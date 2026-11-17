@@ -64,7 +64,7 @@ struct Frame(Vec<u8>);
 /// The agreements' calls with a frame's view beside its owner, as a round
 /// gives them: the harness reads the view from a copy of the owner's bytes,
 /// since its owner here is the bytes themselves.
-trait Given<'v> {
+trait Given<'v, E> {
     fn given(
         &mut self,
         now: Instant,
@@ -73,14 +73,35 @@ trait Given<'v> {
         meta: RxMeta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<Types>;
-    fn hold(&mut self, frame: Frame, meta: RxMeta) -> Parked<Types>;
+    /// An Action offered, each bank command it owes carried out at once by
+    /// `port`, and released frames recycled through it.
+    #[allow(clippy::too_many_arguments, reason = "the owner's offer with its port")]
+    fn offered(
+        &mut self,
+        now: Instant,
+        association: E,
+        bssid: Bssid,
+        action: BlockAckAction,
+        agreements: RxAgreements,
+        port: &mut Recording,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> Result<(), RxBlockAckRefused>;
+    /// A tick, its bank commands carried out at once by `port`.
+    fn ticked(
+        &mut self,
+        now: Instant,
+        port: &mut Recording,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    );
+    /// A clear, its frames recycled and its commands carried out by `port`.
+    fn cleared(&mut self, port: &mut Recording, events: &mut impl EventSink<RxBlockAckEvent>);
 }
 
 fn header_of(bytes: &[u8]) -> RxHead {
     RxHead::of(bytes).unwrap()
 }
 
-impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
+impl<'v, E: Copy + Eq> Given<'v, E> for RxBlockAckView<'v, Types, E> {
     fn given(
         &mut self,
         now: Instant,
@@ -95,17 +116,76 @@ impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
             head: &header,
             bytes: &bytes,
         };
-        self.receive(now, local, frame, view, meta, events)
+        self.receive(now, local, frame, view, &meta, RetainRoom::Free, events)
     }
 
-    fn hold(&mut self, frame: Frame, meta: RxMeta) -> Parked<Types> {
-        let bytes = frame.0.clone();
-        let header = header_of(&bytes);
-        let view = RxView {
-            head: &header,
-            bytes: &bytes,
-        };
-        self.park(frame, view, meta)
+    fn offered(
+        &mut self,
+        now: Instant,
+        association: E,
+        bssid: Bssid,
+        action: BlockAckAction,
+        agreements: RxAgreements,
+        port: &mut Recording,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> Result<(), RxBlockAckRefused> {
+        let answer = self.offer(
+            now,
+            association,
+            bssid,
+            action,
+            agreements,
+            events,
+            |frame| {
+                port.0.push(Call::Recycle(frame.0));
+            },
+        );
+        drive(self, port, events);
+        answer
+    }
+
+    fn ticked(
+        &mut self,
+        now: Instant,
+        port: &mut Recording,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) {
+        self.tick(now, events);
+        drive(self, port, events);
+    }
+
+    fn cleared(&mut self, port: &mut Recording, events: &mut impl EventSink<RxBlockAckEvent>) {
+        self.clear(events, |frame| port.0.push(Call::Recycle(frame.0)));
+        drive(self, port, events);
+    }
+}
+
+/// Carry out every command the banks owe, each ending at once: an
+/// addition runs, a removal empties its slot.
+fn drive<E: Copy + Eq>(
+    view: &mut RxBlockAckView<'_, Types, E>,
+    port: &mut Recording,
+    events: &mut impl EventSink<RxBlockAckEvent>,
+) {
+    while let Some(command) = view.next_command() {
+        match command {
+            BankCommand::Add {
+                ticket,
+                slot,
+                agreement,
+            } => {
+                port.0.push(Call::Add {
+                    slot,
+                    tid: agreement.get().1.get(),
+                    window: agreement.get().3,
+                });
+                view.added(ticket, (slot, agreement.get().1.get()), events);
+            }
+            BankCommand::End { ticket, running } => {
+                port.0.push(Call::Remove(running.0));
+                view.emptied(ticket, running.0);
+            }
+        }
     }
 }
 
@@ -115,7 +195,7 @@ impl RxBlockAckTypes for Types {
     type Slot = u8;
     type Running = (u8, u8);
     type Frame = Frame;
-    type Meta = RxMeta;
+    type Caps = Caps;
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -128,27 +208,6 @@ enum Call {
 /// The port's calls.
 #[derive(Default)]
 struct Recording(Vec<Call>);
-
-impl RxBlockAckPort<Types> for Recording {
-    type Caps = Caps;
-    fn add(&mut self, slot: u8, agreement: SupportedBlockAck<Caps>) -> (u8, u8) {
-        self.0.push(Call::Add {
-            slot,
-            tid: agreement.get().1.get(),
-            window: agreement.get().3,
-        });
-        (slot, agreement.get().1.get())
-    }
-
-    fn remove(&mut self, running: (u8, u8)) -> u8 {
-        self.0.push(Call::Remove(running.0));
-        running.0
-    }
-
-    fn recycle(&mut self, frame: Frame) {
-        self.0.push(Call::Recycle(frame.0));
-    }
-}
 
 fn bssid() -> Bssid {
     Bssid::new(IndividualAddress::new(AP).unwrap()).unwrap()
@@ -199,7 +258,7 @@ fn now(micros: u64) -> Instant {
 
 fn delivered(disposition: RxDisposition<Types>) -> Option<Vec<u8>> {
     match disposition {
-        RxDisposition::Deliver((frame, _)) => Some(frame.0),
+        RxDisposition::Deliver(frame) => Some(frame.0),
         _ => None,
     }
 }
@@ -209,7 +268,7 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -254,7 +313,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     )
     .unwrap();
     let request = parse_block_ack_action(&body).unwrap();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -294,7 +353,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
-        .map(|(frame, _)| frame.0)
+        .map(|frame| frame.0)
         .collect();
     let expected: Vec<_> = (100..116).map(|sequence| qos_data(0, sequence).0).collect();
     assert_eq!(order, expected);
@@ -305,7 +364,7 @@ fn a_station_without_agreements_declines_through_the_reply_queue() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -331,7 +390,7 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -352,7 +411,7 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
-        .map(|(frame, _)| frame.0)
+        .map(|frame| frame.0)
         .collect();
     assert_eq!(order, [qos_data(0, 100).0, qos_data(0, 101).0]);
     // Before a link exists nothing is reordered.
@@ -367,7 +426,7 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -386,7 +445,7 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
         view.given(now(3), Some(LOCAL), Frame(bar.to_vec()), meta(), &mut ()),
         RxDisposition::Recycle(_)
     ));
-    assert_eq!(view.pop_ready().unwrap().0.0, qos_data(0, 101).0);
+    assert_eq!(view.pop_ready().unwrap().0, qos_data(0, 101).0);
 }
 
 #[test]
@@ -394,7 +453,7 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -406,7 +465,7 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
     .unwrap();
     let response = view.next_reply().unwrap();
     view.sent(response.place);
-    view.tick(now(1 + 1024), &mut port, &mut ());
+    view.ticked(now(1 + 1024), &mut port, &mut ());
     assert_eq!(port.0.last(), Some(&Call::Remove(10)));
     let reply = view.next_reply().unwrap();
     assert_eq!(reply.place, ReplyPlace::Queued);
@@ -425,7 +484,7 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -439,8 +498,22 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
         view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
-    view.offer(
-        now(3),
+    // The old association's agreement is removed first: the request asked
+    // meanwhile goes unanswered, and the peer's next one is added.
+    assert_eq!(
+        view.offered(
+            now(3),
+            8,
+            bssid(),
+            addba(0, 0),
+            RxAgreements::Admitted,
+            &mut port,
+            &mut (),
+        ),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    view.offered(
+        now(4),
         8,
         bssid(),
         addba(0, 0),
@@ -457,8 +530,8 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
                 tid: 0,
                 window: 8
             },
-            Call::Remove(10),
             Call::Recycle(qos_data(0, 101).0),
+            Call::Remove(10),
             Call::Add {
                 slot: 10,
                 tid: 0,
@@ -470,44 +543,11 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
 }
 
 #[test]
-fn an_action_waits_retained_while_no_reply_place_is_free() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
-    let mut view = storage.view();
-    let mut port = Recording::default();
-    for _ in 0..PENDING {
-        view.offer(
-            now(1),
-            7,
-            bssid(),
-            addba(3, 0),
-            RxAgreements::Declined,
-            &mut port,
-            &mut (),
-        )
-        .unwrap();
-    }
-    assert!(!view.can_receive_management());
-    let mut action = std::vec![0xd0, 0, 0, 0];
-    action.extend_from_slice(&LOCAL);
-    action.extend_from_slice(&AP);
-    action.extend_from_slice(&AP);
-    action.extend_from_slice(&[0, 0, 3, 0]);
-    assert!(matches!(
-        view.given(now(2), Some(LOCAL), Frame(action.clone()), meta(), &mut ()),
-        RxDisposition::Retained
-    ));
-    assert!(view.pop_deferred().is_none());
-    let reply = view.next_reply().unwrap();
-    view.sent(reply.place);
-    assert_eq!(view.pop_deferred().unwrap().0.0, action);
-}
-
-#[test]
 fn an_external_reply_place_never_panics_or_changes_another_bank() {
     let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -536,7 +576,7 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
     let mut storage = RxBlockAckStorage::<Types, u8, 1, 8>::new([0], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -554,9 +594,9 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
         view.given(now(3), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
         RxDisposition::Recycle(_)
     ));
-    view.tick(now(20_000), &mut port, &mut events);
+    view.ticked(now(20_000), &mut port, &mut events);
     assert!(view.pop_ready().is_some());
-    view.clear(&mut port, &mut events);
+    view.cleared(&mut port, &mut events);
     let events = events.0;
     assert_eq!(
         events
@@ -625,7 +665,7 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
         type Slot = u8;
         type Running = (u8, u8);
         type Frame = Frame;
-        type Meta = Counted<'a>;
+        type Caps = Caps;
     }
     let reads = Cell::new(0);
     let mut common = meta();
@@ -642,10 +682,26 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
         head: &header,
         bytes: &bytes,
     };
-    let _received = view.receive(now(1), None, qos_data(0, 100), seen, counted, &mut ());
+    let _received = view.receive(
+        now(1),
+        None,
+        qos_data(0, 100),
+        seen,
+        &counted,
+        RetainRoom::Free,
+        &mut (),
+    );
     assert_eq!(reads.get(), 0);
     let mut events = Kept::default();
-    let _received = view.receive(now(2), None, qos_data(0, 100), seen, counted, &mut events);
+    let _received = view.receive(
+        now(2),
+        None,
+        qos_data(0, 100),
+        seen,
+        &counted,
+        RetainRoom::Free,
+        &mut events,
+    );
     assert_eq!(reads.get(), 1);
     assert!(matches!(
         events.0.as_slice(),
@@ -657,54 +713,8 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     ));
     assert_eq!(
         core::mem::size_of::<RxBlockAckView<'_, Types, u8>>(),
-        core::mem::size_of::<(
-            &mut Header<u8>,
-            &mut [Bank<Types>],
-            &mut [Option<Retained<Types>>]
-        )>()
+        core::mem::size_of::<(&mut Header<u8>, &mut [Bank<Types>], &mut [Option<Frame>])>()
     );
-}
-
-#[test]
-fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
-    let mut view = storage.view();
-    let mut port = Recording::default();
-    view.offer(
-        now(1),
-        7,
-        bssid(),
-        addba(0, 0),
-        RxAgreements::Admitted,
-        &mut port,
-        &mut (),
-    )
-    .unwrap();
-    let reply = view.next_reply().unwrap();
-    view.sent(reply.place);
-    // Two released in order wait for their consumer: 101 waits for the
-    // hole at 100, which releases both.
-    for sequence in [101, 100] {
-        assert!(matches!(
-            view.given(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
-            RxDisposition::Retained
-        ));
-    }
-    assert!(view.has_ready());
-    // A data frame outside the agreement waits behind them.
-    assert!(matches!(view.hold(qos_data(5, 9), meta()), Parked::Waiting));
-    // A management frame is not held.
-    let mut action = qos_data(5, 9);
-    action.0[0] = 0xd0;
-    assert!(matches!(view.hold(action, meta()), Parked::Deliver(_)));
-    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
-        .map(|(frame, _)| frame.0)
-        .collect();
-    assert_eq!(
-        order,
-        [qos_data(0, 100).0, qos_data(0, 101).0, qos_data(5, 9).0]
-    );
-    assert!(!view.has_ready());
 }
 
 #[test]
@@ -712,8 +722,8 @@ fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() 
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    assert!(!view.holds_frames());
-    view.offer(
+    assert!(!view.retained() != 0);
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -730,15 +740,15 @@ fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() 
         view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
-    assert!(view.holds_frames() && !view.has_ready());
+    assert!(view.retained() != 0 && !view.has_ready());
     // 100 releases both; they are held until taken.
     assert!(matches!(
         view.given(now(2), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained
     ));
-    assert!(view.holds_frames());
+    assert!(view.retained() != 0);
     while view.pop_ready().is_some() {}
-    assert!(!view.holds_frames());
+    assert!(!view.retained() != 0);
 }
 
 #[test]
@@ -746,7 +756,7 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    view.offer(
+    view.offered(
         now(1),
         7,
         bssid(),
@@ -763,7 +773,7 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
     for sequence in 100..103 {
         assert!(matches!(
             view.given(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
-            RxDisposition::Deliver((frame, _)) if frame.0 == qos_data(0, sequence).0
+            RxDisposition::Deliver(frame) if frame.0 == qos_data(0, sequence).0
         ));
     }
     assert!(!view.has_ready());
@@ -782,7 +792,7 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
-        .map(|(frame, _)| frame.0)
+        .map(|frame| frame.0)
         .collect();
     assert_eq!(
         order,
@@ -793,32 +803,6 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
         view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Recycle(_)
     ));
-}
-
-#[test]
-fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 2>::new([10], GAP);
-    let mut view = storage.view();
-    for sequence in 0..2 {
-        assert!(matches!(
-            view.hold(qos_data(0, sequence), meta()),
-            Parked::Waiting
-        ));
-    }
-    assert!(matches!(
-        view.hold(qos_data(0, 2), meta()),
-        Parked::Capacity(_)
-    ));
-    // Clearing returns every parked frame through the port.
-    let mut port = Recording::default();
-    view.clear(&mut port, &mut ());
-    assert_eq!(
-        port.0
-            .iter()
-            .filter(|call| matches!(call, Call::Recycle(_)))
-            .count(),
-        2
-    );
 }
 
 /// An ADDBA Request for `tid` asking for `window`, zero included, which the
@@ -857,7 +841,7 @@ fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
         let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
         let mut view = storage.view();
         let mut port = Recording::default();
-        view.offer(
+        view.offered(
             now(1),
             7,
             bssid(),
@@ -876,11 +860,11 @@ fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
             matches!(
                 events.0.as_slice(),
                 [
-                    RxBlockAckEvent::Started { tid: 0, window: started },
                     RxBlockAckEvent::Requested { .. },
+                    RxBlockAckEvent::Started { tid: 0, window: started },
                 ] if *started == window
             ),
-            "the agreement starts first: {:?}",
+            "the agreement starts at its addition's end, after the request: {:?}",
             events.0
         );
     }
@@ -893,7 +877,7 @@ fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
     let mut view = storage.view();
     let mut port = Recording::default();
     for (dialog, tid) in [(5, 0), (6, 1)] {
-        view.offer(
+        view.offered(
             now(1),
             7,
             bssid(),
@@ -927,7 +911,7 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     let mut view = storage.view();
     let mut port = Recording::default();
     let mut offer = |view: &mut RxBlockAckView<'_, Types, u32>, action, supported| {
-        view.offer(
+        view.offered(
             now(1),
             7,
             bssid(),
@@ -967,4 +951,257 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     );
     assert_eq!(records.last(), Some(&(3, 0, AddbaOutcome::Unanswered)));
     assert_eq!(records.len(), 4 + PENDING - 2 + 1);
+}
+
+/// With only the hole's place free, a frame that would be retained goes
+/// back, and the frame that closes the hole is still taken.
+#[test]
+fn a_full_room_gives_back_what_would_be_retained_and_takes_the_holes_frame() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        addba(0, 0),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    let full = |view: &mut RxBlockAckView<'_, Types, u32>, sequence: u16| {
+        let frame = qos_data(0, sequence);
+        let bytes = frame.0.clone();
+        let header = header_of(&bytes);
+        let seen = RxView {
+            head: &header,
+            bytes: &bytes,
+        };
+        view.receive(
+            now(2),
+            Some(LOCAL),
+            frame,
+            seen,
+            &meta(),
+            RetainRoom::Full,
+            &mut (),
+        )
+    };
+    assert!(matches!(full(&mut view, 101), RxDisposition::Recycle(_)));
+    assert_eq!(view.retained(), 0);
+    assert_eq!(delivered(full(&mut view, 100)), Some(qos_data(0, 100).0));
+}
+
+/// The slots come back only when every bank is free: a running agreement
+/// keeps them, its removal frees them.
+#[test]
+fn the_slots_come_back_once_every_bank_is_free() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let mut port = Recording::default();
+    storage
+        .view()
+        .offered(
+            now(1),
+            7,
+            bssid(),
+            addba(0, 0),
+            RxAgreements::Admitted,
+            &mut port,
+            &mut (),
+        )
+        .unwrap();
+    assert_eq!(storage.slots_home(), Err(BanksBusy), "an agreement runs");
+    storage.view().cleared(&mut port, &mut ());
+    assert!(storage.is_free());
+    assert_eq!(storage.slots_home(), Ok([10, 11]));
+}
+
+/// An addition that expired in the port frees its bank and starts nothing.
+#[test]
+fn an_expired_addition_frees_its_bank() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        addba(0, 0),
+        RxAgreements::Admitted,
+        &mut (),
+        |_| {},
+    )
+    .unwrap();
+    let Some(BankCommand::Add { ticket, slot, .. }) = view.next_command() else {
+        panic!("the addition is owed");
+    };
+    assert!(
+        view.next_command().is_none(),
+        "one command at a time a bank"
+    );
+    view.emptied(ticket, slot);
+    assert!(view.next_reply().is_none(), "nothing started: no response");
+    assert!(storage.is_free());
+}
+
+/// Offer `action` to `view`, admitted, without carrying out any command.
+fn asked(view: &mut RxBlockAckView<'_, Types, u32>, action: BlockAckAction) {
+    tried(view, action).unwrap();
+}
+
+/// Offer `action` to `view`, admitted: a request left unanswered is the
+/// refusal of its capacity.
+fn tried(
+    view: &mut RxBlockAckView<'_, Types, u32>,
+    action: BlockAckAction,
+) -> Result<(), RxBlockAckRefused> {
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        action,
+        RxAgreements::Admitted,
+        &mut (),
+        |_| {},
+    )
+}
+
+/// The responses `view` owes, each taken as sent.
+fn replies(view: &mut RxBlockAckView<'_, Types, u32>) -> usize {
+    let mut count = 0;
+    while let Some(reply) = view.next_reply() {
+        view.sent(reply.place);
+        count += 1;
+    }
+    count
+}
+
+/// A request repeated while its TID's addition waits or runs is that
+/// agreement's own: one bank, one addition, one response after it.
+#[test]
+fn a_request_repeated_during_its_addition_takes_no_second_bank() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    // While the addition waits for its command.
+    asked(&mut view, request_for(6, 0, 8));
+    let Some(BankCommand::Add { ticket, slot, .. }) = view.next_command() else {
+        panic!("the addition is owed");
+    };
+    // While the addition runs in the port.
+    asked(&mut view, request_for(7, 0, 8));
+    assert!(view.next_command().is_none(), "no second bank for TID 0");
+    assert_eq!(replies(&mut view), 0, "the response follows the addition");
+    view.added(ticket, (slot, 0), &mut ());
+    assert_eq!(replies(&mut view), 1, "one response, after the addition");
+    assert!(view.next_command().is_none());
+}
+
+/// A request for a TID whose agreement ends goes unanswered and takes no
+/// bank: the peer asks again once the bank is free.
+#[test]
+fn a_request_during_its_tids_end_is_unanswered() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        request_for(5, 0, 8),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    assert_eq!(replies(&mut view), 1);
+    // Asked anew with other parameters: the running agreement ends.
+    assert_eq!(
+        tried(&mut view, request_for(6, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    // While its end waits for its command.
+    assert_eq!(
+        tried(&mut view, request_for(7, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed");
+    };
+    // While its end runs in the port.
+    assert_eq!(
+        tried(&mut view, request_for(8, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    assert!(view.next_command().is_none(), "no bank for an ending TID");
+    view.emptied(ticket, running.0);
+    assert_eq!(replies(&mut view), 0, "unanswered while it ended");
+    assert!(storage.is_free());
+}
+
+/// With every bank busy and one freeing, a request the station declines is
+/// still answered: only an admitted one waits for the bank.
+#[test]
+fn a_declined_request_is_answered_while_a_bank_frees() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        request_for(6, 1, 8),
+        RxAgreements::Declined,
+        &mut (),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(replies(&mut view), 1, "the decline is queued");
+}
+
+/// An end that could not begin is owed again, to the same bank.
+#[test]
+fn an_end_owed_again_is_given_again() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        request_for(5, 0, 8),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    assert_eq!(
+        tried(&mut view, request_for(6, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed");
+    };
+    view.owe_end(ticket, running);
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed again");
+    };
+    view.emptied(ticket, running.0);
+    assert!(storage.is_free());
+}
+
+/// The slots that went home come back, and the banks serve again.
+#[test]
+fn the_slots_back_serve_again() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let slots = storage.slots_home().unwrap();
+    assert!(!storage.is_free(), "away, the banks serve nothing");
+    storage.slots_back(slots);
+    assert!(storage.is_free());
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    assert!(matches!(
+        view.next_command(),
+        Some(BankCommand::Add { slot: 10, .. })
+    ));
 }

@@ -31,7 +31,18 @@ use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, decapsulate_data_fra
 use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 
-use super::{Carrying, Network, Told};
+use super::{Agreements, Carrying, Network, Told};
+use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
+use oer_protocols_ieee80211_core_upper_mac::block_ack::{
+    RetainRoom, RxAgreements, RxBlockAckRefused, RxDisposition, RxView,
+};
+use oer_protocols_ieee80211_wire::address::Bssid;
+use oer_protocols_ieee80211_wire::block_ack::frame::{BlockAckAction, parse_block_ack_action};
+
+/// The Action subtype of a management frame.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Action is subtype 13).
+const ACTION_SUBTYPE: u16 = 13;
 
 /// The most MSDUs one received A-MSDU is delivered as; an aggregate of more
 /// is refused, counted ([`RxRefusal::AmsduTooLong`]). A policy value: a
@@ -110,6 +121,9 @@ pub enum RxRefusal {
     Undecapsulable,
     /// An A-MSDU of more than [`AMSDU_MSDUS`] MSDUs.
     AmsduTooLong,
+    /// The reorder gave it back: an old frame, a duplicate, or a frame it
+    /// would retain with no place free beyond the hole's.
+    Reorder,
     /// The unit's place could not be read or written.
     Place,
 }
@@ -122,6 +136,7 @@ pub struct RxRefusals {
     pub unverified: u16,
     pub undecapsulable: u16,
     pub amsdu_too_long: u16,
+    pub reorder: u16,
     pub place: u16,
 }
 
@@ -134,6 +149,7 @@ impl RxRefusals {
             RxRefusal::Unverified => &mut self.unverified,
             RxRefusal::Undecapsulable => &mut self.undecapsulable,
             RxRefusal::AmsduTooLong => &mut self.amsdu_too_long,
+            RxRefusal::Reorder => &mut self.reorder,
             RxRefusal::Place => &mut self.place,
         };
         *count = count.saturating_add(1);
@@ -172,6 +188,32 @@ pub(super) enum Flow {
     Stopping,
 }
 
+/// What a round knows of the links: the data's flow, a frame's linked
+/// peer, and a station's receive agreements.
+pub(super) struct Links<'a, 'id, F, K: Ieee80211Capabilities, const BANKS: usize> {
+    pub(super) flow: Flow,
+    pub(super) peer_of: F,
+    pub(super) reorder: Reordering<'a, 'id, K, BANKS>,
+}
+
+/// Whose data a round reads: a station's, with its receive agreements, or
+/// an access point's, which has none in phase B.
+pub(super) enum Reordering<'a, 'id, K: Ieee80211Capabilities, const BANKS: usize> {
+    Station(Reorder<'a, 'id, K, BANKS>),
+    AccessPoint,
+}
+
+/// A station's receive agreements, lent a round: the reorder, the
+/// station's address and its access point's, whether it admits agreements,
+/// and its link's generation (`None` without a link).
+pub(super) struct Reorder<'a, 'id, K: Ieee80211Capabilities, const BANKS: usize> {
+    pub(super) agreements: &'a mut Agreements<'id, K, BANKS>,
+    pub(super) local: [u8; 6],
+    pub(super) bssid: Option<Bssid>,
+    pub(super) admitted: RxAgreements,
+    pub(super) link: Option<u8>,
+}
+
 /// The receive half's state while the data runs.
 pub(super) struct Receive<'id> {
     /// Data units taken for the network, oldest first.
@@ -179,6 +221,9 @@ pub(super) struct Receive<'id> {
     pressure: Pressure,
     /// The episode's bound from its first wait: the composition's.
     late: Duration,
+    /// The units the network holds: one more a loan, fewer by what a round
+    /// reclaims.
+    lent: u8,
     refusals: RxRefusals,
     /// The MSDUs of the unit being delivered, found before any is written:
     /// kept in place and filled again for each unit.
@@ -205,10 +250,18 @@ impl<'id> Receive<'id> {
                 unverified: 0,
                 undecapsulable: 0,
                 amsdu_too_long: 0,
+                reorder: 0,
                 place: 0,
             },
+            lent: 0,
             msdus: heapless::Vec::new(),
         }
+    }
+
+    /// The units waiting for the network, for the crate's search.
+    #[cfg(test)]
+    pub(super) fn waiting(&self) -> usize {
+        self.waiting.len()
     }
 
     /// The refusals counted so far.
@@ -230,21 +283,31 @@ impl<'id> Receive<'id> {
         std::format!("{waiting:?}|{pressure}|{:?}", self.refusals)
     }
 
-    /// One round over `port`; `peer_of` names a frame's linked peer.
-    pub(super) fn round<P, N, C>(
+    /// One round over `port`, the links as `links` names them.
+    pub(super) fn round<P, N, C, F, K, const BANKS: usize>(
         &mut self,
         port: &mut P,
         network: &mut N,
         told: &mut C,
         now: Instant,
-        flow: Flow,
-        peer_of: impl Fn(&RxHeader) -> Option<RxPeer>,
+        links: Links<'_, 'id, F, K, BANKS>,
     ) -> Rest
     where
         P: ReceivePort<'id>,
         N: Network<P::Memory, P::Lent>,
         C: Told<'id>,
+        F: Fn(&RxHeader) -> Option<RxPeer>,
+        K: Ieee80211Capabilities,
     {
+        let Links {
+            flow,
+            peer_of,
+            reorder: mut reordering,
+        } = links;
+        let mut reorder = match &mut reordering {
+            Reordering::Station(reorder) => Some(reorder),
+            Reordering::AccessPoint => None,
+        };
         if let Pressure::Since(since) = self.pressure
             && now
                 .checked_duration_since(since)
@@ -253,7 +316,22 @@ impl<'id> Receive<'id> {
             self.pressure = Pressure::Late;
         }
         let mut round = Round::open(port, now);
+        self.lent = self
+            .lent
+            .saturating_sub(u8::try_from(round.reclaimed()).unwrap_or(u8::MAX));
         let mut room = network.room();
+        // A link that ended, or a stopping data, ends its agreements: what
+        // the reorder retains goes back undelivered.
+        if let Some(reorder) = &mut reorder {
+            let mut agreements = reorder.agreements.view();
+            // The stop ends the links before its round: the link is none.
+            let ended = reorder.link.is_none();
+            if ended && agreements.association().is_some() {
+                agreements.clear(&mut (), |handle| round.release(handle));
+            } else if flow == Flow::Flowing {
+                agreements.tick(now, &mut ());
+            }
+        }
         // What waits goes first, in its order; a stopping data's goes back.
         while let Some(handle) = self.waiting.pop_front() {
             if flow == Flow::Stopping {
@@ -272,6 +350,8 @@ impl<'id> Receive<'id> {
                 }
             }
         }
+        // Then what the reorder released, in its order.
+        self.ready(&mut round, &mut reorder, &mut room, network, told, &peer_of);
         let held_back = !self.waiting.is_empty();
         if !held_back {
             while let Some(unit) = round.staged() {
@@ -288,16 +368,47 @@ impl<'id> Receive<'id> {
                     Route::Back => {}
                     Route::Controller(peer) => told.frame(peer, &view),
                     Route::Refuse(reason) => self.refusals.count(reason),
-                    Route::Network => {
-                        let handle = unit.take();
-                        if let Delivery::Wait(handle) =
-                            self.deliver(&mut round, handle, &mut room, network)
-                            && let Err(handle) = self.waiting.push_back(handle)
+                    Route::Agreements(action) => {
+                        if let Some(reorder) = &mut reorder
+                            && let (Some(bssid), Some(association)) = (reorder.bssid, reorder.link)
                         {
-                            // A place a unit: the deque has one for each.
-                            round.release(handle);
-                            self.refusals.count(RxRefusal::Place);
+                            let mut agreements = reorder.agreements.view();
+                            let answer = agreements.offer(
+                                now,
+                                association,
+                                bssid,
+                                action,
+                                reorder.admitted,
+                                &mut (),
+                                |handle| round.release(handle),
+                            );
+                            // Unanswered (no reply place or bank yet): the
+                            // peer asks again.
+                            let (Ok(()) | Err(RxBlockAckRefused::Capacity(_))) = answer;
+                            if agreements.next_reply().is_some() {
+                                told.reply_owed();
+                            }
                         }
+                    }
+                    Route::Control | Route::Network | Route::Eapol => {
+                        let control = matches!(view.head, RxHead::Control(_));
+                        let handle = unit.take();
+                        let delivered = match &mut reorder {
+                            Some(reorder) => self.reordered(&mut round, handle, reorder, now),
+                            None => Some(handle),
+                        };
+                        match delivered {
+                            // A control frame no reorder reads goes back.
+                            Some(handle) if control => round.release(handle),
+                            Some(handle) => {
+                                self.next_in_order(
+                                    &mut round, handle, &mut room, network, told, &peer_of,
+                                );
+                            }
+                            None => {}
+                        }
+                        // What the frame released follows it.
+                        self.ready(&mut round, &mut reorder, &mut room, network, told, &peer_of);
                     }
                 }
             }
@@ -314,12 +425,190 @@ impl<'id> Receive<'id> {
             Pressure::Since(since) => since.checked_add(self.late),
             Pressure::Clear | Pressure::Late => None,
         };
+        // The reorder's gap and the agreements' inactivity wake too.
+        let deadline = reorder
+            .as_mut()
+            .and_then(|reorder| reorder.agreements.view().deadline());
+        let earliest = |at: Option<Instant>| match (at, deadline) {
+            (Some(at), Some(deadline)) => Some(at.min(deadline)),
+            (at, None) => at,
+            (None, deadline) => deadline,
+        };
         match (rest, held_back || !self.waiting.is_empty()) {
             // Held back: the network's return or the bound wakes.
-            (_, true) => Rest::Wake(bound),
+            (_, true) => Rest::Wake(earliest(bound)),
             (PortRest::Round, false) => Rest::Round,
-            (PortRest::At(at), false) => Rest::Wake(Some(at)),
-            (PortRest::Signal, false) => Rest::Wake(None),
+            (PortRest::At(at), false) => Rest::Wake(earliest(Some(at))),
+            (PortRest::Signal, false) => Rest::Wake(earliest(None)),
+        }
+    }
+
+    /// A taken data unit or control frame through the reorder: delivered
+    /// now (its handle back), or retained or given back (`None`).
+    fn reordered<P, K, const BANKS: usize>(
+        &mut self,
+        round: &mut Round<'_, 'id, P>,
+        handle: UnitHandle<'id>,
+        reorder: &mut Reorder<'_, 'id, K, BANKS>,
+        now: Instant,
+    ) -> Option<UnitHandle<'id>>
+    where
+        P: ReceivePort<'id>,
+        K: Ieee80211Capabilities,
+    {
+        let mut agreements = reorder.agreements.view();
+        // One place stays free for the frame that closes a hole: the
+        // retained, the lent and the waiting with this one leave it.
+        let used = agreements
+            .retained()
+            .saturating_add(usize::from(self.lent))
+            .saturating_add(self.waiting.len())
+            .saturating_add(1);
+        let retain = if used < P::STAGING {
+            RetainRoom::Free
+        } else {
+            RetainRoom::Full
+        };
+        let control = round
+            .unit(&handle)
+            .is_some_and(|view| matches!(view.head, RxHead::Control(_)));
+        let disposition = match round.unit(&handle) {
+            Some(view) => agreements.receive(
+                now,
+                Some(reorder.local),
+                handle,
+                RxView {
+                    head: view.head,
+                    bytes: view.bytes,
+                },
+                view.meta,
+                retain,
+                &mut (),
+            ),
+            // `None` does not happen (`Round::unit`): it goes back.
+            None => RxDisposition::Recycle(handle),
+        };
+        match disposition {
+            RxDisposition::Deliver(handle) => Some(handle),
+            RxDisposition::Retained => None,
+            RxDisposition::Recycle(handle) => {
+                // A BlockAckReq read goes back; an old frame, a duplicate or
+                // a frame with no place is refused, counted.
+                round.release(handle);
+                if !control {
+                    self.refusals.count(RxRefusal::Reorder);
+                }
+                None
+            }
+        }
+    }
+
+    /// Deliver what the reorder released, in its order, behind what waits;
+    /// a held link's is refused.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the round, the reorder, the network's room and end, the controller and the links"
+    )]
+    fn ready<P, N, C, F, K, const BANKS: usize>(
+        &mut self,
+        round: &mut Round<'_, 'id, P>,
+        reorder: &mut Option<&mut Reorder<'_, 'id, K, BANKS>>,
+        room: &mut Room,
+        network: &mut N,
+        told: &mut C,
+        peer_of: &F,
+    ) where
+        P: ReceivePort<'id>,
+        N: Network<P::Memory, P::Lent>,
+        C: Told<'id>,
+        F: Fn(&RxHeader) -> Option<RxPeer>,
+        K: Ieee80211Capabilities,
+    {
+        let Some(reorder) = reorder else {
+            return;
+        };
+        let mut agreements = reorder.agreements.view();
+        while let Some(handle) = agreements.pop_ready() {
+            self.next_in_order(round, handle, room, network, told, peer_of);
+        }
+    }
+
+    /// A unit the reorder let go in order: EAPOL to the controller, read in
+    /// place and back; a held link's data refused; other data to the
+    /// network, behind what waits.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the round, the unit, the network's room and end, the controller and the links"
+    )]
+    fn next_in_order<P, N, C, F>(
+        &mut self,
+        round: &mut Round<'_, 'id, P>,
+        handle: UnitHandle<'id>,
+        room: &mut Room,
+        network: &mut N,
+        told: &mut C,
+        peer_of: &F,
+    ) where
+        P: ReceivePort<'id>,
+        N: Network<P::Memory, P::Lent>,
+        C: Told<'id>,
+        F: Fn(&RxHeader) -> Option<RxPeer>,
+    {
+        let read = match round.unit(&handle) {
+            Some(view) if eapol(&view) => {
+                let peer = match view.head {
+                    RxHead::Frame(header) => peer_of(header).map(|from| from.peer),
+                    RxHead::Control(_) => None,
+                };
+                told.frame(peer, &view);
+                true
+            }
+            _ => false,
+        };
+        if read {
+            round.release(handle);
+            return;
+        }
+        let held = round
+            .unit(&handle)
+            .and_then(|view| match view.head {
+                RxHead::Frame(header) => peer_of(header),
+                RxHead::Control(_) => None,
+            })
+            .is_none_or(|from| from.carrying == Carrying::Held);
+        if held {
+            round.release(handle);
+            self.refusals.count(RxRefusal::LinkHeld);
+            return;
+        }
+        self.offer(round, handle, room, network);
+    }
+
+    /// A unit for the network in its order: behind a unit that waits it
+    /// waits too (the room has two dimensions: a later unit could be lent
+    /// where the waiting one cannot be copied), else it is offered.
+    fn offer<P, N>(
+        &mut self,
+        round: &mut Round<'_, 'id, P>,
+        handle: UnitHandle<'id>,
+        room: &mut Room,
+        network: &mut N,
+    ) where
+        P: ReceivePort<'id>,
+        N: Network<P::Memory, P::Lent>,
+    {
+        let waits = if self.waiting.is_empty() {
+            match self.deliver(round, handle, room, network) {
+                Delivery::Done => return,
+                Delivery::Wait(handle) => handle,
+            }
+        } else {
+            handle
+        };
+        if let Err(handle) = self.waiting.push_back(waits) {
+            // A place a unit: the deque has one for each.
+            round.release(handle);
+            self.refusals.count(RxRefusal::Place);
         }
     }
 
@@ -366,6 +655,7 @@ impl<'id> Receive<'id> {
             }
             let span = msdu.span;
             let lent = round.lend(handle, lendable);
+            self.lent = self.lent.saturating_add(1);
             network.lent(permit, lent, span);
             return Delivery::Done;
         }
@@ -409,6 +699,14 @@ enum Route {
     Controller(Option<u8>),
     /// Taken for the network.
     Network,
+    /// A control frame: the reorder reads a BlockAckReq.
+    Control,
+    /// EAPOL of the linked peer: it takes its number in a receive
+    /// agreement's window first, and the controller reads it when the
+    /// reorder releases it (at once without an agreement).
+    Eapol,
+    /// A Block Ack Action of the linked peer: the agreements take it.
+    Agreements(BlockAckAction),
     /// Refused, counted, back.
     Refuse(RxRefusal),
 }
@@ -419,10 +717,20 @@ fn route<M: RxMetadata>(
     peer_of: &impl Fn(&RxHeader) -> Option<RxPeer>,
 ) -> Route {
     let RxHead::Frame(header) = view.head else {
-        return Route::Back;
+        return Route::Control;
     };
     let from = peer_of(header);
     if header.control.is_management_frame() {
+        // A Block Ack Action of the linked peer is the agreements'.
+        if from.is_some()
+            && header.control.subtype() == ACTION_SUBTYPE
+            && let Some(action) = view
+                .bytes
+                .get(usize::from(header.body)..)
+                .and_then(parse_block_ack_action)
+        {
+            return Route::Agreements(action);
+        }
         return Route::Controller(from.map(|from| from.peer));
     }
     let Some(from) = from.filter(|_| header.control.is_data()) else {
@@ -435,9 +743,8 @@ fn route<M: RxMetadata>(
     if protected && !verified(view.meta.common().crypto) {
         return Route::Refuse(RxRefusal::Unverified);
     }
-    let eapol = matches!(first_ether_type(view), Some(ETHER_TYPE_EAPOL));
-    if eapol {
-        return Route::Controller(Some(from.peer));
+    if eapol(view) {
+        return Route::Eapol;
     }
     if !protected && from.protection == LinkProtection::Ccmp {
         return Route::Refuse(RxRefusal::Unverified);
@@ -446,6 +753,11 @@ fn route<M: RxMetadata>(
         return Route::Refuse(RxRefusal::LinkHeld);
     }
     Route::Network
+}
+
+/// Whether a data frame's first MSDU is EAPOL.
+fn eapol<M>(view: &Received<'_, M>) -> bool {
+    matches!(first_ether_type(view), Some(ETHER_TYPE_EAPOL))
 }
 
 /// Whether the port's evidence says the frame was decrypted and its

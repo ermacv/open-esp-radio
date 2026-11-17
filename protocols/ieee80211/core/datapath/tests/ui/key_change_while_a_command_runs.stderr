@@ -1,11 +1,17 @@
 error[E0599]: no method named `change` found for struct `ChangingKey<'a, E>` in the current scope
-  --> tests/ui/key_change_while_a_command_runs.rs:21:21
+  --> tests/ui/key_change_while_a_command_runs.rs:22:21
    |
-21 |                 key.change(change); // ui-error: E0599
+22 |                 key.change(change); // ui-error: E0599
    |                     ^^^^^^ method not found in `ChangingKey<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
 
 error[E0599]: no method named `change` found for struct `BusyKey<'a, E>` in the current scope
-  --> tests/ui/key_change_while_a_command_runs.rs:26:21
+  --> tests/ui/key_change_while_a_command_runs.rs:27:21
    |
-26 |                 key.change(change); // ui-error: E0599
+27 |                 key.change(change); // ui-error: E0599
    |                     ^^^^^^ method not found in `BusyKey<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
+
+error[E0599]: no method named `change` found for struct `AgreeingKey<'a, E>` in the current scope
+  --> tests/ui/key_change_while_a_command_runs.rs:32:21
+   |
+32 |                 key.change(change); // ui-error: E0599
+   |                     ^^^^^^ method not found in `AgreeingKey<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`

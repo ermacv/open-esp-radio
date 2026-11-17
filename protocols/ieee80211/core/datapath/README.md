@@ -70,8 +70,26 @@ and data that does not decapsulate are refused; the refusals are counted
 by reason (`FlowingData::refusals`). After the data's stop nothing is
 delivered: what waited and what the ring stages go back unread, and the
 rights come home once nothing waits; the units the network holds are the
-installation machine's to wait for (`UnitsHome`). An access point's
-receive agreements and a station's reorder are not here yet.
+installation machine's to wait for (`UnitsHome`).
+
+A station's receive agreements and their reorder are `upper-mac`'s owner
+(`RxBlockAckStorage`), held in the running data in the place of the
+agreements' slots, its frames the units' handles. An ADDBA Request or a
+DELBA of the access point is the agreements', read in the round; an
+agreement is added and ended by a command of the port, begun when no
+other command runs (`Interface::Agreeing`; the data goes on), and its
+response is told owed only once it runs (`Told::reply_owed`): the
+controller sends what the linked peer's `rx_reply` holds and says
+`sent`. A data unit under an agreement goes through the reorder: a frame
+of a hole is retained while a place stays free beyond it (the retained,
+the lent and the waiting with it leave one of the port's `STAGING`
+places), else it is refused; what the reorder releases goes behind what
+waits, and is refused while the controller holds the link. A
+BlockAckReq moves the window; the gap's timer (`ReceivePolicy::gap`)
+gives a hole up at `due`. A link's end and the data's stop end its
+agreements: what the reorder retains goes back undelivered, and the stop
+ends the agreements by their commands before the key and the gate. An
+access point's receive agreements are phase D's: its banks stay free.
 
 The station's data transmission over the port's two arenas.
 `DataPlane::new` takes the installation's two idle arenas, and each book

@@ -1665,6 +1665,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
 {
     type Meta = RxMeta;
     type Lent = ModelLent;
+    const STAGING: usize = MODEL_PLACES;
 
     fn round_open(&mut self, _seal: &Sealed, _now: Instant) -> usize {
         self.call();
