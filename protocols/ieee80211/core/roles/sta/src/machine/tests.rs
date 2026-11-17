@@ -667,7 +667,7 @@ fn transmitted(record: Record<'_>, mut transmit: StaTransmit<'_, Caps>, keyed: b
     if keyed {
         let key = match transmit.number {
             crate::link::FrameNumber::Link { .. } => {
-                record.link.as_ref().and_then(|link| link.numbers().key())
+                record.link.as_ref().and_then(|link| link.key())
             }
             crate::link::FrameNumber::Open => record.pairwise.as_ref(),
         };
@@ -2865,11 +2865,13 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                         length: 14 + 20,
                         priority: WmmUserPriority::new(priority).unwrap(),
                     };
+                    let (numbers, key) = link.numbers_and_key();
                     let taken = plane.intake(
                         &mut port,
                         &ModelLink { protected: false },
                         msdu,
-                        link.numbers_mut(),
+                        numbers,
+                        key,
                         Instant::from_micros(0),
                     );
                     assert!(matches!(taken, Intake::Taken(_)));

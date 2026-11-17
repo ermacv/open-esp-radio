@@ -2828,7 +2828,6 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                 let numbers = TxNumbers::new(
                     self.sequence,
                     connected.qos.then_some(connected.qos_sequences),
-                    None,
                 );
                 self.link = LinkCustody::Lent {
                     carries: false,

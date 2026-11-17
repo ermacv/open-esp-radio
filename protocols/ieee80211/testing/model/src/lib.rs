@@ -1383,6 +1383,11 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id, PairwiseHeld<'id>, PairwiseEnd<'id>> {
         self.polled(now, sink);
+        // A key's command waits, as the gate's closing does, for the arena
+        // on the air: what it misses would be retried under another key.
+        if self.arenas.iter().any(|arena| arena.air.is_some()) {
+            return CommandPoll::Pending(command);
+        }
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
         let end = match running {

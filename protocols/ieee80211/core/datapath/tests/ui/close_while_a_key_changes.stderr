@@ -1,0 +1,5 @@
+error[E0599]: no method named `close` found for struct `KeyingGate<'a, E>` in the current scope
+  --> tests/ui/close_while_a_key_changes.rs:17:14
+   |
+17 |         gate.close(); // ui-error: E0599
+   |              ^^^^^ method not found in `KeyingGate<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`

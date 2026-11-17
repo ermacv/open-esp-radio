@@ -175,6 +175,52 @@ impl TxWindow {
     }
 }
 
+/// What a TID's frames that went home unpublished were: the numbers of
+/// those never transmitted, and whether one that was transmitted went too.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Withdrawn {
+    /// The oldest and the newest number of the never-transmitted frames,
+    /// and their count.
+    pub unsent: Option<(SequenceNumber, SequenceNumber, u8)>,
+    /// A frame that was transmitted, and waited for a retry, went home: its
+    /// number was seen.
+    pub transmitted: bool,
+}
+
+impl Withdrawn {
+    /// The run of unsent numbers with `sequence` in it.
+    fn widen(
+        run: Option<(SequenceNumber, SequenceNumber, u8)>,
+        sequence: SequenceNumber,
+    ) -> (SequenceNumber, SequenceNumber, u8) {
+        match run {
+            None => (sequence, sequence, 1),
+            Some((oldest, newest, count)) => (
+                if sequence.precedes(oldest) {
+                    sequence
+                } else {
+                    oldest
+                },
+                if newest.precedes(sequence) {
+                    sequence
+                } else {
+                    newest
+                },
+                count.saturating_add(1),
+            ),
+        }
+    }
+
+    /// The number the TID's counter goes back to: the oldest unsent, when
+    /// the unsent numbers run without a hole to `next - 1`, the counter's
+    /// last draw.
+    pub fn rewind_to(&self, next: SequenceNumber) -> Option<SequenceNumber> {
+        let (oldest, newest, count) = self.unsent?;
+        let run = oldest.forward_distance(newest).checked_add(1)?;
+        (run == u16::from(count) && newest.wrapping_add(1) == next).then_some(oldest)
+    }
+}
+
 /// One link's data state, which the plane holds while it is linked
 /// ([`DataPlane::link`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -790,16 +836,50 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
 
     /// Return every frame the arenas hold unpublished, keeping the link:
     /// the frames written under the link's key before a new one replaces it
-    /// carry that key's packet numbers.
+    /// carry that key's packet numbers. What went home, a TID each, in
+    /// [`WmmUserPriority::select`]'s order.
     pub fn withdraw_unpublished<P: DataPort<'id, Caps = K>>(
         &mut self,
         port: &mut P,
         mut returned: impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
-    ) {
+    ) -> [Withdrawn; 8] {
+        let mut unsent: [Option<(SequenceNumber, SequenceNumber, u8)>; 8] = [None; 8];
+        let mut transmitted = [false; 8];
         for side in [ArenaSide::First, ArenaSide::Second] {
+            let book = self.book(side);
+            if book.epoch == self.epoch && matches!(book.right, Some(Held::Open(_))) {
+                let tid = book.tid;
+                let first = book.first;
+                for (position, frame) in book.held() {
+                    let sequence = first.wrapping_add(u16::from(position.0));
+                    if frame.attempts == 0 {
+                        let run = tid.select_mut(&mut unsent);
+                        *run = Some(Withdrawn::widen(*run, sequence));
+                    } else {
+                        *tid.select_mut(&mut transmitted) = true;
+                    }
+                }
+            }
             self.withdraw(port, side, &mut returned, events);
         }
+        // `ALL` is in `select`'s order: the array is each TID's.
+        WmmUserPriority::ALL.map(|tid| Withdrawn {
+            unsent: *tid.select(&unsent),
+            transmitted: *tid.select(&transmitted),
+        })
+    }
+
+    /// `tid`'s numbers go back to `next`: the frames that would have carried
+    /// the numbers after it went home never transmitted.
+    pub fn rewound(&mut self, tid: WmmUserPriority, next: SequenceNumber) {
+        *tid.select_mut(&mut self.next) = Some(next);
+    }
+
+    /// Move `tid`'s window to its derived head: the head a BlockAckReq
+    /// names, when `tid` has a window.
+    pub fn rehead(&mut self, tid: WmmUserPriority) -> Option<SequenceNumber> {
+        self.advance(tid)
     }
 
     /// Whether an arena is on the air: its end is owed.
@@ -939,14 +1019,15 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     /// one MPDU of the port's `link`: its body stays in place and its front
     /// is written into the headroom from the link's template, with the next
     /// sequence number of its TID in `numbers` and, on a protected link,
-    /// the CCMP header of the key's next packet number. No sequence number
+    /// the CCMP header of `key`'s next packet number. No sequence number
     /// is drawn for an MSDU that waits or is refused.
     pub fn intake<P: DataPort<'id, Caps = K>, T: TxKey>(
         &mut self,
         port: &mut P,
         link: &P::Link,
         msdu: OutboundMsdu<P::Memory>,
-        numbers: &mut TxNumbers<T>,
+        numbers: &mut TxNumbers,
+        key: Option<&T>,
         now: Instant,
     ) -> Intake<P::Memory> {
         let refused = |msdu: OutboundMsdu<P::Memory>, reason| Intake::Refused {
@@ -974,8 +1055,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         if (header.peer_qos() == PeerQos::Qos) != numbers.qos() {
             return refused(msdu, IntakeRefusal::Numbering);
         }
-        let key = numbers.key().map(TxKey::packet_numbers);
-        match (protection, key) {
+        match (protection, key.map(TxKey::packet_numbers)) {
             (DataProtection::Ccmp(()), None) => return refused(msdu, IntakeRefusal::NoKey),
             (DataProtection::Ccmp(()), Some(key)) if !key.available() => {
                 return refused(msdu, IntakeRefusal::PacketNumberExhausted);
@@ -1065,7 +1145,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             // Its slots are full: the next settlement frees one.
             return Intake::Wait(msdu, Waits::Arena);
         };
-        let (counter, key) = numbers.data_and_key(tid);
+        let counter = numbers.counter(tid);
         let ccmp = match (protection, key.map(TxKey::packet_numbers)) {
             (DataProtection::Open, _) => None,
             (DataProtection::Ccmp(()), Some(key)) => match key.allocate() {

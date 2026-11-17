@@ -11,7 +11,9 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
 };
-use oer_protocols_ieee80211_core_upper_mac::ccmp::{InstalledCcmpTxKey, SoftwareCcmpKey};
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{
+    CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
+};
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::{
@@ -198,10 +200,12 @@ impl EventSink<DataEvent> for Seen {
     }
 }
 
-/// What the engine told the controller: TBTTs and the closed gate.
+/// What the engine told the controller: TBTTs, the closed gate and the
+/// keys' ends.
 pub(super) struct Controller<'id> {
     pub tbtts: Vec<TbttEvent>,
     pub gate: Option<GateClosed<'id>>,
+    pub keys: Vec<KeyEnd>,
 }
 
 impl<'id> Told<'id> for Controller<'id> {
@@ -211,6 +215,10 @@ impl<'id> Told<'id> for Controller<'id> {
 
     fn gate_closed(&mut self, gate: GateClosed<'id>) {
         self.gate = Some(gate);
+    }
+
+    fn key_ended(&mut self, end: KeyEnd) {
+        self.keys.push(end);
     }
 }
 
@@ -247,7 +255,7 @@ pub(super) fn fixed<'id, const S: usize, const D: usize>(
 
 /// Write a station's open QoS link with `attempts` an aggregate member may
 /// miss and a lifetime of `lifetime` into its places.
-pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<ModelLink, Key> {
+pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<ModelLink> {
     StationLink {
         data: DataLink {
             header: StaDataHeaderTemplate::new(
@@ -272,16 +280,15 @@ pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<Mode
 }
 
 /// A link's numbers from zero, a space a TID.
-fn fresh_numbers() -> TxNumbers<Key> {
+fn fresh_numbers() -> TxNumbers {
     TxNumbers::new(
         SequenceCounter::new(SequenceNumber::ZERO),
         Some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
-        None,
     )
 }
 
 /// An access point's open link to `client`.
-pub(super) fn client_link(client: [u8; 6]) -> ClientLink<Key> {
+pub(super) fn client_link(client: [u8; 6]) -> ClientLink {
     ClientLink {
         client,
         access_point: ACCESS_POINT_ADDRESS,
@@ -311,6 +318,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
             told: Controller {
                 tbtts: Vec::new(),
                 gate: None,
+                keys: Vec::new(),
             },
             micros: 1,
         }
@@ -404,6 +412,218 @@ fn station<'id, const POOL: usize>(
 }
 
 const HOUR: Duration = Duration::from_secs(3600);
+
+/// The access point's pairwise key of material `byte`, with its transmit
+/// key of packet numbers from one.
+fn key_change(byte: u8) -> KeyChange<Key> {
+    KeyChange {
+        peer: IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap(),
+        key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[byte; 16]),
+        spp: oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        transmit: InstalledCcmpTxKey::install(TestKey, CcmpPacketNumberStep::ONE),
+    }
+}
+
+/// Ask the station's linked access point's key to change to `byte`'s.
+fn change_key<'id, const POOL: usize>(
+    engine: &mut StationEngine<'id, POOL>,
+    around: &mut Around<'id, STATION_SINGLES, 0>,
+    byte: u8,
+) -> Rest {
+    let mut data = station_flowing(engine);
+    let PeerPlace::Linked(mut linked) = data.peer(ACCESS_POINT) else {
+        panic!("the access point is linked");
+    };
+    let KeyPlace::Idle(idle) = linked.key() else {
+        panic!("no command runs");
+    };
+    idle.change(key_change(byte), &mut around.turn())
+}
+
+/// Whether the station holds a transmit key: its port key is installed.
+fn transmit_key<const POOL: usize>(engine: &StationEngine<'_, POOL>) -> bool {
+    matches!(
+        &engine.data,
+        Data::Flowing(super::Running {
+            interface: Interface::Idle {
+                key: StationKey::Installed(..),
+                ..
+            },
+            ..
+        })
+    )
+}
+
+/// Whether a key's command runs, as the key's view says.
+fn key_changing<'id, const POOL: usize>(engine: &mut StationEngine<'id, POOL>) -> bool {
+    let mut data = station_flowing(engine);
+    let PeerPlace::Linked(mut linked) = data.peer(ACCESS_POINT) else {
+        panic!("the access point is linked");
+    };
+    matches!(linked.key(), KeyPlace::Changing(_))
+}
+
+/// Mutant 5 of the model: a key change done runs the intake. What the
+/// network offered while the key changed waits in its queue, and goes once
+/// the installation ended.
+#[test]
+fn a_key_changes_behind_its_command_and_its_end_runs_the_intake() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        let _ = change_key(&mut engine, &mut around, 1);
+        assert!(key_changing(&mut engine));
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert!(
+            around.port.published().is_empty(),
+            "nothing goes while the key changes"
+        );
+        assert_eq!(engine.queued(), 1);
+        let _ = engine.round(&mut around.turn());
+        assert_eq!(around.told.keys, [KeyEnd::Installed]);
+        assert_eq!(around.port.published().len(), 1);
+        assert_eq!(engine.queued(), 0);
+        assert!(transmit_key(&engine), "the key is the link's");
+    });
+}
+
+/// Mutants 6 and 19 of the model: no MSDU is taken under a key about to go,
+/// and what the arenas hold unpublished when the key changes goes home. The
+/// key's command waits for the arena on the air, and the arena settles at
+/// its end.
+#[test]
+fn a_key_change_waits_for_the_air_and_sends_home_what_the_old_key_wrote() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=2 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        // One arena on the air with 1, the standby written with 2.
+        assert_eq!(around.port.published().len(), 1);
+        let _ = change_key(&mut engine, &mut around, 1);
+        around.net.offer(3, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        let _ = engine.round(&mut around.turn());
+        // The key's command waits at the port's barrier; nothing is taken.
+        assert!(key_changing(&mut engine));
+        assert_eq!(engine.queued(), 1);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        // 1 delivered, 2 written under the old key went home, 3 goes under
+        // the new one.
+        assert_eq!(around.told.keys, [KeyEnd::Installed]);
+        assert_eq!(around.net.home, [1, 2]);
+        assert_eq!(around.port.published().len(), 2);
+        assert_eq!(engine.queued(), 0);
+        // 2's number was never transmitted: 3 takes it.
+        assert_eq!(first_sequence(&around, 1), 1);
+    });
+}
+
+/// The sequence number of the first frame of the `index`th publication.
+fn first_sequence<const S: usize, const D: usize>(around: &Around<'_, S, D>, index: usize) -> u16 {
+    let front = &around.port.published()[index].frames[0];
+    SequenceNumber::from_sequence_control(u16::from_le_bytes([front[22], front[23]])).get()
+}
+
+/// A frame that was transmitted and waited for its retry goes home at a
+/// key's end: its number was seen, so a BlockAckReq to the window's new
+/// head is owed.
+#[test]
+fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let _ = peer.tx_agreement(WmmUserPriority::UP0, 2, &mut around.turn());
+        });
+        for id in 1..=2 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        assert_eq!(around.port.published().len(), 1);
+        let _ = change_key(&mut engine, &mut around, 1);
+        around.port.set_air(BEST_EFFORT, Air::NoAck);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        // Both missed and were kept for a retry; the key's end sent them
+        // home.
+        assert_eq!(around.told.keys, [KeyEnd::Installed]);
+        assert_eq!(around.net.home, [1, 2]);
+        let mut owed = None;
+        linked(&mut engine, |peer| {
+            owed = peer.bar_owed(WmmUserPriority::UP0)
+        });
+        assert_eq!(owed.map(SequenceNumber::get), Some(2));
+    });
+}
+
+/// A rekey is the installed key's removal and the new one's installation:
+/// the controller is told the installation's end once.
+#[test]
+fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        let _ = change_key(&mut engine, &mut around, 1);
+        let _ = engine.round(&mut around.turn());
+        let _ = change_key(&mut engine, &mut around, 2);
+        let _ = engine.round(&mut around.turn());
+        // The removal ended; the installation runs.
+        assert!(key_changing(&mut engine));
+        let _ = engine.round(&mut around.turn());
+        assert!(!key_changing(&mut engine));
+        assert_eq!(around.told.keys, [KeyEnd::Installed, KeyEnd::Installed]);
+    });
+}
+
+/// An installation that expired leaves no key: nothing protected goes, and
+/// the controller is told.
+#[test]
+fn an_expired_installation_leaves_the_link_without_a_key() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.port.expire_next();
+        let _ = change_key(&mut engine, &mut around, 1);
+        let _ = engine.round(&mut around.turn());
+        assert_eq!(around.told.keys, [KeyEnd::Expired]);
+        assert!(!transmit_key(&engine));
+    });
+}
+
+/// Mutant 17 of the model: a stop does not leave a key's command waiting.
+/// The stop waits for the key's end, removes the key, closes the gate, and
+/// only then gives the rights back.
+#[test]
+fn a_stop_during_a_key_change_waits_for_it_removes_the_key_and_closes_the_gate() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        let _ = change_key(&mut engine, &mut around, 1);
+        assert!(matches!(
+            station_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Going
+        ));
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.told.keys, [KeyEnd::Installed]);
+        let mut answer = DataStop::Going;
+        for _ in 0..4 {
+            let DataPlace::Stopping(stopping) = engine.data() else {
+                break;
+            };
+            answer = stopping.poll(&mut around.turn());
+        }
+        assert!(matches!(answer, DataStop::Stopped(_)));
+        assert_eq!(around.told.keys, [KeyEnd::Installed, KeyEnd::Removed]);
+        assert!(around.told.gate.is_some());
+    });
+}
 
 #[test]
 fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order() {
@@ -742,17 +962,31 @@ fn the_access_points_engine_size_at_two_and_fifteen_clients() {
 #[test]
 fn the_sizes_of_the_values_built_into_a_variant() {
     use core::mem::size_of;
-    type Station =
-        super::Running<'static, Arenas, ModelCaps, STATION_SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
-    type Ap =
-        super::Running<'static, Singles, ModelCaps, AP_SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    type Station = super::Running<
+        'static,
+        Arenas,
+        ModelCaps,
+        Key,
+        STATION_SINGLES,
+        MODEL_GROUPS,
+        MODEL_AGREEMENTS,
+    >;
+    type Ap = super::Running<
+        'static,
+        Singles,
+        ModelCaps,
+        Key,
+        AP_SINGLES,
+        MODEL_GROUPS,
+        MODEL_AGREEMENTS,
+    >;
     std::println!(
         "copies: DataLink {}, StationLink {}, StationEntry {}, ClientLink {}, DataPlane {}, \
          station running {}, access point running {}",
         size_of::<DataLink>(),
-        size_of::<StationLink<ModelLink, Key>>(),
-        size_of::<StationEntry<ModelLink, Key>>(),
-        size_of::<ClientLink<Key>>(),
+        size_of::<StationLink<ModelLink>>(),
+        size_of::<StationEntry<ModelLink>>(),
+        size_of::<ClientLink>(),
         size_of::<DataPlane<'static, ModelCaps>>(),
         size_of::<Station>(),
         size_of::<Ap>(),

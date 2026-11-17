@@ -52,10 +52,12 @@ use oer_portable_time::Instant;
 pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataPort, DataRights,
-    GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, MpduLength, PairwiseSlot,
-    PortRate, PortSink, QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome, SinglePlace,
-    SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
+    GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, InstalledPairwise,
+    MpduLength, PairwiseCommand, PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink,
+    QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome, SinglePlace, SizedFrame, TbttEvent,
+    TxFacts, TxFrame, TxOutcome,
 };
+use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::data::{
@@ -63,6 +65,7 @@ use oer_protocols_ieee80211_wire::data::{
 };
 use oer_protocols_ieee80211_wire::frame::{MacHeader, QosAckPolicy};
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+use oer_protocols_ieee80211_wire::security::Spp;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::cost::single_cost;
@@ -131,6 +134,9 @@ pub trait Told<'id> {
 
     /// The gate's closing ended: the closed gate is the controller's again.
     fn gate_closed(&mut self, gate: GateClosed<'id>);
+
+    /// A key's command ended.
+    fn key_ended(&mut self, end: KeyEnd);
 }
 
 /// What one section is lent: the port, the network's end, the rate policy,
@@ -205,14 +211,14 @@ impl sealed::Sealed for Singles {}
 
 impl Form for Arenas {
     type Running<'id, K> = StationRunning<'id, K>;
-    type Entry<L, T> = StationEntry<L, T>;
+    type Entry<L, T> = StationEntry<L>;
     type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
         DataRights<'id, SINGLES, GROUPS, AGREEMENTS, 0>;
 }
 
 impl Form for Singles {
     type Running<'id, K> = ApRunning<'id, K>;
-    type Entry<L, T> = ClientLink<T>;
+    type Entry<L, T> = ClientLink;
     type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
         DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA_SINGLES>;
 }
@@ -220,27 +226,27 @@ impl Form for Singles {
 /// A station's link to its access point, as its controller links it: the
 /// plane's data state, the port's link its arenas open for, and the link's
 /// transmit numbers.
-pub struct StationLink<L, T> {
+pub struct StationLink<L> {
     pub data: DataLink,
     pub port: L,
-    pub numbers: TxNumbers<T>,
+    pub numbers: TxNumbers,
 }
 
 /// What a station's linked entry keeps; the plane holds the link's data
 /// state.
-pub struct StationEntry<L, T> {
+pub struct StationEntry<L> {
     port: L,
-    numbers: TxNumbers<T>,
+    numbers: TxNumbers,
 }
 
 /// An access point's link to one client: its address, its own, whether it
 /// negotiated QoS and the link's transmit numbers. Its data is open:
 /// protection comes with the access point's keys.
-pub struct ClientLink<T> {
+pub struct ClientLink {
     pub client: [u8; 6],
     pub access_point: [u8; 6],
     pub qos: PeerQos,
-    pub numbers: TxNumbers<T>,
+    pub numbers: TxNumbers,
 }
 
 /// What a station's data holds while it runs: the plane, built with the
@@ -281,42 +287,97 @@ struct InFlight<'id, K> {
     psdu: u32,
 }
 
-/// The gate the controller lent, with the interface's command place: the
-/// gate's closing is this half's one command.
+/// The gate the controller lent.
 enum Gate<'id> {
-    /// The controller holds the gate, closed.
-    Shut(CommandPlace<'id>),
+    /// The controller holds it, closed.
+    Shut,
     /// Open: arenas and singles go.
-    Open(GateOpen<'id>, CommandPlace<'id>),
-    /// Its closing runs, with the command's place: nothing goes.
-    Closing(InCommand<'id, GateOpen<'id>>),
+    Open(GateOpen<'id>),
+}
+
+/// The station's pairwise key: its slot empty, or the port's key installed
+/// with the link's transmit key of packet numbers `T`, which exists exactly
+/// while the port's does.
+enum StationKey<'id, T> {
+    Empty(PairwiseSlot<'id>),
+    Installed(InstalledPairwise<'id>, T),
+}
+
+/// A key the controller installs: the port's entry (its peer, the key and
+/// the association's SPP A-MSDU decision) and the link's transmit key of
+/// packet numbers.
+pub struct KeyChange<T> {
+    pub peer: IndividualAddress,
+    pub key: Ccmp128Key,
+    pub spp: Spp,
+    pub transmit: T,
+}
+
+/// Where a key's command is.
+enum KeyStep<T> {
+    /// The installed key goes, and its transmit key `old` with it; then
+    /// `then` is installed, when there is one (a rekey), else the slot
+    /// stays empty (the data's stop).
+    Removing { old: T, then: Option<KeyChange<T>> },
+    /// A key is installed; `transmit` is the link's once it is.
+    Installing { transmit: T },
+}
+
+/// What the interface's command place is doing, each variant holding what
+/// exists beside it. A key's command and the gate's closing stop the
+/// intake; no other command runs in this half yet.
+enum Interface<'id, T> {
+    /// No command runs.
+    Idle {
+        gate: Gate<'id>,
+        place: CommandPlace<'id>,
+        key: StationKey<'id, T>,
+    },
+    /// A key's command runs: the key's slot is the port's.
+    Keying {
+        gate: Gate<'id>,
+        command: InCommand<'id, PairwiseHeld<'id>>,
+        step: KeyStep<T>,
+    },
+    /// The gate's closing runs: the gate is the port's.
+    Closing {
+        command: InCommand<'id, GateOpen<'id>>,
+        key: StationKey<'id, T>,
+    },
     /// Inside one method, between two of the above: the port's command
-    /// takes the open gate and the place by value, so safe Rust moves them
-    /// out through a value left in their place. Never seen outside it.
+    /// takes the place and its right by value, and no variant is without
+    /// them, so safe Rust moves them out through a value left in their
+    /// place. Never seen outside it.
     InTransition,
 }
 
 /// The data's rights and parts while it runs.
-struct Running<'id, F: Form, K, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>
-{
+struct Running<
+    'id,
+    F: Form,
+    K,
+    T,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> {
     form: F::Running<'id, K>,
     /// The controller's single places, which the engine does not lend.
     singles: [SinglePlace<'id>; SINGLES],
-    gate: Gate<'id>,
-    pairwise: PairwiseSlot<'id>,
+    interface: Interface<'id, T>,
     groups: [GroupSlot<'id>; GROUPS],
     agreements: [AgreementSlot<'id>; AGREEMENTS],
 }
 
 /// The data's state.
-enum Data<'id, F: Form, K, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> {
+enum Data<'id, F: Form, K, T, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> {
     /// The installation machine holds the rights.
     Stopped,
     /// The data flows.
-    Flowing(Running<'id, F, K, SINGLES, GROUPS, AGREEMENTS>),
+    Flowing(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>),
     /// Asked to stop: every link ended; what is on the air or in the gate's
     /// closing ends first.
-    Stopping(Running<'id, F, K, SINGLES, GROUPS, AGREEMENTS>),
+    Stopping(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>),
 }
 
 /// A link's state.
@@ -368,7 +429,7 @@ pub struct Engine<
 > {
     /// The MSDUs a section takes at most.
     budget: u8,
-    data: Data<'id, F, P::Caps, SINGLES, GROUPS, AGREEMENTS>,
+    data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>,
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<F::Entry<P::Link, T>>; PEERS],
     queues: TxQueues<P::Memory, POOL, PEERS>,
@@ -384,6 +445,8 @@ pub struct Seal(());
 pub trait Sections<'id, P: DataPort<'id>> {
     /// The data's rights of the form's layout.
     type Rights;
+    /// The link's transmit key.
+    type Key;
 
     /// The data flows, with its rights.
     fn start(&mut self, _seal: Seal, rights: Self::Rights);
@@ -426,11 +489,21 @@ pub trait Sections<'id, P: DataPort<'id>> {
         turn: &mut Turn<'_, P, N, R, E, C>,
     );
 
-    /// Poll the gate's closing, through the form's sink.
+    /// Poll the command that runs, through the form's sink: what ended.
     fn poll_command<N, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Option<Ending<'id, Self::Key>>;
+
+    /// The link's transmit key changed: what the form holds unpublished,
+    /// written under the old one, goes home first.
+    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        _seal: Seal,
+        port: &mut P,
+        network: &mut N,
+        events: &mut E,
     );
 
     /// End the link of `peer`: what the form holds of it goes home.
@@ -516,12 +589,39 @@ impl<
         }
     }
 
-    /// The data's gate, while it runs.
-    const fn gate_mut(&mut self) -> Option<&mut Gate<'id>> {
+    /// The interface's command place, while the data runs.
+    const fn interface_mut(&mut self) -> Option<&mut Interface<'id, T>> {
         match &mut self.data {
-            Data::Flowing(running) | Data::Stopping(running) => Some(&mut running.gate),
+            Data::Flowing(running) | Data::Stopping(running) => Some(&mut running.interface),
             Data::Stopped => None,
         }
+    }
+
+    /// Whether the command place admits the intake: a key's command and the
+    /// gate's closing stop it.
+    const fn admits_intake(&self) -> bool {
+        matches!(
+            &self.data,
+            Data::Flowing(Running {
+                interface: Interface::Idle { .. },
+                ..
+            })
+        )
+    }
+
+    /// Whether a command runs, for the crate's search.
+    #[cfg(test)]
+    pub(crate) fn command_runs(&self) -> bool {
+        matches!(
+            &self.data,
+            Data::Flowing(Running {
+                interface: Interface::Keying { .. } | Interface::Closing { .. },
+                ..
+            }) | Data::Stopping(Running {
+                interface: Interface::Keying { .. } | Interface::Closing { .. },
+                ..
+            })
+        )
     }
 
     /// The MSDUs the queues hold.
@@ -530,50 +630,220 @@ impl<
         self.queues.len()
     }
 
-    /// Begin the gate's closing, when it is open: nothing new goes from now.
+    /// Begin the gate's closing, when it is open and no command runs:
+    /// nothing new goes from now.
     fn close_gate<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
-        let Some(gate) = self.gate_mut() else {
+        let Some(interface) = self.interface_mut() else {
             return;
         };
-        let Gate::Open(..) = gate else {
+        let Interface::Idle {
+            gate: Gate::Open(_),
+            ..
+        } = interface
+        else {
             return;
         };
-        if let Gate::Open(open, place) = core::mem::replace(gate, Gate::InTransition) {
-            *gate = Gate::Closing(turn.port.begin_close(place, CloseGate(open), turn.now));
-        }
+        *interface = match core::mem::replace(interface, Interface::InTransition) {
+            Interface::Idle {
+                gate: Gate::Open(open),
+                place,
+                key,
+            } => Interface::Closing {
+                command: turn.port.begin_close(place, CloseGate(open), turn.now),
+                key,
+            },
+            // Checked open and idle above: this does not happen. Should it,
+            // the interface keeps what it was.
+            other => other,
+        };
     }
 
-    /// The gate's command polled through `sink`: its end puts the
-    /// command's place back and gives the closed gate, for the controller.
-    fn poll_through(
-        gate: &mut Gate<'id>,
+    /// Begin a key's command, when no command runs: the installed key's
+    /// removal (then `change`'s installation), or `change`'s installation
+    /// in the empty slot; [`Begun::Busy`] with the change back while a
+    /// command runs.
+    fn begin_key<N, R, E, C>(
+        &mut self,
+        change: Option<KeyChange<T>>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Begun<KeyChange<T>> {
+        let Some(interface) = self.interface_mut() else {
+            return Begun::Busy(change);
+        };
+        let Interface::Idle { .. } = interface else {
+            return Begun::Busy(change);
+        };
+        let (next, begun) = match core::mem::replace(interface, Interface::InTransition) {
+            Interface::Idle {
+                gate,
+                place,
+                key: StationKey::Installed(installed, old),
+            } => (
+                Interface::Keying {
+                    gate,
+                    command: turn.port.begin_pairwise(
+                        place,
+                        PairwiseCommand::Remove(installed),
+                        turn.now,
+                    ),
+                    step: KeyStep::Removing { old, then: change },
+                },
+                Begun::Started,
+            ),
+            Interface::Idle {
+                gate,
+                place,
+                key: StationKey::Empty(slot),
+            } => match change {
+                Some(KeyChange {
+                    peer,
+                    key,
+                    spp,
+                    transmit,
+                }) => (
+                    Interface::Keying {
+                        gate,
+                        command: turn.port.begin_pairwise(
+                            place,
+                            PairwiseCommand::Install {
+                                slot,
+                                peer,
+                                key,
+                                spp,
+                            },
+                            turn.now,
+                        ),
+                        step: KeyStep::Installing { transmit },
+                    },
+                    Begun::Started,
+                ),
+                None => (
+                    Interface::Idle {
+                        gate,
+                        place,
+                        key: StationKey::Empty(slot),
+                    },
+                    Begun::Nothing,
+                ),
+            },
+            // Checked idle above: this does not happen. Should it, the
+            // interface keeps what it was.
+            other => (other, Begun::Busy(change)),
+        };
+        *interface = next;
+        begun
+    }
+
+    /// The interface's command polled through `sink`: its end puts the
+    /// command's place back with what the end returns, and says what ended.
+    fn poll_interface(
+        interface: &mut Interface<'id, T>,
         port: &mut P,
         now: Instant,
         sink: &mut impl PortSink<'id, P::Ack, P::Denial>,
-    ) -> Option<GateClosed<'id>> {
-        let Gate::Closing(_) = gate else {
+    ) -> Option<Ending<'id, T>> {
+        let (Interface::Keying { .. } | Interface::Closing { .. }) = interface else {
             return None;
         };
-        let command = match core::mem::replace(gate, Gate::InTransition) {
-            Gate::Closing(command) => command,
-            other => {
-                // Checked closing above: this does not happen. Should it,
-                // the gate keeps what it was.
-                *gate = other;
-                return None;
-            }
+        let (next, ending) = match core::mem::replace(interface, Interface::InTransition) {
+            Interface::Closing { command, key } => match port.poll_close(command, now, sink) {
+                CommandPoll::Pending(command) => (Interface::Closing { command, key }, None),
+                CommandPoll::Ended(place, closed) => (
+                    Interface::Idle {
+                        gate: Gate::Shut,
+                        place,
+                        key,
+                    },
+                    Some(Ending::GateClosed(closed)),
+                ),
+            },
+            Interface::Keying {
+                gate,
+                command,
+                step,
+            } => match port.poll_pairwise(command, now, sink) {
+                CommandPoll::Pending(command) => (
+                    Interface::Keying {
+                        gate,
+                        command,
+                        step,
+                    },
+                    None,
+                ),
+                CommandPoll::Ended(place, end) => {
+                    let (key, ending) = match (end, step) {
+                        (PairwiseEnd::Installed(installed), KeyStep::Installing { transmit }) => (
+                            StationKey::Installed(installed, transmit),
+                            Ending::Key {
+                                end: KeyEnd::Installed,
+                                then: None,
+                            },
+                        ),
+                        (PairwiseEnd::Empty(slot), KeyStep::Installing { .. }) => (
+                            StationKey::Empty(slot),
+                            Ending::Key {
+                                end: KeyEnd::Expired,
+                                then: None,
+                            },
+                        ),
+                        (PairwiseEnd::Empty(slot), KeyStep::Removing { then, .. }) => (
+                            StationKey::Empty(slot),
+                            Ending::Key {
+                                end: KeyEnd::Removed,
+                                then,
+                            },
+                        ),
+                        (PairwiseEnd::Installed(installed), KeyStep::Removing { old, .. }) => (
+                            // A removal ends with the slot empty; a key
+                            // still installed stays so, and the controller
+                            // is told it.
+                            StationKey::Installed(installed, old),
+                            Ending::Key {
+                                end: KeyEnd::Installed,
+                                then: None,
+                            },
+                        ),
+                    };
+                    (Interface::Idle { gate, place, key }, Some(ending))
+                }
+            },
+            idle @ (Interface::Idle { .. } | Interface::InTransition) => (idle, None),
         };
-        match port.poll_close(command, now, sink) {
-            CommandPoll::Pending(command) => {
-                *gate = Gate::Closing(command);
-                None
-            }
-            CommandPoll::Ended(place, end) => {
-                *gate = Gate::Shut(place);
-                Some(end)
-            }
-        }
+        *interface = next;
+        ending
     }
+}
+
+/// Whether a command began.
+enum Begun<C> {
+    Started,
+    /// Nothing to begin.
+    Nothing,
+    /// A command runs: the change back.
+    Busy(Option<C>),
+}
+
+/// What a command's end leaves for the engine to tell: made by the
+/// engine's sections alone ([`Seal`]).
+pub enum Ending<'id, T> {
+    GateClosed(GateClosed<'id>),
+    Key {
+        end: KeyEnd,
+        /// The key to install now, after a removal.
+        then: Option<KeyChange<T>>,
+    },
+}
+
+/// How a key's command ended, as the controller is told.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeyEnd {
+    /// The key is installed: protected data goes under it.
+    Installed,
+    /// Its installation expired: the slot is empty, no key; nothing
+    /// protected goes, and the controller ends the link.
+    Expired,
+    /// The installed key is removed (the data's stop): the slot is empty.
+    Removed,
 }
 
 impl<
@@ -588,7 +858,7 @@ impl<
     const AGREEMENTS: usize,
 > engine!()
 where
-    Self: Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    Self: Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -615,7 +885,7 @@ where
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
-        self.poll_command(Seal(()), turn);
+        self.command(turn);
         self.intake(turn)
     }
 
@@ -633,7 +903,7 @@ where
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
         self.ended(Seal(()), facts, tbtt, turn);
-        self.poll_command(Seal(()), turn);
+        self.command(turn);
         self.intake(turn)
     }
 
@@ -725,6 +995,45 @@ where
         moved
     }
 
+    /// The command that runs, polled; what ended told; a stopping data's
+    /// next command begun.
+    fn command<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        if let Some(ending) = self.poll_command(Seal(()), turn) {
+            match ending {
+                Ending::GateClosed(closed) => turn.told.gate_closed(closed),
+                Ending::Key { end, then } => {
+                    self.keyed(Seal(()), turn.port, turn.network, turn.events);
+                    // A rekey's removal is followed by its installation at
+                    // once: the intake stands between them.
+                    let begun = then.map(|change| self.begin_key(Some(change), turn));
+                    if !matches!(begun, Some(Begun::Started)) {
+                        turn.told.key_ended(end);
+                    }
+                    self.queues.unblock();
+                }
+            }
+        }
+        if let Data::Stopping(_) = self.data {
+            self.advance_stop(turn);
+        }
+    }
+
+    /// The stopping data's next command, when none runs: the installed
+    /// key's removal, then the open gate's closing.
+    fn advance_stop<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
+        if let Begun::Nothing = self.begin_key(None, turn) {
+            self.close_gate(turn);
+        }
+    }
+
     /// The intake: drain, fill, publish, again while it moved something,
     /// within one budget. A round is owed when the budget ran out with more
     /// to take.
@@ -800,6 +1109,9 @@ pub enum GatePlace<'a, E> {
     Shut(ShutGate<'a, E>),
     /// The engine holds it open.
     Open(OpenGate<'a, E>),
+    /// Open while a key's command runs: nothing goes, and it offers no
+    /// closing until the key's end ([`Told::key_ended`]).
+    OpenKeying(KeyingGate<'a, E>),
     /// Its closing runs in the port; it ends in [`Told::gate_closed`].
     Closing(ClosingGate<'a, E>),
 }
@@ -812,6 +1124,29 @@ pub struct OpenGate<'a, E>(&'a mut E);
 
 /// A closing gate's handle: it offers no transition.
 pub struct ClosingGate<'a, E>(PhantomData<&'a mut E>);
+
+/// An open gate's handle while a key's command runs: it offers no
+/// transition.
+pub struct KeyingGate<'a, E>(PhantomData<&'a mut E>);
+
+/// What the station's key place is now.
+pub enum KeyPlace<'a, E> {
+    /// No command runs: a key may be installed.
+    Idle(IdleKey<'a, E>),
+    /// A key's command runs; it ends in [`Told::key_ended`].
+    Changing(ChangingKey<'a, E>),
+    /// Another command runs (the gate's closing).
+    Busy(BusyKey<'a, E>),
+}
+
+/// The idle key place's handle.
+pub struct IdleKey<'a, E>(&'a mut E);
+
+/// A changing key's handle: it offers no transition.
+pub struct ChangingKey<'a, E>(PhantomData<&'a mut E>);
+
+/// A busy key place's handle: it offers no transition.
+pub struct BusyKey<'a, E>(PhantomData<&'a mut E>);
 
 impl<
     'a,
@@ -826,7 +1161,7 @@ impl<
     const AGREEMENTS: usize,
 > FlowingData<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -849,17 +1184,33 @@ where
     /// The gate's place.
     pub fn gate(&mut self) -> GatePlace<'_, engine!()> {
         let engine = &mut *self.0;
-        let open = matches!(engine.gate_mut(), Some(Gate::Open(..)));
-        let shut = matches!(engine.gate_mut(), Some(Gate::Shut(_)) | None);
-        match (open, shut) {
-            (true, _) => GatePlace::Open(OpenGate(engine)),
-            (false, true) => GatePlace::Shut(ShutGate(engine)),
-            (false, false) => GatePlace::Closing(ClosingGate(PhantomData)),
+        match engine.interface_mut() {
+            Some(Interface::Idle {
+                gate: Gate::Open(_),
+                ..
+            }) => GatePlace::Open(OpenGate(engine)),
+            Some(Interface::Keying {
+                gate: Gate::Open(_),
+                ..
+            }) => GatePlace::OpenKeying(KeyingGate(PhantomData)),
+            Some(Interface::Closing { .. } | Interface::InTransition) => {
+                GatePlace::Closing(ClosingGate(PhantomData))
+            }
+            Some(
+                Interface::Idle {
+                    gate: Gate::Shut, ..
+                }
+                | Interface::Keying {
+                    gate: Gate::Shut, ..
+                },
+            )
+            | None => GatePlace::Shut(ShutGate(engine)),
         }
     }
 
     /// Stop the data, as the installation machine asks: every link ends,
-    /// its queued and unpublished data goes home, an open gate closes. The
+    /// its queued and unpublished data goes home, the installed key is
+    /// removed and an open gate closes, one command after the other. The
     /// rights come back once nothing is the port's; until
     /// then the answer is [`DataStop::Going`], and the machine asks again
     /// ([`StoppingData::poll`]).
@@ -886,7 +1237,7 @@ where
             Data::Flowing(running) => Data::Stopping(running),
             other => other,
         };
-        engine.close_gate(turn);
+        engine.advance_stop(turn);
         // With no link, what the network still offers goes back.
         engine.drain(turn);
         engine.finish()
@@ -906,7 +1257,7 @@ impl<
     const AGREEMENTS: usize,
 > StoppingData<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -922,7 +1273,7 @@ where
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
         let engine = self.0;
-        engine.poll_command(Seal(()), turn);
+        engine.command(turn);
         engine.finish()
     }
 }
@@ -940,7 +1291,7 @@ impl<
     const AGREEMENTS: usize,
 > LinkedPeer<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -1072,7 +1423,7 @@ impl<
     const AGREEMENTS: usize,
 > ShutGate<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -1088,12 +1439,11 @@ where
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
         let engine = self.0;
-        if let Some(place) = engine.gate_mut() {
-            *place = match core::mem::replace(place, Gate::InTransition) {
-                Gate::Shut(command) => Gate::Open(turn.port.open_gate(gate), command),
-                // The handle is a shut gate's: the data holds no other.
-                other => other,
-            };
+        if let Some(Interface::Idle { gate: place, .. } | Interface::Keying { gate: place, .. }) =
+            engine.interface_mut()
+            && let Gate::Shut = place
+        {
+            *place = Gate::Open(turn.port.open_gate(gate));
         }
         engine.intake(turn)
     }
@@ -1112,7 +1462,7 @@ impl<
     const AGREEMENTS: usize,
 > OpenGate<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -1147,7 +1497,7 @@ impl<
     const AGREEMENTS: usize,
 > StoppedData<'a, engine!()>
 where
-    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
     P::Ack: Copy,
     P::Denial: Copy,
 {
@@ -1187,7 +1537,7 @@ where
         C: Told<'id>,
     >(
         self,
-        link: StationLink<P::Link, T>,
+        link: StationLink<P::Link>,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
         let Self { engine, peer } = self;
@@ -1228,11 +1578,76 @@ where
         C: Told<'id>,
     >(
         self,
-        link: ClientLink<T>,
+        link: ClientLink,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
         let Self { engine, peer } = self;
         engine.link(peer, link, turn)
+    }
+}
+
+/// The station's key: its link's pairwise key, changed by a command.
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> LinkedPeer<'a, station!()>
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    /// The key's place.
+    pub fn key(&mut self) -> KeyPlace<'_, station!()> {
+        let engine = &mut *self.engine;
+        match engine.interface_mut() {
+            Some(Interface::Idle { .. }) => KeyPlace::Idle(IdleKey(engine)),
+            Some(Interface::Keying { .. }) => KeyPlace::Changing(ChangingKey(PhantomData)),
+            Some(Interface::Closing { .. } | Interface::InTransition) | None => {
+                KeyPlace::Busy(BusyKey(PhantomData))
+            }
+        }
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> IdleKey<'a, station!()>
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    /// Install `change` as the link's key: the installed key's removal
+    /// first, when there is one, then its installation. The intake stands
+    /// until the installation's end; then what the arenas hold unpublished
+    /// goes home and the key is the link's ([`Told::key_ended`]).
+    pub fn change<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        change: KeyChange<T>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let engine = self.0;
+        // The handle is an idle place's: the key's command begins.
+        let _begun = engine.begin_key(Some(change), turn);
+        engine.intake(turn)
     }
 }
 
@@ -1382,6 +1797,7 @@ where
     P::Denial: Copy,
 {
     type Rights = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, 0>;
+    type Key = T;
 
     fn start(&mut self, _seal: Seal, rights: Self::Rights) {
         let DataRights {
@@ -1402,8 +1818,11 @@ where
                 queues,
             },
             singles,
-            gate: Gate::Shut(command),
-            pairwise,
+            interface: Interface::Idle {
+                gate: Gate::Shut,
+                place: command,
+                key: StationKey::Empty(pairwise),
+            },
             groups,
             agreements,
         });
@@ -1437,6 +1856,9 @@ where
         turn: &mut Turn<'_, P, N, R, E, C>,
         taken: &mut u8,
     ) -> u8 {
+        if !self.admits_intake() {
+            return 0;
+        }
         let Self {
             data: Data::Flowing(running),
             entries:
@@ -1454,7 +1876,20 @@ where
         else {
             return 0;
         };
-        let plane = &mut running.form.plane;
+        let Running {
+            form: StationRunning { plane, .. },
+            interface,
+            ..
+        } = running;
+        // The link's transmit key exists while the port's key is
+        // installed; a key's command stops the intake.
+        let key = match interface {
+            Interface::Idle {
+                key: StationKey::Installed(_, transmit),
+                ..
+            } => Some(&*transmit),
+            _ => None,
+        };
         let hold = match hold {
             Hold::Named(tid) => Some(QueueId::of_tid(*tid)),
             Hold::Nothing => None,
@@ -1479,7 +1914,14 @@ where
                 break;
             };
             *taken = taken.saturating_add(1);
-            match plane.intake(turn.port, &link.port, msdu, &mut link.numbers, turn.now) {
+            match plane.intake(
+                turn.port,
+                &link.port,
+                msdu,
+                &mut link.numbers,
+                key,
+                turn.now,
+            ) {
                 Intake::Taken(_) => moved = moved.saturating_add(1),
                 Intake::Wait(msdu, why) => {
                     if let Err(msdu) = queues.push_front(queue, msdu) {
@@ -1511,7 +1953,11 @@ where
             data:
                 Data::Flowing(Running {
                     form: StationRunning { plane, .. },
-                    gate: Gate::Open(gate, _),
+                    interface:
+                        Interface::Idle {
+                            gate: Gate::Open(gate),
+                            ..
+                        },
                     ..
                 }),
             entries:
@@ -1566,11 +2012,15 @@ where
                     queues: rights,
                 },
             singles,
-            gate,
+            interface,
             ..
         } = running;
-        let gate = match gate {
-            Gate::Open(gate, _) => Some(&*gate),
+        // Nothing goes while a command that stops the intake runs.
+        let gate = match interface {
+            Interface::Idle {
+                gate: Gate::Open(gate),
+                ..
+            } => Some(&*gate),
             _ => None,
         };
         let rates = &mut *turn.rates;
@@ -1606,27 +2056,58 @@ where
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
+    ) -> Option<Ending<'id, T>> {
         let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
-            return;
+            return None;
         };
         let Running {
             form: StationRunning { queues, .. },
             singles,
-            gate,
+            interface,
             ..
         } = running;
-        let Gate::Closing(_) = gate else {
-            return;
-        };
         let mut sink = StationEnds {
             singles,
             queues,
             told: &mut *turn.told,
         };
-        let closed = Self::poll_through(gate, turn.port, turn.now, &mut sink);
-        if let Some(closed) = closed {
-            turn.told.gate_closed(closed);
+        Self::poll_interface(interface, turn.port, turn.now, &mut sink)
+    }
+
+    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        _seal: Seal,
+        port: &mut P,
+        network: &mut N,
+        events: &mut E,
+    ) {
+        // What the arenas hold unpublished was written under the old key:
+        // it goes home; the arena on the air settles at its end.
+        let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
+            return;
+        };
+        let plane = &mut running.form.plane;
+        let withdrawn = plane.withdraw_unpublished(port, |memory| network.home(memory), events);
+        let [Entry::Linked(linked)] = &mut self.entries else {
+            return;
+        };
+        for tid in WmmUserPriority::ALL {
+            let went = tid.select(&withdrawn);
+            // A number never transmitted named nothing to anyone: the
+            // TID's counter goes back to the oldest of them, when they are
+            // its last draws (no number was drawn after them, a named one
+            // included).
+            if let Some(next) = went.rewind_to(linked.link.numbers.next(tid)) {
+                linked.link.numbers.rewind(tid, next);
+                plane.rewound(tid, next);
+            }
+            // A number that was transmitted was seen: a BlockAckReq to the
+            // window's new head is owed.
+            if went.transmitted
+                && let Some(head) = plane.rehead(tid)
+            {
+                *tid.select_mut(&mut linked.owed) = Some(head);
+            }
         }
     }
 
@@ -1659,7 +2140,12 @@ where
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights> {
         let Data::Stopping(Running {
             form: StationRunning { plane, .. },
-            gate: Gate::Shut(_),
+            interface:
+                Interface::Idle {
+                    gate: Gate::Shut,
+                    key: StationKey::Empty(_),
+                    ..
+                },
             ..
         }) = &self.data
         else {
@@ -1682,13 +2168,19 @@ where
         let Running {
             form: StationRunning { mut plane, queues },
             singles,
-            gate,
-            pairwise,
+            interface,
             groups,
             agreements,
         } = running;
-        match (gate, plane.idle_arenas()) {
-            (Gate::Shut(command), Some(arenas)) => Some(DataRights {
+        match (interface, plane.idle_arenas()) {
+            (
+                Interface::Idle {
+                    gate: Gate::Shut,
+                    place: command,
+                    key: StationKey::Empty(pairwise),
+                },
+                Some(arenas),
+            ) => Some(DataRights {
                 arenas,
                 singles,
                 data: [],
@@ -1698,31 +2190,30 @@ where
                 groups,
                 agreements,
             }),
-            (gate, None) => {
+            (interface, None) => {
                 // Checked idle above: this does not happen. Should it, the
                 // data stays stopping with every part.
                 self.data = Data::Stopping(Running {
                     form: StationRunning { plane, queues },
                     singles,
-                    gate,
-                    pairwise,
+                    interface,
                     groups,
                     agreements,
                 });
                 None
             }
-            (gate, Some(arenas)) => {
-                // Checked shut above: this does not happen. Should it, the
-                // data stays stopping with every right; its plane holds no
-                // link, so a new one with the arenas is all it was.
+            (interface, Some(arenas)) => {
+                // Checked shut, idle and keyless above: this does not
+                // happen. Should it, the data stays stopping with every
+                // right; its plane holds no link, so a new one with the
+                // arenas is all it was.
                 self.data = Data::Stopping(Running {
                     form: StationRunning {
                         plane: DataPlane::new(arenas),
                         queues,
                     },
                     singles,
-                    gate,
-                    pairwise,
+                    interface,
                     groups,
                     agreements,
                 });
@@ -1838,6 +2329,7 @@ where
     P::Denial: Copy,
 {
     type Rights = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA_SINGLES>;
+    type Key = T;
 
     fn start(&mut self, _seal: Seal, rights: Self::Rights) {
         let DataRights {
@@ -1881,8 +2373,13 @@ where
                 arenas,
             },
             singles,
-            gate: Gate::Shut(command),
-            pairwise,
+            // The access point's clients' keys are its controller's (step
+            // 6): the station's slot stays empty.
+            interface: Interface::Idle {
+                gate: Gate::Shut,
+                place: command,
+                key: StationKey::Empty(pairwise),
+            },
             groups,
             agreements,
         });
@@ -1934,7 +2431,11 @@ where
         while *taken < self.budget {
             let Data::Flowing(Running {
                 form: ApRunning { lanes, .. },
-                gate: Gate::Open(..),
+                interface:
+                    Interface::Idle {
+                        gate: Gate::Open(_),
+                        ..
+                    },
                 ..
             }) = &self.data
             else {
@@ -2023,24 +2524,21 @@ where
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
+    ) -> Option<Ending<'id, T>> {
         let Self {
             data: Data::Flowing(running) | Data::Stopping(running),
             queues,
             ..
         } = self
         else {
-            return;
+            return None;
         };
         let Running {
             form: ApRunning { lanes, .. },
             singles,
-            gate,
+            interface,
             ..
         } = running;
-        let Gate::Closing(_) = gate else {
-            return;
-        };
         let mut ends = ApEnds {
             lanes,
             singles,
@@ -2050,10 +2548,17 @@ where
             told: &mut *turn.told,
             now: turn.now,
         };
-        let closed = Self::poll_through(gate, turn.port, turn.now, &mut ends);
-        if let Some(closed) = closed {
-            turn.told.gate_closed(closed);
-        }
+        Self::poll_interface(interface, turn.port, turn.now, &mut ends)
+    }
+
+    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        _seal: Seal,
+        _port: &mut P,
+        _network: &mut N,
+        _events: &mut E,
+    ) {
+        // The access point's data asks no key's command in this half.
     }
 
     fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
@@ -2083,7 +2588,12 @@ where
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights> {
         let Data::Stopping(Running {
             form: ApRunning { lanes, .. },
-            gate: Gate::Shut(_),
+            interface:
+                Interface::Idle {
+                    gate: Gate::Shut,
+                    key: StationKey::Empty(_),
+                    ..
+                },
             ..
         }) = &self.data
         else {
@@ -2129,8 +2639,12 @@ where
                         arenas,
                     },
                 singles,
-                gate: Gate::Shut(command),
-                pairwise,
+                interface:
+                    Interface::Idle {
+                        gate: Gate::Shut,
+                        place: command,
+                        key: StationKey::Empty(pairwise),
+                    },
                 groups,
                 agreements,
             } => Some(DataRights {
@@ -2207,7 +2721,11 @@ impl<
         let (
             Data::Flowing(Running {
                 form: ApRunning { lanes, .. },
-                gate: Gate::Open(gate, _),
+                interface:
+                    Interface::Idle {
+                        gate: Gate::Open(gate),
+                        ..
+                    },
                 ..
             }),
             Some(Entry::Linked(Linked { link, .. })),
@@ -2245,7 +2763,7 @@ impl<
         let Some(length) = length else {
             return refuse(turn, msdu.memory, IntakeRefusal::TooLong);
         };
-        let (counter, _key) = link.numbers.data_and_key(tid);
+        let counter = link.numbers.counter(tid);
         let header = MacHeader::decode(&encapsulation.header)
             .map(|mac| mac.with_sequence_control(counter.peek().sequence_control()));
         let described = header
@@ -2336,14 +2854,14 @@ impl<K> Keyed for ApRunning<'_, K> {
 }
 
 #[cfg(test)]
-impl<L: core::fmt::Debug, T> Keyed for StationEntry<L, T> {
+impl<L: core::fmt::Debug> Keyed for StationEntry<L> {
     fn key(&self) -> std::string::String {
         std::format!("{:?}|{:?}", self.port, self.numbers.state_key())
     }
 }
 
 #[cfg(test)]
-impl<T> Keyed for ClientLink<T> {
+impl Keyed for ClientLink {
     fn key(&self) -> std::string::String {
         std::format!(
             "{:?}|{:?}|{:?}|{:?}",
@@ -2377,14 +2895,33 @@ where
     pub(crate) fn key(&self) -> std::string::String {
         use core::fmt::Write;
         let running =
-            |name: &str, running: &Running<'id, F, P::Caps, SINGLES, GROUPS, AGREEMENTS>| {
+            |name: &str, running: &Running<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>| {
+                let gate = |gate: &Gate<'id>| match gate {
+                    Gate::Shut => "shut",
+                    Gate::Open(_) => "open",
+                };
+                let key = |key: &StationKey<'id, T>| match key {
+                    StationKey::Empty(_) => "empty",
+                    StationKey::Installed(..) => "installed",
+                };
                 std::format!(
                     "{name}|{}|{}",
-                    match running.gate {
-                        Gate::Shut(_) => "shut",
-                        Gate::Open(..) => "open",
-                        Gate::Closing(_) => "closing",
-                        Gate::InTransition => "moving",
+                    match &running.interface {
+                        Interface::Idle {
+                            gate: g, key: k, ..
+                        } => std::format!("idle {} {}", gate(g), key(k)),
+                        Interface::Keying { gate: g, step, .. } => std::format!(
+                            "keying {} {}",
+                            gate(g),
+                            match step {
+                                KeyStep::Removing { then: Some(_), .. } =>
+                                    "removing, then installing",
+                                KeyStep::Removing { then: None, .. } => "removing",
+                                KeyStep::Installing { .. } => "installing",
+                            }
+                        ),
+                        Interface::Closing { key: k, .. } => std::format!("closing {}", key(k)),
+                        Interface::InTransition => std::string::String::from("moving"),
                     },
                     running.form.key()
                 )

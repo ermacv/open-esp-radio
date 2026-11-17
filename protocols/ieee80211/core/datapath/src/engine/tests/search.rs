@@ -70,6 +70,8 @@ enum Ask {
     OpenGate,
     Flows,
     StopData,
+    /// The link's key changes (its installation, or a rekey).
+    ChangeKey,
 }
 
 /// One step of the search.
@@ -102,13 +104,6 @@ enum Stop {
     Stopped,
 }
 
-/// Whether the gate's closing was asked and has not ended.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Closing {
-    None,
-    Asked,
-}
-
 /// The engine and everything around it.
 struct World<'id> {
     engine: StationEngine<'id, POOL>,
@@ -122,7 +117,6 @@ struct World<'id> {
     /// What the last move owed.
     owed: Rest,
     stop: Stop,
-    closing: Closing,
     agreed: [bool; 2],
     hold: Option<usize>,
     /// Each offered MSDU's TID.
@@ -130,6 +124,9 @@ struct World<'id> {
     /// The link generation each publication went in.
     /// The publications the order's check read.
     checked: usize,
+    /// Where this link began: the publications and the homecomings before
+    /// it are another link's.
+    link_from: (usize, usize),
     /// Each TID's next first transmission's number, this link.
     next: [Option<u16>; 2],
     /// The numbers a sequence request took, by TID, this generation.
@@ -153,11 +150,11 @@ impl<'id> World<'id> {
             offered: 0,
             owed: Rest::Wake(None),
             stop: Stop::NotAsked,
-            closing: Closing::None,
             agreed: [false; 2],
             hold: None,
             tids: Vec::new(),
             checked: 0,
+            link_from: (0, 0),
             next: [None; 2],
             named: Vec::new(),
             problems: Vec::new(),
@@ -194,6 +191,26 @@ impl<'id> World<'id> {
         }
     }
 
+    /// Whether the gate is open or its closing runs.
+    fn gate_not_closed(&mut self) -> bool {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => !matches!(flowing.gate(), GatePlace::Shut(_)),
+            DataPlace::Stopping(_) => true,
+            DataPlace::Stopped(_) => false,
+        }
+    }
+
+    /// Whether the key's place admits a change.
+    fn key_idle(&mut self) -> bool {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => match flowing.peer(ACCESS_POINT) {
+                PeerPlace::Linked(mut linked) => matches!(linked.key(), KeyPlace::Idle(_)),
+                PeerPlace::Free(_) => false,
+            },
+            _ => false,
+        }
+    }
+
     fn on_air(&self) -> bool {
         self.around.port.state().on_air
     }
@@ -226,7 +243,7 @@ impl<'id> World<'id> {
         // A command's end and a stop's answer wait for the air to be quiet,
         // as the model's "gate_closed" and "command_done": a turn before it
         // changes nothing.
-        if self.owed == Rest::Round || (self.closing == Closing::Asked && !self.on_air()) {
+        if self.owed == Rest::Round || (self.engine.command_runs() && !self.on_air()) {
             moves.push(Move::Turn);
         }
         if self.stop == Stop::Going && !self.on_air() {
@@ -258,6 +275,9 @@ impl<'id> World<'id> {
         }
         if linked && held {
             asks.extend([Ask::Release, Ask::Unlink]);
+        }
+        if linked && self.key_idle() {
+            asks.push(Ask::ChangeKey);
         }
         if self.hold.is_some() && linked {
             asks.push(Ask::Named);
@@ -326,7 +346,6 @@ impl<'id> World<'id> {
         self.owed = rest.unwrap_or(Rest::Wake(None));
         if let Some(gate) = self.around.told.gate.take() {
             self.gate = Some(gate);
-            self.closing = Closing::None;
         }
         let _ = published;
         self.check(rest);
@@ -336,9 +355,6 @@ impl<'id> World<'id> {
         if ask == Ask::StopData {
             self.agreed = [false; 2];
             self.hold = None;
-            if self.gate_open() {
-                self.closing = Closing::Asked;
-            }
             self.stop_data();
             return None;
         }
@@ -361,10 +377,7 @@ impl<'id> World<'id> {
                     return None;
                 };
                 match (ask, flowing.gate()) {
-                    (Ask::CloseGate, GatePlace::Open(open)) => {
-                        self.closing = Closing::Asked;
-                        Some(open.close(&mut turn))
-                    }
+                    (Ask::CloseGate, GatePlace::Open(open)) => Some(open.close(&mut turn)),
                     (Ask::OpenGate, GatePlace::Shut(shut)) => {
                         let gate = self.gate.take()?;
                         Some(shut.open(gate, &mut turn))
@@ -386,6 +399,10 @@ impl<'id> World<'id> {
                 self.agreed = [false; 2];
                 self.hold = None;
                 self.named.clear();
+                self.link_from = (
+                    self.around.port.published().len(),
+                    self.around.net.home.len(),
+                );
                 Some(owed)
             }
             ask => {
@@ -425,6 +442,13 @@ impl<'id> World<'id> {
                         self.hold = None;
                         Some(linked.named(&mut turn))
                     }
+                    Ask::ChangeKey => match linked.key() {
+                        KeyPlace::Idle(idle) => Some(idle.change(key_change(1), &mut turn)),
+                        _ => {
+                            self.problems.push(refused);
+                            None
+                        }
+                    },
                     _ => None,
                 }
             }
@@ -458,7 +482,7 @@ impl<'id> World<'id> {
                 self.stop = Stop::Going;
                 // A stop goes on only while something ends: the air or the
                 // gate's closing.
-                if !self.on_air() && self.closing == Closing::None {
+                if !self.on_air() && !self.engine.command_runs() {
                     self.problems
                         .push("a stop goes on with nothing on the air and no command");
                 }
@@ -503,7 +527,7 @@ impl<'id> World<'id> {
             if queued != 0 || !arenas.is_empty() {
                 self.problems.push("the data stopped with memory out");
             }
-            if self.gate_open() || self.closing == Closing::Asked {
+            if self.gate_not_closed() {
                 self.problems
                     .push("the data stopped with the gate not closed");
             }
@@ -518,7 +542,7 @@ impl<'id> World<'id> {
         // consecutive numbers, a number a sequence request took aside.
         self.check_order();
         // Nothing waits for a call nobody makes.
-        if rest == Some(Rest::Wake(None)) && self.closing == Closing::None && self.flowing() {
+        if rest == Some(Rest::Wake(None)) && !self.engine.command_runs() && self.flowing() {
             let before = (
                 self.around.net.home.len(),
                 self.around.port.published().len(),
@@ -552,7 +576,9 @@ impl<'id> World<'id> {
                     continue;
                 };
                 let mut expected = self.next[tid].unwrap_or(0);
-                while self.named.contains(&(tid, expected)) {
+                while self.named.contains(&(tid, expected))
+                    || self.withdrawn_below_a_named_number(tid, expected)
+                {
                     expected += 1;
                 }
                 if sequence != expected {
@@ -563,6 +589,38 @@ impl<'id> World<'id> {
             }
         }
         self.checked = published.len();
+    }
+
+    /// Whether `sequence` of `tid` is a number this link drew for an MSDU
+    /// that went home before any transmission, below a number `name_next`
+    /// took: it named nothing to anyone, and the peer counts from the named
+    /// one.
+    fn withdrawn_below_a_named_number(&self, tid: usize, sequence: u16) -> bool {
+        let named_above = self
+            .named
+            .iter()
+            .any(|&(named, number)| named == tid && sequence < number);
+        if !named_above {
+            return false;
+        }
+        let (published_from, home_from) = self.link_from;
+        let numbered = |front: &[u8]| {
+            let control = u16::from_le_bytes([front[22], front[23]]);
+            (
+                front[24] & 0x07,
+                SequenceNumber::from_sequence_control(control).get(),
+            )
+        };
+        let wanted = (TIDS[tid].value(), sequence);
+        let transmitted = self.around.port.published()[published_from..]
+            .iter()
+            .flat_map(|went| &went.frames)
+            .any(|front| numbered(front) == wanted);
+        let withdrawn = self.around.net.home[home_from..]
+            .iter()
+            .filter_map(|id| self.around.port.front(*id))
+            .any(|front| numbered(front) == wanted);
+        withdrawn && !transmitted
     }
 
     /// The whole state: the world's, the engine's private fields and the
@@ -578,12 +636,11 @@ impl<'id> World<'id> {
             .map(|memory| memory.id)
             .collect();
         std::format!(
-            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
             (self.left.offers, self.left.losses, self.left.requests),
             self.offered,
             self.owed,
             self.stop,
-            self.closing,
             self.agreed,
             self.hold,
             self.gate.is_some(),
@@ -593,6 +650,7 @@ impl<'id> World<'id> {
             home,
             self.next,
             self.named,
+            self.link_from,
             self.engine.key(),
             self.around.port.state_key(),
         )

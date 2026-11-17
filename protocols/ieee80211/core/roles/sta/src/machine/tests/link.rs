@@ -16,7 +16,7 @@ fn a_connected_station_hands_its_link_over_once_and_releases_its_data() {
         let link = world.link.as_ref().expect("the holder keeps the link");
         assert!(link.carries());
         assert!(!link.numbers().qos(), "the open test BSS is not a QoS BSS");
-        assert!(link.numbers().key().is_none());
+        assert!(link.key().is_none());
         // The station keeps no number of its own while the link is lent.
         assert!(world.station.link.lent());
     });
@@ -69,7 +69,7 @@ fn a_protected_link_is_held_until_its_keys_are_confirmed() {
         assert_eq!(world.link_actions, [LinkSeen::HandOver]);
         let link = world.link.as_ref().unwrap();
         assert!(!link.carries());
-        assert!(link.numbers().key().is_some(), "the link took the PTK");
+        assert!(link.key().is_some(), "the link took the PTK");
         assert!(world.station.keys.keyed());
         world.hold_transmissions = false;
         world.end_transmissions(at(34));
@@ -89,7 +89,6 @@ fn station_frames_and_data_draw_one_packet_number_space_of_the_link() {
                 .link
                 .as_ref()
                 .unwrap()
-                .numbers()
                 .key()
                 .unwrap()
                 .packet_numbers()
