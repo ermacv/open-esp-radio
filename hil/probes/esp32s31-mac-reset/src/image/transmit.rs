@@ -14,7 +14,7 @@
 //! of its own (`[guard, frame, guard, …]`), painted once and read with them.
 use super::*;
 use oer_chips_esp32s31_hal::{
-    layouts::{WifiRxControlPrefix, WifiTxDmaDescriptor},
+    layouts::{WifiRxControlPrefix, WifiRxControlTail, WifiTxDmaDescriptor},
     radio::ieee80211::dma::{
         space::ChipDma,
         tx_storage::{PinnedTxDmaStorage, TxDmaAccess, TxDmaStorage},
@@ -402,8 +402,15 @@ async fn learn_peer(
             wait_micros(100).await;
             continue;
         };
+        // The frame follows the control prefix and its tail; a frame with
+        // HE-SIG-B options between them is not the peer's (6 Mb/s).
         let peer = unit.step(0).ok().and_then(|step| {
-            let frame = step.bytes().get(WifiRxControlPrefix::SIZE..)?;
+            let bytes = step.bytes();
+            let prefix = WifiRxControlPrefix::new(bytes.first_chunk()?);
+            if prefix.he_sig_b().present() {
+                return None;
+            }
+            let frame = bytes.get(WifiRxControlPrefix::SIZE + WifiRxControlTail::SIZE..)?;
             let to: [u8; 6] = frame.get(4..10)?.try_into().ok()?;
             let from: [u8; 6] = frame.get(10..16)?.try_into().ok()?;
             (to == station).then_some(from)
