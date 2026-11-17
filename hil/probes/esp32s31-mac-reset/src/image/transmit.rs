@@ -158,7 +158,7 @@ const fn guard_word(slot: usize, word: usize) -> u32 {
 
 /// The legacy program of one frame: the backend's direct-MPDU profile
 /// (`LegacyTxConfig::management`) at 6 Mb/s, answered by an ACK.
-fn parameters(length: usize) -> MacLegacyTxParameters {
+fn parameters(length: usize, power: u8) -> MacLegacyTxParameters {
     MacLegacyTxParameters {
         control: MacTxControlFrame {
             protection: MacTxProtection::None,
@@ -169,7 +169,7 @@ fn parameters(length: usize) -> MacLegacyTxParameters {
         rate: MacLegacyRate::Ofdm6M,
         // The PSDU: the MPDU and the FCS the hardware appends.
         signal: (length + 4) as u16,
-        data_power: 8,
+        data_power: power,
         timeout: 0x03ff,
         scheduler_priority: 1,
         packet_priority: 1,
@@ -190,6 +190,10 @@ struct Frames {
         { ABANDONED + 1 },
     >,
     header: [u8; 24],
+    /// The data power code at 6 Mb/s: the calibrated profile's, under the
+    /// regulatory ceiling, as the station's ordinary transmit takes it
+    /// (`ordinary_tx.rs`, `capped_power(self.power.power_pair(rate.code()))`).
+    power: u8,
 }
 
 impl Frames {
@@ -263,6 +267,7 @@ fn start(
     descriptor: &mut Descriptor,
     lease: Lease,
     length: usize,
+    power: u8,
 ) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
@@ -271,8 +276,8 @@ fn start(
     free.reserve(FRAME as u32, length as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
-    let program =
-        MacLegacyTxProgram::new(&publication, parameters(length)).ok_or((tx_phase::START, 5))?;
+    let program = MacLegacyTxProgram::new(&publication, parameters(length, power))
+        .ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
         .map_err(|_| (tx_phase::START, 6))?;
@@ -383,7 +388,7 @@ async fn send(
 ) -> Result<(Ended, u32), Failure> {
     let lease = frames.lease(ORDINARY_SLOT, chain, length)?;
     let begin = oer_portable_riscv::cycle32();
-    start(access, ordinary, lease, length)?;
+    start(access, ordinary, lease, length, frames.power)?;
     let ended = await_completion(access, ordinary, 0).await?;
     Ok((ended, oer_portable_riscv::cycle32().wrapping_sub(begin)))
 }
@@ -544,6 +549,7 @@ pub(super) async fn series(
         pool,
         guards: heapless::Vec::new(),
         header: header(station, peer),
+        power: sources.tx_power.pair(MacLegacyRate::Ofdm6M.code()).primary as u8,
     };
     frames.paint_guards()?;
 
@@ -557,7 +563,12 @@ pub(super) async fn series(
             .copied()
             .unwrap_or(FRAME);
         let counted = access.wifi_mac_hal().transmit_statistics_snapshot();
-        let (ended, cycles) = send(&mut access, &frames, &mut ordinary, index32, length).await?;
+        let lease = frames.lease(ORDINARY_SLOT, index32, length)?;
+        let begin = oer_portable_riscv::cycle32();
+        start(&mut access, &mut ordinary, lease, length, frames.power)?;
+        let queue = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
+        let ended = await_completion(&mut access, &mut ordinary, 0).await?;
+        let cycles = oer_portable_riscv::cycle32().wrapping_sub(begin);
         let counted = access
             .wifi_mac_hal()
             .transmit_statistics_snapshot()
@@ -574,6 +585,15 @@ pub(super) async fn series(
                 counted.tx_cts,
                 counted.track,
                 counted.trcts,
+                u32::from(frames.power),
+                queue_flags(&queue),
+                u32::from(queue.cca_force) | u32::from(queue.cca_aux_force) << 8,
+                u32::from(queue.mac_active_state),
+                u32::from(queue.rate) | u32::from(queue.plcp_format) << 8,
+                u32::from(queue.legacy_signal),
+                u32::from(queue.power_codes[0] as u8),
+                u32::from(queue.interface),
+                u32::from(queue.aifsn) | u32::from(queue.contention_window) << 8,
             ],
         );
     }
@@ -587,7 +607,7 @@ pub(super) async fn series(
             .await
             .map_err(|code| (phase::RECEIVE, code))?;
         let lease = frames.lease(ORDINARY_SLOT, index32, FRAME)?;
-        start(&mut access, &mut ordinary, lease, FRAME)?;
+        start(&mut access, &mut ordinary, lease, FRAME, frames.power)?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let queue = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
@@ -650,7 +670,7 @@ pub(super) async fn series(
             .dma_region()
             .map_err(|_| (tx_phase::PULSE, chain32 | 0x200))?;
         let descriptor_address = descriptor.binding().descriptor_address();
-        start(&mut access, &mut descriptor, lease, FRAME)?;
+        start(&mut access, &mut descriptor, lease, FRAME, frames.power)?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let before = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
