@@ -38,6 +38,9 @@ const SPANS: usize = 16;
 const SHOWN: usize = 16;
 /// The injector's frame: data, no flags; its body's LLC/SNAP.
 const FRAME_CONTROL: [u8; 2] = [0x08, 0x00];
+/// The Retry flag of Frame Control's second octet (IEEE 802.11-2020
+/// 9.2.4.1.6).
+const RETRY: u8 = 0x08;
 const SNAP: [u8; 8] = [0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0xb5];
 
 /// The lengths the run's host sends, by the bytes a unit holds before its
@@ -80,6 +83,8 @@ struct Counts {
     foreign_prefix: u32,
     unknown_length: u32,
     reserved_tail: u32,
+    /// The injector's retransmissions among its units (Retry set).
+    retries: u32,
     /// The injector's units by the padding after the frame up to a word.
     padding: [u32; 4],
     /// Units not the injector's whose last step holds the injector's body:
@@ -129,7 +134,9 @@ impl Joined<'_> {
 /// `peer` to `station`, or `None` where its driver writes the byte.
 fn expected(station: [u8; 6], peer: [u8; 6], offset: usize) -> Option<u8> {
     match offset {
-        0..2 => FRAME_CONTROL.get(offset).copied(),
+        0 => FRAME_CONTROL.first().copied(),
+        // The flags octet: compared with the Retry bit masked, above.
+        1 => None,
         2..4 | 22..24 => None,
         4..10 => station.get(offset - 4).copied(),
         10..16 => peer.get(offset - 10).copied(),
@@ -281,9 +288,10 @@ pub(super) async fn run(
     line.clear();
     let _ = writeln!(
         line,
-        "LAPS end units={} peer_units={} descriptors={} laps={laps} formula_disagrees={} length_disagrees={} metadata_disagrees={} mismatch_units={} mismatch_bytes={} foreign_prefix={} unknown_length={} reserved_tail={}",
+        "LAPS end units={} peer_units={} retries={} descriptors={} laps={laps} formula_disagrees={} length_disagrees={} metadata_disagrees={} mismatch_units={} mismatch_bytes={} foreign_prefix={} unknown_length={} reserved_tail={}",
         counts.units,
         counts.peer_units,
+        counts.retries,
         counts.descriptors,
         counts.formula_disagrees,
         counts.length_disagrees,
@@ -342,7 +350,13 @@ fn check(
     let to = joined.array::<6>(HEADER + 4);
     let from = joined.array::<6>(HEADER + 10);
     let control = joined.array::<2>(HEADER);
-    let ours = to == Some(station) && control == Some(FRAME_CONTROL);
+    // The Retry bit (Frame Control flags bit 3) set by a retransmission is
+    // masked: a retry is compared like its first attempt.
+    let ours = to == Some(station)
+        && control.map(|[kind, flags]| [kind, flags & !RETRY]) == Some(FRAME_CONTROL);
+    if ours && control.is_some_and(|[_, flags]| flags & RETRY != 0) {
+        counts.retries = counts.retries.saturating_add(1);
+    }
     if !ours {
         if joined.steps.len() > 1 && holds_injector_body(joined.last()) {
             counts.foreign_prefix = counts.foreign_prefix.saturating_add(1);
