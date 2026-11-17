@@ -720,6 +720,17 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
         )
     }
 
+    /// The arena on the air.
+    pub fn on_air_side(&self) -> Option<ArenaSide> {
+        [ArenaSide::First, ArenaSide::Second]
+            .into_iter()
+            .find(|side| {
+                self.arenas
+                    .get(side_index(*side))
+                    .is_some_and(|arena| arena.air.is_some())
+            })
+    }
+
     /// The network's names of the memories an arena holds, in its order.
     pub fn arena_memories(&self, side: ArenaSide) -> Vec<u32> {
         self.arenas

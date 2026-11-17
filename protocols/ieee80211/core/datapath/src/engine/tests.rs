@@ -774,6 +774,97 @@ fn a_named_number_holds_its_tid_until_the_frame_that_names_it_went() {
     });
 }
 
+/// The deleted actor's `a_voice_frame_goes_ahead_of_a_best_effort_backlog`:
+/// a voice MSDU behind a best-effort backlog goes in the next arena.
+#[test]
+fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=3 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        // 1 on the air, 2 in the standby, 3 queued behind them.
+        around.net.offer(4, WmmUserPriority::UP6, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        // After the standby that was written, voice goes before the backlog.
+        let third = &around.port.published()[2].frames[0];
+        assert_eq!(third[24] & 0x07, 6, "the voice MSDU went third");
+    });
+}
+
+/// The deleted actor's
+/// `a_tid_held_by_its_window_does_not_hold_the_other_tid_of_its_category`:
+/// a TID held by its window lets the other TID of its category take the
+/// next arena, and goes once its window moves.
+#[test]
+fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let _ = peer.tx_agreement(WmmUserPriority::UP0, 1, &mut around.turn());
+        });
+        for id in 1..=2 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        around.net.offer(3, WmmUserPriority::UP3, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        // UP0's window of one holds 2 behind 1; UP3, best effort too, takes
+        // the standby.
+        assert_eq!(around.port.published().len(), 1);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let second = &around.port.published()[1].frames[0];
+        assert_eq!(second[24] & 0x07, 3, "the other TID went while UP0 waited");
+        for _ in 0..2 {
+            around.port.set_air(BEST_EFFORT, Air::Ack);
+            let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        }
+        // UP0's window moved at 1's end: 2 went last.
+        assert_eq!(around.net.home, [1, 3, 2]);
+    });
+}
+
+/// The deleted actor's `a_link_that_goes_returns_every_queued_msdu_once`:
+/// a link that ends while its MSDUs wait (behind a window, behind the air)
+/// sends each home exactly once.
+#[test]
+fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let _ = peer.tx_agreement(WmmUserPriority::UP0, 1, &mut around.turn());
+        });
+        for id in 1..=4 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        {
+            let mut data = station_flowing(&mut engine);
+            let PeerPlace::Linked(peer) = data.peer(ACCESS_POINT) else {
+                panic!("the access point is linked");
+            };
+            let _ = peer.unlink(&mut around.turn());
+        }
+        // The queued ones went home at the unlink; the one on the air at
+        // its end.
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let mut home = around.net.home.clone();
+        home.sort_unstable();
+        assert_eq!(home, [1, 2, 3, 4]);
+        assert_eq!(engine.queued(), 0);
+    });
+}
+
 #[test]
 fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
     running::<STATION_SINGLES, 0, _>(|run| {

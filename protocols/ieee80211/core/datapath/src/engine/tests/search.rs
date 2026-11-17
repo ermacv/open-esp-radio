@@ -104,6 +104,17 @@ enum Stop {
     Stopped,
 }
 
+/// The world before a step.
+struct Before {
+    published: usize,
+    keying: Awaited,
+    arenas: Vec<u32>,
+    /// The MSDUs the arenas keep for a retry, the air quiet.
+    kept: Vec<u32>,
+    /// The MSDU of a single MPDU on the air.
+    single: Option<u32>,
+}
+
 /// Whether the world asked for a command and was not yet told its end.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Awaited {
@@ -139,6 +150,12 @@ struct World<'id> {
     key: KeyTold,
     /// The keys' ends read so far.
     keys_told: usize,
+    /// The link generation: one more at each link.
+    generation: u32,
+    /// The generation each offered MSDU was offered in, by its id.
+    born: Vec<u32>,
+    /// The times each MSDU's frame went on the air, by its id.
+    aired: Vec<u8>,
     agreed: [bool; 2],
     hold: Option<usize>,
     /// Each offered MSDU's TID.
@@ -181,6 +198,9 @@ impl<'id> World<'id> {
             keying: Awaited::No,
             key: KeyTold::Empty,
             keys_told: 0,
+            generation: 0,
+            born: Vec::new(),
+            aired: Vec::new(),
             next: [None; 2],
             named: Vec::new(),
             problems: Vec::new(),
@@ -328,12 +348,14 @@ impl<'id> World<'id> {
         if let Some(prefix) = step.prefix {
             self.around.port.send_at_most(prefix);
         }
-        let published = self.around.port.published().len();
+        let before = self.before();
         let rest = match step.action {
             Move::Offer(tid) => {
                 self.left.offers -= 1;
                 self.offered += 1;
                 self.tids.push(tid);
+                self.born.push(self.generation);
+                self.aired.push(0);
                 self.around.net.offer(self.offered, TIDS[tid], DESTINATION);
                 Some(self.engine.offered(&mut self.around.turn()))
             }
@@ -383,8 +405,163 @@ impl<'id> World<'id> {
         }
         self.keys_told = self.around.told.keys.len();
         self.stop_awaits();
-        let _ = published;
+        self.check_step(&before, step.action);
         self.check(rest);
+    }
+
+    /// What a step is checked against: the world before it.
+    fn before(&self) -> Before {
+        let arenas = self.arena_ids();
+        let quiet = !self.on_air();
+        let kept = arenas
+            .iter()
+            .copied()
+            .filter(|id| quiet && self.aired_of(*id) > 0)
+            .collect();
+        let single = match self.around.port.published().last() {
+            Some(went) if !quiet && went.single == Went::Single => {
+                self.on_air_ids().first().copied()
+            }
+            _ => None,
+        };
+        Before {
+            published: self.around.port.published().len(),
+            keying: self.keying,
+            arenas,
+            kept,
+            single,
+        }
+    }
+
+    /// The MSDUs the arenas hold.
+    fn arena_ids(&self) -> Vec<u32> {
+        [ArenaSide::First, ArenaSide::Second]
+            .into_iter()
+            .flat_map(|side| self.around.port.arena_memories(side))
+            .collect()
+    }
+
+    fn aired_of(&self, id: u32) -> u8 {
+        self.aired.get(id as usize - 1).copied().unwrap_or(0)
+    }
+
+    /// The MSDUs of the arena on the air, in its order: a publication's.
+    fn on_air_ids(&self) -> Vec<u32> {
+        self.around
+            .port
+            .on_air_side()
+            .map(|side| self.around.port.arena_memories(side))
+            .unwrap_or_default()
+    }
+
+    /// The model's checks of a publication and of the arenas, from what the
+    /// world sees: the publications, the arenas' MSDUs and their fronts.
+    fn check_step(&mut self, before: &Before, action: Move) {
+        let published: Vec<Vec<Vec<u8>>> = self.around.port.published()[before.published..]
+            .iter()
+            .map(|went| went.frames.clone())
+            .collect();
+        let after = self.arena_ids();
+        for (index, frames) in published.iter().enumerate() {
+            if before.keying == Awaited::Yes && self.keying == Awaited::Yes {
+                self.problems
+                    .push("an arena went while a key change awaited");
+            }
+            // One arena on the air at a time: the step's publication is the
+            // arena on the air after it, its frames the prefix that went.
+            let ids: Vec<u32> = self.on_air_ids().into_iter().take(frames.len()).collect();
+            if index == 0
+                && !before.kept.is_empty()
+                && !ids.iter().any(|id| before.kept.contains(id))
+            {
+                self.problems
+                    .push("the standby went before an arena kept for its retry");
+            }
+            for (front, id) in frames.iter().zip(&ids) {
+                if self.born.get(*id as usize - 1) != Some(&self.generation) {
+                    self.problems.push("an ended link's frame went");
+                }
+                let up = front[24] & 0x07;
+                let Some(tid) = TIDS.iter().position(|tid| tid.value() == up) else {
+                    continue;
+                };
+                if self.agreed[tid] {
+                    let sequence = |front: &[u8]| {
+                        SequenceNumber::from_sequence_control(u16::from_le_bytes([
+                            front[22], front[23],
+                        ]))
+                        .get()
+                    };
+                    let oldest = after
+                        .iter()
+                        .filter(|held| self.born.get(**held as usize - 1) == Some(&self.generation))
+                        .filter_map(|held| self.around.port.front(*held))
+                        .filter(|held| held[24] & 0x07 == up)
+                        .map(sequence)
+                        .min();
+                    if oldest.is_some_and(|oldest| sequence(front) - oldest >= WINDOW) {
+                        self.problems.push("a frame went beyond its window");
+                    }
+                }
+            }
+            for id in ids {
+                if let Some(count) = self.aired.get_mut(id as usize - 1) {
+                    *count += 1;
+                }
+            }
+        }
+        if before.keying == Awaited::Yes
+            && self.keying == Awaited::Yes
+            && after.iter().any(|id| !before.arenas.contains(id))
+        {
+            self.problems
+                .push("an MSDU was written while a key change awaited");
+        }
+        if let (Move::Ended(Answer::NoAck), Some(single)) = (action, before.single)
+            && after.contains(&single)
+        {
+            self.problems
+                .push("a frame that went as one MPDU and missed was kept");
+        }
+        if !self.on_air() && after.iter().any(|id| self.aired_of(*id) >= ATTEMPTS) {
+            self.problems.push("a frame is kept with no attempt left");
+        }
+        self.check_blocked(&after);
+    }
+
+    /// A TID held by its window moves when its frames in the arenas
+    /// settle: with none there, the air quiet and nothing awaited, its
+    /// queued MSDUs go.
+    fn check_blocked(&mut self, arenas: &[u32]) {
+        if self.owed == Rest::Round
+            || self.on_air()
+            || self.awaits_a_command()
+            || self.hold.is_some()
+            || !self.linked()
+            || self.held()
+            || !self.gate_open()
+        {
+            return;
+        }
+        let home = &self.around.net.home;
+        let waiting: Vec<u32> = self
+            .around
+            .net
+            .offered
+            .iter()
+            .map(|memory| memory.id)
+            .collect();
+        for tid in 0..TIDS.len() {
+            let mut ids = (1..=self.offered).filter(|id| self.tids[*id as usize - 1] == tid);
+            let queued = ids
+                .clone()
+                .any(|id| !home.contains(&id) && !arenas.contains(&id) && !waiting.contains(&id));
+            let in_arenas = ids.any(|id| arenas.contains(&id));
+            if self.agreed[tid] && queued && !in_arenas {
+                self.problems
+                    .push("a TID is blocked by its window and nothing can move it");
+            }
+        }
     }
 
     fn ask(&mut self, ask: Ask) -> Option<Rest> {
@@ -442,6 +619,7 @@ impl<'id> World<'id> {
                     self.around.port.published().len(),
                     self.around.net.home.len(),
                 );
+                self.generation += 1;
                 Some(owed)
             }
             ask => {
@@ -712,7 +890,7 @@ impl<'id> World<'id> {
             .map(|memory| memory.id)
             .collect();
         std::format!(
-            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
             (self.left.offers, self.left.losses, self.left.requests),
             self.offered,
             self.owed,
@@ -728,6 +906,7 @@ impl<'id> World<'id> {
             self.named,
             self.link_from,
             (self.closing, self.keying, self.key),
+            (self.generation, &self.born, &self.aired),
             self.engine.key(),
             self.around.port.state_key(),
         )
@@ -880,6 +1059,30 @@ fn every_order_at_the_mutants_bounds() {
     run(Bounds {
         offers: 3,
         losses: 1,
+        requests: 6,
+    });
+}
+
+/// The bounds where the window binds: a fourth MSDU behind a full window,
+/// as the model's mutant of the intake's window check is run at.
+#[test]
+#[ignore = "the window's bounds: run by name"]
+fn every_order_at_the_windows_bounds() {
+    run(Bounds {
+        offers: 4,
+        losses: 1,
+        requests: 4,
+    });
+}
+
+/// The bounds where a frame spends every attempt: two losses, as the
+/// model's mutant of the attempts is run at.
+#[test]
+#[ignore = "the attempts' bounds: run by name"]
+fn every_order_at_the_attempts_bounds() {
+    run(Bounds {
+        offers: 3,
+        losses: 2,
         requests: 6,
     });
 }
