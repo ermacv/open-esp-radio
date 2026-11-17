@@ -236,11 +236,13 @@ pub enum BankCommand<T: RxBlockAckTypes> {
     },
 }
 
-/// The bank whose command runs: made only by [`RxBlockAckView::next_command`]
-/// and consumed by the command's end, so an end names the bank that began it.
+/// The bank whose command runs and the TID it serves: made only by
+/// [`RxBlockAckView::next_command`] and consumed by the command's end, so an
+/// end names the bank that began it and the agreement's TID.
 #[derive(Debug, Eq, PartialEq)]
 pub struct BankTicket {
     bank: u8,
+    tid: u8,
 }
 
 /// Whether the caller has a place for one more retained frame: the reorder
@@ -544,13 +546,16 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let (index, bank) = (0_u8..)
             .zip(self.banks.iter_mut())
             .find(|(_, bank)| matches!(bank, Bank::Adding { .. } | Bank::Ending { .. }))?;
-        let ticket = BankTicket { bank: index };
         match core::mem::replace(bank, Bank::InTransition) {
             Bank::Adding {
                 slot,
                 agreement,
                 negotiation,
             } => {
+                let ticket = BankTicket {
+                    bank: index,
+                    tid: negotiation.response().tid,
+                };
                 *bank = Bank::AddCommand { negotiation };
                 Some(BankCommand::Add {
                     ticket,
@@ -560,6 +565,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             Bank::Ending { running, tid } => {
                 *bank = Bank::EndCommand { tid };
+                let ticket = BankTicket { bank: index, tid };
                 Some(BankCommand::End { ticket, running })
             }
             // Found adding or ending above: this does not happen. Should
@@ -580,15 +586,14 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         running: T::Running,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) {
-        let BankTicket { bank } = ticket;
+        let BankTicket { bank, tid } = ticket;
         let Some(place) = self.banks.get_mut(usize::from(bank)) else {
             return;
         };
         let Bank::AddCommand { negotiation } = core::mem::replace(place, Bank::InTransition) else {
             // The ticket was this bank's addition's: this does not happen.
-            // Should it, the agreement waits to be removed; its TID is the
-            // one the bank was for.
-            let tid = place.tid().unwrap_or(0);
+            // Should it, the agreement waits to be removed under the TID
+            // its ticket names.
             *place = Bank::Ending { running, tid };
             return;
         };
@@ -618,9 +623,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// `running` waits again to be removed: the end [`Self::next_command`]
     /// gave could not begin.
     pub fn owe_end(&mut self, ticket: BankTicket, running: T::Running) {
-        let BankTicket { bank } = ticket;
+        let BankTicket { bank, tid } = ticket;
         if let Some(place) = self.banks.get_mut(usize::from(bank)) {
-            let tid = place.tid().unwrap_or(0);
             *place = Bank::Ending { running, tid };
         }
     }
@@ -628,7 +632,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// The command of the ticket's bank ended with its slot empty: an
     /// addition that expired, or a removal.
     pub fn emptied(&mut self, ticket: BankTicket, slot: T::Slot) {
-        let BankTicket { bank } = ticket;
+        let BankTicket { bank, .. } = ticket;
         if let Some(place) = self.banks.get_mut(usize::from(bank)) {
             *place = Bank::Free(slot);
         }

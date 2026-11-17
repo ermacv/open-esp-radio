@@ -226,6 +226,30 @@ impl<'id> World<'id> {
             .collect()
     }
 
+    /// The places of the units that wait for the network, by the world's
+    /// own count (see [`Self::waiting`]): a unit the reorder retains is not
+    /// among them.
+    fn waiting_run(&self) -> Vec<u8> {
+        let places = self.waiting_places();
+        match self.agreement {
+            Agreement::None => places,
+            Agreement::Tid0 => {
+                let run = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
+                places
+                    .into_iter()
+                    .filter(|place| {
+                        self.around.port.place_bytes(*place).is_some_and(|bytes| {
+                            bytes.len() > 24
+                                && (u16::from_le_bytes([bytes[22], bytes[23]]) >> 4)
+                                    .wrapping_sub(self.start)
+                                    < run
+                        })
+                    })
+                    .collect()
+            }
+        }
+    }
+
     /// The units that wait for the network, by the world's own count:
     /// without an agreement every unit held and not lent; under one, the
     /// run of numbers from the next the reorder lets go (released in order,
@@ -279,11 +303,9 @@ impl<'id> World<'id> {
         let held_before = self.held_units();
         let waiting_before = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
         let delivered_before = self.delivered.len();
-        let waited = if self.retained() == 0 {
-            self.waiting_places()
-        } else {
-            Vec::new()
-        };
+        let empty_before = held_before.is_empty() && self.around.net.lent.is_empty();
+        let reorder_before = self.refusals().reorder;
+        let waited = self.waiting_run();
         let services = self.around.port.counts().services;
         let rest = match action {
             Move::Arrives(index) => {
@@ -346,17 +368,29 @@ impl<'id> World<'id> {
         };
         self.owed = rest.unwrap_or(Rest::Wake(None));
         self.read(action);
+        // With nothing held and nothing lent, a frame after a hole has its
+        // place in the reorder, however many units went and came back.
+        if let Move::Arrives(index) = action
+            && self.agreement == Agreement::Tid0
+            && empty_before
+            && !self.stopped
+            && AGREED[index].0 != Kind::Management
+            && AGREED[index].1 > self.start
+            && self.refusals().reorder != reorder_before
+        {
+            self.problems
+                .push("a frame after a hole was refused with nothing held or lent");
+        }
         if self.agreement == Agreement::Tid0 {
             self.advance_start(&held_before, waiting_before, delivered_before);
         }
         // While a unit waits for the network, the ring is not serviced: a
         // unit that waited before the step and still waits after it says
         // the round was held back.
-        let still = self.retained() == 0
-            && self
-                .waiting_places()
-                .iter()
-                .any(|place| waited.contains(place));
+        let still = self
+            .waiting_run()
+            .iter()
+            .any(|place| waited.contains(place));
         if still && self.around.port.counts().services > services && !self.stopped {
             self.problems.push("a held-back engine serviced the ring");
         }

@@ -865,3 +865,33 @@ fn architect_the_end_of_an_agreements_command_is_told() {
         );
     });
 }
+
+/// The units the network gave back are no longer counted against the
+/// reorder's room: after more loans than the port has places, each given
+/// back, a frame after a hole is still retained, and the hole's frame
+/// releases both.
+#[test]
+fn architect_units_given_back_leave_the_reorders_room() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        for sequence in 100..112_u16 {
+            around
+                .port
+                .land(&qos_data(sequence, sequence as u8), meta());
+            let _ = engine.received(&mut around.turn());
+            assert_eq!(around.net.lent.len(), 1, "{sequence} is lent");
+            around.net.lent.clear();
+            let _ = engine.returned(&mut around.turn());
+        }
+        // 113 after a hole at 112: retained, not refused.
+        around.port.land(&qos_data(113, 113), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(refusals(&mut engine).reorder, 0, "113 has a place");
+        around.port.land(&qos_data(112, 112), meta());
+        let _ = engine.received(&mut around.turn());
+        let got = tags(&around);
+        assert_eq!(&got[got.len() - 2..], [112, 113]);
+    });
+}
