@@ -44,6 +44,16 @@ const SLOT_DOMAIN: usize = 256;
 
 /// One received MPDU of the agreement: its sequence number and the slot of
 /// the caller's storage that holds it.
+/// Where a stale initial A-MPDU's resynchronized window starts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResyncStart {
+    /// At the received sequence.
+    Received,
+    /// At the negotiated starting sequence, or ending at the received one
+    /// when that is behind it too.
+    Negotiated,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxReorderMpdu {
     pub sequence: SequenceNumber,
@@ -219,19 +229,20 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// A newly negotiated agreement normally accepts the first aggregate in
     /// the forward half of its sequence space. If that aggregate is instead
     /// behind the current window start, the window moves: with
-    /// `use_received_sequence` it starts at the received sequence; otherwise
+    /// [`ResyncStart::Received`] it starts at the received sequence; otherwise
     /// it falls back to the negotiated starting sequence, and only an
     /// aggregate also behind that moves the window to end at the received
     /// sequence. `None` when the sequence is not behind the window.
     ///
     /// This is a recovery edge the caller chooses to apply; the Espressif
-    /// reorder path applies it with `use_received_sequence` for formats newer
+    /// reorder path applies it with [`ResyncStart::Received`] for formats newer
     /// than HT, as selected by the receive backend.
     pub fn resynchronize_stale_initial_ampdu(
         &mut self,
         sequence: SequenceNumber,
-        use_received_sequence: bool,
+        start: ResyncStart,
     ) -> Option<(RxReorderRelease<WINDOW_CAPACITY>, SequenceNumber)> {
+        let use_received_sequence = start == ResyncStart::Received;
         if self.next_sequence.forward_distance(sequence) < SequenceNumber::HALF_SPACE {
             return None;
         }

@@ -56,8 +56,10 @@ fn detached_rate_selection_uses_mpdu_and_short_failures_without_backend_policy()
     );
 }
 
-fn retry(set_retry_bit: bool) -> RetryDecision {
-    RetryDecision::Retry { set_retry_bit }
+fn retry(retry: RetrySubfield) -> RetryDecision {
+    RetryDecision::Retry {
+        set_retry_bit: retry == RetrySubfield::Set,
+    }
 }
 
 fn complete(outcome: RetryOutcome) -> RetryDecision {
@@ -82,12 +84,18 @@ fn an_acknowledged_first_attempt_ends_the_frame() {
 #[test]
 fn ack_timeouts_set_the_retry_bit_walk_the_ladder_and_stop_at_the_mpdu_limit() {
     let mut state = MpduRetryState::new(VENDOR_LIKE, 3, FrameClass::Long).unwrap();
-    assert_eq!(state.observe(TxStatus::AckTimeout), retry(true));
+    assert_eq!(
+        state.observe(TxStatus::AckTimeout),
+        retry(RetrySubfield::Set)
+    );
     assert_eq!(
         state.rate(&StepDown, OFDM54, OFDM54),
         PhyRate::Legacy(LegacyRate::Ofdm48M)
     );
-    assert_eq!(state.observe(TxStatus::AckTimeout), retry(true));
+    assert_eq!(
+        state.observe(TxStatus::AckTimeout),
+        retry(RetrySubfield::Set)
+    );
     // Short accounting: a long frame's ACK timeouts count as short.
     assert_eq!(
         state.counters(),
@@ -108,7 +116,10 @@ fn ack_timeouts_set_the_retry_bit_walk_the_ladder_and_stop_at_the_mpdu_limit() {
 fn cts_timeouts_walk_the_ladder_without_the_retry_bit_past_the_mpdu_limit() {
     let mut state = MpduRetryState::new(VENDOR_LIKE, 1, FrameClass::Short).unwrap();
     for _ in 0..3 {
-        assert_eq!(state.observe(TxStatus::CtsTimeout), retry(false));
+        assert_eq!(
+            state.observe(TxStatus::CtsTimeout),
+            retry(RetrySubfield::Clear)
+        );
     }
     assert_eq!(state.counters().mpdu, 0);
     assert_eq!(
@@ -124,9 +135,15 @@ fn cts_timeouts_walk_the_ladder_without_the_retry_bit_past_the_mpdu_limit() {
 #[test]
 fn a_long_collision_keeps_the_rate_and_counts_against_the_long_limit() {
     let mut state = MpduRetryState::new(VENDOR_LIKE, 5, FrameClass::Long).unwrap();
-    assert_eq!(state.observe(TxStatus::Collision), retry(false));
+    assert_eq!(
+        state.observe(TxStatus::Collision),
+        retry(RetrySubfield::Clear)
+    );
     assert_eq!(state.rate(&StepDown, OFDM54, OFDM54), OFDM54);
-    assert_eq!(state.observe(TxStatus::Collision), retry(false));
+    assert_eq!(
+        state.observe(TxStatus::Collision),
+        retry(RetrySubfield::Clear)
+    );
     assert_eq!(
         state.observe(TxStatus::Collision),
         complete(RetryOutcome::RetryLimit(TxStatus::Collision))
@@ -138,7 +155,10 @@ fn a_long_collision_keeps_the_rate_and_counts_against_the_long_limit() {
 fn by_frame_class_accounting_counts_a_long_frame_ack_timeout_as_long() {
     let mut state = MpduRetryState::new(RetryLimits::IEEE_DEFAULT, 10, FrameClass::Long).unwrap();
     for _ in 0..3 {
-        assert_eq!(state.observe(TxStatus::AckTimeout), retry(true));
+        assert_eq!(
+            state.observe(TxStatus::AckTimeout),
+            retry(RetrySubfield::Set)
+        );
     }
     assert_eq!(
         state.observe(TxStatus::AckTimeout),

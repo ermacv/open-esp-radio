@@ -59,7 +59,7 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_core_upper_mac::{
     qos::AcAdmission,
     rate_control::BlockAckTally,
-    rate_selection::{FrameRates, RateSelection},
+    rate_selection::{FrameRates, LinkGeneration, RateSelection},
     sequence::SequenceSpace,
 };
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
@@ -334,11 +334,11 @@ impl<A: Copy, B: Copy, D: Copy> RateLesson<A, B, D> {
         match self {
             Self::Single(outcome) => {
                 if let Some(outcome) = single_with(*outcome, ack) {
-                    rates.learn(now, FrameRates::Data, true, &outcome);
+                    rates.learn(now, FrameRates::Data, LinkGeneration::Current, &outcome);
                 }
             }
             Self::Aggregate { tally, outcome } => {
-                rates.learn_aggregate(now, true, *tally, outcome);
+                rates.learn_aggregate(now, LinkGeneration::Current, *tally, outcome);
             }
         }
     }

@@ -18,6 +18,14 @@ use oer_protocols_ieee80211_wire::phy::{LegacyRate, PhyRate};
 use crate::protection::BasicRates;
 use crate::rate_control::{BlockAckTally, RatePeer};
 
+/// Whether a terminal is of the current link's frame, or of a link that
+/// ended before it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LinkGeneration {
+    Current,
+    Stale,
+}
+
 /// Lowest management/group rate admitted by the band and BSS basic set.
 ///
 /// Before a BSS is known, 2.4 GHz uses DSSS 1 Mb/s and 5 GHz uses OFDM
@@ -154,10 +162,10 @@ pub trait RateSelection<M: RxMetadata, A, BA = A> {
         &mut self,
         now: Instant,
         frame: FrameRates,
-        current: bool,
+        link: LinkGeneration,
         completion: &SingleOutcome<A, D>,
     ) {
-        if current && completion.rate_sample().is_some() {
+        if link == LinkGeneration::Current && completion.rate_sample().is_some() {
             self.completed(now, frame, completion);
         }
     }
@@ -177,7 +185,7 @@ pub trait RateSelection<M: RxMetadata, A, BA = A> {
     fn learn_aggregate<D>(
         &mut self,
         now: Instant,
-        current: bool,
+        link: LinkGeneration,
         tally: BlockAckTally,
         completion: &AggregateOutcome<BA, D>,
     ) {
@@ -189,7 +197,7 @@ pub trait RateSelection<M: RxMetadata, A, BA = A> {
                     | AggregateEnd::CtsTimeout(Some(_))
             )
         );
-        if current && aired {
+        if link == LinkGeneration::Current && aired {
             self.completed_aggregate(now, tally, completion);
         }
     }
@@ -245,10 +253,10 @@ mod learn_tests {
         let unaired: AggregateOutcome<(), ()> =
             TxOutcome::Ended(AggregateEnd::ContentionLimit(None));
         let mut rates = Taught(Vec::new());
-        rates.learn_aggregate(Instant::EPOCH, false, tally, &unanswered);
-        rates.learn_aggregate(Instant::EPOCH, true, tally, &unaired);
+        rates.learn_aggregate(Instant::EPOCH, LinkGeneration::Stale, tally, &unanswered);
+        rates.learn_aggregate(Instant::EPOCH, LinkGeneration::Current, tally, &unaired);
         assert!(rates.0.is_empty());
-        rates.learn_aggregate(Instant::EPOCH, true, tally, &unanswered);
+        rates.learn_aggregate(Instant::EPOCH, LinkGeneration::Current, tally, &unanswered);
         assert_eq!(rates.0, [FrameRates::Aggregate]);
     }
 
@@ -264,10 +272,15 @@ mod learn_tests {
         let withdrawn: SingleOutcome<(), ()> = TxOutcome::Withdrawn(WithdrawCause::GateClosed);
         let mut rates = Taught(Vec::new());
         let now = Instant::from_micros(1);
-        rates.learn(now, FrameRates::Probe, true, &delivered);
-        rates.learn(now, FrameRates::Data, false, &delivered);
-        rates.learn(now, FrameRates::Control, true, &withdrawn);
-        rates.learn(now, FrameRates::Data, true, &delivered);
+        rates.learn(now, FrameRates::Probe, LinkGeneration::Current, &delivered);
+        rates.learn(now, FrameRates::Data, LinkGeneration::Stale, &delivered);
+        rates.learn(
+            now,
+            FrameRates::Control,
+            LinkGeneration::Current,
+            &withdrawn,
+        );
+        rates.learn(now, FrameRates::Data, LinkGeneration::Current, &delivered);
         assert_eq!(rates.0, [FrameRates::Probe, FrameRates::Data]);
     }
 }

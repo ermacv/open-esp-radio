@@ -18,6 +18,7 @@
 //! `TimedOut` leaves retry counters unchanged and never republishes the MPDU.
 //! Backend faults are carried by Poisoned and do not enter this policy.
 
+use crate::duplicate::RetrySubfield;
 use oer_protocols_ieee80211_contracts_port::TxStatus;
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 use oer_protocols_ieee80211_wire::phy::PhyRate;
@@ -183,32 +184,38 @@ impl MpduRetryState {
                     | (AckFailureAccounting::ByFrameClass, FrameClass::Short) => self.count_short(),
                     (AckFailureAccounting::ByFrameClass, FrameClass::Long) => self.count_long(),
                 };
-                let reached = class_reached || self.counters.mpdu >= self.mpdu_retry_limit;
-                self.finish_or_retry(status, reached, true)
+                let reached = if class_reached == Limit::Reached
+                    || self.counters.mpdu >= self.mpdu_retry_limit
+                {
+                    Limit::Reached
+                } else {
+                    Limit::Within
+                };
+                self.finish_or_retry(status, reached, RetrySubfield::Set)
             }
             TxStatus::CtsTimeout => {
                 let reached = self.count_short();
-                self.finish_or_retry(status, reached, false)
+                self.finish_or_retry(status, reached, RetrySubfield::Clear)
             }
             TxStatus::Collision => {
                 let reached = match self.frame_class {
                     FrameClass::Short => self.count_short(),
                     FrameClass::Long => self.count_long(),
                 };
-                self.finish_or_retry(status, reached, false)
+                self.finish_or_retry(status, reached, RetrySubfield::Clear)
             }
             TxStatus::TimedOut | TxStatus::KeyRefused => Self::end(RetryOutcome::Terminal(status)),
         }
     }
 
-    fn count_short(&mut self) -> bool {
+    fn count_short(&mut self) -> Limit {
         self.counters.short = self.counters.short.saturating_add(1);
-        self.counters.short >= self.limits.short
+        Limit::of(self.counters.short, self.limits.short)
     }
 
-    fn count_long(&mut self) -> bool {
+    fn count_long(&mut self) -> Limit {
         self.counters.long = self.counters.long.saturating_add(1);
-        self.counters.long >= self.limits.long
+        Limit::of(self.counters.long, self.limits.long)
     }
 
     const fn end(outcome: RetryOutcome) -> RetryDecision {
@@ -218,14 +225,34 @@ impl MpduRetryState {
     fn finish_or_retry(
         &mut self,
         status: TxStatus,
-        reached: bool,
-        set_retry_bit: bool,
+        reached: Limit,
+        retry: RetrySubfield,
     ) -> RetryDecision {
-        if reached {
-            Self::end(RetryOutcome::RetryLimit(status))
+        match reached {
+            Limit::Reached => Self::end(RetryOutcome::RetryLimit(status)),
+            Limit::Within => {
+                self.attempts = self.attempts.saturating_add(1);
+                RetryDecision::Retry {
+                    set_retry_bit: retry == RetrySubfield::Set,
+                }
+            }
+        }
+    }
+}
+
+/// Whether a retry counter reached its limit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Limit {
+    Reached,
+    Within,
+}
+
+impl Limit {
+    const fn of(count: u8, limit: u8) -> Self {
+        if count >= limit {
+            Self::Reached
         } else {
-            self.attempts = self.attempts.saturating_add(1);
-            RetryDecision::Retry { set_retry_bit }
+            Self::Within
         }
     }
 }

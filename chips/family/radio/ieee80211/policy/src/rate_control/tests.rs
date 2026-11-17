@@ -23,6 +23,18 @@ fn state() -> RateControlState {
     }
 }
 
+/// The two HE features the low-metric report reads.
+const BOTH: HeLowMetricReportFeatures = HeLowMetricReportFeatures {
+    dcm_receive: DcmReceive::Supported,
+    extended_range_single_user_permitted: true,
+};
+
+/// The DCM receive alone.
+const DCM_ONLY: HeLowMetricReportFeatures = HeLowMetricReportFeatures {
+    dcm_receive: DcmReceive::Supported,
+    extended_range_single_user_permitted: false,
+};
+
 #[test]
 fn ack_snr_filter_matches_signed_blob_rounding() {
     let mut filter = AckSnrFilter::new();
@@ -55,9 +67,9 @@ fn association_installs_selected_schedule_as_owned_runtime_state() {
     let mut association = StaRateControlAssociation::new(StaRateControlAssociationInput {
         phy: StaRateControlPhy::He,
         link_metric: StaLinkMetric::from_estimator(70),
-        p2p: false,
+        p2p: Peering::Infrastructure,
         peer_highest_rate: None,
-        long_range_rates_present: false,
+        long_range_rates: LongRangeRates::Absent,
         he_low_metric_report: HeLowMetricReportFeatures::default(),
     });
     assert_eq!(
@@ -173,16 +185,16 @@ fn byte_pressure_wrap_is_preserved() {
 #[test]
 fn beamforming_policy_has_three_exact_modes() {
     assert_eq!(
-        beamforming_report_rate(40, 20, true, true),
-        BeamformingReportRate::new(1, 16, false, false, false)
+        beamforming_report_rate(40, 20, BOTH),
+        BeamformingReportRate::new(1, 16, ReportCoding::Plain)
     );
     assert_eq!(
-        beamforming_report_rate(20, 20, true, true),
-        BeamformingReportRate::new(2, 16, true, true, true)
+        beamforming_report_rate(20, 20, BOTH),
+        BeamformingReportRate::new(2, 16, ReportCoding::DcmExtendedRange)
     );
     assert_eq!(
-        beamforming_report_rate(20, 20, true, false),
-        BeamformingReportRate::new(0, 11, false, false, false)
+        beamforming_report_rate(20, 20, DCM_ONLY),
+        BeamformingReportRate::new(0, 11, ReportCoding::Plain)
     );
 }
 
@@ -191,10 +203,10 @@ fn selection_input(phy_type: u8) -> PhyModeSelectionInput {
         phy_type,
         he_type: 0,
         metric: 20,
-        p2p: false,
+        p2p: Peering::Infrastructure,
         supplied_highest_rate: 0,
         use_supplied_highest_rate: false,
-        long_range_rates_present: false,
+        long_range_rates: LongRangeRates::Absent,
     }
 }
 
@@ -355,9 +367,9 @@ fn ampdu_initial_rate_uses_the_vendor_index_eight_floor() {
     let association = StaRateControlAssociation::new(StaRateControlAssociationInput {
         phy: StaRateControlPhy::He,
         link_metric: StaLinkMetric::from_estimator(8),
-        p2p: false,
+        p2p: Peering::Infrastructure,
         peer_highest_rate: None,
-        long_range_rates_present: false,
+        long_range_rates: LongRangeRates::Absent,
         he_low_metric_report: HeLowMetricReportFeatures::default(),
     });
     assert_eq!(
@@ -382,7 +394,7 @@ fn phy_mode_selector_covers_legacy_p2p_ht_he_and_lora() {
 
     let mut dot11g_input = selection_input(1);
     dot11g_input.metric = 12;
-    dot11g_input.p2p = true;
+    dot11g_input.p2p = Peering::PeerToPeer;
     let dot11g = select_phy_mode(dot11g_input);
     assert_eq!(
         dot11g.current,
@@ -403,7 +415,7 @@ fn phy_mode_selector_covers_legacy_p2p_ht_he_and_lora() {
     let mut he_input = selection_input(4);
     he_input.he_type = 7;
     he_input.metric = 8;
-    he_input.long_range_rates_present = true;
+    he_input.long_range_rates = LongRangeRates::Present;
     let he = select_phy_mode(he_input);
     assert_eq!(he.current, literal_schedule!(RateScheduleKind::Dot11Ax, 13));
     assert_eq!(he.maximum_index, 15);
@@ -420,11 +432,11 @@ fn associated_he_owner_joins_schedule_and_report_rate_without_c_layout() {
     let association = StaRateControlAssociation::new(StaRateControlAssociationInput {
         phy: StaRateControlPhy::He,
         link_metric: StaLinkMetric::from_estimator(20),
-        p2p: false,
+        p2p: Peering::Infrastructure,
         peer_highest_rate: None,
-        long_range_rates_present: true,
+        long_range_rates: LongRangeRates::Present,
         he_low_metric_report: HeLowMetricReportFeatures {
-            dcm_receive_supported: true,
+            dcm_receive: DcmReceive::Supported,
             extended_range_single_user_permitted: true,
         },
     });
@@ -442,7 +454,7 @@ fn associated_he_owner_joins_schedule_and_report_rate_without_c_layout() {
     assert_eq!(association.ampdu_limit_rate(), Some(0x13));
     assert_eq!(
         association.beamforming_report(),
-        beamforming_report_rate_for_metric(20, true, true)
+        beamforming_report_rate_for_metric(20, BOTH)
     );
 }
 
@@ -451,11 +463,11 @@ fn associated_he_owner_keeps_low_metric_feature_gates_explicit() {
     let mut input = StaRateControlAssociationInput {
         phy: StaRateControlPhy::He,
         link_metric: StaLinkMetric::from_estimator(8),
-        p2p: false,
+        p2p: Peering::Infrastructure,
         peer_highest_rate: Some(StaRateControlPeerHighestRate::he20_one_spatial_stream(
             HeMcs::new(9).unwrap(),
         )),
-        long_range_rates_present: false,
+        long_range_rates: LongRangeRates::Absent,
         he_low_metric_report: HeLowMetricReportFeatures::default(),
     };
     let ordinary = StaRateControlAssociation::new(input);
@@ -465,16 +477,16 @@ fn associated_he_owner_keeps_low_metric_feature_gates_explicit() {
     );
     assert_eq!(
         ordinary.beamforming_report(),
-        beamforming_report_rate_for_metric(8, false, false)
+        beamforming_report_rate_for_metric(8, HeLowMetricReportFeatures::default())
     );
 
     input.he_low_metric_report = HeLowMetricReportFeatures {
-        dcm_receive_supported: true,
+        dcm_receive: DcmReceive::Supported,
         extended_range_single_user_permitted: true,
     };
     assert_eq!(
         StaRateControlAssociation::new(input).beamforming_report(),
-        beamforming_report_rate_for_metric(8, true, true)
+        beamforming_report_rate_for_metric(8, BOTH)
     );
 }
 
@@ -508,13 +520,13 @@ fn recovered_rate_callbacks_and_ampdu_table_are_finite() {
     assert_eq!(rate_to_schedule_index(RateIndexMap::Lora, 0x28), None);
 }
 
-fn association(phy: StaRateControlPhy, p2p: bool) -> StaRateControlAssociation {
+fn association(phy: StaRateControlPhy, p2p: Peering) -> StaRateControlAssociation {
     StaRateControlAssociation::new(StaRateControlAssociationInput {
         phy,
         link_metric: StaLinkMetric::from_estimator(70),
         p2p,
         peer_highest_rate: None,
-        long_range_rates_present: false,
+        long_range_rates: LongRangeRates::Absent,
         he_low_metric_report: HeLowMetricReportFeatures::default(),
     })
 }
@@ -527,18 +539,21 @@ fn non_data_frames_use_the_association_control_schedule() {
         StaRateControlPhy::Ht,
         StaRateControlPhy::He,
     ] {
-        assert_eq!(association(phy, false).control_schedule(), basic_ofdm);
+        assert_eq!(
+            association(phy, Peering::Infrastructure).control_schedule(),
+            basic_ofdm
+        );
     }
     assert_eq!(
-        association(StaRateControlPhy::Dot11B, false).control_schedule(),
+        association(StaRateControlPhy::Dot11B, Peering::Infrastructure).control_schedule(),
         DEFAULT_CONTROL_SCHEDULE
     );
     assert_eq!(
-        association(StaRateControlPhy::Dot11G, true).control_schedule(),
+        association(StaRateControlPhy::Dot11G, Peering::PeerToPeer).control_schedule(),
         crate::rate_schedule::rate_schedule(RateScheduleKind::P2pDot11G, 7).unwrap()
     );
     assert_eq!(
-        association(StaRateControlPhy::He, true).control_schedule(),
+        association(StaRateControlPhy::He, Peering::PeerToPeer).control_schedule(),
         DEFAULT_CONTROL_SCHEDULE
     );
 }
@@ -577,9 +592,20 @@ mod seam {
 
     /// An HT20 peer, with or without the 20 MHz short guard
     /// interval.
-    fn ht_peer_at_20_mhz(short_gi: bool) -> RatePeer {
+    fn ht_peer_at_20_mhz(gi: oer_protocols_ieee80211_wire::phy::HtGuardInterval) -> RatePeer {
         let mut element = [0_u8; 28];
-        element[..6].copy_from_slice(&[45, 26, if short_gi { 0x20 } else { 0 }, 0, 0x17, 0xff]);
+        element[..6].copy_from_slice(&[
+            45,
+            26,
+            if gi == oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short {
+                0x20
+            } else {
+                0
+            },
+            0,
+            0x17,
+            0xff,
+        ]);
         RatePeer {
             phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht { width: oer_protocols_ieee80211_contracts_port::Width::Mhz20 }.mode(),
             legacy_rates:
@@ -601,7 +627,7 @@ mod seam {
 
     #[test]
     fn a_weaker_link_starts_at_a_slower_rate() {
-        let peer = ht_peer_at_20_mhz(true);
+        let peer = ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short);
         let weakest = EspressifRateControl::for_peer((), &peer, metric(i8::MIN));
         let strong = EspressifRateControl::for_peer((), &peer, metric(60));
         assert!(weakest.mpdu_rate().nominal_kbps() < strong.mpdu_rate().nominal_kbps());
@@ -609,9 +635,18 @@ mod seam {
 
     #[test]
     fn every_ht_schedule_rate_takes_the_short_guard_interval_exactly_where_the_peer_supports_it() {
-        let with = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60)).decode;
-        let without =
-            EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(false), metric(60)).decode;
+        let with = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short),
+            metric(60),
+        )
+        .decode;
+        let without = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal),
+            metric(60),
+        )
+        .decode;
         let mut long_in_schedule = 0;
         for index in 0..14 {
             let Some(schedule) =
@@ -644,19 +679,27 @@ mod seam {
 
     #[test]
     fn an_association_at_the_long_guard_mcs7_record_sends_with_the_short_guard_interval() {
-        let decode =
-            EspressifRateControl::for_peer((), &ht_peer_at_40_mhz(true), metric(60)).decode;
+        let decode = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_40_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short),
+            metric(60),
+        )
+        .decode;
         let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1)
             .expect("the long-GI MCS 7 record");
         assert_eq!(decode.rate(schedule).nominal_kbps(), 150_000);
     }
 
     /// An HT40 peer, with or without the 40 MHz short guard interval.
-    fn ht_peer_at_40_mhz(short_gi40: bool) -> RatePeer {
+    fn ht_peer_at_40_mhz(gi40: oer_protocols_ieee80211_wire::phy::HtGuardInterval) -> RatePeer {
         let mut element = [0_u8; 28];
         // Supported Channel Width Set, SM power save disabled and the 20 MHz
         // short guard interval; the 40 MHz one on request.
-        let info = if short_gi40 { 0x6e } else { 0x2e };
+        let info = if gi40 == oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short {
+            0x6e
+        } else {
+            0x2e
+        };
         element[..6].copy_from_slice(&[45, 26, info, 0, 0x17, 0xff]);
         RatePeer {
             phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht {
@@ -664,7 +707,7 @@ mod seam {
             }
             .mode(),
             ht_capabilities: ht_peer_capabilities(&element),
-            ..ht_peer_at_20_mhz(true)
+            ..ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short)
         }
     }
 
@@ -685,12 +728,16 @@ mod seam {
                 .max_by_key(|rate| PhyRate::Ht(*rate).nominal_kbps())
                 .expect("an HT schedule rate")
         };
-        let short = fastest(&ht_peer_at_40_mhz(true));
+        let short = fastest(&ht_peer_at_40_mhz(
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+        ));
         assert_eq!(short.mcs(), HtMcs::SINGLE_STREAM_MAX);
         assert!(short.short_gi());
         assert_eq!(PhyRate::Ht(short).nominal_kbps(), 150_000);
         // A peer without the 40 MHz short guard interval gets the long one.
-        let long = fastest(&ht_peer_at_40_mhz(false));
+        let long = fastest(&ht_peer_at_40_mhz(
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        ));
         assert_eq!(long.mcs(), HtMcs::SINGLE_STREAM_MAX);
         assert!(!long.short_gi());
         assert_eq!(PhyRate::Ht(long).nominal_kbps(), 135_000);
@@ -698,7 +745,11 @@ mod seam {
 
     #[test]
     fn retry_pressure_lowers_the_rate() {
-        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
+        let mut control = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short),
+            metric(60),
+        );
         let before = control.mpdu_rate().nominal_kbps();
         // Exchanges of ten attempts each add two to the retry pressure; past
         // six the controller moves to the next, slower schedule.
@@ -714,7 +765,11 @@ mod seam {
 
     #[test]
     fn a_block_ack_s_ack_snr_feeds_the_filter() {
-        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
+        let mut control = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short),
+            metric(60),
+        );
         assert_eq!(control.association().filtered_ack_snr(), None);
         assert_eq!(
             control.observe_ampdu(
@@ -729,7 +784,11 @@ mod seam {
 
     #[test]
     fn a_block_ack_without_a_sample_leaves_the_filter_and_still_counts_its_window() {
-        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
+        let mut control = EspressifRateControl::for_peer(
+            (),
+            &ht_peer_at_20_mhz(oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short),
+            metric(60),
+        );
         let now = oer_portable_time::Instant::from_micros(1_000);
         assert_eq!(
             control.observe_ampdu(now, tally(4, 4), &Evidence::Measured(30)),
@@ -835,10 +894,18 @@ fn phy_mode_selection_indices_stay_inside_their_tables() {
                             phy_type,
                             he_type,
                             metric,
-                            p2p: flags & 1 != 0,
+                            p2p: if flags & 1 != 0 {
+                                Peering::PeerToPeer
+                            } else {
+                                Peering::Infrastructure
+                            },
                             supplied_highest_rate,
                             use_supplied_highest_rate: flags & 2 != 0,
-                            long_range_rates_present: flags & 4 != 0,
+                            long_range_rates: if flags & 4 != 0 {
+                                LongRangeRates::Present
+                            } else {
+                                LongRangeRates::Absent
+                            },
                         });
                         for schedule in [
                             selection.current,

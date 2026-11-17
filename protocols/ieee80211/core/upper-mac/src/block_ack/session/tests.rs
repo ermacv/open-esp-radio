@@ -1,4 +1,5 @@
 use super::*;
+use crate::block_ack::Amsdu;
 use crate::seq;
 
 const CONFIG: TxBlockAckConfig = TxBlockAckConfig {
@@ -99,7 +100,7 @@ fn stale_alarm_cannot_cancel_a_new_generation() {
 fn response_cannot_expand_the_static_capacity() {
     let mut session = TxBlockAckSession::new(CONFIG).unwrap();
     let request = session.begin(seq(0), at(0)).unwrap();
-    let parameters = encode_ba_parameters(7, 64, false).to_le_bytes();
+    let parameters = encode_ba_parameters(7, 64, Amsdu::NotPermitted).to_le_bytes();
     let response = [
         3,
         1,
@@ -206,7 +207,7 @@ fn rejected_response_returns_to_idle_without_a_timer_retry() {
 }
 
 fn responses(count: usize) {
-    let parameters = encode_ba_parameters(7, 32, true).to_le_bytes();
+    let parameters = encode_ba_parameters(7, 32, Amsdu::Permitted).to_le_bytes();
     let accepted = [3, 1, 1, 0, 0, parameters[0], parameters[1], 0, 0];
     let mut extended = std::vec::Vec::from(accepted);
     // An HE peer's ADDBA Extension element after the fixed fields.
@@ -240,6 +241,6 @@ fn response_handling_never_panics_full() {
 }
 
 // Fixture encoding for independently constructed peer responses.
-const fn encode_ba_parameters(tid: u8, window: u16, amsdu: bool) -> u16 {
-    (amsdu as u16) | 1 << 1 | (tid as u16) << 2 | window << 6
+const fn encode_ba_parameters(tid: u8, window: u16, amsdu: Amsdu) -> u16 {
+    (matches!(amsdu, Amsdu::Permitted) as u16) | 1 << 1 | (tid as u16) << 2 | window << 6
 }

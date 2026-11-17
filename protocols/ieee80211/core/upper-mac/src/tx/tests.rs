@@ -185,7 +185,7 @@ fn ampdu_request(subframes: usize) -> TxRequest {
                 0,
                 SequenceNumber::new(100).unwrap(),
                 &lengths[..subframes],
-                true,
+                BlockAckAgreement::Operational,
             )
             .unwrap(),
         ),
@@ -308,7 +308,7 @@ fn request_snapshot_keeps_the_mpdu_context_through_completion() {
     let mut planner = planner();
     let expected = mpdu(733);
     let (mut exchange, _) = planner.begin(expected, &Ladder).unwrap();
-    exchange.set_block_ack_operational(false);
+    exchange.set_block_ack(BlockAckAgreement::NotOperational);
     assert_eq!(exchange.request(), expected);
     let step = planner.complete(
         &mut exchange,
@@ -318,7 +318,7 @@ fn request_snapshot_keeps_the_mpdu_context_through_completion() {
         &Ladder,
     );
     assert!(matches!(step, TxStep::Done(TxReport::Mpdu(_))));
-    exchange.set_block_ack_operational(true);
+    exchange.set_block_ack(BlockAckAgreement::Operational);
     assert_eq!(exchange.request(), expected);
 }
 
@@ -329,7 +329,7 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
         7,
         SequenceNumber::new(4094).unwrap(),
         &[311, 677, 1234],
-        true,
+        BlockAckAgreement::Operational,
     )
     .unwrap();
     let mut expected = TxRequest {
@@ -363,8 +363,8 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
             starting_sequence: body.first_sequence,
         }
     );
-    exchange.set_block_ack_operational(false);
-    body.block_ack_operational = false;
+    exchange.set_block_ack(BlockAckAgreement::NotOperational);
+    body.agreement = BlockAckAgreement::NotOperational;
     expected.body = TxBody::Ampdu(body);
     assert_eq!(exchange.request(), expected);
 
@@ -377,8 +377,8 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
     ));
     assert_eq!(individual.content, AttemptContent::Subframe { index: 2 });
     assert_eq!(exchange.request(), expected);
-    exchange.set_block_ack_operational(true);
-    body.block_ack_operational = true;
+    exchange.set_block_ack(BlockAckAgreement::Operational);
+    body.agreement = BlockAckAgreement::Operational;
     expected.body = TxBody::Ampdu(body);
     assert_eq!(exchange.request(), expected);
 
@@ -391,8 +391,8 @@ fn aggregate_body_stays_with_the_bar_individual_and_finished_phases() {
     );
     assert!(matches!(finished, TxStep::Done(TxReport::Ampdu(_))));
     assert_eq!(exchange.request(), expected);
-    exchange.set_block_ack_operational(false);
-    body.block_ack_operational = false;
+    exchange.set_block_ack(BlockAckAgreement::NotOperational);
+    body.agreement = BlockAckAgreement::NotOperational;
     expected.body = TxBody::Ampdu(body);
     assert_eq!(exchange.request(), expected);
     assert_eq!(
@@ -433,11 +433,19 @@ fn an_unanswered_aggregate_ends_as_a_hardware_timeout() {
 
 #[test]
 fn an_aggregate_length_counts_delimiters_and_padding() {
-    let request = AmpduRequest::new(0, SequenceNumber::ZERO, &[101, 102, 103], true).unwrap();
+    let request = AmpduRequest::new(
+        0,
+        SequenceNumber::ZERO,
+        &[101, 102, 103],
+        BlockAckAgreement::Operational,
+    )
+    .unwrap();
     // 4 + 101 -> 108, 4 + 102 -> 108, last 4 + 103 unpadded.
     assert_eq!(request.aggregate_length(0b111), 108 + 108 + 107);
     assert_eq!(request.aggregate_length(0b100), 107);
-    assert!(AmpduRequest::new(0, SequenceNumber::ZERO, &[], true).is_none());
+    assert!(
+        AmpduRequest::new(0, SequenceNumber::ZERO, &[], BlockAckAgreement::Operational).is_none()
+    );
     assert_eq!(
         acknowledged_subframes(&request, report(0, 0b101).unwrap()),
         0b101
@@ -492,7 +500,7 @@ fn an_aged_subframe_alone_is_discarded_behind_a_block_ack_request() {
 fn without_the_agreement_an_aged_subframe_alone_ends_without_a_request() {
     let mut planner = planner();
     let (mut exchange, _) = planner.begin(ampdu_request(3), &Ladder).unwrap();
-    exchange.set_block_ack_operational(false);
+    exchange.set_block_ack(BlockAckAgreement::NotOperational);
     // Both missing subframes go alone; 101 ages on its first timeout, and
     // 102, admitted as early, is discarded before it is sent.
     let individual = attempt(planner.complete(
@@ -564,7 +572,13 @@ fn a_subframe_without_an_admission_instant_ends_the_exchange_incomplete() {
 
 #[test]
 fn maximal_mpdu_lengths_align_without_overflow_and_leave_the_last_unpadded() {
-    let request = AmpduRequest::new(0, SequenceNumber::ZERO, &[u16::MAX; 64], true).unwrap();
+    let request = AmpduRequest::new(
+        0,
+        SequenceNumber::ZERO,
+        &[u16::MAX; 64],
+        BlockAckAgreement::Operational,
+    )
+    .unwrap();
     assert_eq!(request.aggregate_length(u64::MAX), 63 * 65_540 + 65_539);
     assert_eq!(request.aggregate_length(1 << 63), 65_539);
     assert_eq!(request.aggregate_length(0), 0);

@@ -11,6 +11,7 @@
 )]
 
 use super::FragmentAdmissionEpoch;
+use crate::duplicate::RetrySubfield;
 use oer_protocols_ieee80211_wire::data::{LLC_SNAP_HEADER_LEN, MsduParts, rfc1042_ether_type};
 
 use super::{
@@ -278,7 +279,7 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
     pub fn admit_unfragmented(
         &mut self,
         identity: OpenDataFragmentIdentity,
-        retry: bool,
+        retry: RetrySubfield,
         now: Option<Instant>,
     ) -> Result<OpenDataUnfragmentedAdmission, OpenDataReassemblyError> {
         self.admit_unfragmented_in_epoch(
@@ -294,10 +295,11 @@ impl<const CONTEXTS: usize, const CAPACITY: usize> OpenDataDefragmenter<CONTEXTS
         &mut self,
         identity: OpenDataFragmentIdentity,
         admission_epoch: FragmentAdmissionEpoch,
-        retry: bool,
+        retry: RetrySubfield,
         now: Option<Instant>,
     ) -> Result<OpenDataUnfragmentedAdmission, OpenDataReassemblyError> {
         admission_epoch.validate(identity.protection())?;
+        let retry = retry == RetrySubfield::Set;
         let relevant_active = self.slots.iter().any(|slot| {
             slot.is_active()
                 && slot

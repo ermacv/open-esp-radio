@@ -312,7 +312,7 @@ impl TxBlockAckSession {
         starting_sequence: SequenceNumber,
         bitmap: u64,
     ) -> Option<SequenceNumber> {
-        self.progress(starting_sequence, bitmap, false)
+        self.progress(starting_sequence, bitmap, Marked::Delivered)
     }
 
     /// Mark expired MSDUs: bit i names `starting_sequence + i`.
@@ -324,15 +324,16 @@ impl TxBlockAckSession {
         starting_sequence: SequenceNumber,
         bitmap: u64,
     ) -> Option<SequenceNumber> {
-        self.progress(starting_sequence, bitmap, true)
+        self.progress(starting_sequence, bitmap, Marked::Expired)
     }
 
     fn progress(
         &mut self,
         starting_sequence: SequenceNumber,
         bitmap: u64,
-        is_expired: bool,
+        marked: Marked,
     ) -> Option<SequenceNumber> {
+        let is_expired = marked == Marked::Expired;
         let TxBlockAckPhase::Operational {
             agreement,
             delivered,
@@ -422,6 +423,13 @@ impl TxBlockAckSession {
 const fn next_generation(current: u32) -> u32 {
     let next = current.wrapping_add(1);
     if next == 0 { 1 } else { next }
+}
+
+/// What a report marks of an agreement's MSDUs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Marked {
+    Delivered,
+    Expired,
 }
 
 #[cfg(test)]

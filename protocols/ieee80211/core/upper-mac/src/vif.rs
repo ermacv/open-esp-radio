@@ -46,6 +46,17 @@ pub enum StaApRxRoute {
 /// the local interface. Broadcast probe requests are the one deliberate AP
 /// exception: a connected station does not own active-scan requests, while a
 /// SoftAP must receive them before it can answer.
+/// The addressee a frame's address test names.
+macro_rules! addressee {
+    ($addressed:expr) => {
+        if $addressed {
+            Addressee::Addressed
+        } else {
+            Addressee::Other
+        }
+    };
+}
+
 pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRoute {
     let fields = match AddressFields::parse(mpdu) {
         Ok(fields) => fields,
@@ -58,8 +69,8 @@ pub fn classify_sta_ap_rx(mpdu: &[u8], addresses: StaApRxAddresses) -> StaApRxRo
     let receiver = fields.receiver();
     match fields.control().kind() {
         FrameType::Control => select(
-            receiver == addresses.station,
-            receiver == addresses.access_point,
+            addressee!(receiver == addresses.station),
+            addressee!(receiver == addresses.access_point),
         ),
         FrameType::Management => classify_management(fields, addresses),
         FrameType::Data => classify_data(fields, addresses),
@@ -82,7 +93,7 @@ fn classify_management(fields: AddressFields, addresses: StaApRxAddresses) -> St
     let access_point = receiver == addresses.access_point
         || bssid == addresses.access_point
         || group_receiver && is_group(bssid) && probe_request;
-    select(station, access_point)
+    select(addressee!(station), addressee!(access_point))
 }
 
 fn classify_data(fields: AddressFields, addresses: StaApRxAddresses) -> StaApRxRoute {
@@ -94,27 +105,43 @@ fn classify_data(fields: AddressFields, addresses: StaApRxAddresses) -> StaApRxR
     let group_receiver = is_group(receiver);
     match (fields.control().to_ds(), fields.control().from_ds()) {
         (false, true) => select(
-            receiver == addresses.station
-                || group_receiver && transmitter == addresses.station_bssid,
-            false,
+            addressee!(
+                receiver == addresses.station
+                    || group_receiver && transmitter == addresses.station_bssid
+            ),
+            Addressee::Other,
         ),
-        (true, false) => select(false, receiver == addresses.access_point),
+        (true, false) => select(
+            Addressee::Other,
+            addressee!(receiver == addresses.access_point),
+        ),
         (false, false) => select(
-            receiver == addresses.station
-                || group_receiver && bssid_or_destination == addresses.station_bssid,
-            receiver == addresses.access_point
-                || group_receiver && bssid_or_destination == addresses.access_point,
+            addressee!(
+                receiver == addresses.station
+                    || group_receiver && bssid_or_destination == addresses.station_bssid
+            ),
+            addressee!(
+                receiver == addresses.access_point
+                    || group_receiver && bssid_or_destination == addresses.access_point
+            ),
         ),
         (true, true) => StaApRxRoute::Foreign,
     }
 }
 
-const fn select(station: bool, access_point: bool) -> StaApRxRoute {
+/// Whether a frame's addresses name one interface.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Addressee {
+    Addressed,
+    Other,
+}
+
+const fn select(station: Addressee, access_point: Addressee) -> StaApRxRoute {
     match (station, access_point) {
-        (true, false) => StaApRxRoute::Interface(StaApVif::Station),
-        (false, true) => StaApRxRoute::Interface(StaApVif::AccessPoint),
-        (false, false) => StaApRxRoute::Foreign,
-        (true, true) => StaApRxRoute::Ambiguous,
+        (Addressee::Addressed, Addressee::Other) => StaApRxRoute::Interface(StaApVif::Station),
+        (Addressee::Other, Addressee::Addressed) => StaApRxRoute::Interface(StaApVif::AccessPoint),
+        (Addressee::Other, Addressee::Other) => StaApRxRoute::Foreign,
+        (Addressee::Addressed, Addressee::Addressed) => StaApRxRoute::Ambiguous,
     }
 }
 

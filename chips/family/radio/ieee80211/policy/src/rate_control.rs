@@ -511,7 +511,7 @@ impl RateControlState {
 ///
 /// Fields are private so callers cannot construct a combination that the
 /// complete blob policy never emits. Use [`beamforming_report_rate`] or
-use crate::rate_record::BeamformingReportRate;
+use crate::rate_record::{BeamformingReportRate, ReportCoding};
 
 /// Recovered PHY-family discriminator stored in a rate-control record, and
 /// its rate-code callbacks: the Espressif family's policy data.
@@ -546,8 +546,51 @@ pub enum StaRateControlPhy {
 /// them for nonzero.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HeLowMetricReportFeatures {
-    pub dcm_receive_supported: bool,
+    pub dcm_receive: DcmReceive,
     pub extended_range_single_user_permitted: bool,
+}
+
+/// Whether the peer receives DCM (its HE capabilities' DCM Max
+/// Constellation Rx).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum DcmReceive {
+    #[default]
+    Unsupported,
+    Supported,
+}
+
+/// Whether the association is an infrastructure one or peer to peer: the
+/// vendor policy keeps P2P schedules of its own.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Peering {
+    Infrastructure,
+    PeerToPeer,
+}
+
+impl Peering {
+    const fn is_p2p(self) -> bool {
+        matches!(self, Self::PeerToPeer)
+    }
+}
+
+/// Whether the peer's vendor LR rate list holds at least one local rate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LongRangeRates {
+    Absent,
+    Present,
+}
+
+impl LongRangeRates {
+    const fn present(self) -> bool {
+        matches!(self, Self::Present)
+    }
+}
+
+/// Which family an HT-class schedule comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HtFamily {
+    Ht,
+    He,
 }
 
 /// Highest peer rate supplied to the association-time vendor rate policy.
@@ -596,7 +639,7 @@ impl StaRateControlPeerHighestRate {
 pub struct StaRateControlAssociationInput {
     pub phy: StaRateControlPhy,
     pub link_metric: StaLinkMetric,
-    pub p2p: bool,
+    pub p2p: Peering,
     pub peer_highest_rate: Option<StaRateControlPeerHighestRate>,
     /// Whether the peer's vendor LR rate list contains at least one local rate.
     ///
@@ -604,7 +647,7 @@ pub struct StaRateControlAssociationInput {
     /// ieee80211_setup_lr_rates` owns the count at node offset `0x84`;
     /// `ic_set_trc` copies it to record offset `0x8b`. It is not an HE
     /// capability or a generic request for more schedules.
-    pub long_range_rates_present: bool,
+    pub long_range_rates: LongRangeRates,
     pub he_low_metric_report: HeLowMetricReportFeatures,
 }
 
@@ -670,14 +713,11 @@ impl StaRateControlAssociation {
             p2p: input.p2p,
             supplied_highest_rate: peer_highest_rate,
             use_supplied_highest_rate: input.peer_highest_rate.is_some(),
-            long_range_rates_present: input.long_range_rates_present,
+            long_range_rates: input.long_range_rates,
         });
         let beamforming_report = beamforming_report_rate_for_metric(
             i32::from(input.link_metric.value()),
-            input.he_low_metric_report.dcm_receive_supported,
-            input
-                .he_low_metric_report
-                .extended_range_single_user_permitted,
+            input.he_low_metric_report,
         );
         let current = schedule_state(selection.current);
         let ampdu_runtime = selection.ampdu_limit_rate.and_then(|_| {
@@ -843,10 +883,10 @@ pub(crate) struct PhyModeSelectionInput {
     pub phy_type: u8,
     pub he_type: u8,
     pub metric: i32,
-    pub p2p: bool,
+    pub p2p: Peering,
     pub supplied_highest_rate: u32,
     pub use_supplied_highest_rate: bool,
-    pub long_range_rates_present: bool,
+    pub long_range_rates: LongRangeRates,
 }
 
 /// Complete scalar and schedule result of `rcUpdatePhyMode`.
@@ -910,8 +950,8 @@ const DOT11B_0: RateScheduleRef = literal_schedule!(RateScheduleKind::Dot11B, 0)
 /// `rc11BSchedTbl` record 3, 802.11g/n/ax use `BasicOFDMSched`, the flagged
 /// 802.11g association uses `rcP2P11GSchedTbl` record 7 while flagged n/ax
 /// keep the `trc_init` record, and LoRa uses `rcLoRaSchedTbl`.
-const fn control_schedule(phy: StaRateControlPhy, flagged: bool) -> RateScheduleRef {
-    match (phy, flagged) {
+const fn control_schedule(phy: StaRateControlPhy, peering: Peering) -> RateScheduleRef {
+    match (phy, peering.is_p2p()) {
         (StaRateControlPhy::Dot11B, _) => DEFAULT_CONTROL_SCHEDULE,
         (StaRateControlPhy::Lora, _) => LORA_0,
         (StaRateControlPhy::Dot11G, true) => P2P_DOT11G_7,
@@ -926,7 +966,7 @@ const fn control_schedule(phy: StaRateControlPhy, flagged: bool) -> RateSchedule
 // never creates a raw index that needs a fallback record.
 macro_rules! g_schedule {
     ($p2p:expr, $index:expr) => {
-        if $p2p {
+        if $p2p.is_p2p() {
             literal_schedule!(RateScheduleKind::P2pDot11G, $index)
         } else {
             literal_schedule!(RateScheduleKind::Dot11G, $index)
@@ -953,7 +993,7 @@ const fn highest_dot11b(rate: u32) -> RateScheduleRef {
     }
 }
 
-const fn highest_dot11g(rate: u32, p2p: bool) -> RateScheduleRef {
+const fn highest_dot11g(rate: u32, p2p: Peering) -> RateScheduleRef {
     match rate {
         12 => g_schedule!(p2p, 7),
         18 => g_schedule!(p2p, 6),
@@ -1020,7 +1060,12 @@ const fn highest_rate_schedule(input: PhyModeSelectionInput) -> RateScheduleRef 
 
 /// Compare the unadjusted HT threshold with the peer's highest record,
 /// then select the checked HT record or its HE record two places lower.
-const fn ht_metric_schedule(metric: i32, he: bool, highest: RateScheduleRef) -> RateScheduleRef {
+const fn ht_metric_schedule(
+    metric: i32,
+    family: HtFamily,
+    highest: RateScheduleRef,
+) -> RateScheduleRef {
+    let he = matches!(family, HtFamily::He);
     macro_rules! threshold {
         ($index:expr) => {
             if $index <= highest.index() {
@@ -1067,7 +1112,11 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
                     current,
                     DOT11B_3,
                     DOT11B_0,
-                    if input.long_range_rates_present { 5 } else { 3 },
+                    if input.long_range_rates.present() {
+                        5
+                    } else {
+                        3
+                    },
                     6,
                     RateIndexMap::Dot11B,
                     None,
@@ -1077,7 +1126,7 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
                 let current = if input.use_supplied_highest_rate {
                     highest
                 } else if input.metric <= 11 {
-                    if input.p2p {
+                    if input.p2p.is_p2p() {
                         P2P_DOT11G_7
                     } else {
                         literal_schedule!(RateScheduleKind::Dot11G, 10)
@@ -1093,30 +1142,34 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
                 };
                 (
                     current,
-                    if input.p2p {
+                    if input.p2p.is_p2p() {
                         P2P_DOT11G_7
                     } else {
                         BASIC_OFDM_0
                     },
                     g_schedule!(input.p2p, 0),
-                    if input.p2p {
+                    if input.p2p.is_p2p() {
                         7
-                    } else if input.long_range_rates_present {
+                    } else if input.long_range_rates.present() {
                         12
                     } else {
                         10
                     },
-                    if input.p2p { 8 } else { 13 },
+                    if input.p2p.is_p2p() { 8 } else { 13 },
                     RateIndexMap::Dot11G,
                     None,
                 )
             }
             2..=5 => {
                 let he = input.he_type == 7;
-                let metric_schedule = ht_metric_schedule(input.metric, he, highest);
+                let metric_schedule = ht_metric_schedule(
+                    input.metric,
+                    if he { HtFamily::He } else { HtFamily::Ht },
+                    highest,
+                );
                 let current = if input.use_supplied_highest_rate {
                     highest
-                } else if input.p2p && metric_schedule.index() > 7 {
+                } else if input.p2p.is_p2p() && metric_schedule.index() > 7 {
                     ht_schedule!(he, 7)
                 } else {
                     metric_schedule
@@ -1128,13 +1181,13 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
                 };
                 (
                     current,
-                    if input.p2p {
+                    if input.p2p.is_p2p() {
                         P2P_DOT11G_7
                     } else {
                         BASIC_OFDM_0
                     },
                     ht_schedule!(he, 0),
-                    if input.long_range_rates_present {
+                    if input.long_range_rates.present() {
                         if he { 15 } else { 13 }
                     } else if he {
                         13
@@ -1155,7 +1208,11 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
                 DOT11B_3,
                 DOT11B_3,
                 DOT11B_0,
-                if input.long_range_rates_present { 5 } else { 3 },
+                if input.long_range_rates.present() {
+                    5
+                } else {
+                    3
+                },
                 6,
                 RateIndexMap::Dot11B,
                 None,
@@ -1165,7 +1222,7 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
     PhyModeSelection {
         current,
         secondary,
-        fallback: if input.long_range_rates_present {
+        fallback: if input.long_range_rates.present() {
             lora_fallback
         } else {
             secondary
@@ -1186,11 +1243,10 @@ pub(crate) fn select_phy_mode(input: PhyModeSelectionInput) -> PhyModeSelection 
 pub const fn beamforming_report_rate(
     filtered_ack_snr: u8,
     quarter_noise_floor: i32,
-    he_feature_8f: bool,
-    he_feature_90: bool,
+    features: HeLowMetricReportFeatures,
 ) -> BeamformingReportRate {
     let metric = filtered_ack_snr.wrapping_sub(quarter_noise_floor as u8) as i8;
-    beamforming_report_rate_for_metric(metric as i32, he_feature_8f, he_feature_90)
+    beamforming_report_rate_for_metric(metric as i32, features)
 }
 
 /// Direct form used by `rcLowerSched`, `rcUpSched` and the recovered
@@ -1198,15 +1254,18 @@ pub const fn beamforming_report_rate(
 /// metric rather than ACK SNR and noise-floor components.
 pub const fn beamforming_report_rate_for_metric(
     metric: i32,
-    he_feature_8f: bool,
-    he_feature_90: bool,
+    features: HeLowMetricReportFeatures,
 ) -> BeamformingReportRate {
+    // Record offsets 0x8f and 0x90: the DCM receive and the ER SU
+    // permission.
     if metric > 13 {
-        BeamformingReportRate::new(1, 16, false, false, false)
-    } else if he_feature_8f && he_feature_90 {
-        BeamformingReportRate::new(2, 16, true, true, true)
+        BeamformingReportRate::new(1, 16, ReportCoding::Plain)
+    } else if matches!(features.dcm_receive, DcmReceive::Supported)
+        && features.extended_range_single_user_permitted
+    {
+        BeamformingReportRate::new(2, 16, ReportCoding::DcmExtendedRange)
     } else {
-        BeamformingReportRate::new(0, 11, false, false, false)
+        BeamformingReportRate::new(0, 11, ReportCoding::Plain)
     }
 }
 
@@ -1233,9 +1292,9 @@ pub struct EspressifRateControl {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct RateDecode {
     legacy_rates: NegotiatedLegacyRates,
-    high_throughput: bool,
+    format: PhyFormat,
     ht_bandwidth: PpduBandwidth,
-    ht_short_gi: bool,
+    ht_gi: oer_protocols_ieee80211_wire::phy::HtGuardInterval,
     he_800ns_gi_ltf: HeGiLtf,
     he_ldpc: bool,
 }
@@ -1251,16 +1310,16 @@ impl RateDecode {
         ) {
             // A rate with no such form goes at the vendor station's
             // fallback, as one without a portable rate does.
-            Some(PhyRate::Ht(rate)) if rate.short_gi() != self.ht_short_gi => HtRate::new(
-                rate.mcs(),
-                rate.bandwidth(),
-                if self.ht_short_gi {
-                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
-                } else {
-                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
-                },
-            )
-            .map_or_else(|| self.fallback(), PhyRate::Ht),
+            Some(PhyRate::Ht(rate))
+                if rate.short_gi()
+                    != matches!(
+                        self.ht_gi,
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                    ) =>
+            {
+                HtRate::new(rate.mcs(), rate.bandwidth(), self.ht_gi)
+                    .map_or_else(|| self.fallback(), PhyRate::Ht)
+            }
             Some(PhyRate::He(rate)) if self.he_ldpc => HeRate::new(
                 rate.mcs(),
                 rate.spatial_streams(),
@@ -1289,7 +1348,7 @@ impl RateDecode {
             self.ht_bandwidth,
             oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
         ) {
-            Some(rate) if self.high_throughput => PhyRate::Ht(rate),
+            Some(rate) if self.format != PhyFormat::NonHt => PhyRate::Ht(rate),
             _ => PhyRate::Legacy(self.legacy_rates.constrain(LegacyRate::Ofdm54M)),
         }
     }
@@ -1319,13 +1378,17 @@ impl RateControl for EspressifRateControl {
         let association = StaRateControlAssociation::new(StaRateControlAssociationInput {
             phy,
             link_metric: StaLinkMetric::from_estimator(link_metric.db()),
-            p2p: false,
+            p2p: Peering::Infrastructure,
             peer_highest_rate,
-            long_range_rates_present: false,
+            long_range_rates: LongRangeRates::Absent,
             he_low_metric_report: HeLowMetricReportFeatures {
-                dcm_receive_supported: he.is_some_and(|capability| {
+                dcm_receive: if he.is_some_and(|capability| {
                     capability.dcm_receive() != HeDcmConstellation::NotSupported
-                }),
+                }) {
+                    DcmReceive::Supported
+                } else {
+                    DcmReceive::Unsupported
+                },
                 extended_range_single_user_permitted: peer
                     .he_peer_state
                     .is_some_and(HePeerState::extended_range_single_user_permitted),
@@ -1340,11 +1403,16 @@ impl RateControl for EspressifRateControl {
             association,
             decode: RateDecode {
                 legacy_rates: peer.legacy_rates,
-                high_throughput: peer.phy.format() != PhyFormat::NonHt,
+                format: peer.phy.format(),
                 ht_bandwidth,
-                ht_short_gi: peer
+                ht_gi: if peer
                     .ht_capabilities
-                    .is_some_and(|capability| capability.supports_short_guard_interval(width)),
+                    .is_some_and(|capability| capability.supports_short_guard_interval(width))
+                {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                } else {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                },
                 he_800ns_gi_ltf: if he.is_some_and(HeCapabilities::supports_one_ltf_800ns_gi) {
                     HeGiLtf::Ltf1xGi800Ns
                 } else {

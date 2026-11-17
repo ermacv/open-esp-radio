@@ -32,8 +32,8 @@ pub mod session;
 
 pub use banks::{
     AddbaOutcome, AgreementStop, Parked, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace,
-    RxBlockAckCapacity, RxBlockAckEvent, RxBlockAckPort, RxBlockAckRefused, RxBlockAckReplyBody,
-    RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView, RxDisposition,
+    RxAgreements, RxBlockAckCapacity, RxBlockAckEvent, RxBlockAckPort, RxBlockAckRefused,
+    RxBlockAckReplyBody, RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView, RxDisposition,
 };
 pub use originator::{
     DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,
@@ -41,11 +41,12 @@ pub use originator::{
     TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
 };
 pub use recipient::{
-    AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckError, RxBlockAckNegotiation,
-    RxBlockAckSession,
+    AddbaResponse, AddbaStatus, Amsdu, AmsduInAmpdu, BankRoom, BlockAckPolicy, RxAddbaRequest,
+    RxBlockAckError, RxBlockAckNegotiation, RxBlockAckSession,
 };
 pub use reorder::{
-    MAX_RX_REORDER_WINDOW, RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease,
+    MAX_RX_REORDER_WINDOW, ResyncStart, RxReorderBuffer, RxReorderError, RxReorderMpdu,
+    RxReorderRelease,
 };
 pub use session::{
     AddbaRequest, MAX_TX_BLOCK_ACK_WINDOW, OperationalTxBlockAck, TxBlockAckAlarm,

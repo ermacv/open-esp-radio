@@ -118,14 +118,8 @@ impl ProtectionPolicy {
         let individual = matches!(ppdu.receiver, TxReceiver::Individual);
         let (non_dsss, ht_protected) = match ppdu.rate {
             PhyRate::Legacy(rate) => (rate.is_ofdm(), false),
-            PhyRate::Ht(rate) => (
-                true,
-                ht_protects(
-                    self.bss.ht,
-                    matches!(rate.bandwidth(), PpduBandwidth::Mhz40),
-                ),
-            ),
-            PhyRate::He(_) => (true, ht_protects(self.bss.ht, false)),
+            PhyRate::Ht(rate) => (true, ht_protects(self.bss.ht, rate.bandwidth())),
+            PhyRate::He(_) => (true, ht_protects(self.bss.ht, PpduBandwidth::Mhz20)),
         };
         let he_txop = match (self.bss.he_txop_rts_threshold, ppdu.rate) {
             (Some(threshold), PhyRate::He(rate)) => {
@@ -148,10 +142,10 @@ impl ProtectionPolicy {
         };
         let erp = self.bss.erp.use_protection() && non_dsss;
         let reasons = TxProtectionReasons::default()
-            .with(TxProtectionReasons::ERP, erp)
-            .with(TxProtectionReasons::HT, ht_protected)
-            .with(TxProtectionReasons::HE_TXOP_DURATION, individual && he_txop)
-            .with(TxProtectionReasons::LENGTH, individual && length);
+            .with(erp.then_some(TxProtectionReasons::ERP))
+            .with(ht_protected.then_some(TxProtectionReasons::HT))
+            .with((individual && he_txop).then_some(TxProtectionReasons::HE_TXOP_DURATION))
+            .with((individual && length).then_some(TxProtectionReasons::LENGTH));
 
         let rts = individual && (ht_protected || he_txop || length);
         let protection = if rts {
@@ -248,10 +242,10 @@ fn select_control_rate(
 /// Nonmember and non-HT mixed modes protect every HT PPDU; 20-MHz mode
 /// protects only 40-MHz PPDUs. HE PPDUs follow the HT rules, as in mt76x02
 /// and rt2800, because non-HE stations cannot decode them either.
-const fn ht_protects(mode: HtProtectionMode, forty_mhz: bool) -> bool {
+const fn ht_protects(mode: HtProtectionMode, bandwidth: PpduBandwidth) -> bool {
     match mode {
         HtProtectionMode::None => false,
-        HtProtectionMode::TwentyMhz => forty_mhz,
+        HtProtectionMode::TwentyMhz => matches!(bandwidth, PpduBandwidth::Mhz40),
         HtProtectionMode::Nonmember | HtProtectionMode::NonHtMixed => true,
     }
 }

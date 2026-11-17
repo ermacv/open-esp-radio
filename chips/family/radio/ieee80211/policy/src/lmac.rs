@@ -61,7 +61,17 @@ pub const MSDU_AGED_MARGIN_MICROS: u32 = 1 << 10;
 /// (`g_mesh_is_started`). `libpp[lmac.o]::lmacProcessCtsTimeout` counts a failed protection
 /// exchange against the same short limit, and `libpp[lmac.o]::lmacEndRetryAMPDUFail` then
 /// keeps the aggregate and sends a BlockAckReq (executed).
-pub const fn ampdu_retry_policy(lifetime: Duration, retain_single_mpdu: bool) -> AmpduRetryPolicy {
+/// What a missed single-MPDU aggregate does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SingleMpdu {
+    /// It stays an aggregate behind a BlockAckReq.
+    Retain,
+    /// It leaves the aggregate.
+    Unaggregate,
+}
+
+pub const fn ampdu_retry_policy(lifetime: Duration, single: SingleMpdu) -> AmpduRetryPolicy {
+    let retain_single_mpdu = matches!(single, SingleMpdu::Retain);
     AmpduRetryPolicy {
         lifetime,
         aged_margin: Duration::from_micros(MSDU_AGED_MARGIN_MICROS as u64),
@@ -127,7 +137,7 @@ mod tests {
         );
         let policy = ampdu_retry_policy(
             Duration::from_micros(u64::from(AMPDU_MSDU_LIFETIME_MICROS)),
-            false,
+            SingleMpdu::Unaggregate,
         );
         assert_eq!(policy.retry_limit, 32);
         assert_eq!(policy.aged_margin, Duration::from_micros(1024));

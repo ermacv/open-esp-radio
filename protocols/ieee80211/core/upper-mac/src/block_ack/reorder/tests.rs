@@ -202,13 +202,13 @@ fn a_stale_first_aggregate_rebases_the_window() {
     // Ahead of the window: nothing to rebase.
     assert!(
         reorder
-            .resynchronize_stale_initial_ampdu(seq(105), false)
+            .resynchronize_stale_initial_ampdu(seq(105), ResyncStart::Negotiated)
             .is_none()
     );
     // Behind the window and behind the negotiated start: the window ends at
     // the received sequence.
     let (released, start) = reorder
-        .resynchronize_stale_initial_ampdu(seq(50), false)
+        .resynchronize_stale_initial_ampdu(seq(50), ResyncStart::Negotiated)
         .unwrap();
     assert!(releases(&released, &[frame(102, 2)]));
     assert_eq!(start, seq(43));
@@ -217,7 +217,7 @@ fn a_stale_first_aggregate_rebases_the_window() {
     // A newer format starts at the received sequence itself.
     let mut reorder = Buffer::new(seq(100), 8).unwrap();
     let (_, start) = reorder
-        .resynchronize_stale_initial_ampdu(seq(50), true)
+        .resynchronize_stale_initial_ampdu(seq(50), ResyncStart::Received)
         .unwrap();
     assert_eq!(start, seq(50));
 }
@@ -321,7 +321,14 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
             2 => reorder.stop(),
             3 | 4 => {
                 reorder
-                    .resynchronize_stale_initial_ampdu(start.wrapping_sub(10), operation == 4)
+                    .resynchronize_stale_initial_ampdu(
+                        start.wrapping_sub(10),
+                        if operation == 4 {
+                            ResyncStart::Received
+                        } else {
+                            ResyncStart::Negotiated
+                        },
+                    )
                     .unwrap()
                     .0
             }
@@ -407,9 +414,14 @@ fn run_script<const CAPACITY: usize, const SLOT_CAPACITY: usize>(bytes: &[u8]) {
                 }
             }
             4 => {
-                if let Some((release, next)) =
-                    reorder.resynchronize_stale_initial_ampdu(sequence, slot & 1 != 0)
-                {
+                if let Some((release, next)) = reorder.resynchronize_stale_initial_ampdu(
+                    sequence,
+                    if slot & 1 != 0 {
+                        ResyncStart::Received
+                    } else {
+                        ResyncStart::Negotiated
+                    },
+                ) {
                     check(&release, &reorder);
                     assert_eq!(reorder.next_sequence(), next);
                 }

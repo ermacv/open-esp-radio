@@ -182,13 +182,25 @@ impl<'a> AdmittedData<'a> {
 mod tests {
     extern crate std;
     use super::*;
+    use oer_protocols_ieee80211_wire::data::PeerQos;
+    use oer_protocols_ieee80211_wire::security::LinkProtection;
     use oer_protocols_ieee80211_wire::{
         address::IndividualAddress,
         ccmp::{CcmpKeyId, CcmpPacketNumber, GroupKeyId},
     };
     use std::vec::Vec;
 
-    fn packet(qos: bool, ht: bool, protected: bool) -> Vec<u8> {
+    /// Whether a test frame carries an HT Control field.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum HtControl {
+        Present,
+        Absent,
+    }
+
+    fn packet(qos: PeerQos, ht: HtControl, protection: LinkProtection) -> Vec<u8> {
+        let qos = qos == PeerQos::Qos;
+        let ht = ht == HtControl::Present;
+        let protected = protection == LinkProtection::Ccmp;
         let mut frame = std::vec![0; 24];
         let control: u16 = 0x0208
             | if qos { 0x80 } else { 0 }
@@ -230,7 +242,8 @@ mod tests {
         )
     }
     /// An uplink of `peer` [4; 6] to the BSS [2; 6] for [6; 6].
-    fn uplink(protected: bool, number: u64) -> Vec<u8> {
+    fn uplink(protection: LinkProtection, number: u64) -> Vec<u8> {
+        let protected = protection == LinkProtection::Ccmp;
         let mut frame = std::vec![0; 24];
         let control: u16 = 0x0108 | if protected { 0x4000 } else { 0 };
         frame[..2].copy_from_slice(&control.to_le_bytes());
@@ -269,7 +282,7 @@ mod tests {
     fn an_uplink_names_its_peer_and_the_bss_and_passes_its_replay_owner_once() {
         let mut replay =
             CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
-        let frame = uplink(true, 5);
+        let frame = uplink(LinkProtection::Ccmp, 5);
         // Another transmitter, a downlink and an unverified frame are refused.
         assert!(matches!(
             admit_uplink(
@@ -282,7 +295,7 @@ mod tests {
         ));
         assert!(matches!(
             admit_uplink(
-                &packet(false, false, false),
+                &packet(PeerQos::NonQos, HtControl::Absent, LinkProtection::Open),
                 [4; 6],
                 Integrity::Unverified,
                 None
@@ -317,17 +330,29 @@ mod tests {
             Err(RxDropReason::Replay)
         ));
         // An open uplink needs no replay owner.
-        assert!(admit_uplink(&uplink(false, 0), [4; 6], Integrity::Unverified, None).is_ok());
+        assert!(
+            admit_uplink(
+                &uplink(LinkProtection::Open, 0),
+                [4; 6],
+                Integrity::Unverified,
+                None
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn eapol_follows_the_checked_qos_ht_and_ccmp_boundary() {
-        for (qos, ht) in [(false, false), (true, false), (true, true)] {
-            for protected in [false, true] {
+        for (qos, ht) in [
+            (PeerQos::NonQos, HtControl::Absent),
+            (PeerQos::Qos, HtControl::Absent),
+            (PeerQos::Qos, HtControl::Present),
+        ] {
+            for protected in [LinkProtection::Open, LinkProtection::Ccmp] {
                 let frame = packet(qos, ht, protected);
                 let mut replay =
                     CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
-                if protected {
+                if protected == LinkProtection::Ccmp {
                     assert!(matches!(
                         admit(&frame, Integrity::Unverified, &mut replay),
                         Err(RxDropReason::Integrity)
@@ -337,7 +362,7 @@ mod tests {
                 let parts = admitted.msdus().unwrap().next().unwrap().unwrap();
                 assert_eq!(parts.ether_type, 0x888e);
                 assert_eq!(parts.payload, [1, 2, 3]);
-                if protected {
+                if protected == LinkProtection::Ccmp {
                     assert!(matches!(
                         admit(&frame, Integrity::DecryptedAndVerified, &mut replay),
                         Err(RxDropReason::Replay)
@@ -348,7 +373,7 @@ mod tests {
     }
     #[test]
     fn ccmp_integrity_does_not_admit_an_llc_aliased_amsdu() {
-        let mut frame = packet(true, false, true);
+        let mut frame = packet(PeerQos::Qos, HtControl::Absent, LinkProtection::Ccmp);
         frame.truncate(26 + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
         frame[24] |= 0x80;
         frame.extend_from_slice(&[
@@ -377,8 +402,16 @@ mod tests {
     #[test]
     fn only_payload_bearing_data_subtypes_admit_msdus() {
         for subtype in 0..16 {
-            for protected in [false, true] {
-                let mut frame = packet(subtype >= 8, false, protected);
+            for protected in [LinkProtection::Open, LinkProtection::Ccmp] {
+                let mut frame = packet(
+                    if subtype >= 8 {
+                        PeerQos::Qos
+                    } else {
+                        PeerQos::NonQos
+                    },
+                    HtControl::Absent,
+                    protected,
+                );
                 frame[0] = 0x08 | (subtype << 4);
                 let mut replay =
                     CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
@@ -403,7 +436,7 @@ mod tests {
     }
     #[test]
     fn a_short_header_never_reaches_replay_admission() {
-        let frame = packet(true, true, true);
+        let frame = packet(PeerQos::Qos, HtControl::Present, LinkProtection::Ccmp);
         for length in 0..38 {
             let mut replay =
                 CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
@@ -447,12 +480,16 @@ mod tests {
 
     fn run(count: usize) {
         let mut seeds = Vec::new();
-        for (qos, ht) in [(false, false), (true, false), (true, true)] {
-            for protected in [false, true] {
+        for (qos, ht) in [
+            (PeerQos::NonQos, HtControl::Absent),
+            (PeerQos::Qos, HtControl::Absent),
+            (PeerQos::Qos, HtControl::Present),
+        ] {
+            for protected in [LinkProtection::Open, LinkProtection::Ccmp] {
                 seeds.push(packet(qos, ht, protected));
             }
         }
-        let mut amsdu = packet(true, false, true);
+        let mut amsdu = packet(PeerQos::Qos, HtControl::Absent, LinkProtection::Ccmp);
         amsdu.truncate(26 + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN);
         amsdu[24] |= 0x80;
         amsdu.extend_from_slice(&[2, 2, 2, 2, 2, 2, 6, 6, 6, 6, 6, 6, 0, 10]);

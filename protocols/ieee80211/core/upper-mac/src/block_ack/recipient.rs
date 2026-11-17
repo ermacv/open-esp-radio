@@ -22,13 +22,44 @@ pub enum AddbaStatus {
     InvalidParameters = status_code::INVALID_PARAMETERS,
 }
 
+/// The Block Ack Policy subfield of a Block Ack Parameter Set (IEEE Std
+/// 802.11-2020, 9.4.1.14).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockAckPolicy {
+    Immediate,
+    Delayed,
+}
+
+/// The A-MSDU Supported subfield of a Block Ack Parameter Set (IEEE Std
+/// 802.11-2020, 9.4.1.14): whether A-MSDUs may go under the agreement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Amsdu {
+    Permitted,
+    NotPermitted,
+}
+
+/// Whether the backend delivers an MPDU carrying an A-MSDU inside an
+/// A-MPDU.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmsduInAmpdu {
+    Delivered,
+    NotDelivered,
+}
+
+/// Whether a hardware bank is free for a new agreement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BankRoom {
+    Free,
+    Exhausted,
+}
+
 /// Fixed fields of one parsed ADDBA Request, without another action variant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxAddbaRequest {
     dialog_token: u8,
     tid: u8,
-    immediate: bool,
-    amsdu: bool,
+    policy: BlockAckPolicy,
+    amsdu: Amsdu,
     window: u16,
     timeout_tu: u16,
     starting_sequence: SequenceNumber,
@@ -48,8 +79,16 @@ impl RxAddbaRequest {
             } => Some(Self {
                 dialog_token,
                 tid,
-                immediate,
-                amsdu,
+                policy: if immediate {
+                    BlockAckPolicy::Immediate
+                } else {
+                    BlockAckPolicy::Delayed
+                },
+                amsdu: if amsdu {
+                    Amsdu::Permitted
+                } else {
+                    Amsdu::NotPermitted
+                },
                 window,
                 timeout_tu,
                 starting_sequence,
@@ -104,7 +143,7 @@ pub struct RxBlockAckNegotiation {
     response: AddbaResponse,
     starting_sequence: SequenceNumber,
     requested_window: u16,
-    requested_amsdu: bool,
+    requested_amsdu: Amsdu,
     inactivity: Option<NonZeroU64>,
 }
 
@@ -118,15 +157,15 @@ impl RxBlockAckNegotiation {
     pub fn request(
         request: RxAddbaRequest,
         maximum_tid: u8,
-        amsdu_in_ampdu: bool,
+        amsdu_in_ampdu: AmsduInAmpdu,
         capacity: u16,
-        bank_available: bool,
+        bank: BankRoom,
         now: Instant,
     ) -> Result<Self, AddbaResponse> {
         let RxAddbaRequest {
             dialog_token,
             tid,
-            immediate,
+            policy,
             amsdu,
             window,
             timeout_tu,
@@ -144,7 +183,11 @@ impl RxBlockAckNegotiation {
             response.status = AddbaStatus::InvalidParameters;
             return Err(response);
         }
-        if !immediate || tid > maximum_tid || capacity == 0 || !bank_available {
+        if policy == BlockAckPolicy::Delayed
+            || tid > maximum_tid
+            || capacity == 0
+            || bank == BankRoom::Exhausted
+        {
             return Err(response);
         }
         let inactivity = if timeout_tu == 0 {
@@ -164,7 +207,7 @@ impl RxBlockAckNegotiation {
         // __ieee80211_start_rx_ba_session applies the same default before
         // bounding it by the receiver's actual storage capacity.
         response.window = if window == 0 { 64 } else { window }.min(capacity).min(64);
-        response.amsdu = amsdu && amsdu_in_ampdu;
+        response.amsdu = amsdu == Amsdu::Permitted && amsdu_in_ampdu == AmsduInAmpdu::Delivered;
         Ok(Self {
             response,
             starting_sequence,
@@ -198,7 +241,7 @@ pub struct RxBlockAckSession<A, const WINDOW: usize, const SLOTS: usize> {
     gap: Option<NonZeroU64>,
     starting_sequence: SequenceNumber,
     requested_window: u16,
-    requested_amsdu: bool,
+    requested_amsdu: Amsdu,
     timeout_tu: u16,
     tid: u8,
     dialog_token: u8,
@@ -247,7 +290,7 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         if request.tid != self.tid || request.dialog_token != self.dialog_token {
             return None;
         }
-        let identical = request.immediate
+        let identical = request.policy == BlockAckPolicy::Immediate
             && request.amsdu == self.requested_amsdu
             && request.window == self.requested_window
             && request.timeout_tu == self.timeout_tu

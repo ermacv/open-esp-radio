@@ -227,12 +227,11 @@ impl TxProtectionReasons {
         self.0 == 0
     }
 
-    /// Include a reason when its requirement applies.
-    pub const fn with(self, other: Self, present: bool) -> Self {
-        if present {
-            Self(self.0 | other.0)
-        } else {
-            self
+    /// Include a reason when its requirement applies (`Some`).
+    pub const fn with(self, other: Option<Self>) -> Self {
+        match other {
+            Some(other) => Self(self.0 | other.0),
+            None => self,
         }
     }
 }
