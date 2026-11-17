@@ -41,6 +41,8 @@ use oer_portable_time::{Clock, Duration, Instant, settle::Settle};
 const SEGMENT_MS: u64 = 2500;
 /// One detach (and, in a rebind segment, one rebind) at most this often.
 const ACTION_MS: u32 = 80;
+/// The longest wait for the sender's first frame.
+const FIRST_UNIT_S: u32 = 120;
 const UNITS_PER_SCAN: usize = 8;
 const RETIRED_CHECKS_PER_SCAN: usize = 2;
 const SPARE_CHECKS_PER_SCAN: usize = 1;
@@ -854,8 +856,24 @@ pub(super) async fn run(
         ]
     };
     let mut next_action: Instant = start;
+    // The segments' clock starts at the sender's first frame: it boots after
+    // this probe, and a segment without its frames proves nothing.
+    let mut start = start;
+    let first_deadline = start
+        .checked_add(Duration::from_secs(FIRST_UNIT_S))
+        .ok_or(name!("first-deadline"; 32))?;
     loop {
         let now = EmbassyClock.now();
+        if state
+            .counts
+            .first()
+            .is_some_and(|counts| counts.content_ok == 0)
+        {
+            if now >= first_deadline {
+                return Err(name!("no-sender"; 32));
+            }
+            start = now;
+        }
         let elapsed = now
             .checked_duration_since(start)
             .ok_or(name!("clock"; 32))?
