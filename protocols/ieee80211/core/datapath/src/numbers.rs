@@ -72,19 +72,6 @@ impl TxNumbers {
         }
     }
 
-    /// Name the next Sequence Number of `space` for a controller's frame:
-    /// the station's own space's is taken, as the frame carries it; a TID's
-    /// is only read, and the TID's first data MPDU after carries it (an
-    /// ADDBA Request's Starting Sequence Number, IEEE Std 802.11-2020,
-    /// 9.4.1.13). `None` for a TID of a non-QoS BSS.
-    pub fn name(&mut self, space: LinkSpace) -> Option<SequenceNumber> {
-        match (space, &self.tids) {
-            (LinkSpace::Station, _) => Some(self.station.take()),
-            (LinkSpace::Tid(tid), Some(tids)) => Some(tid.select(tids).peek()),
-            (LinkSpace::Tid(_), None) => None,
-        }
-    }
-
     /// Take the next Sequence Number of `space`; `None` for a TID of a
     /// non-QoS BSS.
     pub fn take(&mut self, space: LinkSpace) -> Option<SequenceNumber> {

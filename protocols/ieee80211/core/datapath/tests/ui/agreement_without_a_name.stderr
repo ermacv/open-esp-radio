@@ -1,0 +1,29 @@
+error[E0599]: no method named `tx_agreement` found for struct `LinkedPeer<'a, E>` in the current scope
+  --> tests/ui/agreement_without_a_name.rs:19:14
+   |
+19 |         peer.tx_agreement(); // ui-error: E0599
+   |              ^^^^^^^^^^^^
+   |
+help: there is a method `tx_agreement_ended` with a similar name, but with different arguments
+  --> src/engine.rs
+   |
+   | /     pub fn tx_agreement_ended<
+   | |         N: Network<P::Memory>,
+   | |         R: Rates<'id, P::Caps>,
+   | |         E: EventSink<DataEvent>,
+...  |
+   | |         turn: &mut Turn<'_, P, N, R, E, C>,
+   | |     ) -> Rest {
+   | |_____________^
+
+error[E0599]: no method named `tx_agreement` found for struct `UnnamedTids<'a, E>` in the current scope
+  --> tests/ui/agreement_without_a_name.rs:24:25
+   |
+24 |                 unnamed.tx_agreement(); // ui-error: E0599
+   |                         ^^^^^^^^^^^^ method not found in `UnnamedTids<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
+
+error[E0599]: no method named `tx_agreement` found for struct `DrainingTid<'a, E>` in the current scope
+  --> tests/ui/agreement_without_a_name.rs:29:26
+   |
+29 |                 draining.tx_agreement(); // ui-error: E0599
+   |                          ^^^^^^^^^^^^ method not found in `DrainingTid<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`

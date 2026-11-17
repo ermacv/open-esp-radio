@@ -74,6 +74,21 @@ enum Ask {
     ChangeKey,
 }
 
+/// The named TID's place as its view shows it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Naming {
+    Unnamed,
+    Draining(usize),
+    Named(usize),
+}
+
+/// The search's index of `tid`.
+fn tid_index(tid: WmmUserPriority) -> usize {
+    TIDS.iter()
+        .position(|known| *known == tid)
+        .unwrap_or(TIDS.len())
+}
+
 /// One step of the search.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Move {
@@ -113,6 +128,8 @@ struct Before {
     kept: Vec<u32>,
     /// The MSDU of a single MPDU on the air.
     single: Option<u32>,
+    /// The named TID.
+    hold: Option<usize>,
 }
 
 /// Whether the world asked for a command and was not yet told its end.
@@ -168,8 +185,10 @@ struct World<'id> {
     link_from: (usize, usize),
     /// Each TID's next first transmission's number, this link.
     next: [Option<u16>; 2],
-    /// The numbers a sequence request took, by TID, this generation.
+    /// The numbers told for named TIDs, by TID, this generation.
     named: Vec<(usize, u16)>,
+    /// A told number no first transmission of its TID carried yet.
+    carried: [Option<u16>; 2],
     problems: Vec<&'static str>,
 }
 
@@ -203,6 +222,7 @@ impl<'id> World<'id> {
             aired: Vec::new(),
             next: [None; 2],
             named: Vec::new(),
+            carried: [None; 2],
             problems: Vec::new(),
         }
     }
@@ -227,6 +247,22 @@ impl<'id> World<'id> {
                 PeerPlace::Free(_) => false,
             },
             _ => false,
+        }
+    }
+
+    /// The named TID's place, by the view: none named, its number not told,
+    /// or told.
+    fn naming(&mut self) -> Option<Naming> {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => match flowing.peer(ACCESS_POINT) {
+                PeerPlace::Linked(mut linked) => Some(match linked.naming() {
+                    NamePlace::Unnamed(_) => Naming::Unnamed,
+                    NamePlace::Draining(draining) => Naming::Draining(tid_index(draining.tid())),
+                    NamePlace::Named(named) => Naming::Named(tid_index(named.tid())),
+                }),
+                PeerPlace::Free(_) => None,
+            },
+            _ => None,
         }
     }
 
@@ -306,15 +342,18 @@ impl<'id> World<'id> {
         }
         let linked = self.linked();
         let held = self.held();
+        let naming = self.naming();
         if linked && !held {
             asks.extend([Ask::Hold, Ask::Unlink]);
             for tid in 0..TIDS.len() {
-                asks.push(if self.agreed[tid] {
-                    Ask::EndAgreement(tid)
-                } else {
-                    Ask::Agree(tid)
-                });
-                if self.hold.is_none() {
+                // An agreement begins where the view offers it: on the TID
+                // whose named number was told.
+                if self.agreed[tid] {
+                    asks.push(Ask::EndAgreement(tid));
+                } else if naming == Some(Naming::Named(tid)) {
+                    asks.push(Ask::Agree(tid));
+                }
+                if naming == Some(Naming::Unnamed) {
                     asks.push(Ask::Sequence(tid));
                 }
             }
@@ -325,7 +364,7 @@ impl<'id> World<'id> {
         if linked && self.key_idle() {
             asks.push(Ask::ChangeKey);
         }
-        if self.hold.is_some() && linked {
+        if matches!(naming, Some(Naming::Draining(_) | Naming::Named(_))) {
             asks.push(Ask::Named);
         }
         if flowing && self.gate_open() {
@@ -404,6 +443,17 @@ impl<'id> World<'id> {
             };
         }
         self.keys_told = self.around.told.keys.len();
+        for (tid, number) in self.around.told.named.drain(..) {
+            let tid = tid_index(tid);
+            if self.hold != Some(tid) {
+                self.problems
+                    .push("a number was told for a TID nobody named");
+            }
+            self.named.push((tid, number.get()));
+            if let Some(carried) = self.carried.get_mut(tid) {
+                *carried = Some(number.get());
+            }
+        }
         self.stop_awaits();
         self.check_step(&before, step.action);
         self.check(rest);
@@ -430,6 +480,7 @@ impl<'id> World<'id> {
             arenas,
             kept,
             single,
+            hold: self.hold,
         }
     }
 
@@ -462,6 +513,18 @@ impl<'id> World<'id> {
             .map(|went| went.frames.clone())
             .collect();
         let after = self.arena_ids();
+        // A named TID's intake waits until its agreement begins or its name
+        // is released.
+        let unholds = matches!(action, Move::Asked(Ask::Agree(_) | Ask::Named));
+        if let Some(tid) = before.hold
+            && !unholds
+            && after.iter().any(|id| {
+                !before.arenas.contains(id) && self.tids.get(*id as usize - 1) == Some(&tid)
+            })
+        {
+            self.problems
+                .push("an MSDU of a named TID was written before its hold ended");
+        }
         for (index, frames) in published.iter().enumerate() {
             if before.keying == Awaited::Yes && self.keying == Awaited::Yes {
                 self.problems
@@ -534,7 +597,7 @@ impl<'id> World<'id> {
     /// begins at the oldest number the arenas hold of the TID, and one
     /// beyond it waits in its queue.
     fn check_window(&mut self, arenas: &[u32]) {
-        for tid in 0..TIDS.len() {
+        for (tid, up) in TIDS.iter().enumerate() {
             if !self.agreed[tid] {
                 continue;
             }
@@ -542,7 +605,7 @@ impl<'id> World<'id> {
                 .iter()
                 .filter(|id| self.born.get(**id as usize - 1) == Some(&self.generation))
                 .filter_map(|id| self.around.port.front(*id))
-                .filter(|front| front[24] & 0x07 == TIDS[tid].value())
+                .filter(|front| front[24] & 0x07 == up.value())
                 .map(|front| {
                     SequenceNumber::from_sequence_control(u16::from_le_bytes([
                         front[22], front[23],
@@ -645,6 +708,7 @@ impl<'id> World<'id> {
                 self.agreed = [false; 2];
                 self.hold = None;
                 self.named.clear();
+                self.carried = [None; 2];
                 self.link_from = (
                     self.around.port.published().len(),
                     self.around.net.home.len(),
@@ -669,25 +733,47 @@ impl<'id> World<'id> {
                         self.hold = None;
                         Some(linked.unlink(&mut turn))
                     }
-                    Ask::Agree(tid) => {
-                        self.agreed[tid] = true;
-                        Some(linked.tx_agreement(TIDS[tid], WINDOW, &mut turn))
-                    }
+                    Ask::Agree(tid) => match linked.naming() {
+                        NamePlace::Named(named) if named.tid() == TIDS[tid] => {
+                            self.agreed[tid] = true;
+                            self.hold = None;
+                            Some(named.tx_agreement(WINDOW, &mut turn))
+                        }
+                        _ => {
+                            self.problems.push(refused);
+                            None
+                        }
+                    },
                     Ask::EndAgreement(tid) => {
                         self.agreed[tid] = false;
                         Some(linked.tx_agreement_ended(TIDS[tid], &mut turn))
                     }
-                    Ask::Sequence(tid) => {
-                        self.hold = Some(tid);
-                        match linked.name_next(LinkSpace::Tid(TIDS[tid])) {
-                            Ok(number) => self.named.push((tid, number.get())),
-                            Err(NoSpace) => self.problems.push(refused),
+                    Ask::Sequence(tid) => match linked.naming() {
+                        NamePlace::Unnamed(unnamed) => {
+                            self.hold = Some(tid);
+                            match unnamed.name(TIDS[tid], &mut turn) {
+                                Ok(rest) => Some(rest),
+                                Err(NoSpace) => {
+                                    self.problems.push(refused);
+                                    None
+                                }
+                            }
                         }
-                        None
-                    }
+                        _ => {
+                            self.problems.push(refused);
+                            None
+                        }
+                    },
                     Ask::Named => {
                         self.hold = None;
-                        Some(linked.named(&mut turn))
+                        match linked.naming() {
+                            NamePlace::Draining(draining) => Some(draining.release(&mut turn)),
+                            NamePlace::Named(named) => Some(named.release(&mut turn)),
+                            NamePlace::Unnamed(_) => {
+                                self.problems.push(refused);
+                                None
+                            }
+                        }
                     }
                     Ask::ChangeKey => match linked.key() {
                         KeyPlace::Idle(idle) => {
@@ -867,6 +953,12 @@ impl<'id> World<'id> {
                     self.problems
                         .push("a TID's first transmissions are out of order or have a gap");
                 }
+                if let Some(told) = self.carried[tid].take()
+                    && sequence != told
+                {
+                    self.problems
+                        .push("the first transmission after a named number does not carry it");
+                }
                 self.next[tid] = Some(sequence + 1);
             }
         }
@@ -874,8 +966,8 @@ impl<'id> World<'id> {
     }
 
     /// Whether `sequence` of `tid` is a number this link drew for an MSDU
-    /// that went home before any transmission, below a number `name_next`
-    /// took: it named nothing to anyone, and the peer counts from the named
+    /// that went home before any transmission, below a number told for a
+    /// named TID: it named nothing to anyone, and the peer counts from the named
     /// one.
     fn withdrawn_below_a_named_number(&self, tid: usize, sequence: u16) -> bool {
         let named_above = self
@@ -931,7 +1023,7 @@ impl<'id> World<'id> {
             waiting,
             home,
             self.next,
-            self.named,
+            (&self.named, self.carried),
             self.link_from,
             (self.closing, self.keying, self.key),
             (self.generation, &self.born, &self.aired),

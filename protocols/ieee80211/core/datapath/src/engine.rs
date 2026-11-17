@@ -20,8 +20,12 @@
 //!   [`FlowingData::gate`], [`FlowingData::stop`]; [`StoppingData::poll`];
 //! - [`PeerPlace`]: `FreePeer::link`; [`LinkedPeer::unlink`],
 //!   [`LinkedPeer::hold`], [`LinkedPeer::release`],
-//!   [`LinkedPeer::name_next`], [`LinkedPeer::named`], and on the station's
-//!   form `LinkedPeer::tx_agreement`, `LinkedPeer::tx_agreement_ended`;
+//!   [`LinkedPeer::own_number`], [`LinkedPeer::naming`], and on the
+//!   station's form `LinkedPeer::tx_agreement_ended`;
+//! - [`NamePlace`]: [`UnnamedTids::name`]; [`DrainingTid::release`];
+//!   [`NamedTid::release`], and on the station's form
+//!   `NamedTid::tx_agreement`: a TID's agreement begins only on its named
+//!   number;
 //! - [`GatePlace`]: [`ShutGate::open`]; [`OpenGate::close`]; the closing
 //!   ends in the port, and the closed gate goes to the controller
 //!   ([`Told::gate_closed`]).
@@ -137,6 +141,17 @@ pub trait Told<'id> {
 
     /// A key's command ended.
     fn key_ended(&mut self, end: KeyEnd);
+
+    /// The TID `peer`'s link named ([`UnnamedTids::name`]) has nothing in
+    /// the port's places: `number` is the one its next data MPDU carries,
+    /// for an ADDBA Request's Starting Sequence Number (IEEE Std
+    /// 802.11-2020, 9.4.1.13).
+    fn tid_named<const PEERS: usize>(
+        &mut self,
+        peer: Peer<PEERS>,
+        tid: WmmUserPriority,
+        number: SequenceNumber,
+    );
 }
 
 /// What one section is lent: the port, the network's end, the rate policy,
@@ -396,12 +411,26 @@ enum Carrying {
     Held,
 }
 
-/// Whether a TID's data waits for the controller's frame that names the
-/// number it was given.
+/// Whether a TID's intake is held for a number the controller names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Hold {
     Nothing,
-    Named(WmmUserPriority),
+    /// The TID was named: its number is told once the port's places hold
+    /// nothing of it, so nothing of it is below the number.
+    Draining(WmmUserPriority),
+    /// Its number was told: it waits for the agreement's start on it, or
+    /// for the controller's release.
+    Named(WmmUserPriority, SequenceNumber),
+}
+
+impl Hold {
+    /// The TID whose intake waits.
+    const fn tid(self) -> Option<WmmUserPriority> {
+        match self {
+            Self::Nothing => None,
+            Self::Draining(tid) | Self::Named(tid, _) => Some(tid),
+        }
+    }
 }
 
 /// A linked peer: its link, its state, and the BlockAckReqs owed it.
@@ -530,8 +559,19 @@ pub trait Sections<'id, P: DataPort<'id>> {
     /// shut and nothing the port's; else nothing changes.
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights>;
 
-    /// The next number of `peer`'s link's `space`, named (`TxNumbers::name`).
-    fn name_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber>;
+    /// Take the next number of `peer`'s link's own space.
+    fn own_number(&mut self, _seal: Seal, peer: u8) -> Option<SequenceNumber>;
+
+    /// Name `tid` of `peer`'s link: its intake waits from now.
+    ///
+    /// # Errors
+    ///
+    /// The link has no sequence space per TID; nothing changed.
+    fn name_tid(&mut self, _seal: Seal, peer: u8, tid: WmmUserPriority) -> Result<(), NoSpace>;
+
+    /// Tell each draining TID whose port's places hold nothing of it its
+    /// number ([`Told::tid_named`]).
+    fn tell_drained<C: Told<'id>>(&mut self, _seal: Seal, told: &mut C);
 }
 
 /// The engine type of a handle's methods.
@@ -1045,6 +1085,7 @@ where
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
+        self.tell_drained(Seal(()), turn.told);
         let mut taken = 0;
         loop {
             let drained = self.drain(turn);
@@ -1100,6 +1141,39 @@ pub struct FreePeer<'a, E> {
 pub struct LinkedPeer<'a, E> {
     engine: &'a mut E,
     peer: u8,
+}
+
+/// What a linked peer's named TID is now: one TID at a time is named.
+pub enum NamePlace<'a, E> {
+    /// No TID is named: one may be.
+    Unnamed(UnnamedTids<'a, E>),
+    /// A TID was named: its intake waits, and its number is told
+    /// ([`Told::tid_named`]) once the port's places hold nothing of it.
+    Draining(DrainingTid<'a, E>),
+    /// Its number was told: its intake waits for the agreement's start on
+    /// it or for the controller's release.
+    Named(NamedTid<'a, E>),
+}
+
+/// The handle of a link with no TID named.
+pub struct UnnamedTids<'a, E> {
+    engine: &'a mut E,
+    peer: u8,
+}
+
+/// The handle of a named TID whose number is not told yet.
+pub struct DrainingTid<'a, E> {
+    engine: &'a mut E,
+    peer: u8,
+    tid: WmmUserPriority,
+}
+
+/// The handle of a named TID whose number was told.
+pub struct NamedTid<'a, E> {
+    engine: &'a mut E,
+    peer: u8,
+    tid: WmmUserPriority,
+    number: SequenceNumber,
 }
 
 /// What the gate's place is now.
@@ -1354,39 +1428,30 @@ where
         self.change(turn, |linked| linked.carrying = Carrying::Carrying)
     }
 
-    /// The controller's frame that names the held number went: the held
-    /// TID's data goes on.
-    pub fn named<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told<'id>,
-    >(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        self.change(turn, |linked| linked.hold = Hold::Nothing)
+    /// Take the next number of the link's own space, for a frame of the
+    /// controller that carries it (management, EAPOL, a non-QoS BSS's data).
+    /// `None` never for a linked peer's handle, which borrows the engine.
+    pub fn own_number(&mut self) -> Option<SequenceNumber> {
+        self.engine.own_number(Seal(()), self.peer)
     }
 
-    /// The next number of the link's `space`, for a frame of the
-    /// controller. The station's own space's is taken: the controller's
-    /// frame carries it. A TID's is named and not taken (an ADDBA
-    /// Request's Starting Sequence Number): the TID's data waits until the
-    /// controller says the frame that names it went ([`Self::named`]), and
-    /// its first data MPDU after carries the number.
-    ///
-    /// # Errors
-    ///
-    /// The link has no such space: its peer did not negotiate QoS.
-    pub fn name_next(&mut self, space: LinkSpace) -> Result<SequenceNumber, NoSpace> {
-        let number = self
+    /// The place of the link's named TID.
+    pub fn naming(&mut self) -> NamePlace<'_, engine!()> {
+        let hold = self
             .engine
-            .name_number(Seal(()), self.peer, space)
-            .ok_or(NoSpace)?;
-        if let (LinkSpace::Tid(tid), Some(linked)) = (space, self.engine.linked_mut(self.peer)) {
-            linked.hold = Hold::Named(tid);
+            .linked_mut(self.peer)
+            .map_or(Hold::Nothing, |linked| linked.hold);
+        let (engine, peer) = (&mut *self.engine, self.peer);
+        match hold {
+            Hold::Nothing => NamePlace::Unnamed(UnnamedTids { engine, peer }),
+            Hold::Draining(tid) => NamePlace::Draining(DrainingTid { engine, peer, tid }),
+            Hold::Named(tid, number) => NamePlace::Named(NamedTid {
+                engine,
+                peer,
+                tid,
+                number,
+            }),
         }
-        Ok(number)
     }
 
     /// The BlockAckReq owed for `tid`, to its window's head.
@@ -1410,6 +1475,158 @@ where
             .linked_mut(self.peer)
             .is_some_and(|linked| linked.carrying == Carrying::Held)
     }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> UnnamedTids<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// Name `tid`: its intake waits from now, and its number is told
+    /// ([`Told::tid_named`]) once the port's places hold nothing of it, at
+    /// once when they hold nothing now. The number is not taken: the TID's
+    /// first data MPDU after carries it.
+    ///
+    /// # Errors
+    ///
+    /// The link has no TID's space: its peer did not negotiate QoS. Nothing
+    /// changed.
+    pub fn name<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        tid: WmmUserPriority,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Result<Rest, NoSpace> {
+        let Self { engine, peer } = self;
+        engine.name_tid(Seal(()), peer, tid)?;
+        Ok(engine.intake(turn))
+    }
+}
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> DrainingTid<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// The named TID.
+    pub const fn tid(&self) -> WmmUserPriority {
+        self.tid
+    }
+
+    /// The controller releases the name before its number was told: the
+    /// TID's intake goes on.
+    pub fn release<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        unhold(self.engine, self.peer, turn)
+    }
+}
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> NamedTid<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// The named TID.
+    pub const fn tid(&self) -> WmmUserPriority {
+        self.tid
+    }
+
+    /// The number told: the one its next data MPDU carries.
+    pub const fn number(&self) -> SequenceNumber {
+        self.number
+    }
+
+    /// The controller releases the name (the exchange that carried the
+    /// number was refused or failed): the TID's intake goes on, its first
+    /// data MPDU carrying the number.
+    pub fn release<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        unhold(self.engine, self.peer, turn)
+    }
+}
+
+/// A name's hold ends: the TID's intake goes on.
+fn unhold<
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    N: Network<P::Memory>,
+    R: Rates<'id, P::Caps>,
+    E: EventSink<DataEvent>,
+    C: Told<'id>,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+>(
+    engine: &mut engine!(),
+    peer: u8,
+    turn: &mut Turn<'_, P, N, R, E, C>,
+) -> Rest
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    if let Some(linked) = engine.linked_mut(peer) {
+        linked.hold = Hold::Nothing;
+    }
+    engine.queues.unblock();
+    engine.intake(turn)
 }
 
 impl<
@@ -1653,6 +1870,53 @@ where
     }
 }
 
+/// A station's named TID begins its transmit agreement: the arenas' form
+/// alone aggregates.
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> NamedTid<'a, station!()>
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    /// The named TID's transmit agreement is operational with a window of
+    /// `size`, 1 to 64. Its head is the number told: the ADDBA Request's
+    /// Starting Sequence Number, which the peer counts from (IEEE Std
+    /// 802.11-2020, 10.25.2). The name's hold ends.
+    pub fn tx_agreement<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        size: u16,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let Self {
+            engine,
+            peer,
+            tid,
+            number,
+        } = self;
+        if let Data::Flowing(running) = &mut engine.data {
+            running
+                .form
+                .plane
+                .agreement(tid, Some(TxWindow { head: number, size }));
+        }
+        unhold(engine, peer, turn)
+    }
+}
+
 /// The station's transmit agreements: the arenas' form alone aggregates.
 impl<
     'a,
@@ -1669,38 +1933,6 @@ where
     P::BlockAck: Copy,
     P::Denial: Copy,
 {
-    /// The TID's transmit agreement is operational with a window of `size`,
-    /// 1 to 64; its head is derived: the oldest number the link's arenas
-    /// hold of the TID, else its next.
-    pub fn tx_agreement<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told<'id>,
-    >(
-        &mut self,
-        tid: WmmUserPriority,
-        size: u16,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        let engine = &mut *self.engine;
-        if let (Data::Flowing(running), [Entry::Linked(linked)]) =
-            (&mut engine.data, &engine.entries)
-        {
-            let plane = &mut running.form.plane;
-            let window = TxWindow {
-                head: match plane.oldest_held(tid) {
-                    Some(oldest) => oldest,
-                    None => linked.link.numbers.next(tid),
-                },
-                size,
-            };
-            plane.agreement(tid, Some(window));
-        }
-        engine.queues.unblock();
-        engine.intake(turn)
-    }
-
     /// The TID's transmit agreement ended.
     pub fn tx_agreement_ended<
         N: Network<P::Memory>,
@@ -1892,10 +2124,7 @@ where
             } => Some(&*transmit),
             _ => None,
         };
-        let hold = match hold {
-            Hold::Named(tid) => Some(QueueId::of_tid(*tid)),
-            Hold::Nothing => None,
-        };
+        let hold = hold.tid().map(QueueId::of_tid);
         let mut moved: u8 = 0;
         while *taken < *budget {
             let queue = match plane.standby_tid() {
@@ -2097,11 +2326,9 @@ where
             let went = tid.select(&withdrawn);
             // A number never transmitted named nothing to anyone: the
             // TID's counter goes back to the oldest of them, when they are
-            // its last draws. A TID held for a named number is not set back
-            // below it: the peer counts from the named number.
-            if linked.hold != Hold::Named(tid)
-                && let Some(next) = went.rewind_to(linked.link.numbers.next(tid))
-            {
+            // its last draws. A named TID's places hold nothing of it, so
+            // nothing sets it back below its told number.
+            if let Some(next) = went.rewind_to(linked.link.numbers.next(tid)) {
                 linked.link.numbers.rewind(tid, next);
                 plane.rewound(tid, next);
             }
@@ -2226,11 +2453,37 @@ where
         }
     }
 
-    fn name_number(&mut self, _seal: Seal, _peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+    fn own_number(&mut self, _seal: Seal, _peer: u8) -> Option<SequenceNumber> {
         match &mut self.entries {
-            [Entry::Linked(linked)] => linked.link.numbers.name(space),
+            [Entry::Linked(linked)] => linked.link.numbers.take(LinkSpace::Station),
             [Entry::Free] => None,
         }
+    }
+
+    fn name_tid(&mut self, _seal: Seal, _peer: u8, tid: WmmUserPriority) -> Result<(), NoSpace> {
+        match &mut self.entries {
+            [Entry::Linked(linked)] if linked.link.numbers.qos() => {
+                linked.hold = Hold::Draining(tid);
+                Ok(())
+            }
+            _ => Err(NoSpace),
+        }
+    }
+
+    fn tell_drained<C: Told<'id>>(&mut self, _seal: Seal, told: &mut C) {
+        let (Data::Flowing(running), [Entry::Linked(linked)]) = (&self.data, &mut self.entries)
+        else {
+            return;
+        };
+        let Hold::Draining(tid) = linked.hold else {
+            return;
+        };
+        if running.form.plane.oldest_held(tid).is_some() {
+            return;
+        }
+        let number = linked.link.numbers.next(tid);
+        linked.hold = Hold::Named(tid, number);
+        told.tid_named(Peer::<1>(0), tid, number);
     }
 }
 
@@ -2453,7 +2706,7 @@ where
             let carries = matches!(
                 self.entries.get(usize::from(queue.peer())),
                 Some(Entry::Linked(Linked { carrying: Carrying::Carrying, hold, .. }))
-                    if *hold != Hold::Named(tid)
+                    if hold.tid() != Some(tid)
             );
             if !free || !carries {
                 // This queue waits for its hardware queue, or for its link.
@@ -2675,10 +2928,46 @@ where
         }
     }
 
-    fn name_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+    fn own_number(&mut self, _seal: Seal, peer: u8) -> Option<SequenceNumber> {
         match self.entries.get_mut(usize::from(peer)) {
-            Some(Entry::Linked(linked)) => linked.link.numbers.name(space),
+            Some(Entry::Linked(linked)) => linked.link.numbers.take(LinkSpace::Station),
             _ => None,
+        }
+    }
+
+    fn name_tid(&mut self, _seal: Seal, peer: u8, tid: WmmUserPriority) -> Result<(), NoSpace> {
+        match self.entries.get_mut(usize::from(peer)) {
+            Some(Entry::Linked(linked)) if linked.link.numbers.qos() => {
+                linked.hold = Hold::Draining(tid);
+                Ok(())
+            }
+            _ => Err(NoSpace),
+        }
+    }
+
+    fn tell_drained<C: Told<'id>>(&mut self, _seal: Seal, told: &mut C) {
+        let Data::Flowing(running) = &self.data else {
+            return;
+        };
+        for (index, entry) in (0..=u8::MAX).zip(self.entries.iter_mut()) {
+            let Entry::Linked(linked) = entry else {
+                continue;
+            };
+            let Hold::Draining(tid) = linked.hold else {
+                continue;
+            };
+            let queue = QueueId::new(index, tid);
+            let held = running
+                .form
+                .lanes
+                .iter()
+                .any(|lane| matches!(lane, Lane::Air(flight) if Some(flight.queue) == queue));
+            if held {
+                continue;
+            }
+            let number = linked.link.numbers.next(tid);
+            linked.hold = Hold::Named(tid, number);
+            told.tid_named(Peer::<PEERS>(index), tid, number);
         }
     }
 }
