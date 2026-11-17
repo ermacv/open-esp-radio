@@ -120,6 +120,32 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         }
     }
 
+    /// The queues' whole state, for the engine's search.
+    #[cfg(test)]
+    pub(crate) fn key(&self) -> std::string::String
+    where
+        M: core::fmt::Debug,
+    {
+        std::format!(
+            "{:?}|{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}",
+            self.msdus,
+            self.next,
+            self.free,
+            self.heads,
+            self.tails,
+            self.served,
+            self.peer_served,
+            self.active,
+            self.blocked,
+            self.dearest
+        )
+    }
+
+    /// The MSDUs the queues hold.
+    pub fn len(&self) -> usize {
+        self.msdus.iter().filter(|msdu| msdu.is_some()).count()
+    }
+
     /// Whether the pool takes another MSDU.
     pub const fn has_room(&self) -> bool {
         self.free != END

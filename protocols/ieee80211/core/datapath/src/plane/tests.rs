@@ -142,7 +142,8 @@ impl<'id> World<'id> {
         let Installed {
             port, data, gate, ..
         } = model;
-        let mut plane = DataPlane::new(data.arenas);
+        let mut plane = DataPlane::new();
+        plane.give(data.arenas);
         plane.handover(link).ok().unwrap();
         plane.aggregate_rate(Some(AggregateRate {
             rate,
@@ -254,7 +255,7 @@ impl<'id> World<'id> {
             .completed(
                 &mut self.port,
                 TxFacts::DUE,
-                &self.gate,
+                Some(&self.gate),
                 now,
                 how,
                 |memory| returned.push(memory),

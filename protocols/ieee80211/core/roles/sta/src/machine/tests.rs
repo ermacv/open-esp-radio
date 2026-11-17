@@ -2834,7 +2834,8 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                 let install = mint.into_pools();
                 let mut port =
                     ModelPort::<'_, 8>::new(install.key, install.issuer, channel::<ModelCaps>(1));
-                let mut plane = DataPlane::<'_, ModelCaps>::new(install.data.arenas);
+                let mut plane = DataPlane::<'_, ModelCaps>::new();
+                plane.give(install.data.arenas);
                 plane
                     .handover(DataLink {
                         header,

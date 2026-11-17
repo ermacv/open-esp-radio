@@ -6,8 +6,8 @@ use core::task::{Context, Waker};
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    Channel, ChannelWidth, DataPort, GateOpen, PortPools, RadioPort, RegulatedChannel, StartPoll,
-    SupportedChannel,
+    Channel, ChannelWidth, DataPort, GateClosed, GateOpen, PortPools, RadioPort, RegulatedChannel,
+    StartPoll, SupportedChannel,
 };
 use oer_protocols_ieee80211_testing_model::{ModelCaps, ModelLayout, ModelPort, ModelRights};
 use oer_protocols_radio_port::{Mint, branded};
@@ -50,6 +50,41 @@ pub(crate) fn installed<R>(body: impl for<'id> FnOnce(Installed<'id>) -> R) -> R
                 port,
                 data: install.data,
                 gate,
+            })
+        }
+    ));
+    let mut cx = Context::from_waker(Waker::noop());
+    match core::future::Future::poll(future, &mut cx) {
+        core::task::Poll::Ready(result) => result,
+        core::task::Poll::Pending => panic!("an installation's mint performs no async operation"),
+    }
+}
+
+/// A model installation of `S` single's places, its radio running and its
+/// gate closed, as the controller holds it.
+pub(crate) struct Running<'id, const S: usize> {
+    pub port: ModelPort<'id, S>,
+    pub data: ModelRights<'id, S>,
+    pub gate: GateClosed<'id>,
+}
+
+/// Run `body` over a fresh model installation of `S` single's places,
+/// running, its gate closed.
+pub(crate) fn running<const S: usize, R>(body: impl for<'id> FnOnce(Running<'id, S>) -> R) -> R {
+    let future = core::pin::pin!(branded(
+        async |mint: Mint<'_, PortPools<ModelLayout<S>>>| {
+            let install = mint.into_pools();
+            let mut port = ModelPort::new(install.key, install.issuer, channel(1));
+            let mut cx = Context::from_waker(Waker::noop());
+            let starting = port.start(install.stopped, channel(6), Instant::EPOCH);
+            let StartPoll::Running(_running) = port.poll_start(starting, &mut cx, Instant::EPOCH)
+            else {
+                panic!("the model starts at once");
+            };
+            body(Running {
+                port,
+                data: install.data,
+                gate: install.gate,
             })
         }
     ));

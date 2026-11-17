@@ -11,6 +11,8 @@ description = "Executor- and chip-independent IEEE 802.11 data plane: the link's
 oer-portable-events = { path = "../../../../portable/events" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
+oer-protocols-ieee80211-core-installation = { path = "../installation" }
+heapless = "0.9.3"
 oer-protocols-ieee80211-core-upper-mac = { path = "../upper-mac" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
 

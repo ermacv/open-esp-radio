@@ -425,7 +425,8 @@ enum Held<'id> {
 /// of `pending` in their order; a settlement compacts the arena, not the
 /// book.
 struct ArenaBook<'id, K> {
-    /// The arena's right. `None` only inside a transition of the plane,
+    /// The arena's right. `None` while the data is stopped (the
+    /// installation holds the arena), and inside a transition of the plane,
     /// which puts the next right back before it returns.
     right: Option<Held<'id>>,
     /// The link generation that filled it.
@@ -512,9 +513,9 @@ const fn ones(bits: u64) -> u8 {
 }
 
 impl<'id, K> ArenaBook<'id, K> {
-    const fn new(right: IdleArena<'id>) -> Self {
+    const fn new() -> Self {
         Self {
-            right: Some(Held::Idle(right)),
+            right: None,
             epoch: 0,
             tid: WmmUserPriority::UP0,
             first: SequenceNumber::from_low_bits(0),
@@ -621,18 +622,88 @@ pub struct DataPlane<'id, K> {
     second: ArenaBook<'id, K>,
 }
 
+impl<K: Ieee80211Capabilities> Default for DataPlane<'_, K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
-    /// The plane over the installation's two idle arenas.
-    pub const fn new(arenas: [IdleArena<'id>; 2]) -> Self {
-        let [first, second] = arenas;
+    /// The plane of stopped data: it holds no arena until
+    /// [`Self::give`].
+    pub const fn new() -> Self {
         Self {
             link: None,
             epoch: 0,
             rate: None,
             limits: [None; 8],
             next: [None; 8],
-            first: ArenaBook::new(first),
-            second: ArenaBook::new(second),
+            first: ArenaBook::new(),
+            second: ArenaBook::new(),
+        }
+    }
+
+    /// The data flows: the installation's two idle arenas, each to its
+    /// book.
+    pub fn give(&mut self, arenas: [IdleArena<'id>; 2]) {
+        let [first, second] = arenas;
+        self.first.right = Some(Held::Idle(first));
+        self.first.clear();
+        self.second.right = Some(Held::Idle(second));
+        self.second.clear();
+    }
+
+    /// The plane's whole state but its frames' admission instants, for the
+    /// engine's search: no lifetime expires within its bounds.
+    #[cfg(test)]
+    pub(crate) fn key(&self) -> std::string::String {
+        let book = |book: &ArenaBook<'id, K>| {
+            let right = match &book.right {
+                None => std::string::String::from("away"),
+                Some(Held::Idle(_)) => std::string::String::from("idle"),
+                Some(Held::Open(arena)) => std::format!("open{}", arena.frames()),
+                Some(Held::Air(air)) => std::format!("air{}", air.sent().bits()),
+            };
+            let frames: std::vec::Vec<(u8, u16, u8)> = book
+                .held()
+                .map(|(position, frame)| (position.0, frame.psdu, frame.attempts))
+                .collect();
+            std::format!(
+                "{right}|{}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{:?}",
+                book.epoch,
+                book.tid,
+                book.first,
+                book.taken,
+                book.pending,
+                book.octets,
+                frames,
+                book.retained,
+                book.published
+                    .map(|published| (published.psdu, published.octets)),
+            )
+        };
+        std::format!(
+            "{:?}|{}|{:?}|{:?}|{:?}|{}|{}",
+            self.link,
+            self.epoch,
+            self.rate,
+            self.limits,
+            self.next,
+            book(&self.first),
+            book(&self.second)
+        )
+    }
+
+    /// The two arenas back, when both are idle: the data stops. `None`
+    /// while one holds frames or is on the air; the plane keeps them.
+    pub fn take(&mut self) -> Option<[IdleArena<'id>; 2]> {
+        match (self.first.right.take(), self.second.right.take()) {
+            (Some(Held::Idle(first)), Some(Held::Idle(second))) => Some([first, second]),
+            (first, second) => {
+                self.first.right = first;
+                self.second.right = second;
+                None
+            }
         }
     }
 
@@ -846,6 +917,11 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             .into_iter()
             .find(|side| self.book(*side).takes() && self.book(*side).pending != 0)
             .or_else(|| sides.into_iter().find(|side| self.book(*side).takes()))
+    }
+
+    /// Whether an arena takes frames now.
+    pub fn takes(&self) -> bool {
+        self.standby().is_some()
     }
 
     /// The TID whose frames the standby holds: only its next frames join
@@ -1108,11 +1184,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             },
         );
         book.right = Some(Held::Air(on_air));
-        book.published = Some(Published {
-            ppdu,
-            psdu,
-            octets,
-        });
+        book.published = Some(Published { ppdu, psdu, octets });
         Some(plan)
     }
 
@@ -1187,7 +1259,7 @@ const fn aggregate_rate<B, D>(outcome: &AggregateOutcome<B, D>) -> Option<PhyRat
 }
 
 /// What a single MPDU's miss lost it to.
-const fn single_loss<A, D>(outcome: &SingleOutcome<A, D>) -> DataLoss {
+pub(crate) const fn single_loss<A, D>(outcome: &SingleOutcome<A, D>) -> DataLoss {
     match outcome {
         TxOutcome::Indeterminate(_) => DataLoss::Indeterminate,
         TxOutcome::Ended(SingleEnd::ContentionLimit(_)) => DataLoss::ContentionLimited,
@@ -1205,8 +1277,8 @@ const fn single_loss<A, D>(outcome: &SingleOutcome<A, D>) -> DataLoss {
 impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     /// Read the end of the arena on the air at `now` and settle it, in
     /// section 4's order: the end, then, when its BlockAck acknowledged
-    /// every frame the arena held, the other arena published at once as
-    /// `how` gives its rates, then the settlement. Acknowledged frames are
+    /// every frame the arena held and `gate` is open, the other arena
+    /// published at once as `how` gives its rates, then the settlement. Acknowledged frames are
     /// delivered; an A-MPDU's missing ones are kept in their places while
     /// their MSDU's lifetime and the policy's attempts last, dropped after;
     /// a single MPDU's miss is dropped, its plan having been its retries;
@@ -1222,7 +1294,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         &mut self,
         port: &mut P,
         facts: TxFacts,
-        gate: &GateOpen<'id>,
+        gate: Option<&GateOpen<'id>>,
         now: Instant,
         how: impl FnOnce(PpduPlan) -> Option<Ppdu<'id, K>>,
         mut returned: impl FnMut(P::Memory),
@@ -1260,10 +1332,11 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             )
             && acknowledged == sent
             && sent.len() == u32::from(count);
-        let ahead = if whole && self.book(other(side)).publishable() {
-            self.publication_of(port, gate, now, other(side), how)
-        } else {
-            None
+        let ahead = match gate {
+            Some(gate) if whole && self.book(other(side)).publishable() => {
+                self.publication_of(port, gate, now, other(side), how)
+            }
+            _ => None,
         };
         let retry = self.link.as_ref().and_then(|link| link.retry);
         let book = self.book_mut(side);
@@ -1304,9 +1377,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             ArenaOutcome::Aggregate(aggregate) => {
                 let reached = reached(aggregate);
                 let mut first = true;
-                for (position, (original, frame)) in
-                    (0..sent_count).zip(book.held_mut())
-                {
+                for (position, (original, frame)) in (0..sent_count).zip(book.held_mut()) {
                     frame.attempts = frame.attempts.saturating_add(u8::from(reached));
                     let attempts = frame.attempts;
                     first &= attempts == 1;
@@ -1314,7 +1385,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
                         decision.delivered = decision.delivered.saturating_add(1);
                         continue;
                     }
-                    decision.holes = decision.holes.union(only(position));
+                    decision.missed = decision.missed.union(only(position));
                     let admitted = frame.admitted;
                     let loss = if matches!(aggregate, TxOutcome::Indeterminate(_)) {
                         Some(DataLoss::Indeterminate)
@@ -1378,7 +1449,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
                     retried: decision.keep.count(),
                     dropped: decision.dropped,
                     refused: false,
-                    holes: decision.first.then_some(decision.holes.bits()),
+                    holes: decision.first.then_some(decision.missed.bits()),
                     rate: aggregate_rate(aggregate),
                 })
             });
@@ -1396,6 +1467,19 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             cost,
             ahead,
         })
+    }
+
+    /// The oldest sequence number the arenas hold of `tid` on the current
+    /// link.
+    pub fn oldest_held(&self, tid: WmmUserPriority) -> Option<SequenceNumber> {
+        let epoch = self.epoch;
+        [
+            self.first.oldest(epoch, tid),
+            self.second.oldest(epoch, tid),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|oldest, held| if held.precedes(oldest) { held } else { oldest })
     }
 
     /// Move `tid`'s window to the oldest sequence number the arenas still
@@ -1432,7 +1516,7 @@ struct Decision {
     /// The original positions the arena holds after the settlement.
     pending: u64,
     /// The positions this attempt left unacknowledged.
-    holes: FrameSet,
+    missed: FrameSet,
     /// Every frame that went was at its first transmission, and the
     /// aggregate was answered.
     first: bool,

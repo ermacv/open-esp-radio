@@ -11,6 +11,9 @@ pub enum DataEvent {
     /// A data aggregate's terminal, or its refusal before the port, settled
     /// its members.
     AggregateSettled(AggregateSettled),
+    /// The engine refused an MSDU before its queue or its place; its memory
+    /// went home.
+    MsduRefused(crate::plane::IntakeRefusal),
 }
 
 /// How one data aggregate's members settled.

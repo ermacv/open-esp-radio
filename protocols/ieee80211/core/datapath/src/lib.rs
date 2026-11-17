@@ -86,6 +86,7 @@ pub const fn calibrated_power<K: oer_protocols_ieee80211_contracts_port::Ieee802
 mod aggregate;
 pub use aggregate::{AggregateRetry, MAX_AGGREGATE, PpduLimit};
 pub mod cost;
+pub mod engine;
 pub mod events;
 pub mod numbers;
 pub mod plane;

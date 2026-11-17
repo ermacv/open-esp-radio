@@ -163,6 +163,31 @@ pub struct MsduHeader {
     pub ether_type: u16,
 }
 
+impl MsduHeader {
+    /// The header at the front of an MSDU as the network hands it: an
+    /// Ethernet II header (destination, source, EtherType, the last most
+    /// significant octet first), and the payload after it; `None` for a
+    /// frame shorter than the header.
+    ///
+    /// SOURCE: IEEE Std 802.3-2022, 3.1.1 (the MAC frame: Destination
+    /// Address, Source Address, Length/Type, most significant octet
+    /// first), which RFC 1042 encapsulates (IEEE Std 802.11-2020, 5.1.4).
+    pub fn parse(frame: &[u8]) -> Option<(Self, &[u8])> {
+        let mut reader = oer_portable_wire::Reader::new(frame);
+        let destination = reader.read::<6>().ok()?;
+        let source = reader.read::<6>().ok()?;
+        let ether_type = reader.u16_be().ok()?;
+        Some((
+            Self {
+                destination,
+                source,
+                ether_type,
+            },
+            reader.remaining(),
+        ))
+    }
+}
+
 /// One MSDU borrowed from a validated data MPDU or A-MSDU subframe, or lent
 /// to an encoder: its addressing and the payload after its LLC/SNAP header.
 ///

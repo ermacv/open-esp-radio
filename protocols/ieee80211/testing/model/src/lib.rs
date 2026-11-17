@@ -512,6 +512,13 @@ pub struct ModelPort<'id, const SINGLES: usize> {
     returns: Rc<Cell<u64>>,
     /// The frames the next aggregate's BlockAck acknowledges.
     acknowledge: Option<FrameSet>,
+    /// The most frames the next arena's publication sends: the prefix its
+    /// rate admits, as a test sets it.
+    prefix: Option<u8>,
+    /// The next command's poll serves the singles' ends first, through the
+    /// sink it is lent, as a port does while its command waits at its
+    /// barrier.
+    serve_in_poll: bool,
     /// Every arena's publication, in order.
     published: Vec<Publication>,
     /// Each memory's last written front, by its id.
@@ -563,6 +570,8 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             places: (0..MODEL_PLACES).map(|_| None).collect(),
             returns: Rc::new(Cell::new(0)),
             acknowledge: None,
+            prefix: None,
+            serve_in_poll: false,
             published: Vec::new(),
             fronts: Vec::new(),
             command: None,
@@ -621,6 +630,17 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
         }
     }
 
+    /// Let the next command's poll serve the singles' ends first.
+    pub const fn serve_in_next_poll(&mut self) {
+        self.serve_in_poll = true;
+    }
+
+    /// Let the next arena's publication send at most `frames` of its
+    /// frames, one at least: the prefix its rate admits.
+    pub const fn send_at_most(&mut self, frames: u8) {
+        self.prefix = Some(frames);
+    }
+
     /// Let the next aggregate's BlockAck acknowledge only the frames of
     /// `frames`, by their positions.
     pub const fn acknowledge(&mut self, frames: FrameSet) {
@@ -670,6 +690,35 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     /// The bytes written in a single's place.
     pub fn single(&self, place: u8) -> Option<&[u8]> {
         self.singles.get(usize::from(place)).map(Vec::as_slice)
+    }
+
+    /// The modelled hardware's whole state, for a search that merges equal
+    /// states: its phase, parts, slots, arenas, queues, singles' places,
+    /// command and levers. Its records and counts are history, not state,
+    /// and are left out.
+    pub fn state_key(&self) -> std::string::String {
+        std::format!(
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            self.phase,
+            self.parts,
+            self.groups,
+            self.agreements,
+            self.anomaly,
+            self.arenas,
+            self.queues,
+            self.singles,
+            self.command.is_some(),
+            self.acknowledge,
+            self.prefix,
+        )
+    }
+
+    /// The network's names of the memories an arena holds, in its order.
+    pub fn arena_memories(&self, side: ArenaSide) -> Vec<u32> {
+        self.arenas
+            .get(side_index(side))
+            .map(|arena| arena.frames.iter().map(|frame| frame.memory.id).collect())
+            .unwrap_or_default()
     }
 
     /// The frames an arena holds.
@@ -996,6 +1045,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         };
         let mut record = None;
         let air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
+        let prefix = self.prefix.take();
         let buffer = self.arenas.get_mut(side_index(arena.side()));
         let mut sent: u8 = 0;
         if let Some(buffer) = buffer {
@@ -1013,7 +1063,8 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             }
             sent = sent
                 .max(1)
-                .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX));
+                .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX))
+                .min(prefix.unwrap_or(u8::MAX).max(1));
             buffer.sent = sent;
             buffer.went = if sent > 1 {
                 Went::Aggregate
@@ -1286,10 +1337,13 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     fn poll_command(
         &mut self,
         command: InCommand<'id>,
-        _now: Instant,
-        _sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id> {
         self.call();
+        if core::mem::take(&mut self.serve_in_poll) {
+            self.serve(TxFacts::DUE, Signal::Quiet, now, sink);
+        }
         let Some(Running_ { command: running }) = self.command.take() else {
             return CommandPoll::Pending(command);
         };
@@ -1356,7 +1410,9 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 CommandEnd::AgreementEmpty(self.key.agreement_ended(agreement))
             }
             Command::CloseGate(open) => {
-                if self.queues.iter().any(|queue| queue.single.is_some()) {
+                if self.queues.iter().any(|queue| queue.single.is_some())
+                    || self.arenas.iter().any(|arena| arena.air.is_some())
+                {
                     // The barrier waits for what is on the air.
                     self.command = Some(Running_ {
                         command: Command::CloseGate(open),

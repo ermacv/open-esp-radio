@@ -520,3 +520,16 @@ fn malformed_payload_offsets_and_lengths_return_errors() {
         );
     }
 }
+
+#[test]
+fn an_msdu_header_parses_from_the_networks_ethernet_frame() {
+    let frame = [
+        2, 0, 0, 0, 0, 0x10, 2, 0, 0, 0, 0, 1, 0x88, 0x8e, 0xaa, 0xbb,
+    ];
+    let (header, payload) = MsduHeader::parse(&frame).unwrap();
+    assert_eq!(header.destination, [2, 0, 0, 0, 0, 0x10]);
+    assert_eq!(header.source, [2, 0, 0, 0, 0, 1]);
+    assert_eq!(header.ether_type, 0x888e);
+    assert_eq!(payload, [0xaa, 0xbb]);
+    assert!(MsduHeader::parse(&frame[..13]).is_none());
+}
