@@ -13,7 +13,8 @@
 //! holds), then lent to the network while it has room to borrow, else
 //! copied into the network's storage while it has room for a copy, else it
 //! waits, taken, for the network: the pressure episode. A unit waits for the
-//! network at most [`NETWORK_LATE`] from the episode's first wait, not
+//! network at most the episode's bound (`late`, the composition's policy
+//! value, as the engine's budget) from the episode's first wait, not
 //! extended by returns; after it, a unit the network has no room for is
 //! refused, counted. The episode ends once the ring was walked to its end
 //! with no unit waiting.
@@ -31,13 +32,6 @@ use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 
 use super::{Carrying, Network, Told};
-
-/// How long the network may hold the ring back: the bound of a pressure
-/// episode, from its first wait.
-///
-/// SOURCE: the deleted actor's `NETWORK_LATE` (`b88a3d2cc`,
-/// `protocols/ieee80211/runtime/src/datapath.rs:147`), a policy value.
-pub const NETWORK_LATE: Duration = Duration::from_millis(10);
 
 /// The most MSDUs one received A-MSDU is delivered as; an aggregate of more
 /// is refused, counted ([`RxRefusal::AmsduTooLong`]). A policy value: a
@@ -183,6 +177,8 @@ pub(super) struct Receive<'id> {
     /// Data units taken for the network, oldest first.
     waiting: Deque<UnitHandle<'id>, PLACES>,
     pressure: Pressure,
+    /// The episode's bound from its first wait: the composition's.
+    late: Duration,
     refusals: RxRefusals,
     /// The MSDUs of the unit being delivered, found before any is written:
     /// kept in place and filled again for each unit.
@@ -198,10 +194,11 @@ enum Delivery<'id> {
 }
 
 impl<'id> Receive<'id> {
-    pub(super) const fn new() -> Self {
+    pub(super) const fn new(late: Duration) -> Self {
         Self {
             waiting: Deque::new(),
             pressure: Pressure::Clear,
+            late,
             refusals: RxRefusals {
                 link_held: 0,
                 pressure: 0,
@@ -251,7 +248,7 @@ impl<'id> Receive<'id> {
         if let Pressure::Since(since) = self.pressure
             && now
                 .checked_duration_since(since)
-                .is_some_and(|waited| waited >= NETWORK_LATE)
+                .is_some_and(|waited| waited >= self.late)
         {
             self.pressure = Pressure::Late;
         }
@@ -314,7 +311,7 @@ impl<'id> Receive<'id> {
             self.pressure = Pressure::Since(now);
         }
         let bound = match self.pressure {
-            Pressure::Since(since) => since.checked_add(NETWORK_LATE),
+            Pressure::Since(since) => since.checked_add(self.late),
             Pressure::Clear | Pressure::Late => None,
         };
         match (rest, held_back || !self.waiting.is_empty()) {

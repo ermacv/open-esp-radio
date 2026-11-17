@@ -111,7 +111,7 @@ fn refusals<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> RxRefusa
 #[test]
 fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_is_told_nothing() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9), meta());
         assert_eq!(engine.received(&mut around.turn()), Rest::Wake(None));
@@ -135,7 +135,7 @@ fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_
 #[test]
 fn a_frame_whose_header_does_not_decode_reaches_no_one() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9)[..20], meta());
         let _ = engine.received(&mut around.turn());
@@ -151,7 +151,7 @@ fn a_frame_whose_header_does_not_decode_reaches_no_one() {
 #[test]
 fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&beacon(1), meta());
         around.port.land(
@@ -184,7 +184,7 @@ fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
 #[test]
 fn every_management_frame_is_read_in_its_round_and_none_waits() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for sequence in 0..6 {
             around.port.land(&beacon(sequence), meta());
@@ -202,7 +202,7 @@ fn every_management_frame_is_read_in_its_round_and_none_waits() {
 #[test]
 fn every_staged_unit_is_routed_once() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         let mut foreign = data(2, IPV4, 2);
         foreign[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 0x30]);
@@ -226,7 +226,7 @@ fn every_staged_unit_is_routed_once() {
 #[test]
 fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
         around.net.copy_room = 1;
@@ -242,11 +242,7 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
             [Got::Lent(0), Got::Copied(ethernet(IPV4, 2))]
         );
         assert_eq!(around.told.frames, [(Some(0), beacon(9))]);
-        let bound = |start: u64| {
-            Instant::from_micros(start)
-                .checked_add(NETWORK_LATE)
-                .unwrap()
-        };
+        let bound = |start: u64| Instant::from_micros(start).checked_add(LATE).unwrap();
         assert_eq!(rest, Rest::Wake(Some(bound(start))));
         // The network consumed the copy: its room for one is back, 3 goes,
         // and the episode ends.
@@ -270,7 +266,7 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
         );
         assert_eq!(around.net.received.len(), 4);
         // At the bound: 5 has no room and is refused; the ring is walked.
-        around.pass(NETWORK_LATE.as_micros());
+        around.pass(LATE.as_micros());
         assert_eq!(engine.due(&mut around.turn()), Rest::Wake(None));
         assert_eq!(refusals(&mut engine).pressure, 1);
         assert_eq!(around.port.places_held(), 1, "4, lent");
@@ -283,7 +279,7 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
 #[test]
 fn refusals_are_counted_by_reason() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         // Protected without the port's evidence.
         around.port.land(&protected(1, 1), meta());
@@ -322,7 +318,7 @@ fn refusals_are_counted_by_reason() {
 #[test]
 fn verified_protected_data_is_delivered_after_its_ccmp_header() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&protected(1, 5), verified());
         let _ = engine.received(&mut around.turn());
@@ -336,7 +332,7 @@ fn verified_protected_data_is_delivered_after_its_ccmp_header() {
 #[test]
 fn a_protected_link_takes_unprotected_eapol_alone() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         {
             let mut data = station_flowing(&mut engine);
@@ -376,7 +372,7 @@ fn a_protected_link_takes_unprotected_eapol_alone() {
 #[test]
 fn an_a_msdus_msdus_are_copied_each_in_order() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&amsdu(&[1, 2, 3]), meta());
         let _ = engine.received(&mut around.turn());
@@ -398,7 +394,7 @@ fn an_a_msdus_msdus_are_copied_each_in_order() {
 #[test]
 fn a_stop_delivers_nothing_and_sends_back_what_waited() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
         around.net.copy_room = 0;
@@ -421,7 +417,7 @@ fn a_stop_delivers_nothing_and_sends_back_what_waited() {
 #[test]
 fn an_access_points_client_data_goes_to_the_network() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         let mut to_ds = data(1, IPV4, 6);
         to_ds[1] = 0x01;

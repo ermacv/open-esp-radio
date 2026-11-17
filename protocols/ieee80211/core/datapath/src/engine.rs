@@ -52,7 +52,7 @@
 use core::marker::PhantomData;
 
 use oer_portable_events::{EventSink, report};
-use oer_portable_time::Instant;
+use oer_portable_time::{Duration, Instant};
 pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataRights, GateClosed,
@@ -487,6 +487,9 @@ pub struct Engine<
 > {
     /// The MSDUs a section takes at most.
     budget: u8,
+    /// How long the network may hold the ring back: a pressure episode's
+    /// bound from its first wait.
+    late: Duration,
     data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>,
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<F::Entry<P::Link, T>>; PEERS],
@@ -645,11 +648,14 @@ impl<
 > engine!()
 {
     /// The engine of stopped data, taking at most `budget` MSDUs a section
-    /// (at least one): built in its place, a `const` item or a placed
+    /// (at least one), and letting the network hold the ring back for at
+    /// most `late` from a pressure episode's first wait: the composition's
+    /// policy values. Built in its place, a `const` item or a placed
     /// initializer.
-    pub const fn new(budget: u8) -> Self {
+    pub const fn new(budget: u8, late: Duration) -> Self {
         Self {
             budget: if budget == 0 { 1 } else { budget },
+            late,
             data: Data::Stopped,
             entries: [const { Entry::Free }; PEERS],
             queues: TxQueues::new(),
@@ -2156,7 +2162,7 @@ where
             },
             groups,
             agreements,
-            receive: Receive::new(),
+            receive: Receive::new(self.late),
         });
     }
 
@@ -2204,6 +2210,7 @@ where
                 ],
             queues,
             budget,
+            late: _,
         } = self
         else {
             return 0;
@@ -2783,7 +2790,7 @@ where
             },
             groups,
             agreements,
-            receive: Receive::new(),
+            receive: Receive::new(self.late),
         });
     }
 
@@ -3426,9 +3433,7 @@ where
 }
 
 mod receive;
-pub use receive::{
-    AMSDU_MSDUS, CopyPermit, EthernetSpan, LendPermit, NETWORK_LATE, Room, RxRefusal, RxRefusals,
-};
+pub use receive::{AMSDU_MSDUS, CopyPermit, EthernetSpan, LendPermit, Room, RxRefusal, RxRefusals};
 use receive::{Flow, Receive, RxPeer};
 
 #[cfg(test)]

@@ -60,7 +60,8 @@ addresses written before the EtherType of its LLC/SNAP header,
 borrow (`Network::room`, `Network::lent`), else copied into the network's
 storage while it has room for a copy (`Network::copied`; an A-MSDU's
 MSDUs are copied, at most `AMSDU_MSDUS`), else it waits, taken, for the
-network. A unit waits at most `NETWORK_LATE` from the episode's first wait,
+network. A unit waits at most the episode's bound (`late`, a policy value
+the composition gives `Engine::new` beside its budget) from the episode's first wait,
 not extended by returns; after it, a unit the network has no room for is
 refused, and the episode ends once the ring was walked with no unit
 waiting. While a unit waits, the ring is not serviced. A data frame of a

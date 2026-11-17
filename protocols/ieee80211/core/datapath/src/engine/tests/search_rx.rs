@@ -95,7 +95,7 @@ struct World<'id> {
 
 impl<'id> World<'id> {
     fn new(run: Running<'id, STATION_SINGLES, 0>, bounds: Bounds) -> Self {
-        let mut engine = StationEngine::<'_, 2>::new(4);
+        let mut engine = StationEngine::<'_, 2>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = LEND;
         around.net.copy_room = 0;
@@ -207,9 +207,7 @@ impl<'id> World<'id> {
                 Some(self.engine.returned(&mut self.around.turn()))
             }
             Move::Late => {
-                let bound = self
-                    .first_wait
-                    .map_or(0, |first| first + NETWORK_LATE.as_micros());
+                let bound = self.first_wait.map_or(0, |first| first + LATE.as_micros());
                 if bound > self.around.micros {
                     self.around.micros = bound;
                 }
@@ -287,7 +285,7 @@ impl<'id> World<'id> {
         if self.refusals().pressure > pressure_before {
             let late = self
                 .first_wait
-                .is_some_and(|first| now >= first + NETWORK_LATE.as_micros());
+                .is_some_and(|first| now >= first + LATE.as_micros());
             if !late {
                 self.problems
                     .push("a unit was refused for pressure before the bound");
@@ -305,7 +303,7 @@ impl<'id> World<'id> {
         if waiting > 0 && !self.stopped {
             let bound = self
                 .first_wait
-                .map(|first| Instant::from_micros(first + NETWORK_LATE.as_micros()));
+                .map(|first| Instant::from_micros(first + LATE.as_micros()));
             match (self.owed, bound) {
                 (Rest::Wake(Some(at)), Some(bound)) if at == bound => {}
                 (Rest::Wake(Some(_)), _) => {
