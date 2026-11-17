@@ -1,5 +1,5 @@
 //! The station interface's HE association, which the backend's MAC
-//! follows ([`PortCommand::SetHe`](crate::PortCommand::SetHe)).
+//! follows ([`ValueCommand::SetHe`](crate::ValueCommand::SetHe)).
 //!
 //! It is set in two stages, in the order the pinned vendor station sets it:
 //! the BSS before authentication ([`StationHe::Bss`],

@@ -51,7 +51,7 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
-    AckHeader, AgreementSlot, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
+    AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataPort, DataRights,
     GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, MpduLength, PairwiseSlot,
     PortRate, PortSink, QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome, SinglePlace,
     SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
@@ -289,7 +289,7 @@ enum Gate<'id> {
     /// Open: arenas and singles go.
     Open(GateOpen<'id>, CommandPlace<'id>),
     /// Its closing runs, with the command's place: nothing goes.
-    Closing(InCommand<'id>),
+    Closing(InCommand<'id, CloseGate<'id>>),
     /// Inside one method, between two of the above: the port's command
     /// takes the open gate and the place by value, so safe Rust moves them
     /// out through a value left in their place. Never seen outside it.
@@ -539,7 +539,7 @@ impl<
             return;
         };
         if let Gate::Open(open, place) = core::mem::replace(gate, Gate::InTransition) {
-            *gate = Gate::Closing(turn.port.begin(place, Command::CloseGate(open), turn.now));
+            *gate = Gate::Closing(turn.port.begin_close(place, CloseGate(open), turn.now));
         }
     }
 
@@ -563,17 +563,14 @@ impl<
                 return None;
             }
         };
-        match port.poll_command(command, now, sink) {
+        match port.poll_close(command, now, sink) {
             CommandPoll::Pending(command) => {
                 *gate = Gate::Closing(command);
                 None
             }
             CommandPoll::Ended(place, end) => {
                 *gate = Gate::Shut(place);
-                match end {
-                    CommandEnd::GateClosed(closed) => Some(closed),
-                    _ => None,
-                }
+                Some(end)
             }
         }
     }

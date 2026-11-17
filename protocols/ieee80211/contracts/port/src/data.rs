@@ -16,7 +16,7 @@ use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::security::Spp;
-use oer_protocols_radio_port::{ClockError, PoolPath, Root};
+use oer_protocols_radio_port::ClockError;
 
 use crate::life::{MintData, PortKey, RadioPort};
 use crate::{
@@ -205,10 +205,6 @@ right!(
 right!(
     /// The one place of a command.
     CommandPlace {}
-);
-right!(
-    /// A command in progress.
-    InCommand {}
 );
 right!(
     /// The station's pairwise key slot, empty.
@@ -531,11 +527,36 @@ pub struct Ended<A, B, D> {
     pub acknowledged: FrameSet,
 }
 
-/// A command the port runs behind its barrier. It carries the right it
-/// needs; its end ([`CommandEnd`]) returns it.
-pub enum Command<'id, K> {
-    /// Install the station's pairwise key.
-    InstallPairwise {
+/// A command of kind `C` in progress: the command's place and the rights
+/// the command carries are the port's until its end, which is its kind's
+/// ([`CommandPoll`]). Only a port's key makes one (`PortKey::began`).
+#[must_use = "a right is the only way to the call that takes it"]
+#[derive(Debug)]
+pub struct InCommand<'id, C> {
+    command: C,
+    brand: Brand<'id>,
+}
+
+/// A command's poll: in progress, or ended with the command's place and its
+/// kind's end.
+#[derive(Debug)]
+pub enum CommandPoll<'id, C, E> {
+    /// In progress; the port's facts wake.
+    Pending(InCommand<'id, C>),
+    /// It ended, with the command's place.
+    Ended(CommandPlace<'id>, E),
+}
+
+/// Close the gate, once what is on the air ended. Its end is the closed
+/// gate; it has no expired end.
+#[derive(Debug)]
+pub struct CloseGate<'id>(pub GateOpen<'id>);
+
+/// A command on the station's pairwise key slot.
+#[derive(Debug)]
+pub enum PairwiseCommand<'id> {
+    /// Install the station's pairwise key in the empty slot.
+    Install {
         /// The empty slot.
         slot: PairwiseSlot<'id>,
         /// The peer.
@@ -545,8 +566,25 @@ pub enum Command<'id, K> {
         /// The association's SPP A-MSDU decision.
         spp: Spp,
     },
+    /// Remove the pairwise key.
+    Remove(InstalledPairwise<'id>),
+}
+
+/// A pairwise key command's end: the slot always comes back.
+#[derive(Debug)]
+pub enum PairwiseEnd<'id> {
+    /// The key is installed.
+    Installed(InstalledPairwise<'id>),
+    /// The slot is empty: an installation that expired (the port cleared
+    /// the entry) or a removal.
+    Empty(PairwiseSlot<'id>),
+}
+
+/// A command on a group key slot.
+#[derive(Debug)]
+pub enum GroupCommand<'id> {
     /// Install a group key in an empty slot.
-    InstallGroup {
+    Install {
         /// The empty slot.
         slot: GroupSlot<'id>,
         /// The key's ID.
@@ -555,7 +593,7 @@ pub enum Command<'id, K> {
         key: Ccmp128Key,
     },
     /// Replace an installed group key.
-    ReplaceGroup {
+    Replace {
         /// The installed key.
         installed: InstalledGroup<'id>,
         /// The new key's ID.
@@ -564,24 +602,48 @@ pub enum Command<'id, K> {
         key: Ccmp128Key,
     },
     /// Make an installed group key the one received under its ID.
-    SelectGroup(InstalledGroup<'id>),
-    /// Remove the pairwise key.
-    RemovePairwise(InstalledPairwise<'id>),
+    Select(InstalledGroup<'id>),
     /// Remove a group key.
-    RemoveGroup(InstalledGroup<'id>),
+    Remove(InstalledGroup<'id>),
+}
+
+/// A group key command's end: the slot always comes back.
+#[derive(Debug)]
+pub enum GroupEnd<'id> {
+    /// A group key is installed, replaced or selected.
+    Installed(InstalledGroup<'id>),
+    /// The slot is empty: an installation, replacement or selection that
+    /// expired (the port cleared the entry), or a removal.
+    Empty(GroupSlot<'id>),
+}
+
+/// A command on a receive Block Ack agreement's slot.
+#[derive(Debug)]
+pub enum AgreementCommand<'id, K> {
     /// Begin a receive Block Ack agreement.
-    AddAgreement {
+    Add {
         /// The empty slot.
         slot: AgreementSlot<'id>,
         /// The agreement.
         agreement: SupportedBlockAck<K>,
     },
     /// End a receive Block Ack agreement.
-    EndAgreement(Agreement<'id>),
+    End(Agreement<'id>),
+}
+
+/// An agreement command's end: the slot always comes back.
+#[derive(Debug)]
+pub enum AgreementEnd<'id> {
+    /// An agreement runs.
+    Added(Agreement<'id>),
+    /// The slot is empty: an addition that expired, or an end.
+    Empty(AgreementSlot<'id>),
+}
+
+/// A command of values: it carries no right.
+pub enum ValueCommand<K> {
     /// Configure the station's receive.
     Configure(StationReceive<K>),
-    /// Close the gate, once what is on the air ended.
-    CloseGate(GateOpen<'id>),
     /// Set the station's EDCA parameters.
     SetEdca(SupportedEdca<K>),
     /// Set the BSS color.
@@ -590,39 +652,13 @@ pub enum Command<'id, K> {
     SetHe(StationHe),
 }
 
-/// A command's end: one sum, a variant a kind of end, each carrying what
-/// that end returns.
-#[derive(Debug)]
-pub enum CommandEnd<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
-    /// A command of values took effect.
+/// A command of values' end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ValueEnd {
+    /// It took effect.
     Done,
-    /// A command of values did not take effect within its bound.
+    /// It did not take effect within its bound.
     Expired,
-    /// The gate is closed. It has no expired end.
-    GateClosed(GateClosed<'id, Path>),
-    /// The pairwise key is installed.
-    PairwiseInstalled(InstalledPairwise<'id>),
-    /// The pairwise slot is empty: an installation that expired (the port
-    /// cleared the entry) or a removal.
-    PairwiseEmpty(PairwiseSlot<'id>),
-    /// A group key is installed, replaced or selected.
-    GroupInstalled(InstalledGroup<'id>),
-    /// A group slot is empty: an installation, replacement or selection
-    /// that expired (the port cleared the entry), or a removal.
-    GroupEmpty(GroupSlot<'id>),
-    /// An agreement runs.
-    AgreementAdded(Agreement<'id>),
-    /// An agreement's slot is empty: an addition that expired or an end.
-    AgreementEmpty(AgreementSlot<'id>),
-}
-
-/// A command's poll.
-#[derive(Debug)]
-pub enum CommandPoll<'id> {
-    /// In progress; the port's facts wake.
-    Pending(InCommand<'id>),
-    /// It ended, with the command's place.
-    Ended(CommandPlace<'id>, CommandEnd<'id>),
 }
 
 /// What receives the ends a port's service makes.
@@ -778,21 +814,85 @@ pub trait DataPort<'id>: RadioPort<'id> {
         now: Instant,
     );
 
-    /// Begin a command.
-    fn begin(
+    /// Begin closing the gate.
+    fn begin_close(
         &mut self,
         place: CommandPlace<'id>,
-        command: Command<'id, Self::Caps>,
+        command: CloseGate<'id>,
         now: Instant,
-    ) -> InCommand<'id>;
+    ) -> InCommand<'id, CloseGate<'id>>;
 
-    /// Poll a command.
-    fn poll_command(
+    /// Poll the gate's closing.
+    fn poll_close(
         &mut self,
-        command: InCommand<'id>,
+        command: InCommand<'id, CloseGate<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id>;
+    ) -> CommandPoll<'id, CloseGate<'id>, GateClosed<'id>>;
+
+    /// Begin a pairwise key command.
+    fn begin_pairwise(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: PairwiseCommand<'id>,
+        now: Instant,
+    ) -> InCommand<'id, PairwiseCommand<'id>>;
+
+    /// Poll a pairwise key command.
+    fn poll_pairwise(
+        &mut self,
+        command: InCommand<'id, PairwiseCommand<'id>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, PairwiseCommand<'id>, PairwiseEnd<'id>>;
+
+    /// Begin a group key command.
+    fn begin_group(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: GroupCommand<'id>,
+        now: Instant,
+    ) -> InCommand<'id, GroupCommand<'id>>;
+
+    /// Poll a group key command.
+    fn poll_group(
+        &mut self,
+        command: InCommand<'id, GroupCommand<'id>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, GroupCommand<'id>, GroupEnd<'id>>;
+
+    /// Begin an agreement command.
+    fn begin_agreement(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: AgreementCommand<'id, Self::Caps>,
+        now: Instant,
+    ) -> InCommand<'id, AgreementCommand<'id, Self::Caps>>;
+
+    /// Poll an agreement command.
+    fn poll_agreement(
+        &mut self,
+        command: InCommand<'id, AgreementCommand<'id, Self::Caps>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, AgreementCommand<'id, Self::Caps>, AgreementEnd<'id>>;
+
+    /// Begin a command of values.
+    fn begin_value(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: ValueCommand<Self::Caps>,
+        now: Instant,
+    ) -> InCommand<'id, ValueCommand<Self::Caps>>;
+
+    /// Poll a command of values.
+    fn poll_value(
+        &mut self,
+        command: InCommand<'id, ValueCommand<Self::Caps>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, ValueCommand<Self::Caps>, ValueEnd>;
 
     /// Open the closed gate.
     fn open_gate(&mut self, gate: GateClosed<'id>) -> GateOpen<'id>;
@@ -909,16 +1009,22 @@ impl<'id> PortKey<'id> {
         )
     }
 
-    /// A command began.
-    pub const fn begin(&self, place: CommandPlace<'id>) -> InCommand<'id> {
+    /// A command began: the place and the command are the port's.
+    pub fn began<C>(&self, place: CommandPlace<'id>, command: C) -> InCommand<'id, C> {
         let CommandPlace { brand } = place;
-        InCommand { brand }
+        InCommand { command, brand }
     }
 
-    /// A command ended: its place back.
-    pub const fn command_ended(&self, command: InCommand<'id>) -> CommandPlace<'id> {
-        let InCommand { brand } = command;
-        CommandPlace { brand }
+    /// The command in progress, read.
+    pub const fn command<'c, C>(&self, command: &'c InCommand<'id, C>) -> &'c C {
+        &command.command
+    }
+
+    /// A command ended: its place back, and the command, whose rights its
+    /// end returns.
+    pub fn command_ended<C>(&self, command: InCommand<'id, C>) -> (CommandPlace<'id>, C) {
+        let InCommand { command, brand } = command;
+        (CommandPlace { brand }, command)
     }
 
     /// The pairwise key installed.

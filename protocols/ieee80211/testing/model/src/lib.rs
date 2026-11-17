@@ -69,16 +69,17 @@ use std::vec::Vec;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::data::Sealed;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, Air as OnAirAir, AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome,
-    ArenaSide, BandSet, BlockAckReport, Channel, Command, CommandEnd, CommandPlace, CommandPoll,
-    Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GateClosed, GateIssuer,
-    GateLent, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities,
-    Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities, MpduLength, OnAir,
-    PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort, RateSupport,
-    ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
-    Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
-    StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping,
-    SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet, WithdrawCause,
+    AggregateEnd, AgreementCommand, AgreementEnd, Air as OnAirAir, AmpduCapabilities,
+    AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport, Channel, CloseGate,
+    CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
+    GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd, HEADROOM, HardwareServices,
+    HeaderLen, IdleArena, Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause,
+    LowerMacCapabilities, MpduLength, OnAir, PairwiseCommand, PairwiseEnd, PhyFormatSet, Place,
+    PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort, RateSupport, ReceiveFilter,
+    ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal,
+    SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure,
+    StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping, SupportedChannel, Tid,
+    TxFacts, TxFrame, TxOutcome, UnitsHome, ValueCommand, ValueEnd, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -467,9 +468,11 @@ struct Unit {
     lent: bool,
 }
 
-/// A command in progress.
-struct Running_<'id> {
-    command: Command<'id, ModelCaps>,
+/// Whether a command runs on the model's one command place.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+enum Commanding {
+    Idle,
+    Running,
 }
 
 /// A unit lent to the network: its drop returns it to the model's ring.
@@ -524,7 +527,7 @@ pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize> {
     published: Vec<Publication>,
     /// Each memory's last written front, by its id.
     fronts: Vec<(u32, Vec<u8>)>,
-    command: Option<Running_<'id>>,
+    commanding: Commanding,
     record: Vec<Programmed>,
     counts: Counts,
 }
@@ -577,7 +580,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
             serve_in_poll: false,
             published: Vec::new(),
             fronts: Vec::new(),
-            command: None,
+            commanding: Commanding::Idle,
             record: Vec::new(),
             counts: Counts::default(),
         }
@@ -710,7 +713,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
             self.arenas,
             self.queues,
             self.singles,
-            self.command.is_some(),
+            self.commanding,
             self.acknowledge,
             self.prefix,
         )
@@ -1329,112 +1332,189 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         self.key.single_published(place, queue);
     }
 
-    fn begin(
+    fn begin_close(
         &mut self,
         place: CommandPlace<'id>,
-        command: Command<'id, Self::Caps>,
+        command: CloseGate<'id>,
         _now: Instant,
-    ) -> InCommand<'id> {
-        self.call();
-        self.command = Some(Running_ { command });
-        self.key.begin(place)
+    ) -> InCommand<'id, CloseGate<'id>> {
+        self.begin(place, command)
     }
 
-    fn poll_command(
+    fn poll_close(
         &mut self,
-        command: InCommand<'id>,
+        command: InCommand<'id, CloseGate<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id> {
-        self.call();
-        if core::mem::take(&mut self.serve_in_poll) {
-            self.serve(TxFacts::DUE, Signal::Quiet, now, sink);
-        }
-        let Some(Running_ { command: running }) = self.command.take() else {
+    ) -> CommandPoll<'id, CloseGate<'id>, GateClosed<'id>> {
+        self.polled(now, sink);
+        if self.queues.iter().any(|queue| queue.single.is_some())
+            || self.arenas.iter().any(|arena| arena.air.is_some())
+        {
+            // The barrier waits for what is on the air.
             return CommandPoll::Pending(command);
-        };
+        }
+        let (place, CloseGate(open)) = self.ended(command);
+        self.parts.off(Part::Gate);
+        self.program(Programmed::Gate(false));
+        CommandPoll::Ended(place, self.issuer.close(open))
+    }
+
+    fn begin_pairwise(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: PairwiseCommand<'id>,
+        _now: Instant,
+    ) -> InCommand<'id, PairwiseCommand<'id>> {
+        self.begin(place, command)
+    }
+
+    fn poll_pairwise(
+        &mut self,
+        command: InCommand<'id, PairwiseCommand<'id>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, PairwiseCommand<'id>, PairwiseEnd<'id>> {
+        self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
-        let plain = if expire {
-            CommandEnd::Expired
-        } else {
-            CommandEnd::Done
-        };
+        let (place, running) = self.ended(command);
         let end = match running {
-            Command::InstallPairwise { slot, .. } => {
+            PairwiseCommand::Install { slot, .. } => {
                 if expire {
                     self.parts.off(Part::Pairwise);
                     self.program(Programmed::Pairwise(false));
-                    CommandEnd::PairwiseEmpty(slot)
+                    PairwiseEnd::Empty(slot)
                 } else {
                     self.parts.on(Part::Pairwise);
                     self.program(Programmed::Pairwise(true));
-                    CommandEnd::PairwiseInstalled(self.key.pairwise_installed(slot))
+                    PairwiseEnd::Installed(self.key.pairwise_installed(slot))
                 }
             }
-            Command::RemovePairwise(key) => {
+            PairwiseCommand::Remove(key) => {
                 self.parts.off(Part::Pairwise);
                 self.program(Programmed::Pairwise(false));
-                CommandEnd::PairwiseEmpty(self.key.pairwise_removed(key))
+                PairwiseEnd::Empty(self.key.pairwise_removed(key))
             }
-            Command::InstallGroup { slot, .. } => {
+        };
+        CommandPoll::Ended(place, end)
+    }
+
+    fn begin_group(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: GroupCommand<'id>,
+        _now: Instant,
+    ) -> InCommand<'id, GroupCommand<'id>> {
+        self.begin(place, command)
+    }
+
+    fn poll_group(
+        &mut self,
+        command: InCommand<'id, GroupCommand<'id>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, GroupCommand<'id>, GroupEnd<'id>> {
+        self.polled(now, sink);
+        let expire = self.parts.take(Part::Expire);
+        let (place, running) = self.ended(command);
+        let end = match running {
+            GroupCommand::Install { slot, .. } => {
                 let index = slot.index();
                 if expire {
                     self.set_group(index, Slot::Empty);
-                    CommandEnd::GroupEmpty(slot)
+                    GroupEnd::Empty(slot)
                 } else {
                     self.set_group(index, Slot::Held);
-                    CommandEnd::GroupInstalled(self.key.group_installed(slot))
+                    GroupEnd::Installed(self.key.group_installed(slot))
                 }
             }
-            Command::ReplaceGroup { installed, .. } | Command::SelectGroup(installed) => {
+            GroupCommand::Replace { installed, .. } | GroupCommand::Select(installed) => {
                 let index = installed.index();
                 if expire {
                     self.set_group(index, Slot::Empty);
-                    CommandEnd::GroupEmpty(self.key.group_removed(installed))
+                    GroupEnd::Empty(self.key.group_removed(installed))
                 } else {
                     self.set_group(index, Slot::Held);
-                    CommandEnd::GroupInstalled(installed)
+                    GroupEnd::Installed(installed)
                 }
             }
-            Command::RemoveGroup(installed) => {
+            GroupCommand::Remove(installed) => {
                 let index = installed.index();
                 self.set_group(index, Slot::Empty);
-                CommandEnd::GroupEmpty(self.key.group_removed(installed))
+                GroupEnd::Empty(self.key.group_removed(installed))
             }
-            Command::AddAgreement { slot, .. } => {
+        };
+        CommandPoll::Ended(place, end)
+    }
+
+    fn begin_agreement(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: AgreementCommand<'id, Self::Caps>,
+        _now: Instant,
+    ) -> InCommand<'id, AgreementCommand<'id, Self::Caps>> {
+        self.begin(place, command)
+    }
+
+    fn poll_agreement(
+        &mut self,
+        command: InCommand<'id, AgreementCommand<'id, Self::Caps>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, AgreementCommand<'id, Self::Caps>, AgreementEnd<'id>> {
+        self.polled(now, sink);
+        let expire = self.parts.take(Part::Expire);
+        let (place, running) = self.ended(command);
+        let end = match running {
+            AgreementCommand::Add { slot, .. } => {
                 let index = slot.index();
                 if expire {
-                    CommandEnd::AgreementEmpty(slot)
+                    AgreementEnd::Empty(slot)
                 } else {
                     self.set_agreement(index, Slot::Held);
-                    CommandEnd::AgreementAdded(self.key.agreement_added(slot))
+                    AgreementEnd::Added(self.key.agreement_added(slot))
                 }
             }
-            Command::EndAgreement(agreement) => {
+            AgreementCommand::End(agreement) => {
                 let index = agreement.index();
                 self.set_agreement(index, Slot::Empty);
-                CommandEnd::AgreementEmpty(self.key.agreement_ended(agreement))
+                AgreementEnd::Empty(self.key.agreement_ended(agreement))
             }
-            Command::CloseGate(open) => {
-                if self.queues.iter().any(|queue| queue.single.is_some())
-                    || self.arenas.iter().any(|arena| arena.air.is_some())
-                {
-                    // The barrier waits for what is on the air.
-                    self.command = Some(Running_ {
-                        command: Command::CloseGate(open),
-                    });
-                    return CommandPoll::Pending(command);
-                }
-                self.parts.off(Part::Gate);
-                self.program(Programmed::Gate(false));
-                CommandEnd::GateClosed(self.issuer.close(open))
-            }
-            Command::Configure(_) => self.value(Programmed::Configure, plain),
-            Command::SetEdca(_) => self.value(Programmed::Edca, plain),
-            Command::SetBssColor(_) => self.value(Programmed::Color, plain),
-            Command::SetHe(_) => self.value(Programmed::He, plain),
         };
-        CommandPoll::Ended(self.key.command_ended(command), end)
+        CommandPoll::Ended(place, end)
+    }
+
+    fn begin_value(
+        &mut self,
+        place: CommandPlace<'id>,
+        command: ValueCommand<Self::Caps>,
+        _now: Instant,
+    ) -> InCommand<'id, ValueCommand<Self::Caps>> {
+        self.begin(place, command)
+    }
+
+    fn poll_value(
+        &mut self,
+        command: InCommand<'id, ValueCommand<Self::Caps>>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+    ) -> CommandPoll<'id, ValueCommand<Self::Caps>, ValueEnd> {
+        self.polled(now, sink);
+        let end = if self.parts.take(Part::Expire) {
+            ValueEnd::Expired
+        } else {
+            ValueEnd::Done
+        };
+        let (place, running) = self.ended(command);
+        if end == ValueEnd::Done {
+            self.program(match running {
+                ValueCommand::Configure(_) => Programmed::Configure,
+                ValueCommand::SetEdca(_) => Programmed::Edca,
+                ValueCommand::SetBssColor(_) => Programmed::Color,
+                ValueCommand::SetHe(_) => Programmed::He,
+            });
+        }
+        CommandPoll::Ended(place, end)
     }
 
     fn open_gate(&mut self, gate: GateClosed<'id>) -> GateOpen<'id> {
@@ -1462,12 +1542,25 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
         self.program(Programmed::Agreement(index, running));
     }
 
-    /// A command with no slot: it expires when the lever said so.
-    fn value(&mut self, programmed: Programmed, end: CommandEnd<'id>) -> CommandEnd<'id> {
-        if let CommandEnd::Done = end {
-            self.program(programmed);
+    /// A command began on the one place.
+    fn begin<C>(&mut self, place: CommandPlace<'id>, command: C) -> InCommand<'id, C> {
+        self.call();
+        self.commanding = Commanding::Running;
+        self.key.began(place, command)
+    }
+
+    /// A command's poll: the singles' ends first, when the lever says so.
+    fn polled(&mut self, now: Instant, sink: &mut impl PortSink<'id, (), ()>) {
+        self.call();
+        if core::mem::take(&mut self.serve_in_poll) {
+            self.serve(TxFacts::DUE, Signal::Quiet, now, sink);
         }
-        end
+    }
+
+    /// A command ended: its place back with the command.
+    fn ended<C>(&mut self, command: InCommand<'id, C>) -> (CommandPlace<'id>, C) {
+        self.commanding = Commanding::Idle;
+        self.key.command_ended(command)
     }
 }
 

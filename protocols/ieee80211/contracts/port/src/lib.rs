@@ -182,11 +182,12 @@ pub mod life;
 pub mod receive;
 
 pub use data::{
-    Agreement, AgreementSlot, Arena, ArenaOutcome, ArenaSide, Command, CommandEnd, CommandPlace,
-    CommandPoll, Complete, DATA_SINGLES, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
-    GroupSlot, HEADROOM, HeaderLen, IdleArena, InCommand, InstalledGroup, InstalledPairwise, OnAir,
+    Agreement, AgreementCommand, AgreementEnd, AgreementSlot, Arena, ArenaOutcome, ArenaSide,
+    CloseGate, CommandPlace, CommandPoll, Complete, DATA_SINGLES, DataLayout, DataPort, DataRights,
+    Ended, Facts, FrameSet, GroupCommand, GroupEnd, GroupSlot, HEADROOM, HeaderLen, IdleArena,
+    InCommand, InstalledGroup, InstalledPairwise, OnAir, PairwiseCommand, PairwiseEnd,
     PairwiseSlot, Place, Placing, PortSink, Ppdu, QUEUES, QueueRight, Settled, Signal, SinglePlace,
-    TxFacts,
+    TxFacts, ValueCommand, ValueEnd,
 };
 pub use life::{
     Install, MintData, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning,

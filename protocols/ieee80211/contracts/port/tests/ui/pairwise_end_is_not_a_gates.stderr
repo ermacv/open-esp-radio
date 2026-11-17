@@ -1,0 +1,10 @@
+error[E0308]: mismatched types
+  --> tests/ui/pairwise_end_is_not_a_gates.rs:19:67
+   |
+19 |     let _: CommandPoll<'a, PairwiseCommand<'a>, GateClosed<'a>> = port.poll_pairwise(command, now, sink); // ui-error: E0308
+   |            ----------------------------------------------------   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `GateClosed<'a>`, found `PairwiseEnd<'a>`
+   |            |
+   |            expected due to this
+   |
+   = note: expected enum `CommandPoll<'a, PairwiseCommand<'a>, oer_protocols_ieee80211_contracts_port::GateClosed<'a>>`
+              found enum `CommandPoll<'a, PairwiseCommand<'a>, PairwiseEnd<'a>>`

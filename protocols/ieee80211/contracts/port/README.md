@@ -44,7 +44,7 @@ or build dependency turns that on (`oer-tools-test-layers`,
 | `GateOpen` | `open_gate` | the controller, lent to a publication | the close-gate command |
 | `IdleArena`, `Arena`, `OnAir` | the install; `open`, `publish`, `settle`, `withdraw` | the engine | the next of them |
 | `SinglePlace`, `QueueRight` | the install; a single's end (`PortSink::single_ended`) | the engine; the port from a single's publication to its end | `publish_single` |
-| `CommandPlace`, `InCommand` | the install; `begin`; a command's end | the engine | `begin`, `poll_command` |
+| `CommandPlace`, `InCommand<'id, C>` | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
 | `PairwiseSlot`, `GroupSlot`, `AgreementSlot` and their installed forms | the install (empty); a key's or an agreement's command end | the engine | the commands that install, replace and remove them |
 
 ## The radio's life
@@ -98,10 +98,15 @@ the sink (`PortSink::single_ended`). A role's frames are of a closed set of
 purposes and the installation has a place for each (`SINGLES`), so a
 role's frame always has its place.
 
-**Commands** (`Command`): keys, agreements, configuration, the gate's
-close, EDCA, the BSS color and HE settings, each carrying the right it
-needs; `begin` and `poll_command`, and its end (`CommandEnd`) returns the
-right, an expired key command with its slot empty.
+**Commands**, one kind a call, each carrying the right it needs:
+`CloseGate` (`begin_close`, `poll_close`), `PairwiseCommand`
+(`begin_pairwise`, `poll_pairwise`), `GroupCommand`, `AgreementCommand`
+and `ValueCommand` (configuration, EDCA, the BSS color, HE). A command in
+progress is `InCommand<'id, C>`, typed by its kind, and its poll ends only
+with that kind's end: the closed gate; `PairwiseEnd`, `GroupEnd` or
+`AgreementEnd`, the slot always back, installed or empty (an expired key
+command with its slot empty); `ValueEnd::Done` or `Expired`. Every end gives
+the command's place back (`tests/ui/pairwise_end_is_not_a_gates.rs`).
 
 ## Receive as a round
 
