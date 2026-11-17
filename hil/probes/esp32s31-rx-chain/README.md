@@ -81,6 +81,47 @@ patterns; buffers12/20/28 keep full patterns and other buffers keep the leading
 marker. RX descriptors stay armed; there are no CPU-owned barrier nodes.
 These bytes are never painted during RX.
 
+## Case D: chains joined over many laps (`--features laps`, `tasks/156`)
+
+With `laps` the probe replaces selections 200–209 with case D. It starts
+receive in the port's order (the open receive and the station's scan policy
+before the walker, then the MAC's runtime released), so that a frame to the
+station is taken and acknowledged. `ring256` selects 256-byte buffers in place
+of 128.
+
+The sender is `esp32c5-wifi-injector` as it is: non-QoS Data to the station,
+its body LLC/SNAP `0x88b5` then each byte its offset. The host sends seven
+lengths in turn, chosen so that a unit (the 64-octet RX-control prefix and
+tail, then the MPDU) is one less than a buffer, a buffer, one more, two
+buffers, one more, 764 and 1 564 octets.
+
+The probe takes and recycles the ring until it holds at least 10 000 of the
+injector's units, 100 laps and 1 000 units of each length (at most 150 s). For
+every unit it does the following:
+
+- it joins the steps in order, each bounded by its own completed word, so that
+  nothing past the terminal LENGTH is read;
+- it checks `(n − 1) × SIZE + last LENGTH` against the HAL's total and against
+  the joined bytes;
+- it takes the frame's length from the RX-control tail's signal length less
+  the FCS, since the descriptors' lengths round the unit up to a word;
+- it compares every byte of the frame with the injector's, but for the
+  duration and the sequence control its driver writes;
+- it checks the rate (6 Mb/s);
+- it counts OFFSET and SOSF of every descriptor.
+
+It prints `LAPS` lines: each length's units and spans, the spans' histogram,
+the padding after the frame, the totals and the MAC's counters.
+
+```console
+cargo stand --owner wifi lease --board s31-a --board c5-a --air exclusive -- sh -c '
+  cargo stand board send c5-a --timeout 30s SYNC "MODE 13 20 6m" &&
+  cargo fw run esp32s31-rx-chain --features laps --board s31-a --timeout 240s &
+  # once the console prints LAPS begin, for each unit length U:
+  #   cargo stand board send c5-a "TX 15000 3000 <U − 64> <s31-a> <c5-a> <c5-a> 0"
+  wait'
+```
+
 Build with `cargo fw probe oer-hil-probes-esp32s31-rx-chain`. The staged
 ELF requires the normal bootstrap/PSRAM handoff. Under a board/air lease:
 

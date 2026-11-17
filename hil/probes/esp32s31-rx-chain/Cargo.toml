@@ -41,6 +41,13 @@ oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 [build-dependencies]
 oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
+[features]
+# Case D of `tasks/156`: chains joined over many laps, the injector's frames
+# checked byte by byte, in place of selections 200–209.
+laps = []
+# Case D's second geometry: 256-byte buffers in place of 128.
+ring256 = []
+
 [lints]
 workspace = true
 

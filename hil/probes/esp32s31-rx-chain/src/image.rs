@@ -32,11 +32,18 @@ use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
+#[cfg(feature = "laps")]
+#[path = "laps.rs"]
+mod laps;
 #[path = "traffic.rs"]
 mod traffic;
 
 const COUNT: usize = 32;
+#[cfg(not(feature = "ring256"))]
 const BUFFER: usize = 128;
+/// Case D's second geometry (`tasks/156`).
+#[cfg(feature = "ring256")]
+const BUFFER: usize = 256;
 const NODES: usize = COUNT + 1;
 const CHANNEL: u8 = 13;
 // The active 200–209 profile keeps full patterns in these three buffers.
@@ -55,6 +62,9 @@ static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
     access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
     _clocks: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    /// The station's address: case D counts the units addressed to it.
+    #[cfg_attr(not(feature = "laps"), expect(dead_code, reason = "case D's alone"))]
+    station: [u8; 6],
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_portable_memory::ClaimCell<
@@ -412,6 +422,7 @@ fn direct_future(
         Ok(DirectOutput {
             access,
             _clocks: clocks,
+            station,
         })
     }
 }
@@ -600,14 +611,32 @@ async fn run_direct(
     let stopped_ring = ready
         .publish(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-publish"; 32))?;
+    // Case D starts receive in the port's order (`ReceiveSession::port_start`,
+    // as the mac-reset probe does): the open receive and the station's scan
+    // policy before the walker, then the MAC's runtime released. Selections
+    // 200–209 keep their recorded order.
+    #[cfg(feature = "laps")]
+    {
+        let broadcast = [0xff; 6];
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        access
+            .wifi_mac_hal()
+            .configure_station_receive_policy(broadcast);
+        access
+            .wifi_mac_hal()
+            .configure_station_scan_policy(broadcast);
+    }
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
+    #[cfg(feature = "laps")]
+    access.wifi_mac_hal().start_mac_runtime(&ring);
     let stale = mac_irq.mac_interrupt_raw();
     if stale.fatal_assertion_raw().is_some() {
         return Err(oer_portable_diagnostics::name!("traffic-initial-fatal"; 32));
     }
     mac_irq.acknowledge_mac_interrupt_raw(stale);
+    #[cfg(not(feature = "laps"))]
     access.wifi_mac_hal().configure_open_promiscuous_receive();
     mac_irq.mask_all_mac_interrupts();
     traffic::checkpoint(trace, 202, 0, &mac_irq)?;
@@ -616,7 +645,13 @@ async fn run_direct(
         b"TRAFFIC begin v=1 selections=200-209 channel=13 cap_ms=700 mask_ms=350 take_recycle=1\n",
     )
     .await;
+    #[cfg(not(feature = "laps"))]
     let observation = traffic::collect(trace, storage, &mut ring, access, &mut mac_irq);
+    // Case D: the station's scan policy, so that a frame to its address is
+    // taken and acknowledged whatever its BSSID, as the mac-reset probe and
+    // the backend's `StaScanRxPolicyHardware` apply it.
+    #[cfg(feature = "laps")]
+    let observation = laps::run(console, storage, &mut ring, access, output.station).await;
     access.wifi_mac_hal().request_channel_stop();
     let deadline = EmbassyClock
         .now()

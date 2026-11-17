@@ -322927,10 +322927,10 @@ pub mod layouts {
         pub const LENGTH_WIDTH: u32 = 14;
         /// Greatest unsigned image of `LENGTH`.
         pub const LENGTH_MAX: u32 = 0x3fff;
-        /// Project-assigned name. Received byte count on a terminal descriptor. Software arms LENGTH with SIZE; an unchanged nonterminal value establishes neither a hardware writeback nor consumption or accepted-frame membership.
+        /// Project-assigned name. Received byte count on a terminal descriptor: the last buffer's bytes of the unit rounded up to a word, so that a unit holds 0 to 3 bytes of padding after its frame; the frame's own length is the RX-control tail's signal length less the FCS. Over a chain, (n - 1) x SIZE + the terminal LENGTH is the unit's bytes. Software arms LENGTH with SIZE; an unchanged nonterminal value establishes neither a hardware writeback nor consumption or accepted-frame membership.
         ///
         /// `LENGTH`, bits 27:14; written by the hardware.
-        /// SOURCE: HW18_RX_CHAIN_20261027, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
+        /// SOURCE: HW18_RX_CHAIN_20261027, HW_RX_CHAIN_LAPS_20261117, ROM_REV0_WDEV_APPEND_RX_BLOCKS, HIL_W1_RX_WALKER_2026_10_18.
         pub const fn length(self) -> u16 {
             ((self.0 >> 14) & 0x3fff) as u16
         }
