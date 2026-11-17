@@ -14,37 +14,34 @@ pub struct Arm {
     pub hold: usize,
 }
 
-/// The segments of one run: fixed and rebind alternated, each under both
-/// holds.
-pub const SEGMENTS: usize = 12;
-pub const ARMS: [Arm; SEGMENTS] = {
-    let pattern = [
-        Arm {
-            rebind: false,
-            hold: 8,
-        },
-        Arm {
-            rebind: true,
-            hold: 8,
-        },
-        Arm {
-            rebind: false,
-            hold: 1,
-        },
-        Arm {
-            rebind: true,
-            hold: 1,
-        },
-    ];
-    let mut arms = [pattern[0]; SEGMENTS];
-    let mut at = 0;
-    while at < SEGMENTS {
-        arms[at] = pattern[at % pattern.len()];
-        at += 1;
-    }
-    arms
-};
-/// The holds the run reports apart.
+/// The segments of one run (`tasks/169`): fixed and rebind alternated
+/// under holds 8 and 1 (the port's margins), then rebinds under holds 24,
+/// 28 and 30 of 32, where the walker runs out and a rebound descriptor is
+/// re-linked with few armed descriptors or none ahead of it, then 8 and 1
+/// again and a closing fixed segment that gives the last retirements their
+/// laps.
+pub const SEGMENTS: usize = 15;
+const fn arm(rebind: bool, hold: usize) -> Arm {
+    Arm { rebind, hold }
+}
+pub const ARMS: [Arm; SEGMENTS] = [
+    arm(false, 8),
+    arm(true, 8),
+    arm(false, 1),
+    arm(true, 1),
+    arm(false, 24),
+    arm(true, 24),
+    arm(false, 28),
+    arm(true, 28),
+    arm(false, 30),
+    arm(true, 30),
+    arm(false, 8),
+    arm(true, 8),
+    arm(false, 1),
+    arm(true, 1),
+    arm(false, 8),
+];
+/// The holds the verdict asks its rebinds of; the others are reported.
 pub const HOLDS: [usize; 2] = [8, 1];
 
 /// Frames a fixed segment checks at least.
@@ -55,8 +52,9 @@ pub const MIN_FIXED_DETACHES: u32 = 16;
 /// BUFFER word changed and a later frame landed in the new spare with every
 /// frame check run.
 pub const MIN_COVERED_REBINDS: u32 = 1_000;
-/// The buckets of the armed reserve at a rebind: 0 to 15, then 16 or more.
-pub const RESERVE_BUCKETS: usize = 17;
+/// The buckets of the armed reserve at a rebind: one for each of 0 to 30,
+/// then 31 or more.
+pub const RESERVE_BUCKETS: usize = 32;
 
 /// One segment's counters.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -103,6 +101,11 @@ pub struct Counts {
     pub reserve_min: u32,
     /// Retired spares returned to the bank after two laps and their CRC.
     pub returned: u32,
+    /// The sender's counters this segment saw first and last, and how many
+    /// it completed: the frames between that it did not are the air's
+    /// losses while the ring was out.
+    pub counter_first: u32,
+    pub counter_last: u32,
 }
 
 /// What a violation found.
@@ -260,11 +263,10 @@ mod tests {
             window_checks: MIN_FIXED_DETACHES,
             ..Counts::default()
         };
-        // Three rebind segments a hold.
         let rebind = Counts {
             frames: MIN_FRAMES,
-            rebinds: 400,
-            covered_rebinds: 400,
+            rebinds: 600,
+            covered_rebinds: 600,
             ..Counts::default()
         };
         let counts = ARMS.map(|arm| if arm.rebind { rebind } else { fixed });
@@ -272,8 +274,8 @@ mod tests {
             counts,
             violations: 0,
             first_violation: None,
-            retired: 2_400,
-            returned: 2_300,
+            retired: 4_200,
+            returned: 4_100,
             kept: 100,
             kept_final_checks: 100,
             kept_with_lap: 100,
@@ -317,7 +319,7 @@ mod tests {
         let mut observations = covered();
         for (counts, arm) in observations.counts.iter_mut().zip(ARMS) {
             if arm.rebind && arm.hold == 1 {
-                counts.covered_rebinds = 300;
+                counts.covered_rebinds = 400;
             }
         }
         assert_eq!(

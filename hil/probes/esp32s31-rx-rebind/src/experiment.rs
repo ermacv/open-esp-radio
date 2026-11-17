@@ -158,6 +158,7 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
     }
     for counts in &mut state.counts {
         counts.reserve_min = u32::MAX;
+        counts.counter_first = u32::MAX;
     }
     Ok((state, frame))
 }
@@ -322,7 +323,13 @@ impl State {
             }),
         };
         match first {
-            None => bump(&mut self.counts(segment)?.content_ok),
+            None => {
+                let round = counter.map_or(0, Case::round);
+                let counts = self.counts(segment)?;
+                bump(&mut counts.content_ok);
+                counts.counter_first = counts.counter_first.min(round);
+                counts.counter_last = counts.counter_last.max(round);
+            }
             Some(offset) => {
                 bump(&mut self.counts(segment)?.content_bad);
                 self.record(
@@ -1024,7 +1031,8 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
              content_bad={} frames_on_rebound={} detached={} window_checks={} rebinds={} \
              covered_rebinds={} returned={} spares_exhausted={} held_back={} retired_checks={} \
              spare_checks={} reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} \
-             hw_buffer_full={} hw_data_success={} reserve_min={} reserve={:?}",
+             hw_buffer_full={} hw_data_success={} sender_first={} sender_last={} \
+             sender_lost={} reserve_min={} reserve={:?}",
             if arm.rebind { "rebind" } else { "fixed" },
             arm.hold,
             counts.services,
@@ -1055,6 +1063,22 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.hw_fcs_error,
             counts.hw_buffer_full,
             counts.hw_data_success,
+            if counts.content_ok == 0 {
+                0
+            } else {
+                counts.counter_first
+            },
+            counts.counter_last,
+            // The sender's frames of this segment's span it did not complete.
+            if counts.content_ok == 0 {
+                0
+            } else {
+                counts
+                    .counter_last
+                    .saturating_sub(counts.counter_first)
+                    .saturating_add(1)
+                    .saturating_sub(counts.content_ok)
+            },
             if counts.rebinds == 0 {
                 0
             } else {
