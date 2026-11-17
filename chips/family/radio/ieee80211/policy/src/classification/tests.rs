@@ -2,23 +2,39 @@ use super::*;
 
 #[test]
 fn fixed_rate_is_limited_to_recovered_control_traffic() {
-    assert!(uses_fixed_per_packet_rate(ETHER_TYPE_EAPOL, false, None));
-    assert!(uses_fixed_per_packet_rate(ETHER_TYPE_WAPI, false, None));
-    assert!(uses_fixed_per_packet_rate(ETHER_TYPE_ARP, true, None));
-    assert!(!uses_fixed_per_packet_rate(ETHER_TYPE_ARP, false, None));
+    assert!(uses_fixed_per_packet_rate(
+        ETHER_TYPE_EAPOL,
+        ArpRate::Policy,
+        None
+    ));
+    assert!(uses_fixed_per_packet_rate(
+        ETHER_TYPE_WAPI,
+        ArpRate::Policy,
+        None
+    ));
+    assert!(uses_fixed_per_packet_rate(
+        ETHER_TYPE_ARP,
+        ArpRate::Fixed,
+        None
+    ));
+    assert!(!uses_fixed_per_packet_rate(
+        ETHER_TYPE_ARP,
+        ArpRate::Policy,
+        None
+    ));
     assert!(uses_fixed_per_packet_rate(
         ETHER_TYPE_IPV4,
-        false,
+        ArpRate::Policy,
         Some((68, 67))
     ));
     assert!(uses_fixed_per_packet_rate(
         ETHER_TYPE_IPV4,
-        false,
+        ArpRate::Policy,
         Some((49152, 53))
     ));
     assert!(!uses_fixed_per_packet_rate(
         ETHER_TYPE_IPV4,
-        false,
+        ArpRate::Policy,
         Some((49152, 443))
     ));
 }

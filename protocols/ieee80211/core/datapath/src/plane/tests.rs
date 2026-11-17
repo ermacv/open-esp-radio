@@ -1096,19 +1096,15 @@ fn he() -> PhyRate {
     )
 }
 
-/// The link of an access point whose HE Operation names an HE TXOP
-/// Duration RTS Threshold of 64 (2 ms), when `threshold`.
-fn he_link(threshold: bool) -> DataLink {
+/// The link of an access point whose HE Operation names the HE TXOP
+/// Duration RTS Threshold `threshold` (64 is 2 ms), or none.
+fn he_link(threshold: Option<u16>) -> DataLink {
     use oer_protocols_ieee80211_core_upper_mac::protection::{
         BasicRates, BssProtection, HeTxopDurationRtsThreshold,
     };
     DataLink {
         protection: BssProtection {
-            he_txop_rts_threshold: if threshold {
-                HeTxopDurationRtsThreshold::new(64)
-            } else {
-                None
-            },
+            he_txop_rts_threshold: threshold.and_then(HeTxopDurationRtsThreshold::new),
             basic_rates: BasicRates::from_rate_elements(&[0x8c, 0x12, 0x98, 0x24], &[]),
             ..BssProtection::UNPROTECTED
         },
@@ -1171,22 +1167,22 @@ fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> 
 fn a_finite_he_txop_threshold_protects_every_he_ppdu_and_its_retries() {
     let rts = |rate| {
         let mut policy = oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::new(None);
-        policy.install_bss(he_link(true).protection);
+        policy.install_bss(he_link(Some(64)).protection);
         policy.every_he_txop_protection(rate)
     };
     assert!(matches!(rts(he()), Protection::RtsCts { .. }));
     // A single MPDU: each stage of its plan.
     assert_eq!(
-        he_publication(he_link(true), he(), 1),
+        he_publication(he_link(Some(64)), he(), 1),
         [rts(he()), rts(he())]
     );
     // An A-MPDU.
-    assert_eq!(he_publication(he_link(true), he(), 3), [rts(he())]);
+    assert_eq!(he_publication(he_link(Some(64)), he(), 3), [rts(he())]);
 }
 
 #[test]
 fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
-    for (link, rate) in [(he_link(false), he()), (he_link(true), ht())] {
+    for (link, rate) in [(he_link(None), he()), (he_link(Some(64)), ht())] {
         for frames in [1, 3] {
             let protection = he_publication(link, rate, frames);
             assert!(protection.iter().all(|stage| *stage == Protection::None));

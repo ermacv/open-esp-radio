@@ -85,6 +85,7 @@ pub mod tx;
 
 pub use ampdu::{
     AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
+    BlockAckAgreement,
 };
 pub use protection::{HeTxopRtsBudget, ProtectEveryHeTxop, ProtectionPolicy};
 pub use retry::{

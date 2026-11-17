@@ -88,5 +88,13 @@ pub const OPEN_DATA_REASSEMBLY_CAPACITY: usize = 1_500 + LLC_SNAP_HEADER_LEN;
 pub const OPEN_DATA_FRAGMENT_TIMEOUT: oer_portable_time::Duration =
     oer_portable_time::Duration::from_secs(1);
 
+/// Whether a test fragment announces another (More Fragments).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MoreFragments {
+    More,
+    Last,
+}
+
 #[cfg(test)]
 mod tests;

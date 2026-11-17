@@ -23,16 +23,25 @@ pub const ETHER_TYPE_IPV6: u16 = protocol_word(EtherType::IPV6.value());
 /// The vendor classifier's private priority marker.
 pub const ETHER_TYPE_VENDOR_PRIORITY: u16 = 0xeeee;
 
+/// How the vendor station sends an ARP frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArpRate {
+    /// At the fixed per-packet rate.
+    Fixed,
+    /// At the rate policy's.
+    Policy,
+}
+
 pub const fn uses_fixed_per_packet_rate(
     protocol: u16,
-    sta_arp: bool,
+    arp: ArpRate,
     udp_ports: Option<(u16, u16)>,
 ) -> bool {
     if protocol == ETHER_TYPE_EAPOL || protocol == ETHER_TYPE_WAPI {
         return true;
     }
     if protocol == ETHER_TYPE_ARP {
-        return sta_arp;
+        return matches!(arp, ArpRate::Fixed);
     }
     if protocol != ETHER_TYPE_IPV4 {
         return false;

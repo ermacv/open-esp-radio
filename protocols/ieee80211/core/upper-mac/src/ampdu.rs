@@ -86,6 +86,15 @@ pub fn compact<T: Copy, const N: usize>(items: &mut [T; N], mask: u64) -> usize 
 }
 
 /// The limits of one aggregate's retries.
+/// Whether the TID's Block Ack agreement is operational (IEEE Std
+/// 802.11-2020, 10.25.2): while it is not, missing subframes leave the
+/// aggregate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockAckAgreement {
+    Operational,
+    NotOperational,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AmpduRetryPolicy {
     /// Time from an MSDU's admission after which its subframe is aged and
@@ -260,7 +269,7 @@ impl AmpduRetryState {
     /// Apply how the attempt carrying `observed_subframes` ended at
     /// `now`. `admitted` gives the admission instant of an original
     /// subframe's MSDU. While the Block Ack agreement is not
-    /// `block_ack_operational`, missing subframes leave the aggregate for
+    /// `block_ack`, missing subframes leave the aggregate for
     /// individual retries.
     ///
     /// # Errors
@@ -272,7 +281,7 @@ impl AmpduRetryState {
         result: AmpduAttemptResult,
         observed_subframes: u8,
         now: Instant,
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
         admitted: impl Fn(u8) -> Option<Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         if observed_subframes != self.current_subframes {
@@ -293,7 +302,7 @@ impl AmpduRetryState {
                 self.missing_original_indices = self.pending_original_indices;
                 let aged = self.aged_mask(every, now, &admitted)?;
                 if aged != 0 {
-                    return Ok(self.discard(every, aged, block_ack_operational));
+                    return Ok(self.discard(every, aged, block_ack));
                 }
                 if self.protection_failures < self.retry_limit {
                     return Ok(AmpduRetryDecision::RepublishUnchanged { retry_mask: every });
@@ -315,13 +324,11 @@ impl AmpduRetryState {
                 }
                 let aged = self.aged_mask(every, now, &admitted)?;
                 if aged != 0 {
-                    return Ok(self.discard(every, aged, block_ack_operational));
+                    return Ok(self.discard(every, aged, block_ack));
                 }
-                Ok(self.retain_or_unaggregate(every, observed_subframes, block_ack_operational))
+                Ok(self.retain_or_unaggregate(every, observed_subframes, block_ack))
             }
-            AmpduAttemptResult::Answered(report) => {
-                self.resort(report, now, block_ack_operational, &admitted)
-            }
+            AmpduAttemptResult::Answered(report) => self.resort(report, now, block_ack, &admitted),
         }
     }
 
@@ -334,12 +341,12 @@ impl AmpduRetryState {
     /// An original subframe without an admission instant.
     pub fn observe_block_ack_request(
         &mut self,
-        block_ack: Option<BlockAckReport>,
+        report: Option<BlockAckReport>,
         now: Instant,
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
         admitted: impl Fn(u8) -> Option<Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
-        self.resort(block_ack, now, block_ack_operational, &admitted)
+        self.resort(report, now, block_ack, &admitted)
     }
 
     /// Keep the subframes `report` does not acknowledge.
@@ -347,7 +354,7 @@ impl AmpduRetryState {
         &mut self,
         report: Option<BlockAckReport>,
         now: Instant,
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
         admitted: &impl Fn(u8) -> Option<Instant>,
     ) -> Result<AmpduRetryDecision, AmpduRetryError> {
         let mut retry_mask = 0_u64;
@@ -371,9 +378,9 @@ impl AmpduRetryState {
         }
         let aged = self.aged_mask(retry_mask, now, admitted)?;
         if aged != 0 {
-            return Ok(self.discard(retry_mask, aged, block_ack_operational));
+            return Ok(self.discard(retry_mask, aged, block_ack));
         }
-        let decision = self.retain_or_unaggregate(retry_mask, missing, block_ack_operational);
+        let decision = self.retain_or_unaggregate(retry_mask, missing, block_ack);
         if matches!(decision, AmpduRetryDecision::RetainAggregate { .. }) {
             self.pending_original_indices = retry_original_indices;
             self.current_subframes = missing;
@@ -413,7 +420,7 @@ impl AmpduRetryState {
         &mut self,
         missing: u64,
         aged: u64,
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
     ) -> AmpduRetryDecision {
         let remaining = missing & !aged;
         let mut remaining_original = 0_u64;
@@ -429,7 +436,7 @@ impl AmpduRetryState {
             }
             index = index.saturating_add(1);
         }
-        if !block_ack_operational {
+        if block_ack == BlockAckAgreement::NotOperational {
             return if remaining == 0 {
                 AmpduRetryDecision::Finish { retry_mask: aged }
             } else {
@@ -459,9 +466,11 @@ impl AmpduRetryState {
         &mut self,
         retry_mask: u64,
         missing: u8,
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
     ) -> AmpduRetryDecision {
-        if !block_ack_operational || (missing == 1 && !self.retain_single_mpdu) {
+        if block_ack == BlockAckAgreement::NotOperational
+            || (missing == 1 && !self.retain_single_mpdu)
+        {
             return AmpduRetryDecision::Unaggregate { retry_mask };
         }
         AmpduRetryDecision::RetainAggregate { retry_mask }

@@ -54,21 +54,21 @@ pub struct RateScheduleRecordState {
 pub struct BeamformingReportRate {
     mode: u8,
     rate: u16,
-    dcm: bool,
-    ersu: bool,
-    ersu_ack: bool,
+    coding: ReportCoding,
+}
+
+/// How a beamforming report goes: the recovered policy sets DCM, ER SU and
+/// the matching ER SU ACK together, or none of them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReportCoding {
+    Plain,
+    DcmExtendedRange,
 }
 
 impl BeamformingReportRate {
     /// Construct the complete report-rate and matching ACK request.
-    pub const fn new(mode: u8, rate: u16, dcm: bool, ersu: bool, ersu_ack: bool) -> Self {
-        Self {
-            mode,
-            rate,
-            dcm,
-            ersu,
-            ersu_ack,
-        }
+    pub const fn new(mode: u8, rate: u16, coding: ReportCoding) -> Self {
+        Self { mode, rate, coding }
     }
 
     /// PHY signal mode.
@@ -83,16 +83,16 @@ impl BeamformingReportRate {
 
     /// DCM selector.
     pub const fn dcm(self) -> bool {
-        self.dcm
+        matches!(self.coding, ReportCoding::DcmExtendedRange)
     }
 
     /// ER SU selector.
     pub const fn extended_range_single_user(self) -> bool {
-        self.ersu
+        matches!(self.coding, ReportCoding::DcmExtendedRange)
     }
 
     /// Matching ER SU ACK selector.
     pub const fn extended_range_ack(self) -> bool {
-        self.ersu_ack
+        matches!(self.coding, ReportCoding::DcmExtendedRange)
     }
 }

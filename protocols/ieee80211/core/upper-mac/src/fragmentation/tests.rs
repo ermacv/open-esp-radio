@@ -14,6 +14,8 @@ use oer_portable_time::{Duration, Instant};
 fn at(micros: u64) -> Instant {
     Instant::from_micros(micros)
 }
+use crate::duplicate::RetrySubfield;
+use crate::fragmentation::MoreFragments;
 use crate::seq;
 
 const STA: [u8; 6] = [2, 0, 0, 0, 0, 1];
@@ -24,8 +26,8 @@ fn fragment(
     role: DataInterfaceRole,
     sequence: u16,
     number: u8,
-    more: bool,
-    retry: bool,
+    more: MoreFragments,
+    retry: RetrySubfield,
     payload: &[u8],
 ) -> [u8; 64] {
     let mut mpdu = [0_u8; 64];
@@ -34,10 +36,10 @@ fn fragment(
             DataInterfaceRole::Station => FROM_DS,
             DataInterfaceRole::AccessPoint => TO_DS,
         };
-    if more {
+    if more == MoreFragments::More {
         control |= MORE_FRAGMENTS;
     }
-    if retry {
+    if retry == RetrySubfield::Set {
         control |= RETRY;
     }
     mpdu[..2].copy_from_slice(&control.to_le_bytes());
@@ -74,16 +76,16 @@ fn station_fragments_reassemble_one_exact_ethernet_view() {
         DataInterfaceRole::Station,
         0x123,
         0,
-        true,
-        false,
+        MoreFragments::More,
+        RetrySubfield::Clear,
         &first_payload,
     );
     let second = fragment(
         DataInterfaceRole::Station,
         0x123,
         1,
-        false,
-        false,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
         &second_payload,
     );
     let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
@@ -131,16 +133,16 @@ fn changed_address_cannot_splice_an_active_sequence() {
         DataInterfaceRole::Station,
         7,
         0,
-        true,
-        false,
+        MoreFragments::More,
+        RetrySubfield::Clear,
         &first_payload,
     );
     let mut changed = fragment(
         DataInterfaceRole::Station,
         7,
         1,
-        false,
-        false,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
         &last_payload,
     );
     changed[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 9]);
@@ -148,8 +150,8 @@ fn changed_address_cannot_splice_an_active_sequence() {
         DataInterfaceRole::Station,
         7,
         1,
-        false,
-        false,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
         &last_payload,
     );
     let mut state = OpenDataDefragmenter::<1, 16>::new(Duration::from_micros(100));
@@ -177,11 +179,46 @@ fn changed_address_cannot_splice_an_active_sequence() {
 #[test]
 fn retry_out_of_order_timeout_and_oldest_eviction_are_bounded() {
     let payload = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
-    let first = fragment(DataInterfaceRole::Station, 1, 0, true, false, &payload);
-    let retry = fragment(DataInterfaceRole::Station, 1, 0, true, true, &payload);
-    let third = fragment(DataInterfaceRole::Station, 1, 2, false, false, &[2]);
-    let other = fragment(DataInterfaceRole::Station, 2, 0, true, false, &payload);
-    let newest = fragment(DataInterfaceRole::Station, 3, 0, true, false, &payload);
+    let first = fragment(
+        DataInterfaceRole::Station,
+        1,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
+    let retry = fragment(
+        DataInterfaceRole::Station,
+        1,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Set,
+        &payload,
+    );
+    let third = fragment(
+        DataInterfaceRole::Station,
+        1,
+        2,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        &[2],
+    );
+    let other = fragment(
+        DataInterfaceRole::Station,
+        2,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
+    let newest = fragment(
+        DataInterfaceRole::Station,
+        3,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(10));
     state
         .ingest(
@@ -226,7 +263,14 @@ fn retry_out_of_order_timeout_and_oldest_eviction_are_bounded() {
             ..
         } if identity.sequence_number() == seq(1)
     ));
-    let expired = fragment(DataInterfaceRole::Station, 4, 0, true, false, &payload);
+    let expired = fragment(
+        DataInterfaceRole::Station,
+        4,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     assert!(matches!(
         state.ingest(
             parsed(DataInterfaceRole::Station, &expired, payload.len()),
@@ -240,14 +284,28 @@ fn retry_out_of_order_timeout_and_oldest_eviction_are_bounded() {
 #[test]
 fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
     let payload = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
-    let mut protected = fragment(DataInterfaceRole::Station, 1, 0, true, false, &payload);
+    let mut protected = fragment(
+        DataInterfaceRole::Station,
+        1,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     protected[1] |= 0x40;
     assert_eq!(
         parse_open_data_fragment(DataInterfaceRole::Station, &protected[..33]),
         Err(OpenDataFragmentError::Protected)
     );
 
-    let mut qos = fragment(DataInterfaceRole::Station, 1, 0, true, false, &payload);
+    let mut qos = fragment(
+        DataInterfaceRole::Station,
+        1,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     qos[0] = QOS_DATA as u8;
     qos[24] = QOS_AMSDU_PRESENT;
     assert_eq!(
@@ -255,7 +313,14 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
         Err(OpenDataFragmentError::AmsduUnsupported)
     );
 
-    let mut group = fragment(DataInterfaceRole::Station, 2, 0, true, false, &payload);
+    let mut group = fragment(
+        DataInterfaceRole::Station,
+        2,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     group[4..10].fill(0xff);
     assert_eq!(
         parse_open_data_fragment(DataInterfaceRole::Station, &group[..33]),
@@ -266,8 +331,14 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
         "ordinary group-address identity remains valid"
     );
 
-    let mut group_destination =
-        fragment(DataInterfaceRole::AccessPoint, 2, 0, true, false, &payload);
+    let mut group_destination = fragment(
+        DataInterfaceRole::AccessPoint,
+        2,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
     group_destination[16..22].fill(0xff);
     assert_eq!(
         parse_open_data_fragment(DataInterfaceRole::AccessPoint, &group_destination[..33]),
@@ -278,8 +349,22 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
         "ordinary To-DS group destination remains valid"
     );
 
-    let first = fragment(DataInterfaceRole::AccessPoint, 3, 0, true, false, &payload);
-    let second = fragment(DataInterfaceRole::AccessPoint, 3, 1, false, false, &[2, 3]);
+    let first = fragment(
+        DataInterfaceRole::AccessPoint,
+        3,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
+    let second = fragment(
+        DataInterfaceRole::AccessPoint,
+        3,
+        1,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        &[2, 3],
+    );
     let mut state = OpenDataDefragmenter::<1, 10>::new(Duration::from_micros(100));
     state
         .ingest(
@@ -316,11 +401,18 @@ fn fresh_ordinary_wrap_replaces_stale_fragment_completion_identity() {
         DataInterfaceRole::Station,
         7,
         0,
-        true,
-        false,
+        MoreFragments::More,
+        RetrySubfield::Clear,
         &first_payload,
     );
-    let final_fragment = fragment(DataInterfaceRole::Station, 7, 1, false, false, &[2]);
+    let final_fragment = fragment(
+        DataInterfaceRole::Station,
+        7,
+        1,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        &[2],
+    );
     let mut state = OpenDataDefragmenter::<1, 32>::new(Duration::from_micros(100));
     state
         .ingest(
@@ -343,16 +435,23 @@ fn fresh_ordinary_wrap_replaces_stale_fragment_completion_identity() {
     // third address owns the reused sequence; its retry is left to the
     // ordinary duplicate filter instead of colliding with stale fragment
     // identity here.
-    let mut ordinary = fragment(DataInterfaceRole::Station, 7, 0, false, false, &[9]);
+    let mut ordinary = fragment(
+        DataInterfaceRole::Station,
+        7,
+        0,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        &[9],
+    );
     ordinary[16..22].copy_from_slice(&[2, 0, 0, 0, 0, 9]);
     let ordinary_identity =
         parse_open_data_identity(DataInterfaceRole::Station, &ordinary[..25]).unwrap();
     assert_eq!(
-        state.admit_unfragmented(ordinary_identity, false, Some(at(3))),
+        state.admit_unfragmented(ordinary_identity, RetrySubfield::Clear, Some(at(3))),
         Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
     );
     assert_eq!(
-        state.admit_unfragmented(ordinary_identity, true, Some(at(4))),
+        state.admit_unfragmented(ordinary_identity, RetrySubfield::Set, Some(at(4))),
         Ok(OpenDataUnfragmentedAdmission::Admitted { expired: 0 })
     );
 }
@@ -360,8 +459,22 @@ fn fresh_ordinary_wrap_replaces_stale_fragment_completion_identity() {
 #[test]
 fn clock_wrap_expires_retained_bytes_before_sequence_reuse() {
     let payload = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
-    let first = fragment(DataInterfaceRole::Station, 9, 0, true, false, &payload);
-    let final_fragment = fragment(DataInterfaceRole::Station, 9, 1, false, false, &[2]);
+    let first = fragment(
+        DataInterfaceRole::Station,
+        9,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        &payload,
+    );
+    let final_fragment = fragment(
+        DataInterfaceRole::Station,
+        9,
+        1,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        &[2],
+    );
     let mut state = OpenDataDefragmenter::<1, 32>::new(Duration::from_micros(100));
     state
         .ingest(
@@ -393,7 +506,7 @@ fn ccmp_parsed<'a>(frame: &'a [u8; 64], payload: &'a [u8], pn: u64) -> OpenDataF
     .unwrap()
 }
 
-fn protected_fragment(number: u8, more: bool, retry: bool) -> [u8; 64] {
+fn protected_fragment(number: u8, more: MoreFragments, retry: RetrySubfield) -> [u8; 64] {
     let mut frame = fragment(DataInterfaceRole::Station, 0x123, number, more, retry, &[1]);
     frame[1] |= 0x40;
     frame
@@ -404,8 +517,8 @@ fn protected_fragment(number: u8, more: bool, retry: bool) -> [u8; 64] {
 // successor PN and installation key_color. No Linux code is incorporated.
 #[test]
 fn ccmp_fragments_require_the_immediately_following_packet_number() {
-    let first = protected_fragment(0, true, false);
-    let last = protected_fragment(1, false, false);
+    let first = protected_fragment(0, MoreFragments::More, RetrySubfield::Clear);
+    let last = protected_fragment(1, MoreFragments::Last, RetrySubfield::Clear);
     let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
     for (previous, observed, valid) in [
         (10, 10, false),
@@ -437,7 +550,7 @@ fn ccmp_fragments_require_the_immediately_following_packet_number() {
 
 #[test]
 fn ccmp_fragments_cannot_use_the_implicit_open_epoch() {
-    let first = protected_fragment(0, true, false);
+    let first = protected_fragment(0, MoreFragments::More, RetrySubfield::Clear);
     let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
     assert!(
         state
@@ -448,9 +561,9 @@ fn ccmp_fragments_cannot_use_the_implicit_open_epoch() {
 
 #[test]
 fn a_same_key_id_reinstallation_cannot_complete_or_retry_an_old_fragment_train() {
-    let first = protected_fragment(0, true, false);
-    let last = protected_fragment(1, false, false);
-    let retry = protected_fragment(0, true, true);
+    let first = protected_fragment(0, MoreFragments::More, RetrySubfield::Clear);
+    let last = protected_fragment(1, MoreFragments::Last, RetrySubfield::Clear);
+    let retry = protected_fragment(0, MoreFragments::More, RetrySubfield::Set);
     let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
     let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
     state
@@ -492,9 +605,9 @@ fn a_same_key_id_reinstallation_cannot_complete_or_retry_an_old_fragment_train()
 
 #[test]
 fn a_ccmp_fragment_retry_keeps_its_original_pn_and_bytes() {
-    let first = protected_fragment(0, true, false);
-    let retry = protected_fragment(0, true, true);
-    let last = protected_fragment(1, false, false);
+    let first = protected_fragment(0, MoreFragments::More, RetrySubfield::Clear);
+    let retry = protected_fragment(0, MoreFragments::More, RetrySubfield::Set);
+    let last = protected_fragment(1, MoreFragments::Last, RetrySubfield::Clear);
     let llc = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1];
     let epoch = FragmentAdmissionEpoch::CcmpKeyInstallation(7);
     let mut state = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));

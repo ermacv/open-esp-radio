@@ -10,6 +10,14 @@
     clippy::arithmetic_side_effects
 )]
 
+/// The Retry subfield of an MPDU's Frame Control (IEEE Std 802.11-2020,
+/// 9.2.4.1.4): set in a retransmission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetrySubfield {
+    Set,
+    Clear,
+}
+
 /// Per-traffic-class IEEE 802.11 receive history.
 ///
 /// A retransmission is a duplicate only when Retry is set and the complete
@@ -37,13 +45,23 @@ impl RxDuplicateFilter {
     /// fence a Retry that toggles More Fragments, while fragmented MPDUs keep
     /// their acceptance and retry history entirely inside the reassembler.
     #[inline(always)]
-    pub fn is_known_duplicate(&self, retry: bool, sequence_control: u16, tid: Option<u8>) -> bool {
+    pub fn is_known_duplicate(
+        &self,
+        retry: RetrySubfield,
+        sequence_control: u16,
+        tid: Option<u8>,
+    ) -> bool {
         let (bit, last) = space(&self.last_sequence_control, tid);
-        retry && self.valid & bit != 0 && *last == sequence_control
+        retry == RetrySubfield::Set && self.valid & bit != 0 && *last == sequence_control
     }
 
     #[inline(always)]
-    pub fn is_duplicate(&mut self, retry: bool, sequence_control: u16, tid: Option<u8>) -> bool {
+    pub fn is_duplicate(
+        &mut self,
+        retry: RetrySubfield,
+        sequence_control: u16,
+        tid: Option<u8>,
+    ) -> bool {
         if self.is_known_duplicate(retry, sequence_control, tid) {
             return true;
         }

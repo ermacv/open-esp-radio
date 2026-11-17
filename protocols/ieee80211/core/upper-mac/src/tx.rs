@@ -45,7 +45,7 @@ use oer_protocols_ieee80211_wire::{
 use crate::{
     ampdu::{
         AmpduAttemptResult, AmpduRetryDecision, AmpduRetryError, AmpduRetryPolicy, AmpduRetryState,
-        MAX_AMPDU_SUBFRAMES,
+        BlockAckAgreement, MAX_AMPDU_SUBFRAMES,
     },
     protection::{HeTxopRtsBudget, ProtectionPolicy},
     retry::{
@@ -88,9 +88,8 @@ pub struct AmpduRequest {
     pub first_sequence: SequenceNumber,
     subframes: u8,
     lengths: [u16; MAX_AMPDU_SUBFRAMES as usize],
-    /// Whether the Block Ack agreement is operational; while it is not,
-    /// missing subframes leave the aggregate.
-    pub block_ack_operational: bool,
+    /// Whether the Block Ack agreement is operational.
+    pub agreement: BlockAckAgreement,
 }
 
 impl AmpduRequest {
@@ -101,7 +100,7 @@ impl AmpduRequest {
         tid: u8,
         first_sequence: SequenceNumber,
         lengths: &[u16],
-        block_ack_operational: bool,
+        block_ack: BlockAckAgreement,
     ) -> Option<Self> {
         if lengths.is_empty() || lengths.len() > usize::from(MAX_AMPDU_SUBFRAMES) {
             return None;
@@ -115,7 +114,7 @@ impl AmpduRequest {
             first_sequence,
             subframes: lengths.len() as u8,
             lengths: owned,
-            block_ack_operational,
+            agreement: block_ack,
         })
     }
 
@@ -375,7 +374,7 @@ impl TxExchange {
 
     /// Mark whether the Block Ack agreement is operational; the next
     /// completion of the aggregate reads it.
-    pub fn set_block_ack_operational(&mut self, operational: bool) {
+    pub fn set_block_ack(&mut self, block_ack: BlockAckAgreement) {
         match &mut self.phase {
             Phase::Live(
                 Live::Aggregate(_, ampdu)
@@ -384,7 +383,7 @@ impl TxExchange {
                 | Live::Individual { ampdu, .. },
             )
             | Phase::Done(_, TxBody::Ampdu(ampdu)) => {
-                ampdu.block_ack_operational = operational;
+                ampdu.agreement = block_ack;
             }
             Phase::Live(Live::Mpdu(..)) | Phase::Done(_, TxBody::Mpdu(_)) => {}
         }
@@ -514,8 +513,8 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                 }
                 exchange.unanswered = matches!(result, AmpduAttemptResult::NoResponse);
                 let current = state.current_subframes();
-                let operational = self.block_ack_operational(exchange);
-                match state.observe(result, current, now, operational, &admitted) {
+                let block_ack = Self::block_ack(exchange);
+                match state.observe(result, current, now, block_ack, &admitted) {
                     Ok(decision) => {
                         match self.after_aggregate(exchange, state, ampdu, decision, now, &admitted)
                         {
@@ -541,9 +540,9 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                     _ => None,
                 };
                 exchange.unanswered = false;
-                let operational = self.block_ack_operational(exchange);
+                let block_ack = Self::block_ack(exchange);
                 let next = state
-                    .observe_block_ack_request(report, now, operational, &admitted)
+                    .observe_block_ack_request(report, now, block_ack, &admitted)
                     .map_err(TxPlanError::Ampdu)
                     .and_then(|decision| {
                         self.after_aggregate(exchange, state, ampdu, decision, now, &admitted)
@@ -616,7 +615,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
                         let status = Self::mpdu_status(exchange, &retry, outcome);
                         exchange.individual.record(status);
                         let rest = remaining & remaining.wrapping_sub(1);
-                        let next = if aged && ampdu.block_ack_operational {
+                        let next = if aged && ampdu.agreement == BlockAckAgreement::Operational {
                             Ok(Some(Self::individual_block_ack_request(
                                 aggregate, ampdu, rest, index,
                             )))
@@ -701,7 +700,7 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
             remaining &= remaining.wrapping_sub(1);
         }
         if let Some(index) = last_aged
-            && ampdu.block_ack_operational
+            && ampdu.agreement == BlockAckAgreement::Operational
         {
             return Ok(Some(Self::individual_block_ack_request(
                 *aggregate, ampdu, remaining, index,
@@ -793,10 +792,10 @@ impl<B: HeTxopRtsBudget> TxPlanner<B> {
         }
     }
 
-    fn block_ack_operational(&self, exchange: &TxExchange) -> bool {
+    fn block_ack(exchange: &TxExchange) -> BlockAckAgreement {
         match exchange.body() {
-            TxBody::Ampdu(ampdu) => ampdu.block_ack_operational,
-            TxBody::Mpdu(_) => false,
+            TxBody::Ampdu(ampdu) => ampdu.agreement,
+            TxBody::Mpdu(_) => BlockAckAgreement::NotOperational,
         }
     }
 

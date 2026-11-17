@@ -9,7 +9,8 @@
 use std::vec::Vec;
 
 use super::*;
-use crate::fragmentation::OpenDataReassemblyError;
+use crate::duplicate::RetrySubfield;
+use crate::fragmentation::{MoreFragments, OpenDataReassemblyError};
 use oer_protocols_ieee80211_wire::ccmp::{CCMP_HEADER_LEN, CcmpHeader};
 use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, IEEE80211_LEGACY_DATA_HEADER_LEN};
 use oer_protocols_ieee80211_wire::fragmentation::{
@@ -23,18 +24,19 @@ const SOURCE: [u8; 6] = [2, 0, 0, 0, 0, 3];
 
 /// One data MPDU of sequence 0x123 from the AP (`station`) or to it.
 fn mpdu(
-    station: bool,
+    role: DataInterfaceRole,
     number: u8,
-    more: bool,
-    retry: bool,
+    more: MoreFragments,
+    retry: RetrySubfield,
     pn: Option<u8>,
     body: &[u8],
 ) -> Vec<u8> {
+    let station = role == DataInterfaceRole::Station;
     let mut control: u16 = 0x0008 | if station { 0x0200 } else { 0x0100 };
-    if more {
+    if more == MoreFragments::More {
         control |= 0x0400;
     }
-    if retry {
+    if retry == RetrySubfield::Set {
         control |= 0x0800;
     }
     if pn.is_some() {
@@ -56,8 +58,8 @@ fn mpdu(
 }
 
 /// A train: the role octet, then each MPDU behind its length octet.
-fn train(station: bool, frames: &[Vec<u8>]) -> Vec<u8> {
-    let mut bytes = std::vec![u8::from(station)];
+fn train(role: DataInterfaceRole, frames: &[Vec<u8>]) -> Vec<u8> {
+    let mut bytes = std::vec![u8::from(role == DataInterfaceRole::Station)];
     for frame in frames {
         bytes.push(u8::try_from(frame.len()).unwrap());
         bytes.extend_from_slice(frame);
@@ -69,24 +71,87 @@ const LLC: [u8; 10] = [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 1, 2];
 
 fn seeds() -> Vec<Vec<u8>> {
     let mut seeds = Vec::new();
-    for station in [true, false] {
+    for station in [DataInterfaceRole::Station, DataInterfaceRole::AccessPoint] {
         seeds.push(train(
             station,
             &[
-                mpdu(station, 0, true, false, None, &LLC),
-                mpdu(station, 1, true, false, None, &[3, 4]),
-                mpdu(station, 1, true, true, None, &[3, 4]),
-                mpdu(station, 2, false, false, None, &[5]),
-                mpdu(station, 2, false, true, None, &[5]),
-                mpdu(station, 0, false, true, None, &LLC),
+                mpdu(
+                    station,
+                    0,
+                    MoreFragments::More,
+                    RetrySubfield::Clear,
+                    None,
+                    &LLC,
+                ),
+                mpdu(
+                    station,
+                    1,
+                    MoreFragments::More,
+                    RetrySubfield::Clear,
+                    None,
+                    &[3, 4],
+                ),
+                mpdu(
+                    station,
+                    1,
+                    MoreFragments::More,
+                    RetrySubfield::Set,
+                    None,
+                    &[3, 4],
+                ),
+                mpdu(
+                    station,
+                    2,
+                    MoreFragments::Last,
+                    RetrySubfield::Clear,
+                    None,
+                    &[5],
+                ),
+                mpdu(
+                    station,
+                    2,
+                    MoreFragments::Last,
+                    RetrySubfield::Set,
+                    None,
+                    &[5],
+                ),
+                mpdu(
+                    station,
+                    0,
+                    MoreFragments::Last,
+                    RetrySubfield::Set,
+                    None,
+                    &LLC,
+                ),
             ],
         ));
         seeds.push(train(
             station,
             &[
-                mpdu(station, 0, true, false, Some(1), &LLC),
-                mpdu(station, 1, false, false, Some(2), &[3, 4, 5]),
-                mpdu(station, 1, false, true, Some(2), &[3, 4, 5]),
+                mpdu(
+                    station,
+                    0,
+                    MoreFragments::More,
+                    RetrySubfield::Clear,
+                    Some(1),
+                    &LLC,
+                ),
+                mpdu(
+                    station,
+                    1,
+                    MoreFragments::Last,
+                    RetrySubfield::Clear,
+                    Some(2),
+                    &[3, 4, 5],
+                ),
+                mpdu(
+                    station,
+                    1,
+                    MoreFragments::Last,
+                    RetrySubfield::Set,
+                    Some(2),
+                    &[3, 4, 5],
+                ),
             ],
         ));
     }
@@ -151,7 +216,11 @@ fn drive(bytes: &[u8]) {
             let _ = owner.admit_unfragmented_in_epoch(
                 identity,
                 FragmentAdmissionEpoch::OpenAssociation(epoch),
-                length & 0x20 != 0,
+                if length & 0x20 != 0 {
+                    RetrySubfield::Set
+                } else {
+                    RetrySubfield::Clear
+                },
                 clock,
             );
         } else if length == 0xfe {
@@ -172,8 +241,22 @@ fn run(count: usize) {
 #[test]
 fn seeds_reassemble() {
     let mut owner = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
-    let first = mpdu(true, 0, true, false, None, &LLC);
-    let last = mpdu(true, 1, false, false, None, &[3, 4]);
+    let first = mpdu(
+        DataInterfaceRole::Station,
+        0,
+        MoreFragments::More,
+        RetrySubfield::Clear,
+        None,
+        &LLC,
+    );
+    let last = mpdu(
+        DataInterfaceRole::Station,
+        1,
+        MoreFragments::Last,
+        RetrySubfield::Clear,
+        None,
+        &[3, 4],
+    );
     let first = parse_open_data_fragment(DataInterfaceRole::Station, &first).unwrap();
     let last = parse_open_data_fragment(DataInterfaceRole::Station, &last).unwrap();
     owner.ingest(first, Instant::from_micros(1), read).unwrap();
@@ -193,7 +276,14 @@ fn a_sixteenth_fragment_with_more_fragments_is_refused() {
     let mut owner = OpenDataDefragmenter::<2, 32>::new(Duration::from_micros(100));
     for number in 0..16_u8 {
         let body = if number == 0 { &LLC[..] } else { &[number][..] };
-        let frame = mpdu(true, number, true, false, None, body);
+        let frame = mpdu(
+            DataInterfaceRole::Station,
+            number,
+            MoreFragments::More,
+            RetrySubfield::Clear,
+            None,
+            body,
+        );
         let fragment = parse_open_data_fragment(DataInterfaceRole::Station, &frame).unwrap();
         let outcome = owner.ingest(fragment, Instant::from_micros(1), read);
         if number == 15 {

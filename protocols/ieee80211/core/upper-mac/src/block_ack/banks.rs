@@ -11,8 +11,8 @@
 use oer_portable_events::{EventSink, report};
 
 use super::{
-    AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
-    RxReorderMpdu, RxReorderRelease,
+    AddbaResponse, AddbaStatus, AmsduInAmpdu, BankRoom, RxAddbaRequest, RxBlockAckNegotiation,
+    RxBlockAckSession, RxReorderMpdu, RxReorderRelease,
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
@@ -28,6 +28,13 @@ use oer_protocols_ieee80211_wire::{
     sequence::{SequenceControl, SequenceNumber},
     status::reason_code,
 };
+
+/// Whether the station admits receive agreements now.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxAgreements {
+    Admitted,
+    Declined,
+}
 
 /// What the receive agreements decided, reported to the sink the caller lends
 /// a call. The owner keeps no count of these.
@@ -477,7 +484,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     }
 
     /// Take one Block Ack Action the station validated for `association`
-    /// with `bssid`; `supported` is whether the station admits agreements.
+    /// with `bssid`; `agreements` is whether the station admits them.
     /// A new association first ends every agreement of the previous one.
     #[inline(never)]
     #[allow(
@@ -490,7 +497,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         association: E,
         bssid: Bssid,
         action: BlockAckAction,
-        supported: bool,
+        agreements: RxAgreements,
         port: &mut P,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<(), RxBlockAckRefused> {
@@ -516,7 +523,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let Some(parsed) = RxAddbaRequest::from_action(action) else {
             return Ok(());
         };
-        let answered = self.request(now, bssid, parsed, supported, port, events);
+        let answered = self.request(now, bssid, parsed, agreements, port, events);
         report(events, || RxBlockAckEvent::Requested {
             tid: parsed.tid(),
             requested: parsed.window(),
@@ -534,7 +541,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         now: Instant,
         bssid: Bssid,
         parsed: RxAddbaRequest,
-        supported: bool,
+        agreements: RxAgreements,
         port: &mut P,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
@@ -576,9 +583,16 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let negotiation = match RxBlockAckNegotiation::request(
             parsed,
             P::Caps::CAPS.rx_block_ack_max_tid,
-            P::Caps::CAPS.rx_amsdu_in_ampdu,
+            if P::Caps::CAPS.rx_amsdu_in_ampdu {
+                AmsduInAmpdu::Delivered
+            } else {
+                AmsduInAmpdu::NotDelivered
+            },
             capacity,
-            available.is_some() && supported,
+            match (available, agreements) {
+                (Some(_), RxAgreements::Admitted) => BankRoom::Free,
+                _ => BankRoom::Exhausted,
+            },
             now,
         ) {
             Ok(negotiation) => negotiation,
