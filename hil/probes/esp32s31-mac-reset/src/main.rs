@@ -16,6 +16,12 @@
 //! it, the key table across it, and how long an ordinary stop takes, over
 //! the radio domain the probe holds itself (`tasks/084`). See the README.
 
+#[cfg(any(test, feature = "amsdu"))]
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "the receiver's half is esp32s31-rx-chain's")
+)]
+mod case_c;
 #[cfg(target_arch = "riscv32")]
 mod diagnostic;
 #[cfg(target_arch = "riscv32")]
