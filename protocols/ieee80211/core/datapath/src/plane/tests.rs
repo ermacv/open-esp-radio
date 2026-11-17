@@ -79,7 +79,7 @@ impl SoftwareCcmpKey for TestKey {}
 /// headroom, its payload the body.
 fn msdu(tag: u8, priority: WmmUserPriority) -> OutboundMsdu<ModelMemory> {
     let mut front = [0; HEADROOM];
-    let ethernet = &mut front[HEADROOM - ETHERNET_HEADER_LEN..];
+    let ethernet = &mut front[crate::MSDU_ETHERNET_OFFSET..];
     ethernet[..6].copy_from_slice(&DESTINATION);
     ethernet[6..12].copy_from_slice(&STATION);
     ethernet[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
@@ -337,6 +337,7 @@ cases! {
     handover_and_stop_keep_the_sequence_numbers => round_trip,
     the_stations_own_frames_share_the_sequence_spaces => shared_spaces,
     numbers_of_the_other_qos_kind_are_refused => numbering,
+    a_key_whose_numbers_are_spent_refuses_the_msdu_and_writes_nothing => spent_key,
     withdrawing_unpublished_frames_keeps_the_link_and_the_arena_on_the_air => withdraw_unpublished,
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
@@ -911,6 +912,36 @@ fn shared_spaces(model: Installed<'_>) {
     assert_eq!(sequence(&frames[0]), 2);
 }
 
+/// A key whose packet numbers are spent.
+struct Spent;
+
+impl TxKey for Spent {
+    fn draw(&self) -> Result<CcmpPacketNumber, crate::numbers::PacketNumbersSpent> {
+        Err(crate::numbers::PacketNumbersSpent)
+    }
+}
+
+fn spent_key(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Ccmp));
+    let now = world.now();
+    let Intake::Refused { reason, memory } = world.plane.intake(
+        &mut world.port,
+        &ModelLink { protected: true },
+        msdu(7, BE),
+        &mut TxNumbers::new(
+            SequenceCounter::new(SequenceNumber::ZERO),
+            Some(world.sequences),
+        ),
+        Some(&Spent),
+        now,
+    ) else {
+        panic!("a key whose numbers are spent refuses the MSDU");
+    };
+    assert_eq!(reason, IntakeRefusal::PacketNumberExhausted);
+    assert_eq!(memory.id, 7, "its memory comes back");
+    assert_eq!(world.port.front(7), None, "nothing was written");
+}
+
 fn numbering(model: Installed<'_>) {
     let mut world = World::new(model, link(LinkProtection::Open));
     let mut numbers = TxNumbers::new(SequenceCounter::new(SequenceNumber::from_low_bits(0)), None);
@@ -936,7 +967,7 @@ fn withdraw_unpublished(model: Installed<'_>) {
     world.taken(1, BE);
     world.publish();
     world.taken(2, BE);
-    assert!(world.plane.on_air() && world.plane.holds_frames());
+    assert!(world.plane.on_air() && world.plane.oldest_held(BE).is_some());
     let returned = &mut world.returned;
     world
         .plane
@@ -946,7 +977,7 @@ fn withdraw_unpublished(model: Installed<'_>) {
     assert!(world.plane.is_connected() && world.plane.on_air());
     world.block_ack(FrameSet::prefix(2));
     assert_eq!(world.settle().delivered, 2);
-    assert!(!world.plane.on_air() && !world.plane.holds_frames());
+    assert!(!world.plane.on_air() && world.plane.oldest_held(BE).is_none());
     world.taken(3, BE);
     let (_, frames) = world.publish();
     assert_eq!(sequence(&frames[0]), 3);
@@ -1196,4 +1227,83 @@ fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
             assert!(protection.iter().all(|stage| *stage == Protection::None));
         }
     }
+}
+
+/// The front the plane writes is the MAC header, the CCMP header of a
+/// protected link and the LLC/SNAP header (IEEE Std 802.11-2020, 9.3.2.1:
+/// 24 octets, 26 with QoS Control; 12.5.3.2: 8 of CCMP; IETF RFC 1042: 8).
+#[test]
+fn a_front_is_its_mac_header_its_ccmp_header_and_its_llc_snap_header() {
+    let front = |qos, protection| {
+        let header = StaDataHeaderTemplate::new(
+            OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
+            Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap(),
+            qos,
+            protection,
+        )
+        .unwrap();
+        front_of(&header).get()
+    };
+    assert_eq!(front(PeerQos::NonQos, LinkProtection::Open), 32);
+    assert_eq!(front(PeerQos::Qos, LinkProtection::Open), 34);
+    assert_eq!(front(PeerQos::NonQos, LinkProtection::Ccmp), 40);
+    assert_eq!(front(PeerQos::Qos, LinkProtection::Ccmp), 42);
+}
+
+/// An A-MPDU subframe is its delimiter and its MPDU padded to four octets
+/// (IEEE Std 802.11-2020, 9.7.1).
+#[test]
+fn an_a_mpdu_subframe_is_its_mpdu_padded_to_four_and_its_delimiter() {
+    assert_eq!(subframe(100), 104);
+    assert_eq!(subframe(101), 108);
+    assert_eq!(subframe(103), 108);
+    assert_eq!(subframe(104), 108);
+}
+
+/// The originator sends within its window's head and size, and a number a
+/// half space or more ahead lies behind the head (IEEE Std 802.11-2020,
+/// 10.25.6, 10.24.7).
+#[test]
+fn a_window_admits_its_size_and_reads_a_half_space_ahead_as_behind() {
+    let number = |value| SequenceNumber::new(value).unwrap();
+    let window = TxWindow {
+        head: number(4090),
+        size: 8,
+    };
+    assert!(!window.ahead(number(4090)));
+    assert!(!window.ahead(number(1)), "the window wraps: 4090 + 7");
+    assert!(window.ahead(number(2)), "the first beyond the window");
+    let horizon = 4090_u16.wrapping_add(SequenceNumber::HALF_SPACE) % 4096;
+    assert!(window.ahead(number(horizon - 1)));
+    assert!(
+        !window.ahead(number(horizon)),
+        "a half space ahead is behind"
+    );
+}
+
+/// A TID's counter goes back only over a run of never-transmitted numbers
+/// that ends at its last draw.
+#[test]
+fn withdrawn_numbers_rewind_the_counter_only_when_they_are_its_last_draws() {
+    let number = |value| SequenceNumber::new(value).unwrap();
+    let run = Withdrawn::widen(Some(Withdrawn::widen(None, number(3))), number(4));
+    let withdrawn = Withdrawn {
+        unsent: Some(run),
+        transmitted: false,
+    };
+    assert_eq!(withdrawn.rewind_to(number(5)), Some(number(3)));
+    assert_eq!(withdrawn.rewind_to(number(6)), None, "5 was drawn after");
+    let holed = Withdrawn {
+        unsent: Some(Withdrawn::widen(
+            Some(Withdrawn::widen(None, number(3))),
+            number(5),
+        )),
+        transmitted: false,
+    };
+    assert_eq!(holed.rewind_to(number(6)), None, "4 was transmitted");
+    let none = Withdrawn {
+        unsent: None,
+        transmitted: true,
+    };
+    assert_eq!(none.rewind_to(number(6)), None);
 }

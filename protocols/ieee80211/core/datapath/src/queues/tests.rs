@@ -50,7 +50,7 @@ fn each_queue_keeps_its_order_and_its_own_msdus() {
         "back at its head"
     );
     assert_eq!(queues.pop(q(VO)).map(|m| m.memory), Some(4));
-    assert!(queues.is_empty());
+    assert_eq!(queues.count(), 0);
 }
 
 /// A TID blocked by its window holds only its own queue: the other TID of
@@ -64,7 +64,7 @@ fn a_tid_blocked_by_its_window_does_not_hold_another_tid_of_its_category() {
     assert_eq!(queues.select(None), Some(q(BE3)));
     queues.block(q(BE3));
     assert_eq!(queues.select(None), None, "both wait for their windows");
-    assert!(!queues.has_ready());
+    assert_eq!(queues.select(None), None);
     queues.unblock();
     assert!(queues.select(None).is_some());
 }
@@ -188,7 +188,7 @@ fn a_full_pool_refuses_and_a_drain_returns_every_msdu_once() {
     queues.drain(|msdu| back.push(msdu.memory));
     back.sort_unstable();
     assert_eq!(back, [0, 1, 2, 3]);
-    assert!(queues.is_empty() && queues.has_room());
+    assert!(queues.count() == 0 && queues.has_room());
     assert_eq!(
         queues.push(of(1, BE), msdu(7, BE)).err().map(|m| m.memory),
         Some(7),
@@ -292,4 +292,102 @@ fn a_peer_s_drain_returns_its_msdus_and_only_its_own() {
     queues.drain(|msdu| rest.push(msdu.memory));
     rest.sort_unstable();
     assert_eq!(rest, [3, 4], "each MSDU once");
+}
+
+/// Each attempt is charged to its queue and to its peer; an attempt of
+/// unknown cost is charged the dearest known one.
+#[test]
+fn an_attempt_is_charged_to_its_queue_and_its_peer_and_an_unknown_one_the_dearest() {
+    let mut queues = Access::new();
+    queues.charge(of(1, BE), estimated(100));
+    queues.charge(of(1, BE), estimated(40));
+    assert_eq!(queues.air(of(1, BE)), 140);
+    queues.charge(of(1, VO), TxEstimate::Unknown);
+    assert_eq!(queues.air(of(1, VO)), 100, "the dearest known");
+    assert_eq!(queues.peer_served, [0, 240, 0]);
+    let mut fresh = Access::new();
+    fresh.charge(of(0, BE), TxEstimate::Unknown);
+    assert_eq!(fresh.air(of(0, BE)), 1, "never nothing");
+}
+
+/// Accounts halve together once one passes half their range, so their
+/// order holds and none saturates; below it nothing halves.
+#[test]
+fn the_accounts_of_a_kind_halve_together_once_one_passes_half_their_range() {
+    let half = u32::MAX / 2;
+    let mut queues = Access::new();
+    queues.charge(of(0, BE3), estimated(6));
+    queues.charge(of(2, BE), estimated(10));
+    queues.charge(of(0, BE), estimated(half - 6));
+    assert_eq!(queues.air(of(0, BE)), half - 6);
+    assert_eq!(queues.peer_served, [half, 0, 10], "at half: nothing halves");
+    queues.charge(of(0, BE), estimated(2));
+    assert_eq!(
+        queues.peer_served,
+        [(half + 2) >> 1, 0, 5],
+        "the peers halve"
+    );
+    assert_eq!(queues.air(of(0, BE)), half - 4, "no queue passed half");
+    assert_eq!(queues.air(of(0, BE3)), 6);
+    queues.charge(of(0, BE), estimated(4));
+    assert_eq!(queues.air(of(0, BE)), half, "at half: nothing halves");
+    queues.charge(of(0, BE), estimated(1));
+    assert_eq!(queues.air(of(0, BE)), (half + 1) >> 1, "the queues halve");
+    assert_eq!(queues.air(of(0, BE3)), 3, "the peer's other queue with it");
+    assert_eq!(
+        queues.air(of(2, BE)),
+        10,
+        "another peer's queues keep theirs"
+    );
+    assert_eq!(queues.peer_served[0], ((half + 2) >> 1) + 5);
+}
+
+/// A queue that starts to hold MSDUs starts level with the least served
+/// queue of its peer and category that holds MSDUs, never below its own;
+/// a queue that holds none does not count.
+#[test]
+fn a_queue_that_starts_to_hold_msdus_starts_level_with_the_least_served_busy_one() {
+    let mut queues = Station::new();
+    assert!(queues.push(q(BE), msdu(1, BE)).is_ok());
+    queues.charge(q(BE), estimated(100));
+    assert!(queues.push(q(VO), msdu(2, VO)).is_ok());
+    assert_eq!(queues.air(q(VO)), 0, "another category does not count");
+    assert!(queues.push(q(BE3), msdu(3, BE3)).is_ok());
+    assert_eq!(queues.air(q(BE3)), 100, "level with UP0");
+    assert_eq!(queues.pop(q(BE3)).map(|m| m.memory), Some(3));
+    assert_eq!(queues.pop(q(BE)).map(|m| m.memory), Some(1));
+    queues.charge(q(BE), estimated(100));
+    assert!(queues.push(q(BE3), msdu(4, BE3)).is_ok());
+    assert_eq!(queues.air(q(BE3)), 100, "UP0 holds none: UP3 keeps its own");
+}
+
+/// A peer that starts to hold MSDUs starts level with the least served
+/// peer that holds MSDUs; one that already held MSDUs, or a peer that holds
+/// none, changes nothing.
+#[test]
+fn a_peer_that_starts_to_hold_msdus_starts_level_with_the_least_served_busy_peer() {
+    let mut queues = Access::new();
+    assert!(queues.push(of(0, BE), msdu(1, BE)).is_ok());
+    queues.charge(of(0, BE), estimated(100));
+    queues.charge(of(1, BE), estimated(50));
+    assert!(queues.push(of(2, VO), msdu(2, VO)).is_ok());
+    assert_eq!(queues.peer_served, [100, 50, 100], "peer 1 holds none");
+    queues.charge(of(0, BE), estimated(100));
+    assert!(queues.push(of(2, BE), msdu(3, BE)).is_ok());
+    assert_eq!(queues.peer_served[2], 100, "peer 2 held MSDUs already");
+}
+
+/// Within a category, the least served peer goes first, then its least
+/// served queue.
+#[test]
+fn the_least_served_peer_goes_first_and_then_its_least_served_queue() {
+    let mut queues = Access::new();
+    for (tag, peer, tid) in [(1, 0, BE), (2, 1, BE), (3, 1, BE3)] {
+        assert!(queues.push(of(peer, tid), msdu(tag, tid)).is_ok());
+    }
+    queues.charge(of(0, BE), estimated(100));
+    queues.charge(of(1, BE), estimated(30));
+    assert_eq!(queues.select(None), Some(of(1, BE3)));
+    queues.charge(of(1, BE3), estimated(100));
+    assert_eq!(queues.select(None), Some(of(0, BE)), "peer 1 took 130");
 }

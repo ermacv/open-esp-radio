@@ -908,16 +908,6 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         Some(bound.saturating_sub(count))
     }
 
-    /// The frames the arenas hold: published, retained or taken.
-    pub const fn frames(&self) -> u8 {
-        self.first.count().saturating_add(self.second.count())
-    }
-
-    /// Whether an arena holds a frame: published, retained or taken.
-    pub const fn holds_frames(&self) -> bool {
-        self.first.pending != 0 || self.second.pending != 0
-    }
-
     /// Return every frame the arena of `side` holds while it is not on the
     /// air; its right goes back to idle.
     fn withdraw<P: DataPort<'id, Caps = K>>(
@@ -1004,11 +994,6 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             .or_else(|| sides.into_iter().find(|side| self.book(*side).takes()))
     }
 
-    /// Whether an arena takes frames now.
-    pub fn takes(&self) -> bool {
-        self.standby().is_some()
-    }
-
     /// The TID whose frames the standby holds: only its next frames join
     /// them. `None` while the standby holds none, or no arena takes frames.
     pub fn standby_tid(&self) -> Option<WmmUserPriority> {
@@ -1058,12 +1043,8 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         if (header.peer_qos() == PeerQos::Qos) != numbers.qos() {
             return refused(msdu, IntakeRefusal::Numbering);
         }
-        match (protection, key.map(TxKey::packet_numbers)) {
-            (DataProtection::Ccmp(()), None) => return refused(msdu, IntakeRefusal::NoKey),
-            (DataProtection::Ccmp(()), Some(key)) if !key.available() => {
-                return refused(msdu, IntakeRefusal::PacketNumberExhausted);
-            }
-            (DataProtection::Ccmp(()), Some(_)) | (DataProtection::Open, _) => {}
+        if let (DataProtection::Ccmp(()), None) = (protection, key) {
+            return refused(msdu, IntakeRefusal::NoKey);
         }
         let Some(payload) = msdu.length.checked_sub(ETHERNET_HEADER_LEN) else {
             return refused(msdu, IntakeRefusal::ShortFrame);
@@ -1149,9 +1130,9 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             return Intake::Wait(msdu, Waits::Arena);
         };
         let counter = numbers.counter(tid);
-        let ccmp = match (protection, key.map(TxKey::packet_numbers)) {
+        let ccmp = match (protection, key) {
             (DataProtection::Open, _) => None,
-            (DataProtection::Ccmp(()), Some(key)) => match key.allocate() {
+            (DataProtection::Ccmp(()), Some(key)) => match key.draw() {
                 Ok(packet_number) => {
                     Some(CcmpHeader::new(packet_number, CcmpKeyId::PAIRWISE).encode())
                 }
