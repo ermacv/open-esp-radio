@@ -32,11 +32,18 @@ use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
+#[cfg(feature = "laps")]
+#[path = "laps.rs"]
+mod laps;
 #[path = "traffic.rs"]
 mod traffic;
 
 const COUNT: usize = 32;
+#[cfg(not(feature = "ring256"))]
 const BUFFER: usize = 128;
+/// Case D's second geometry (`tasks/156`).
+#[cfg(feature = "ring256")]
+const BUFFER: usize = 256;
 const NODES: usize = COUNT + 1;
 const CHANNEL: u8 = 13;
 // The active 200–209 profile keeps full patterns in these three buffers.
@@ -55,6 +62,9 @@ static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
     access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
     _clocks: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    /// The station's address: case D counts the units addressed to it.
+    #[cfg_attr(not(feature = "laps"), expect(dead_code, reason = "case D's alone"))]
+    station: [u8; 6],
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
 static DIRECT_READY: oer_portable_memory::ClaimCell<
@@ -412,6 +422,7 @@ fn direct_future(
         Ok(DirectOutput {
             access,
             _clocks: clocks,
+            station,
         })
     }
 }
@@ -616,7 +627,22 @@ async fn run_direct(
         b"TRAFFIC begin v=1 selections=200-209 channel=13 cap_ms=700 mask_ms=350 take_recycle=1\n",
     )
     .await;
+    #[cfg(not(feature = "laps"))]
     let observation = traffic::collect(trace, storage, &mut ring, access, &mut mac_irq);
+    // Case D: the station's scan policy, so that a frame to its address is
+    // taken and acknowledged whatever its BSSID, as the mac-reset probe and
+    // the backend's `StaScanRxPolicyHardware` apply it.
+    #[cfg(feature = "laps")]
+    let observation = {
+        let broadcast = [0xff; 6];
+        access
+            .wifi_mac_hal()
+            .configure_station_receive_policy(broadcast);
+        access
+            .wifi_mac_hal()
+            .configure_station_scan_policy(broadcast);
+        laps::run(console, storage, &mut ring, access, output.station).await
+    };
     access.wifi_mac_hal().request_channel_stop();
     let deadline = EmbassyClock
         .now()
