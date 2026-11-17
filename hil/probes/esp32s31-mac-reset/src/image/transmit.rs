@@ -40,6 +40,8 @@ const SLOTS: usize = 2 * ABANDONED + 2;
 const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The frames sent before the stops, each awaited.
 const BASELINE: usize = 20;
+/// Their lengths, in turn: an authentication frame's, then longer.
+const BASELINE_LENGTHS: [usize; 4] = [30, 100, 512, FRAME];
 /// The stops with a frame on the air.
 pub(super) const STOPS: usize = 1_000;
 /// How long a frame's completion is awaited.
@@ -156,7 +158,7 @@ const fn guard_word(slot: usize, word: usize) -> u32 {
 
 /// The legacy program of one frame: the backend's direct-MPDU profile
 /// (`LegacyTxConfig::management`) at 6 Mb/s, answered by an ACK.
-fn parameters() -> MacLegacyTxParameters {
+fn parameters(length: usize) -> MacLegacyTxParameters {
     MacLegacyTxParameters {
         control: MacTxControlFrame {
             protection: MacTxProtection::None,
@@ -166,7 +168,7 @@ fn parameters() -> MacLegacyTxParameters {
         },
         rate: MacLegacyRate::Ofdm6M,
         // The PSDU: the MPDU and the FCS the hardware appends.
-        signal: (FRAME + 4) as u16,
+        signal: (length + 4) as u16,
         data_power: 8,
         timeout: 0x03ff,
         scheduler_priority: 1,
@@ -237,9 +239,9 @@ impl Frames {
     }
 
     /// Slot `slot`'s frame of chain `chain`, as the radio holds it.
-    fn lease(&self, slot: u8, chain: u32) -> Result<Lease, Failure> {
+    fn lease(&self, slot: u8, chain: u32, length: usize) -> Result<Lease, Failure> {
         let header = self.header;
-        let length = FrameLen::new(FRAME).map_err(|_| (tx_phase::FRAME, 0))?;
+        let length = FrameLen::new(length).map_err(|_| (tx_phase::FRAME, 0))?;
         let network = self
             .pool
             .claim_network(slot)
@@ -260,16 +262,17 @@ fn start(
     access: &mut RadioAccess,
     descriptor: &mut Descriptor,
     lease: Lease,
+    length: usize,
 ) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
     };
-    free.reserve(FRAME as u32, FRAME as u32)
+    free.reserve(FRAME as u32, length as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
     let program =
-        MacLegacyTxProgram::new(&publication, parameters()).ok_or((tx_phase::START, 5))?;
+        MacLegacyTxProgram::new(&publication, parameters(length)).ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
         .map_err(|_| (tx_phase::START, 6))?;
@@ -376,10 +379,11 @@ async fn send(
     frames: &Frames,
     ordinary: &mut Descriptor,
     chain: u32,
+    length: usize,
 ) -> Result<(Ended, u32), Failure> {
-    let lease = frames.lease(ORDINARY_SLOT, chain)?;
+    let lease = frames.lease(ORDINARY_SLOT, chain, length)?;
     let begin = oer_portable_riscv::cycle32();
-    start(access, ordinary, lease)?;
+    start(access, ordinary, lease, length)?;
     let ended = await_completion(access, ordinary, 0).await?;
     Ok((ended, oer_portable_riscv::cycle32().wrapping_sub(begin)))
 }
@@ -545,10 +549,33 @@ pub(super) async fn series(
 
     // The single frame: sent and acknowledged, before anything is stopped.
     mark(71);
+    // Of four lengths in turn, the MAC's transmit counters beside each.
     for index in 0..BASELINE {
         let index32 = index as u32;
-        let (ended, cycles) = send(&mut access, &frames, &mut ordinary, index32).await?;
-        journal.record(Kind::Tx, &[index32, ended.status, ended.detail, cycles]);
+        let length = BASELINE_LENGTHS
+            .get(index % BASELINE_LENGTHS.len())
+            .copied()
+            .unwrap_or(FRAME);
+        let counted = access.wifi_mac_hal().transmit_statistics_snapshot();
+        let (ended, cycles) = send(&mut access, &frames, &mut ordinary, index32, length).await?;
+        let counted = access
+            .wifi_mac_hal()
+            .transmit_statistics_snapshot()
+            .wrapping_delta_since(counted);
+        journal.record(
+            Kind::Tx,
+            &[
+                index32,
+                ended.status,
+                ended.detail,
+                cycles,
+                length as u32,
+                counted.tx_rts,
+                counted.tx_cts,
+                counted.track,
+                counted.trcts,
+            ],
+        );
     }
 
     // A3: an ordinary stop with a frame on the air.
@@ -559,8 +586,8 @@ pub(super) async fn series(
         let units = receive(storage, &mut ring, &mut access, 1 + spread.next(3))
             .await
             .map_err(|code| (phase::RECEIVE, code))?;
-        let lease = frames.lease(ORDINARY_SLOT, index32)?;
-        start(&mut access, &mut ordinary, lease)?;
+        let lease = frames.lease(ORDINARY_SLOT, index32, FRAME)?;
+        start(&mut access, &mut ordinary, lease, FRAME)?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let queue = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
@@ -618,12 +645,12 @@ pub(super) async fn series(
         let mut descriptor: Descriptor =
             TxDmaStorage::pin::<ChipDma, Lease>(place.take().ok_or((tx_phase::PULSE, chain32))?)
                 .map_err(|_| (tx_phase::PULSE, chain32 | 0x100))?;
-        let lease = frames.lease(Frames::frame_slot(chain), chain32)?;
+        let lease = frames.lease(Frames::frame_slot(chain), chain32, FRAME)?;
         let region = lease
             .dma_region()
             .map_err(|_| (tx_phase::PULSE, chain32 | 0x200))?;
         let descriptor_address = descriptor.binding().descriptor_address();
-        start(&mut access, &mut descriptor, lease)?;
+        start(&mut access, &mut descriptor, lease, FRAME)?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let before = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
@@ -690,8 +717,14 @@ pub(super) async fn series(
         let (descriptor_changed, buffer_changed) = abandoned.changed(&frames.header, chain32);
         let guards_changed = frames.changed_guard_words(chain..chain + 2);
         // The second run transmits.
-        let (second, second_cycles) =
-            send(&mut access, &frames, &mut ordinary, 0x8000_0000 | chain32).await?;
+        let (second, second_cycles) = send(
+            &mut access,
+            &frames,
+            &mut ordinary,
+            0x8000_0000 | chain32,
+            FRAME,
+        )
+        .await?;
         journal.record(
             Kind::TxPulse,
             &[
