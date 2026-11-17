@@ -80,6 +80,12 @@ struct Counts {
     foreign_prefix: u32,
     unknown_length: u32,
     reserved_tail: u32,
+    /// The injector's units by the padding after the frame up to a word.
+    padding: [u32; 4],
+    /// Units not the injector's whose last step holds the injector's body:
+    /// their head index, span, and the first bytes of their Address 1.
+    foreign: [[u32; 4]; 8],
+    foreign_used: usize,
     per_length: [PerLength; 7],
     shown: [[u32; 5]; SHOWN],
     shown_used: usize,
@@ -266,7 +272,11 @@ pub(super) async fn run(
         usb::text(console, line.as_bytes()).await;
     }
     line.clear();
-    let _ = writeln!(line, "LAPS spans {:?}", counts.spans);
+    let _ = writeln!(
+        line,
+        "LAPS spans {:?} padding {:?}",
+        counts.spans, counts.padding
+    );
     usb::text(console, line.as_bytes()).await;
     line.clear();
     let _ = writeln!(
@@ -297,6 +307,15 @@ pub(super) async fn run(
         after.data_success.wrapping_sub(before.data_success),
     );
     usb::text(console, line.as_bytes()).await;
+    for foreign in counts.foreign.iter().take(counts.foreign_used) {
+        line.clear();
+        let _ = writeln!(
+            line,
+            "LAPS foreign spans={} control_duration={:#010x} address1={:#010x} address2={:#010x}",
+            foreign[0], foreign[1], foreign[2], foreign[3]
+        );
+        usb::text(console, line.as_bytes()).await;
+    }
     for shown in counts.shown.iter().take(counts.shown_used) {
         line.clear();
         let _ = writeln!(
@@ -327,6 +346,13 @@ fn check(
     if !ours {
         if joined.steps.len() > 1 && holds_injector_body(joined.last()) {
             counts.foreign_prefix = counts.foreign_prefix.saturating_add(1);
+            if let Some(slot) = counts.foreign.get_mut(counts.foreign_used) {
+                let head = joined.array::<4>(HEADER).map_or(0, u32::from_be_bytes);
+                let address = joined.array::<4>(HEADER + 4).map_or(0, u32::from_be_bytes);
+                let sender = joined.array::<4>(HEADER + 10).map_or(0, u32::from_be_bytes);
+                *slot = [joined.steps.len() as u32, head, address, sender];
+                counts.foreign_used += 1;
+            }
         }
         return None;
     }
@@ -336,15 +362,28 @@ fn check(
         return None;
     }
     counts.peer_units = counts.peer_units.saturating_add(1);
-    let mpdu = joined.len().saturating_sub(HEADER);
-    // The tail's signal length is the PSDU's: the MPDU and its FCS.
+    // The unit's bytes past the header, by its descriptors' lengths.
+    let held = joined.len().saturating_sub(HEADER);
+    // The frame's own length: the tail's signal length is the PSDU's, the
+    // MPDU and its FCS. The descriptors' lengths round the unit up to a
+    // word (run d2): the bytes between are padding, never compared.
     let tail = joined.array::<{ WifiRxControlTail::SIZE }>(WifiRxControlPrefix::SIZE);
     let prefix = joined.array::<{ WifiRxControlPrefix::SIZE }>(0);
     let signal =
         tail.map(|tail| usize::from(WifiRxControlTail::new(&tail).signal_length().length()));
     let rate = prefix.map(|prefix| WifiRxControlPrefix::new(&prefix).rate().rate());
-    if signal != Some(mpdu + 4) {
+    let Some(mpdu) = signal.and_then(|signal| signal.checked_sub(4)) else {
         counts.length_disagrees = counts.length_disagrees.saturating_add(1);
+        return None;
+    };
+    // The unit holds the frame and at most a word's padding after it.
+    match held.checked_sub(mpdu) {
+        Some(padding @ 0..4) if (HEADER + mpdu).next_multiple_of(4) == HEADER + held => {
+            if let Some(slot) = counts.padding.get_mut(padding) {
+                *slot = slot.saturating_add(1);
+            }
+        }
+        _ => counts.length_disagrees = counts.length_disagrees.saturating_add(1),
     }
     // The injector's 6 Mb/s (`MODE … 6m`): the PLCP rate code 0xb.
     if rate != Some(0xb) {
