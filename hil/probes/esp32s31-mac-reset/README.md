@@ -1,10 +1,8 @@
 # The Wi-Fi MAC's block reset mid-run, and how long a stop takes
 
 `oer-hil-probes-esp32s31-mac-reset` answers four questions of the stop's
-last resort (`tasks/084` of the notes) on a board under receive load. The
-first part, written now, is receive; the transmit part (a frame queued, a
-stop with a frame and with an aggregate on the air, a second run with an
-acknowledged frame) follows in the same image.
+last resort (`tasks/084` of the notes) on a board under receive load. It
+answers them for receive; it has no transmit case.
 
 1. **A pulse mid-run.** With the receive walker live on a busy channel,
    `RST_WIFIMAC` is asserted and released (`WifiClocked::reset_mac`). After

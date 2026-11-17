@@ -690,7 +690,13 @@ async fn session(
     let timer = CooperativeTimer::new(EmbassyClock);
     let mut platform = ();
     // prepare: the PHY's registration.
-    apart!(register(&mut slot, &timer, &mut platform, &clocks, identity))?;
+    apart!(register(
+        &mut slot,
+        &timer,
+        &mut platform,
+        &clocks,
+        identity
+    ))?;
     // enter: coexistence, common power, the modem clocks, the PHY's client.
     let radio = held(&mut slot)?;
     let (coexisting, _participants) = radio.enter_coex(coex);
@@ -718,11 +724,21 @@ async fn session(
     if acquired == ConcurrentAcquire::TrackingDue {
         apart!(maintain(&mut slot, &timer, &mut platform, &mut pilot))?;
     }
-    set_wifi_rx(held(&mut slot)?, membership.as_ref().ok_or((phase::RX_ENABLE, 1))?, true)
-        .map_err(|_| (phase::RX_ENABLE, 0))?;
-    let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
-        .map_err(|_| (phase::CHANNEL, 0))?;
-    apart!(tune(&mut slot, &mut clocked, &timer, &mut platform, channel))?;
+    set_wifi_rx(
+        held(&mut slot)?,
+        membership.as_ref().ok_or((phase::RX_ENABLE, 1))?,
+        true,
+    )
+    .map_err(|_| (phase::RX_ENABLE, 0))?;
+    let channel =
+        Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20).map_err(|_| (phase::CHANNEL, 0))?;
+    apart!(tune(
+        &mut slot,
+        &mut clocked,
+        &timer,
+        &mut platform,
+        channel
+    ))?;
     let radio = held(&mut slot)?;
     let ceiling = Country::new(*b"DE")
         .ok()
@@ -761,7 +777,8 @@ async fn session(
         station_address: station,
         access_point_address: ap,
     };
-    apart!(cold(radio, &mut clocked, &mut sources, &timer, mac)).map_err(|()| (phase::MAC_COLD, 0))?;
+    apart!(cold(radio, &mut clocked, &mut sources, &timer, mac))
+        .map_err(|()| (phase::MAC_COLD, 0))?;
     let (access, clocks_on) = clocked.into_running();
 
     // The series is polled in a frame of its own: inlined into this
@@ -809,9 +826,11 @@ struct Owners<'a> {
 
 /// The Wi-Fi client's owners a leave and a join take and give back.
 struct Client<'a> {
-    coex: &'a mut Option<oer_chips_esp32s31_hal::radio::domain::Coexisting<
-        oer_chips_esp32s31_hal::radio::domain::WifiClient,
-    >>,
+    coex: &'a mut Option<
+        oer_chips_esp32s31_hal::radio::domain::Coexisting<
+            oer_chips_esp32s31_hal::radio::domain::WifiClient,
+        >,
+    >,
     power: &'a mut Option<
         oer_chips_esp32s31_hal::radio::domain::CommonPower<
             oer_chips_esp32s31_hal::radio::domain::WifiClient,
@@ -850,8 +869,8 @@ async fn series(
         client,
     } = owners;
     // The receive ring, live, with the open promiscuous receive.
-    let placed = RxDmaStorage::place(RX.take().ok_or((phase::RING, 0))?)
-        .map_err(|_| (phase::RING, 1))?;
+    let placed =
+        RxDmaStorage::place(RX.take().ok_or((phase::RING, 0))?).map_err(|_| (phase::RING, 1))?;
     let storage = placed.storage();
     let prepared = placed
         .prepare_ring(access.rx_dma())
@@ -989,9 +1008,7 @@ async fn series(
             Ok(halted) => halted,
             Err((_live, _error)) => return Err((phase::WALKER_STOP, index32 | 0x4000_0000)),
         };
-        let key_after = access
-            .wifi_mac_hal()
-            .ccmp_entry_is_valid(key);
+        let key_after = access.wifi_mac_hal().ccmp_entry_is_valid(key);
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
@@ -1183,7 +1200,9 @@ async fn series(
     let series_micros = EmbassyClock
         .now()
         .checked_duration_since(series_start)
-        .map_or(0, |elapsed| u32::try_from(elapsed.as_micros()).unwrap_or(u32::MAX));
+        .map_or(0, |elapsed| {
+            u32::try_from(elapsed.as_micros()).unwrap_or(u32::MAX)
+        });
     journal.record(Kind::End, &[series_cycles, series_micros]);
     // Every owner stays held until the leased host reset.
     let _held = (access, clocks_on, ring);
@@ -1218,7 +1237,11 @@ async fn window(
         .await
         .map_err(|code| (phase::RECEIVE, code | 0x0800_0000))?;
     let after = statistics(access);
-    Ok([units, advance(counted, after, 0, 1), advance(counted, after, 2, 3)])
+    Ok([
+        units,
+        advance(counted, after, 0, 1),
+        advance(counted, after, 2, 3),
+    ])
 }
 
 /// The ring rebuilt and started in the port's order.
@@ -1283,8 +1306,14 @@ async fn cases(
     mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
     mut ring: Ring,
     journal: &mut Journal,
-) -> Result<(RadioAccess, oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn, Ring), Failure>
-{
+) -> Result<
+    (
+        RadioAccess,
+        oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+        Ring,
+    ),
+    Failure,
+> {
     let CaseParts {
         storage,
         slot,
@@ -1318,9 +1347,7 @@ async fn cases(
     // Case 0: an ordinary stop, the cold preparation again, the start.
     mark(20);
     access.wifi_mac_hal().request_channel_stop();
-    let halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| fail(0x01))?;
+    let halted = ring.try_stop(access.rx_dma()).map_err(|_| fail(0x01))?;
     let mut clocked = WifiClocked::from_running(access, clocks_on);
     let cold = {
         let mut hal = clocked.cold_mac_hal(held(slot)?);
@@ -1341,9 +1368,7 @@ async fn cases(
         .map_err(|_| fail(0x11))?;
     apart!(tune(slot, &mut clocked, timer, &mut platform, channel))?;
     (access, clocks_on) = clocked.into_running();
-    let halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| fail(0x12))?;
+    let halted = ring.try_stop(access.rx_dma()).map_err(|_| fail(0x12))?;
     let mut clocked = WifiClocked::from_running(access, clocks_on);
     let cold = {
         let mut hal = clocked.cold_mac_hal(held(slot)?);
@@ -1360,9 +1385,7 @@ async fn cases(
     // the PHY's registration kept.
     mark(50);
     access.wifi_mac_hal().request_channel_stop();
-    let halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| fail(0x30))?;
+    let halted = ring.try_stop(access.rx_dma()).map_err(|_| fail(0x30))?;
     let clocked = WifiClocked::from_running(access, clocks_on);
     let left = membership.take().ok_or(fail(0x31))?;
     set_wifi_rx(held(slot)?, &left, false).map_err(|_| fail(0x32))?;
@@ -1440,8 +1463,12 @@ fn open_epoch(mac_irq: &mut MacInterruptRegisters, power_irq: &mut MacPowerInter
 /// station's own address is the cold start's; no key is installed for it.
 fn station_policy(access: &mut RadioAccess) {
     let broadcast = [0xff; 6];
-    access.wifi_mac_hal().configure_station_receive_policy(broadcast);
-    access.wifi_mac_hal().configure_station_scan_policy(broadcast);
+    access
+        .wifi_mac_hal()
+        .configure_station_receive_policy(broadcast);
+    access
+        .wifi_mac_hal()
+        .configure_station_scan_policy(broadcast);
 }
 
 /// The MAC's receive statistics this probe reads: MPDUs, data successes,
@@ -1504,7 +1531,10 @@ fn walker(
 }
 
 async fn wait_micros(micros: u64) {
-    if let Some(at) = EmbassyClock.now().checked_add(Duration::from_micros(micros)) {
+    if let Some(at) = EmbassyClock
+        .now()
+        .checked_add(Duration::from_micros(micros))
+    {
         EmbassyClock.wait_until(at).await;
     }
 }
@@ -1596,7 +1626,10 @@ fn buffer_address(storage: &Storage, index: usize) -> Result<usize, u32> {
 // This probe paints the ring's buffers after the pulse, while its
 // descriptors stay published: the question is whether the MAC's bus master
 // still writes them. Allowed in probe images (`docs/unsafe.md`).
-#[allow(unsafe_code, reason = "probe-only guard paint of the probe's own DMA arena")]
+#[allow(
+    unsafe_code,
+    reason = "probe-only guard paint of the probe's own DMA arena"
+)]
 fn paint(storage: &Storage, pulse: u32) -> Result<(), u32> {
     for index in 0..NODES {
         let address = buffer_address(storage, index)?;
@@ -1617,7 +1650,10 @@ fn paint(storage: &Storage, pulse: u32) -> Result<(), u32> {
 }
 
 // The guard's read: CPU loads of SRAM, which are no traffic of the MAC's bus.
-#[allow(unsafe_code, reason = "probe-only volatile read of the probe's own DMA arena")]
+#[allow(
+    unsafe_code,
+    reason = "probe-only volatile read of the probe's own DMA arena"
+)]
 fn changed_words(storage: &Storage, pulse: u32) -> Result<u32, u32> {
     oer_portable_riscv::fence();
     let mut changed = 0_u32;
