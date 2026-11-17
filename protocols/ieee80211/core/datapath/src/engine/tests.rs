@@ -661,6 +661,41 @@ fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
     });
 }
 
+/// A link's accounts start anew at the next link of its peer: a single on
+/// the air when the link ended charges them at its end, after the unlink.
+#[test]
+fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        let queue = QueueId::new(0, WmmUserPriority::UP0).unwrap();
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        let _ = engine.offered(&mut around.turn());
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Linked(linked) = data.peer(Peer::new(0).unwrap()) else {
+                panic!("the client is linked");
+            };
+            let _ = linked.unlink(&mut around.turn());
+        }
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert!(
+            engine.queues.air(queue) > 0,
+            "the end charged the ended link"
+        );
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Free(free) = data.peer(Peer::new(0).unwrap()) else {
+                panic!("the client is free");
+            };
+            let _ = free.link(client_link(CLIENT_A), &mut around.turn());
+        }
+        assert_eq!(engine.queues.air(queue), 0);
+    });
+}
+
 #[test]
 fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {

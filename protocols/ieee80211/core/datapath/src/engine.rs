@@ -554,8 +554,14 @@ impl<
         let Gate::Closing(_) = gate else {
             return None;
         };
-        let Gate::Closing(command) = core::mem::replace(gate, Gate::InTransition) else {
-            return None;
+        let command = match core::mem::replace(gate, Gate::InTransition) {
+            Gate::Closing(command) => command,
+            other => {
+                // Checked closing above: this does not happen. Should it,
+                // the gate keeps what it was.
+                *gate = other;
+                return None;
+            }
         };
         match port.poll_command(command, now, sink) {
             CommandPoll::Pending(command) => {
@@ -637,9 +643,8 @@ where
     /// The rights back, when the data is stopping, the gate shut and
     /// nothing the port's.
     fn finish(&mut self) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
-        if self.in_flight(Seal(())) != 0 {
-            return DataStop::Going;
-        }
+        // `stopped` answers only for quiet air: an arena on the air is not
+        // idle, a single on the air keeps its lane.
         match self.stopped(Seal(())) {
             Some(rights) => DataStop::Stopped(rights),
             None => DataStop::Going,
@@ -658,7 +663,8 @@ where
             report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
             network.home(msdu.memory);
         }
-        self.queues.reset_peer(peer);
+        // Its accounts start anew at its next link (`link`): what is still
+        // on the air charges them after this.
         self.unlink_form(Seal(()), peer, port, network, events);
         if let Some(entry) = self.entries.get_mut(usize::from(peer)) {
             *entry = Entry::Free;
@@ -685,6 +691,8 @@ where
                 owed: [None; 8],
             });
         }
+        // The peer's accounts start anew: what was on the air when its last
+        // link ended charged them after the unlink.
         self.queues.reset_peer(peer);
         self.intake(turn)
     }
@@ -1665,8 +1673,14 @@ where
         }
         // The running data moves out of its variant: a copy, once the
         // data's stop.
-        let Data::Stopping(running) = core::mem::replace(&mut self.data, Data::Stopped) else {
-            return None;
+        let running = match core::mem::replace(&mut self.data, Data::Stopped) {
+            Data::Stopping(running) => running,
+            other => {
+                // Checked stopping above: this does not happen. Should it,
+                // the data keeps what it was, every right with it.
+                self.data = other;
+                return None;
+            }
         };
         let Running {
             form: StationRunning { mut plane, queues },
@@ -1771,14 +1785,22 @@ impl<
         // The port gives back what the engine lent it: the lane of the
         // queue is free again with both.
         let lane = queue.category().select_mut(self.lanes);
-        let Lane::Air(flight) = core::mem::replace(
+        let flight = match core::mem::replace(
             lane,
             Lane::Free {
                 right: queue,
                 place,
             },
-        ) else {
-            return;
+        ) {
+            Lane::Air(flight) => flight,
+            free @ Lane::Free { .. } => {
+                // A free lane holds its queue's one right, so the port
+                // cannot give back another: this does not happen. Should it,
+                // the lane keeps the right it held, and the end teaches
+                // nothing.
+                *lane = free;
+                return;
+            }
         };
         let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
         if !delivered {
@@ -2075,8 +2097,14 @@ where
         }
         // The running data moves out of its variant: a copy, once the
         // data's stop.
-        let Data::Stopping(running) = core::mem::replace(&mut self.data, Data::Stopped) else {
-            return None;
+        let running = match core::mem::replace(&mut self.data, Data::Stopped) {
+            Data::Stopping(running) => running,
+            other => {
+                // Checked stopping above: this does not happen. Should it,
+                // the data keeps what it was, every right with it.
+                self.data = other;
+                return None;
+            }
         };
         match running {
             Running {
