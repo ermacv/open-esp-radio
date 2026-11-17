@@ -1,0 +1,17 @@
+error[E0599]: no method named `link` found for struct `LinkedPeer<'a, E>` in the current scope
+  --> tests/ui/link_of_a_linked_peer.rs:29:14
+   |
+29 |         peer.link(); // ui-error: E0599
+   |              ^^^^
+   |
+help: there is a method `unlink` with a similar name, but with different arguments
+  --> src/engine.rs
+   |
+   | /     pub fn unlink<
+   | |         N: Network<P::Memory>,
+   | |         R: Rates<'id, P::Caps>,
+   | |         E: EventSink<DataEvent>,
+...  |
+   | |         turn: &mut Turn<'_, P, N, R, E, C>,
+   | |     ) -> Rest {
+   | |_____________^

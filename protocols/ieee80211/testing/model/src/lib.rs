@@ -170,11 +170,12 @@ pub const MODEL_GROUPS: usize = 2;
 pub const MODEL_AGREEMENTS: usize = 2;
 
 /// The layout of the model's data's rights, with `SINGLES` single places.
-pub type ModelLayout<const SINGLES: usize> = DataLayout<SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+pub type ModelLayout<const SINGLES: usize, const DATA: usize> =
+    DataLayout<SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
 
 /// The model's data's rights.
-pub type ModelRights<'id, const SINGLES: usize> =
-    DataRights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+pub type ModelRights<'id, const SINGLES: usize, const DATA: usize> =
+    DataRights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
 
 /// The network's memory of one MSDU, by its handle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -435,8 +436,7 @@ struct ArenaBuffer {
     /// The rate the publication went at.
     rate: Option<PhyRate>,
     air: Option<Air>,
-    ended: Option<ArenaOutcome<(), (), ()>>,
-    acknowledged: FrameSet,
+    ended: Option<Ended<(), (), ()>>,
 }
 
 /// What an arena's publication put on the air.
@@ -493,8 +493,9 @@ impl Drop for ModelLent {
     }
 }
 
-/// The model port of one installation, with `SINGLES` single places.
-pub struct ModelPort<'id, const SINGLES: usize> {
+/// The model port of one installation, with `SINGLES` single places of
+/// its controller and `DATA` of an access point's data.
+pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize> {
     key: PortKey<'id>,
     issuer: GateIssuer<'id>,
     phase: Phase,
@@ -512,6 +513,13 @@ pub struct ModelPort<'id, const SINGLES: usize> {
     returns: Rc<Cell<u64>>,
     /// The frames the next aggregate's BlockAck acknowledges.
     acknowledge: Option<FrameSet>,
+    /// The most frames the next arena's publication sends: the prefix its
+    /// rate admits, as a test sets it.
+    prefix: Option<u8>,
+    /// The next command's poll serves the singles' ends first, through the
+    /// sink it is lent, as a port does while its command waits at its
+    /// barrier.
+    serve_in_poll: bool,
     /// Every arena's publication, in order.
     published: Vec<Publication>,
     /// Each memory's last written front, by its id.
@@ -538,7 +546,7 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
     pub fn new(
@@ -558,11 +566,15 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             anomaly: None,
             arenas: [ArenaBuffer::default(), ArenaBuffer::default()],
             queues: [Queue::default(); 4],
-            singles: (0..SINGLES).map(|_| Vec::new()).collect(),
+            singles: (0..SINGLES.saturating_add(DATA))
+                .map(|_| Vec::new())
+                .collect(),
             ring: VecDeque::new(),
             places: (0..MODEL_PLACES).map(|_| None).collect(),
             returns: Rc::new(Cell::new(0)),
             acknowledge: None,
+            prefix: None,
+            serve_in_poll: false,
             published: Vec::new(),
             fronts: Vec::new(),
             command: None,
@@ -621,6 +633,17 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
         }
     }
 
+    /// Let the next command's poll serve the singles' ends first.
+    pub const fn serve_in_next_poll(&mut self) {
+        self.serve_in_poll = true;
+    }
+
+    /// Let the next arena's publication send at most `frames` of its
+    /// frames, one at least: the prefix its rate admits.
+    pub const fn send_at_most(&mut self, frames: u8) {
+        self.prefix = Some(frames);
+    }
+
     /// Let the next aggregate's BlockAck acknowledge only the frames of
     /// `frames`, by their positions.
     pub const fn acknowledge(&mut self, frames: FrameSet) {
@@ -672,6 +695,35 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
         self.singles.get(usize::from(place)).map(Vec::as_slice)
     }
 
+    /// The modelled hardware's whole state, for a search that merges equal
+    /// states: its phase, parts, slots, arenas, queues, singles' places,
+    /// command and levers. Its records and counts are history, not state,
+    /// and are left out.
+    pub fn state_key(&self) -> std::string::String {
+        std::format!(
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            self.phase,
+            self.parts,
+            self.groups,
+            self.agreements,
+            self.anomaly,
+            self.arenas,
+            self.queues,
+            self.singles,
+            self.command.is_some(),
+            self.acknowledge,
+            self.prefix,
+        )
+    }
+
+    /// The network's names of the memories an arena holds, in its order.
+    pub fn arena_memories(&self, side: ArenaSide) -> Vec<u32> {
+        self.arenas
+            .get(side_index(side))
+            .map(|arena| arena.frames.iter().map(|frame| frame.memory.id).collect())
+            .unwrap_or_default()
+    }
+
     /// The frames an arena holds.
     pub fn arena_frames(&self, side: ArenaSide) -> usize {
         self.arenas
@@ -708,9 +760,13 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
         for arena in &mut self.arenas {
             if arena.air.take().is_some() && arena.ended.is_none() {
                 let cause = WithdrawCause::Disabled;
-                arena.ended = Some(match arena.went {
-                    Went::Single => ArenaOutcome::Single(TxOutcome::Withdrawn(cause)),
-                    Went::Aggregate => ArenaOutcome::Aggregate(TxOutcome::Withdrawn(cause)),
+                arena.ended = Some(Ended {
+                    outcome: match arena.went {
+                        Went::Single => ArenaOutcome::Single(TxOutcome::Withdrawn(cause)),
+                        Went::Aggregate => ArenaOutcome::Aggregate(TxOutcome::Withdrawn(cause)),
+                    },
+                    sent: FrameSet::prefix(arena.sent),
+                    acknowledged: FrameSet::EMPTY,
                 });
             }
         }
@@ -739,10 +795,12 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> RadioPort<'id>
+    for ModelPort<'id, SINGLES, DATA>
+{
     type Caps = ModelCaps;
     type Channel = SupportedChannel<ModelCaps>;
-    type Data = ModelRights<'id, SINGLES>;
+    type Data = ModelRights<'id, SINGLES, DATA>;
     type Released<'a>
         = ()
     where
@@ -875,7 +933,7 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'id, SINGLES, DATA> {
     type Link = ModelLink;
     type Memory = ModelMemory;
     type Ack = ();
@@ -996,6 +1054,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         };
         let mut record = None;
         let air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
+        let prefix = self.prefix.take();
         let buffer = self.arenas.get_mut(side_index(arena.side()));
         let mut sent: u8 = 0;
         if let Some(buffer) = buffer {
@@ -1013,7 +1072,8 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             }
             sent = sent
                 .max(1)
-                .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX));
+                .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX))
+                .min(prefix.unwrap_or(u8::MAX).max(1));
             buffer.sent = sent;
             buffer.went = if sent > 1 {
                 Went::Aggregate
@@ -1022,7 +1082,6 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             };
             buffer.air = Some(air);
             buffer.ended = None;
-            buffer.acknowledged = FrameSet::EMPTY;
             let went_at = match (how, buffer.went) {
                 (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, Went::Single) => {
                     plan.first().rate.get()
@@ -1055,7 +1114,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             });
         }
         self.published.extend(record);
-        self.key.publish(arena, FrameSet::prefix(sent))
+        self.key.publish(arena, sent)
     }
 
     fn withdraw(
@@ -1078,7 +1137,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _facts: TxFacts,
         on_air: &OnAir<'id>,
         _now: Instant,
-    ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>> {
+    ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
         let acknowledge = self.acknowledge;
         // The air answers at the end, as it is set then.
@@ -1154,16 +1213,14 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                     FrameSet::EMPTY,
                 ),
             };
-            buffer.ended = Some(outcome);
-            buffer.acknowledged = acknowledged;
+            buffer.ended = Some(Ended {
+                outcome,
+                sent: on_air.sent(),
+                acknowledged,
+            });
             self.acknowledge = None;
         }
-        let outcome = buffer.ended.as_ref()?;
-        Some(Ended {
-            outcome,
-            sent: on_air.sent(),
-            acknowledged: buffer.acknowledged,
-        })
+        buffer.ended.as_ref()
     }
 
     fn settle(
@@ -1286,10 +1343,13 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     fn poll_command(
         &mut self,
         command: InCommand<'id>,
-        _now: Instant,
-        _sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
     ) -> CommandPoll<'id> {
         self.call();
+        if core::mem::take(&mut self.serve_in_poll) {
+            self.serve(TxFacts::DUE, Signal::Quiet, now, sink);
+        }
         let Some(Running_ { command: running }) = self.command.take() else {
             return CommandPoll::Pending(command);
         };
@@ -1356,7 +1416,9 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 CommandEnd::AgreementEmpty(self.key.agreement_ended(agreement))
             }
             Command::CloseGate(open) => {
-                if self.queues.iter().any(|queue| queue.single.is_some()) {
+                if self.queues.iter().any(|queue| queue.single.is_some())
+                    || self.arenas.iter().any(|arena| arena.air.is_some())
+                {
                     // The barrier waits for what is on the air.
                     self.command = Some(Running_ {
                         command: Command::CloseGate(open),
@@ -1383,7 +1445,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
         if let Some(place) = self.groups.get_mut(usize::from(index)) {
@@ -1409,7 +1471,9 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
+    for ModelPort<'id, SINGLES, DATA>
+{
     type Meta = RxMeta;
     type Lent = ModelLent;
 

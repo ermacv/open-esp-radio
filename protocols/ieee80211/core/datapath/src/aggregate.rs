@@ -54,6 +54,18 @@ impl PpduLimit {
         self.subframes
     }
 
+    /// The same bound as a count of an arena's frames: at most
+    /// [`MAX_AGGREGATE`], which a byte holds.
+    pub const fn subframe_count(&self) -> u8 {
+        const {
+            if MAX_AGGREGATE > u8::MAX as usize {
+                panic!("an aggregate's subframes are counted in a byte");
+            }
+        }
+        // At most MAX_AGGREGATE, which the check above bounds.
+        self.subframes as u8
+    }
+
     /// The longest aggregate in octets, delimiters and padding included.
     pub const fn octets(&self) -> u32 {
         self.octets

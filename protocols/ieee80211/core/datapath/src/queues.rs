@@ -66,7 +66,10 @@ pub struct TxQueues<M, const POOL: usize, const PEERS: usize> {
     msdus: [Option<OutboundMsdu<M>>; POOL],
     /// Each place's successor in its list: its queue's, or the free list's.
     next: [u8; POOL],
+    /// The free list of places freed, and the places never used, from
+    /// `fresh` on.
     free: u8,
+    fresh: u8,
     /// Per queue: its head and tail places, and the air its attempts took
     /// against the other queues of its peer and access category.
     heads: [[u8; TIDS]; PEERS],
@@ -89,7 +92,9 @@ impl<M, const POOL: usize, const PEERS: usize> Default for TxQueues<M, POOL, PEE
 }
 
 impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
-    pub fn new() -> Self {
+    /// Empty queues, built where they live (a `const` item or a placed
+    /// initializer).
+    pub const fn new() -> Self {
         const {
             if POOL >= END as usize {
                 panic!("a pool place is a u8 below END");
@@ -98,18 +103,11 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
                 panic!("one to sixteen peers: a queue is a bit of a u128");
             }
         };
-        let mut next = [END; POOL];
-        for (place, link) in next.iter_mut().enumerate() {
-            // Below END: the pool's size says so.
-            *link = u8::try_from(place.saturating_add(1)).unwrap_or(END);
-        }
-        if let Some(last) = next.last_mut() {
-            *last = END;
-        }
         Self {
-            msdus: core::array::from_fn(|_| None),
-            next,
-            free: if POOL == 0 { END } else { 0 },
+            msdus: [const { None }; POOL],
+            next: [END; POOL],
+            free: END,
+            fresh: 0,
             heads: [[END; TIDS]; PEERS],
             tails: [[END; TIDS]; PEERS],
             served: [[0; TIDS]; PEERS],
@@ -120,9 +118,36 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         }
     }
 
+    /// The queues' whole state, for the engine's search.
+    #[cfg(test)]
+    pub(crate) fn key(&self) -> std::string::String
+    where
+        M: core::fmt::Debug,
+    {
+        std::format!(
+            "{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}",
+            self.msdus,
+            self.next,
+            self.free,
+            self.fresh,
+            self.heads,
+            self.tails,
+            self.served,
+            self.peer_served,
+            self.active,
+            self.blocked,
+            self.dearest
+        )
+    }
+
+    /// The MSDUs the queues hold.
+    pub fn len(&self) -> usize {
+        self.msdus.iter().filter(|msdu| msdu.is_some()).count()
+    }
+
     /// Whether the pool takes another MSDU.
     pub const fn has_room(&self) -> bool {
-        self.free != END
+        self.free != END || (self.fresh as usize) < POOL
     }
 
     /// Whether any queue holds an MSDU.
@@ -138,6 +163,29 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
     /// Whether `queue` holds an MSDU and does not wait.
     pub const fn ready(&self, queue: QueueId) -> bool {
         self.active & !self.blocked & queue.bit() != 0
+    }
+
+    /// Queue the MSDU of `memory`, `length` and `priority` behind its
+    /// queue's others, written into its pool place.
+    ///
+    /// # Errors
+    /// The memory back: the pool is full or `queue` is past the peers.
+    pub fn push_parts(
+        &mut self,
+        queue: QueueId,
+        memory: M,
+        length: usize,
+        priority: WmmUserPriority,
+    ) -> Result<(), M> {
+        self.push(
+            queue,
+            OutboundMsdu {
+                memory,
+                length,
+                priority,
+            },
+        )
+        .map_err(|msdu| msdu.memory)
     }
 
     /// Queue `msdu` behind its queue's others.
@@ -365,7 +413,13 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
     fn take_free(&mut self) -> Option<u8> {
         let place = self.free;
         if place == END {
-            return None;
+            // A place never used, while the pool has one.
+            if usize::from(self.fresh) >= POOL {
+                return None;
+            }
+            let fresh = self.fresh;
+            self.fresh = fresh.saturating_add(1);
+            return Some(fresh);
         }
         self.free = self.next.get(usize::from(place)).copied().unwrap_or(END);
         Some(place)

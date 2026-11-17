@@ -1,0 +1,914 @@
+//! The engine over the model port: its cases, its sizes and the search of
+//! every order of its sections (`search`). The tests reach the engine
+//! through its views, as a controller does.
+
+use super::*;
+use crate::AggregateRetry;
+use crate::model::{Running, running};
+use crate::plane::{AggregateRate, HtLimits, PpduKind};
+use core::num::NonZeroU8;
+use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::{
+    AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
+};
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{InstalledCcmpTxKey, SoftwareCcmpKey};
+use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_testing_model::{
+    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLink, ModelMemory, ModelPort,
+};
+use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
+use oer_protocols_ieee80211_wire::phy::{
+    HtGuardInterval, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
+};
+use oer_protocols_ieee80211_wire::security::LinkProtection;
+use oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate;
+use std::collections::VecDeque;
+use std::vec::Vec;
+
+mod search;
+
+pub(super) const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
+pub(super) const ACCESS_POINT_ADDRESS: [u8; 6] = [2, 0, 0, 0, 0, 2];
+pub(super) const CLIENT_A: [u8; 6] = [2, 0, 0, 0, 0, 0x0a];
+pub(super) const CLIENT_B: [u8; 6] = [2, 0, 0, 0, 0, 0x0b];
+pub(super) const DESTINATION: [u8; 6] = [2, 0, 0, 0, 0, 0x10];
+pub(super) const PAYLOAD: usize = 100;
+pub(super) const ETHERNET: usize = 14;
+pub(super) const BEST_EFFORT: WmmAccessCategory = WmmAccessCategory::BestEffort;
+
+/// A station's single places in the tests.
+pub(super) const STATION_SINGLES: usize = 8;
+/// An access point's controller's.
+pub(super) const AP_SINGLES: usize = 17;
+
+/// Key material of a test key, which software alone owns.
+pub(super) struct TestKey;
+
+impl SoftwareCcmpKey for TestKey {}
+
+pub(super) type Key = InstalledCcmpTxKey<TestKey>;
+
+/// A station's engine over the model port, with a pool of `POOL`.
+pub(super) type StationEngine<'id, const POOL: usize> = Engine<
+    'id,
+    ModelPort<'id, STATION_SINGLES, 0>,
+    Arenas,
+    Key,
+    1,
+    POOL,
+    STATION_SINGLES,
+    MODEL_GROUPS,
+    MODEL_AGREEMENTS,
+>;
+
+/// An access point's engine of `PEERS` clients over the model port.
+pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
+    'id,
+    ModelPort<'id, AP_SINGLES, DATA_SINGLES>,
+    Singles,
+    Key,
+    PEERS,
+    POOL,
+    AP_SINGLES,
+    MODEL_GROUPS,
+    MODEL_AGREEMENTS,
+>;
+
+/// The network's end: what it offers, each MSDU's Ethernet frame, and what
+/// came home, in order.
+#[derive(Default)]
+pub(super) struct Net {
+    pub offered: VecDeque<ModelMemory>,
+    pub frames: Vec<(u32, WmmUserPriority, Vec<u8>)>,
+    pub home: Vec<u32>,
+}
+
+impl Net {
+    /// Offer MSDU `id` of `priority` to `destination`.
+    pub fn offer(&mut self, id: u32, priority: WmmUserPriority, destination: [u8; 6]) {
+        let mut ethernet = Vec::new();
+        ethernet.extend_from_slice(&destination);
+        ethernet.extend_from_slice(&STATION);
+        ethernet.extend_from_slice(&0x0800_u16.to_be_bytes());
+        let mut front = [0; HEADROOM];
+        front[HEADROOM - ETHERNET..].copy_from_slice(&ethernet);
+        let mut frame = ethernet;
+        frame.extend((0..PAYLOAD).map(|octet| octet as u8 ^ id as u8));
+        self.frames.push((id, priority, frame));
+        self.offered.push_back(ModelMemory {
+            id,
+            len: PAYLOAD as u16,
+            front,
+        });
+    }
+
+    fn of(&self, memory: &ModelMemory) -> Option<&(u32, WmmUserPriority, Vec<u8>)> {
+        self.frames.iter().find(|(id, _, _)| *id == memory.id)
+    }
+}
+
+impl Network<ModelMemory> for Net {
+    fn take(&mut self) -> Option<ModelMemory> {
+        self.offered.pop_front()
+    }
+
+    fn length(&self, memory: &ModelMemory) -> usize {
+        self.of(memory).map_or(0, |(_, _, frame)| frame.len())
+    }
+
+    fn priority(&self, memory: &ModelMemory) -> WmmUserPriority {
+        self.of(memory)
+            .map_or(WmmUserPriority::UP0, |(_, priority, _)| *priority)
+    }
+
+    fn frame<'m>(&'m self, memory: &'m ModelMemory, length: usize) -> &'m [u8] {
+        self.of(memory)
+            .map_or(&[], |(_, _, frame)| &frame[..length.min(frame.len())])
+    }
+
+    fn home(&mut self, memory: ModelMemory) {
+        self.home.push(memory.id);
+    }
+}
+
+/// One transmission at `rate`.
+pub(super) fn once<R>(rate: R) -> RetryPlan<R> {
+    RetryPlan::new(RetryStage {
+        rate,
+        transmissions: NonZeroU8::MIN,
+        protection: Protection::None,
+    })
+}
+
+/// The rate policy of the tests: one rate a kind; it counts what it
+/// learned.
+pub(super) struct Fixed<'id> {
+    pub plan: RetryPlan<PortRate<'id, ModelCaps>>,
+    pub single: Ppdu<'id, ModelCaps>,
+    pub aggregate: Ppdu<'id, ModelCaps>,
+    pub lessons: usize,
+}
+
+impl<'id> Rates<'id, ModelCaps> for Fixed<'id> {
+    fn arena(&mut self, _peer: u8, plan: PpduPlan) -> Option<Ppdu<'id, ModelCaps>> {
+        Some(match plan.kind {
+            PpduKind::Single => self.single,
+            PpduKind::Aggregate { .. } => self.aggregate,
+        })
+    }
+
+    fn single(
+        &mut self,
+        _peer: u8,
+        _tid: WmmUserPriority,
+    ) -> Option<RetryPlan<PortRate<'id, ModelCaps>>> {
+        Some(self.plan)
+    }
+
+    fn learn<A: Copy, B: Copy, D: Copy>(
+        &mut self,
+        _peer: u8,
+        _lesson: RateLesson<A, B, D>,
+        _now: Instant,
+    ) {
+        self.lessons += 1;
+    }
+}
+
+/// What the engine reported, kept by value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Event {
+    Lost(DataLoss),
+    Settled(crate::events::AggregateSettled),
+    Refused(IntakeRefusal),
+}
+
+/// The events the engine reported.
+#[derive(Default)]
+pub(super) struct Seen(pub Vec<Event>);
+
+impl EventSink<DataEvent> for Seen {
+    fn event(&mut self, event: DataEvent) {
+        self.0.push(match event {
+            DataEvent::DataLost(loss) => Event::Lost(loss),
+            DataEvent::AggregateSettled(settled) => Event::Settled(settled),
+            DataEvent::MsduRefused(reason) => Event::Refused(reason),
+        });
+    }
+}
+
+/// What the engine told the controller: TBTTs and the closed gate.
+pub(super) struct Controller<'id> {
+    pub tbtts: Vec<TbttEvent>,
+    pub gate: Option<GateClosed<'id>>,
+}
+
+impl<'id> Told<'id> for Controller<'id> {
+    fn tbtt(&mut self, event: TbttEvent) {
+        self.tbtts.push(event);
+    }
+
+    fn gate_closed(&mut self, gate: GateClosed<'id>) {
+        self.gate = Some(gate);
+    }
+}
+
+/// HT MCS 7 on 20 MHz.
+pub(super) fn ht() -> PhyRate {
+    PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz20,
+            HtGuardInterval::Normal,
+        )
+        .unwrap(),
+    )
+}
+
+/// The rates the tests send at, from the port.
+pub(super) fn fixed<'id, const S: usize, const D: usize>(
+    port: &ModelPort<'id, S, D>,
+) -> Fixed<'id> {
+    let single = port.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
+    let aggregate: AmpduRate<'id, ModelCaps> = port.ampdu_rate(port.rate(ht()).unwrap()).unwrap();
+    Fixed {
+        plan: once(single),
+        single: Ppdu::Single(once(single)),
+        aggregate: Ppdu::Aggregate {
+            rate: aggregate,
+            spacing: MpduStartSpacing::new(0).unwrap(),
+            protection: Protection::None,
+            alone: once(single),
+        },
+        lessons: 0,
+    }
+}
+
+/// Write a station's open QoS link with `attempts` an aggregate member may
+/// miss and a lifetime of `lifetime` into its places.
+pub(super) fn station_link(attempts: u8, lifetime: Duration) -> StationLink<ModelLink, Key> {
+    StationLink {
+        data: DataLink {
+            header: StaDataHeaderTemplate::new(
+                OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
+                Bssid::new(IndividualAddress::new(ACCESS_POINT_ADDRESS).unwrap()).unwrap(),
+                PeerQos::Qos,
+                LinkProtection::Open,
+            )
+            .unwrap(),
+            admission: AcAdmission::default(),
+            retry: Some(AggregateRetry { lifetime, attempts }),
+            ht: Some(HtLimits {
+                spacing: MpduStartSpacing::new(0).unwrap(),
+                max_length: 65_535,
+            }),
+            windows: [None; 8],
+            protection: Default::default(),
+        },
+        port: ModelLink { protected: false },
+        numbers: fresh_numbers(),
+    }
+}
+
+/// A link's numbers from zero, a space a TID.
+fn fresh_numbers() -> TxNumbers<Key> {
+    TxNumbers::new(
+        SequenceCounter::new(SequenceNumber::ZERO),
+        Some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
+        None,
+    )
+}
+
+/// An access point's open link to `client`.
+pub(super) fn client_link(client: [u8; 6]) -> ClientLink<Key> {
+    ClientLink {
+        client,
+        access_point: ACCESS_POINT_ADDRESS,
+        qos: PeerQos::Qos,
+        numbers: fresh_numbers(),
+    }
+}
+
+/// What a section is lent, held apart from the engine.
+pub(super) struct Around<'id, const S: usize, const D: usize> {
+    pub port: ModelPort<'id, S, D>,
+    pub net: Net,
+    pub rates: Fixed<'id>,
+    pub seen: Seen,
+    pub told: Controller<'id>,
+    pub micros: u64,
+}
+
+impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
+    pub fn new(port: ModelPort<'id, S, D>) -> Self {
+        let rates = fixed(&port);
+        Self {
+            port,
+            net: Net::default(),
+            rates,
+            seen: Seen::default(),
+            told: Controller {
+                tbtts: Vec::new(),
+                gate: None,
+            },
+            micros: 1,
+        }
+    }
+
+    /// Let `micros` pass.
+    pub fn pass(&mut self, micros: u64) {
+        self.micros += micros;
+    }
+
+    /// One section's turn, a microsecond after the last.
+    pub fn turn(
+        &mut self,
+    ) -> Turn<'_, ModelPort<'id, S, D>, Net, Fixed<'id>, Seen, Controller<'id>> {
+        self.micros += 1;
+        Turn {
+            port: &mut self.port,
+            network: &mut self.net,
+            rates: &mut self.rates,
+            events: &mut self.seen,
+            told: &mut self.told,
+            now: Instant::from_micros(self.micros),
+        }
+    }
+}
+
+/// The station's engine's flowing data, which the test expects.
+pub(super) fn station_flowing<'e, 'id, const POOL: usize>(
+    engine: &'e mut StationEngine<'id, POOL>,
+) -> FlowingData<'e, StationEngine<'id, POOL>> {
+    match engine.data() {
+        DataPlace::Flowing(flowing) => flowing,
+        _ => panic!("the data flows"),
+    }
+}
+
+/// An access point's engine's flowing data, which the test expects.
+pub(super) fn ap_flowing<'e, 'id, const PEERS: usize, const POOL: usize>(
+    engine: &'e mut ApEngine<'id, PEERS, POOL>,
+) -> FlowingData<'e, ApEngine<'id, PEERS, POOL>> {
+    match engine.data() {
+        DataPlace::Flowing(flowing) => flowing,
+        _ => panic!("the data flows"),
+    }
+}
+
+/// Act on the station's linked access point.
+pub(super) fn linked<'id, const POOL: usize>(
+    engine: &mut StationEngine<'id, POOL>,
+    act: impl FnOnce(&mut LinkedPeer<'_, StationEngine<'id, POOL>>),
+) {
+    let mut data = station_flowing(engine);
+    let PeerPlace::Linked(mut linked) = data.peer(ACCESS_POINT) else {
+        panic!("the peer is linked");
+    };
+    act(&mut linked);
+}
+
+/// A station's engine flowing, its gate open, linked, aggregating at HT
+/// MCS 7.
+fn station<'id, const POOL: usize>(
+    run: Running<'id, STATION_SINGLES, 0>,
+    engine: &mut StationEngine<'id, POOL>,
+    attempts: u8,
+    lifetime: Duration,
+) -> Around<'id, STATION_SINGLES, 0> {
+    let Running {
+        port,
+        data: rights,
+        gate,
+    } = run;
+    let mut around = Around::new(port);
+    let DataPlace::Stopped(data) = engine.data() else {
+        panic!("a new engine's data is stopped");
+    };
+    let mut flowing = data.flows(rights);
+    let GatePlace::Shut(shut) = flowing.gate() else {
+        panic!("the gate is shut");
+    };
+    let _ = shut.open(gate, &mut around.turn());
+    let PeerPlace::Free(free) = flowing.peer(ACCESS_POINT) else {
+        panic!("the peer is free");
+    };
+    let _ = free.link(station_link(attempts, lifetime), &mut around.turn());
+    engine.aggregate_rate(&AggregateRate {
+        rate: ht(),
+        max_subframes: 8,
+        max_length: 65_535,
+    });
+    around
+}
+
+const HOUR: Duration = Duration::from_secs(3600);
+
+#[test]
+fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=3 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        // One arena on the air, the other filled: one frame each.
+        assert_eq!(around.port.published().len(), 1);
+        assert_eq!(engine.queued(), 1);
+        for _ in 0..3 {
+            around.port.set_air(BEST_EFFORT, Air::Ack);
+            let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        }
+        assert_eq!(around.net.home, [1, 2, 3]);
+        assert_eq!(around.rates.lessons, 3);
+        assert!(
+            around
+                .port
+                .published()
+                .iter()
+                .all(|went| went.frames.len() == 1)
+        );
+    });
+}
+
+#[test]
+fn a_station_under_an_agreement_aggregates_within_its_window() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let _ = peer.tx_agreement(WmmUserPriority::UP0, 2, &mut around.turn());
+        });
+        for id in 1..=4 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        assert_eq!(around.port.published().len(), 1);
+        for _ in 0..5 {
+            around.port.set_air(BEST_EFFORT, Air::Ack);
+            let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        }
+        assert!(
+            around
+                .port
+                .published()
+                .iter()
+                .all(|went| went.frames.len() <= 2)
+        );
+        assert_eq!(around.net.home, [1, 2, 3, 4]);
+    });
+}
+
+#[test]
+fn a_station_without_a_link_refuses_what_the_network_offers_at_once() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let Running {
+            port, data: rights, ..
+        } = run;
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = Around::new(port);
+        let DataPlace::Stopped(data) = engine.data() else {
+            panic!("stopped");
+        };
+        let _ = data.flows(rights);
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert_eq!(around.net.home, [1]);
+        assert_eq!(around.seen.0, [Event::Refused(IntakeRefusal::NoLink)]);
+    });
+}
+
+#[test]
+fn a_held_link_keeps_its_data_until_released() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let _ = peer.hold(&mut around.turn());
+        });
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert!(around.port.published().is_empty());
+        linked(&mut engine, |peer| {
+            let _ = peer.release(&mut around.turn());
+        });
+        assert_eq!(around.port.published().len(), 1);
+    });
+}
+
+#[test]
+fn a_named_number_holds_its_tid_until_the_frame_that_names_it_went() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            let named = peer
+                .name_next(LinkSpace::Tid(WmmUserPriority::UP0))
+                .unwrap();
+            assert_eq!(named, SequenceNumber::ZERO);
+        });
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert!(around.port.published().is_empty());
+        linked(&mut engine, |peer| {
+            let _ = peer.named(&mut around.turn());
+        });
+        assert_eq!(around.port.published().len(), 1);
+        // The data drew the number after the named one.
+        let front = around.port.front(1).unwrap();
+        let control = u16::from_le_bytes([front[22], front[23]]);
+        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
+    });
+}
+
+#[test]
+fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=3 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        assert!(matches!(
+            station_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Going
+        ));
+        // What waited and what the standby held went home at once.
+        assert_eq!(around.net.home, [3, 2]);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let DataPlace::Stopping(stopping) = engine.data() else {
+            panic!("the data is stopping");
+        };
+        let DataStop::Stopped(stopped) = stopping.poll(&mut around.turn()) else {
+            panic!("the air ended and the gate closed");
+        };
+        assert_eq!(around.net.home, [3, 2, 1]);
+        assert!(around.told.gate.is_some());
+        assert!(matches!(engine.data(), DataPlace::Stopped(_)));
+        // The data flows again with its rights.
+        let DataPlace::Stopped(data) = engine.data() else {
+            panic!("the data is stopped");
+        };
+        let _ = data.flows(stopped);
+        assert!(matches!(engine.data(), DataPlace::Flowing(_)));
+    });
+}
+
+/// An access point's engine of `PEERS` flowing, its gate open, with two
+/// clients linked.
+fn access_point<'id, const PEERS: usize, const POOL: usize>(
+    run: Running<'id, AP_SINGLES, DATA_SINGLES>,
+    engine: &mut ApEngine<'id, PEERS, POOL>,
+) -> Around<'id, AP_SINGLES, DATA_SINGLES> {
+    let Running {
+        port,
+        data: rights,
+        gate,
+    } = run;
+    let mut around = Around::new(port);
+    let DataPlace::Stopped(data) = engine.data() else {
+        panic!("a new engine's data is stopped");
+    };
+    let mut flowing = data.flows(rights);
+    let GatePlace::Shut(shut) = flowing.gate() else {
+        panic!("the gate is shut");
+    };
+    let _ = shut.open(gate, &mut around.turn());
+    for (peer, client) in [(0, CLIENT_A), (1, CLIENT_B)] {
+        let PeerPlace::Free(free) = flowing.peer(Peer::new(peer).unwrap()) else {
+            panic!("the peer is free");
+        };
+        let _ = free.link(client_link(client), &mut around.turn());
+    }
+    around
+}
+
+/// The data place of `category` in an access point's layout: after the
+/// controller's, in QUEUES' order.
+fn data_place(category: WmmAccessCategory) -> u8 {
+    let offset = oer_protocols_ieee80211_contracts_port::QUEUES
+        .iter()
+        .position(|queued| *queued == category)
+        .unwrap();
+    (AP_SINGLES + offset) as u8
+}
+
+#[test]
+fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_home_at_the_write() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        around.net.offer(7, WmmUserPriority::UP0, CLIENT_B);
+        let _ = engine.offered(&mut around.turn());
+        // Home at the write, before its end.
+        assert_eq!(around.net.home, [7]);
+        let single = around
+            .port
+            .single(data_place(BEST_EFFORT))
+            .unwrap()
+            .to_vec();
+        // A QoS data frame from the DS: Address 1 the client, 2 the access
+        // point, 3 the source; then LLC/SNAP and the payload, copied.
+        assert_eq!(single[0], 0x88);
+        assert_eq!(single[1] & 0x03, 0x02);
+        assert_eq!(single[4..10], CLIENT_B);
+        assert_eq!(single[10..16], ACCESS_POINT_ADDRESS);
+        assert_eq!(single[16..22], STATION);
+        let payload = &around.net.frames[0].2[ETHERNET..];
+        assert_eq!(&single[26 + 8..], payload);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.rates.lessons, 1);
+    });
+}
+
+#[test]
+fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
+        around.net.offer(2, WmmUserPriority::UP0, CLIENT_B);
+        around.net.offer(3, WmmUserPriority::UP6, CLIENT_B);
+        let _ = engine.offered(&mut around.turn());
+        // Voice and best effort each carry one; the second best effort
+        // waits in its queue.
+        assert_eq!(around.net.home, [3, 1]);
+        assert_eq!(engine.queued(), 1);
+        around.port.set_air(BEST_EFFORT, Air::NoAck);
+        around.port.set_air(WmmAccessCategory::Voice, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.net.home, [3, 1, 2]);
+        assert_eq!(engine.queued(), 0);
+        assert!(around.seen.0.contains(&Event::Lost(DataLoss::RetryLimit)));
+    });
+}
+
+#[test]
+fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert_eq!(around.net.home, [1]);
+        assert_eq!(around.seen.0, [Event::Refused(IntakeRefusal::NoLink)]);
+    });
+}
+
+/// A link's accounts start anew at the next link of its peer: a single on
+/// the air when the link ended charges them at its end, after the unlink.
+#[test]
+fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        let queue = QueueId::new(0, WmmUserPriority::UP0).unwrap();
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        let _ = engine.offered(&mut around.turn());
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Linked(linked) = data.peer(Peer::new(0).unwrap()) else {
+                panic!("the client is linked");
+            };
+            let _ = linked.unlink(&mut around.turn());
+        }
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert!(
+            engine.queues.air(queue) > 0,
+            "the end charged the ended link"
+        );
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Free(free) = data.peer(Peer::new(0).unwrap()) else {
+                panic!("the client is free");
+            };
+            let _ = free.link(client_link(CLIENT_A), &mut around.turn());
+        }
+        assert_eq!(engine.queues.air(queue), 0);
+    });
+}
+
+#[test]
+fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
+        around.net.offer(2, WmmUserPriority::UP0, CLIENT_A);
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        let _ = engine.offered(&mut around.turn());
+        assert!(matches!(
+            ap_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Going
+        ));
+        assert_eq!(around.net.home, [1, 2]);
+        assert_eq!(engine.in_flight(Seal(())), 1);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let DataPlace::Stopping(stopping) = engine.data() else {
+            panic!("the data is stopping");
+        };
+        let DataStop::Stopped(_rights) = stopping.poll(&mut around.turn()) else {
+            panic!("the single ended and the gate closed");
+        };
+        assert!(matches!(engine.data(), DataPlace::Stopped(_)));
+    });
+}
+
+/// The engine's host size for an access point's clients: a figure for the
+/// report, not a gate (`tasks/114`, O8).
+#[test]
+fn the_access_points_engine_size_at_two_and_fifteen_clients() {
+    let two = core::mem::size_of::<ApEngine<'static, 2, 32>>();
+    let fifteen = core::mem::size_of::<ApEngine<'static, 15, 32>>();
+    let station = core::mem::size_of::<StationEngine<'static, 32>>();
+    std::println!(
+        "engine size: access point at 2 clients {two}, at 15 {fifteen}; station {station}"
+    );
+    assert!(two < fifteen);
+}
+
+/// The host sizes of the values built into a variant, for the audit of
+/// copies and frames (`tasks/126`): the link at an association, the plane
+/// at the data's start, the running data at its stop.
+#[test]
+fn the_sizes_of_the_values_built_into_a_variant() {
+    use core::mem::size_of;
+    type Station =
+        super::Running<'static, Arenas, ModelCaps, STATION_SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    type Ap =
+        super::Running<'static, Singles, ModelCaps, AP_SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    std::println!(
+        "copies: DataLink {}, StationLink {}, StationEntry {}, ClientLink {}, DataPlane {}, \
+         station running {}, access point running {}",
+        size_of::<DataLink>(),
+        size_of::<StationLink<ModelLink, Key>>(),
+        size_of::<StationEntry<ModelLink, Key>>(),
+        size_of::<ClientLink<Key>>(),
+        size_of::<DataPlane<'static, ModelCaps>>(),
+        size_of::<Station>(),
+        size_of::<Ap>(),
+    );
+    assert!(size_of::<DataPlane<'static, ModelCaps>>() <= size_of::<Station>());
+}
+
+/// The lifetime: the search leaves it out (its paths last microseconds, the
+/// lifetime an hour), so these cases hold it. A station whose members live
+/// a millisecond and may miss three aggregates, under an agreement of
+/// four, its three MSDUs offered while its link was held and released
+/// together: they go as one aggregate. A miss of one frame is its end
+/// whatever its age (it went as one MPDU by its retry plan), so the cases
+/// keep two frames to retry.
+fn aggregating<'id>(
+    run: Running<'id, STATION_SINGLES, 0>,
+    engine: &mut StationEngine<'id, 8>,
+    before: impl FnOnce(&mut Around<'id, STATION_SINGLES, 0>),
+) -> Around<'id, STATION_SINGLES, 0> {
+    let mut around = station(run, engine, 3, Duration::from_millis(1));
+    linked(engine, |peer| {
+        let _ = peer.tx_agreement(WmmUserPriority::UP0, 4, &mut around.turn());
+        let _ = peer.hold(&mut around.turn());
+    });
+    around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+    around.net.offer(2, WmmUserPriority::UP0, DESTINATION);
+    around.net.offer(3, WmmUserPriority::UP0, DESTINATION);
+    let _ = engine.offered(&mut around.turn());
+    before(&mut around);
+    linked(engine, |peer| {
+        let _ = peer.release(&mut around.turn());
+    });
+    assert_eq!(around.port.published().len(), 1);
+    assert_eq!(around.port.published()[0].frames.len(), 3);
+    around
+}
+
+/// The BlockAck acknowledges the first frame only.
+fn first_only<const S: usize, const D: usize>(around: &mut Around<'_, S, D>) {
+    around.port.set_air(BEST_EFFORT, Air::Ack);
+    around.port.acknowledge(FrameSet::prefix(1));
+}
+
+fn expired(around: &Around<'_, STATION_SINGLES, 0>) -> usize {
+    around
+        .seen
+        .0
+        .iter()
+        .filter(|event| **event == Event::Lost(DataLoss::Expired))
+        .count()
+}
+
+#[test]
+fn a_member_missed_within_its_lifetime_is_kept_and_one_missed_after_it_is_dropped_expired() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = aggregating(run, &mut engine, |_| {});
+        // Within their lifetime: the missed members are kept and go again.
+        first_only(&mut around);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.net.home, [1]);
+        assert_eq!(around.port.published().len(), 2);
+        // Missed again after their lifetime: dropped, expired, home.
+        around.pass(2_000);
+        around.port.set_air(BEST_EFFORT, Air::NoAck);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.net.home, [1, 2, 3]);
+        assert_eq!(expired(&around), 2);
+        assert_eq!(around.port.published().len(), 2);
+    });
+}
+
+/// A queued MSDU's lifetime starts when an arena takes it, not when the
+/// network offered it: the time it waited in its queue is not counted.
+#[test]
+fn a_member_that_waited_in_its_queue_past_its_lifetime_still_has_its_lifetime_in_the_arena() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        // The three waited in their queue, held, longer than they live.
+        let mut around = aggregating(run, &mut engine, |around| around.pass(5_000));
+        first_only(&mut around);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        // The missed ones are kept for their retry, not dropped expired.
+        assert_eq!(around.net.home, [1]);
+        assert_eq!(expired(&around), 0);
+        assert_eq!(around.port.published().len(), 2);
+    });
+}
+
+/// A kept member that outlives its lifetime while the gate closes and stays
+/// closed is not dropped then: the lifetime is read at a settlement. It
+/// goes once more when the gate opens, and that miss drops it expired.
+#[test]
+fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_expires_it() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = aggregating(run, &mut engine, |_| {});
+        // The gate's closing is asked while the aggregate is on the air.
+        {
+            let mut data = station_flowing(&mut engine);
+            let GatePlace::Open(open) = data.gate() else {
+                panic!("the gate is open");
+            };
+            let _ = open.close(&mut around.turn());
+        }
+        first_only(&mut around);
+        // Its end settles; the closing's poll ends with the air quiet.
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let gate = around.told.gate.take().unwrap();
+        assert_eq!(around.net.home, [1]);
+        around.pass(5_000);
+        let _ = engine.round(&mut around.turn());
+        assert_eq!(around.net.home, [1]);
+        {
+            let mut data = station_flowing(&mut engine);
+            let GatePlace::Shut(shut) = data.gate() else {
+                panic!("the gate is shut");
+            };
+            let _ = shut.open(gate, &mut around.turn());
+        }
+        assert_eq!(around.port.published().len(), 2);
+        around.port.set_air(BEST_EFFORT, Air::NoAck);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.net.home, [1, 2, 3]);
+        assert_eq!(expired(&around), 2);
+    });
+}
+
+/// A single that ends while the gate's closing is polled comes back through
+/// the poll's sink: its place and its queue's right are home again, and the
+/// stop gives the proof back.
+#[test]
+fn a_single_that_ends_during_the_commands_poll_gives_its_place_and_queue_back() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
+        let _ = engine.offered(&mut around.turn());
+        {
+            let mut data = ap_flowing(&mut engine);
+            let GatePlace::Open(open) = data.gate() else {
+                panic!("the gate is open");
+            };
+            let _ = open.close(&mut around.turn());
+        }
+        // The single ends while the closing is polled, before the barrier.
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        around.port.serve_in_next_poll();
+        let _ = engine.round(&mut around.turn());
+        assert_eq!(around.rates.lessons, 1);
+        assert!(around.told.gate.is_some());
+        assert!(matches!(
+            ap_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Stopped(_)
+        ));
+        assert!(matches!(engine.data(), DataPlace::Stopped(_)));
+    });
+}

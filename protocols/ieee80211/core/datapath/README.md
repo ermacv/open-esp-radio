@@ -4,6 +4,16 @@
 code, has no runtime panic path and touches no port, frame buffer or clock of
 its own: every instant and every arena is its caller's. It holds today:
 
+- `engine`: one interface's transmit engine over the port, the network's
+  end (`Network`), the rate policy (`Rates`) and the controller's end
+  (`Told`). Its state is a sum: the data is `Stopped`, or flowing or
+  stopping with what it holds while it runs (a station's plane built with
+  its arenas, or an access point's lanes, the gate with the command's
+  place, the rights), and a peer is free or linked with its link. A
+  controller acts through views of these places (`DataPlace`, `PeerPlace`,
+  `GatePlace`), whose handles offer only the transitions their variant
+  admits; the rights come in by value at `flows` and go back with
+  `DataStop::Stopped`;
 - `plane`: the station's data transmission over the port's two data arenas;
 - `numbers`: the link's transmit numbers (`TxNumbers`: each TID's QoS
   sequence space, the station's own space, which management frames and
@@ -34,10 +44,10 @@ its own: every instant and every arena is its caller's. It holds today:
 The station's data transmission over the port's two arenas.
 `DataPlane::new` takes the installation's two idle arenas, and each book
 holds its arena's right in its place: idle, open or on the air.
-`DataPlane::handover` takes one link's `DataLink` (header template,
-`AcAdmission`, retry policy, HT limits and each TID's `TxWindow`) and
-`DataPlane::stop` returns it, after returning the frames of the arenas not
-on the air; `DataPlane::withdraw_unpublished` returns them alone, before a
+`DataPlane::link` takes one link's `DataLink` (header template,
+`AcAdmission`, retry policy, HT limits and each TID's `TxWindow`) into its
+`Linkage::Linked` variant, and `DataPlane::stop` ends it, after returning
+the frames of the arenas not on the air; `DataPlane::withdraw_unpublished` returns them alone, before a
 pairwise key changes. `DataPlane::intake` makes an MSDU one MPDU in place,
 as the standby arena takes it (`DataPort::place`, `Place::write`): its
 body stays in the network's memory, and its front (the header from the

@@ -1,0 +1,16 @@
+error[E0080]: evaluation panicked: a layout has no data place or one a transmit queue
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::DataLayout::<17, 2, 4, 3>::CHECKED` failed here
+  |
+ ::: src/data.rs
+  |
+  |         panic!("a layout has no data place or one a transmit queue")
+  |         ------------------------------------------------------------ in this macro invocation
+
+note: erroneous constant encountered
+ --> tests/ui/data_places.rs:8:23
+  |
+8 | pub const THREE: () = DataLayout::<17, 2, 4, 3>::CHECKED; // ui-error@outside: E0080: evaluation panicked: a layout has no data place...
+  |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

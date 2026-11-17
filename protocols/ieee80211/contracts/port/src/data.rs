@@ -145,6 +145,11 @@ impl FrameSet {
         self.0.count_ones()
     }
 
+    /// The number of frames, which a byte holds: a set names at most 64.
+    pub const fn count(self) -> u8 {
+        self.0.count_ones() as u8
+    }
+
     /// Whether the set holds no frame.
     pub const fn is_empty(self) -> bool {
         self.0 == 0
@@ -186,7 +191,7 @@ right!(
 );
 right!(
     /// An arena on the air: the frames of its prefix that went.
-    OnAir { side: ArenaSide, sent: FrameSet }
+    OnAir { side: ArenaSide, sent: u8 }
 );
 right!(
     /// A single's place: one of a purpose of a role, a const count of the
@@ -258,6 +263,11 @@ impl OnAir<'_> {
     /// The frames of the prefix that went; the others stay in their
     /// places with no attempt spent.
     pub const fn sent(&self) -> FrameSet {
+        FrameSet::prefix(self.sent)
+    }
+
+    /// How many went: what went is always a prefix, so the set is derived.
+    pub const fn went(&self) -> u8 {
         self.sent
     }
 }
@@ -298,17 +308,28 @@ pub const QUEUES: [WmmAccessCategory; 4] = [
 ];
 
 /// The data's rights of an installation: two arenas, `SINGLES` single
-/// places, a right a transmit queue, the command's place, the key slots
-/// and the receive agreements' slots, all empty. The machine holds them
+/// places of its controller, `DATA` single places of an access point's
+/// data, a right a transmit queue, the command's place, the key slots and
+/// the receive agreements' slots, all empty. The machine holds them
 /// while the data is stopped, the engine while it flows; a retirement
 /// takes them whole.
 #[must_use = "the data's rights each have one holder"]
 #[derive(Debug)]
-pub struct DataRights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> {
+pub struct DataRights<
+    'id,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+    const DATA: usize,
+> {
     /// The two arenas.
     pub arenas: [IdleArena<'id>; 2],
-    /// The single places, one a purpose.
+    /// The controller's single places, one a purpose.
     pub singles: [SinglePlace<'id>; SINGLES],
+    /// An access point's data places, one a transmit queue in the order of
+    /// [`QUEUES`]; a station's data goes in the arenas and has none
+    /// ([`DataLayout::CHECKED`]).
+    pub data: [SinglePlace<'id>; DATA],
     /// A right a queue, in the order of [`QUEUES`].
     pub queues: [QueueRight<'id>; 4],
     /// The command's place.
@@ -322,22 +343,44 @@ pub struct DataRights<'id, const SINGLES: usize, const GROUPS: usize, const AGRE
 }
 
 /// The layout of an installation's data's rights.
-pub struct DataLayout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>;
+pub struct DataLayout<
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+    const DATA: usize,
+>;
 
-impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> crate::life::sealed::Layout
-    for DataLayout<SINGLES, GROUPS, AGREEMENTS>
+/// The data places of an access point's layout: one a transmit queue.
+pub const DATA_SINGLES: usize = QUEUES.len();
+
+impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize>
+    DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
+{
+    /// The layout's data places are none (a station's) or one a transmit
+    /// queue (an access point's, [`DATA_SINGLES`]): a single of an access
+    /// point's data takes its queue's place, so another number is no
+    /// layout. Its mint evaluates it; a layout of another number does not
+    /// build.
+    pub const CHECKED: () = if DATA != 0 && DATA != DATA_SINGLES {
+        panic!("a layout has no data place or one a transmit queue")
+    };
+}
+
+impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize>
+    crate::life::sealed::Layout for DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
 {
 }
 
-impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> MintData
-    for DataLayout<SINGLES, GROUPS, AGREEMENTS>
+impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const DATA: usize> MintData
+    for DataLayout<SINGLES, GROUPS, AGREEMENTS, DATA>
 {
-    type Rights<'id> = DataRights<'id, SINGLES, GROUPS, AGREEMENTS>;
+    type Rights<'id> = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA>;
 
     fn mint<'id>(seal: crate::life::MintSeal) -> Self::Rights<'id> {
         let crate::life::MintSeal(()) = seal;
+        const { Self::CHECKED };
         const {
-            if SINGLES > u8::MAX as usize
+            if SINGLES + DATA > u8::MAX as usize
                 || GROUPS > u8::MAX as usize
                 || AGREEMENTS > u8::MAX as usize
             {
@@ -351,6 +394,13 @@ impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> MintDat
             }),
             singles: core::array::from_fn(|index| SinglePlace {
                 index: index as u8,
+                brand: PhantomData,
+            }),
+            // After the controller's: each place's index is the installation's
+            // own. The sum fits a byte (the const check above), so the
+            // addition saturates nowhere.
+            data: core::array::from_fn(|index| SinglePlace {
+                index: SINGLES.saturating_add(index) as u8,
                 brand: PhantomData,
             }),
             queues: QUEUES.map(|category| QueueRight {
@@ -468,11 +518,13 @@ pub enum ArenaOutcome<A, B, D> {
     Aggregate(AggregateOutcome<B, D>),
 }
 
-/// An arena's end, read in place: what the prefix's frames did on the air.
-#[derive(Debug)]
-pub struct Ended<'a, A, B, D> {
+/// An arena's end, kept by the port and read in place through the
+/// reference [`DataPort::aggregate_ended`] returns: what the prefix's frames
+/// did on the air.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Ended<A, B, D> {
     /// What went, and how it ended.
-    pub outcome: &'a ArenaOutcome<A, B, D>,
+    pub outcome: ArenaOutcome<A, B, D>,
     /// The frames of the prefix that went.
     pub sent: FrameSet,
     /// The frames the response acknowledged.
@@ -686,7 +738,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         facts: TxFacts,
         on_air: &OnAir<'id>,
         now: Instant,
-    ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>>;
+    ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>>;
 
     /// Settle an ended arena: the frames of `keep` stay in their places for
     /// a retry, every other body goes home.
@@ -799,8 +851,8 @@ impl<'id> PortKey<'id> {
         }
     }
 
-    /// An arena published: its prefix `sent` went.
-    pub const fn publish(&self, arena: Arena<'id>, sent: FrameSet) -> OnAir<'id> {
+    /// An arena published: its first `sent` frames went.
+    pub const fn publish(&self, arena: Arena<'id>, sent: u8) -> OnAir<'id> {
         let Arena { side, brand, .. } = arena;
         OnAir { side, sent, brand }
     }

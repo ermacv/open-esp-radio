@@ -90,6 +90,19 @@ impl<P> TxNumbers<P> {
     }
 
     /// The link's sequence spaces and key, taken apart.
+    /// The numbers' state, for the engine's search: each space's next and
+    /// whether a key is held.
+    #[cfg(test)]
+    pub(crate) fn state_key(&self) -> ([u16; 9], bool) {
+        let mut next = [self.station.peek().get(); 9];
+        if let Some(tids) = &self.tids {
+            for (slot, tid) in next.iter_mut().skip(1).zip(tids) {
+                *slot = tid.peek().get();
+            }
+        }
+        (next, self.key.is_some())
+    }
+
     pub fn into_parts(self) -> (SequenceCounter, Option<[SequenceCounter; 8]>, Option<P>) {
         (self.station, self.tids, self.key)
     }

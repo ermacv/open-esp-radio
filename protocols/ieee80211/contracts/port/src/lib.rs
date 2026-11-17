@@ -183,8 +183,8 @@ pub mod receive;
 
 pub use data::{
     Agreement, AgreementSlot, Arena, ArenaOutcome, ArenaSide, Command, CommandEnd, CommandPlace,
-    CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GroupSlot,
-    HEADROOM, HeaderLen, IdleArena, InCommand, InstalledGroup, InstalledPairwise, OnAir,
+    CommandPoll, Complete, DATA_SINGLES, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
+    GroupSlot, HEADROOM, HeaderLen, IdleArena, InCommand, InstalledGroup, InstalledPairwise, OnAir,
     PairwiseSlot, Place, Placing, PortSink, Ppdu, QUEUES, QueueRight, Settled, Signal, SinglePlace,
     TxFacts,
 };
