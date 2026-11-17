@@ -573,6 +573,36 @@ mod c {
             );
             usb::text(console, line.as_bytes()).await;
         }
+        // By the frame before (`tasks/160`): completed / sent, the last
+        // column the run's first frame.
+        for (case, per) in CASES.iter().zip(&cases.per) {
+            let mut after = [[0_u32; 2]; CASES.len() + 1];
+            for round in 0..ROUNDS {
+                let seen = per
+                    .seen
+                    .get((round / 32) as usize)
+                    .is_some_and(|word| word & 1 << (round % 32) != 0);
+                if let Some(cell) = after.get_mut(case_c::before_index(round, *case)) {
+                    cell[0] = cell[0].saturating_add(u32::from(seen));
+                    cell[1] = cell[1].saturating_add(1);
+                }
+            }
+            line.clear();
+            let _ = writeln!(line, "PLACE tag={} after={:?}", case.tag(), after);
+            usb::text(console, line.as_bytes()).await;
+        }
+        // The rounds completed, for the air capture's comparison.
+        for (case, per) in CASES.iter().zip(&cases.per) {
+            for (at, words) in per.seen.chunks(16).enumerate() {
+                line.clear();
+                let _ = write!(line, "SEEN tag={} from={}", case.tag(), at * 16 * 32);
+                for word in words {
+                    let _ = write!(line, " {word:08x}");
+                }
+                let _ = writeln!(line);
+                usb::text(console, line.as_bytes()).await;
+            }
+        }
         line.clear();
         let _ = writeln!(line, "CASE unknown={}", cases.unknown);
         usb::text(console, line.as_bytes()).await;

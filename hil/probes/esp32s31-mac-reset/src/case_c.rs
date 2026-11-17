@@ -50,6 +50,47 @@ pub const CASES: [Case; 6] = [
     Case::Provenance1500,
 ];
 
+/// The order of round `round`'s cases: a permutation drawn from the round,
+/// so that every case follows every other (`tasks/160`: the bit or the
+/// place after a long frame).
+pub fn order(round: u32) -> [Case; 6] {
+    let mut cases = CASES;
+    let mut state = round.wrapping_add(1).wrapping_mul(0x9e37_79b9) | 1;
+    for last in (1..cases.len()).rev() {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        let pick = (state as usize) % (last + 1);
+        if let (Some(&a), Some(&b)) = (cases.get(last), cases.get(pick)) {
+            if let Some(cell) = cases.get_mut(last) {
+                *cell = b;
+            }
+            if let Some(cell) = cases.get_mut(pick) {
+                *cell = a;
+            }
+        }
+    }
+    cases
+}
+
+/// The frame sent before `case`'s frame of round `round`; `None` for the
+/// run's first.
+pub fn before(round: u32, case: Case) -> Option<Case> {
+    let this = order(round);
+    match this.iter().position(|each| *each == case)? {
+        0 => order(round.checked_sub(1)?).last().copied(),
+        at => this.get(at - 1).copied(),
+    }
+}
+
+/// An index for [`before`]'s answer: a case's place in [`CASES`], or
+/// `CASES.len()` for none.
+pub fn before_index(round: u32, case: Case) -> usize {
+    before(round, case)
+        .and_then(|before| CASES.iter().position(|each| *each == before))
+        .unwrap_or(CASES.len())
+}
+
 impl Case {
     pub const fn tag(self) -> u32 {
         match self {
@@ -228,6 +269,26 @@ mod tests {
             .filter(|offset| Case::Provenance1500.counter_place(*offset))
             .count();
         assert_eq!(places, 4 * (1_500 - BODY).div_ceil(PERIOD));
+    }
+
+    #[test]
+    fn every_case_follows_every_other() {
+        let mut seen = [[0_u32; 7]; 6];
+        for round in 0..ROUNDS {
+            let order = order(round);
+            for case in CASES {
+                assert_eq!(order.iter().filter(|each| **each == case).count(), 1);
+                let at = CASES.iter().position(|each| *each == case).unwrap();
+                seen[at][before_index(round, case)] += 1;
+            }
+        }
+        for (at, row) in seen.iter().enumerate() {
+            for (before, count) in row.iter().enumerate().take(6) {
+                if before != at {
+                    assert!(*count > 300, "case {at} after {before}: {count}");
+                }
+            }
+        }
     }
 
     #[test]
