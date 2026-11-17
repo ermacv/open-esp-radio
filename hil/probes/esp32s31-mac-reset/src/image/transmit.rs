@@ -131,6 +131,8 @@ mod tx_phase {
     pub const RELEASE: u32 = 35;
     pub const STOP: u32 = 36;
     pub const PULSE: u32 = 37;
+    /// An abandoned chain's words or buffer could not be read (`tasks/169`).
+    pub const READ: u32 = 38;
 }
 
 /// The single site that reads the probe's own placed DMA memory while the
@@ -653,19 +655,23 @@ struct Abandoned {
 }
 
 impl Abandoned {
-    /// The descriptor's three words now.
-    fn words(&self) -> [u32; 3] {
+    /// The descriptor's three words now; a word that cannot be read fails
+    /// the series with its chain, never compares as a value (`tasks/169`).
+    fn words(&self, chain: u32) -> Result<[u32; 3], Failure> {
         let len = WifiTxDmaDescriptor::SIZE as u32;
-        [0, 4, 8].map(|offset| {
-            read_placed_word(self.descriptor_address, len, offset).unwrap_or(u32::MAX)
-        })
+        let mut words = [0_u32; 3];
+        for (word, offset) in words.iter_mut().zip([0, 4, 8]) {
+            *word = read_placed_word(self.descriptor_address, len, offset)
+                .ok_or((tx_phase::READ, chain | offset << 24))?;
+        }
+        Ok(words)
     }
 
     /// The descriptor's words that differ from their reference, and the
     /// buffer's words that differ from the frame written into it.
-    fn changed(&self, header: &[u8; 24], chain: u32) -> (u32, u32) {
+    fn changed(&self, header: &[u8; 24], chain: u32) -> Result<(u32, u32), Failure> {
         let descriptor = self
-            .words()
+            .words(chain)?
             .iter()
             .zip(self.reference)
             .filter(|(now, then)| **now != *then)
@@ -676,11 +682,13 @@ impl Abandoned {
             let expected = u32::from_le_bytes(core::array::from_fn(|byte| {
                 buffer_byte(header, chain, FRAME, word * 4 + byte)
             }));
-            if read_placed_word(self.buffer_start, self.buffer_len, offset) != Some(expected) {
+            let read = read_placed_word(self.buffer_start, self.buffer_len, offset)
+                .ok_or((tx_phase::READ, chain | 0x0080_0000))?;
+            if read != expected {
                 buffer = buffer.saturating_add(1);
             }
         }
-        (descriptor, buffer)
+        Ok((descriptor, buffer))
     }
 }
 
@@ -931,7 +939,7 @@ pub(super) async fn series(
             buffer_len: region.len(),
             reference: [0; 3],
         };
-        abandoned.reference = abandoned.words();
+        abandoned.reference = abandoned.words(chain32)?;
         let after = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
         let active = access.wifi_mac_hal().channel_active_state();
         let raw = mac_irq.mac_interrupt_raw().bits();
@@ -976,7 +984,7 @@ pub(super) async fn series(
             EmbassyClock.wait_until(waited).await;
         }
         let (descriptor_changed, buffer_changed) =
-            abandoned.changed(&frames.header, counter::PULSE | chain32);
+            abandoned.changed(&frames.header, counter::PULSE | chain32)?;
         let guards_changed = frames.changed_guard_words(chain..chain + 2);
         // The second run transmits.
         let (second, second_cycles) = send(
@@ -1024,7 +1032,8 @@ pub(super) async fn series(
     let mut buffers = 0_u32;
     let mut first = u32::MAX;
     for (chain, abandoned) in chains.iter().enumerate() {
-        let (descriptor, buffer) = abandoned.changed(&frames.header, counter::PULSE | chain as u32);
+        let (descriptor, buffer) =
+            abandoned.changed(&frames.header, counter::PULSE | chain as u32)?;
         if (descriptor != 0 || buffer != 0) && first == u32::MAX {
             first = chain as u32;
         }
