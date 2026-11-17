@@ -40,6 +40,10 @@ oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 [build-dependencies]
 oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
+[features]
+# Part two's transmit series (`tasks/144` A) in place of part one's.
+transmit = []
+
 [lints]
 workspace = true
 

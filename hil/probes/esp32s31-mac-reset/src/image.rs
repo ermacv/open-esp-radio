@@ -3,6 +3,13 @@
 //! crate and the HAL that `Esp32s31Radio` calls, in the same order
 //! (README, "The order"), so that `WifiClocked::reset_mac` can pulse the
 //! MAC's block reset with the receive walker live.
+#![cfg_attr(
+    feature = "transmit",
+    allow(
+        dead_code,
+        reason = "part two's image leaves part one's series out; its helpers stay shared"
+    )
+)]
 use crate::usb;
 use oer_chips_esp32s31_hal::{
     peripherals::usb_serial_jtag::ConsoleInterrupt,
@@ -348,10 +355,29 @@ enum Kind {
     Hold = 7,
     /// One recovery case of `tasks/097` and its window.
     Case = 8,
+    /// Part two: one frame sent and awaited.
+    #[cfg(feature = "transmit")]
+    Tx = 9,
+    /// Part two: a pulse with a frame of its own on the air, and the
+    /// second run's frame.
+    #[cfg(feature = "transmit")]
+    TxPulse = 10,
+    /// Part two: an ordinary stop with a frame on the air.
+    #[cfg(feature = "transmit")]
+    TxStop = 11,
+    /// Part two: every abandoned chain read again at the run's end.
+    #[cfg(feature = "transmit")]
+    Abandoned = 12,
+    /// Part two: the peer's address, learned from its frames.
+    #[cfg(feature = "transmit")]
+    Peer = 13,
 }
 
 const WIDTH: usize = 22;
+#[cfg(not(feature = "transmit"))]
 const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS + CASES;
+#[cfg(feature = "transmit")]
+const ROWS: usize = transmit::ROWS;
 /// The recovery cases' records: a baseline and cases 0, 1 and 3.
 const CASES: usize = 4;
 /// The window each recovery case is measured over.
@@ -514,6 +540,8 @@ macro_rules! apart {
         core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
     }};
 }
+#[cfg(feature = "transmit")]
+mod transmit;
 type SessionRun = impl core::future::Future<Output = ()>;
 static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<SessionRun>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
@@ -799,6 +827,7 @@ async fn session(
                     pilot: &mut pilot,
                     clocks: &clocks,
                 },
+                station,
             },
             access,
             clocks_on,
@@ -822,6 +851,7 @@ struct Owners<'a> {
     sources: &'a mut Sources,
     timer: &'a CooperativeTimer,
     client: Client<'a>,
+    station: [u8; 6],
 }
 
 /// The Wi-Fi client's owners a leave and a join take and give back.
@@ -854,7 +884,7 @@ fn poll_apart<F: core::future::Future>(
 async fn series(
     owners: Owners<'_>,
     mut access: RadioAccess,
-    mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
     mac: MacColdStartConfig,
     channel: Ghz2_4Channel,
     seed: u32,
@@ -867,6 +897,7 @@ async fn series(
         sources,
         timer,
         client,
+        station,
     } = owners;
     // The receive ring, live, with the open promiscuous receive.
     let placed =
@@ -893,6 +924,90 @@ async fn series(
         .map_err(|code| (phase::RECEIVE, code))?;
     journal.record(Kind::Up, &[units]);
 
+    #[cfg(feature = "transmit")]
+    let result = {
+        let _ = client;
+        apart!(transmit::series(
+            transmit::TransmitParts {
+                storage,
+                slot,
+                mac_irq,
+                power_irq,
+                sources,
+                timer,
+                mac,
+                channel,
+                station,
+                seed,
+            },
+            access,
+            clocks_on,
+            ring,
+            journal,
+        ))
+    };
+    #[cfg(not(feature = "transmit"))]
+    let result = {
+        let _ = station;
+        apart!(part_one(
+            PartOne {
+                storage,
+                slot,
+                mac_irq,
+                power_irq,
+                sources,
+                timer,
+                client,
+                mac,
+                channel,
+                seed,
+            },
+            access,
+            clocks_on,
+            ring,
+            journal,
+        ))
+    };
+    result
+}
+
+/// What part one borrows from the series.
+#[cfg(not(feature = "transmit"))]
+struct PartOne<'a> {
+    storage: &'static Storage,
+    slot: &'a mut Option<Radio>,
+    mac_irq: &'a mut MacInterruptRegisters,
+    power_irq: &'a mut MacPowerInterruptRegisters,
+    sources: &'a mut Sources,
+    timer: &'a CooperativeTimer,
+    client: Client<'a>,
+    mac: MacColdStartConfig,
+    channel: Ghz2_4Channel,
+    seed: u32,
+}
+
+/// Part one (`tasks/084`): the recovery cases, the stops, the pulses, the
+/// quiet pulses and the holds, all under receive.
+#[cfg(not(feature = "transmit"))]
+async fn part_one(
+    parts: PartOne<'_>,
+    mut access: RadioAccess,
+    mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    mut ring: Ring,
+    journal: &mut Journal,
+) -> Result<(), Failure> {
+    let PartOne {
+        storage,
+        slot,
+        mac_irq,
+        power_irq,
+        sources,
+        timer,
+        client,
+        mac,
+        channel,
+        seed,
+    } = parts;
     // `tasks/097`: the recovery cases, from the healthy start on.
     let (cased_access, cased_clocks, cased_ring) = apart!(cases(
         CaseParts {
