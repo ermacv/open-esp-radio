@@ -14,6 +14,8 @@ use super::amsdu::AmsduParts;
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start, tx_phase};
 use super::*;
 use crate::case_c::{CASES, CELL_ROUNDS, Case, TEMPORAL_KEY, byte, order, protected_byte};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_cipher::{
     aes::SoftwareAes128, ccmp_mpdu::CcmpAssociation,
@@ -23,6 +25,8 @@ use oer_protocols_ieee80211_wire::security::Spp;
 /// Unprotected frames before the cell: the receiver learns this board's
 /// address from them.
 const HELLO: u32 = 40;
+/// The wait after the peer is learned.
+const QUIET_MS: u32 = 1_500;
 /// The longest protected MPDU: case 4's.
 const LONGEST: usize = Case::AmsduLong.protected_length();
 
@@ -38,6 +42,15 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         journal,
     } = parts;
     mark(96);
+    // The injector's burst that taught this board its peer ends within half
+    // a second (`tasks/167`); the cell starts after it, on a quiet air (run
+    // e2 overlapped it by 0.33 s).
+    if let Some(at) = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(QUIET_MS))
+    {
+        EmbassyClock.wait_until(at).await;
+    }
     for hello in 0..HELLO {
         let case = Case::Provenance700;
         let counter = case.counter(hello);
