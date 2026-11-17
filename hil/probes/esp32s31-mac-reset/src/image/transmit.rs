@@ -38,10 +38,19 @@ const ABANDONED: usize = 100;
 const SLOTS: usize = 2 * ABANDONED + 2;
 /// The ordinary frames' slot.
 const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
-/// The frames sent before the stops, each awaited.
-const BASELINE: usize = 20;
-/// Their lengths, in turn: an authentication frame's, then longer.
-const BASELINE_LENGTHS: [usize; 4] = [30, 100, 512, FRAME];
+/// The queue's timeout of the backend's direct-MPDU profile.
+const TIMEOUT: u16 = 0x03ff;
+/// The medium's observation (`tasks/157`): each timeout, each length, this
+/// many frames, with the peer silent and then sending.
+const OBSERVED_TIMEOUTS: [u16; 3] = [0, TIMEOUT, 0xffff];
+const OBSERVED_LENGTHS: [usize; 2] = [30, FRAME];
+const OBSERVED_REPEATS: usize = 4;
+const OBSERVED: usize = OBSERVED_TIMEOUTS.len() * OBSERVED_LENGTHS.len() * OBSERVED_REPEATS;
+/// The frames sent before the stops: the observation's, in both phases.
+const BASELINE: usize = 2 * OBSERVED;
+/// How long an observed frame's completion is awaited before its abort:
+/// past the largest timeout's 65 ms.
+const OBSERVED_COMPLETION_MS: u32 = 100;
 /// The stops with a frame on the air.
 pub(super) const STOPS: usize = 1_000;
 /// How long a frame's completion is awaited.
@@ -158,7 +167,7 @@ const fn guard_word(slot: usize, word: usize) -> u32 {
 
 /// The legacy program of one frame: the backend's direct-MPDU profile
 /// (`LegacyTxConfig::management`) at 6 Mb/s, answered by an ACK.
-fn parameters(length: usize, power: u8) -> MacLegacyTxParameters {
+fn parameters(length: usize, power: u8, timeout: u16) -> MacLegacyTxParameters {
     MacLegacyTxParameters {
         control: MacTxControlFrame {
             protection: MacTxProtection::None,
@@ -170,7 +179,7 @@ fn parameters(length: usize, power: u8) -> MacLegacyTxParameters {
         // The PSDU: the MPDU and the FCS the hardware appends.
         signal: (length + 4) as u16,
         data_power: power,
-        timeout: 0x03ff,
+        timeout,
         scheduler_priority: 1,
         packet_priority: 1,
         priority_count: 1,
@@ -268,6 +277,7 @@ fn start(
     lease: Lease,
     length: usize,
     power: u8,
+    timeout: u16,
 ) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
@@ -276,7 +286,7 @@ fn start(
     free.reserve(FRAME as u32, length as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
-    let program = MacLegacyTxProgram::new(&publication, parameters(length, power))
+    let program = MacLegacyTxProgram::new(&publication, parameters(length, power, timeout))
         .ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
@@ -351,6 +361,109 @@ async fn await_completion(
     complete(access, descriptor, observation, how)
 }
 
+/// An observed frame's end: its completion within `millis`, else its abort
+/// (and the completion the abort finds on the air). `how`: 0 completed,
+/// 1 aborted and detached, 2 completed after the abort, 3 aborted after
+/// no completion within `millis`.
+async fn observed_end(
+    access: &mut RadioAccess,
+    descriptor: &mut Descriptor,
+    millis: u32,
+) -> Result<Ended, Failure> {
+    let end = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(millis))
+        .ok_or((tx_phase::COMPLETION, 2))?;
+    while EmbassyClock.now() < end {
+        if let Some(observation) = access.wifi_mac_hal().take_tx_completion(QUEUE) {
+            return complete(access, descriptor, observation, 0);
+        }
+        wait_micros(50).await;
+    }
+    match abort(access, descriptor)? {
+        Some(ended) => Ok(Ended {
+            how: if ended.how == 1 { 3 } else { ended.how },
+            ..ended
+        }),
+        None => await_completion(access, descriptor, 2).await,
+    }
+}
+
+/// What the medium's observation waits for from the peer.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum PeerState {
+    /// No frame of its for 200 ms.
+    Silent,
+    /// A frame of its.
+    Sending,
+}
+
+/// Wait, at most 30 s, until the peer is in `state`; the 200 ms windows
+/// waited.
+async fn await_peer(
+    storage: &Storage,
+    ring: &mut Ring,
+    access: &mut RadioAccess,
+    peer: [u8; 6],
+    state: PeerState,
+) -> Result<u32, Failure> {
+    for window in 0..150_u32 {
+        let heard = units_from(storage, ring, access, peer, 200).await?;
+        if (heard != 0) == (state == PeerState::Sending) {
+            return Ok(window);
+        }
+    }
+    Err((
+        tx_phase::PEER,
+        0x10 | u32::from(state == PeerState::Sending),
+    ))
+}
+
+/// The units of `peer`'s received over `millis`, each taken and recycled.
+async fn units_from(
+    storage: &Storage,
+    ring: &mut Ring,
+    access: &mut RadioAccess,
+    peer: [u8; 6],
+    millis: u32,
+) -> Result<u32, Failure> {
+    let end = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(millis))
+        .ok_or((tx_phase::PEER, 0x20))?;
+    let mut heard = 0_u32;
+    while EmbassyClock.now() < end {
+        storage
+            .observe_reserved(ring, access.rx_dma())
+            .map_err(|_| (tx_phase::PEER, 0x21))?;
+        ring.complete_pending_reload(access.rx_dma(), Settle::new(RELOAD_SETTLE, &EmbassyClock))
+            .map_err(|_| (tx_phase::PEER, 0x22))?;
+        let frozen = ring
+            .freeze_cursor(access.rx_dma())
+            .map_err(|_| (tx_phase::PEER, 0x23))?;
+        let Some(unit) = storage
+            .take_completed_unit(ring, frozen)
+            .map_err(|_| (tx_phase::PEER, 0x24))?
+        else {
+            wait_micros(100).await;
+            continue;
+        };
+        let from = unit
+            .step(0)
+            .ok()
+            .and_then(|step| addresses(step.bytes()))
+            .map(|(_, from)| from);
+        if from == Some(peer) {
+            heard = heard.saturating_add(1);
+        }
+        let credit = unit.retain_discard().ok_or((tx_phase::PEER, 0x25))?;
+        let _appended = credit
+            .append(access.rx_dma())
+            .map_err(|_| (tx_phase::PEER, 0x26))?;
+    }
+    Ok(heard)
+}
+
 /// A completion taken: the descriptor released by the queue's detach.
 fn complete(
     access: &mut RadioAccess,
@@ -388,9 +501,24 @@ async fn send(
 ) -> Result<(Ended, u32), Failure> {
     let lease = frames.lease(ORDINARY_SLOT, chain, length)?;
     let begin = oer_portable_riscv::cycle32();
-    start(access, ordinary, lease, length, frames.power)?;
+    start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
     let ended = await_completion(access, ordinary, 0).await?;
     Ok((ended, oer_portable_riscv::cycle32().wrapping_sub(begin)))
+}
+
+/// A received frame's Address 1 and Address 2. The frame follows the
+/// control prefix and its tail; a frame with HE-SIG-B options between them
+/// is not the peer's (6 Mb/s).
+fn addresses(bytes: &[u8]) -> Option<([u8; 6], [u8; 6])> {
+    let prefix = WifiRxControlPrefix::new(bytes.first_chunk()?);
+    if prefix.he_sig_b().present() {
+        return None;
+    }
+    let frame = bytes.get(WifiRxControlPrefix::SIZE + WifiRxControlTail::SIZE..)?;
+    Some((
+        frame.get(4..10)?.try_into().ok()?,
+        frame.get(10..16)?.try_into().ok()?,
+    ))
 }
 
 /// The peer: the sender of the first frame addressed to the station, read
@@ -421,19 +549,11 @@ async fn learn_peer(
             wait_micros(100).await;
             continue;
         };
-        // The frame follows the control prefix and its tail; a frame with
-        // HE-SIG-B options between them is not the peer's (6 Mb/s).
-        let peer = unit.step(0).ok().and_then(|step| {
-            let bytes = step.bytes();
-            let prefix = WifiRxControlPrefix::new(bytes.first_chunk()?);
-            if prefix.he_sig_b().present() {
-                return None;
-            }
-            let frame = bytes.get(WifiRxControlPrefix::SIZE + WifiRxControlTail::SIZE..)?;
-            let to: [u8; 6] = frame.get(4..10)?.try_into().ok()?;
-            let from: [u8; 6] = frame.get(10..16)?.try_into().ok()?;
-            (to == station).then_some(from)
-        });
+        let peer = unit
+            .step(0)
+            .ok()
+            .and_then(|step| addresses(step.bytes()))
+            .and_then(|(to, from)| (to == station).then_some(from));
         let credit = unit.retain_discard().ok_or((tx_phase::PEER, 5))?;
         let _appended = credit
             .append(access.rx_dma())
@@ -553,49 +673,54 @@ pub(super) async fn series(
     };
     frames.paint_guards()?;
 
-    // The single frame: sent and acknowledged, before anything is stopped.
+    // The medium (`tasks/157`): with the peer silent, then sending, each
+    // frame of two lengths under three queue timeouts, what the MAC sees
+    // just before it, and how it ends.
     mark(71);
-    // Of four lengths in turn, the MAC's transmit counters beside each.
-    for index in 0..BASELINE {
-        let index32 = index as u32;
-        let length = BASELINE_LENGTHS
-            .get(index % BASELINE_LENGTHS.len())
-            .copied()
-            .unwrap_or(FRAME);
-        let counted = access.wifi_mac_hal().transmit_statistics_snapshot();
-        let lease = frames.lease(ORDINARY_SLOT, index32, length)?;
-        let begin = oer_portable_riscv::cycle32();
-        start(&mut access, &mut ordinary, lease, length, frames.power)?;
-        let queue = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
-        let ended = await_completion(&mut access, &mut ordinary, 0).await?;
-        let cycles = oer_portable_riscv::cycle32().wrapping_sub(begin);
-        let counted = access
-            .wifi_mac_hal()
-            .transmit_statistics_snapshot()
-            .wrapping_delta_since(counted);
-        journal.record(
-            Kind::Tx,
-            &[
-                index32,
-                ended.status,
-                ended.detail,
-                cycles,
-                length as u32,
-                counted.tx_rts,
-                counted.tx_cts,
-                counted.track,
-                counted.trcts,
-                u32::from(frames.power),
-                queue_flags(&queue),
-                u32::from(queue.cca_force) | u32::from(queue.cca_aux_force) << 8,
-                u32::from(queue.mac_active_state),
-                u32::from(queue.rate) | u32::from(queue.plcp_format) << 8,
-                u32::from(queue.legacy_signal),
-                u32::from(queue.power_codes[0] as u8),
-                u32::from(queue.interface),
-                u32::from(queue.aifsn) | u32::from(queue.contention_window) << 8,
-            ],
-        );
+    let mut index32 = 0_u32;
+    for state in [PeerState::Silent, PeerState::Sending] {
+        let waited = await_peer(storage, &mut ring, &mut access, peer, state).await?;
+        for timeout in OBSERVED_TIMEOUTS {
+            for length in OBSERVED_LENGTHS {
+                for _ in 0..OBSERVED_REPEATS {
+                    let noise = access.wifi_mac_hal().read_noise_floor_dbm();
+                    let before = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
+                    let lease = frames.lease(ORDINARY_SLOT, index32, length)?;
+                    let begin = oer_portable_riscv::cycle32();
+                    start(
+                        &mut access,
+                        &mut ordinary,
+                        lease,
+                        length,
+                        frames.power,
+                        timeout,
+                    )?;
+                    let ended =
+                        observed_end(&mut access, &mut ordinary, OBSERVED_COMPLETION_MS).await?;
+                    let cycles = oer_portable_riscv::cycle32().wrapping_sub(begin);
+                    journal.record(
+                        Kind::Tx,
+                        &[
+                            index32,
+                            u32::from(state == PeerState::Sending),
+                            waited,
+                            u32::from(timeout),
+                            length as u32,
+                            ended.how,
+                            ended.status,
+                            ended.detail,
+                            cycles,
+                            noise as u8 as u32,
+                            u32::from(before.mac_active_state),
+                            u32::from(before.cca_force) | u32::from(before.cca_aux_force) << 8,
+                            u32::from(before.hang.tx) | u32::from(before.hang.rx) << 8,
+                            u32::from(frames.power),
+                        ],
+                    );
+                    index32 = index32.wrapping_add(1);
+                }
+            }
+        }
     }
 
     // A3: an ordinary stop with a frame on the air.
@@ -607,7 +732,14 @@ pub(super) async fn series(
             .await
             .map_err(|code| (phase::RECEIVE, code))?;
         let lease = frames.lease(ORDINARY_SLOT, index32, FRAME)?;
-        start(&mut access, &mut ordinary, lease, FRAME, frames.power)?;
+        start(
+            &mut access,
+            &mut ordinary,
+            lease,
+            FRAME,
+            frames.power,
+            TIMEOUT,
+        )?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let queue = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
@@ -670,7 +802,14 @@ pub(super) async fn series(
             .dma_region()
             .map_err(|_| (tx_phase::PULSE, chain32 | 0x200))?;
         let descriptor_address = descriptor.binding().descriptor_address();
-        start(&mut access, &mut descriptor, lease, FRAME, frames.power)?;
+        start(
+            &mut access,
+            &mut descriptor,
+            lease,
+            FRAME,
+            frames.power,
+            TIMEOUT,
+        )?;
         let delay = spread.next(SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let before = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
