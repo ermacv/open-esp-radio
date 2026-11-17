@@ -84,15 +84,15 @@ pub enum FrameNumber {
 /// its frame description; any other frame stays as the station wrote it.
 /// The number is taken whether or not the frame goes later, as the
 /// station's own numbering does. Its packet number is the caller's to draw
-/// from [`TxNumbers::key`], once its rate is known.
+/// from the link's key ([`LinkHandover::key`]), once its rate is known.
 ///
 /// # Errors
 ///
 /// A TID's space on a non-QoS BSS ([`TxRefusal::LinkChanged`]), or a
 /// buffer whose memory or header no longer holds the frame
 /// ([`TxRefusal::Layout`]).
-pub fn number<P, K: Ieee80211Capabilities>(
-    numbers: &mut TxNumbers<P>,
+pub fn number<K: Ieee80211Capabilities>(
+    numbers: &mut TxNumbers,
     transmit: &mut StaTransmit<'_, K>,
 ) -> Result<(), TxRefusal> {
     number_frame(
@@ -111,8 +111,8 @@ pub fn number<P, K: Ieee80211Capabilities>(
 /// # Errors
 ///
 /// As [`number`].
-pub fn number_frame<P, K: Ieee80211Capabilities>(
-    numbers: &mut TxNumbers<P>,
+pub fn number_frame<K: Ieee80211Capabilities>(
+    numbers: &mut TxNumbers,
     number: FrameNumber,
     frame: &mut StaFrame<K>,
     bytes: &mut [u8],
@@ -305,7 +305,10 @@ pub enum LinkRx {
 pub struct LinkHandover<P> {
     epoch: LinkEpoch,
     data: Option<DataLink>,
-    numbers: TxNumbers<P>,
+    numbers: TxNumbers,
+    /// The holder's pairwise key, whose packet numbers the link's protected
+    /// frames draw; `None` on an open connection.
+    key: Option<P>,
     rx: RxLink,
     /// The link carries data now, as the station last said.
     carries: bool,
@@ -315,13 +318,14 @@ impl LinkHandover<()> {
     pub(crate) const fn new(
         epoch: LinkEpoch,
         data: Option<DataLink>,
-        numbers: TxNumbers<()>,
+        numbers: TxNumbers,
         rx: RxLink,
     ) -> Self {
         Self {
             epoch,
             data,
             numbers,
+            key: None,
             rx,
             carries: false,
         }
@@ -335,15 +339,16 @@ impl LinkHandover<()> {
             epoch,
             data,
             numbers,
+            key: _none,
             rx,
             carries,
         } = self;
-        // The station's numbers carry no key.
-        let (station, tids, _none) = numbers.into_parts();
+        // The station hands over no key.
         LinkHandover {
             epoch,
             data,
-            numbers: TxNumbers::new(station, tids, key),
+            numbers,
+            key,
             rx,
             carries,
         }
@@ -399,13 +404,23 @@ impl<P> LinkHandover<P> {
     }
 
     /// The link's transmit numbers.
-    pub const fn numbers(&self) -> &TxNumbers<P> {
+    pub const fn numbers(&self) -> &TxNumbers {
         &self.numbers
     }
 
     /// The link's transmit numbers, to number a frame from.
-    pub fn numbers_mut(&mut self) -> &mut TxNumbers<P> {
+    pub fn numbers_mut(&mut self) -> &mut TxNumbers {
         &mut self.numbers
+    }
+
+    /// The holder's pairwise key; `None` on an open connection.
+    pub const fn key(&self) -> Option<&P> {
+        self.key.as_ref()
+    }
+
+    /// The numbers and the key together, to draw a data MPDU's from.
+    pub fn numbers_and_key(&mut self) -> (&mut TxNumbers, Option<&P>) {
+        (&mut self.numbers, self.key.as_ref())
     }
 
     /// The link's receive admission.
@@ -534,8 +549,8 @@ impl<P> LinkHandover<P> {
             numbers: TxNumbers::new(
                 SequenceCounter::new(SequenceNumber::ZERO),
                 qos.then_some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
-                key,
             ),
+            key,
             rx: RxLink::new(address, bssid, protected, None),
             carries: false,
         }
@@ -544,14 +559,14 @@ impl<P> LinkHandover<P> {
     /// Give the link back to the station: what it needs to number its
     /// frames again. The holder keeps its key.
     pub fn into_return(self) -> (LinkReturn, Option<P>) {
-        let (station, tids, key) = self.numbers.into_parts();
+        let (station, tids) = self.numbers.into_parts();
         (
             LinkReturn {
                 station,
                 tids,
                 rx: self.rx,
             },
-            key,
+            self.key,
         )
     }
 }

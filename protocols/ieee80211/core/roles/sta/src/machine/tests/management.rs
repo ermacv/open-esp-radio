@@ -454,7 +454,6 @@ fn a_protected_deauthentication_after_the_links_return_draws_the_keys_next_packe
             .link
             .as_ref()
             .unwrap()
-            .numbers()
             .key()
             .unwrap()
             .packet_numbers()

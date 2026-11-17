@@ -11,14 +11,18 @@ its own: every instant and every arena is its caller's. It holds today:
   its arenas, or an access point's lanes, the gate with the command's
   place, the rights), and a peer is free or linked with its link. A
   controller acts through views of these places (`DataPlace`, `PeerPlace`,
-  `GatePlace`), whose handles offer only the transitions their variant
-  admits; the rights come in by value at `flows` and go back with
-  `DataStop::Stopped`;
+  `GatePlace`, and on a station's linked peer `KeyPlace`), whose handles
+  offer only the transitions their variant admits; the rights come in by
+  value at `flows` and go back with `DataStop::Stopped`. The command place
+  is one sum (`Interface`: idle, a key's command, the gate's closing); the
+  station's key is `StationKey { Empty, Installed(port key, transmit key) }`;
+  a key's command and the gate's closing stop the intake;
 - `plane`: the station's data transmission over the port's two data arenas;
 - `numbers`: the link's transmit numbers (`TxNumbers`: each TID's QoS
-  sequence space, the station's own space, which management frames and
-  non-QoS data share, and the pairwise key's transmit half with its CCMP
-  packet numbers), which the plane draws a data MPDU's from and the link's
+  sequence space and the station's own space, which management frames and
+  non-QoS data share; the pairwise key's transmit half with its CCMP packet
+  numbers, `TxKey`, is held beside them), which the plane draws a data
+  MPDU's from and the link's
   holder a station frame's (`oer-protocols-ieee80211-core-roles-sta`'s
   `link::number`);
 - `queues`: the MAC's transmit queues (`TxQueues`), one per radio peer and

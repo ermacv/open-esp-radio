@@ -184,7 +184,6 @@ impl<'id> World<'id> {
         let mut numbers = TxNumbers::new(
             SequenceCounter::new(SequenceNumber::ZERO),
             Some(self.sequences),
-            self.key.take(),
         );
         let link = ModelLink {
             protected: self
@@ -192,12 +191,16 @@ impl<'id> World<'id> {
                 .current()
                 .is_some_and(|link| link.header.protection() == LinkProtection::Ccmp),
         };
-        let intake = self
-            .plane
-            .intake(&mut self.port, &link, msdu, &mut numbers, now);
-        let (_, sequences, key) = numbers.into_parts();
+        let intake = self.plane.intake(
+            &mut self.port,
+            &link,
+            msdu,
+            &mut numbers,
+            self.key.as_ref(),
+            now,
+        );
+        let (_, sequences) = numbers.into_parts();
         self.sequences = sequences.unwrap();
-        self.key = key;
         intake
     }
 
@@ -910,17 +913,14 @@ fn shared_spaces(model: Installed<'_>) {
 
 fn numbering(model: Installed<'_>) {
     let mut world = World::new(model, link(LinkProtection::Open));
-    let mut numbers = TxNumbers::<InstalledCcmpTxKey<TestKey>>::new(
-        SequenceCounter::new(SequenceNumber::from_low_bits(0)),
-        None,
-        None,
-    );
+    let mut numbers = TxNumbers::new(SequenceCounter::new(SequenceNumber::from_low_bits(0)), None);
     let now = world.now();
     let Intake::Refused { reason, .. } = world.plane.intake(
         &mut world.port,
         &ModelLink { protected: false },
         msdu(0, BE),
         &mut numbers,
+        None::<&InstalledCcmpTxKey<TestKey>>,
         now,
     ) else {
         panic!("a QoS template refuses the station's non-QoS space");

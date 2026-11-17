@@ -1,6 +1,7 @@
-//! The link's transmit numbers: its sequence spaces and the pairwise key
-//! whose packet numbers its protected MPDUs draw. The data plane draws a
-//! data MPDU's from them, and the link's holder a station frame's.
+//! The link's transmit numbers: its sequence spaces. The data plane draws a
+//! data MPDU's from them, and the link's holder a station frame's. The
+//! pairwise key whose packet numbers a protected MPDU draws ([`TxKey`]) is
+//! held beside them, by whoever holds the port's key.
 
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
@@ -29,32 +30,29 @@ impl<K> TxKey for InstalledCcmpTxKey<K> {
     }
 }
 
-/// The link's transmit numbers: the station's own sequence space, each
-/// TID's space on a QoS BSS and the pairwise key `P` of a protected link,
-/// whose packet numbers every protected MPDU of the link draws from.
-pub struct TxNumbers<P> {
+/// The link's transmit numbers: the station's own sequence space and each
+/// TID's space on a QoS BSS. The pairwise key whose packet numbers a
+/// protected MPDU draws is not here: it lives with the port's key it
+/// belongs to.
+pub struct TxNumbers {
     station: SequenceCounter,
     tids: Option<[SequenceCounter; 8]>,
-    key: Option<P>,
 }
 
-impl<P> TxNumbers<P> {
-    pub const fn new(
-        station: SequenceCounter,
-        tids: Option<[SequenceCounter; 8]>,
-        key: Option<P>,
-    ) -> Self {
-        Self { station, tids, key }
+impl TxNumbers {
+    pub const fn new(station: SequenceCounter, tids: Option<[SequenceCounter; 8]>) -> Self {
+        Self { station, tids }
+    }
+
+    /// `tid`'s counter goes back to `next`: the numbers after it named no
+    /// frame that was transmitted.
+    pub(crate) fn rewind(&mut self, tid: WmmUserPriority, next: SequenceNumber) {
+        *self.counter(tid) = SequenceCounter::new(next);
     }
 
     /// Whether the link is a QoS BSS's: a sequence space per TID.
     pub const fn qos(&self) -> bool {
         self.tids.is_some()
-    }
-
-    /// The link's pairwise key; `None` on an open link.
-    pub const fn key(&self) -> Option<&P> {
-        self.key.as_ref()
     }
 
     /// The next Sequence Number of data of `tid`: its TID's on a QoS BSS,
@@ -66,17 +64,12 @@ impl<P> TxNumbers<P> {
         }
     }
 
-    /// The counter data of `tid` takes its numbers from, and the key its
-    /// packet numbers come from.
-    pub(crate) fn data_and_key(
-        &mut self,
-        tid: WmmUserPriority,
-    ) -> (&mut SequenceCounter, Option<&P>) {
-        let counter = match &mut self.tids {
+    /// The counter data of `tid` takes its numbers from.
+    pub(crate) fn counter(&mut self, tid: WmmUserPriority) -> &mut SequenceCounter {
+        match &mut self.tids {
             Some(tids) => tid.select_mut(tids),
             None => &mut self.station,
-        };
-        (counter, self.key.as_ref())
+        }
     }
 
     /// Take the next Sequence Number of `space`; `None` for a TID of a
@@ -89,21 +82,20 @@ impl<P> TxNumbers<P> {
         }
     }
 
-    /// The link's sequence spaces and key, taken apart.
-    /// The numbers' state, for the engine's search: each space's next and
-    /// whether a key is held.
+    /// The numbers' state, for the engine's search: each space's next.
     #[cfg(test)]
-    pub(crate) fn state_key(&self) -> ([u16; 9], bool) {
+    pub(crate) fn state_key(&self) -> [u16; 9] {
         let mut next = [self.station.peek().get(); 9];
         if let Some(tids) = &self.tids {
             for (slot, tid) in next.iter_mut().skip(1).zip(tids) {
                 *slot = tid.peek().get();
             }
         }
-        (next, self.key.is_some())
+        next
     }
 
-    pub fn into_parts(self) -> (SequenceCounter, Option<[SequenceCounter; 8]>, Option<P>) {
-        (self.station, self.tids, self.key)
+    /// The link's sequence spaces, taken apart.
+    pub fn into_parts(self) -> (SequenceCounter, Option<[SequenceCounter; 8]>) {
+        (self.station, self.tids)
     }
 }
