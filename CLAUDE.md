@@ -341,7 +341,12 @@ A page never relaxes a rule above: where they differ, the rule above holds.
   that can be rebuilt.
 - **Checks on the host:** `cargo test -p <pkg>`, `cargo clippy -p <pkg>
   --all-targets` and `cargo fmt --check` for what you changed, plus `cargo
-  test -p oer-tools-test-layers`. Images, image checks and sizes are built by
+  test -p oer-tools-test-layers`. A pull request that changes a sans-IO
+  crate also runs `cargo mutants --in-diff` over its own diff for that
+  crate, and lists every missed mutant with its outcome: a test added, the
+  code removed, or equivalent with its reason. It is a report, never a
+  gate ([mutation testing](tools/README.md#mutation-testing)). Images,
+  image checks and sizes are built by
   CI. Changed chip packages may also run `cargo check` and `cargo clippy`
   with `--target riscv32imafc-unknown-none-elf -p <pkg>` as type-checks
   only, without images or linking. Judge a check only by its own exit code,
