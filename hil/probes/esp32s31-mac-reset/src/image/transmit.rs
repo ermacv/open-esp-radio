@@ -14,7 +14,7 @@
 //! of its own (`[guard, frame, guard, …]`), painted once and read with them.
 use super::*;
 use oer_chips_esp32s31_hal::{
-    layouts::{WifiRxControlPrefix, WifiRxControlTail, WifiTxDmaDescriptor},
+    layouts::WifiTxDmaDescriptor,
     radio::ieee80211::dma::{
         space::ChipDma,
         tx_storage::{PinnedTxDmaStorage, TxDmaAccess, TxDmaStorage},
@@ -53,7 +53,7 @@ const TIMEOUT: u16 = 0x03ff;
 /// many frames, with the peer silent and then sending.
 const OBSERVED_TIMEOUTS: [u16; 3] = [0, TIMEOUT, TIMEOUT_MAX];
 /// The largest timeout `MacLegacyTxProgram::new` admits.
-const TIMEOUT_MAX: u16 = oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX as u16;
+const TIMEOUT_MAX: u16 = oer_chips_esp32s31_hal::types::MAC_TX_TIMEOUT_MAX;
 const OBSERVED_LENGTHS: [usize; 2] = [30, FRAME];
 const OBSERVED_REPEATS: usize = 4;
 const OBSERVED: usize = OBSERVED_TIMEOUTS.len() * OBSERVED_LENGTHS.len() * OBSERVED_REPEATS;
@@ -711,7 +711,14 @@ pub(super) async fn series(
     // just before it, and how it ends.
     mark(71);
     let mut index32 = 0_u32;
-    for state in [PeerState::Silent, PeerState::Sending] {
+    // On a quiet air (`quiet`, `tasks/168`) the peer never sends: only its
+    // silence is observed.
+    let states: &[PeerState] = if cfg!(feature = "quiet") {
+        &[PeerState::Silent]
+    } else {
+        &[PeerState::Silent, PeerState::Sending]
+    };
+    for &state in states {
         let waited = await_peer(storage, &mut ring, &mut access, peer, state).await?;
         for timeout in OBSERVED_TIMEOUTS {
             for length in OBSERVED_LENGTHS {

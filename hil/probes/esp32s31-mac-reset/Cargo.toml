@@ -27,7 +27,6 @@ oer-portable-trace = { path = "../../../portable/trace" }
 oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
-oer-chips-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
 oer-chips-esp32s31-radio-phy = { path = "../../../chips/esp32s31/radio/phy" }
 oer-portable-cooperate = { path = "../../../portable/cooperate" }
 oer-chips-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
@@ -47,6 +46,9 @@ transmit = []
 # Part two's receiver (`tasks/158`, A2): listens and acknowledges the
 # transmitting probe's frames to its station, counting them.
 receiver = []
+# Part A on a quiet air (`tasks/168`): the medium observed with the peer
+# silent only, since nothing else transmits.
+quiet = ["transmit"]
 
 [lints]
 workspace = true
