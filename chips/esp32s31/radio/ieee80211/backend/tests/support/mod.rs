@@ -645,3 +645,23 @@ impl MacCoexPtiSource for MockPlatform {
             .into()
     }
 }
+
+/// A layout of `transfer` bytes (the entry, an MPDU and its FCS) at
+/// `capacity`, made over a scratch buffer: the slot checks it against the
+/// buffer it holds.
+pub(crate) fn test_frame(
+    capacity: u32,
+    transfer: usize,
+) -> oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TxFrame {
+    use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::{
+        TX_ENTRY_BYTES, TX_FCS_BYTES, TxCapacity, TxEntry, TxFrame,
+    };
+    TxFrame::lay_out(
+        &mut [0; 2048],
+        transfer - TX_ENTRY_BYTES - TX_FCS_BYTES,
+        0,
+        TxEntry::default(),
+        TxCapacity::Exactly(capacity),
+    )
+    .expect("a layout within the scratch buffer")
+}

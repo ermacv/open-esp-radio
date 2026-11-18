@@ -2,10 +2,9 @@
 
 use core::pin::Pin;
 
-use super::{
-    AmpduFrameLayout, HtAmpduTxError, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE, TX_FCS_SIZE,
-};
+use super::{AmpduFrameLayout, HtAmpduTxError, HtAmpduTxStorage, TX_AMPDU_METADATA_SIZE};
 use crate::mac::tx::{TxCookie, TxDmaState};
+use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::{TxCapacity, TxEntry, TxFrame};
 
 /// One referenced MPDU checked against its batch, its metadata prefix
 /// written, not yet counted.
@@ -73,41 +72,23 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
         if usize::from(self.count) >= SLOTS {
             return Err(HtAmpduTxError::SlotCapacity);
         }
-        let psdu_length = frame_length
-            .checked_add(usize::from(hardware_mic_length))
-            .and_then(|length| length.checked_add(usize::from(TX_FCS_SIZE)))
-            .and_then(|length| u16::try_from(length).ok())
-            .filter(|length| *length != 0 && *length <= 0x3fff)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let transfer_length = TX_AMPDU_METADATA_SIZE
-            .checked_add(usize::from(psdu_length))
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let descriptor_capacity = transfer_length
-            .checked_add(3)
-            .map(|length| length & !3)
-            .filter(|length| *length <= dma_storage.len())
-            .and_then(|length| u16::try_from(length).ok())
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
+        // The entry (the PSDU's length and the empty delimiters) and the
+        // zeroed MIC and FCS room, by the HAL's layout.
+        let laid = TxFrame::lay_out(
+            dma_storage,
+            frame_length,
+            usize::from(hardware_mic_length),
+            TxEntry {
+                delimiters: empty_delimiters,
+                ..TxEntry::default()
+            },
+            TxCapacity::Minimal,
+        )
+        .map_err(|_| HtAmpduTxError::FrameTooLong)?;
+        let psdu_length = laid.psdu_length();
+        let descriptor_capacity =
+            u16::try_from(laid.descriptor_capacity()).map_err(|_| HtAmpduTxError::FrameTooLong)?;
         let prepared_length = self.length_after_append(psdu_length, false)?;
-        let trailer_start = TX_AMPDU_METADATA_SIZE
-            .checked_add(frame_length)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let (prefix, rest) = dma_storage
-            .split_first_chunk_mut::<TX_AMPDU_METADATA_SIZE>()
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        let (length, flags) = prefix.split_at_mut(4);
-        length.copy_from_slice(&u32::from(psdu_length).to_le_bytes());
-        if let Some((delimiters, reserved)) = flags.split_first_mut() {
-            *delimiters = empty_delimiters;
-            reserved.fill(0);
-        }
-        let trailer_length = usize::from(descriptor_capacity)
-            .checked_sub(trailer_start)
-            .ok_or(HtAmpduTxError::FrameTooLong)?;
-        rest.get_mut(frame_length..)
-            .and_then(|trailer| trailer.get_mut(..trailer_length))
-            .ok_or(HtAmpduTxError::FrameTooLong)?
-            .fill(0);
         Ok(ReferencedFrame {
             buffer_address: dma_storage.as_mut_ptr().addr(),
             frame_length: u16::try_from(frame_length).map_err(|_| HtAmpduTxError::FrameTooLong)?,

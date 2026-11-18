@@ -4675,7 +4675,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/rx_storage/host_dma.rs", 203, WIFI_DMA),
     ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
-    ("radio/ieee80211/dma/tx_storage.rs", 565, WIFI_DMA),
+    ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
     (
         "radio/bluetooth/engine/",
         15970,

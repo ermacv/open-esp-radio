@@ -13,6 +13,7 @@
 //! the run's end. Between the abandoned buffers the pool keeps guard slots
 //! of its own (`[guard, frame, guard, …]`), painted once and read with them.
 use super::*;
+use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::{TxCapacity, TxEntry, TxFrame};
 use oer_chips_esp32s31_hal::{
     layouts::WifiTxDmaDescriptor,
     radio::ieee80211::dma::{
@@ -372,13 +373,20 @@ pub(super) fn start_keyed(
     key: u8,
 ) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
-    let TxDmaAccess::Free(free) = descriptor.access() else {
+    let TxDmaAccess::Free(mut free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
     };
-    // The descriptor's capacity: the transfer rounded up to a word.
-    let total = transfer(length);
-    free.reserve(total.next_multiple_of(4) as u32, total as u32)
-        .map_err(|_| (tx_phase::START, 3))?;
+    // The HAL's layout: the entry, the frame, its FCS room; the descriptor's
+    // capacity the transfer rounded up to a word.
+    let frame = TxFrame::lay_out(
+        free.buffer_mut().map_err(|_| (tx_phase::START, 3))?,
+        length,
+        0,
+        TxEntry::default(),
+        TxCapacity::Minimal,
+    )
+    .map_err(|_| (tx_phase::START, 3))?;
+    free.reserve(frame).map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
     let mut parameters = parameters(length, power, timeout);
     parameters.hardware_key_selector = key;

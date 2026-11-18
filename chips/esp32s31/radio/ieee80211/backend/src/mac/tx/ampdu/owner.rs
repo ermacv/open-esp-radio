@@ -841,14 +841,19 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             storage
                 .as_mut()
                 .set_empty_delimiters(cookie, delimiters, |position, value| {
-                    let place = dma
+                    let entry = dma
                         .software_region_mut(position)
                         .ok()
-                        .and_then(|region| region.get_mut(4))
+                        .and_then(|region| {
+                            region.first_chunk_mut::<{ WifiTxMetadataEntry::SIZE }>()
+                        })
                         .ok_or(HtAmpduTxError::BackingUnavailable {
                             index: u8::try_from(position).unwrap_or(u8::MAX),
                         })?;
-                    *place = value;
+                    // The subframe's `DELI_NUM`, by the entry's layout.
+                    let mut entry = WifiTxMetadataEntryMut::new(entry);
+                    let delimiters = entry.delimiters().with_deli_num(value);
+                    entry.set_delimiters(delimiters);
                     Ok(())
                 })?;
         let head = dma

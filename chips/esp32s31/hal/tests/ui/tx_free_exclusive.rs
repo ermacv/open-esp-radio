@@ -1,12 +1,12 @@
 #![no_std]
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::{PinnedTxDmaStorage, TxDmaAccess};
-use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedBacking;
+use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TxFrame; use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedBacking;
 
-pub fn encode<L: PlacedBacking>(owner: &mut PinnedTxDmaStorage<L>) {
+pub fn encode<L: PlacedBacking>(owner: &mut PinnedTxDmaStorage<L>, frame: TxFrame) {
     if let TxDmaAccess::Free(mut free) = owner.access() {
         #[cfg(ui_reject)]
         let _second = owner.access(); // ui-error: E0499
         let _ = free.buffer_mut();
-        let _ = free.reserve(64, 8);
+        let _ = free.reserve(frame);
     }
 }

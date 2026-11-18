@@ -41,7 +41,9 @@ fn each_publication_carries_its_control_frame_across_phy_and_queue_changes() {
             LegacyTxQueue::Background,
         ] {
             for phy in 0..3 {
-                let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+                let cookie = free_slot(slot.as_mut())
+                    .reserve(test_frame(512, 100))
+                    .unwrap();
                 // Unprotected PPDUs publish the vendor rate of their data rate.
                 let unprotected_rate = match phy {
                     0 => {
@@ -125,7 +127,9 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
     let mut previous = None;
     for payload in 0..32_u8 {
         free_slot(slot.as_mut()).into_buffer().unwrap()[0] = payload;
-        let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+        let cookie = free_slot(slot.as_mut())
+            .reserve(test_frame(512, 100))
+            .unwrap();
         slot.as_mut()
             .submit_legacy_q0(
                 &mut hardware,
@@ -178,7 +182,9 @@ fn completed_tx_keeps_buffer_until_detach_and_rejects_previous_generation() {
 fn failed_completion_detach_quarantines_storage_despite_success_status() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut hardware,
@@ -216,7 +222,9 @@ fn failed_completion_detach_quarantines_storage_despite_success_status() {
 fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     free_slot(slot.as_mut()).into_buffer().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     assert!(!matches!(
         slot.as_mut().access(),
         oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxSlotAccess::Free(_)
@@ -267,7 +275,9 @@ fn tx_slot_rejects_stale_cookie_and_completes_one_generation() {
 #[test]
 fn tx_slot_cancels_only_an_unpublished_reservation() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
 
     assert_eq!(slot.as_mut().cancel_reservation(cookie), Ok(()));
     assert_eq!(slot.state(), TxDmaState::Free);
@@ -289,7 +299,9 @@ fn tx_slot_cancels_only_an_unpublished_reservation() {
 fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() {
     let mut slot = std::boxed::Box::pin(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut hardware,
@@ -312,7 +324,9 @@ fn executor_deadline_quarantines_hardware_owned_tx_storage_without_drop_panic() 
 fn tx_completion_decodes_the_blob_ack_snr_byte() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut mmio,
@@ -348,7 +362,9 @@ fn tx_completion_decodes_the_blob_ack_snr_byte() {
 fn tx_slot_aborts_its_queue_in_the_vendors_order_in_one_step() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut mmio,
@@ -396,7 +412,9 @@ fn tx_slot_aborts_its_queue_in_the_vendors_order_in_one_step() {
 fn a_tx_slot_whose_queue_the_mac_took_stays_hardware_owned_after_its_abort() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut mmio,
@@ -421,7 +439,9 @@ fn a_tx_slot_whose_queue_the_mac_took_stays_hardware_owned_after_its_abort() {
 fn tx_slot_disables_before_acknowledging_one_collision_queue() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut mmio,
@@ -458,7 +478,9 @@ fn no_effect_keeps_dma_hardware_owned_and_faults_quarantine_it() {
     use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::CompletionFault;
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut hardware = MockMmio::default();
-    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    let cookie = free_slot(slot.as_mut())
+        .reserve(test_frame(512, 100))
+        .unwrap();
     slot.as_mut()
         .submit_legacy_q0(
             &mut hardware,
@@ -502,7 +524,9 @@ fn he_smpdu_publication_records_its_su_ppdu_duration() {
     let he_smpdu_work = |rate: HeRate| {
         let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
         let mut hardware = MockMmio::default();
-        let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+        let cookie = free_slot(slot.as_mut())
+            .reserve(test_frame(512, 100))
+            .unwrap();
         let config = HeSmpduTxConfig::new(rate, 0, 96).unwrap();
         slot.as_mut()
             .submit_he_smpdu(&mut hardware, cookie, LegacyTxQueue::BestEffort, config)
