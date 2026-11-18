@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_reclaim_requires_a_release.rs:48:27
+   |
+48 |     let _ = arena.reclaim(lent); // ui-error: E0308
+   |                   ------- ^^^^ expected `Released<Rx>`, found `Lent<Rx>`
+   |                   |
+   |                   arguments to this method are incorrect
+   |
+   = note: expected struct `oer_portable_memory::arena::Released<Rx>`
+              found struct `oer_portable_memory::arena::Lent<Rx>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn reclaim(&self, released: Released<B>) -> Handle<B> {
+   |            ^^^^^^^

@@ -1,0 +1,21 @@
+error[E0080]: evaluation panicked: a span lies between the brand's floor and its buffer's end
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_portable_memory::arena::Span::<Rx>::fixed::<4, 4>::{constant#0}` failed here
+  |
+ ::: src/arena.rs
+  |
+  |                 None => panic!("a span lies between the brand's floor and its buffer's end"),
+  |                         -------------------------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/arena.rs
+  |
+  | /         const {
+  | |             match Self::new(START, LEN) {
+  | |                 Some(span) => span,
+  | |                 None => panic!("a span lies between the brand's floor and its buffer's end"),
+  | |             }
+  | |         }
+  | |_________^

@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `oer_portable_memory::arena::Handle<B>` in the current scope
+  --> tests/ui/arena_handle_is_not_cloned.rs:48:24
+   |
+48 |     let _twin = handle.clone(); // ui-error: E0599
+   |                        ^^^^^ method not found in `oer_portable_memory::arena::Handle<Rx>`

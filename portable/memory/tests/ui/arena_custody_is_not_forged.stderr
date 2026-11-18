@@ -1,0 +1,23 @@
+error[E0451]: fields `place` and `at` of struct `oer_portable_memory::arena::Arena` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:49:94
+   |
+49 |     let _ = |place: &'static ArenaPlace<Rx, 256>, at: DmaRef<ArenaPlace<Rx, 256>>| RxArena { place, at }; // ui-error: E0451
+   |                                                                                              ^^^^^  ^^ private field
+   |                                                                                              |
+   |                                                                                              private field
+
+error[E0451]: fields `index` and `span` of struct `oer_portable_memory::arena::Handle` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:51:28
+   |
+51 |     let _ = Handle::<Rx> { index: 0, span: Span::FULL }; // ui-error: E0451
+   |                            ^^^^^     ^^^^ private field
+   |                            |
+   |                            private field
+
+error[E0451]: fields `index` and `span` of struct `oer_portable_memory::arena::Released` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:53:30
+   |
+53 |     let _ = Released::<Rx> { index: 0, span: Span::FULL }; // ui-error: E0451
+   |                              ^^^^^     ^^^^ private field
+   |                              |
+   |                              private field

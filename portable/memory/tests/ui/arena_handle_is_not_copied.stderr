@@ -1,0 +1,10 @@
+error[E0382]: borrow of moved value: `handle`
+  --> tests/ui/arena_handle_is_not_copied.rs:49:25
+   |
+46 | pub fn copied(arena: RxArena, handle: Handle<Rx>) -> Lent<Rx> {
+   |                               ------ move occurs because `handle` has type `oer_portable_memory::arena::Handle<Rx>`, which does not implement the `Copy` trait
+47 |     let (lent, _) = arena.lend(handle);
+   |                                ------ value moved here
+48 |     #[cfg(all())]
+49 |     let _ = arena.bytes(&handle); // ui-error: E0382
+   |                         ^^^^^^^ value borrowed here after move

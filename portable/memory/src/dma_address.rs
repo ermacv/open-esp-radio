@@ -106,6 +106,30 @@ impl<L: DmaLayout> DmaRef<L> {
     pub const fn bits(self) -> u32 {
         self.address.address
     }
+
+    /// A model reference no hardware follows, for this crate's tests.
+    #[cfg(test)]
+    pub(crate) const fn model(address: u32) -> Self {
+        Self {
+            address: DmaWindowAddress {
+                address,
+                window: PhantomData,
+            },
+            layout: PhantomData,
+        }
+    }
+
+    /// The address of the byte `offset` bytes into the referenced `L`.
+    ///
+    /// The caller, in this crate, gives an `offset` below `size_of::<L>()`:
+    /// the byte lies inside the `L` this reference names, so inside its
+    /// window, and the sum does not wrap.
+    pub(crate) const fn byte_within(self, offset: u32) -> DmaWindowAddress<L::Window> {
+        DmaWindowAddress {
+            address: self.address.address.wrapping_add(offset),
+            window: PhantomData,
+        }
+    }
 }
 
 impl<L: DmaLayout> Clone for DmaRef<L> {

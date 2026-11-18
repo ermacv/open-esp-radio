@@ -1,0 +1,10 @@
+error[E0502]: cannot borrow `handle` as mutable because it is also borrowed as immutable
+  --> tests/ui/arena_slices_follow_the_handle_borrow.rs:49:21
+   |
+47 |     let shared = arena.bytes(&handle);
+   |                              ------- immutable borrow occurs here
+48 |     #[cfg(all())]
+49 |     arena.bytes_mut(&mut handle).fill(0); // ui-error: E0502
+   |                     ^^^^^^^^^^^ mutable borrow occurs here
+50 |     let len = shared.len();
+   |               ------ immutable borrow later used here

@@ -1,0 +1,335 @@
+extern crate std;
+
+use std::vec::Vec;
+
+use super::*;
+use crate::zeroed::ZeroedStatic;
+
+struct Window;
+
+impl DmaWindow for Window {
+    const RANGE: core::ops::Range<u32> = 0x4000_0000..0x4010_0000;
+}
+
+/// The tests' placement: a zeroed static at a model address.
+struct HostStatic<T, const AT: u32>(ZeroedStatic<T>);
+
+#[allow(unsafe_code, reason = "the tests' placement")]
+// SAFETY: the value is the static's own, claimed once by `try_take`; the
+// model address is followed by no hardware.
+unsafe impl<T: DmaLayout, const AT: u32> PlacedStatic<T> for HostStatic<T, AT> {
+    #[allow(clippy::mut_from_ref, reason = "the claim-once static's claim")]
+    fn claim(&'static self) -> Option<(&'static mut T, DmaRef<T>)> {
+        Some((self.0.try_take()?, DmaRef::model(AT)))
+    }
+}
+
+macro_rules! rx_place {
+    (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
+        static $name: HostStatic<$ty, RX_BASE> = HostStatic(ZeroedStatic::new());
+    };
+}
+
+macro_rules! tx_place {
+    (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
+        static $name: HostStatic<$ty, TX_BASE> = HostStatic(ZeroedStatic::new());
+    };
+}
+
+type RxStatic<T> = HostStatic<T, RX_BASE>;
+type TxStatic<T> = HostStatic<T, TX_BASE>;
+
+crate::arena! {
+    Rx: window Window, count 40, size 64, floor 8,
+        placed by rx_place as RxStatic in ".dma.bss.test_rx";
+}
+
+crate::arena! {
+    Tx: window Window, count 3, size 16, floor 0,
+        placed by tx_place as TxStatic in ".dma.bss.test_tx";
+}
+
+const RX_BASE: u32 = 0x4000_1000;
+const TX_BASE: u32 = 0x4000_2000;
+
+/// A notify of its own and its counter, for one test: tests run in
+/// parallel and share no counter.
+macro_rules! counted {
+    ($name:ident) => {
+        struct $name;
+
+        impl $name {
+            fn count() -> u32 {
+                Self::counter().load(Ordering::Relaxed)
+            }
+
+            fn counter() -> &'static AtomicU32 {
+                static NOTIFIED: AtomicU32 = AtomicU32::new(0);
+                &NOTIFIED
+            }
+        }
+
+        impl ReturnNotify for $name {
+            fn notify() {
+                Self::counter().fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    };
+}
+
+fn release<B: Brand>(lent: Lent<B>, start: usize, len: usize) -> Released<B> {
+    #[allow(unsafe_code, reason = "the test is the hardware")]
+    // SAFETY: no hardware touches the model's buffers.
+    unsafe {
+        Released::assume(lent, Span::new(start, len).expect("within the buffer"))
+    }
+}
+
+// One test holds each place: a brand's place is taken once.
+#[test]
+fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
+    counted!(Counted);
+    let (arena, fresh) = Arena::<Rx, { 40 * 64 }>::claim().expect("the first claim");
+    assert!(
+        Arena::<Rx, { 40 * 64 }>::claim().is_none(),
+        "a place is claimed once"
+    );
+    let mut handles: Vec<_> = fresh.collect();
+    assert_eq!(handles.len(), 40, "every buffer once");
+    assert!(handles.iter().all(|handle| handle.span() == Span::FULL));
+    assert_eq!((Span::<Rx>::FULL.start(), Span::<Rx>::FULL.len()), (8, 56));
+
+    // Each handle's bytes are its own CPU region.
+    for (value, handle) in handles.iter_mut().enumerate() {
+        arena.bytes_mut(handle).fill(value as u8);
+    }
+    for (value, handle) in handles.iter().enumerate() {
+        assert!(arena.bytes(handle).iter().all(|&byte| byte == value as u8));
+    }
+
+    // Lending gives the buffer's first byte, below the floor included.
+    let third = handles.remove(3);
+    let (lent, address) = arena.lend(third);
+    assert_eq!(address.get(), RX_BASE + 3 * 64);
+
+    // The hardware writes its metadata and a unit; the release names where
+    // the unit begins and how long it is, and the handle gives exactly that.
+    let place = arena.place.bytes.get().cast::<u8>();
+    for offset in 0..64 {
+        #[allow(unsafe_code, reason = "the test is the hardware")]
+        // SAFETY: the buffer is lent, inside the place; the test is the
+        // hardware.
+        unsafe {
+            place
+                .add(3 * 64 + offset)
+                .write(0xA0 | (offset as u8 & 0xF));
+        }
+    }
+    let handle = arena.reclaim(release(lent, 12, 5));
+    assert_eq!((handle.span().start(), handle.span().len()), (12, 5));
+    assert_eq!(arena.bytes(&handle), &[0xAC, 0xAD, 0xAE, 0xAF, 0xA0]);
+
+    // Returning: each drop sets its bit and notifies, on another thread; the
+    // take gives each handle once, whole, and then nothing.
+    assert_eq!(Counted::count(), 0);
+    let units: Vec<_> = handles
+        .drain(..)
+        .chain([handle])
+        .map(Returning::<Rx, Counted>::new)
+        .collect();
+    std::thread::spawn(move || drop(units))
+        .join()
+        .expect("the returner");
+    assert_eq!(Counted::count(), 40);
+    let mut indices: Vec<_> = arena
+        .returned()
+        .map(|handle| {
+            assert_eq!(handle.span(), Span::FULL);
+            handle.index
+        })
+        .collect();
+    indices.sort_unstable();
+    assert_eq!(indices, (0..40).collect::<Vec<u16>>());
+    assert_eq!(arena.returned().count(), 0);
+
+    // A unit's handle gives its bytes while it is held, and its drop
+    // returns exactly it.
+    let mut unit = Returning::<Rx, Counted>::new(Handle::full(39));
+    arena.bytes_mut(unit.handle_mut()).fill(7);
+    assert!(arena.bytes(unit.handle()).iter().all(|&byte| byte == 7));
+    drop(unit);
+    assert_eq!(Counted::count(), 41);
+    let again: Vec<_> = arena.returned().map(|handle| handle.index).collect();
+    assert_eq!(again, [39]);
+}
+
+#[test]
+fn a_brand_without_shared_bytes_gives_its_whole_buffer() {
+    let (arena, fresh) = Arena::<Tx, { 3 * 16 }>::claim().expect("the first claim");
+    let mut handles: Vec<_> = fresh.collect();
+    assert_eq!(handles.len(), 3);
+    let mut last = handles.pop().expect("three");
+    assert_eq!(last.index, 2);
+    assert_eq!(arena.bytes_mut(&mut last).len(), 16);
+    arena.bytes_mut(&mut last)[3] = 0x5A;
+    let short = last
+        .narrow(Span::fixed::<3, 7>())
+        .unwrap_or_else(|_| panic!("inside the whole buffer"));
+    assert_eq!(arena.bytes(&short).len(), 7);
+    assert_eq!(arena.bytes(&short).first(), Some(&0x5A));
+    let (lent, address) = arena.lend(short);
+    assert_eq!(address.get(), 0x4000_2000 + 2 * 16);
+    let back = arena.reclaim(release(lent, 0, 16));
+    assert_eq!(arena.bytes(&back).len(), 16);
+}
+
+#[test]
+fn a_returned_set_reaches_its_every_word() {
+    let set = ReturnedSet::new();
+    for word in 0..RETURNED_WORDS {
+        set.word(word).store(1 << word, Ordering::Relaxed);
+    }
+    for word in 0..RETURNED_WORDS {
+        assert_eq!(set.word(word).load(Ordering::Relaxed), 1 << word);
+    }
+}
+
+macro_rules! geometry {
+    ($name:ident: $count:expr, $size:expr, $floor:expr) => {
+        enum $name {}
+        #[allow(unsafe_code, reason = "geometry-only brands that never make an arena")]
+        // SAFETY: the brand has no place (`()` claims nothing) and its own
+        // set; no arena is made of it.
+        unsafe impl Brand for $name {
+            type Window = Window;
+            const COUNT: usize = $count;
+            const SIZE: usize = $size;
+            const FLOOR: usize = $floor;
+            type Static = ();
+            fn returned() -> &'static ReturnedSet {
+                static RETURNED: ReturnedSet = ReturnedSet::new();
+                &RETURNED
+            }
+            fn place() -> &'static () {
+                &()
+            }
+        }
+    };
+}
+
+geometry!(Most: MAX_BUFFERS, 65_532, 0);
+geometry!(OneWord: 3, 16, 0);
+geometry!(TooMany: MAX_BUFFERS + 1, 4, 0);
+geometry!(NoBuffer: 0, 4, 0);
+geometry!(Highest: 1, 65_532, 65_531);
+geometry!(TooWide: 1, 65_536, 0);
+geometry!(OddSize: 1, 6, 0);
+geometry!(NoBytes: 1, 8, 8);
+geometry!(Overflowing: 2, usize::MAX, 0);
+
+#[test]
+fn the_geometry_is_refused_exactly_at_its_bounds() {
+    assert_eq!(geometry_refusal::<Most, { MAX_BUFFERS * 65_532 }>(), None);
+    assert_eq!(geometry_refusal::<Highest, 65_532>(), None);
+    assert_eq!(geometry_refusal::<Rx, { 40 * 64 }>(), None);
+    let buffers = Some("an arena has 1 to MAX_BUFFERS buffers");
+    assert_eq!(
+        geometry_refusal::<TooMany, { (MAX_BUFFERS + 1) * 4 }>(),
+        buffers
+    );
+    assert_eq!(geometry_refusal::<NoBuffer, 0>(), buffers);
+    let place = Some("an arena's place is COUNT buffers of SIZE bytes");
+    assert_eq!(geometry_refusal::<Rx, { 40 * 64 + 4 }>(), place);
+    assert_eq!(geometry_refusal::<Overflowing, 0>(), place);
+    let buffer = Some("a buffer is at most 65 535 bytes, in words");
+    assert_eq!(geometry_refusal::<TooWide, 65_536>(), buffer);
+    assert_eq!(geometry_refusal::<OddSize, 6>(), buffer);
+    assert_eq!(
+        geometry_refusal::<NoBytes, 8>(),
+        Some("a buffer has bytes above its floor")
+    );
+}
+
+#[test]
+fn a_span_lies_between_the_floor_and_the_buffer_end() {
+    // Rx: floor 8, size 64.
+    assert_eq!(Span::<Rx>::new(8, 56), Some(Span::FULL));
+    assert_eq!(
+        Span::<Rx>::new(64, 0).map(|span| (span.start(), span.len())),
+        Some((64, 0))
+    );
+    assert!(Span::<Rx>::new(64, 0).is_some_and(Span::is_empty));
+    assert!(!Span::<Rx>::FULL.is_empty());
+    assert_eq!(Span::<Rx>::new(7, 1), None, "below the floor");
+    assert_eq!(Span::<Rx>::new(8, 57), None, "past the buffer");
+    assert_eq!(Span::<Rx>::new(60, 5), None, "past the buffer");
+    assert_eq!(Span::<Rx>::new(usize::MAX, 1), None, "an overflowing end");
+    assert_eq!(
+        Span::<Rx>::fixed::<20, 30>(),
+        Span::new(20, 30).expect("fits")
+    );
+    assert_eq!(Span::<Tx>::new(0, 16), Some(Span::FULL));
+    assert_ne!(Span::<Rx>::new(8, 1), Span::new(8, 2), "another end");
+    assert_ne!(Span::<Rx>::new(8, 1), Span::new(9, 1), "another start");
+}
+
+#[test]
+fn a_one_word_brand_reads_only_its_word() {
+    counted!(Counted);
+    // Bits no buffer of the brand can set are never a handle.
+    OneWord::returned().word(1).fetch_or(1, Ordering::Relaxed);
+    drop(Returning::<OneWord, Counted>::new(Handle::full(2)));
+    assert_eq!(Counted::count(), 1);
+    let indices: Vec<_> = Returned::<OneWord> {
+        word: 0,
+        bits: 0,
+        brand: PhantomData,
+    }
+    .map(|handle| (handle.index, handle.span()))
+    .collect();
+    assert_eq!(indices, [(2, Span::FULL)]);
+}
+
+#[test]
+fn a_span_only_narrows_in_a_holders_hands() {
+    // OneWord: floor 0, size 16; a unit released as bytes 4 to 12.
+    let unit = Handle::<OneWord> {
+        index: 1,
+        span: Span::fixed::<4, 8>(),
+    };
+    let widened = [
+        Span::fixed::<0, 16>(),
+        Span::fixed::<3, 8>(),
+        Span::fixed::<4, 9>(),
+        Span::fixed::<0, 4>(),
+        Span::fixed::<12, 4>(),
+    ];
+    let mut unit = unit;
+    for span in widened {
+        unit = match unit.narrow(span) {
+            Ok(_) => panic!("{span:?} reaches outside 4..12"),
+            Err(refused) => refused.into_handle(),
+        };
+        assert_eq!(
+            (unit.index, unit.span),
+            (1, Span::fixed::<4, 8>()),
+            "unchanged"
+        );
+    }
+    let same = unit
+        .narrow(Span::fixed::<4, 8>())
+        .unwrap_or_else(|_| panic!("its own span"));
+    let later = same
+        .narrow(Span::fixed::<6, 6>())
+        .unwrap_or_else(|_| panic!("starts later, ends at the end"));
+    assert_eq!(later.span, Span::fixed::<6, 6>());
+    let empty = later
+        .narrow(Span::fixed::<12, 0>())
+        .unwrap_or_else(|_| panic!("the empty span at the end"));
+    assert!(empty.span.is_empty());
+    assert!(empty.narrow(Span::fixed::<11, 1>()).is_err(), "no way back");
+    assert_eq!(
+        std::format!("{:?}", Span::<OneWord>::fixed::<4, 8>()),
+        "Span(4, 12)"
+    );
+}

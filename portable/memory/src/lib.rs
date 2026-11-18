@@ -35,6 +35,9 @@
 //! storage, cleaning up its initialized fields if construction stops early.
 //! [`WakingSpscQueue`] wakes the sole consumer and producer task of an
 //! affine SPSC queue through ordinary atomic wakers.
+//! [`arena`] gives the custody of buffers the hardware reads or writes: a
+//! handle the CPU holds, lent to the hardware and given back only by a
+//! release proof.
 //! [`StaticPlace`] reserves static backing for short-lived values and pinned
 //! futures without extending their input loans.
 
@@ -44,6 +47,7 @@ pub extern crate core as __core;
 use core::marker::PhantomData;
 
 mod affine_spsc;
+pub mod arena;
 mod claim_cell;
 mod context_cell;
 mod dma_address;

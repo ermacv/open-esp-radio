@@ -1,0 +1,10 @@
+error[E0080]: evaluation panicked: a buffer has bytes above its floor
+  --> tests/ui/arena_geometry_is_checked_at_build.rs:41:1
+   |
+41 | / oer_portable_memory::arena! { // ui-error: E0080
+42 | |     pub Tx: window Window, count 4, size 64, floor 64,
+43 | |         placed by place as Placed in ".dma.bss.ui_tx";
+44 | | }
+   | |_^ evaluation of `_::_` failed here
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `oer_portable_memory::arena` (in Nightly builds, run with -Z macro-backtrace for more info)

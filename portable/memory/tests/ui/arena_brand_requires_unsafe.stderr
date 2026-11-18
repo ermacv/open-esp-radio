@@ -1,0 +1,11 @@
+error[E0200]: the trait `oer_portable_memory::arena::Brand` requires an `unsafe impl` declaration
+  --> tests/ui/arena_brand_requires_unsafe.rs:50:1
+   |
+50 | impl Brand for Mine { // ui-error: E0200
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = note: the trait `oer_portable_memory::arena::Brand` enforces invariants that the compiler can't check. Review the trait documentation and make sure this implementation upholds those invariants before adding the `unsafe` keyword
+help: add `unsafe` to this trait implementation
+   |
+50 | unsafe impl Brand for Mine { // ui-error: E0200
+   | ++++++
