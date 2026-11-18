@@ -11,23 +11,46 @@ impl DmaWindow for Window {
     const RANGE: core::ops::Range<u32> = 0x4000_0000..0x4010_0000;
 }
 
-macro_rules! host_place {
+/// The tests' placement: a zeroed static at a model address.
+struct HostStatic<T, const AT: u32>(ZeroedStatic<T>);
+
+#[allow(unsafe_code, reason = "the tests' placement")]
+// SAFETY: the value is the static's own, claimed once by `try_take`; the
+// model address is followed by no hardware.
+unsafe impl<T: DmaLayout, const AT: u32> PlacedStatic<T> for HostStatic<T, AT> {
+    #[allow(clippy::mut_from_ref, reason = "the claim-once static's claim")]
+    fn claim(&'static self) -> Option<(&'static mut T, DmaRef<T>)> {
+        Some((self.0.try_take()?, DmaRef::model(AT)))
+    }
+}
+
+macro_rules! rx_place {
     (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
-        static $name: ZeroedStatic<$ty> = ZeroedStatic::new();
+        static $name: HostStatic<$ty, RX_BASE> = HostStatic(ZeroedStatic::new());
     };
 }
 
+macro_rules! tx_place {
+    (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
+        static $name: HostStatic<$ty, TX_BASE> = HostStatic(ZeroedStatic::new());
+    };
+}
+
+type RxStatic<T> = HostStatic<T, RX_BASE>;
+type TxStatic<T> = HostStatic<T, TX_BASE>;
+
 crate::arena! {
     Rx: window Window, count 40, size 64, front 8, back 4,
-        placed by host_place as ZeroedStatic in ".dma.bss.test_rx";
+        placed by rx_place as RxStatic in ".dma.bss.test_rx";
 }
 
 crate::arena! {
     Tx: window Window, count 3, size 16, front 0, back 0,
-        placed by host_place as ZeroedStatic in ".dma.bss.test_tx";
+        placed by tx_place as TxStatic in ".dma.bss.test_tx";
 }
 
 const RX_BASE: u32 = 0x4000_1000;
+const TX_BASE: u32 = 0x4000_2000;
 
 struct Counted;
 
@@ -37,10 +60,6 @@ impl ReturnNotify for Counted {
     fn notify() {
         NOTIFIED.fetch_add(1, Ordering::Relaxed);
     }
-}
-
-fn model_ref<L: DmaLayout>(address: u32) -> DmaRef<L> {
-    DmaRef::model(address)
 }
 
 fn release<B: Brand>(lent: Lent<B>, extent: usize) -> Released<B> {
@@ -54,7 +73,11 @@ fn release<B: Brand>(lent: Lent<B>, extent: usize) -> Released<B> {
 // One test holds each place: a brand's place is taken once.
 #[test]
 fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
-    let (arena, fresh) = Arena::<Rx, { 40 * 64 }>::new(Rx::place().take(), model_ref(RX_BASE));
+    let (arena, fresh) = Arena::<Rx, { 40 * 64 }>::claim().expect("the first claim");
+    assert!(
+        Arena::<Rx, { 40 * 64 }>::claim().is_none(),
+        "a place is claimed once"
+    );
     let mut handles: Vec<_> = fresh.collect();
     assert_eq!(handles.len(), 40, "every buffer once");
     assert!(handles.iter().all(|handle| handle.extent() == 64 - 8 - 4));
@@ -127,7 +150,7 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
 
 #[test]
 fn a_brand_without_shared_bytes_gives_its_whole_buffer() {
-    let (arena, fresh) = Arena::<Tx, { 3 * 16 }>::new(Tx::place().take(), model_ref(0x4000_2000));
+    let (arena, fresh) = Arena::<Tx, { 3 * 16 }>::claim().expect("the first claim");
     let mut handles: Vec<_> = fresh.collect();
     assert_eq!(handles.len(), 3);
     let mut last = handles.pop().expect("three");
@@ -155,16 +178,22 @@ fn a_returned_set_reaches_its_every_word() {
 macro_rules! geometry {
     ($name:ident: $count:expr, $size:expr, $front:expr, $back:expr) => {
         enum $name {}
-        impl sealed::Sealed for $name {}
-        impl Brand for $name {
+        #[allow(unsafe_code, reason = "geometry-only brands that never make an arena")]
+        // SAFETY: the brand has no place (`()` claims nothing) and its own
+        // set; no arena is made of it.
+        unsafe impl Brand for $name {
             type Window = Window;
             const COUNT: usize = $count;
             const SIZE: usize = $size;
             const FRONT: usize = $front;
             const BACK: usize = $back;
+            type Static = ();
             fn returned() -> &'static ReturnedSet {
                 static RETURNED: ReturnedSet = ReturnedSet::new();
                 &RETURNED
+            }
+            fn place() -> &'static () {
+                &()
             }
         }
     };

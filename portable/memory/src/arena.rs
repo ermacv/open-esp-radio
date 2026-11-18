@@ -44,15 +44,17 @@ pub const MAX_BUFFERS: usize = 32 * RETURNED_WORDS;
 
 const RETURNED_WORDS: usize = 4;
 
-#[doc(hidden)]
-pub mod sealed {
-    /// Only [`arena!`](crate::arena!) implements a brand.
-    pub trait Sealed {}
-}
-
 /// The brand of one arena: a type with one place, declared with it by
 /// [`arena!`](crate::arena!). A handle of one brand fits no other arena.
-pub trait Brand: sealed::Sealed + Sized + 'static {
+///
+/// # Safety
+///
+/// The constants are the geometry of the place [`Brand::place`] names,
+/// that place is a static no other brand names, and [`Brand::returned`] is
+/// a set no other brand names. Only [`arena!`](crate::arena!) implements
+/// this trait.
+#[allow(unsafe_code, reason = "a brand names its one place and its one set")]
+pub unsafe trait Brand: Sized + 'static {
     /// The window the place lies in.
     type Window: DmaWindow;
     /// The buffers.
@@ -63,8 +65,31 @@ pub trait Brand: sealed::Sealed + Sized + 'static {
     const FRONT: usize;
     /// The bytes behind the CPU's region that the hardware shares.
     const BACK: usize;
+    /// The placed static that holds the brand's place.
+    type Static: 'static;
     /// The brand's returned set, in a static of its own.
     fn returned() -> &'static ReturnedSet;
+    /// The brand's one place, for its arena to claim.
+    fn place() -> &'static Self::Static;
+}
+
+/// A placed static that hands out the value it holds once, with the proof
+/// of its address in the DMA window: the HAL's placement implements it for
+/// its placed statics.
+///
+/// # Safety
+///
+/// [`PlacedStatic::claim`] gives the value of this static and no other, at
+/// most once, and the `DmaRef` it gives with it is that value's address in
+/// its window, for as long as the value lives.
+#[allow(unsafe_code, reason = "the placement proves the address of its static")]
+pub unsafe trait PlacedStatic<T: DmaLayout> {
+    /// The value and its address, the first time; `None` once claimed.
+    #[allow(
+        clippy::mut_from_ref,
+        reason = "a claim-once static: the claim makes this the only reference"
+    )]
+    fn claim(&'static self) -> Option<(&'static mut T, DmaRef<T>)>;
 }
 
 /// What is wrong with `B`'s geometry and its place of `BYTES` bytes, if
@@ -134,22 +159,25 @@ impl<B: Brand, const BYTES: usize> Clone for Arena<B, BYTES> {
 
 impl<B: Brand, const BYTES: usize> Copy for Arena<B, BYTES> {}
 
-impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
-    /// The arena of the brand's place, which the HAL's placement claimed
-    /// once and whose address `at` it proved, and its fresh handles.
-    pub fn new(
-        place: &'static mut ArenaPlace<B, BYTES>,
-        at: DmaRef<ArenaPlace<B, BYTES>>,
-    ) -> (Self, Fresh<B>) {
+impl<B: Brand, const BYTES: usize> Arena<B, BYTES>
+where
+    B::Static: PlacedStatic<ArenaPlace<B, BYTES>>,
+{
+    /// The arena of the brand's own place and its fresh handles, the first
+    /// time; `None` once the place is claimed. The arena is made from no
+    /// other place.
+    pub fn claim() -> Option<(Self, Fresh<B>)> {
         const {
             if let Some(refusal) = geometry_refusal::<B, BYTES>() {
                 panic!("{}", refusal);
             }
         }
-        let arena = Self { place, at };
-        (arena, Fresh::new())
+        let (place, at) = B::place().claim()?;
+        Some((Self { place, at }, Fresh::new()))
     }
+}
 
+impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
     /// The CPU's bytes of a held buffer: `[FRONT, FRONT + extent)`.
     pub fn bytes<'h>(&self, handle: &'h Handle<B>) -> &'h [u8] {
         let start = self.cpu_start(handle.index);
@@ -459,7 +487,9 @@ impl<B: Brand, N: ReturnNotify> Drop for Returning<B, N> {
 /// ```
 ///
 /// The place's static lies in an anonymous constant: nothing names it but
-/// `RxBuffers::place()`, which the placement claims once.
+/// `Brand::place`, and an arena is made only by [`Arena::claim`] from it,
+/// through the wrapper's [`PlacedStatic`]. A second static of the place's
+/// type is inert.
 #[macro_export]
 macro_rules! arena {
     (
@@ -479,17 +509,26 @@ macro_rules! arena {
                     zeroed in $section;
             }
 
-            impl $crate::arena::sealed::Sealed for $name {}
-
-            impl $crate::arena::Brand for $name {
+            #[allow(unsafe_code, reason = "the macro's brand names its own place and set")]
+            // SAFETY: the constants are those of `PLACE`'s type, and `PLACE`
+            // and `RETURNED` are statics of this anonymous constant, which
+            // nothing outside it names.
+            unsafe impl $crate::arena::Brand for $name {
                 type Window = $window;
                 const COUNT: usize = $count;
                 const SIZE: usize = $size;
                 const FRONT: usize = $front;
                 const BACK: usize = $back;
 
+                type Static =
+                    $($wrap)::+<$crate::arena::ArenaPlace<$name, { $count * $size }>>;
+
                 fn returned() -> &'static $crate::arena::ReturnedSet {
                     &RETURNED
+                }
+
+                fn place() -> &'static Self::Static {
+                    &PLACE
                 }
             }
 
@@ -498,15 +537,6 @@ macro_rules! arena {
             {
                 panic!("{}", refusal)
             };
-
-            impl $name {
-                /// The brand's one place, for its placement to claim.
-                $vis fn place()
-                    -> &'static $($wrap)::+<$crate::arena::ArenaPlace<$name, { $count * $size }>>
-                {
-                    &PLACE
-                }
-            }
         };
     };
 }

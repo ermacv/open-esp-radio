@@ -1,16 +1,24 @@
-error[E0451]: fields `index`, `extent` and `brand` of struct `oer_portable_memory::arena::Handle` are private
-  --> tests/ui/arena_custody_is_not_forged.rs:38:28
+error[E0451]: fields `place` and `at` of struct `oer_portable_memory::arena::Arena` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:49:94
    |
-38 |     let _ = Handle::<Rx> { index: 0, extent: 52, brand: core::marker::PhantomData }; // ui-error: E0451
+49 |     let _ = |place: &'static ArenaPlace<Rx, 256>, at: DmaRef<ArenaPlace<Rx, 256>>| RxArena { place, at }; // ui-error: E0451
+   |                                                                                              ^^^^^  ^^ private field
+   |                                                                                              |
+   |                                                                                              private field
+
+error[E0451]: fields `index`, `extent` and `brand` of struct `oer_portable_memory::arena::Handle` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:51:28
+   |
+51 |     let _ = Handle::<Rx> { index: 0, extent: 52, brand: core::marker::PhantomData }; // ui-error: E0451
    |                            ^^^^^     ^^^^^^      ^^^^^ private field
    |                            |         |
    |                            |         private field
    |                            private field
 
 error[E0451]: fields `index` and `extent` of struct `oer_portable_memory::arena::Released` are private
-  --> tests/ui/arena_custody_is_not_forged.rs:40:30
+  --> tests/ui/arena_custody_is_not_forged.rs:53:30
    |
-40 |     let _ = Released::<Rx> { index: 0, extent: Extent::FULL }; // ui-error: E0451
+53 |     let _ = Released::<Rx> { index: 0, extent: Extent::FULL }; // ui-error: E0451
    |                              ^^^^^     ^^^^^^ private field
    |                              |
    |                              private field
