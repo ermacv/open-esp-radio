@@ -149,6 +149,9 @@ struct World<'id, const P: usize, const W: usize> {
     returned: usize,
     /// The deliveries the last check saw.
     delivered_seen: usize,
+    /// Numbers the reorder took and passed undelivered (a frame refused for
+    /// no place to wait), by the world's arithmetic.
+    skipped: Vec<u16>,
     /// The stop asked.
     stopped: bool,
     /// Whether the controller holds the link.
@@ -190,6 +193,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             frames_read: 0,
             returned: 0,
             delivered_seen: 0,
+            skipped: Vec::new(),
             stopped: false,
             link: Link::Carrying,
             waits: Vec::new(),
@@ -276,7 +280,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         match self.agreement {
             Agreement::None => places,
             Agreement::Tid0 => {
-                let run = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
+                let run = self.span();
                 places
                     .into_iter()
                     .filter(|place| {
@@ -300,12 +304,25 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         match self.agreement {
             Agreement::None => self.waiting_places().len(),
             Agreement::Tid0 => {
-                let held = self.held_units();
-                (0_u16..)
-                    .take_while(|n| held.contains(&self.start.wrapping_add(*n)))
+                let span = self.span();
+                self.held_units()
+                    .into_iter()
+                    .filter(|n| n.wrapping_sub(self.start) < span)
                     .count()
             }
         }
+    }
+
+    /// The numbers from the next the reorder lets go that it let go: held
+    /// units in order, through the numbers it passed undelivered.
+    fn span(&self) -> u16 {
+        let held = self.held_units();
+        (0_u16..)
+            .take_while(|n| {
+                let number = self.start.wrapping_add(*n);
+                held.contains(&number) || self.skipped.contains(&number)
+            })
+            .count() as u16
     }
 
     /// The units the reorder retains, by the world's own count: the held
@@ -462,6 +479,29 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
                 .push("a frame after a hole was refused with nothing held or lent");
         }
         if self.agreement == Agreement::Tid0 {
+            // A frame in order refused as it came for no place to wait: the
+            // reorder took its number, which passes undelivered (a held
+            // link's data is refused before the reorder and takes none).
+            if let Move::Arrives(index) = action
+                && !self.stopped
+                && self.refusals().no_place_to_wait > refused_before.no_place_to_wait
+            {
+                let id = u8::try_from(self.arrived.len()).unwrap_or(u8::MAX);
+                let (kind, number) = AGREED[index];
+                let placed = self.around.port.held_places().into_iter().any(|place| {
+                    self.around
+                        .port
+                        .place_bytes(place)
+                        .is_some_and(|bytes| bytes.last() == Some(&id))
+                });
+                if matches!(kind, Kind::Data | Kind::Amsdu)
+                    && !placed
+                    && !self.delivered.contains(&id)
+                    && number.wrapping_sub(self.start) < 0x800
+                {
+                    self.skipped.push(number);
+                }
+            }
             self.advance_start(&held_before, waiting_before, delivered_before);
         }
         let _ = (waited, services);
@@ -490,7 +530,13 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             self.problems
                 .push("P9 data of a held link was kept for the reorder");
         }
-        self.check(action, refused_before, &waits_before, link_before);
+        self.check(
+            action,
+            refused_before,
+            &waits_before,
+            link_before,
+            places_before,
+        );
     }
 
     /// The world's record of the waiting units: one that began to wait in
@@ -538,6 +584,13 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
                 self.start = number.wrapping_add(1);
             }
         }
+        // A number passed undelivered is passed by the world too.
+        while self.skipped.contains(&self.start) && !self.held_units().contains(&self.start) {
+            self.start = self.start.wrapping_add(1);
+        }
+        let start = self.start;
+        self.skipped
+            .retain(|number| number.wrapping_sub(start) < 0x800);
     }
 
     /// The world's record of what the network and the controller got.
@@ -577,6 +630,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         before: RxRefusals,
         waits_before: &[(u8, u64)],
         link_before: Link,
+        places_before: usize,
     ) {
         let now = self.around.micros;
         let waiting = self.waiting();
@@ -659,9 +713,9 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             self.problems
                 .push("P7 a unit was refused for a hold that was not");
         }
-        if refused.no_place_to_wait > before.no_place_to_wait
-            && self.around.port.places_held() + 1 < places
-        {
+        // A newcomer is refused for no place only where the places the
+        // step began with and the newcomer leave none free.
+        if refused.no_place_to_wait > before.no_place_to_wait && places_before + 1 < places {
             self.problems
                 .push("P7 a unit was refused for no place to wait with places free");
         }
@@ -873,7 +927,12 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             self.delivered,
             self.returned,
             self.stopped,
-            (self.link, self.left.holds, self.relative_waits()),
+            (
+                self.link,
+                self.left.holds,
+                self.relative_waits(),
+                &self.skipped
+            ),
             self.owed,
             self.around.net.copy_room,
             self.around.net.lent.len(),
@@ -990,24 +1049,19 @@ const SMALL_WINDOW: usize = 3;
 const LARGE_PLACES: usize = oer_protocols_ieee80211_testing_model::MODEL_PLACES;
 const LARGE_WINDOW: usize = MODEL_WINDOW;
 
-/// Each bound's ceiling of nodes: about three times what it takes today,
-/// a ceiling against an explosion that stops a search within a minute or
-/// two of where it should have ended, never a pinned figure.
-const SMALL_CEILING: usize = SMALL_CEILING_NODES;
-const SMALL_AGREED_CEILING: usize = SMALL_AGREED_CEILING_NODES;
-const LARGE_CEILING: usize = LARGE_CEILING_NODES;
-const SMALL_DEEP_CEILING: usize = SMALL_DEEP_CEILING_NODES;
-const SMALL_HOLD_CEILING: usize = SMALL_HOLD_CEILING_NODES;
-const SMALL_AGREED_DEEP_CEILING: usize = SMALL_AGREED_DEEP_CEILING_NODES;
-const SMALL_AGREED_HOLD_CEILING: usize = SMALL_AGREED_HOLD_CEILING_NODES;
-const SMALL_CEILING_NODES: usize = 1_000_000;
-const SMALL_AGREED_CEILING_NODES: usize = 1_000_000;
-const LARGE_CEILING_NODES: usize = 25_000;
-const SMALL_DEEP_CEILING_NODES: usize = 3_000_000;
-const SMALL_HOLD_CEILING_NODES: usize = 3_000_000;
-const SMALL_AGREED_DEEP_CEILING_NODES: usize = 3_000_000;
-const SMALL_AGREED_HOLD_CEILING_NODES: usize = 3_000_000;
-const SMALL_AGREED_LOANS_CEILING: usize = 3_000_000;
+/// Each bound's ceiling of nodes: about three times what it takes today
+/// (the ordinary 7 052, 26 209 and, over eight places, 7 052; the named
+/// 93 624, 66 181, 267 094, 188 350 and 32 875), a ceiling against an
+/// explosion that stops a search within a minute or two of where it should
+/// have ended, never a pinned figure.
+const SMALL_CEILING: usize = 25_000;
+const SMALL_AGREED_CEILING: usize = 80_000;
+const LARGE_CEILING: usize = 25_000;
+const SMALL_DEEP_CEILING: usize = 300_000;
+const SMALL_HOLD_CEILING: usize = 200_000;
+const SMALL_AGREED_DEEP_CEILING: usize = 800_000;
+const SMALL_AGREED_HOLD_CEILING: usize = 600_000;
+const SMALL_AGREED_LOANS_CEILING: usize = 100_000;
 
 /// The small port at its ordinary bounds, without an agreement.
 #[test]
