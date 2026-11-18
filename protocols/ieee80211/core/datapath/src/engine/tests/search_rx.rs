@@ -24,8 +24,6 @@ use super::*;
 use std::string::String;
 use std::time::Instant as Clock;
 
-/// The units the network may hold at once.
-const LEND: u8 = 1;
 /// The most steps of a path.
 const DEPTH: usize = 24;
 
@@ -44,6 +42,8 @@ pub(super) struct Bounds {
     pub gaps: usize,
     /// Holds of the link by its controller (each may be released).
     pub holds: usize,
+    /// The units the network may hold at once (the model's loan is one).
+    pub loans: u8,
 }
 
 /// Whether the world's link has a receive agreement on TID 0.
@@ -70,17 +70,18 @@ const PLAIN: [(Kind, u16); 8] = [
 
 /// The frames that may arrive under an agreement, the first `units` of
 /// them, in any order, each with its number: one before the first, an
-/// A-MSDU, the first, a management frame, then retries of the numbers sent
-/// (all within the small port's window of three, from 0) (the model's list, ordered so that each
+/// A-MSDU, the first, a management frame, a fourth number (sent only once
+/// the first came, so that it lies inside the small port's window of three
+/// and the world's arithmetic needs no window's move), then retries (the model's list, ordered so that each
 /// kind is within the ordinary bounds).
 const AGREED: [(Kind, u16); 8] = [
     (Kind::Data, 1),
     (Kind::Amsdu, 2),
     (Kind::Data, 0),
     (Kind::Management, 0),
+    (Kind::Data, 3),
     (Kind::Data, 1),
     (Kind::Data, 2),
-    (Kind::Data, 0),
     (Kind::Management, 0),
 ];
 
@@ -163,7 +164,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
     fn new(run: Running<'id, STATION_SINGLES, 0, P>, bounds: Bounds, agreement: Agreement) -> Self {
         let mut engine = StationEngineOn::<'_, 2, P, W>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
-        around.net.lend_limit = LEND;
+        around.net.lend_limit = bounds.loans;
         around.net.copy_room = 0;
         // Two units a service, as the model's frontier.
         around.port.set_frontier(2);
@@ -205,7 +206,16 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         let kinds = self.kinds();
         let left = (0..limit.min(kinds.len())).filter(|index| !self.arrived.contains(index));
         match self.agreement {
-            Agreement::Tid0 => left.collect(),
+            // Number 3 only once number 0 came: inside the window.
+            Agreement::Tid0 => left
+                .filter(|index| {
+                    kinds[*index].1 != 3
+                        || self
+                            .arrived
+                            .iter()
+                            .any(|seen| kinds[*seen] == (Kind::Data, 0))
+                })
+                .collect(),
             Agreement::None => {
                 let mut sends = Vec::new();
                 for index in left {
@@ -348,6 +358,8 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         let reorder_before = self.refusals().reorder;
         let waited = self.waiting_run();
         let services = self.around.port.counts().services;
+        let ring_before = self.around.port.ring_len();
+        let places_before = self.around.port.places_held();
         let rest = match action {
             Move::Arrives(index) => {
                 self.left.units -= 1;
@@ -453,6 +465,20 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             self.advance_start(&held_before, waiting_before, delivered_before);
         }
         let _ = (waited, services);
+        // P5: a round that finds a free place services the ring: a unit
+        // the ring held at the step's start, or the one that landed, left
+        // it.
+        let landed = usize::from(matches!(action, Move::Arrives(_)));
+        let ring_in = ring_before + landed;
+        if !self.stopped
+            && action != Move::Stop
+            && ring_in > 0
+            && places_before < P
+            && self.around.port.ring_len() >= ring_in
+        {
+            self.problems
+                .push("P5 a round found a free place and did not service the ring");
+        }
         self.record_waits();
         // P9: data that arrives while the link is held is refused, never
         // kept for the reorder.
@@ -517,7 +543,8 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
     /// The world's record of what the network and the controller got.
     fn read(&mut self, action: Move) {
         let received = &self.around.net.received[self.received_read..];
-        if self.stopped && !received.is_empty() && action != Move::Stop {
+        // Nothing is delivered after the stop, its own round included (P13).
+        if self.stopped && !received.is_empty() {
             self.problems
                 .push("data was delivered after the data stopped");
         }
@@ -554,7 +581,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         let now = self.around.micros;
         let waiting = self.waiting();
         let refused = self.refusals();
-        if self.around.net.lent.len() > usize::from(LEND) {
+        if self.around.net.lent.len() > usize::from(self.left.loans) {
             self.problems.push("the network holds more than its limit");
         }
         // Data leaves in order: under an agreement its sequence numbers,
@@ -725,7 +752,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             // held (its tag is its id), under one the held unit of the
             // number the reorder lets go next. A single frame needs room to
             // lend or one copy, an A-MSDU a copy of each of its two MSDUs.
-            let lend = usize::from(LEND).saturating_sub(self.around.net.lent.len());
+            let lend = usize::from(self.left.loans).saturating_sub(self.around.net.lent.len());
             let start = self.start;
             let agreement = self.agreement;
             let first = self
@@ -980,6 +1007,7 @@ const SMALL_DEEP_CEILING_NODES: usize = 3_000_000;
 const SMALL_HOLD_CEILING_NODES: usize = 3_000_000;
 const SMALL_AGREED_DEEP_CEILING_NODES: usize = 3_000_000;
 const SMALL_AGREED_HOLD_CEILING_NODES: usize = 3_000_000;
+const SMALL_AGREED_LOANS_CEILING: usize = 3_000_000;
 
 /// The small port at its ordinary bounds, without an agreement.
 #[test]
@@ -992,6 +1020,7 @@ fn every_order_of_the_receive_sections_keeps_its_properties() {
             frees: 1,
             gaps: 0,
             holds: 1,
+            loans: 1,
         },
         Agreement::None,
         SMALL_CEILING,
@@ -1010,6 +1039,7 @@ fn every_order_under_a_receive_agreement_keeps_its_properties() {
             frees: 1,
             gaps: 1,
             holds: 1,
+            loans: 1,
         },
         Agreement::Tid0,
         SMALL_AGREED_CEILING,
@@ -1028,6 +1058,7 @@ fn every_order_over_eight_places_keeps_its_properties() {
             frees: 1,
             gaps: 0,
             holds: 1,
+            loans: 1,
         },
         Agreement::None,
         LARGE_CEILING,
@@ -1054,6 +1085,7 @@ fn every_receive_order_at_six_frames() {
             frees: 2,
             gaps: 0,
             holds: 0,
+            loans: 1,
         },
         Agreement::None,
         SMALL_DEEP_CEILING,
@@ -1072,6 +1104,7 @@ fn every_receive_order_at_five_frames_with_a_hold() {
             frees: 2,
             gaps: 0,
             holds: 1,
+            loans: 1,
         },
         Agreement::None,
         SMALL_HOLD_CEILING,
@@ -1090,6 +1123,7 @@ fn every_order_under_a_receive_agreement_at_six_frames() {
             frees: 1,
             gaps: 1,
             holds: 0,
+            loans: 1,
         },
         Agreement::Tid0,
         SMALL_AGREED_DEEP_CEILING,
@@ -1108,8 +1142,29 @@ fn every_order_under_a_receive_agreement_at_five_frames_with_a_hold() {
             frees: 1,
             gaps: 1,
             holds: 1,
+            loans: 1,
         },
         Agreement::Tid0,
         SMALL_AGREED_HOLD_CEILING,
+    );
+}
+
+/// The agreement with a loan of two: one unit lent and two retained leave
+/// the network room at the last place, where a newcomer keeps none.
+#[test]
+#[ignore = "a named bound: run by name"]
+fn every_order_under_a_receive_agreement_at_five_frames_with_two_loans() {
+    named(
+        Bounds {
+            units: 5,
+            returns: 2,
+            stops: 1,
+            frees: 1,
+            gaps: 1,
+            holds: 0,
+            loans: 2,
+        },
+        Agreement::Tid0,
+        SMALL_AGREED_LOANS_CEILING,
     );
 }
