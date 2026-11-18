@@ -5,6 +5,36 @@ use super::{CoexTimerBankRegisters, CoexTimerRegister};
 use crate::radio::phy::RadioPhyRegisters;
 use oer_chips_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
 
+/// The fields of the three words inside the `WIFI_MAC` block that are not
+/// the Wi-Fi MAC's (the PHY's channel offset word, the PHY's I2C TX rate
+/// word and the shared radio init word), as one observation reads them.
+///
+/// For a probe's observation of the block's reset: read without effect,
+/// decided on by nothing. `minimum_power` and `channel_bit_17` are the
+/// Wi-Fi cold preparation's in the first word, `init_low` its low twelve
+/// bits of the last; `init_bit_31` is the Bluetooth baseband's.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ForeignWifiMacWords {
+    /// `CHANNEL_TX_OFFSET_CONTROL.PRIMARY_20_CHANNEL_OFFSET` [3:0], the PHY's.
+    pub primary_20_channel_offset: u8,
+    /// `MINIMUM_POWER_HIGH`:`MINIMUM_POWER_LOW` [9:4].
+    pub minimum_power: u8,
+    /// `BITS_10_16_OPAQUE` [16:10].
+    pub channel_bits_10_16: u8,
+    /// `BIT_17_OPAQUE` [17].
+    pub channel_bit_17: bool,
+    /// `BITS_18_31_OPAQUE` [31:18].
+    pub channel_bits_18_31: u16,
+    /// `I2C_TX_RATE_CONTROL.BITS_0_1_OPAQUE` [1:0], the PHY's.
+    pub i2c_bits_0_1: u8,
+    /// `I2C_TX_RATE_CONTROL.BITS_18_25_OPAQUE` [25:18], the PHY's.
+    pub i2c_bits_18_25: u8,
+    /// `RADIO_INIT_CONTROL.BITS_0_11_OPAQUE` [11:0].
+    pub init_low: u16,
+    /// `RADIO_INIT_CONTROL.BIT_31_OPAQUE` [31].
+    pub init_bit_31: bool,
+}
+
 /// Shared register ownership retained by the radio-system actor.
 pub struct SharedRadioRegisters {
     pub(crate) radio_phy: RadioPhyRegisters,
@@ -44,6 +74,37 @@ impl SharedRadioRegisters {
 
     pub const fn radio_phy(&self) -> &RadioPhyRegisters {
         &self.radio_phy
+    }
+
+    /// Read the three foreign words of the `WIFI_MAC` block
+    /// ([`ForeignWifiMacWords`]), without effect.
+    pub fn foreign_wifi_mac_words(&self) -> ForeignWifiMacWords {
+        let parts = &self.radio_phy.peripherals;
+        let channel = parts
+            .phy_frequency_channel_oracle
+            .wifi_mac
+            .read_channel_tx_offset_control();
+        let i2c = parts
+            .phy_baseband_config_oracle
+            .wifi_mac
+            .read_i2c_tx_rate_control();
+        let init = self.shared_radio.shared_radio_init_control.read_radio_init_control();
+        let narrow = |value: u32| u8::try_from(value).unwrap_or(u8::MAX);
+        ForeignWifiMacWords {
+            primary_20_channel_offset: narrow(u32::from(channel.primary_20_channel_offset().get())),
+            minimum_power: narrow(
+                (u32::from(channel.minimum_power_high().get()) << 4)
+                    | u32::from(channel.minimum_power_low().get()),
+            ),
+            channel_bits_10_16: narrow(u32::from(channel.bits_10_16_opaque().get())),
+            channel_bit_17: channel.bit_17_opaque(),
+            channel_bits_18_31: u16::try_from(u32::from(channel.bits_18_31_opaque().get()))
+                .unwrap_or(u16::MAX),
+            i2c_bits_0_1: narrow(u32::from(i2c.bits_0_1_opaque().get())),
+            i2c_bits_18_25: i2c.bits_18_25_opaque(),
+            init_low: u16::try_from(u32::from(init.bits_0_11_opaque().get())).unwrap_or(u16::MAX),
+            init_bit_31: init.bit_31_opaque(),
+        }
     }
     pub fn radio_phy_mut(&mut self) -> &mut RadioPhyRegisters {
         &mut self.radio_phy

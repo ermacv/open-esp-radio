@@ -1042,6 +1042,12 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.registers().radio_phy().register_image(index)
     }
 
+    /// Read the three words inside the `WIFI_MAC` block that this domain
+    /// owns, without effect, for a probe's observation of the block's reset.
+    pub fn foreign_wifi_mac_words(&self) -> crate::radio::modem::ForeignWifiMacWords {
+        self.registers().foreign_wifi_mac_words()
+    }
+
     pub(crate) fn registers(&self) -> &SharedRadioRegisters {
         &self.state().registers
     }
