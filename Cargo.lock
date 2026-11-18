@@ -2085,6 +2085,7 @@ dependencies = [
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-esp32s31-radio-client",
+ "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-drivers-usb-serial-jtag",
  "oer-chips-family-platform-executor",

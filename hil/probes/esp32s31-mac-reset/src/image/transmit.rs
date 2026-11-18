@@ -51,8 +51,11 @@ const ABANDONED: usize = 100;
 #[cfg(not(feature = "amsdu"))]
 const SLOTS: usize = 2 * ABANDONED + 2;
 /// Case C abandons no chain: the ordinary frames' slot and one spare.
-#[cfg(feature = "amsdu")]
+#[cfg(all(feature = "amsdu", not(feature = "ampdu")))]
 const SLOTS: usize = 2;
+/// Cell F: an aggregate's eight subframes, then the ordinary frames' slot.
+#[cfg(feature = "ampdu")]
+pub(super) const SLOTS: usize = 9;
 /// The ordinary frames' slot.
 pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.
@@ -86,7 +89,7 @@ pub(super) const ROWS: usize = 4 + BASELINE + STOPS + ABANDONED + 2;
 
 type Pool = PinnedDmaTxPool<SLOT, 0, 0, SLOTS>;
 type Placed = PlacedTxPool<SLOT, 0, 0, SLOTS>;
-type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
+pub(super) type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
 pub(super) type Descriptor = PinnedTxDmaStorage<Lease>;
 
 macro_rules! abandoned_descriptors {

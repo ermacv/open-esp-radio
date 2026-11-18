@@ -52,6 +52,9 @@ amsdu = ["laps"]
 # Cell E's receiver (`tasks/161`): case C's QoS cases protected under CCMP,
 # the pairwise key installed through the HAL, the MAC decrypting.
 ccmp = ["amsdu"]
+# Cell F's receiver (`tasks/161`): the A-MPDUs' subframes under a receive
+# Block Ack agreement for TID 0 programmed through the backend.
+ampdu = ["amsdu"]
 # Case D's second geometry: 256-byte buffers in place of 128.
 ring256 = []
 

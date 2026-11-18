@@ -237,6 +237,11 @@ pub fn byte(case: Case, sender: [u8; 6], receiver: [u8; 6], counter: u32, offset
 /// sender seals them in software (`CcmpAssociation`, SPP not negotiated, as
 /// the access point of 2026-11-01); the receiver's MAC decrypts them under
 /// the same pairwise key installed through the HAL.
+/// Cell F's control: the frames of the aggregates of 2 subframes, then those
+/// of the aggregates of 8, numbered in one run.
+pub const CELL_F_PAIRS: u32 = 600;
+pub const CELL_F_OCTETS: u32 = 150;
+pub const CELL_F_FRAMES: u32 = 2 * CELL_F_PAIRS + 8 * CELL_F_OCTETS;
 /// Cell E's rounds: at least 1 000 frames of each QoS case.
 pub const CELL_ROUNDS: u32 = 1_100;
 pub const CCMP_HEADER: usize = 8;

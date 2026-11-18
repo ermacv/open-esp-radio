@@ -251,6 +251,29 @@ pub(super) async fn run(
             let first = c::check(&joined, &mut counts, &mut cases, station, &mut peer);
             // Cell E: the pairwise key under the sender's address, once it is
             // known from its first (unprotected) frame.
+            // Cell F: the receive Block Ack agreement for TID 0 under the
+            // sender's address, programmed as the backend programs it, before
+            // the first aggregate.
+            #[cfg(feature = "ampdu")]
+            if cases.agreement.is_none()
+                && let Some(sender) = peer
+            {
+                use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::{
+                    S31RxBlockAckAgreement, program,
+                };
+                cases.agreement = Some(program(
+                    &mut access.wifi_mac_hal(),
+                    S31RxBlockAckAgreement {
+                        hardware_index: 0,
+                        interface: oer_chips_esp32s31_hal::types::MacInterface::Station,
+                        peer: sender,
+                        tid: 0,
+                        starting_sequence:
+                            oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
+                        window: 64,
+                    },
+                ));
+            }
             #[cfg(feature = "ccmp")]
             if cases.key.is_none()
                 && let Some(sender) = peer
@@ -400,10 +423,12 @@ mod c {
     use super::*;
 
     /// The rounds the sender sends: case C's, or cell E's.
-    #[cfg(not(feature = "ccmp"))]
+    #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
     const RECEIVED_ROUNDS: u32 = ROUNDS;
     #[cfg(feature = "ccmp")]
     const RECEIVED_ROUNDS: u32 = case_c::CELL_ROUNDS;
+    #[cfg(all(feature = "ampdu", not(feature = "ccmp")))]
+    const RECEIVED_ROUNDS: u32 = case_c::CELL_F_FRAMES;
 
     /// The sender's quiet that ends the run once it has begun.
     pub(super) const QUIET_MS: u32 = 5_000;
@@ -456,6 +481,9 @@ mod c {
     pub(super) struct Cases {
         per: [PerCase; CASES.len()],
         unknown: u32,
+        /// Cell F: how the receive Block Ack agreement's programming ended.
+        #[cfg(feature = "ampdu")]
+        pub(super) agreement: Option<Result<(), oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::S31RxBlockAckAgreementError>>,
         /// Cell E: how the pairwise key's installation ended.
         #[cfg(feature = "ccmp")]
         pub(super) key: Option<oer_chips_esp32s31_hal::types::MacKeyInstallOutcome>,
@@ -609,7 +637,7 @@ mod c {
             // Cell E sends the QoS cases and, before them, unprotected hello
             // frames of case 5's layout; it sends no round of cases 5 and 6,
             // so they have no absent rounds to count (`tasks/172`).
-            if cfg!(feature = "ccmp") && !case.qos() {
+            if cfg!(any(feature = "ccmp", feature = "ampdu")) && !case.qos() {
                 line.clear();
                 let _ = writeln!(
                     line,
@@ -658,7 +686,7 @@ mod c {
         // By the frame before (`tasks/160`): completed / sent, the last
         // column the run's first frame. Cell E sends the QoS cases alone,
         // so case C's order does not name its frames' neighbours.
-        #[cfg(not(feature = "ccmp"))]
+        #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
         for (case, per) in CASES.iter().zip(&cases.per) {
             let mut after = [[0_u32; 2]; CASES.len() + 1];
             for round in 0..ROUNDS {
@@ -690,7 +718,13 @@ mod c {
         line.clear();
         #[cfg(feature = "ccmp")]
         let _ = writeln!(line, "CASE unknown={} key={:?}", cases.unknown, cases.key);
-        #[cfg(not(feature = "ccmp"))]
+        #[cfg(feature = "ampdu")]
+        let _ = writeln!(
+            line,
+            "CASE unknown={} agreement={:?}",
+            cases.unknown, cases.agreement
+        );
+        #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
         let _ = writeln!(line, "CASE unknown={}", cases.unknown);
         usb::text(console, line.as_bytes()).await;
     }
