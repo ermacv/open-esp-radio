@@ -7,7 +7,8 @@
 //! ([`Link`]), whether the data flows ([`Flow`]), how it holds its place
 //! ([`Taken`]) and the places the reorder retains. It answers with a sum
 //! that carries the handle back ([`Decision`]), or keeps the handle: every
-//! call that takes a handle gives it back or keeps it in the queue. The
+//! call that takes a handle gives it back or keeps it in the queue; the
+//! lent count changes only with a loan it decides and a return it is told. The
 //! network's room is spent here: spending it is the rule's decision.
 //!
 //! - A unit is delivered when nothing waits and the network has room: lent
@@ -31,9 +32,10 @@ use oer_protocols_ieee80211_core_upper_mac::block_ack::RetainRoom;
 
 /// What a unit needs of the network, read by the round from its bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum Need {
-    /// One MSDU the network may borrow in place, or copy.
-    Lendable,
+pub(super) enum Need<L> {
+    /// One MSDU the network may borrow in place, or copy; `L` is what a
+    /// loan needs (the unit's proof that it can be lent, its frame).
+    Lendable(L),
     /// Frames to copy, each one (an A-MSDU's MSDUs, or a unit the network
     /// may not borrow).
     Copies(u8),
@@ -64,9 +66,9 @@ pub(super) enum Taken {
 /// What the core decided of a unit, the handle with it; or that it keeps
 /// the unit.
 #[derive(Debug)]
-pub(super) enum Decision<H> {
+pub(super) enum Decision<H, L> {
     /// Lend it to the network: one unit more the network holds.
-    Lend(H, LendPermit),
+    Lend(H, L, LendPermit),
     /// Copy its frames into the network's storage; its place comes back at
     /// the round's close.
     Copy(H, CopyPermits),
@@ -75,24 +77,8 @@ pub(super) enum Decision<H> {
     /// Back to the ring unread: the data stops.
     Back(H),
     /// The core keeps it: it waits (a unit offered), or still waits at the
-    /// head (the drain ends).
+    /// head (the round goes on to the reorder and the ring).
     Kept,
-}
-
-/// The round's side of the rule: what it reads of a unit (its need, its
-/// link) and how it carries out a decision. A loan it could not make is
-/// said, and the core takes the loan back.
-pub(super) trait Hands<H> {
-    fn read(&mut self, unit: &H) -> (Need, Link);
-    fn carry(&mut self, decision: Decision<H>) -> Carried;
-}
-
-/// What carrying out a decision did.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum Carried {
-    Done,
-    /// A loan the core decided was not made: the unit was refused instead.
-    LoanUnmade,
 }
 
 /// The pressure rule's state: the units that wait, each with its moment,
@@ -143,11 +129,7 @@ impl<H> Pressure<H> {
     /// waiting and `gap`'s place in the same order (the values go, the
     /// order stays), and the units lent.
     #[cfg(test)]
-    pub(super) fn key(
-        &self,
-        gap: Option<Instant>,
-        name: impl Fn(&H) -> u8,
-    ) -> std::string::String {
+    pub(super) fn key(&self, gap: Option<Instant>, name: impl Fn(&H) -> u8) -> std::string::String {
         let deadlines = || {
             self.waiting
                 .iter()
@@ -170,7 +152,6 @@ impl<H> Pressure<H> {
         std::format!("{waiting:?}|gap {gap:?}|lent {}", self.lent)
     }
 
-
     /// The head's bound: its moment and `late`.
     pub(super) fn bound(&self) -> Option<Instant> {
         self.waiting
@@ -189,66 +170,43 @@ impl<H> Pressure<H> {
         }
     }
 
-    /// What waits, from its head, until the head still waits: each head
-    /// decided with what `read` finds of it (its need, its link), each
-    /// decision given to `carry`.
-    pub(super) fn drain(
-        &mut self,
-        flow: Flow,
-        now: Instant,
-        room: &mut Room,
-        hands: &mut impl Hands<H>,
-    ) {
-        while let Some((head, _)) = self.waiting.front() {
-            let (need, link) = hands.read(head);
-            match self.next(need, link, flow, now, room) {
-                Decision::Kept => break,
-                decision => self.carry(decision, hands),
-            }
-        }
-    }
-
-    /// A decision carried out by the round; a loan it could not make comes
-    /// back off the count.
-    fn carry(&mut self, decision: Decision<H>, hands: &mut impl Hands<H>) {
-        if hands.carry(decision) == Carried::LoanUnmade {
-            self.lent = self.lent.saturating_sub(1);
-        }
+    /// The head of what waits, for the round to read its need and link.
+    pub(super) fn head(&self) -> Option<&H> {
+        self.waiting.front().map(|(handle, _)| handle)
     }
 
     /// The head, decided with what the round read of it: a stopping data's
     /// goes back; a held link's and a late one are refused; else it is
     /// delivered while the network has room, or still waits.
-    fn next(
+    pub(super) fn next<L>(
         &mut self,
-        need: Need,
+        need: Need<L>,
         link: Link,
         flow: Flow,
         now: Instant,
         room: &mut Room,
-    ) -> Decision<H> {
-        let Some((handle, since)) = self.waiting.pop_front() else {
+    ) -> Decision<H, L> {
+        let Some((_, since)) = self.waiting.front() else {
             return Decision::Kept;
         };
-        if flow == Flow::Stopping {
-            return Decision::Back(handle);
-        }
-        if link == Link::Held {
-            return Decision::Refused(handle, RxRefusal::LinkHeld);
-        }
-        if now
-            .checked_duration_since(since)
-            .is_some_and(|waited| waited >= self.late)
-        {
-            return Decision::Refused(handle, RxRefusal::Late);
-        }
-        match self.deliver(handle, need, Place::Held, room) {
-            Delivered::Decided(decision) => decision,
-            Delivered::Waits(handle) => match self.waiting.push_front((handle, since)) {
-                Ok(()) => Decision::Kept,
-                // One was just taken from it: it has its place.
-                Err((handle, _)) => Decision::Refused(handle, RxRefusal::Place),
+        // Decided before the head is taken: a head that still waits is
+        // never taken out.
+        let late = now
+            .checked_duration_since(*since)
+            .is_some_and(|waited| waited >= self.late);
+        let answer = match (flow, link, late) {
+            (Flow::Stopping, _, _) => Answer::Back,
+            (Flow::Flowing, Link::Held, _) => Answer::Refuse(RxRefusal::LinkHeld),
+            (Flow::Flowing, Link::Carrying, true) => Answer::Refuse(RxRefusal::Late),
+            (Flow::Flowing, Link::Carrying, false) => match room_for(need, Place::Held, room) {
+                Some(answer) => answer,
+                None => return Decision::Kept,
             },
+        };
+        match self.waiting.pop_front() {
+            Some((handle, _)) => self.decided(handle, answer),
+            // `front` found it: nothing is taken, nothing changes.
+            None => Decision::Kept,
         }
     }
 
@@ -257,34 +215,20 @@ impl<H> Pressure<H> {
     /// later unit could be lent where the waiting one cannot be copied),
     /// else it is delivered; a newcomer at the last free place keeps no
     /// place.
-    pub(super) fn offer(
-        &mut self,
-        handle: H,
-        taken: Taken,
-        staging: usize,
-        now: Instant,
-        room: &mut Room,
-        hands: &mut impl Hands<H>,
-    ) {
-        let (need, link) = hands.read(&handle);
-        let decision = self.decide(handle, need, link, taken, staging, now, room);
-        self.carry(decision, hands);
-    }
-
     #[allow(
         clippy::too_many_arguments,
         reason = "the unit, its need, link and place, the port's places, the clock and the room"
     )]
-    fn decide(
+    pub(super) fn offer<L>(
         &mut self,
         handle: H,
-        need: Need,
+        need: Need<L>,
         link: Link,
         taken: Taken,
         staging: usize,
         now: Instant,
         room: &mut Room,
-    ) -> Decision<H> {
+    ) -> Decision<H, L> {
         if link == Link::Held {
             return Decision::Refused(handle, RxRefusal::LinkHeld);
         }
@@ -294,21 +238,32 @@ impl<H> Pressure<H> {
             }
             Taken::InPlace | Taken::Newcomer { .. } => Place::Held,
         };
-        let waits = if self.waiting.is_empty() {
-            match self.deliver(handle, need, place, room) {
-                Delivered::Decided(decision) => return decision,
-                Delivered::Waits(handle) => handle,
-            }
-        } else {
-            handle
-        };
-        if place == Place::Last {
-            return Decision::Refused(waits, RxRefusal::NoPlaceToWait);
+        if self.waiting.is_empty()
+            && let Some(answer) = room_for(need, place, room)
+        {
+            return self.decided(handle, answer);
         }
-        match self.waiting.push_back((waits, now)) {
+        if place == Place::Last {
+            return Decision::Refused(handle, RxRefusal::NoPlaceToWait);
+        }
+        match self.waiting.push_back((handle, now)) {
             Ok(()) => Decision::Kept,
-            // A place a unit: the queue has one for each.
+            // A place a unit: the queue has a place for each of the port's
+            // (`PLACES`), and the composition's staging is at most it.
             Err((handle, _)) => Decision::Refused(handle, RxRefusal::Place),
+        }
+    }
+
+    /// What was decided, carried to its handle: a loan counted.
+    fn decided<L>(&mut self, handle: H, answer: Answer<L>) -> Decision<H, L> {
+        match answer {
+            Answer::Lend(loan, permit) => {
+                self.lent = self.lent.saturating_add(1);
+                Decision::Lend(handle, loan, permit)
+            }
+            Answer::Copy(permits) => Decision::Copy(handle, permits),
+            Answer::Refuse(reason) => Decision::Refused(handle, reason),
+            Answer::Back => Decision::Back(handle),
         }
     }
 
@@ -318,27 +273,22 @@ impl<H> Pressure<H> {
             .saturating_add(usize::from(self.lent))
             .saturating_add(self.waiting.len())
     }
+}
 
-    /// Lend while the network has room to borrow (a unit at the last place
-    /// keeps none: not a loan), else copy while it has room to copy, else
-    /// it waits.
-    fn deliver(&mut self, handle: H, need: Need, place: Place, room: &mut Room) -> Delivered<H> {
-        if let (Need::Lendable, Place::Held) = (need, place)
-            && let Some(permit) = room.lend()
-        {
-            self.lent = self.lent.saturating_add(1);
-            return Delivered::Decided(Decision::Lend(handle, permit));
-        }
-        let copies = match need {
-            Need::Lendable => 1,
-            Need::Copies(count) => usize::from(count),
-            Need::Unread(reason) => return Delivered::Decided(Decision::Refused(handle, reason)),
-        };
-        match room.copies(copies) {
-            Some(permits) => Delivered::Decided(Decision::Copy(handle, permits)),
-            None => Delivered::Waits(handle),
-        }
-    }
+/// Lend while the network has room to borrow (a unit at the last place
+/// keeps none: not a loan), else copy while it has room to copy; `None`:
+/// it waits. A unit that does not decapsulate is refused for its reason.
+fn room_for<L>(need: Need<L>, place: Place, room: &mut Room) -> Option<Answer<L>> {
+    let copies = match (need, place) {
+        (Need::Lendable(loan), Place::Held) => match room.lend() {
+            Some(permit) => return Some(Answer::Lend(loan, permit)),
+            None => 1,
+        },
+        (Need::Lendable(_), Place::Last) => 1,
+        (Need::Copies(count), _) => usize::from(count),
+        (Need::Unread(reason), _) => return Some(Answer::Refuse(reason)),
+    };
+    room.copies(copies).map(Answer::Copy)
 }
 
 /// Where a unit offered holds its place: one it held, or the last free one.
@@ -348,10 +298,12 @@ enum Place {
     Last,
 }
 
-/// What delivering a unit found.
-enum Delivered<H> {
-    Decided(Decision<H>),
-    Waits(H),
+/// What the core decided, before the handle is joined to it.
+enum Answer<L> {
+    Lend(L, LendPermit),
+    Copy(CopyPermits),
+    Refuse(RxRefusal),
+    Back,
 }
 
 #[cfg(test)]

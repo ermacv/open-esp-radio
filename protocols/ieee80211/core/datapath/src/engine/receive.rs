@@ -31,7 +31,7 @@
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    EthernetAddresses, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
+    EthernetAddresses, Lendable, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
     RxEvidence, RxHead, RxHeader, RxMetadata, UnitHandle,
 };
 use oer_protocols_ieee80211_core_installation::Rest;
@@ -43,13 +43,13 @@ use oer_protocols_ieee80211_wire::security::LinkProtection;
 use super::{Agreements, Carrying, Network, Told};
 
 mod pressure;
-use pressure::{Carried, Decision, Hands, Link, Need, Pressure, Taken};
 use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{
     RxAgreements, RxBlockAckRefused, RxDisposition, RxView,
 };
 use oer_protocols_ieee80211_wire::address::Bssid;
 use oer_protocols_ieee80211_wire::block_ack::frame::{BlockAckAction, parse_block_ack_action};
+use pressure::{Decision, Link, Need, Pressure, Taken};
 
 /// The Action subtype of a management frame.
 ///
@@ -334,24 +334,13 @@ impl<'id> Receive<'id> {
         }
         // What waits goes first, from its head, as the core decides with
         // what the round reads of each: until the head still waits.
-        {
-            let Self {
-                pressure,
-                refusals,
-                msdus,
-            } = self;
-            pressure.drain(
-                flow,
-                now,
-                &mut room,
-                &mut RoundHands {
-                    round: &mut round,
-                    msdus,
-                    refusals,
-                    network,
-                    peer_of: &peer_of,
-                },
-            );
+        while let Some(head) = self.pressure.head() {
+            let need = need(&round, head, &mut self.msdus);
+            let link = link(&round, head, &peer_of);
+            match self.pressure.next(need, link, flow, now, &mut room) {
+                Decision::Kept => break,
+                decision => self.carry(&mut round, decision, network),
+            }
         }
         // Then what the reorder released, in its order.
         self.ready(
@@ -450,7 +439,7 @@ impl<'id> Receive<'id> {
         // The reorder's gap and the agreements' inactivity wake too.
         let deadline = reorder
             .as_mut()
-            .and_then(|reorder| reorder.agreements.view().deadline());
+            .and_then(|reorder| reorder.agreements.deadline());
         let earliest = |at: Option<Instant>| match (at, deadline) {
             (Some(at), Some(deadline)) => Some(at.min(deadline)),
             (at, None) => at,
@@ -597,58 +586,25 @@ impl<'id> Receive<'id> {
             round.release(handle);
             return;
         }
-        let Self {
-            pressure,
-            refusals,
-            msdus,
-        } = self;
-        pressure.offer(
-            handle,
-            taken,
-            P::STAGING,
-            now,
-            room,
-            &mut RoundHands {
-                round,
-                msdus,
-                refusals,
-                network,
-                peer_of,
-            },
-        );
-    }
-}
-
-/// The round's hands for the pressure rule: it reads a unit's need from its
-/// bytes and its link from the links, and carries out what the core decides
-/// (the loan, the copies, the release, the count).
-struct RoundHands<'h, 'r, 'id, P: ReceivePort<'id>, N, F> {
-    round: &'h mut Round<'r, 'id, P>,
-    msdus: &'h mut heapless::Vec<Msdu, AMSDU_MSDUS>,
-    refusals: &'h mut RxRefusals,
-    network: &'h mut N,
-    peer_of: &'h F,
-}
-
-impl<'id, P, N, F> Hands<UnitHandle<'id>> for RoundHands<'_, '_, 'id, P, N, F>
-where
-    P: ReceivePort<'id>,
-    N: Network<P::Memory, P::Lent>,
-    F: Fn(&RxHeader) -> Option<RxPeer>,
-{
-    /// Its link and its need; its MSDUs are left for the delivery, which
-    /// follows at once.
-    fn read(&mut self, unit: &UnitHandle<'id>) -> (Need, Link) {
-        (
-            need(self.round, unit, self.msdus),
-            link(self.round, unit, self.peer_of),
-        )
+        let need = need(round, &handle, &mut self.msdus);
+        let link = link(round, &handle, peer_of);
+        let decision = self
+            .pressure
+            .offer(handle, need, link, taken, P::STAGING, now, room);
+        self.carry(round, decision, network);
     }
 
-    /// Carry out what the core decided of a unit, its MSDUs the ones the
-    /// read before found.
-    fn carry(&mut self, decision: Decision<UnitHandle<'id>>) -> Carried {
-        let round = &mut *self.round;
+    /// Carry out what the core decided of a unit, its MSDUs the ones its
+    /// need was read with just before.
+    fn carry<P, N>(
+        &mut self,
+        round: &mut Round<'_, 'id, P>,
+        decision: Decision<UnitHandle<'id>, Loan>,
+        network: &mut N,
+    ) where
+        P: ReceivePort<'id>,
+        N: Network<P::Memory, P::Lent>,
+    {
         match decision {
             Decision::Kept => {}
             Decision::Back(handle) => round.release(handle),
@@ -656,27 +612,20 @@ where
                 round.release(handle);
                 self.refusals.count(reason);
             }
-            Decision::Lend(handle, permit) => {
-                let lendable = round.unit(&handle).and_then(|view| view.lendable());
-                let msdu = self.msdus.first().copied();
-                match (lendable, msdu) {
-                    (Some(lendable), Some(msdu))
-                        if round.write_addresses(&handle, msdu.addresses).is_ok() =>
-                    {
-                        let lent = round.lend(handle, lendable);
-                        self.network.lent(permit, lent, msdu.span);
-                    }
-                    // A lendable unit's need had its MSDU and its view: this
-                    // does not happen. The loan the core counted comes back.
-                    _ => {
-                        round.release(handle);
-                        self.refusals.count(RxRefusal::Place);
-                        return Carried::LoanUnmade;
-                    }
+            Decision::Lend(handle, Loan { lendable, msdu }, permit) => {
+                if round.write_addresses(&handle, msdu.addresses).is_ok() {
+                    let lent = round.lend(handle, lendable);
+                    network.lent(permit, lent, msdu.span);
+                } else {
+                    // The MSDU was found inside the unit: the port refuses
+                    // no write of it. The loan the core counted comes back.
+                    self.pressure.reclaimed(1);
+                    round.release(handle);
+                    self.refusals.count(RxRefusal::Place);
                 }
             }
             Decision::Copy(handle, mut permits) => {
-                for msdu in self.msdus.iter() {
+                for msdu in &self.msdus {
                     if round.write_addresses(&handle, msdu.addresses).is_err() {
                         self.refusals.count(RxRefusal::Place);
                         continue;
@@ -689,7 +638,7 @@ where
                             .unit(&handle)
                             .and_then(|view| view.bytes.get(start..end)),
                     ) {
-                        (Some(permit), Some(frame)) => self.network.copied(permit, frame),
+                        (Some(permit), Some(frame)) => network.copied(permit, frame),
                         _ => self.refusals.count(RxRefusal::Place),
                     }
                 }
@@ -697,8 +646,15 @@ where
                 round.release(handle);
             }
         }
-        Carried::Done
     }
+}
+
+/// What a loan needs: the unit's proof that it can be lent and its one
+/// MSDU.
+#[derive(Clone, Copy, Debug)]
+struct Loan {
+    lendable: Lendable,
+    msdu: Msdu,
 }
 
 /// What a unit needs of the network, from its bytes: one MSDU it may lend,
@@ -708,7 +664,7 @@ fn need<'id, P: ReceivePort<'id>>(
     round: &Round<'_, 'id, P>,
     handle: &UnitHandle<'id>,
     msdus: &mut heapless::Vec<Msdu, AMSDU_MSDUS>,
-) -> Need {
+) -> Need<Loan> {
     let Some(view) = round.unit(handle) else {
         // `None` does not happen (`Round::unit`).
         msdus.clear();
@@ -717,9 +673,12 @@ fn need<'id, P: ReceivePort<'id>>(
     if let Err(reason) = self::msdus(&view, msdus) {
         return Need::Unread(reason);
     }
-    match (msdus.len(), view.lendable()) {
-        (1, Some(_)) => Need::Lendable,
-        (count, _) => Need::Copies(u8::try_from(count).unwrap_or(u8::MAX)),
+    match (msdus.as_slice(), view.lendable()) {
+        ([msdu], Some(lendable)) => Need::Lendable(Loan {
+            lendable,
+            msdu: *msdu,
+        }),
+        (msdus, _) => Need::Copies(u8::try_from(msdus.len()).unwrap_or(u8::MAX)),
     }
 }
 
@@ -854,7 +813,7 @@ fn first_ether_type<M>(view: &Received<'_, M>) -> Option<u16> {
 
 /// One MSDU of a unit: where its Ethernet frame lies once its addresses
 /// are written.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Msdu {
     addresses: EthernetAddresses,
     span: EthernetSpan,

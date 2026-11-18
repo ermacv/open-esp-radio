@@ -1058,18 +1058,12 @@ const LARGE_PLACES: usize = oer_protocols_ieee80211_testing_model::MODEL_PLACES;
 const LARGE_WINDOW: usize = MODEL_WINDOW;
 
 /// Each bound's ceiling of nodes: about three times what it takes today
-/// (the ordinary 7 052, 26 209 and, over eight places, 7 052; the named
-/// 93 624, 66 181, 267 094, 188 350 and 32 875), a ceiling against an
-/// explosion that stops a search within a minute or two of where it should
-/// have ended, never a pinned figure.
+/// (7 052, 26 209 and, over eight places, 7 052), a ceiling against an
+/// explosion, never a pinned figure. The pressure rule's own orders are
+/// searched by its core (`receive::pressure`); these are the round's.
 const SMALL_CEILING: usize = 25_000;
 const SMALL_AGREED_CEILING: usize = 80_000;
 const LARGE_CEILING: usize = 25_000;
-const SMALL_DEEP_CEILING: usize = 300_000;
-const SMALL_HOLD_CEILING: usize = 200_000;
-const SMALL_AGREED_DEEP_CEILING: usize = 800_000;
-const SMALL_AGREED_HOLD_CEILING: usize = 600_000;
-const SMALL_AGREED_LOANS_CEILING: usize = 100_000;
 
 /// The small port at its ordinary bounds, without an agreement.
 #[test]
@@ -1124,109 +1118,5 @@ fn every_order_over_eight_places_keeps_its_properties() {
         },
         Agreement::None,
         LARGE_CEILING,
-    );
-}
-
-/// A named search over the small port: `bounds` under `agreement`, stopped
-/// at `ceiling` nodes. Named, not run by default; each is run by name once
-/// a pull request, under `ulimit -v`, its time and peak memory in it, and
-/// stopped if it has not ended in five minutes.
-fn named(bounds: Bounds, agreement: Agreement, ceiling: usize) {
-    run::<SMALL_PLACES, SMALL_WINDOW>(bounds, agreement, ceiling);
-}
-
-/// Depth without a hold: six frames, two returns, two copies freed.
-#[test]
-#[ignore = "a named bound: run by name"]
-fn every_receive_order_at_six_frames() {
-    named(
-        Bounds {
-            units: 6,
-            returns: 2,
-            stops: 1,
-            frees: 2,
-            gaps: 0,
-            holds: 0,
-            loans: 1,
-        },
-        Agreement::None,
-        SMALL_DEEP_CEILING,
-    );
-}
-
-/// A hold with depth: five frames and one hold.
-#[test]
-#[ignore = "a named bound: run by name"]
-fn every_receive_order_at_five_frames_with_a_hold() {
-    named(
-        Bounds {
-            units: 5,
-            returns: 2,
-            stops: 1,
-            frees: 2,
-            gaps: 0,
-            holds: 1,
-            loans: 1,
-        },
-        Agreement::None,
-        SMALL_HOLD_CEILING,
-    );
-}
-
-/// The agreement's depth without a hold: six frames, a gap.
-#[test]
-#[ignore = "a named bound: run by name"]
-fn every_order_under_a_receive_agreement_at_six_frames() {
-    named(
-        Bounds {
-            units: 6,
-            returns: 2,
-            stops: 1,
-            frees: 1,
-            gaps: 1,
-            holds: 0,
-            loans: 1,
-        },
-        Agreement::Tid0,
-        SMALL_AGREED_DEEP_CEILING,
-    );
-}
-
-/// The agreement with a hold: five frames, a gap and a hold.
-#[test]
-#[ignore = "a named bound: run by name"]
-fn every_order_under_a_receive_agreement_at_five_frames_with_a_hold() {
-    named(
-        Bounds {
-            units: 5,
-            returns: 2,
-            stops: 1,
-            frees: 1,
-            gaps: 1,
-            holds: 1,
-            loans: 1,
-        },
-        Agreement::Tid0,
-        SMALL_AGREED_HOLD_CEILING,
-    );
-}
-
-/// The agreement with a loan of two: one unit lent and two retained leave
-/// the network room at the last place, where a newcomer keeps none.
-#[test]
-#[ignore = "a named bound: run by name"]
-fn every_order_under_a_receive_agreement_at_five_frames_with_two_loans() {
-    named(
-        Bounds {
-            units: 5,
-            returns: 2,
-            stops: 1,
-            frees: 1,
-            gaps: 1,
-            holds: 0,
-            loans: 2,
-        },
-        Agreement::Tid0,
-        SMALL_AGREED_LOANS_CEILING,
     );
 }
