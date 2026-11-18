@@ -14,7 +14,7 @@
 use super::{BUFFER, COUNT, Spares, Storage, usb};
 use crate::case_c::{Case, byte};
 use crate::crc::{CRC32, crc32};
-use crate::verdict::{ARMS, Counts, Kind, Observations, RESERVE_BUCKETS, SEGMENTS};
+use crate::verdict::{ARMS, Act, Counts, Kind, Observations, RESERVE_BUCKETS, SEGMENTS};
 use bytemuck::Zeroable;
 use core::fmt::Write as _;
 use oer_chips_esp32s31_hal::{
@@ -92,6 +92,55 @@ const TAIL_BYTES: usize = 8;
 /// The violation kinds counted (`Kind` codes 1 to 8, and 9 for a copy
 /// difference outside the known late word).
 const KINDS: usize = 10;
+
+/// `tasks/200`: the sequence numbers an exhaust event keeps, before the ring
+/// ran out and after it was restored.
+const EXHAUST_SNS: usize = 64;
+/// The pause with the ring out while the sender goes on.
+const EXHAUST_PAUSE_US: u64 = 20_000;
+/// The longest hold before an event is recorded as out regardless.
+const EXHAUST_HOLD_LIMIT_US: u64 = 500_000;
+
+/// `tasks/200`: where an exhaust segment is.
+#[derive(Clone, Copy, PartialEq, Eq, Zeroable)]
+#[repr(u32)]
+enum Exhaust {
+    /// Not an exhaust segment: every unit recycles.
+    Idle = 0,
+    /// Every taken unit is kept; nothing is re-armed.
+    Holding = 1,
+    /// The ring ran out; the pause runs, still nothing re-armed.
+    Out = 2,
+    /// The kept units re-armed; ordinary service.
+    Restored = 3,
+}
+
+/// One exhaust segment's record.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+struct ExhaustEvent {
+    /// Microseconds since the segments' clock start.
+    hold_us: u32,
+    out_us: u32,
+    restore_us: u32,
+    /// Units kept when the ring was found out.
+    held: u32,
+    /// Ring indices of NEXT and LAST at the exhaustion; `u32::MAX` none.
+    next: u32,
+    last: u32,
+    /// Whether the hold limit ended the hold rather than an empty ring.
+    by_limit: u32,
+    /// The MAC's counters (MPDU, FCS error, buffer full, data success).
+    hw_at_hold: [u16; 4],
+    hw_at_out: [u16; 4],
+    hw_at_restore: [u16; 4],
+    before: [u16; EXHAUST_SNS],
+    before_len: u32,
+    after: [u16; EXHAUST_SNS],
+    after_len: u32,
+    /// The microseconds of the first sequence number after the restore.
+    after_first_us: u32,
+}
 
 /// The late word of one class of takes (at LAST or not).
 #[derive(Clone, Copy, Zeroable)]
@@ -216,6 +265,15 @@ pub(super) struct State {
     /// The stopping descriptor's words when the stop was seen.
     stop_now: [u32; 3],
     acts: [ActSnapshot; COUNT],
+    /// `tasks/200`: the exhaust phase and its records.
+    exhaust: Exhaust,
+    exhaust_events: [ExhaustEvent; SEGMENTS],
+    /// Microseconds since the segments' clock start, set every pass.
+    now_us: u32,
+    /// The run's first data sequence number from the sender and its time,
+    /// to align the capture.
+    first_sn: u32,
+    first_sn_us: u32,
 }
 
 /// The HAL's copy of one completed frame.
@@ -242,6 +300,11 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
     state.late_at_last_rebind.min = u32::MAX;
     state.late_not_last_rebind.min = u32::MAX;
     state.stop_descriptor = u32::MAX;
+    state.first_sn = u32::MAX;
+    for event in &mut state.exhaust_events {
+        event.next = u32::MAX;
+        event.last = u32::MAX;
+    }
     Ok((state, frame))
 }
 
@@ -620,6 +683,7 @@ impl State {
             _ => bump(&mut counts.fcs_absent),
         }
         if let Some(mpdu) = frame.get(layout.frame_offset..body_end) {
+            self.record_sequence(segment, mpdu);
             self.check_content(segment, spare, mpdu)?;
         }
         // The rebind is covered: the BUFFER word named the new spare, DMA
@@ -630,6 +694,51 @@ impl State {
             *self.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = 0;
         }
         Ok(())
+    }
+
+    /// `tasks/200`: a data frame's sequence number (IEEE 802.11-2020
+    /// 9.2.4.4), kept for the capture: the run's first, and an exhaust
+    /// segment's before the ring ran out and after it was restored.
+    fn record_sequence(&mut self, segment: usize, mpdu: &[u8]) {
+        let (Some(&control), Some(sequence)) = (mpdu.first(), mpdu.get(22..24)) else {
+            return;
+        };
+        // Frame Control: type Data (9.2.4.1.3).
+        if control & 0x0c != 0x08 {
+            return;
+        }
+        let sequence = u16::from_le_bytes([
+            sequence.first().copied().unwrap_or(0),
+            sequence.get(1).copied().unwrap_or(0),
+        ]) >> 4;
+        if self.first_sn == u32::MAX {
+            self.first_sn = u32::from(sequence);
+            self.first_sn_us = self.now_us;
+        }
+        let phase = self.exhaust;
+        let now = self.now_us;
+        let Some(event) = self.exhaust_events.get_mut(segment) else {
+            return;
+        };
+        match phase {
+            Exhaust::Holding | Exhaust::Out => {
+                let at = event.before_len as usize % EXHAUST_SNS;
+                if let Some(slot) = event.before.get_mut(at) {
+                    *slot = sequence;
+                }
+                event.before_len = event.before_len.saturating_add(1);
+            }
+            Exhaust::Restored => {
+                if event.after_len == 0 {
+                    event.after_first_us = now;
+                }
+                if let Some(slot) = event.after.get_mut(event.after_len as usize) {
+                    *slot = sequence;
+                    event.after_len += 1;
+                }
+            }
+            Exhaust::Idle => {}
+        }
     }
 
     /// Recheck `limit` kept spares round-robin.
@@ -711,6 +820,16 @@ impl State {
         Ok(())
     }
 
+    fn hardware_now(access: &RadioAccess) -> [u16; 4] {
+        let stats = access.receive_statistics_snapshot().primary;
+        [
+            stats.mpdu_count,
+            stats.fcs_error,
+            stats.buffer_full,
+            stats.data_success,
+        ]
+    }
+
     fn sample_hardware(&mut self, segment: usize, access: &RadioAccess) -> Result<(), Name<32>> {
         let stats = access.receive_statistics_snapshot().primary;
         let now = [
@@ -773,15 +892,18 @@ fn scan(
         .observe_reserved(ring, access.rx_dma())
         .map_err(|_| name!("reserved"; 32))?;
     reload(ring, access)?;
+    // `tasks/200`: while an exhaust segment holds, nothing is re-armed.
+    let holding = arm.exhaust() && matches!(state.exhaust, Exhaust::Holding | Exhaust::Out);
     for _ in 0..UNITS_PER_SCAN {
         let frozen = ring
             .freeze_cursor(access.rx_dma())
             .map_err(|_| name!("cursor"; 32))?;
         // A unit whose append found the doorbell re-rung stays observed at
         // the recycle frontier; it is appended before any later take.
-        if let Some(credit) = storage
-            .claim_deferred_recycle(ring, frozen)
-            .map_err(|_| name!("deferred-claim"; 32))?
+        if !holding
+            && let Some(credit) = storage
+                .claim_deferred_recycle(ring, frozen)
+                .map_err(|_| name!("deferred-claim"; 32))?
         {
             match credit.append(access.rx_dma()) {
                 Ok(_) | Err(RxRingError::ReloadPending) => {}
@@ -794,6 +916,31 @@ fn scan(
             .first_completed_unit_frontier_through_cursor(ring, frozen)
             .map_err(|_| name!("frontier"; 32))?;
         if frontier.unit_count == 0 {
+            if holding && state.exhaust == Exhaust::Holding {
+                let held = state
+                    .exhaust_events
+                    .get(segment)
+                    .map_or(0, |event| event.held);
+                if held as usize + 2 >= COUNT {
+                    let base = ring.descriptor_base();
+                    let index = |low| {
+                        cursor_ring_index(low, base, COUNT).map_or(u32::MAX, |index| index as u32)
+                    };
+                    let (next, last) = (
+                        index(frozen.next_descriptor_low()),
+                        index(frozen.last_descriptor_low()),
+                    );
+                    let hw = State::hardware_now(access);
+                    let now = state.now_us;
+                    if let Some(event) = state.exhaust_events.get_mut(segment) {
+                        event.out_us = now;
+                        event.next = next;
+                        event.last = last;
+                        event.hw_at_out = hw;
+                    }
+                    state.exhaust = Exhaust::Out;
+                }
+            }
             break;
         }
         let head = storage
@@ -842,7 +989,7 @@ fn scan(
         // A fixed segment waits for the late words before the copy, so the
         // delay is measured from the take (`tasks/196`); a rebind segment
         // rebinds first and waits after, to see where the write lands.
-        let settled_before_copy = if arm.rebind {
+        let settled_before_copy = if arm.rebind() {
             None
         } else {
             Some(settle_late_word(
@@ -894,13 +1041,20 @@ fn scan(
         // take, before the late word; the header then settles, the copy is
         // checked against the buffer taken out, and the act is finished.
         let mut bound = None;
-        if copied && (arm.rebind || *action) {
+        if copied && (arm.rebind() || (*action && !arm.exhaust())) {
             if reserve == 0 {
                 // No armed descriptor ahead of the walker: excluded.
                 bump(&mut state.counts(segment)?.exhausted);
             } else {
                 match act_bind(
-                    state, segment, arm.rebind, bank, storage, &mut unit, frozen, access,
+                    state,
+                    segment,
+                    arm.rebind(),
+                    bank,
+                    storage,
+                    &mut unit,
+                    frozen,
+                    access,
                 ) {
                     Ok(made) => bound = Some(made),
                     Err(error) => {
@@ -916,7 +1070,7 @@ fn scan(
                 Some(changed) => changed,
                 None => settle_late_word(bank, taken_spare, word_at_take, take_cycle, window),
             };
-            let late = match (at_last, arm.rebind) {
+            let late = match (at_last, arm.rebind()) {
                 (true, false) => &mut state.late_at_last,
                 (false, false) => &mut state.late_not_last,
                 (true, true) => &mut state.late_at_last_rebind,
@@ -970,6 +1124,15 @@ fn scan(
                 },
             );
             state.agreement = true;
+        }
+        if holding {
+            // Kept: the unit stays observed at the recycle frontier and is
+            // appended by the deferred claims after the restore.
+            unit.retain_for_deferred_recycle();
+            if let Some(event) = state.exhaust_events.get_mut(segment) {
+                event.held = event.held.saturating_add(1);
+            }
+            continue;
         }
         let Some(credit) = unit.retain_discard() else {
             return Err(name!("recycle-frontier"; 32));
@@ -1254,6 +1417,13 @@ pub(super) async fn run(
         if state.stop {
             break;
         }
+        state.now_us = u32::try_from(
+            now.checked_duration_since(start)
+                .ok_or(name!("clock"; 32))?
+                .as_micros(),
+        )
+        .unwrap_or(u32::MAX);
+        exhaust_phase(state, segment, access)?;
         let due = now >= next_action;
         let mut action = due;
         scan(
@@ -1276,6 +1446,45 @@ pub(super) async fn run(
         yield_once().await;
     }
     irq.mask_all_mac_interrupts();
+    Ok(())
+}
+
+/// `tasks/200`: an exhaust segment holds from its start, is out once a scan
+/// finds the ring empty, and is restored after the pause; any other segment
+/// is idle, so units kept by an unfinished hold recycle there.
+fn exhaust_phase(state: &mut State, segment: usize, access: &RadioAccess) -> Result<(), Name<32>> {
+    let arm = *ARMS.get(segment).ok_or(name!("segment"; 32))?;
+    let now = state.now_us;
+    if !arm.exhaust() {
+        state.exhaust = Exhaust::Idle;
+        return Ok(());
+    }
+    let hw = State::hardware_now(access);
+    let phase = state.exhaust;
+    let event = state
+        .exhaust_events
+        .get_mut(segment)
+        .ok_or(name!("exhaust-event"; 32))?;
+    let since = |at: u32| u64::from(now.saturating_sub(at));
+    state.exhaust = match phase {
+        Exhaust::Idle => {
+            event.hold_us = now;
+            event.hw_at_hold = hw;
+            Exhaust::Holding
+        }
+        Exhaust::Holding if since(event.hold_us) >= EXHAUST_HOLD_LIMIT_US => {
+            event.out_us = now;
+            event.by_limit = 1;
+            event.hw_at_out = hw;
+            Exhaust::Out
+        }
+        Exhaust::Out if since(event.out_us) >= EXHAUST_PAUSE_US => {
+            event.restore_us = now;
+            event.hw_at_restore = hw;
+            Exhaust::Restored
+        }
+        phase => phase,
+    };
     Ok(())
 }
 
@@ -1394,7 +1603,11 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
              spare_checks={} reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} \
              hw_buffer_full={} hw_data_success={} sender_first={} sender_last={} \
              sender_lost={} reserve_min={} reserve={:?}",
-            if arm.rebind { "rebind" } else { "fixed" },
+            match arm.act {
+                Act::Fixed => "fixed",
+                Act::Rebind => "rebind",
+                Act::Exhaust => "exhaust",
+            },
             arm.hold,
             counts.services,
             counts.units,
@@ -1453,6 +1666,71 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         usb::text(console, line.as_bytes())
             .await
             .map_err(|_| name!("console-write"; 32))?;
+    }
+    line.clear();
+    writeln!(
+        &mut line,
+        "T200 first_sn={} first_sn_us={}",
+        state.first_sn, state.first_sn_us
+    )
+    .map_err(|_| name!("format"; 32))?;
+    usb::text(console, line.as_bytes())
+        .await
+        .map_err(|_| name!("console-write"; 32))?;
+    for (segment, (event, arm)) in state.exhaust_events.iter().zip(ARMS).enumerate() {
+        if !arm.exhaust() {
+            continue;
+        }
+        line.clear();
+        let before_len = (event.before_len as usize).min(EXHAUST_SNS);
+        let first = event.before_len as usize - before_len;
+        writeln!(
+            &mut line,
+            "EXH {segment} hold_us={} out_us={} restore_us={} after_first_us={} held={} \
+             by_limit={} next={} last={} hw_hold={:?} hw_out={:?} hw_restore={:?} \
+             before_total={} after_len={}",
+            event.hold_us,
+            event.out_us,
+            event.restore_us,
+            event.after_first_us,
+            event.held,
+            event.by_limit,
+            event.next,
+            event.last,
+            event.hw_at_hold,
+            event.hw_at_out,
+            event.hw_at_restore,
+            event.before_len,
+            event.after_len,
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+        for (tag, sequences) in [
+            (
+                "EXHB",
+                (first..first + before_len)
+                    .filter_map(|at| event.before.get(at % EXHAUST_SNS).copied())
+                    .collect::<heapless::Vec<u16, EXHAUST_SNS>>(),
+            ),
+            (
+                "EXHA",
+                event
+                    .after
+                    .iter()
+                    .take(event.after_len as usize)
+                    .copied()
+                    .collect(),
+            ),
+        ] {
+            line.clear();
+            writeln!(&mut line, "{tag} {segment} {:?}", sequences.as_slice())
+                .map_err(|_| name!("format"; 32))?;
+            usb::text(console, line.as_bytes())
+                .await
+                .map_err(|_| name!("console-write"; 32))?;
+        }
     }
     line.clear();
     writeln!(

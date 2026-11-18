@@ -5,39 +5,65 @@
 //! A violation fails the run. Without one, the run passes only when every
 //! arm exercised what it claims; otherwise it is an insufficient experiment.
 
-/// One segment's arm: whether it rebinds, and the hold-back `hold`, the
+/// What a segment does with a unit it takes (`tasks/200`: an exhaust
+/// segment keeps every unit until the ring is out, then restores them).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Act {
+    Fixed,
+    Rebind,
+    Exhaust,
+}
+
+/// One segment's arm: what it does, and the hold-back `hold`, the
 /// completed descriptors a taken unit keeps between itself and the frozen
 /// LAST (`tasks/165`: 8 comfortably, 1 the port's own condition).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Arm {
-    pub rebind: bool,
+    pub act: Act,
     pub hold: usize,
+}
+
+impl Arm {
+    /// Whether the segment rebinds.
+    pub const fn rebind(self) -> bool {
+        matches!(self.act, Act::Rebind)
+    }
+
+    /// Whether the segment exhausts the ring.
+    pub const fn exhaust(self) -> bool {
+        matches!(self.act, Act::Exhaust)
+    }
 }
 
 /// The segments of one run (`tasks/193`): fixed and rebind alternated,
 /// every one under hold 0, so a unit is taken, and in a rebind segment
 /// rebound, as soon as it completed, at LAST included; a closing fixed
-/// segment gives the last retirements their laps.
+/// segment gives the last retirements their laps. With the feature
+/// `exhaust` (`tasks/200`) the rebind segments exhaust the ring instead.
 pub const SEGMENTS: usize = 15;
-const fn arm(rebind: bool, hold: usize) -> Arm {
-    Arm { rebind, hold }
+const fn arm(act: Act, hold: usize) -> Arm {
+    Arm { act, hold }
 }
+#[cfg(not(feature = "exhaust"))]
+const ODD: Act = Act::Rebind;
+#[cfg(feature = "exhaust")]
+const ODD: Act = Act::Exhaust;
 pub const ARMS: [Arm; SEGMENTS] = [
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
-    arm(true, 0),
-    arm(false, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
+    arm(ODD, 0),
+    arm(Act::Fixed, 0),
 ];
 /// The holds the verdict asks its rebinds of; the others are reported.
 pub const HOLDS: [usize; 1] = [0];
@@ -226,7 +252,11 @@ fn shortfall(observations: &Observations) -> Option<Shortfall> {
     let mut rebinds = 0u32;
     let mut covered = [0u32; HOLDS.len()];
     for (counts, arm) in observations.counts.iter().zip(ARMS) {
-        if arm.rebind {
+        if arm.exhaust() {
+            // `tasks/200`: an exhaust segment is judged by its records.
+            continue;
+        }
+        if arm.rebind() {
             rebinds = rebinds.saturating_add(counts.rebinds);
             if let Some(at) = HOLDS.iter().position(|hold| *hold == arm.hold)
                 && let Some(sum) = covered.get_mut(at)
@@ -242,7 +272,7 @@ fn shortfall(observations: &Observations) -> Option<Shortfall> {
             }
         }
     }
-    if covered.iter().any(|sum| *sum < MIN_COVERED_REBINDS) {
+    if ARMS.iter().any(|arm| arm.rebind()) && covered.iter().any(|sum| *sum < MIN_COVERED_REBINDS) {
         return Some(Shortfall::RebindCoverage);
     }
     if observations.retired != rebinds
@@ -276,7 +306,7 @@ mod tests {
             covered_rebinds: 600,
             ..Counts::default()
         };
-        let counts = ARMS.map(|arm| if arm.rebind { rebind } else { fixed });
+        let counts = ARMS.map(|arm| if arm.rebind() { rebind } else { fixed });
         Observations {
             counts,
             violations: 0,
@@ -293,10 +323,10 @@ mod tests {
 
     #[test]
     fn both_holds_alternate_with_their_controls() {
-        assert_eq!(ARMS.iter().filter(|arm| arm.rebind).count(), SEGMENTS / 2);
+        assert_eq!(ARMS.iter().filter(|arm| arm.rebind()).count(), SEGMENTS / 2);
         for hold in HOLDS {
-            assert!(ARMS.iter().any(|arm| arm.rebind && arm.hold == hold));
-            assert!(ARMS.iter().any(|arm| !arm.rebind && arm.hold == hold));
+            assert!(ARMS.iter().any(|arm| arm.rebind() && arm.hold == hold));
+            assert!(ARMS.iter().any(|arm| !arm.rebind() && arm.hold == hold));
         }
     }
 
@@ -325,7 +355,7 @@ mod tests {
     fn one_hold_short_of_its_rebinds_is_insufficient() {
         let mut observations = covered();
         for (counts, arm) in observations.counts.iter_mut().zip(ARMS) {
-            if arm.rebind && arm.hold == 0 {
+            if arm.rebind() && arm.hold == 0 {
                 counts.covered_rebinds = 100;
             }
         }
