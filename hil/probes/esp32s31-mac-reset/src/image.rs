@@ -377,6 +377,15 @@ enum Kind {
     /// Case C's sender: one case's frames and how they ended.
     #[cfg(feature = "amsdu")]
     AmsduSent = 15,
+    /// Cell E's sender: one case's protected frames and how they ended.
+    #[cfg(feature = "ccmp")]
+    CcmpSent = 16,
+    /// Cell F's sender: one aggregate size's ends.
+    #[cfg(feature = "ampdu")]
+    AmpduSent = 17,
+    /// Cell F's sender: the Block Ack's bit of each subframe, 32 to a word.
+    #[cfg(feature = "ampdu")]
+    AmpduAcked = 18,
 }
 
 const WIDTH: usize = 22;
@@ -548,8 +557,12 @@ macro_rules! apart {
         core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
     }};
 }
+#[cfg(feature = "ampdu")]
+mod ampdu;
 #[cfg(feature = "amsdu")]
 mod amsdu;
+#[cfg(feature = "ccmp")]
+mod ccmp;
 #[cfg(feature = "receiver")]
 mod receiver;
 #[cfg(feature = "transmit")]

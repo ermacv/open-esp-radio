@@ -32,6 +32,9 @@ oer-portable-cooperate = { path = "../../../portable/cooperate" }
 oer-chips-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-chips-esp32s31-radio-ieee80211-backend = { path = "../../../chips/esp32s31/radio/ieee80211/backend", optional = true }
+oer-protocols-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
+oer-protocols-ieee80211-contracts-security = { path = "../../../protocols/ieee80211/contracts/security" }
 oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [dev-dependencies]
@@ -52,6 +55,15 @@ quiet = ["transmit"]
 # Case C's sender (`tasks/154`, `159`): A-MSDU cases and the provenance
 # series to the receiving rx-chain probe, in place of part two's A.
 amsdu = ["transmit"]
+# Cell E of `tasks/161`: case C's QoS cases protected under CCMP, sealed in
+# software, in place of case C's rounds.
+ccmp = ["amsdu"]
+# Cell F of `tasks/161`: case C's QoS cases in A-MPDUs through the backend's
+# A-MPDU owner, the control first, in place of case C's rounds.
+ampdu = ["amsdu", "dep:oer-chips-esp32s31-radio-ieee80211-backend"]
+# Cell G of `tasks/161` (`tasks/174`): cell F's aggregates under CCMP sealed
+# by this board's MAC, after single sealed MPDUs as the control.
+gcell = ["ampdu"]
 
 [lints]
 workspace = true

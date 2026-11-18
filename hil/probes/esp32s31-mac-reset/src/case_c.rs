@@ -233,6 +233,110 @@ pub fn byte(case: Case, sender: [u8; 6], receiver: [u8; 6], counter: u32, offset
     }
 }
 
+/// Cell E of `tasks/161`: the same QoS cases protected under CCMP. The
+/// sender seals them in software (`CcmpAssociation`, SPP not negotiated, as
+/// the access point of 2026-11-01); the receiver's MAC decrypts them under
+/// the same pairwise key installed through the HAL.
+/// Cell F's control: the frames of the aggregates of 2 subframes, then those
+/// of the aggregates of 8, numbered in one run.
+pub const CELL_F_PAIRS: u32 = 600;
+pub const CELL_F_OCTETS: u32 = 150;
+pub const CELL_F_FRAMES: u32 = 2 * CELL_F_PAIRS + 8 * CELL_F_OCTETS;
+/// Cell F's A-MSDU stage: each A-MSDU case's frames, half in aggregates of 2
+/// and half in aggregates of 8 (the long one in aggregates of 2 alone: eight
+/// would outlast an HT MCS0 PPDU).
+pub const CELL_F_AMSDU_FRAMES: u32 = 1_200;
+/// The frames cell F sends of `case`.
+pub const fn cell_f_frames(case: Case) -> u32 {
+    match case {
+        Case::Control => CELL_F_FRAMES,
+        Case::Amsdu1 | Case::Amsdu2 | Case::AmsduLong => CELL_F_AMSDU_FRAMES,
+        Case::Provenance700 | Case::Provenance1500 => 0,
+    }
+}
+/// Cell G's control: single MPDUs sealed by the sender's MAC, of each of
+/// these, before the aggregates.
+pub const CELL_G_SINGLES: u32 = 200;
+/// The frames cell G sends of `case`: its singles first (the control and
+/// the A-MSDU of two short subframes), then cell F's aggregates, numbered on.
+pub const fn cell_g_frames(case: Case) -> u32 {
+    match case {
+        Case::Control | Case::Amsdu2 => CELL_G_SINGLES + cell_f_frames(case),
+        _ => cell_f_frames(case),
+    }
+}
+/// Cell E's rounds: at least 1 000 frames of each QoS case.
+pub const CELL_ROUNDS: u32 = 1_100;
+pub const CCMP_HEADER: usize = 8;
+pub const CCMP_MIC: usize = 8;
+/// Frame Control's Protected Frame flag (IEEE 802.11-2020 9.2.4.1.9).
+pub const PROTECTED: u8 = 0x40;
+/// The cell's temporal key, shared by both probes; a probe's own constant,
+/// protecting nothing.
+pub const TEMPORAL_KEY: [u8; 16] = *b"oer-probe-cell-e";
+
+impl Case {
+    /// The protected MPDU's length: the CCMP header and MIC around the
+    /// plaintext's.
+    pub const fn protected_length(self) -> usize {
+        self.length() + CCMP_HEADER + CCMP_MIC
+    }
+
+    /// Where the protected frame's counter first is.
+    pub const fn protected_counter_at(self) -> usize {
+        self.counter_at() + CCMP_HEADER
+    }
+}
+
+/// The byte at `offset` of `case`'s protected frame before sealing: the
+/// header with the Protected flag, the CCMP header of packet number `pn`
+/// (key 0, ExtIV), the plaintext body, then the MIC's room as zeros.
+pub fn protected_byte(
+    case: Case,
+    sender: [u8; 6],
+    receiver: [u8; 6],
+    counter: u32,
+    pn: u64,
+    offset: usize,
+) -> u8 {
+    let pn = pn.to_le_bytes();
+    let at = |bytes: &[u8], at: usize| bytes.get(at).copied().unwrap_or(0);
+    match offset {
+        1 => byte(case, sender, receiver, counter, 1) | PROTECTED,
+        _ if offset < QOS_HEADER => byte(case, sender, receiver, counter, offset),
+        _ => match offset - QOS_HEADER {
+            0 => at(&pn, 0),
+            1 => at(&pn, 1),
+            2 => 0,
+            // ExtIV set, key ID 0 (IEEE 802.11-2020 12.5.3.2).
+            3 => 0x20,
+            inner @ 4..8 => at(&pn, inner - 2),
+            _ if offset < QOS_HEADER + CCMP_HEADER + case.length() - QOS_HEADER => {
+                byte(case, sender, receiver, counter, offset - CCMP_HEADER)
+            }
+            _ => 0,
+        },
+    }
+}
+
+/// What a receiver that decrypted `case`'s frame holds at `offset`, or
+/// `None` where the packet number or the MIC lie.
+pub fn protected_expected(
+    case: Case,
+    sender: [u8; 6],
+    receiver: [u8; 6],
+    counter: u32,
+    offset: usize,
+) -> Option<u8> {
+    let header = QOS_HEADER..QOS_HEADER + CCMP_HEADER;
+    if offset >= case.protected_length() - CCMP_MIC
+        || (header.contains(&offset) && offset != QOS_HEADER + 2 && offset != QOS_HEADER + 3)
+    {
+        return None;
+    }
+    Some(protected_byte(case, sender, receiver, counter, 0, offset))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,6 +410,36 @@ mod tests {
                 .iter()
                 .all(|at| *at == 24 || Case::Control.counter_place(*at))
         );
+    }
+
+    #[test]
+    fn a_protected_frame_is_the_plain_one_behind_its_ccmp_header() {
+        for case in CASES.into_iter().filter(|case| case.qos()) {
+            let counter = case.counter(9);
+            let plain = frame(case, 9);
+            let protected: Vec<u8> = (0..case.protected_length())
+                .map(|offset| {
+                    protected_byte(case, SENDER, RECEIVER, counter, 0x0102_0304_0506, offset)
+                })
+                .collect();
+            assert_eq!(protected[1], plain[1] | PROTECTED);
+            assert_eq!(protected[..QOS_HEADER][2..], plain[..QOS_HEADER][2..]);
+            assert_eq!(
+                protected[QOS_HEADER..QOS_HEADER + CCMP_HEADER],
+                [6, 5, 0, 0x20, 4, 3, 2, 1]
+            );
+            assert_eq!(
+                protected[QOS_HEADER + CCMP_HEADER..case.protected_length() - CCMP_MIC],
+                plain[QOS_HEADER..]
+            );
+            let at = case.protected_counter_at();
+            assert_eq!(protected[at..at + 4], counter.to_le_bytes());
+            assert!(protected_expected(case, SENDER, RECEIVER, counter, QOS_HEADER).is_none());
+            assert!(
+                protected_expected(case, SENDER, RECEIVER, counter, case.protected_length() - 1)
+                    .is_none()
+            );
+        }
     }
 
     #[test]

@@ -51,8 +51,11 @@ const ABANDONED: usize = 100;
 #[cfg(not(feature = "amsdu"))]
 const SLOTS: usize = 2 * ABANDONED + 2;
 /// Case C abandons no chain: the ordinary frames' slot and one spare.
-#[cfg(feature = "amsdu")]
+#[cfg(all(feature = "amsdu", not(feature = "ampdu")))]
 const SLOTS: usize = 2;
+/// Cell F: an aggregate's eight subframes, then the ordinary frames' slot.
+#[cfg(feature = "ampdu")]
+pub(super) const SLOTS: usize = 9;
 /// The ordinary frames' slot.
 pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.
@@ -86,7 +89,7 @@ pub(super) const ROWS: usize = 4 + BASELINE + STOPS + ABANDONED + 2;
 
 type Pool = PinnedDmaTxPool<SLOT, 0, 0, SLOTS>;
 type Placed = PlacedTxPool<SLOT, 0, 0, SLOTS>;
-type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
+pub(super) type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
 pub(super) type Descriptor = PinnedTxDmaStorage<Lease>;
 
 macro_rules! abandoned_descriptors {
@@ -122,7 +125,7 @@ pub(super) mod counter {
 }
 
 /// The phases part two's failures name.
-mod tx_phase {
+pub(super) mod tx_phase {
     pub const POOL: u32 = 30;
     pub const PEER: u32 = 31;
     pub const FRAME: u32 = 32;
@@ -351,6 +354,20 @@ pub(super) fn start(
     power: u8,
     timeout: u16,
 ) -> Result<(), Failure> {
+    start_keyed(access, descriptor, lease, length, power, timeout, 0)
+}
+
+/// [`start`] under hardware key `key`: the MAC seals the frame with that
+/// entry's key and appends its MIC, for which `length` already holds room.
+pub(super) fn start_keyed(
+    access: &mut RadioAccess,
+    descriptor: &mut Descriptor,
+    lease: Lease,
+    length: usize,
+    power: u8,
+    timeout: u16,
+    key: u8,
+) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
@@ -360,8 +377,9 @@ pub(super) fn start(
     free.reserve(total.next_multiple_of(4) as u32, total as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
-    let program = MacLegacyTxProgram::new(&publication, parameters(length, power, timeout))
-        .ok_or((tx_phase::START, 5))?;
+    let mut parameters = parameters(length, power, timeout);
+    parameters.hardware_key_selector = key;
+    let program = MacLegacyTxProgram::new(&publication, parameters).ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
         .map_err(|_| (tx_phase::START, 6))?;

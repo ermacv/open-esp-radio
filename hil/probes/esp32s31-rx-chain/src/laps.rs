@@ -249,6 +249,46 @@ pub(super) async fn run(
         let first = {
             let before = counts.peer_units;
             let first = c::check(&joined, &mut counts, &mut cases, station, &mut peer);
+            // Cell E: the pairwise key under the sender's address, once it is
+            // known from its first (unprotected) frame.
+            // Cell F: the receive Block Ack agreement for TID 0 under the
+            // sender's address, programmed as the backend programs it, before
+            // the first aggregate.
+            #[cfg(feature = "ampdu")]
+            if cases.agreement.is_none()
+                && let Some(sender) = peer
+            {
+                use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::{
+                    S31RxBlockAckAgreement, program,
+                };
+                cases.agreement = Some(program(
+                    &mut access.wifi_mac_hal(),
+                    S31RxBlockAckAgreement {
+                        hardware_index: 0,
+                        interface: oer_chips_esp32s31_hal::types::MacInterface::Station,
+                        peer: sender,
+                        tid: 0,
+                        starting_sequence:
+                            oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
+                        window: 64,
+                    },
+                ));
+            }
+            #[cfg(feature = "ccmp")]
+            if cases.key.is_none()
+                && let Some(sender) = peer
+            {
+                let mut hal = access.wifi_mac_hal();
+                hal.configure_ccmp_association(
+                    oer_chips_esp32s31_hal::types::MacInterface::Station,
+                    oer_chips_esp32s31_hal::types::MacSppMode::Unauthenticated,
+                );
+                cases.key = Some(hal.install_station_ccmp_entry(
+                    c::KEY_ENTRY,
+                    oer_chips_esp32s31_hal::types::MacCcmpKeyIdentity::Pairwise { peer: sender },
+                    &c::case_c::TEMPORAL_KEY,
+                ));
+            }
             if counts.peer_units != before {
                 last_peer = EmbassyClock
                     .now()
@@ -375,8 +415,18 @@ const fn done(_counts: &Counts) -> bool {
 /// byte by byte against [`case_c`]'s layout, counted per case and round.
 #[cfg(feature = "amsdu")]
 mod c {
-    use super::super::case_c::{self, CASES, Case, ROUNDS};
+    pub(super) use super::super::case_c::{self, CASES, Case, ROUNDS};
+    /// Cell E's pairwise key entry: the station's, as the backend's
+    /// (`STA_PAIRWISE_HARDWARE_INDEX`).
+    #[cfg(feature = "ccmp")]
+    pub(super) const KEY_ENTRY: u8 = 4;
     use super::*;
+
+    /// The rounds the sender sends: case C's, or cell E's.
+    #[cfg(not(feature = "ccmp"))]
+    const RECEIVED_ROUNDS: u32 = ROUNDS;
+    #[cfg(feature = "ccmp")]
+    const RECEIVED_ROUNDS: u32 = case_c::CELL_ROUNDS;
 
     /// The sender's quiet that ends the run once it has begun.
     pub(super) const QUIET_MS: u32 = 5_000;
@@ -400,6 +450,8 @@ mod c {
         spans_min: u32,
         spans_max: u32,
         first_mismatch: Option<(u32, u32)>,
+        /// The first MPDU length that disagreed with the case's.
+        length_seen: Option<u32>,
         seen: [u32; WORDS],
     }
 
@@ -416,6 +468,7 @@ mod c {
                 spans_min: 0,
                 spans_max: 0,
                 first_mismatch: None,
+                length_seen: None,
                 seen: [0; WORDS],
             }
         }
@@ -426,6 +479,12 @@ mod c {
     pub(super) struct Cases {
         per: [PerCase; CASES.len()],
         unknown: u32,
+        /// Cell F: how the receive Block Ack agreement's programming ended.
+        #[cfg(feature = "ampdu")]
+        pub(super) agreement: Option<Result<(), oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::S31RxBlockAckAgreementError>>,
+        /// Cell E: how the pairwise key's installation ended.
+        #[cfg(feature = "ccmp")]
+        pub(super) key: Option<oer_chips_esp32s31_hal::types::MacKeyInstallOutcome>,
     }
 
     /// Check one unit to the station: the sender's when its Frame Control
@@ -441,7 +500,10 @@ mod c {
         let to = joined.array::<6>(HEADER + 4);
         let from = joined.array::<6>(HEADER + 10)?;
         let [kind, flags] = joined.array::<2>(HEADER)?;
-        if to != Some(station) || flags & !RETRY != 0 || !matches!(kind, 0x88 | 0x08) {
+        // Cell E (`ccmp`): the QoS cases come protected, the hello frames not.
+        let protected = cfg!(feature = "ccmp") && kind == 0x88;
+        let flags_expected = if protected { case_c::PROTECTED } else { 0 };
+        if to != Some(station) || flags & !RETRY != flags_expected || !matches!(kind, 0x88 | 0x08) {
             return None;
         }
         let sender = *peer.get_or_insert(from);
@@ -454,8 +516,13 @@ mod c {
         } else {
             Case::Provenance700
         };
+        let counter_at = if protected {
+            probe.protected_counter_at()
+        } else {
+            probe.counter_at()
+        };
         let counter = joined
-            .array::<4>(HEADER + probe.counter_at())
+            .array::<4>(HEADER + counter_at)
             .map(u32::from_le_bytes);
         let Some((case, counter)) =
             counter.and_then(|counter| Some((Case::from_counter(counter)?, counter)))
@@ -490,22 +557,45 @@ mod c {
             tail.map(|tail| usize::from(WifiRxControlTail::new(&tail).signal_length().length()));
         let held = joined.len().saturating_sub(HEADER);
         let mpdu = signal.and_then(|signal| signal.checked_sub(4));
-        match mpdu.and_then(|mpdu| Some((mpdu, held.checked_sub(mpdu)?))) {
-            Some((mpdu, padding @ 0..4)) if mpdu == case.length() => {
+        let length = if protected {
+            case.protected_length()
+        } else {
+            case.length()
+        };
+        // A unit the MAC decrypted holds no MIC (`HW_RX_CCMP_MIC_CUT_20261118`):
+        // the bytes held are the tail's less the MIC.
+        let cut = if protected { case_c::CCMP_MIC } else { 0 };
+        match mpdu.and_then(|mpdu| Some((mpdu, held.checked_sub(mpdu.checked_sub(cut)?)?))) {
+            Some((mpdu, padding @ 0..4)) if mpdu == length => {
                 if let Some(slot) = counts.padding.get_mut(padding) {
                     *slot = slot.saturating_add(1);
                 }
             }
             _ => {
                 per.length_disagrees = per.length_disagrees.saturating_add(1);
-                return None;
+                // The tail's MPDU length and the bytes the unit holds after
+                // the header.
+                per.length_seen
+                    .get_or_insert(((mpdu.unwrap_or(0) as u32) << 16) | held as u32);
+                // Cell E compares what the unit holds: its MIC may be cut.
+                if !protected {
+                    return None;
+                }
             }
         }
         let mut mismatches = 0_u32;
         let mut foreign = false;
         let mut first = None;
-        for offset in 0..case.length() {
-            let want = case_c::byte(case, sender, station, counter, offset);
+        for offset in 0..length.min(held) {
+            let want = if protected {
+                // The packet number and the MIC are not compared.
+                match case_c::protected_expected(case, sender, station, counter, offset) {
+                    Some(want) => want,
+                    None => continue,
+                }
+            } else {
+                case_c::byte(case, sender, station, counter, offset)
+            };
             let got = joined.get(HEADER + offset);
             let same = match offset {
                 // The Retry flag, the Duration and the Sequence Control are
@@ -517,7 +607,11 @@ mod c {
             if !same {
                 mismatches = mismatches.saturating_add(1);
                 first.get_or_insert(offset);
-                foreign |= case.counter_place(offset);
+                foreign |= case.counter_place(if protected {
+                    offset.saturating_sub(case_c::CCMP_HEADER)
+                } else {
+                    offset
+                });
             }
         }
         if mismatches != 0 {
@@ -541,9 +635,33 @@ mod c {
         cases: &Cases,
     ) {
         for (case, per) in CASES.iter().zip(&cases.per) {
+            // Cell E sends the QoS cases and, before them, unprotected hello
+            // frames of case 5's layout; it sends no round of cases 5 and 6,
+            // so they have no absent rounds to count (`tasks/172`).
+            if cfg!(any(feature = "ccmp", feature = "ampdu")) && !case.qos() {
+                line.clear();
+                let _ = writeln!(
+                    line,
+                    "CASE tag={} hello units={} length_disagrees={} mismatch_units={}",
+                    case.tag(),
+                    per.units,
+                    per.length_disagrees,
+                    per.mismatch_units,
+                );
+                usb::text(console, line.as_bytes()).await;
+                continue;
+            }
             let mut missing = heapless::Vec::<u32, MISSING>::new();
             let mut absent = 0_u32;
-            for round in 0..ROUNDS {
+            // Cell F sends its control and its A-MSDU cases in numbers of
+            // their own.
+            #[cfg(all(feature = "ampdu", not(feature = "gcell")))]
+            let rounds = case_c::cell_f_frames(*case);
+            #[cfg(feature = "gcell")]
+            let rounds = case_c::cell_g_frames(*case);
+            #[cfg(not(feature = "ampdu"))]
+            let rounds = RECEIVED_ROUNDS;
+            for round in 0..rounds {
                 let seen = per
                     .seen
                     .get((round / 32) as usize)
@@ -556,7 +674,7 @@ mod c {
             line.clear();
             let _ = writeln!(
                 line,
-                "CASE tag={} mpdu={} units={} distinct={} retries={} absent={absent} length_disagrees={} mismatch_units={} mismatch_bytes={} counter_disagrees={} spans={}..{} first_mismatch={:?} absent_first={:?}",
+                "CASE tag={} mpdu={} units={} distinct={} retries={} absent={absent} length_disagrees={} mismatch_units={} mismatch_bytes={} counter_disagrees={} spans={}..{} first_mismatch={:?} length_seen={:x?} absent_first={:?}",
                 case.tag(),
                 case.length(),
                 per.units,
@@ -569,12 +687,15 @@ mod c {
                 per.spans_min,
                 per.spans_max,
                 per.first_mismatch,
+                per.length_seen,
                 missing.as_slice(),
             );
             usb::text(console, line.as_bytes()).await;
         }
         // By the frame before (`tasks/160`): completed / sent, the last
-        // column the run's first frame.
+        // column the run's first frame. Cell E sends the QoS cases alone,
+        // so case C's order does not name its frames' neighbours.
+        #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
         for (case, per) in CASES.iter().zip(&cases.per) {
             let mut after = [[0_u32; 2]; CASES.len() + 1];
             for round in 0..ROUNDS {
@@ -604,6 +725,21 @@ mod c {
             }
         }
         line.clear();
+        #[cfg(feature = "gcell")]
+        let _ = writeln!(
+            line,
+            "CASE unknown={} key={:?} agreement={:?}",
+            cases.unknown, cases.key, cases.agreement
+        );
+        #[cfg(all(feature = "ccmp", not(feature = "gcell")))]
+        let _ = writeln!(line, "CASE unknown={} key={:?}", cases.unknown, cases.key);
+        #[cfg(all(feature = "ampdu", not(feature = "gcell")))]
+        let _ = writeln!(
+            line,
+            "CASE unknown={} agreement={:?}",
+            cases.unknown, cases.agreement
+        );
+        #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
         let _ = writeln!(line, "CASE unknown={}", cases.unknown);
         usb::text(console, line.as_bytes()).await;
     }
