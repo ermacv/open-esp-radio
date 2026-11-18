@@ -1,7 +1,7 @@
 //! The probe's boot and its radio session. The session holds the radio
 //! domain itself and brings Wi-Fi up by the public operations of the PHY
 //! crate and the HAL that `Esp32s31Radio` calls, in the same order
-//! (README, "The order"), so that `WifiClocked::reset_mac` can pulse the
+//! (README, "The order"), so that `RadioDomain::reset_wifi_mac_block` can pulse the
 //! MAC's block reset with the receive walker live.
 #![cfg_attr(
     any(feature = "transmit", feature = "receiver"),
@@ -490,10 +490,10 @@ async fn report(
 
 // ---------------------------------------------------------------- session
 
-/// The platform values the MAC cold start reads, as the radio system's
-/// `MacSources` answers them.
+/// The platform values the MAC cold start reads, as the radio client's
+/// `MacColdSources` holds them.
 ///
-/// SOURCE: `oer-chips-esp32s31-radio-system` `mac_sources::MacSources` and
+/// SOURCE: `oer-chips-esp32s31-radio-client` `wifi::MacColdSources` and
 /// `MAC_COEX_EVENTS` (the four events in `MacColdCoexPti::query` order).
 struct Sources {
     pti: [MacCoexPti; 4],

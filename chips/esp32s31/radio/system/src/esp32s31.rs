@@ -29,9 +29,9 @@ use oer_chips_esp32s31_radio_client::{
     PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow, RegistrationFailure, RegistrationFault,
     RequestKind,
     wifi::{
-        MAC_COEX_EVENTS, RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft,
-        WifiMacReset, WifiResetMac, WifiRetune,
-        WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
+        MAC_COEX_EVENTS, RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave,
+        WifiLeft, WifiMacReset, WifiResetMac, WifiRetune, WifiRetuned, WifiReturned, WifiTrack,
+        WifiTracked,
     },
 };
 use oer_chips_esp32s31_radio_phy::{
@@ -48,9 +48,7 @@ use oer_chips_esp32s31_radio_phy::{
 
 use crate::owned_operation;
 
-use crate::{
-    ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
-};
+use crate::{ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain};
 
 mod modem_sleep;
 mod retune;

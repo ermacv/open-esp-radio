@@ -1201,8 +1201,18 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   field is computed or replayed raises the calibration revision, so a cached
   record of another revision is never replayed.
 - **Power and reset.** Common radio power enables the shared domain without
-  resetting the Wi-Fi MAC. Wi-Fi resets its own baseband and MAC after PHY
-  calibration at its client entry. Brownout policy belongs to the bootstrap.
+  resetting the Wi-Fi MAC; Wi-Fi's power entry pulses its baseband and MAC
+  once per boot. `track` is the PHY's alone: the initial tracking, the RX
+  enable and the initial channel. A tracked Wi-Fi member's `reset_mac`
+  request has the actor reset the MAC's block (`RST_WIFIMAC`, in the shared
+  reset word only the actor writes) and write back, in the same step, what
+  the domain keeps inside that block: the PHY's channel field of the tuned
+  channel and Wi-Fi's constants of the same words, so that each word has one
+  writing context. The answer is the reset's proof (`MacBlockReset`) and the
+  coexistence priorities. The Wi-Fi owner then runs its cold preparation in
+  its own task, on its own partition, and the preparation takes the proof.
+  A stop's last resort is the same request, whose proof first returns the
+  transmit chains the MAC held. Brownout policy belongs to the bootstrap.
 - **Regulatory domain.** `oer-protocols-radio-regulatory` holds a validated domain (a
   generated subset of `wireless-regdb`) fixed for an installation; without
   one no radio installs. Every tune, install, scan and transmission of all
