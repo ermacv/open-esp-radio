@@ -78,12 +78,17 @@ const _: () = {
 /// LAST (bytes 48 to 51), and the header's length (the RX-control prefix).
 const LATE_WORD: usize = 12;
 const HEADER_BYTES: usize = 56;
-/// How long a take waits for the late word, in cycles of `mcycle` at
-/// 320 MHz: 64 us.
-const LATE_WINDOW_CYCLES: u32 = 64 * 320;
-const CYCLES_PER_US: u32 = 320;
-/// Late-write delay buckets of 1 us, the last one 63 us or more.
+/// How long a take waits for the late words, in cycles of `mcycle` at
+/// 320 MHz: 256 us (`tasks/196`: 194 saw about 114 us as a bound).
+const LATE_WINDOW_CYCLES: u32 = 256 * 320;
+/// Late-write delay buckets of 4 us, the last one 252 us or more.
+const CYCLES_PER_BUCKET: u32 = 4 * 320;
 const DELAY_BUCKETS: usize = 64;
+/// A unit not at LAST is watched this long only (16 us): its late words
+/// are expected written at the take, which the value at the take answers.
+const NOT_LAST_WINDOW_CYCLES: u32 = 16 * 320;
+/// The receive buffer's tail after the frame (`tasks/196`).
+const TAIL_BYTES: usize = 8;
 /// The violation kinds counted (`Kind` codes 1 to 8, and 9 for a copy
 /// difference outside the known late word).
 const KINDS: usize = 10;
@@ -93,6 +98,8 @@ const KINDS: usize = 10;
 #[repr(C)]
 struct LateWord {
     takes: u32,
+    /// Takes whose late words already read non-zero at the take.
+    written_at_take: u32,
     changed: u32,
     never: u32,
     min: u32,
@@ -195,6 +202,11 @@ pub(super) struct State {
     frame_differs: u32,
     late_at_last: LateWord,
     late_not_last: LateWord,
+    /// The same in rebind segments, measured after the rebind.
+    late_at_last_rebind: LateWord,
+    late_not_last_rebind: LateWord,
+    /// Frames whose bytes differed in the tail (the last 8).
+    tail_differs: u32,
     /// After a rebind at LAST, which of the buffer taken out and the spare
     /// put in had the late word change: neither, old only, new only, both.
     landing: [u32; 4],
@@ -227,6 +239,8 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
     }
     state.late_at_last.min = u32::MAX;
     state.late_not_last.min = u32::MAX;
+    state.late_at_last_rebind.min = u32::MAX;
+    state.late_not_last_rebind.min = u32::MAX;
     state.stop_descriptor = u32::MAX;
     Ok((state, frame))
 }
@@ -497,14 +511,14 @@ impl State {
             bank.read_word(spare, at / 4)
                 .and_then(|word| word.to_le_bytes().get(at % 4).copied())
         };
-        // `tasks/194`: every byte of the frame, after its header settled.
-        // A difference in bytes 48 to 51 alone is the known late word,
-        // counted; any other is a violation.
-        let late = LATE_WORD * 4..LATE_WORD * 4 + 4;
-        let mut late_differs = false;
+        // `tasks/196`: every byte of the unit, after its header settled. A
+        // difference in the header (below 56) or the 8-byte tail is counted
+        // by offset and never stops the run; one in the frame's bytes is a
+        // violation and stops it.
+        let tail = length.saturating_sub(TAIL_BYTES);
         let mut header_differs = false;
-        let mut frame_differs = false;
-        let mut first_other = None;
+        let mut tail_differs = false;
+        let mut first_frame = None;
         for offset in 0..length {
             if frame.get(offset).copied() == spare_byte(offset) {
                 continue;
@@ -512,24 +526,22 @@ impl State {
             if let Some(count) = self.copy_offsets.get_mut(offset) {
                 bump(count);
             }
-            if late.contains(&offset) {
-                late_differs = true;
-                continue;
-            }
             if offset < HEADER_BYTES {
                 header_differs = true;
+            } else if offset >= tail {
+                tail_differs = true;
             } else {
-                frame_differs = true;
+                first_frame.get_or_insert(offset);
             }
-            first_other.get_or_insert(offset);
         }
         if header_differs {
             bump(&mut self.header_differs);
         }
-        if frame_differs {
-            bump(&mut self.frame_differs);
+        if tail_differs {
+            bump(&mut self.tail_differs);
         }
-        if let Some(offset) = first_other {
+        if let Some(offset) = first_frame {
+            bump(&mut self.frame_differs);
             clean = false;
             self.stop_descriptor = index as u32;
             self.record(
@@ -543,7 +555,7 @@ impl State {
                     observed: u32::from(spare_byte(offset).unwrap_or(0)),
                 },
             );
-        } else if late_differs {
+        } else if header_differs || tail_differs {
             bump(&mut self.known_late);
         }
         let canary_words = (0..compared / 4)
@@ -807,8 +819,33 @@ fn scan(
         // `tasks/194`: the late word of the head's buffer at the take.
         let taken_spare = usize::try_from(*state.expected.get(head).ok_or(name!("expected"; 32))?)
             .map_err(|_| name!("expected"; 32))?;
-        let word_at_take = bank.read_word(taken_spare, LATE_WORD);
         let take_cycle = oer_portable_riscv::cycle32();
+        let word_at_take = [
+            bank.read_word(taken_spare, LATE_WORD),
+            bank.read_word(taken_spare, LATE_WORD + 1),
+        ];
+        let window = if behind == Some(0) {
+            LATE_WINDOW_CYCLES
+        } else {
+            NOT_LAST_WINDOW_CYCLES
+        };
+        let written_at_take = word_at_take
+            .iter()
+            .any(|word| word.is_some_and(|word| word != 0));
+        // A fixed segment waits for the late words before the copy, so the
+        // delay is measured from the take (`tasks/196`); a rebind segment
+        // rebinds first and waits after, to see where the write lands.
+        let settled_before_copy = if arm.rebind {
+            None
+        } else {
+            Some(settle_late_word(
+                bank,
+                taken_spare,
+                word_at_take,
+                take_cycle,
+                window,
+            ))
+        };
         let copied = frontier.descriptor_count == 1
             && length != 0
             && length <= BUFFER
@@ -868,19 +905,29 @@ fn scan(
             *action = false;
         }
         if copied {
-            let changed = settle_late_word(bank, taken_spare, word_at_take, take_cycle);
-            let late = if at_last {
-                &mut state.late_at_last
-            } else {
-                &mut state.late_not_last
+            let changed = match settled_before_copy {
+                Some(changed) => changed,
+                None => settle_late_word(bank, taken_spare, word_at_take, take_cycle, window),
+            };
+            let late = match (at_last, arm.rebind) {
+                (true, false) => &mut state.late_at_last,
+                (false, false) => &mut state.late_not_last,
+                (true, true) => &mut state.late_at_last_rebind,
+                (false, true) => &mut state.late_not_last_rebind,
             };
             late.record(changed);
+            if written_at_take {
+                bump(&mut late.written_at_take);
+            }
             if let Some(bound) = bound
                 && let Some((spare, word_at_bind)) = bound.new
                 && at_last
             {
                 let old_changed = changed.is_some();
-                let new_changed = bank.read_word(spare, LATE_WORD) != word_at_bind;
+                let new_changed = (
+                    bank.read_word(spare, LATE_WORD),
+                    bank.read_word(spare, LATE_WORD + 1),
+                ) != word_at_bind;
                 let outcome = usize::from(old_changed) | usize::from(new_changed) << 1;
                 if let Some(count) = state.landing.get_mut(outcome) {
                     bump(count);
@@ -945,7 +992,7 @@ struct Bound {
     index: usize,
     old: u32,
     rebind: bool,
-    new: Option<(usize, Option<u32>)>,
+    new: Option<(usize, (Option<u32>, Option<u32>))>,
 }
 
 impl LateWord {
@@ -958,7 +1005,7 @@ impl LateWord {
                 bump(&mut self.changed);
                 self.min = self.min.min(cycles);
                 self.max = self.max.max(cycles);
-                let bucket = ((cycles / CYCLES_PER_US) as usize).min(DELAY_BUCKETS - 1);
+                let bucket = ((cycles / CYCLES_PER_BUCKET) as usize).min(DELAY_BUCKETS - 1);
                 if let Some(count) = self.delay.get_mut(bucket) {
                     bump(count);
                 }
@@ -973,17 +1020,21 @@ impl LateWord {
 fn settle_late_word(
     bank: &'static Spares,
     spare: usize,
-    at_take: Option<u32>,
+    at_take: [Option<u32>; 2],
     take_cycle: u32,
+    window: u32,
 ) -> Option<u32> {
     loop {
         let now = oer_portable_riscv::cycle32();
-        let word = bank.read_word(spare, LATE_WORD);
+        let word = [
+            bank.read_word(spare, LATE_WORD),
+            bank.read_word(spare, LATE_WORD + 1),
+        ];
         let elapsed = now.wrapping_sub(take_cycle);
         if word != at_take {
             return Some(elapsed);
         }
-        if elapsed >= LATE_WINDOW_CYCLES {
+        if elapsed >= window {
             return None;
         }
     }
@@ -1027,7 +1078,13 @@ fn act_bind(
         match state.free_pop() {
             Some(spare) => {
                 unit.rebind_next(spare).map_err(|_| name!("rebind"; 32))?;
-                new = Some((spare, bank.read_word(spare, LATE_WORD)));
+                new = Some((
+                    spare,
+                    (
+                        bank.read_word(spare, LATE_WORD),
+                        bank.read_word(spare, LATE_WORD + 1),
+                    ),
+                ));
             }
             None => bump(&mut state.counts(segment)?.spares_exhausted),
         }
@@ -1169,11 +1226,8 @@ pub(super) async fn run(
         .ok_or(name!("first-deadline"; 32))?;
     loop {
         let now = EmbassyClock.now();
-        if state
-            .counts
-            .first()
-            .is_some_and(|counts| counts.content_ok == 0)
-        {
+        // `tasks/196`: the sender's first frame of any kind, QoS included.
+        if !state.sender_known && !state.agreement_peer_known {
             if now >= first_deadline {
                 return Err(name!("no-sender"; 32));
             }
@@ -1439,10 +1493,11 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
     line.clear();
     writeln!(
         &mut line,
-        "T194 kinds={:?} known_late={} header_differs={} frame_differs={} landing(neither,old,new,both)={:?} stopped={} stop_descriptor={}",
+        "T196 kinds={:?} header_or_tail_only={} header_differs={} tail_differs={} frame_differs={} landing(neither,old,new,both)={:?} stopped={} stop_descriptor={}",
         state.kinds,
         state.known_late,
         state.header_differs,
+        state.tail_differs,
         state.frame_differs,
         state.landing,
         state.stop,
@@ -1455,12 +1510,15 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
     for (tag, late) in [
         ("at_last", &state.late_at_last),
         ("not_last", &state.late_not_last),
+        ("at_last_rebind", &state.late_at_last_rebind),
+        ("not_last_rebind", &state.late_not_last_rebind),
     ] {
         line.clear();
         writeln!(
             &mut line,
-            "LATE {tag} takes={} changed={} never={} min_cycles={} max_cycles={} delay_us={:?}",
+            "LATE {tag} takes={} written_at_take={} changed={} never={} min_cycles={} max_cycles={} delay_4us={:?}",
             late.takes,
+            late.written_at_take,
             late.changed,
             late.never,
             if late.changed == 0 { 0 } else { late.min },
