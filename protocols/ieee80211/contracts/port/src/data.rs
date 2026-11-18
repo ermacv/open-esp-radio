@@ -611,7 +611,8 @@ impl<P> TxSlot<P> {
 
     /// Where the body begins: behind the headroom, on a word.
     pub const fn body_at(self) -> usize {
-        self.front + HEADROOM
+        // Inside `len`, which `new` found in `usize`.
+        self.front.saturating_add(HEADROOM)
     }
 
     /// The port's octets in front of the headroom.
@@ -625,8 +626,9 @@ impl<P> TxSlot<P> {
         if body > self.body {
             None
         } else {
-            let at = self.front + HEADROOM + body + MIC_ROOM;
-            Some(at..at + self.behind)
+            // Inside `len`, which `new` found in `usize`.
+            let at = self.body_at().saturating_add(body).saturating_add(MIC_ROOM);
+            Some(at..at.saturating_add(self.behind))
         }
     }
 }

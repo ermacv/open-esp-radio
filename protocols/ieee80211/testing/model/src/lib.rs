@@ -596,7 +596,9 @@ fn lay_out<P>(tx: TxSlot<P>, memory: &ModelMemory) -> Vec<u8> {
     }
     let headroom = tx.headroom_at();
     if let Some(room) = slot.get_mut(headroom..headroom.saturating_add(HEADROOM)) {
-        room.copy_from_slice(&memory.front);
+        for (to, from) in room.iter_mut().zip(memory.front) {
+            *to = from;
+        }
     }
     let tag = memory.id.to_le_bytes()[0];
     if let Some(octets) = slot.get_mut(tx.body_at()..tx.body_at().saturating_add(body)) {
@@ -1184,7 +1186,9 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX
         };
         let mut front = [0; HEADROOM];
         if let Some(room) = slot.get(headroom..headroom.saturating_add(HEADROOM)) {
-            front.copy_from_slice(room);
+            for (to, from) in front.iter_mut().zip(room) {
+                *to = *from;
+            }
         }
         if !whole(self.tx, &slot, body.len) {
             self.counts.overwritten = self.counts.overwritten.saturating_add(1);
