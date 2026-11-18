@@ -405,7 +405,11 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
         RxDisposition::Retained
     ));
     assert!(view.pop_ready().is_none());
-    assert!(view.deadline().is_some());
+    let deadline = view.deadline();
+    assert!(deadline.is_some());
+    // The storage reads the same deadline without a view.
+    assert_eq!(storage.deadline(), deadline);
+    let mut view = storage.view();
     assert!(matches!(
         view.given(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained

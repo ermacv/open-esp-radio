@@ -60,12 +60,37 @@ package's tests against each change. A pull request that changes a sans-IO
 crate runs it over its own diff, one package at a time, with its scratch
 under the clone's `target/`, never `/tmp`:
 
+It runs in two stages. `.cargo/mutants.toml` makes a plain `cargo mutants`
+the first: the library's tests without the searches over every order of
+events (`--lib -- --skip tests::search`: a module's path, so whatever is put
+into a module named `search` is skipped) and without the compile-fail
+cases. A search takes most of a crate's test time and `cargo mutants` runs
+the tests for every mutant. The second stage runs everything, only for what
+the first missed (`--iterate` keeps the mutants already caught):
+
 ```sh
 mkdir -p target/mutants/tmp
 git diff origin/<base>... > target/mutants/pr.diff
 TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> \
   --in-diff target/mutants/pr.diff --output target/mutants --jobs 4
+TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> --no-config \
+  --in-diff target/mutants/pr.diff --output target/mutants --jobs 4 --iterate
 ```
+
+A search's binaries are built with `opt-level = 1` and the overflow checks
+kept, by the environment, never by a profile in the tree:
+`CARGO_PROFILE_TEST_OPT_LEVEL=1 CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true`, in a
+`CARGO_TARGET_DIR` of their own. The engine's five named receive bounds take
+62 s together that way, 160 s unoptimized.
+
+A crate whose slow tests are not in a module named `search` gets its own
+line in `.cargo/mutants.toml` when it has such tests; today it is the
+engine's (`oer-protocols-ieee80211-core-datapath`) alone. A crate's ordinary
+`cargo test` stays within 30 s: larger bounds of its searches are
+`#[ignore]`d tests run by name once a pull request, with their time and peak
+memory in it, under `ulimit -v`. A check that will not end is stopped and
+reported (what ran, for how long, at what memory), never left to run behind
+another.
 
 Four jobs: over the whole engine crate (582 mutants), four took 11 min
 19 s with 25 missed and 10 timed out, eight 9 min 34 s with 22 missed and

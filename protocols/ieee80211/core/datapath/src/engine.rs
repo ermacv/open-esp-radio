@@ -576,8 +576,8 @@ const fn engine_refusal(staging: usize, window: usize, max_window: u16) -> Optio
 /// The receive half's policy values, the composition's.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReceivePolicy {
-    /// How long the network may hold the ring back: a pressure episode's
-    /// bound from its first wait.
+    /// How long a data unit may wait for the network, from the moment it
+    /// began to wait.
     pub late: Duration,
     /// How long a receive agreement's reorder holds a hole open before it
     /// gives the missing frames up.
@@ -838,6 +838,16 @@ impl<
                 ..
             })
         )
+    }
+
+    /// The receive refusals, the stopping data's included, for the crate's
+    /// search.
+    #[cfg(test)]
+    pub(crate) fn rx_refusals(&self) -> RxRefusals {
+        match &self.data {
+            Data::Flowing(running) | Data::Stopping(running) => running.receive.refusals(),
+            Data::Stopped => RxRefusals::default(),
+        }
     }
 
     /// The received units the engine holds: waiting for the network, and
@@ -1822,8 +1832,11 @@ where
         earliest(received, engine.intake(turn))
     }
 
-    /// Change the linked entry and run the intake. The handle borrows the
-    /// engine, so the peer is linked while the handle lives.
+    /// Change the linked entry, then run a receive round (a hold or its
+    /// release changes what the units that wait may do: a held link's are
+    /// refused at the head, and the head's bound stays armed) and the
+    /// intake. The handle borrows the engine, so the peer is linked while
+    /// the handle lives.
     fn change<
         N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
@@ -1838,7 +1851,9 @@ where
             change(linked);
         }
         self.engine.queues.unblock();
-        self.engine.intake(turn)
+        let received = self.engine.receive_round(Seal(()), turn);
+        self.engine.command(turn);
+        earliest(received, self.engine.intake(turn))
     }
 
     /// Hold the link's data.
@@ -3815,7 +3830,7 @@ where
             };
             std::format!(
                 "{name}|{}|{}|{}",
-                running.receive.key(),
+                running.receive.key(running.agreements.deadline()),
                 match &running.interface {
                     Interface::Idle {
                         gate: g, key: k, ..

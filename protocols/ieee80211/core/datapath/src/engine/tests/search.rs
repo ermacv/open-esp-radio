@@ -1082,7 +1082,7 @@ pub(super) struct Found {
     pub problems: Vec<(&'static str, String)>,
 }
 
-pub(super) fn search(bounds: Bounds) -> Found {
+pub(super) fn search(bounds: Bounds, ceiling: usize) -> Found {
     let mut found = Found {
         nodes: 0,
         ways: 0,
@@ -1118,6 +1118,14 @@ pub(super) fn search(bounds: Bounds) -> Found {
             continue;
         }
         found.nodes += 1;
+        // A ceiling against an explosion, not a pinned figure.
+        if found.nodes > ceiling {
+            found.problems.push((
+                "the search passed its ceiling of nodes",
+                std::format!("{} nodes over a ceiling of {ceiling}", found.nodes),
+            ));
+            break;
+        }
         if path.len() >= DEPTH {
             if !visit.moves.is_empty()
                 && !found
@@ -1143,10 +1151,16 @@ pub(super) fn search(bounds: Bounds) -> Found {
     found
 }
 
+/// The most nodes a search at the ordinary bounds visits (about 12 000
+/// today) and one at named bounds: ceilings against an explosion, several
+/// times what they take, never a pinned figure.
+const ORDINARY_CEILING: usize = 100_000;
+const NAMED_CEILING: usize = 3_000_000;
+
 /// Run the search at `bounds`, print its size, time and problems.
-fn run(bounds: Bounds) {
+fn run(bounds: Bounds, ceiling: usize) {
     let start = Clock::now();
-    let found = search(bounds);
+    let found = search(bounds, ceiling);
     std::println!(
         "search {bounds:?}: {} states, {} ways, depth {}, {:?}",
         found.nodes,
@@ -1163,11 +1177,14 @@ fn run(bounds: Bounds) {
 /// The search at the model's bounds, in the ordinary test run.
 #[test]
 fn every_order_of_the_station_engines_sections_keeps_its_properties() {
-    run(Bounds {
-        offers: 3,
-        losses: 1,
-        requests: 4,
-    });
+    run(
+        Bounds {
+            offers: 3,
+            losses: 1,
+            requests: 4,
+        },
+        ORDINARY_CEILING,
+    );
 }
 
 /// The search at the bounds the model's mutants run at (two links and an
@@ -1176,11 +1193,14 @@ fn every_order_of_the_station_engines_sections_keeps_its_properties() {
 #[test]
 #[ignore = "the mutants' bounds: run by name"]
 fn every_order_at_the_mutants_bounds() {
-    run(Bounds {
-        offers: 3,
-        losses: 1,
-        requests: 6,
-    });
+    run(
+        Bounds {
+            offers: 3,
+            losses: 1,
+            requests: 6,
+        },
+        NAMED_CEILING,
+    );
 }
 
 /// The bounds where the window binds: a fourth MSDU behind a full window,
@@ -1188,11 +1208,14 @@ fn every_order_at_the_mutants_bounds() {
 #[test]
 #[ignore = "the window's bounds: run by name"]
 fn every_order_at_the_windows_bounds() {
-    run(Bounds {
-        offers: 4,
-        losses: 1,
-        requests: 4,
-    });
+    run(
+        Bounds {
+            offers: 4,
+            losses: 1,
+            requests: 4,
+        },
+        NAMED_CEILING,
+    );
 }
 
 /// The bounds where a frame spends every attempt: two losses, as the
@@ -1200,9 +1223,12 @@ fn every_order_at_the_windows_bounds() {
 #[test]
 #[ignore = "the attempts' bounds: run by name"]
 fn every_order_at_the_attempts_bounds() {
-    run(Bounds {
-        offers: 3,
-        losses: 2,
-        requests: 6,
-    });
+    run(
+        Bounds {
+            offers: 3,
+            losses: 2,
+            requests: 6,
+        },
+        NAMED_CEILING,
+    );
 }

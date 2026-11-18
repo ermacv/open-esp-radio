@@ -70,9 +70,14 @@ impl SoftwareCcmpKey for TestKey {}
 pub(super) type Key = InstalledCcmpTxKey<TestKey>;
 
 /// A station's engine over the model port, with a pool of `POOL`.
-pub(super) type StationEngine<'id, const POOL: usize> = Engine<
+pub(super) type StationEngine<'id, const POOL: usize> =
+    StationEngineOn<'id, POOL, MODEL_PLACES, MODEL_WINDOW>;
+
+/// A station's engine over a model port of `P` staging places, its receive
+/// window `W`: the search's small port takes the model's numbers.
+pub(super) type StationEngineOn<'id, const POOL: usize, const P: usize, const W: usize> = Engine<
     'id,
-    ModelPort<'id, STATION_SINGLES, 0>,
+    ModelPort<'id, STATION_SINGLES, 0, P>,
     Arenas,
     Key,
     1,
@@ -80,7 +85,7 @@ pub(super) type StationEngine<'id, const POOL: usize> = Engine<
     STATION_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
-    MODEL_WINDOW,
+    W,
 >;
 
 /// An access point's engine of `PEERS` clients over the model port.
@@ -334,8 +339,8 @@ pub(super) fn ht() -> PhyRate {
 }
 
 /// The rates the tests send at, from the port.
-pub(super) fn fixed<'id, const S: usize, const D: usize>(
-    port: &ModelPort<'id, S, D>,
+pub(super) fn fixed<'id, const S: usize, const D: usize, const P: usize>(
+    port: &ModelPort<'id, S, D, P>,
 ) -> Fixed<'id> {
     let single = port.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
     let aggregate: AmpduRate<'id, ModelCaps> = port.ampdu_rate(port.rate(ht()).unwrap()).unwrap();
@@ -397,8 +402,8 @@ pub(super) fn client_link(client: [u8; 6]) -> ClientLink {
 }
 
 /// What a section is lent, held apart from the engine.
-pub(super) struct Around<'id, const S: usize, const D: usize> {
-    pub port: ModelPort<'id, S, D>,
+pub(super) struct Around<'id, const S: usize, const D: usize, const P: usize = MODEL_PLACES> {
+    pub port: ModelPort<'id, S, D, P>,
     pub net: Net,
     pub rates: Fixed<'id>,
     pub seen: Seen,
@@ -406,8 +411,8 @@ pub(super) struct Around<'id, const S: usize, const D: usize> {
     pub micros: u64,
 }
 
-impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
-    pub fn new(port: ModelPort<'id, S, D>) -> Self {
+impl<'id, const S: usize, const D: usize, const P: usize> Around<'id, S, D, P> {
+    pub fn new(port: ModelPort<'id, S, D, P>) -> Self {
         let rates = fixed(&port);
         Self {
             port,
@@ -436,7 +441,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
     /// One section's turn, a microsecond after the last.
     pub fn turn(
         &mut self,
-    ) -> Turn<'_, ModelPort<'id, S, D>, Net, Fixed<'id>, Seen, Controller<'id>> {
+    ) -> Turn<'_, ModelPort<'id, S, D, P>, Net, Fixed<'id>, Seen, Controller<'id>> {
         self.micros += 1;
         Turn {
             port: &mut self.port,
@@ -450,9 +455,9 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
 }
 
 /// The station's engine's flowing data, which the test expects.
-pub(super) fn station_flowing<'e, 'id, const POOL: usize>(
-    engine: &'e mut StationEngine<'id, POOL>,
-) -> FlowingData<'e, StationEngine<'id, POOL>> {
+pub(super) fn station_flowing<'e, 'id, const POOL: usize, const P: usize, const W: usize>(
+    engine: &'e mut StationEngineOn<'id, POOL, P, W>,
+) -> FlowingData<'e, StationEngineOn<'id, POOL, P, W>> {
     match engine.data() {
         DataPlace::Flowing(flowing) => flowing,
         _ => panic!("the data flows"),
@@ -470,9 +475,9 @@ pub(super) fn ap_flowing<'e, 'id, const PEERS: usize, const POOL: usize>(
 }
 
 /// Act on the station's linked access point.
-pub(super) fn linked<'id, const POOL: usize>(
-    engine: &mut StationEngine<'id, POOL>,
-    act: impl FnOnce(&mut LinkedPeer<'_, StationEngine<'id, POOL>>),
+pub(super) fn linked<'id, const POOL: usize, const P: usize, const W: usize>(
+    engine: &mut StationEngineOn<'id, POOL, P, W>,
+    act: impl FnOnce(&mut LinkedPeer<'_, StationEngineOn<'id, POOL, P, W>>),
 ) {
     let mut data = station_flowing(engine);
     let PeerPlace::Linked(mut linked) = data.peer(ACCESS_POINT) else {
@@ -501,12 +506,12 @@ pub(super) fn agree<'id, const POOL: usize>(
 
 /// A station's engine flowing, its gate open, linked, aggregating at HT
 /// MCS 7.
-fn station<'id, const POOL: usize>(
-    run: Running<'id, STATION_SINGLES, 0>,
-    engine: &mut StationEngine<'id, POOL>,
+fn station<'id, const POOL: usize, const P: usize, const W: usize>(
+    run: Running<'id, STATION_SINGLES, 0, P>,
+    engine: &mut StationEngineOn<'id, POOL, P, W>,
     attempts: u8,
     lifetime: Duration,
-) -> Around<'id, STATION_SINGLES, 0> {
+) -> Around<'id, STATION_SINGLES, 0, P> {
     let Running {
         port,
         data: rights,
