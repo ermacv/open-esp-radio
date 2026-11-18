@@ -25,12 +25,12 @@ macro_rules! place {
 }
 
 oer_portable_memory::arena! {
-    pub Rx: window Window, count 4, size 64, front 8, back 4,
+    pub Rx: window Window, count 4, size 64, floor 8,
         placed by place as Placed in ".dma.bss.ui_rx";
 }
 
 oer_portable_memory::arena! {
-    pub Tx: window Window, count 4, size 64, front 0, back 0,
+    pub Tx: window Window, count 4, size 64, floor 0,
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
@@ -48,8 +48,8 @@ pub fn forged(released: Released<Rx>) -> Released<Rx> {
     #[cfg(ui_reject)]
     let _ = |place: &'static ArenaPlace<Rx, 256>, at: DmaRef<ArenaPlace<Rx, 256>>| RxArena { place, at }; // ui-error: E0451
     #[cfg(ui_reject)]
-    let _ = Handle::<Rx> { index: 0, extent: 52, brand: core::marker::PhantomData }; // ui-error: E0451
+    let _ = Handle::<Rx> { index: 0, span: Span::FULL }; // ui-error: E0451
     #[cfg(ui_reject)]
-    let _ = Released::<Rx> { index: 0, extent: Extent::FULL }; // ui-error: E0451
+    let _ = Released::<Rx> { index: 0, span: Span::FULL }; // ui-error: E0451
     released
 }

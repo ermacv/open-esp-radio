@@ -40,12 +40,12 @@ type RxStatic<T> = HostStatic<T, RX_BASE>;
 type TxStatic<T> = HostStatic<T, TX_BASE>;
 
 crate::arena! {
-    Rx: window Window, count 40, size 64, front 8, back 4,
+    Rx: window Window, count 40, size 64, floor 8,
         placed by rx_place as RxStatic in ".dma.bss.test_rx";
 }
 
 crate::arena! {
-    Tx: window Window, count 3, size 16, front 0, back 0,
+    Tx: window Window, count 3, size 16, floor 0,
         placed by tx_place as TxStatic in ".dma.bss.test_tx";
 }
 
@@ -62,11 +62,11 @@ impl ReturnNotify for Counted {
     }
 }
 
-fn release<B: Brand>(lent: Lent<B>, extent: usize) -> Released<B> {
+fn release<B: Brand>(lent: Lent<B>, start: usize, len: usize) -> Released<B> {
     #[allow(unsafe_code, reason = "the test is the hardware")]
     // SAFETY: no hardware touches the model's buffers.
     unsafe {
-        Released::assume(lent, Extent::new(extent).expect("within the region"))
+        Released::assume(lent, Span::new(start, len).expect("within the buffer"))
     }
 }
 
@@ -80,7 +80,8 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
     );
     let mut handles: Vec<_> = fresh.collect();
     assert_eq!(handles.len(), 40, "every buffer once");
-    assert!(handles.iter().all(|handle| handle.extent() == 64 - 8 - 4));
+    assert!(handles.iter().all(|handle| handle.span() == Span::FULL));
+    assert_eq!((Span::<Rx>::FULL.start(), Span::<Rx>::FULL.len()), (8, 56));
 
     // Each handle's bytes are its own CPU region.
     for (value, handle) in handles.iter_mut().enumerate() {
@@ -90,13 +91,13 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
         assert!(arena.bytes(handle).iter().all(|&byte| byte == value as u8));
     }
 
-    // Lending gives the buffer's first byte, its front included.
+    // Lending gives the buffer's first byte, below the floor included.
     let third = handles.remove(3);
     let (lent, address) = arena.lend(third);
     assert_eq!(address.get(), RX_BASE + 3 * 64);
 
-    // The hardware writes the front and a frame; the release names the
-    // frame's extent and the handle gives exactly that.
+    // The hardware writes its metadata and a unit; the release names where
+    // the unit begins and how long it is, and the handle gives exactly that.
     let place = arena.place.bytes.get().cast::<u8>();
     for offset in 0..64 {
         #[allow(unsafe_code, reason = "the test is the hardware")]
@@ -108,12 +109,9 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
                 .write(0xA0 | (offset as u8 & 0xF));
         }
     }
-    let handle = arena.reclaim(release(lent, 5));
-    assert_eq!(handle.extent(), 5);
-    assert_eq!(arena.bytes(&handle), &[0xA8, 0xA9, 0xAA, 0xAB, 0xAC]);
-    assert!(Extent::<Rx>::new(64 - 8 - 4 + 1).is_none());
-    assert_eq!(Extent::<Rx>::new(52).map(Extent::get), Some(52));
-    assert_eq!(Extent::<Rx>::FULL.get(), 52);
+    let handle = arena.reclaim(release(lent, 12, 5));
+    assert_eq!((handle.span().start(), handle.span().len()), (12, 5));
+    assert_eq!(arena.bytes(&handle), &[0xAC, 0xAD, 0xAE, 0xAF, 0xA0]);
 
     // Returning: each drop sets its bit and notifies, on another thread; the
     // take gives each handle once, whole, and then nothing.
@@ -130,7 +128,7 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
     let mut indices: Vec<_> = arena
         .returned()
         .map(|handle| {
-            assert_eq!(handle.extent(), 52);
+            assert_eq!(handle.span(), Span::FULL);
             handle.index
         })
         .collect();
@@ -156,11 +154,13 @@ fn a_brand_without_shared_bytes_gives_its_whole_buffer() {
     let mut last = handles.pop().expect("three");
     assert_eq!(last.index, 2);
     assert_eq!(arena.bytes_mut(&mut last).len(), 16);
-    let short = last.with_extent(Extent::new(7).expect("fits"));
+    arena.bytes_mut(&mut last)[3] = 0x5A;
+    let short = last.with_span(Span::fixed::<3, 7>());
     assert_eq!(arena.bytes(&short).len(), 7);
+    assert_eq!(arena.bytes(&short).first(), Some(&0x5A));
     let (lent, address) = arena.lend(short);
     assert_eq!(address.get(), 0x4000_2000 + 2 * 16);
-    let back = arena.reclaim(release(lent, 16));
+    let back = arena.reclaim(release(lent, 0, 16));
     assert_eq!(arena.bytes(&back).len(), 16);
 }
 
@@ -176,7 +176,7 @@ fn a_returned_set_reaches_its_every_word() {
 }
 
 macro_rules! geometry {
-    ($name:ident: $count:expr, $size:expr, $front:expr, $back:expr) => {
+    ($name:ident: $count:expr, $size:expr, $floor:expr) => {
         enum $name {}
         #[allow(unsafe_code, reason = "geometry-only brands that never make an arena")]
         // SAFETY: the brand has no place (`()` claims nothing) and its own
@@ -185,8 +185,7 @@ macro_rules! geometry {
             type Window = Window;
             const COUNT: usize = $count;
             const SIZE: usize = $size;
-            const FRONT: usize = $front;
-            const BACK: usize = $back;
+            const FLOOR: usize = $floor;
             type Static = ();
             fn returned() -> &'static ReturnedSet {
                 static RETURNED: ReturnedSet = ReturnedSet::new();
@@ -199,23 +198,19 @@ macro_rules! geometry {
     };
 }
 
-geometry!(Most: MAX_BUFFERS, 65_532, 0, 0);
-geometry!(TooMany: MAX_BUFFERS + 1, 4, 0, 0);
-geometry!(NoBuffer: 0, 4, 0, 0);
-geometry!(Widest: 1, 65_532, 65_528, 0);
-geometry!(TooWide: 1, 65_536, 0, 0);
-geometry!(OddSize: 1, 6, 0, 0);
-geometry!(OddFront: 1, 8, 2, 0);
-geometry!(NoRegion: 1, 8, 4, 4);
-geometry!(OneByte: 1, 8, 4, 3);
-geometry!(Overflowing: 2, usize::MAX, 0, 0);
-geometry!(OverflowingShared: 1, 8, usize::MAX, 1);
+geometry!(Most: MAX_BUFFERS, 65_532, 0);
+geometry!(TooMany: MAX_BUFFERS + 1, 4, 0);
+geometry!(NoBuffer: 0, 4, 0);
+geometry!(Highest: 1, 65_532, 65_531);
+geometry!(TooWide: 1, 65_536, 0);
+geometry!(OddSize: 1, 6, 0);
+geometry!(NoBytes: 1, 8, 8);
+geometry!(Overflowing: 2, usize::MAX, 0);
 
 #[test]
 fn the_geometry_is_refused_exactly_at_its_bounds() {
     assert_eq!(geometry_refusal::<Most, { MAX_BUFFERS * 65_532 }>(), None);
-    assert_eq!(geometry_refusal::<Widest, 65_532>(), None);
-    assert_eq!(geometry_refusal::<OneByte, 8>(), None);
+    assert_eq!(geometry_refusal::<Highest, 65_532>(), None);
     assert_eq!(geometry_refusal::<Rx, { 40 * 64 }>(), None);
     let buffers = Some("an arena has 1 to MAX_BUFFERS buffers");
     assert_eq!(
@@ -226,13 +221,34 @@ fn the_geometry_is_refused_exactly_at_its_bounds() {
     let place = Some("an arena's place is COUNT buffers of SIZE bytes");
     assert_eq!(geometry_refusal::<Rx, { 40 * 64 + 4 }>(), place);
     assert_eq!(geometry_refusal::<Overflowing, 0>(), place);
-    let buffer = Some("a buffer is at most 65 535 bytes, in words, its front in words");
+    let buffer = Some("a buffer is at most 65 535 bytes, in words");
     assert_eq!(geometry_refusal::<TooWide, 65_536>(), buffer);
     assert_eq!(geometry_refusal::<OddSize, 6>(), buffer);
-    assert_eq!(geometry_refusal::<OddFront, 8>(), buffer);
-    let region = Some("a buffer's CPU region is not empty");
-    assert_eq!(geometry_refusal::<NoRegion, 8>(), region);
-    assert_eq!(geometry_refusal::<OverflowingShared, 8>(), region);
+    assert_eq!(
+        geometry_refusal::<NoBytes, 8>(),
+        Some("a buffer has bytes above its floor")
+    );
+}
+
+#[test]
+fn a_span_lies_between_the_floor_and_the_buffer_end() {
+    // Rx: floor 8, size 64.
+    assert_eq!(Span::<Rx>::new(8, 56), Some(Span::FULL));
+    assert_eq!(
+        Span::<Rx>::new(64, 0).map(|span| (span.start(), span.len())),
+        Some((64, 0))
+    );
+    assert!(Span::<Rx>::new(64, 0).is_some_and(Span::is_empty));
+    assert!(!Span::<Rx>::FULL.is_empty());
+    assert_eq!(Span::<Rx>::new(7, 1), None, "below the floor");
+    assert_eq!(Span::<Rx>::new(8, 57), None, "past the buffer");
+    assert_eq!(Span::<Rx>::new(60, 5), None, "past the buffer");
+    assert_eq!(Span::<Rx>::new(usize::MAX, 1), None, "an overflowing end");
+    assert_eq!(
+        Span::<Rx>::fixed::<20, 30>(),
+        Span::new(20, 30).expect("fits")
+    );
+    assert_eq!(Span::<Tx>::new(0, 16), Some(Span::FULL));
 }
 
 #[test]
@@ -245,7 +261,7 @@ fn a_one_word_brand_reads_only_its_word() {
         bits: 0,
         brand: PhantomData,
     }
-    .map(|handle| (handle.index, handle.extent()))
+    .map(|handle| (handle.index, handle.span()))
     .collect();
-    assert_eq!(indices, [(2, 16)]);
+    assert_eq!(indices, [(2, Span::FULL)]);
 }

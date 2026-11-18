@@ -1,7 +1,7 @@
 error[E0133]: call to unsafe function `oer_portable_memory::arena::Released::<B>::assume` is unsafe and requires unsafe block
   --> tests/ui/arena_release_requires_unsafe.rs:48:17
    |
-48 |     return Some(Released::assume(lent, Extent::FULL)); // ui-error: E0133
-   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
+48 |     return Some(Released::assume(lent, Span::FULL)); // ui-error: E0133
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ call to unsafe function
    |
    = note: consult the function's documentation for information on how to avoid undefined behavior

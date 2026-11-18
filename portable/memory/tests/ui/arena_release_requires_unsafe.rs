@@ -25,12 +25,12 @@ macro_rules! place {
 }
 
 oer_portable_memory::arena! {
-    pub Rx: window Window, count 4, size 64, front 8, back 4,
+    pub Rx: window Window, count 4, size 64, floor 8,
         placed by place as Placed in ".dma.bss.ui_rx";
 }
 
 oer_portable_memory::arena! {
-    pub Tx: window Window, count 4, size 64, front 0, back 0,
+    pub Tx: window Window, count 4, size 64, floor 0,
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
@@ -45,7 +45,7 @@ pub type TxArena = Arena<Tx, 256>;
 
 pub fn release(lent: Lent<Rx>) -> Option<Released<Rx>> {
     #[cfg(ui_reject)]
-    return Some(Released::assume(lent, Extent::FULL)); // ui-error: E0133
+    return Some(Released::assume(lent, Span::FULL)); // ui-error: E0133
     #[cfg(not(ui_reject))]
     {
         drop(lent);

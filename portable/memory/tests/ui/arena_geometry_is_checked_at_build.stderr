@@ -1,8 +1,8 @@
-error[E0080]: evaluation panicked: a buffer's CPU region is not empty
+error[E0080]: evaluation panicked: a buffer has bytes above its floor
   --> tests/ui/arena_geometry_is_checked_at_build.rs:41:1
    |
 41 | / oer_portable_memory::arena! { // ui-error: E0080
-42 | |     pub Tx: window Window, count 4, size 64, front 32, back 32,
+42 | |     pub Tx: window Window, count 4, size 64, floor 64,
 43 | |         placed by place as Placed in ".dma.bss.ui_tx";
 44 | | }
    | |_^ evaluation of `_::_` failed here

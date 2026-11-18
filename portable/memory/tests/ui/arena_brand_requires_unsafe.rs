@@ -25,12 +25,12 @@ macro_rules! place {
 }
 
 oer_portable_memory::arena! {
-    pub Rx: window Window, count 4, size 64, front 8, back 4,
+    pub Rx: window Window, count 4, size 64, floor 8,
         placed by place as Placed in ".dma.bss.ui_rx";
 }
 
 oer_portable_memory::arena! {
-    pub Tx: window Window, count 4, size 64, front 0, back 0,
+    pub Tx: window Window, count 4, size 64, floor 0,
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
@@ -51,8 +51,7 @@ impl Brand for Mine { // ui-error: E0200
     type Window = Window;
     const COUNT: usize = 4;
     const SIZE: usize = 64;
-    const FRONT: usize = 8;
-    const BACK: usize = 4;
+    const FLOOR: usize = 8;
     type Static = ();
     fn returned() -> &'static ReturnedSet {
         Rx::returned()

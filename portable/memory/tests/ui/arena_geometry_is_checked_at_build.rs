@@ -25,13 +25,13 @@ macro_rules! place {
 }
 
 oer_portable_memory::arena! {
-    pub Rx: window Window, count 4, size 64, front 8, back 4,
+    pub Rx: window Window, count 4, size 64, floor 8,
         placed by place as Placed in ".dma.bss.ui_rx";
 }
 
 #[cfg(not(ui_reject))]
 oer_portable_memory::arena! {
-    pub Tx: window Window, count 4, size 64, front 32, back 28,
+    pub Tx: window Window, count 4, size 64, floor 60,
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 
@@ -39,7 +39,7 @@ oer_portable_memory::arena! {
 // declared.
 #[cfg(ui_reject)]
 oer_portable_memory::arena! { // ui-error: E0080
-    pub Tx: window Window, count 4, size 64, front 32, back 32,
+    pub Tx: window Window, count 4, size 64, floor 64,
         placed by place as Placed in ".dma.bss.ui_tx";
 }
 

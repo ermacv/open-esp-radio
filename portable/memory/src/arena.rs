@@ -14,12 +14,13 @@
 //!   constructor, [`Released::assume`], is `unsafe`: each kind of release is
 //!   one HAL atom that observed it and cites its stand record.
 //!
-//! The CPU's bytes of a buffer are `[FRONT, FRONT + extent)`: the extent is
-//! the release's (what the hardware wrote) or, for a fresh or returned
-//! handle, the whole CPU region `SIZE - FRONT - BACK`. The `FRONT` bytes in
-//! front of it and the `BACK` bytes behind the region are shared with the
-//! hardware for good (a receive header, its tail) and never lie under a
-//! slice; the HAL reads them through its layouts' volatile accessors.
+//! The CPU's bytes of a buffer are the [`Span`] its handle holds: the
+//! release's (where the hardware's unit begins and how long it is) or, for a
+//! fresh or returned handle, the whole buffer from the brand's floor. No span
+//! begins below the floor (`FLOOR`, 64 for receive: the metadata's fixed
+//! prefix and tail, which the hardware shares, never lie under a slice). What
+//! lies in front of a span's start is read by the HAL through its layouts'
+//! volatile accessors.
 //!
 //! A held buffer lent on to another task returns through a [`Returning`]:
 //! its destructor sets the buffer's bit in the brand's [`ReturnedSet`] with
@@ -61,10 +62,8 @@ pub unsafe trait Brand: Sized + 'static {
     const COUNT: usize;
     /// Each buffer's bytes.
     const SIZE: usize;
-    /// The bytes in front of the CPU's region that the hardware shares.
-    const FRONT: usize;
-    /// The bytes behind the CPU's region that the hardware shares.
-    const BACK: usize;
+    /// The offset below which no span of a buffer begins.
+    const FLOOR: usize;
     /// The placed static that holds the brand's place.
     type Static: 'static;
     /// The brand's returned set, in a static of its own.
@@ -102,25 +101,17 @@ pub const fn geometry_refusal<B: Brand, const BYTES: usize>() -> Option<&'static
     let Some(place) = B::COUNT.checked_mul(B::SIZE) else {
         return Some("an arena's place is COUNT buffers of SIZE bytes");
     };
-    let Some(shared) = B::FRONT.checked_add(B::BACK) else {
-        return Some("a buffer's CPU region is not empty");
-    };
     if B::COUNT == 0 || B::COUNT > MAX_BUFFERS {
         Some("an arena has 1 to MAX_BUFFERS buffers")
     } else if place != BYTES {
         Some("an arena's place is COUNT buffers of SIZE bytes")
-    } else if B::SIZE > u16::MAX as usize || B::SIZE % 4 != 0 || B::FRONT % 4 != 0 {
-        Some("a buffer is at most 65 535 bytes, in words, its front in words")
-    } else if shared >= B::SIZE {
-        Some("a buffer's CPU region is not empty")
+    } else if B::SIZE > u16::MAX as usize || B::SIZE % 4 != 0 {
+        Some("a buffer is at most 65 535 bytes, in words")
+    } else if B::FLOOR >= B::SIZE {
+        Some("a buffer has bytes above its floor")
     } else {
         None
     }
-}
-
-/// The CPU region's bytes of a buffer of `B`.
-const fn region<B: Brand>() -> usize {
-    B::SIZE - B::FRONT - B::BACK
 }
 
 /// The place of a brand's buffers: `BYTES = COUNT × SIZE` bytes, all zero at
@@ -178,34 +169,35 @@ where
 }
 
 impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
-    /// The CPU's bytes of a held buffer: `[FRONT, FRONT + extent)`.
+    /// The CPU's bytes of a held buffer: its handle's span.
     pub fn bytes<'h>(&self, handle: &'h Handle<B>) -> &'h [u8] {
-        let start = self.cpu_start(handle.index);
+        let start = self.cpu_start(handle.index, handle.span);
         #[allow(unsafe_code, reason = "a held buffer's CPU bytes")]
         // SAFETY: `handle` is the one handle of its buffer (`Handle`), which
-        // the hardware does not touch while a handle exists; the bytes
-        // `[FRONT, FRONT + extent)` of buffer `index < COUNT` lie in the
-        // place (`new`'s geometry, `extent <= SIZE - FRONT - BACK`), which
-        // is `'static`. The slice lives while `handle` is borrowed shared,
-        // so no `&mut` of the same bytes exists meanwhile.
+        // the hardware does not touch while a handle exists; the span lies in
+        // buffer `index < COUNT` (`Span`: `FLOOR <= start <= end <= SIZE`),
+        // inside the place (`claim`'s geometry), which is `'static`. The
+        // slice lives while `handle` is borrowed shared, so no `&mut` of the
+        // same bytes exists meanwhile.
         unsafe {
-            core::slice::from_raw_parts(start, usize::from(handle.extent))
+            core::slice::from_raw_parts(start, handle.span.len())
         }
     }
 
-    /// The CPU's bytes of a held buffer, to write: `[FRONT, FRONT + extent)`.
+    /// The CPU's bytes of a held buffer, to write: its handle's span.
     pub fn bytes_mut<'h>(&self, handle: &'h mut Handle<B>) -> &'h mut [u8] {
-        let start = self.cpu_start(handle.index);
+        let start = self.cpu_start(handle.index, handle.span);
         #[allow(unsafe_code, reason = "a held buffer's CPU bytes")]
         // SAFETY: as `bytes`; the slice lives while `handle` is borrowed
         // unique, so no other slice of the same bytes exists meanwhile.
         unsafe {
-            core::slice::from_raw_parts_mut(start, usize::from(handle.extent))
+            core::slice::from_raw_parts_mut(start, handle.span.len())
         }
     }
 
     /// Lend a held buffer to the hardware: the handle goes, and the buffer's
-    /// address (its first byte, the front included) is the HAL's to publish.
+    /// address (its first byte, below the floor included) is the HAL's to
+    /// publish.
     pub fn lend(&self, handle: Handle<B>) -> (Lent<B>, DmaWindowAddress<B::Window>) {
         let offset = buffer_offset::<B>(handle.index);
         (
@@ -217,17 +209,16 @@ impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
         )
     }
 
-    /// The handle of a released buffer, with the release's extent.
+    /// The handle of a released buffer, with the release's span.
     pub fn reclaim(&self, released: Released<B>) -> Handle<B> {
         Handle {
             index: released.index,
-            extent: released.extent.0,
-            brand: PhantomData,
+            span: released.span,
         }
     }
 
     /// The buffers returned since the last take, as handles of their whole
-    /// CPU region.
+    /// buffer from the floor.
     pub fn returned(&self) -> Returned<B> {
         Returned {
             word: 0,
@@ -236,8 +227,8 @@ impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
         }
     }
 
-    fn cpu_start(&self, index: u16) -> *mut u8 {
-        let offset = buffer_offset::<B>(index) as usize + B::FRONT;
+    fn cpu_start(&self, index: u16, span: Span<B>) -> *mut u8 {
+        let offset = buffer_offset::<B>(index) as usize + usize::from(span.start);
         self.place.bytes.get().cast::<u8>().wrapping_add(offset)
     }
 }
@@ -248,34 +239,28 @@ const fn buffer_offset<B: Brand>(index: u16) -> u32 {
     (index as u32).wrapping_mul(B::SIZE as u32)
 }
 
-/// The CPU's custody of one buffer: its index and the extent of its CPU
-/// bytes, one word. Neither `Copy` nor `Clone`; made only by this module.
+/// The CPU's custody of one buffer: its index and the span of its CPU bytes,
+/// two words. Neither `Copy` nor `Clone`; made only by this module.
 pub struct Handle<B: Brand> {
     index: u16,
-    extent: u16,
-    brand: PhantomData<fn() -> B>,
+    span: Span<B>,
 }
 
 impl<B: Brand> Handle<B> {
-    /// The extent of the buffer's CPU bytes.
-    pub const fn extent(&self) -> usize {
-        self.extent as usize
+    /// The span of the buffer's CPU bytes.
+    pub const fn span(&self) -> Span<B> {
+        self.span
     }
 
-    /// The handle with its extent set to `extent`: the bytes a writer means
-    /// to lend, within the CPU region.
-    pub fn with_extent(self, extent: Extent<B>) -> Self {
-        Self {
-            extent: extent.0,
-            ..self
-        }
+    /// The handle with the span `span`: the bytes a writer means to lend.
+    pub fn with_span(self, span: Span<B>) -> Self {
+        Self { span, ..self }
     }
 
     fn full(index: u16) -> Self {
         Self {
             index,
-            extent: region::<B>() as u16,
-            brand: PhantomData,
+            span: Span::FULL,
         }
     }
 }
@@ -287,58 +272,113 @@ pub struct Lent<B: Brand> {
     brand: PhantomData<fn() -> B>,
 }
 
-/// A count of a buffer's CPU bytes, at most its CPU region.
-pub struct Extent<B: Brand>(u16, PhantomData<fn() -> B>);
+/// The bytes `[start, end)` of a buffer of `B`, with `FLOOR <= start <= end
+/// <= SIZE`.
+pub struct Span<B: Brand> {
+    start: u16,
+    end: u16,
+    brand: PhantomData<fn() -> B>,
+}
 
-impl<B: Brand> Clone for Extent<B> {
+impl<B: Brand> Clone for Span<B> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<B: Brand> Copy for Extent<B> {}
+impl<B: Brand> Copy for Span<B> {}
 
-impl<B: Brand> Extent<B> {
-    /// The whole CPU region.
-    pub const FULL: Self = Self(region::<B>() as u16, PhantomData);
+impl<B: Brand> PartialEq for Span<B> {
+    fn eq(&self, other: &Self) -> bool {
+        (self.start, self.end) == (other.start, other.end)
+    }
+}
 
-    /// `bytes`, if it fits the CPU region: a length the hardware reported is
-    /// checked here.
-    pub const fn new(bytes: usize) -> Option<Self> {
-        if bytes <= region::<B>() {
-            Some(Self(bytes as u16, PhantomData))
+impl<B: Brand> Eq for Span<B> {}
+
+impl<B: Brand> core::fmt::Debug for Span<B> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_tuple("Span")
+            .field(&self.start)
+            .field(&self.end)
+            .finish()
+    }
+}
+
+impl<B: Brand> Span<B> {
+    /// The whole buffer from the floor.
+    pub const FULL: Self = Self {
+        start: B::FLOOR as u16,
+        end: B::SIZE as u16,
+        brand: PhantomData,
+    };
+
+    /// The `len` bytes from `start`, if they lie between the floor and the
+    /// buffer's end: where the hardware reported its unit is checked here.
+    pub const fn new(start: usize, len: usize) -> Option<Self> {
+        let Some(end) = start.checked_add(len) else {
+            return None;
+        };
+        if start >= B::FLOOR && end <= B::SIZE {
+            Some(Self {
+                start: start as u16,
+                end: end as u16,
+                brand: PhantomData,
+            })
         } else {
             None
         }
     }
 
-    /// The count.
-    pub const fn get(self) -> usize {
-        self.0 as usize
+    /// The `LEN` bytes from `START`, a span of constants: refused at build
+    /// time where [`Span::new`] would refuse it at run time.
+    pub const fn fixed<const START: usize, const LEN: usize>() -> Self {
+        const {
+            match Self::new(START, LEN) {
+                Some(span) => span,
+                None => panic!("a span lies between the brand's floor and its buffer's end"),
+            }
+        }
+    }
+
+    /// The offset of the span's first byte in its buffer.
+    pub const fn start(self) -> usize {
+        self.start as usize
+    }
+
+    /// The span's bytes.
+    pub const fn len(self) -> usize {
+        self.end.wrapping_sub(self.start) as usize
+    }
+
+    /// Whether the span has no bytes.
+    pub const fn is_empty(self) -> bool {
+        self.start == self.end
     }
 }
 
 /// The claim that the hardware no longer reads or writes a lent buffer, with
-/// the extent of the bytes it wrote there.
+/// the span of the unit it wrote there.
 pub struct Released<B: Brand> {
     index: u16,
-    extent: Extent<B>,
+    span: Span<B>,
 }
 
 impl<B: Brand> Released<B> {
-    /// The release of `lent`, its CPU bytes the first `extent`.
+    /// The release of `lent`, its CPU bytes `span`.
     ///
     /// # Safety
     ///
     /// The hardware no longer reads or writes the buffer `lent` names, and
     /// will not until it is lent again: an observation of the one HAL atom
     /// that made it, citing its stand record. The bytes the hardware may
-    /// still write after that observation lie outside the CPU region.
+    /// still write after that observation lie outside `span`.
     #[allow(unsafe_code, reason = "a release proof is a claim about the hardware")]
-    pub unsafe fn assume(lent: Lent<B>, extent: Extent<B>) -> Self {
+    pub unsafe fn assume(lent: Lent<B>, span: Span<B>) -> Self {
         Self {
             index: lent.index,
-            extent,
+            span,
         }
     }
 }
@@ -480,7 +520,7 @@ impl<B: Brand, N: ReturnNotify> Drop for Returning<B, N> {
 /// oer_portable_memory::arena! {
 ///     /// The receive buffers.
 ///     pub RxBuffers: window Esp32s31DmaWindow, count 48, size 1664,
-///         front 56, back 8, placed by oer_chips_esp32s31_hal::dma_static
+///         floor 64, placed by oer_chips_esp32s31_hal::dma_static
 ///         as oer_chips_esp32s31_hal::system::memory::DmaStatic
 ///         in ".dma.bss.wifi_rx";
 /// }
@@ -495,7 +535,7 @@ macro_rules! arena {
     (
         $(#[$meta:meta])*
         $vis:vis $name:ident: window $window:ty, count $count:literal, size $size:literal,
-            front $front:literal, back $back:literal,
+            floor $floor:literal,
             placed by $($place:ident)::+ as $($wrap:ident)::+ in $section:literal;
     ) => {
         $(#[$meta])*
@@ -517,8 +557,7 @@ macro_rules! arena {
                 type Window = $window;
                 const COUNT: usize = $count;
                 const SIZE: usize = $size;
-                const FRONT: usize = $front;
-                const BACK: usize = $back;
+                const FLOOR: usize = $floor;
 
                 type Static =
                     $($wrap)::+<$crate::arena::ArenaPlace<$name, { $count * $size }>>;
