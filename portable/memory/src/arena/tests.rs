@@ -328,4 +328,8 @@ fn a_span_only_narrows_in_a_holders_hands() {
         .unwrap_or_else(|_| panic!("the empty span at the end"));
     assert!(empty.span.is_empty());
     assert!(empty.narrow(Span::fixed::<11, 1>()).is_err(), "no way back");
+    assert_eq!(
+        std::format!("{:?}", Span::<OneWord>::fixed::<4, 8>()),
+        "Span(4, 12)"
+    );
 }
