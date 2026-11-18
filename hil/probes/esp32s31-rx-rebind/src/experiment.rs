@@ -139,6 +139,11 @@ pub(super) struct State {
     station: [u8; 6],
     sender: [u8; 6],
     sender_known: bool,
+    /// The first QoS Data sender to this station (`tasks/193`), for whom
+    /// the receive agreement is programmed once.
+    agreement_peer: [u8; 6],
+    agreement_peer_known: bool,
+    agreement: bool,
 }
 
 /// The HAL's copy of one completed frame.
@@ -287,6 +292,16 @@ impl State {
         ) else {
             return Ok(());
         };
+        if kind == 0x88
+            && to == self.station
+            && !self.agreement_peer_known
+            && let Some(from) = mpdu
+                .get(10..16)
+                .and_then(|from| <[u8; 6]>::try_from(from).ok())
+        {
+            self.agreement_peer = from;
+            self.agreement_peer_known = true;
+        }
         if kind != 0x08 || to != self.station {
             return Ok(());
         }
@@ -701,6 +716,8 @@ fn scan(
             Some(next) => (ring.topology_snapshot().tail_index + COUNT - next) % COUNT + 1,
             None => 0,
         };
+        // `tasks/193`: a unit at the frozen LAST is rebound too.
+        let at_last = behind == Some(0);
         let mut unit = storage
             .take_completed_unit(ring, frozen)
             .map_err(|_| name!("take"; 32))?
@@ -725,13 +742,34 @@ fn scan(
             return Err(error);
         }
         if copied && (arm.rebind || *action) {
-            if let Err(error) = act(
-                state, segment, arm.rebind, bank, &mut unit, frozen, access, reserve,
+            if reserve == 0 {
+                // No armed descriptor ahead of the walker: excluded.
+                bump(&mut state.counts(segment)?.exhausted);
+            } else if let Err(error) = act(
+                state, segment, arm.rebind, bank, &mut unit, frozen, access, reserve, at_last,
             ) {
                 unit.retain_for_deferred_recycle();
                 return Err(error);
             }
             *action = false;
+        }
+        if !state.agreement && state.agreement_peer_known {
+            let peer = state.agreement_peer;
+            use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::{
+                S31RxBlockAckAgreement, program,
+            };
+            let _programmed = program(
+                &mut access.wifi_mac_hal(),
+                S31RxBlockAckAgreement {
+                    hardware_index: 0,
+                    interface: oer_chips_esp32s31_hal::types::MacInterface::Station,
+                    peer,
+                    tid: 0,
+                    starting_sequence: oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
+                    window: 64,
+                },
+            );
+            state.agreement = true;
         }
         let Some(credit) = unit.retain_discard() else {
             return Err(name!("recycle-frontier"; 32));
@@ -768,6 +806,7 @@ fn act(
     frozen: RxFrozenCursor,
     access: &mut RadioAccess,
     reserve: usize,
+    at_last: bool,
 ) -> Result<(), Name<32>> {
     let index = unit.head_index();
     unit.detach_before_last(access.rx_dma(), frozen)
@@ -818,6 +857,9 @@ fn act(
     *state.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = segment as u32 + 1;
     let counts = state.counts(segment)?;
     bump(&mut counts.rebinds);
+    if at_last {
+        bump(&mut counts.rebinds_at_last);
+    }
     if let Some(bucket) = counts.reserve.get_mut(reserve.min(RESERVE_BUCKETS - 1)) {
         bump(bucket);
     }
@@ -1029,7 +1071,7 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             "SEG {segment} arm={} hold={} services={} units={} descriptors={} chained={} frames={} \
              prefix_ok={} prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} content_ok={} \
              content_bad={} frames_on_rebound={} detached={} window_checks={} rebinds={} \
-             covered_rebinds={} returned={} spares_exhausted={} held_back={} retired_checks={} \
+             rebinds_at_last={} exhausted={} covered_rebinds={} returned={} spares_exhausted={} held_back={} retired_checks={} \
              spare_checks={} reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} \
              hw_buffer_full={} hw_data_success={} sender_first={} sender_last={} \
              sender_lost={} reserve_min={} reserve={:?}",
@@ -1051,6 +1093,8 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.detached,
             counts.window_checks,
             counts.rebinds,
+            counts.rebinds_at_last,
+            counts.exhausted,
             counts.covered_rebinds,
             counts.returned,
             counts.spares_exhausted,

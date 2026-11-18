@@ -53,10 +53,10 @@ const fn base(case: Case) -> u32 {
 }
 const QUIET_MS: u32 = 1_500;
 /// The largest aggregate.
-#[cfg(not(feature = "b6"))]
+#[cfg(not(any(feature = "b6", feature = "stream-ampdu")))]
 const SUBFRAMES: usize = 8;
 /// B6 (`tasks/177`): aggregates of up to 32 short subframes.
-#[cfg(feature = "b6")]
+#[cfg(any(feature = "b6", feature = "stream-ampdu"))]
 const SUBFRAMES: usize = 32;
 /// How long an aggregate's completion is awaited.
 const COMPLETION_MS: u32 = 100;
@@ -79,7 +79,7 @@ static RETENTION: static_cell::StaticCell<RetainedAmpduDmaStorage<Lease, SUBFRAM
 type Ends = [u32; 5];
 
 #[cfg_attr(
-    feature = "b6",
+    any(feature = "b6", feature = "stream-ampdu"),
     allow(
         unreachable_code,
         unused_variables,
@@ -202,6 +202,45 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         #[cfg(feature = "gcell")]
         pn,
     };
+    // `tasks/193`: aggregates of 16 short subframes at HT MCS7 with the
+    // short guard interval, back to back, for the rebind probe's run.
+    #[cfg(feature = "stream-ampdu")]
+    {
+        sender.rate = HtRate::new(
+            HtMcs::Mcs7,
+            HtGuardInterval::Short400Ns,
+            HtChannelWidth::Mhz20,
+        );
+        sender
+            .owner
+            .configure_max_aggregate_bytes(
+                sender.rate.vendor_ampdu_byte_limit().unwrap_or(u16::MAX),
+            )
+            .map_err(|_| (tx_phase::FRAME, 0x6a))?;
+        let end = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(STREAM_RUN_MS))
+            .ok_or((tx_phase::FRAME, 0x6b))?;
+        let mut row: Ends = [0; 5];
+        while EmbassyClock.now() < end {
+            sender.send_plain(access, B6_SHORT, 16, &mut row).await?;
+        }
+        journal.record(
+            Kind::AmpduSent,
+            &[
+                u32::from(sender.rate.code()),
+                B6_SHORT as u32,
+                16,
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+            ],
+        );
+        mark(102);
+        return Ok(());
+    }
     // B6 (`tasks/177`): in place of cell F's stages.
     #[cfg(feature = "b6")]
     {
@@ -333,7 +372,10 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
 /// The pool's slot holds the frame and the intake's 8-octet trailer room
 /// within its 1 500 octets.
 const B6_FULL: usize = 1_490;
-#[cfg(feature = "b6")]
+/// `tasks/193`: how long the aggregates run, past the receiver's segments.
+#[cfg(feature = "stream-ampdu")]
+const STREAM_RUN_MS: u32 = 45_000;
+#[cfg(any(feature = "b6", feature = "stream-ampdu"))]
 const B6_SHORT: usize = 100;
 /// Aggregates of each rate, length and size.
 #[cfg(feature = "b6")]
@@ -482,7 +524,7 @@ impl Aggregates<'_, '_> {
     /// B6: one aggregate of `size` QoS Data subframes of `length` octets,
     /// case C's control header, the body each octet its offset; awaited,
     /// its end counted in `row`.
-    #[cfg(feature = "b6")]
+    #[cfg(any(feature = "b6", feature = "stream-ampdu"))]
     async fn send_plain(
         &mut self,
         access: &mut RadioAccess,

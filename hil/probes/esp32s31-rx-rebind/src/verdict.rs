@@ -14,35 +14,33 @@ pub struct Arm {
     pub hold: usize,
 }
 
-/// The segments of one run (`tasks/169`): fixed and rebind alternated
-/// under holds 8 and 1 (the port's margins), then rebinds under holds 24,
-/// 28 and 30 of 32, where the walker runs out and a rebound descriptor is
-/// re-linked with few armed descriptors or none ahead of it, then 8 and 1
-/// again and a closing fixed segment that gives the last retirements their
-/// laps.
+/// The segments of one run (`tasks/193`): fixed and rebind alternated,
+/// every one under hold 0, so a unit is taken, and in a rebind segment
+/// rebound, as soon as it completed, at LAST included; a closing fixed
+/// segment gives the last retirements their laps.
 pub const SEGMENTS: usize = 15;
 const fn arm(rebind: bool, hold: usize) -> Arm {
     Arm { rebind, hold }
 }
 pub const ARMS: [Arm; SEGMENTS] = [
-    arm(false, 8),
-    arm(true, 8),
-    arm(false, 1),
-    arm(true, 1),
-    arm(false, 24),
-    arm(true, 24),
-    arm(false, 28),
-    arm(true, 28),
-    arm(false, 30),
-    arm(true, 30),
-    arm(false, 8),
-    arm(true, 8),
-    arm(false, 1),
-    arm(true, 1),
-    arm(false, 8),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
+    arm(true, 0),
+    arm(false, 0),
 ];
 /// The holds the verdict asks its rebinds of; the others are reported.
-pub const HOLDS: [usize; 2] = [8, 1];
+pub const HOLDS: [usize; 1] = [0];
 
 /// Frames a fixed segment checks at least.
 pub const MIN_FRAMES: u32 = 500;
@@ -75,6 +73,11 @@ pub struct Counts {
     pub detached: u32,
     pub window_checks: u32,
     pub rebinds: u32,
+    /// Of `rebinds`, those of a unit at the frozen LAST (`tasks/193`).
+    pub rebinds_at_last: u32,
+    /// Takes left unrebound because no armed descriptor lay ahead of the
+    /// walker (its reserve 0): excluded by `tasks/193`.
+    pub exhausted: u32,
     /// Rebinds made in this segment whose new spare then received a frame
     /// that passed the binding, copy and canary checks with a decoded prefix.
     pub covered_rebinds: u32,
@@ -318,8 +321,8 @@ mod tests {
     fn one_hold_short_of_its_rebinds_is_insufficient() {
         let mut observations = covered();
         for (counts, arm) in observations.counts.iter_mut().zip(ARMS) {
-            if arm.rebind && arm.hold == 1 {
-                counts.covered_rebinds = 400;
+            if arm.rebind && arm.hold == 0 {
+                counts.covered_rebinds = 100;
             }
         }
         assert_eq!(

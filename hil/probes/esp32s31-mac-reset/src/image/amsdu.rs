@@ -21,22 +21,26 @@ pub(super) struct AmsduParts<'a> {
 /// The rounds, each frame awaited; per case: sent, acknowledged (status
 /// 0), ACK timeouts (status 5), other ends.
 pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
-    #[cfg(feature = "ccmp")]
+    #[cfg(feature = "stream")]
+    {
+        super::stream::series(parts, access).await
+    }
+    #[cfg(all(feature = "ccmp", not(feature = "stream")))]
     {
         super::ccmp::series(parts, access).await
     }
-    #[cfg(all(feature = "ampdu", not(feature = "ccmp")))]
+    #[cfg(all(feature = "ampdu", not(any(feature = "ccmp", feature = "stream"))))]
     {
         super::ampdu::series(parts, access).await
     }
-    #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+    #[cfg(not(any(feature = "ccmp", feature = "ampdu", feature = "stream")))]
     {
         rounds(parts, access).await
     }
 }
 
 /// Case C's rounds.
-#[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+#[cfg(not(any(feature = "ccmp", feature = "ampdu", feature = "stream")))]
 async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
         frames,
