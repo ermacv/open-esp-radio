@@ -318,7 +318,9 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
 
 /// B6's subframes: full-size and short QoS Data MPDUs, TID 0, no A-MSDU.
 #[cfg(feature = "b6")]
-const B6_FULL: usize = 1_500;
+/// The pool's slot holds the frame and the intake's 8-octet trailer room
+/// within its 1 500 octets.
+const B6_FULL: usize = 1_490;
 #[cfg(feature = "b6")]
 const B6_SHORT: usize = 100;
 /// Aggregates of each rate, length and size.
