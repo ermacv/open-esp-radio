@@ -445,6 +445,59 @@ fn refusals_are_counted_by_reason() {
     });
 }
 
+/// A frame that does not decapsulate is refused for its own reason in the
+/// round that offers it, behind data that waits: it never waits, its place
+/// is free at the round's close, and the good frame after it waits in its
+/// order (`tasks/215`).
+#[test]
+fn a_frame_that_does_not_decapsulate_is_refused_at_once_behind_what_waits() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.net.lend_limit = 0;
+        around.net.copy_room = 0;
+        around.port.land(&data(1, IPV4, 1), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.port.places_held(), 1, "1 waits");
+        // No RFC 1042 header, then a good frame, in one round.
+        let mut bare = data(2, IPV4, 2);
+        bare[24] = 0;
+        around.port.land(&bare, meta());
+        around.port.land(&data(3, IPV4, 3), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(
+            refusals(&mut engine),
+            RxRefusals {
+                undecapsulable: 1,
+                ..RxRefusals::default()
+            }
+        );
+        assert_eq!(
+            around.port.places_held(),
+            2,
+            "1 and 3 wait; 2's place is free"
+        );
+        assert!(around.net.received.is_empty());
+        // Room for both: 1, then 3, in their order.
+        around.net.copy_room = 2;
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(
+            around.net.received,
+            [
+                Got::Copied(ethernet(IPV4, 1)),
+                Got::Copied(ethernet(IPV4, 3))
+            ]
+        );
+        assert_eq!(
+            refusals(&mut engine),
+            RxRefusals {
+                undecapsulable: 1,
+                ..RxRefusals::default()
+            }
+        );
+    });
+}
+
 /// A protected frame with the port's evidence goes to the network, its
 /// CCMP header left before the Ethernet frame.
 #[test]

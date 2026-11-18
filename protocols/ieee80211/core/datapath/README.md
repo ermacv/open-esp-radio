@@ -70,9 +70,11 @@ or refused for no place to wait; a unit the reorder lets go waits, or is
 lent, in the place it already holds. A unit that waited `late` (a policy
 value the composition gives `Engine::new` beside its budget) from its own
 moment is refused at the head, every late head in one round; a waiting
-unit of a held link is refused when it reaches the head. A data frame of a
-held link, protected data without the port's evidence of its integrity,
-and data that does not decapsulate are refused; the refusals are counted
+unit of a held link is refused when it reaches the head. Data that does not
+decapsulate is refused for its own reason in the round that offers it,
+before what waits, its place and its link: it never waits. A data frame
+of a held link and protected data without the port's evidence of its
+integrity are refused; the refusals are counted
 by reason (`FlowingData::refusals`): no place to wait and late each have
 their own count. After the data's stop nothing is delivered: what waited
 and what the ring stages go back unread, and the rights come home once
