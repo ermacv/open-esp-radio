@@ -8,16 +8,26 @@
 //! it: a management frame and EAPOL to the interface's controller, read by
 //! reference inside the round ([`Told::frame`]); a data frame of a linked
 //! peer to the network; anything else back to the ring at the round's
-//! close. A data unit for the network is decapsulated in its place once
-//! (its Ethernet addresses written before the EtherType its LLC/SNAP header
+//! close. The ring is read in every round: a management frame, EAPOL and a
+//! BlockAckReq pass at once, whatever waits for the network.
+//!
+//! A data unit for the network is decapsulated in its place once (its
+//! Ethernet addresses written before the EtherType its LLC/SNAP header
 //! holds), then lent to the network while it has room to borrow, else
 //! copied into the network's storage while it has room for a copy, else it
-//! waits, taken, for the network: the pressure episode. A unit waits for the
-//! network at most the episode's bound (`late`, the composition's policy
-//! value, as the engine's budget) from the episode's first wait, not
-//! extended by returns; after it, a unit the network has no room for is
-//! refused, counted. The episode ends once the ring was walked to its end
-//! with no unit waiting.
+//! waits, taken, behind what already waits, in the order of the moment each
+//! began to wait (`design/engine-model-rx.py`, `tasks/205`):
+//!
+//! - a newcomer from the ring keeps a place (lent or waiting) only while a
+//!   place stays free after it, the place the control plane passes
+//!   through; at the last place it is copied, when nothing waits and the
+//!   network can copy it, or refused ([`RxRefusal::NoPlaceToWait`]); a unit
+//!   the reorder lets go waits, or is lent, in the place it already holds;
+//! - a unit that waited `late` (the composition's policy value) from its
+//!   own moment is refused at the head ([`RxRefusal::Late`]), every late
+//!   head in one round;
+//! - a waiting unit of a link the controller holds is refused when it
+//!   reaches the head ([`RxRefusal::LinkHeld`]).
 
 use heapless::Deque;
 use oer_portable_time::{Duration, Instant};
@@ -111,8 +121,12 @@ pub struct EthernetSpan {
 pub enum RxRefusal {
     /// A data frame of a link the controller holds.
     LinkHeld,
-    /// The network had no room for it after the episode's bound.
-    Pressure,
+    /// The network had no room for it and keeping it would have taken the
+    /// last free place: the MAC acknowledged it, so it is lost to the peer.
+    NoPlaceToWait,
+    /// It waited for the network the composition's `late` from the moment
+    /// it began to wait.
+    Late,
     /// Protected data without the port's evidence of its integrity, or
     /// unprotected data other than EAPOL on a protected link.
     Unverified,
@@ -132,7 +146,8 @@ pub enum RxRefusal {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RxRefusals {
     pub link_held: u16,
-    pub pressure: u16,
+    pub no_place_to_wait: u16,
+    pub late: u16,
     pub unverified: u16,
     pub undecapsulable: u16,
     pub amsdu_too_long: u16,
@@ -145,7 +160,8 @@ impl RxRefusals {
     pub fn count(&mut self, reason: RxRefusal) {
         let count = match reason {
             RxRefusal::LinkHeld => &mut self.link_held,
-            RxRefusal::Pressure => &mut self.pressure,
+            RxRefusal::NoPlaceToWait => &mut self.no_place_to_wait,
+            RxRefusal::Late => &mut self.late,
             RxRefusal::Unverified => &mut self.unverified,
             RxRefusal::Undecapsulable => &mut self.undecapsulable,
             RxRefusal::AmsduTooLong => &mut self.amsdu_too_long,
@@ -154,18 +170,6 @@ impl RxRefusals {
         };
         *count = count.saturating_add(1);
     }
-}
-
-/// The pressure episode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Pressure {
-    /// No unit waits for the network.
-    Clear,
-    /// A unit has waited for the network since the instant.
-    Since(Instant),
-    /// The episode's bound passed: what the network has no room for is
-    /// refused until the ring was walked with no unit waiting.
-    Late,
 }
 
 /// Who a received frame is from, as the form's links know it.
@@ -235,10 +239,10 @@ pub(super) struct Reorder<
 
 /// The receive half's state while the data runs.
 pub(super) struct Receive<'id> {
-    /// Data units taken for the network, oldest first.
-    waiting: Deque<UnitHandle<'id>, PLACES>,
-    pressure: Pressure,
-    /// The episode's bound from its first wait: the composition's.
+    /// Data units taken for the network, each with the moment it began to
+    /// wait, oldest first.
+    waiting: Deque<(UnitHandle<'id>, Instant), PLACES>,
+    /// How long a unit may wait for the network: the composition's.
     late: Duration,
     /// The units the network holds: one more a loan, fewer by what a round
     /// reclaims.
@@ -261,11 +265,11 @@ impl<'id> Receive<'id> {
     pub(super) const fn new(late: Duration) -> Self {
         Self {
             waiting: Deque::new(),
-            pressure: Pressure::Clear,
             late,
             refusals: RxRefusals {
                 link_held: 0,
-                pressure: 0,
+                no_place_to_wait: 0,
+                late: 0,
                 unverified: 0,
                 undecapsulable: 0,
                 amsdu_too_long: 0,
@@ -289,17 +293,22 @@ impl<'id> Receive<'id> {
     }
 
     /// The receive half's state, for the engine's search: the places that
-    /// wait, the episode (not its instant: the search jumps to the bound),
-    /// the refusals.
+    /// wait, each with its moment after the head's (the search's clock moves
+    /// only to a head's bound), the refusals.
     #[cfg(test)]
     pub(super) fn key(&self) -> std::string::String {
-        let waiting: std::vec::Vec<u8> = self.waiting.iter().map(UnitHandle::place).collect();
-        let pressure = match self.pressure {
-            Pressure::Clear => "clear",
-            Pressure::Since(_) => "since",
-            Pressure::Late => "late",
-        };
-        std::format!("{waiting:?}|{pressure}|{:?}", self.refusals)
+        let head = self.waiting.front().map(|(_, since)| *since);
+        let waiting: std::vec::Vec<(u8, u64)> = self
+            .waiting
+            .iter()
+            .map(|(unit, since)| {
+                let after = head
+                    .and_then(|head| since.checked_duration_since(head))
+                    .map_or(0, |after| after.as_micros());
+                (unit.place(), after)
+            })
+            .collect();
+        std::format!("{waiting:?}|{:?}", self.refusals)
     }
 
     /// One round over `port`, the links as `links` names them.
@@ -327,13 +336,6 @@ impl<'id> Receive<'id> {
             Reordering::Station(reorder) => Some(reorder),
             Reordering::AccessPoint => None,
         };
-        if let Pressure::Since(since) = self.pressure
-            && now
-                .checked_duration_since(since)
-                .is_some_and(|waited| waited >= self.late)
-        {
-            self.pressure = Pressure::Late;
-        }
         let mut round = Round::open(port, now);
         self.lent = self
             .lent
@@ -351,16 +353,31 @@ impl<'id> Receive<'id> {
                 agreements.tick(now, &mut ());
             }
         }
-        // What waits goes first, in its order; a stopping data's goes back.
-        while let Some(handle) = self.waiting.pop_front() {
+        // What waits goes first, from its head: a stopping data's goes
+        // back; a held link's and a late one are refused; the rest is
+        // delivered while the network has room.
+        while let Some((handle, since)) = self.waiting.pop_front() {
             if flow == Flow::Stopping {
                 round.release(handle);
                 continue;
             }
-            match self.deliver(&mut round, handle, &mut room, network) {
+            if held(&round, &handle, &peer_of) {
+                round.release(handle);
+                self.refusals.count(RxRefusal::LinkHeld);
+                continue;
+            }
+            if now
+                .checked_duration_since(since)
+                .is_some_and(|waited| waited >= self.late)
+            {
+                round.release(handle);
+                self.refusals.count(RxRefusal::Late);
+                continue;
+            }
+            match self.deliver(&mut round, handle, &mut room, network, Taken::InPlace) {
                 Delivery::Done => {}
                 Delivery::Wait(handle) => {
-                    if let Err(handle) = self.waiting.push_front(handle) {
+                    if let Err((handle, _)) = self.waiting.push_front((handle, since)) {
                         // One was just taken from it: this does not happen.
                         round.release(handle);
                         self.refusals.count(RxRefusal::Place);
@@ -370,9 +387,18 @@ impl<'id> Receive<'id> {
             }
         }
         // Then what the reorder released, in its order.
-        self.ready(&mut round, &mut reorder, &mut room, network, told, &peer_of);
-        let held_back = !self.waiting.is_empty();
-        if !held_back {
+        self.ready(
+            &mut round,
+            &mut reorder,
+            &mut room,
+            network,
+            told,
+            &peer_of,
+            now,
+            None,
+        );
+        // The ring is read in every round, whatever waits.
+        {
             while let Some(unit) = round.staged() {
                 if flow == Flow::Stopping {
                     // A stopping data takes nothing: it goes back unread.
@@ -412,6 +438,14 @@ impl<'id> Receive<'id> {
                     Route::Control | Route::Network | Route::Eapol => {
                         let control = matches!(view.head, RxHead::Control(_));
                         let handle = unit.take();
+                        // The places taken before the frame joins: the
+                        // reorder's retained (a release keeps their
+                        // places), the lent and the waiting.
+                        let retained = reorder
+                            .as_mut()
+                            .map_or(0, |reorder| reorder.agreements.view().retained());
+                        let taken = self.newcomer::<P>(retained);
+                        let place = handle.place();
                         let delivered = match &mut reorder {
                             Some(reorder) => self.reordered(&mut round, handle, reorder, now),
                             None => Some(handle),
@@ -421,29 +455,34 @@ impl<'id> Receive<'id> {
                             Some(handle) if control => round.release(handle),
                             Some(handle) => {
                                 self.next_in_order(
-                                    &mut round, handle, &mut room, network, told, &peer_of,
+                                    &mut round, handle, &mut room, network, told, &peer_of, now,
+                                    taken,
                                 );
                             }
                             None => {}
                         }
-                        // What the frame released follows it.
-                        self.ready(&mut round, &mut reorder, &mut room, network, told, &peer_of);
+                        // What the frame released follows it (the frame
+                        // itself, when the reorder let it go with them).
+                        self.ready(
+                            &mut round,
+                            &mut reorder,
+                            &mut room,
+                            network,
+                            told,
+                            &peer_of,
+                            now,
+                            Some((place, taken)),
+                        );
                     }
                 }
             }
         }
         let rest = round.close();
-        // The episode ends once the ring holds nothing more and nothing
-        // waits (a held-back round leaves its units waiting).
-        if matches!(rest, PortRest::Signal) && self.waiting.is_empty() {
-            self.pressure = Pressure::Clear;
-        } else if !self.waiting.is_empty() && self.pressure == Pressure::Clear {
-            self.pressure = Pressure::Since(now);
-        }
-        let bound = match self.pressure {
-            Pressure::Since(since) => since.checked_add(self.late),
-            Pressure::Clear | Pressure::Late => None,
-        };
+        // The head's bound: the oldest waiting unit's moment and `late`.
+        let bound = self
+            .waiting
+            .front()
+            .and_then(|(_, since)| since.checked_add(self.late));
         // The reorder's gap and the agreements' inactivity wake too.
         let deadline = reorder
             .as_mut()
@@ -453,12 +492,30 @@ impl<'id> Receive<'id> {
             (at, None) => at,
             (None, deadline) => deadline,
         };
-        match (rest, held_back || !self.waiting.is_empty()) {
-            // Held back: the network's return or the bound wakes.
-            (_, true) => Rest::Wake(earliest(bound)),
-            (PortRest::Round, false) => Rest::Round,
-            (PortRest::At(at), false) => Rest::Wake(earliest(Some(at))),
-            (PortRest::Signal, false) => Rest::Wake(earliest(None)),
+        let soonest = |first: Option<Instant>, second: Option<Instant>| match (first, second) {
+            (Some(first), Some(second)) => Some(first.min(second)),
+            (first, None) => first,
+            (None, second) => second,
+        };
+        // What waits wakes at the network's return or at the head's bound.
+        match rest {
+            PortRest::Round => Rest::Round,
+            PortRest::At(at) => Rest::Wake(earliest(soonest(Some(at), bound))),
+            PortRest::Signal => Rest::Wake(earliest(bound)),
+        }
+    }
+
+    /// How a newcomer from the ring is taken: at the last free place it may
+    /// keep no place (`tasks/206`), so that a place stays free for the
+    /// control plane. `retained` are the reorder's.
+    fn newcomer<P: ReceivePort<'id>>(&self, retained: usize) -> Taken {
+        let kept = retained
+            .saturating_add(usize::from(self.lent))
+            .saturating_add(self.waiting.len());
+        if kept.saturating_add(1) >= P::STAGING {
+            Taken::LastPlace
+        } else {
+            Taken::Newcomer
         }
     }
 
@@ -536,6 +593,8 @@ impl<'id> Receive<'id> {
         network: &mut N,
         told: &mut C,
         peer_of: &F,
+        now: Instant,
+        newcomer: Option<(u8, Taken)>,
     ) where
         P: ReceivePort<'id>,
         N: Network<P::Memory, P::Lent>,
@@ -547,8 +606,15 @@ impl<'id> Receive<'id> {
             return;
         };
         let mut agreements = reorder.agreements.view();
+        // A unit the reorder lets go holds its place already, but for the
+        // newcomer of this round, which the reorder may let go itself (the
+        // frame that closes a hole).
         while let Some(handle) = agreements.pop_ready() {
-            self.next_in_order(round, handle, room, network, told, peer_of);
+            let taken = match newcomer {
+                Some((place, taken)) if place == handle.place() => taken,
+                _ => Taken::InPlace,
+            };
+            self.next_in_order(round, handle, room, network, told, peer_of, now, taken);
         }
     }
 
@@ -567,6 +633,8 @@ impl<'id> Receive<'id> {
         network: &mut N,
         told: &mut C,
         peer_of: &F,
+        now: Instant,
+        taken: Taken,
     ) where
         P: ReceivePort<'id>,
         N: Network<P::Memory, P::Lent>,
@@ -588,43 +656,45 @@ impl<'id> Receive<'id> {
             round.release(handle);
             return;
         }
-        let held = round
-            .unit(&handle)
-            .and_then(|view| match view.head {
-                RxHead::Frame(header) => peer_of(header),
-                RxHead::Control(_) => None,
-            })
-            .is_none_or(|from| from.carrying == Carrying::Held);
-        if held {
+        if held(round, &handle, peer_of) {
             round.release(handle);
             self.refusals.count(RxRefusal::LinkHeld);
             return;
         }
-        self.offer(round, handle, room, network);
+        self.offer(round, handle, room, network, now, taken);
     }
 
     /// A unit for the network in its order: behind a unit that waits it
     /// waits too (the room has two dimensions: a later unit could be lent
-    /// where the waiting one cannot be copied), else it is offered.
+    /// where the waiting one cannot be copied), else it is offered. A
+    /// newcomer at the last free place keeps no place: it is refused rather
+    /// than wait.
     fn offer<P, N>(
         &mut self,
         round: &mut Round<'_, 'id, P>,
         handle: UnitHandle<'id>,
         room: &mut Room,
         network: &mut N,
+        now: Instant,
+        taken: Taken,
     ) where
         P: ReceivePort<'id>,
         N: Network<P::Memory, P::Lent>,
     {
         let waits = if self.waiting.is_empty() {
-            match self.deliver(round, handle, room, network) {
+            match self.deliver(round, handle, room, network, taken) {
                 Delivery::Done => return,
                 Delivery::Wait(handle) => handle,
             }
         } else {
             handle
         };
-        if let Err(handle) = self.waiting.push_back(waits) {
+        if taken == Taken::LastPlace {
+            round.release(waits);
+            self.refusals.count(RxRefusal::NoPlaceToWait);
+            return;
+        }
+        if let Err((handle, _)) = self.waiting.push_back((waits, now)) {
             // A place a unit: the deque has one for each.
             round.release(handle);
             self.refusals.count(RxRefusal::Place);
@@ -639,6 +709,7 @@ impl<'id> Receive<'id> {
         handle: UnitHandle<'id>,
         room: &mut Room,
         network: &mut N,
+        taken: Taken,
     ) -> Delivery<'id>
     where
         P: ReceivePort<'id>,
@@ -657,9 +728,10 @@ impl<'id> Receive<'id> {
         }
         let msdus = &self.msdus;
         let single = msdus.len() == 1;
-        // Lend while the network has room to borrow, else copy while it has
-        // room to copy, else wait; past the bound, refuse.
-        if let (true, Some(lendable)) = (single, lendable)
+        // Lend while the network has room to borrow (a newcomer at the last
+        // place keeps none: not a loan), else copy while it has room to
+        // copy, else wait.
+        if let (true, Some(lendable), false) = (single, lendable, taken == Taken::LastPlace)
             && let Some(permit) = room.lend()
         {
             let Some(msdu) = msdus.first().copied() else {
@@ -700,13 +772,36 @@ impl<'id> Receive<'id> {
             round.release(handle);
             return Delivery::Done;
         }
-        if self.pressure == Pressure::Late {
-            round.release(handle);
-            self.refusals.count(RxRefusal::Pressure);
-            return Delivery::Done;
-        }
         Delivery::Wait(handle)
     }
+}
+
+/// How a data unit for the network holds its place.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Taken {
+    /// It held a place before this round: the reorder let it go, or it
+    /// waited.
+    InPlace,
+    /// A newcomer from the ring with a place free after it.
+    Newcomer,
+    /// A newcomer at the last free place: it keeps no place.
+    LastPlace,
+}
+
+/// Whether a unit is a held link's (or of no link): the controller holds
+/// it, and its data is refused.
+fn held<'id, P, F>(round: &Round<'_, 'id, P>, handle: &UnitHandle<'id>, peer_of: &F) -> bool
+where
+    P: ReceivePort<'id>,
+    F: Fn(&RxHeader) -> Option<RxPeer>,
+{
+    round
+        .unit(handle)
+        .and_then(|view| match view.head {
+            RxHead::Frame(header) => peer_of(header),
+            RxHead::Control(_) => None,
+        })
+        .is_none_or(|from| from.carrying == Carrying::Held)
 }
 
 /// Where a staged unit goes.

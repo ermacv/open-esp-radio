@@ -47,30 +47,39 @@ its own: every instant and every arena is its caller's. It holds today:
 
 The engine's receive half. Each section that touches received units
 (`Engine::received` at the ring's signal, `returned` when the network gave
-lent units back, `due` at the pressure episode's bound or the ring's
-continuation, and the data's stop) opens one round over the port's
-receive (`Round`) and closes it. A unit stays in the port's staging place
-from the ring's service to its return; the engine reads it there and
-routes it: a management frame and EAPOL to the controller, read by
-reference inside the round (`Told::frame`); a data frame of a linked peer
-to the network; anything else back to the ring at the round's close. A
+lent units back, `due` at a waiting unit's bound or the ring's
+continuation, a link's hold or release, and the data's stop) opens one
+round over the port's receive (`Round`) and closes it. A unit stays in the
+port's staging place from the ring's service to its return; the engine
+reads it there and routes it: a management frame and EAPOL to the
+controller, read by reference inside the round (`Told::frame`); a data
+frame of a linked peer to the network; anything else back to the ring at
+the round's close. The ring is read in every round: a management frame,
+EAPOL and a BlockAckReq pass at once, whatever waits for the network. A
 data unit for the network is decapsulated in its place once (its Ethernet
 addresses written before the EtherType of its LLC/SNAP header,
 `Round::write_addresses`), then lent to the network while it has room to
 borrow (`Network::room`, `Network::lent`), else copied into the network's
 storage while it has room for a copy (`Network::copied`; an A-MSDU's
-MSDUs are copied, at most `AMSDU_MSDUS`), else it waits, taken, for the
-network. A unit waits at most the episode's bound (`late`, a policy value
-the composition gives `Engine::new` beside its budget) from the episode's first wait,
-not extended by returns; after it, a unit the network has no room for is
-refused, and the episode ends once the ring was walked with no unit
-waiting. While a unit waits, the ring is not serviced. A data frame of a
+MSDUs are copied, at most `AMSDU_MSDUS`), else it waits, taken, behind
+what already waits, in the order of the moment each began to wait. A
+newcomer from the ring keeps a place (lent or waiting) only while a place
+stays free after it, the one the control plane passes through: at the
+last place it is copied, when nothing waits and the network can copy it,
+or refused for no place to wait; a unit the reorder lets go waits, or is
+lent, in the place it already holds. A unit that waited `late` (a policy
+value the composition gives `Engine::new` beside its budget) from its own
+moment is refused at the head, every late head in one round; a waiting
+unit of a held link is refused when it reaches the head. A data frame of a
 held link, protected data without the port's evidence of its integrity,
 and data that does not decapsulate are refused; the refusals are counted
-by reason (`FlowingData::refusals`). After the data's stop nothing is
-delivered: what waited and what the ring stages go back unread, and the
-rights come home once nothing waits; the units the network holds are the
-installation machine's to wait for (`UnitsHome`).
+by reason (`FlowingData::refusals`): no place to wait and late each have
+their own count. After the data's stop nothing is delivered: what waited
+and what the ring stages go back unread, and the rights come home once
+nothing waits; the units the network holds are the installation machine's
+to wait for (`UnitsHome`). The rule is `design/engine-model-rx.py`'s, and
+the crate's search over the real engine checks its properties by the same
+numbers.
 
 A station's receive agreements and their reorder are `upper-mac`'s owner
 (`RxBlockAckStorage`), held in the running data in the place of the

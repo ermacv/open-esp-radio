@@ -1,17 +1,20 @@
 //! Every order of a station engine's receive sections over the model port,
-//! as `design/engine-model-rx.py` searches its model (C1: no receive
-//! agreement, so no reorder): the ring's signal with a data or a
-//! management frame arrived, the network's return of a lent unit, its copy
-//! room changed, the episode's bound, the data's stop, a round owed.
+//! as `design/engine-model-rx.py` searches its model: the ring's signal
+//! with a data frame, an A-MSDU, EAPOL or a management frame arrived, the network's return of a lent unit, its copy room
+//! changed, the reorder's gap, the head's bound, the controller's hold of
+//! the link and its release, the data's stop, a round owed.
 //!
 //! The network lends one unit at most and copies one frame a round while
 //! its copy room is open; the model port has eight places. The world keeps
 //! its own record: what arrived, what the network got and gave back, what
-//! the controller read, when the first unit began to wait. Properties are
+//! the controller read, the moment each unit began to wait. Properties are
 //! read through the engine's public API and what the model port and the
-//! test's network show. States are merged by their whole key, the
-//! engine's and the model port's included; the episode's instant is left
-//! out: the search reaches the bound only by its own move.
+//! test's network show; each is named by the model's number (`P1` …
+//! `P14`), and the model's properties without a twin here are named in
+//! the pull request. States are merged by their whole key, the engine's
+//! and the model port's included; the waiting units' moments enter it
+//! after the head's, and the search reaches a head's bound only by its own
+//! move.
 
 use super::*;
 use std::string::String;
@@ -35,6 +38,8 @@ pub(super) struct Bounds {
     pub frees: usize,
     /// Reorder gaps that time out.
     pub gaps: usize,
+    /// Holds of the link by its controller (each may be released).
+    pub holds: usize,
 }
 
 /// Whether the world's link has a receive agreement on TID 0.
@@ -47,13 +52,13 @@ pub(super) enum Agreement {
 
 /// The frames that may arrive without an agreement, the first `units` of
 /// them, a kind at a time in their order: the list C1 searched, with an
-/// A-MSDU (which the network cannot borrow) second.
+/// A-MSDU (which the network cannot borrow) second and EAPOL fifth.
 const PLAIN: [(Kind, u16); 8] = [
     (Kind::Data, 0),
     (Kind::Amsdu, 0),
     (Kind::Data, 0),
     (Kind::Management, 0),
-    (Kind::Data, 0),
+    (Kind::Eapol, 0),
     (Kind::Data, 0),
     (Kind::Management, 0),
     (Kind::Data, 0),
@@ -62,8 +67,8 @@ const PLAIN: [(Kind, u16); 8] = [
 /// The frames that may arrive under an agreement, the first `units` of
 /// them, in any order, each with its number: one before the first, an
 /// A-MSDU, the first, a management frame, a retry of a number sent, then
-/// a gap (the model's list, ordered so that each kind is within the
-/// ordinary bounds).
+/// a gap (the model's list, ordered so that each
+/// kind is within the ordinary bounds).
 const AGREED: [(Kind, u16); 8] = [
     (Kind::Data, 1),
     (Kind::Amsdu, 2),
@@ -80,6 +85,8 @@ enum Kind {
     Data,
     /// A data frame carrying an A-MSDU of two MSDUs: copied, never lent.
     Amsdu,
+    /// EAPOL of the linked peer: the controller's.
+    Eapol,
     Management,
 }
 
@@ -95,12 +102,24 @@ enum Move {
     /// The network consumed a copy: its storage takes one more, and it
     /// says so (its wake).
     Frees,
-    /// The episode's bound comes.
+    /// The head's bound comes: the clock moves to the oldest waiting
+    /// unit's moment and `late`.
     Late,
+    /// The controller holds the link.
+    Hold,
+    /// The controller lets it go again.
+    Release,
     /// The data's stop.
     Stop,
     /// A round owed.
     Round,
+}
+
+/// The link as the world's controller left it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Link {
+    Carrying,
+    Held,
 }
 
 struct World<'id> {
@@ -121,10 +140,15 @@ struct World<'id> {
     frames_read: usize,
     /// Lent units given back.
     returned: usize,
+    /// The deliveries the last check saw.
+    delivered_seen: usize,
     /// The stop asked.
     stopped: bool,
-    /// The micros of the first wait of the episode, as the world saw it.
-    first_wait: Option<u64>,
+    /// Whether the controller holds the link.
+    link: Link,
+    /// The world's record of each unit waiting for the network: its id and
+    /// the micros it began to wait, kept apart from the engine's.
+    waits: Vec<(u8, u64)>,
     owed: Rest,
     problems: Vec<&'static str>,
 }
@@ -158,8 +182,10 @@ impl<'id> World<'id> {
             received_read: 0,
             frames_read: 0,
             returned: 0,
+            delivered_seen: 0,
             stopped: false,
-            first_wait: None,
+            link: Link::Carrying,
+            waits: Vec::new(),
             owed: Rest::Wake(None),
             problems: Vec::new(),
         }
@@ -289,6 +315,12 @@ impl<'id> World<'id> {
         if self.waiting() > 0 && !self.stopped {
             moves.push(Move::Late);
         }
+        if self.left.holds > 0 && self.link == Link::Carrying && !self.stopped {
+            moves.push(Move::Hold);
+        }
+        if self.link == Link::Held && !self.stopped {
+            moves.push(Move::Release);
+        }
         if !self.stopped && self.left.stops > 0 {
             moves.push(Move::Stop);
         }
@@ -299,7 +331,10 @@ impl<'id> World<'id> {
     }
 
     fn apply(&mut self, action: Move) {
-        let pressure = self.refusals().pressure;
+        let refused_before = self.refusals();
+        let waits_before = self.waits.clone();
+        let link_before = self.link;
+        let retained_before = self.retained();
         let held_before = self.held_units();
         let waiting_before = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
         let delivered_before = self.delivered.len();
@@ -313,11 +348,13 @@ impl<'id> World<'id> {
                 self.arrived.push(index);
                 let id = self.arrived.len() as u8;
                 let (kind, sequence) = self.kinds()[index];
+                let eapol = oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
                 let frame = match (kind, self.agreement) {
                     (Kind::Data, Agreement::Tid0) => receive::qos_data(sequence, id),
                     (Kind::Data, Agreement::None) => {
                         receive::data(u16::from(id), receive::IPV4, id)
                     }
+                    (Kind::Eapol, _) => receive::data(u16::from(id), eapol, id),
                     (Kind::Amsdu, _) => receive::amsdu_numbered(sequence, &[id, id]),
                     (Kind::Management, _) => receive::beacon(u16::from(id)),
                 };
@@ -352,11 +389,36 @@ impl<'id> World<'id> {
                 Some(self.engine.due(&mut self.around.turn()))
             }
             Move::Late => {
-                let bound = self.first_wait.map_or(0, |first| first + LATE.as_micros());
-                if bound > self.around.micros {
-                    self.around.micros = bound;
+                // The clock moves to the head's bound, by the world's record.
+                let bound = self
+                    .waits
+                    .iter()
+                    .map(|(_, since)| since + LATE.as_micros())
+                    .min()
+                    .unwrap_or(0);
+                if bound > self.around.micros + 1 {
+                    self.around.micros = bound - 1;
                 }
                 Some(self.engine.due(&mut self.around.turn()))
+            }
+            Move::Hold => {
+                self.left.holds -= 1;
+                self.link = Link::Held;
+                let around = &mut self.around;
+                let mut rest = Rest::Wake(None);
+                linked(&mut self.engine, |peer| {
+                    rest = peer.hold(&mut around.turn())
+                });
+                Some(rest)
+            }
+            Move::Release => {
+                self.link = Link::Carrying;
+                let around = &mut self.around;
+                let mut rest = Rest::Wake(None);
+                linked(&mut self.engine, |peer| {
+                    rest = peer.release(&mut around.turn())
+                });
+                Some(rest)
             }
             Move::Stop => {
                 self.left.stops -= 1;
@@ -384,17 +446,36 @@ impl<'id> World<'id> {
         if self.agreement == Agreement::Tid0 {
             self.advance_start(&held_before, waiting_before, delivered_before);
         }
-        // While a unit waits for the network, the ring is not serviced: a
-        // unit that waited before the step and still waits after it says
-        // the round was held back.
-        let still = self
+        let _ = (waited, services);
+        self.record_waits();
+        // P9: data that arrives while the link is held is refused, never
+        // kept for the reorder.
+        if link_before == Link::Held
+            && self.link == Link::Held
+            && matches!(action, Move::Arrives(index) if matches!(self.kinds()[index].0, Kind::Data | Kind::Amsdu))
+            && self.retained() > retained_before
+        {
+            self.problems
+                .push("P9 data of a held link was kept for the reorder");
+        }
+        self.check(action, refused_before, &waits_before, link_before);
+    }
+
+    /// The world's record of the waiting units: one that began to wait in
+    /// this step takes the step's micros; one that left is dropped.
+    fn record_waits(&mut self) {
+        let now = self.around.micros;
+        let ids: Vec<u8> = self
             .waiting_run()
             .iter()
-            .any(|place| waited.contains(place));
-        if still && self.around.port.counts().services > services && !self.stopped {
-            self.problems.push("a held-back engine serviced the ring");
+            .filter_map(|place| self.around.port.place_bytes(*place)?.last().copied())
+            .collect();
+        self.waits.retain(|(id, _)| ids.contains(id));
+        for id in ids {
+            if !self.waits.iter().any(|(seen, _)| *seen == id) {
+                self.waits.push((id, now));
+            }
         }
-        self.check(action, pressure);
     }
 
     fn refusals(&mut self) -> RxRefusals {
@@ -457,9 +538,16 @@ impl<'id> World<'id> {
         self.frames_read = self.around.told.frames.len();
     }
 
-    fn check(&mut self, action: Move, pressure_before: u16) {
+    fn check(
+        &mut self,
+        action: Move,
+        before: RxRefusals,
+        waits_before: &[(u8, u64)],
+        link_before: Link,
+    ) {
         let now = self.around.micros;
         let waiting = self.waiting();
+        let refused = self.refusals();
         if self.around.net.lent.len() > usize::from(LEND) {
             self.problems.push("the network holds more than its limit");
         }
@@ -478,26 +566,104 @@ impl<'id> World<'id> {
         let mut order = order;
         order.dedup();
         if order.windows(2).any(|pair| pair[0] >= pair[1]) {
-            self.problems.push("data left out of its order");
+            self.problems.push("P3 data left out of its order");
         }
-        if self.agreement == Agreement::Tid0 && !self.stopped && waiting == 0 {
-            let held = self.around.port.places_held();
-            if held >= oer_protocols_ieee80211_testing_model::MODEL_PLACES {
+        let places = oer_protocols_ieee80211_testing_model::MODEL_PLACES;
+        // P6 (and P10's place): while the data flows a place is free when a
+        // round closes, the one the control plane and the hole's frame pass.
+        if !self.stopped && self.around.port.places_held() >= places {
+            self.problems.push("P6 a round closed with no place free");
+        }
+        // P5: the ring is serviced in every round that finds a free place.
+        if !self.stopped
+            && self.owed != Rest::Round
+            && self.around.port.ring_len() > 0
+            && self.around.port.places_held() < places
+        {
+            self.problems
+                .push("P5 a round found a free place and did not service the ring");
+        }
+        // P4: every management frame and EAPOL that left the ring while the
+        // data flows was read in its round (without an agreement EAPOL is
+        // read at once; under one it takes its number first).
+        if !self.stopped {
+            let staged = self
+                .arrived
+                .len()
+                .saturating_sub(self.around.port.ring_len());
+            let controls = self.arrived[..staged]
+                .iter()
+                .filter(|index| {
+                    matches!(
+                        (self.kinds()[**index].0, self.agreement),
+                        (Kind::Management, _) | (Kind::Eapol, Agreement::None)
+                    )
+                })
+                .count();
+            if self.around.told.frames.len() < controls {
                 self.problems
-                    .push("the frame that closes the hole has no place");
+                    .push("P4 a management frame or EAPOL left unread while the data flows");
             }
         }
+        // P7: each refusal has its reason.
+        let late = usize::from(refused.late.saturating_sub(before.late));
+        if late > 0 {
+            let due = waits_before
+                .iter()
+                .filter(|(id, since)| {
+                    since + LATE.as_micros() <= now && !self.waits.iter().any(|(w, _)| w == id)
+                })
+                .count();
+            if due < late {
+                self.problems
+                    .push("P7 a unit was refused late before it waited LATE from its own moment");
+            }
+        }
+        if refused.link_held > before.link_held
+            && link_before == Link::Carrying
+            && self.link == Link::Carrying
+        {
+            self.problems
+                .push("P7 a unit was refused for a hold that was not");
+        }
+        if refused.no_place_to_wait > before.no_place_to_wait
+            && self.around.port.places_held() + 1 < places
+        {
+            self.problems
+                .push("P7 a unit was refused for no place to wait with places free");
+        }
+        // P8: no unit that waited `late` from its own moment still waits.
+        if !self.stopped
+            && self
+                .waits
+                .iter()
+                .any(|(_, since)| since + LATE.as_micros() <= now)
+        {
+            self.problems
+                .push("P8 a unit that waited LATE from its own moment still waits");
+        }
+        // P9: nothing is delivered while the link is held.
+        if link_before == Link::Held
+            && self.link == Link::Held
+            && self.delivered.len() > self.delivered_seen
+        {
+            self.problems
+                .push("P9 data was delivered while the link is held");
+        }
+        self.delivered_seen = self.delivered.len();
         if self.stopped && self.retained() > 0 {
             self.problems
-                .push("the data stopped with the reorder's units held");
+                .push("P13 the data stopped with the reorder's units held");
         }
-        // A retained unit that follows in order is released at once: with
-        // nothing waiting for the network and nothing refused for pressure,
-        // no unit the engine holds carries the next number.
+        // P12: a retained unit that follows in order is released at once:
+        // with nothing waiting for the network and nothing refused, no unit
+        // the engine holds carries the next number.
         if self.agreement == Agreement::Tid0
             && !self.stopped
             && waiting == 0
-            && self.refusals().pressure == 0
+            && refused.no_place_to_wait == 0
+            && refused.late == 0
+            && refused.link_held == 0
         {
             let next = order.last().map_or(0, |last| last + 1);
             let held = self.waiting_places();
@@ -508,7 +674,7 @@ impl<'id> World<'id> {
             });
             if follows {
                 self.problems
-                    .push("a held unit follows in order and was not released");
+                    .push("P12 a held unit follows in order and was not released");
             }
         }
         // A retry of a frame the reorder holds goes back: no two units the
@@ -530,36 +696,24 @@ impl<'id> World<'id> {
                     .push("a retry of a frame already held is held too");
             }
         }
-        if self.refusals().pressure > pressure_before {
-            let late = self
-                .first_wait
-                .is_some_and(|first| now >= first + LATE.as_micros());
-            if !late {
-                self.problems
-                    .push("a unit was refused for pressure before the bound");
-            }
-        }
-        // The episode: from the first wait, not extended by returns; it
-        // ends once the ring was walked with nothing waiting.
-        if waiting == 0 {
-            if !self.stopped && self.around.port.ring_len() == 0 {
-                self.first_wait = None;
-            }
-        } else if self.first_wait.is_none() {
-            self.first_wait = Some(now);
-        }
         if waiting > 0 && !self.stopped {
+            // P14: the head's bound is its own moment and `late`; a reorder
+            // that retains may wake sooner, by its gap.
             let bound = self
-                .first_wait
-                .map(|first| Instant::from_micros(first + LATE.as_micros()));
+                .waits
+                .iter()
+                .map(|(_, since)| Instant::from_micros(since + LATE.as_micros()))
+                .min();
             match (self.owed, bound) {
-                (Rest::Wake(Some(at)), Some(bound)) if at == bound => {}
+                (Rest::Wake(Some(at)), Some(bound))
+                    if at == bound || (self.retained() > 0 && at < bound) => {}
+                (Rest::Round, _) => {}
                 (Rest::Wake(Some(_)), _) => {
-                    self.problems.push("the episode's bound moved");
+                    self.problems.push("P14 the head's bound is not its own");
                 }
                 _ => self
                     .problems
-                    .push("a unit waits for the network and no bound is armed"),
+                    .push("P14 a unit waits for the network and no bound is armed"),
             }
             // The first unit that waits: without an agreement the earliest
             // held (its tag is its id), under one the held unit of the
@@ -597,9 +751,10 @@ impl<'id> World<'id> {
         // A unit is in one place: the ring, a place, or gone (copied, read,
         // refused, given back by the network).
         let refused = {
-            let r = self.refusals();
+            let r = refused;
             usize::from(r.link_held)
-                + usize::from(r.pressure)
+                + usize::from(r.no_place_to_wait)
+                + usize::from(r.late)
                 + usize::from(r.unverified)
                 + usize::from(r.undecapsulable)
                 + usize::from(r.amsdu_too_long)
@@ -627,14 +782,14 @@ impl<'id> World<'id> {
             + refused
             + self.returned;
         if !self.stopped && accounted != self.arrived.len() {
-            self.problems.push("a unit is in two places or in none");
+            self.problems.push("P1 a unit is in two places or in none");
         }
         if self.stopped && accounted > self.arrived.len() {
             self.problems.push("a unit is in two places");
         }
         if self.stopped && action == Move::Stop && waiting > 0 {
             self.problems
-                .push("the data stopped with units waiting for the network");
+                .push("P13 the data stopped with units waiting for the network");
         }
         if self.stopped && waiting > 0 {
             self.problems
@@ -646,19 +801,34 @@ impl<'id> World<'id> {
             let work = self.around.port.ring_len() > 0 || waiting > 0;
             let wake = matches!(self.owed, Rest::Wake(Some(_))) || !self.around.net.lent.is_empty();
             if work && !wake {
-                self.problems.push("work is left and nothing wakes for it");
+                self.problems
+                    .push("P14 work is left and nothing wakes for it");
             }
             let before = self.key();
             let again = self.engine.received(&mut self.around.turn());
             if self.key() != before || again == Rest::Round {
-                self.problems.push("work waits for a call nobody makes");
+                self.problems.push("P14 work waits for a call nobody makes");
             }
         }
     }
 
+    /// The world's waiting moments after the oldest's, for the key.
+    fn relative_waits(&self) -> Vec<(u8, u64)> {
+        let first = self
+            .waits
+            .iter()
+            .map(|(_, since)| *since)
+            .min()
+            .unwrap_or(0);
+        self.waits
+            .iter()
+            .map(|(id, since)| (*id, since - first))
+            .collect()
+    }
+
     fn key(&mut self) -> String {
         std::format!(
-            "{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{}|{}|{}|{}",
+            "{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{}|{}|{}|{}",
             (
                 self.left.units,
                 self.left.returns,
@@ -671,7 +841,7 @@ impl<'id> World<'id> {
             self.delivered,
             self.returned,
             self.stopped,
-            self.first_wait.is_some(),
+            (self.link, self.left.holds, self.relative_waits()),
             self.owed,
             self.around.net.copy_room,
             self.around.net.lent.len(),
@@ -772,6 +942,7 @@ fn every_order_of_the_receive_sections_keeps_its_properties() {
             stops: 1,
             frees: 1,
             gaps: 0,
+            holds: 1,
         },
         Agreement::None,
     );
@@ -788,6 +959,7 @@ fn every_order_under_a_receive_agreement_keeps_its_properties() {
             stops: 1,
             frees: 1,
             gaps: 1,
+            holds: 1,
         },
         Agreement::Tid0,
     );
@@ -805,6 +977,7 @@ fn every_receive_order_at_the_mutants_bounds() {
             stops: 1,
             frees: 2,
             gaps: 0,
+            holds: 1,
         },
         Agreement::None,
     );
@@ -821,6 +994,7 @@ fn every_order_under_a_receive_agreement_at_the_mutants_bounds() {
             stops: 1,
             frees: 1,
             gaps: 1,
+            holds: 1,
         },
         Agreement::Tid0,
     );

@@ -223,13 +223,13 @@ fn every_staged_unit_is_routed_once() {
     });
 }
 
-/// The deleted actor's `the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked`,
-/// with the copy: above the lend limit a unit is copied while the network
-/// has room to copy; with room for neither it waits, the ring with it, and
-/// the episode runs from the first wait: a return does not end or extend
-/// it, and at its bound what has no room is refused and the ring walked.
+/// Above the lend limit a unit is copied while the network has room to
+/// copy; with room for neither it waits, and the ring is read on behind it
+/// (a beacon after it is read in its round). Each unit waits from its own
+/// moment: a return does not move it, and at the head's bound the head is
+/// refused late while a younger unit waits on.
 #[test]
-fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
+fn above_the_lend_limit_a_unit_is_copied_then_waits_from_its_own_moment() {
     running::<STATION_SINGLES, 0, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
@@ -249,34 +249,155 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
         assert_eq!(around.told.frames, [(Some(0), beacon(9))]);
         let bound = |start: u64| Instant::from_micros(start).checked_add(LATE).unwrap();
         assert_eq!(rest, Rest::Wake(Some(bound(start))));
-        // The network consumed the copy: its room for one is back, 3 goes,
-        // and the episode ends.
+        // The network consumed the copy: its room for one is back, 3 goes.
         around.net.copy_room = 1;
         assert_eq!(engine.returned(&mut around.turn()), Rest::Wake(None));
         assert_eq!(around.net.received[2], Got::Copied(ethernet(IPV4, 3)));
-        // No room to copy now: 4 and 5 wait.
+        // No room to copy now: 4 waits from its moment.
         around.port.land(&data(4, IPV4, 4), meta());
-        around.port.land(&data(5, IPV4, 5), meta());
-        let start = around.micros + 1;
+        let four = around.micros + 1;
         assert_eq!(
             engine.received(&mut around.turn()),
-            Rest::Wake(Some(bound(start)))
+            Rest::Wake(Some(bound(four)))
         );
-        // The network gives 1 back: 4 is lent, 5 still waits, and the
-        // bound stays where the first wait put it.
+        // Later, 5 waits behind it from its own moment; a beacon landed
+        // with it is read in the same round, past what waits.
+        around.pass(LATE.as_micros() / 2);
+        around.port.land(&data(5, IPV4, 5), meta());
+        around.port.land(&beacon(10), meta());
+        let five = around.micros + 1;
+        assert_eq!(
+            engine.received(&mut around.turn()),
+            Rest::Wake(Some(bound(four)))
+        );
+        assert_eq!(around.told.frames[1], (Some(0), beacon(10)));
+        // The network gives 1 back: 4 is lent; the head is 5, and the bound
+        // is its own.
         around.net.lent.clear();
         assert_eq!(
             engine.returned(&mut around.turn()),
-            Rest::Wake(Some(bound(start)))
+            Rest::Wake(Some(bound(five)))
         );
         assert_eq!(around.net.received.len(), 4);
-        // At the bound: 5 has no room and is refused; the ring is walked.
+        // At 5's bound: it has no room and is refused late.
         around.pass(LATE.as_micros());
         assert_eq!(engine.due(&mut around.turn()), Rest::Wake(None));
-        assert_eq!(refusals(&mut engine).pressure, 1);
+        assert_eq!(
+            refusals(&mut engine),
+            RxRefusals {
+                late: 1,
+                ..RxRefusals::default()
+            }
+        );
         assert_eq!(around.port.places_held(), 1, "4, lent");
         assert_eq!(around.port.ring_len(), 0);
     });
+}
+
+/// A newcomer that would take the last free place keeps none: it is
+/// refused for no place to wait, and the place stays for the control
+/// plane, which a later round reads through.
+#[test]
+fn a_newcomer_at_the_last_free_place_is_refused_and_the_place_stays_free() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.net.lend_limit = 1;
+        around.net.copy_room = 0;
+        // Eight places: 1 lent, 2 to 7 wait, 8 would take the last.
+        for tag in 1..=8 {
+            around.port.land(&data(u16::from(tag), IPV4, tag), meta());
+        }
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.net.received, [Got::Lent(0)]);
+        assert_eq!(around.port.places_held(), 7, "1 lent and six waiting");
+        assert_eq!(
+            refusals(&mut engine),
+            RxRefusals {
+                no_place_to_wait: 1,
+                ..RxRefusals::default()
+            }
+        );
+        // The free place takes a beacon, read at once.
+        around.port.land(&beacon(9), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.told.frames, [(Some(0), beacon(9))]);
+        // Room to copy: what waits goes first, in its order, and frees its
+        // places.
+        around.net.copy_room = 6;
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.net.received.len(), 7);
+        assert_eq!(around.port.places_held(), 1, "1, lent");
+    });
+}
+
+/// Two links of an access point: a held client's unit in the middle of the
+/// queue is refused when it reaches the head, the other's are delivered in
+/// order, and a late head of one does not refuse the other's younger unit.
+#[test]
+fn a_held_clients_unit_leaves_at_the_head_and_the_others_go_in_order() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
+        let mut around = access_point(run, &mut engine);
+        around.net.lend_limit = 1;
+        around.net.copy_room = 0;
+        let from = |client: [u8; 6], tag: u8| {
+            let mut to_ds = data(u16::from(tag), IPV4, tag);
+            to_ds[1] = 0x01;
+            to_ds[4..10].copy_from_slice(&ACCESS_POINT_ADDRESS);
+            to_ds[10..16].copy_from_slice(&client);
+            to_ds[16..22].copy_from_slice(&SOURCE);
+            to_ds
+        };
+        // B1 lent; B2, A3 and B4 wait in that order.
+        for (client, tag) in [(CLIENT_B, 1), (CLIENT_B, 2), (CLIENT_A, 3), (CLIENT_B, 4)] {
+            around.port.land(&from(client, tag), meta());
+        }
+        let _ = engine.received(&mut around.turn());
+        let mut tags = std::vec![lent_tag(&around)];
+        // The controller holds client A.
+        {
+            let mut flowing = ap_flowing(&mut engine);
+            let PeerPlace::Linked(mut peer) = flowing.peer(Peer::new(0).unwrap()) else {
+                panic!("client A is linked");
+            };
+            let _ = peer.hold(&mut around.turn());
+        }
+        // Each return lets one go: B2, then A3 refused at the head and B4.
+        for _ in 0..2 {
+            around.net.lent.clear();
+            let _ = engine.returned(&mut around.turn());
+            tags.push(lent_tag(&around));
+        }
+        assert_eq!(tags, [1, 2, 4], "B in order, A3 refused before B4");
+        assert_eq!(refusals_ap(&mut engine).link_held, 1);
+        // B5 waits; later B6 waits behind it; at B5's bound only B5 is late.
+        around.port.land(&from(CLIENT_B, 5), meta());
+        let _ = engine.received(&mut around.turn());
+        around.pass(LATE.as_micros() / 2);
+        around.port.land(&from(CLIENT_B, 6), meta());
+        let _ = engine.received(&mut around.turn());
+        around.pass(LATE.as_micros() / 2);
+        let _ = engine.due(&mut around.turn());
+        assert_eq!(refusals_ap(&mut engine).late, 1, "B5 alone");
+        around.net.lent.clear();
+        let _ = engine.returned(&mut around.turn());
+        assert_eq!(lent_tag(&around), 6);
+    });
+}
+
+fn refusals_ap<const PEERS: usize, const POOL: usize>(
+    engine: &mut ApEngine<'_, PEERS, POOL>,
+) -> RxRefusals {
+    ap_flowing(engine).refusals()
+}
+
+/// The tag of the unit the network holds last: its frame's last octet.
+fn lent_tag<const SINGLES: usize, const DATA: usize>(around: &Around<'_, SINGLES, DATA>) -> u8 {
+    let (unit, span) = around.net.lent.last().expect("a unit is lent");
+    let bytes = around.port.place_bytes(unit.place()).unwrap();
+    let end = usize::from(span.offset) + usize::from(span.length);
+    bytes[end - 1]
 }
 
 /// The deleted actor's `msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order`:
@@ -310,11 +431,17 @@ fn refusals_are_counted_by_reason() {
         );
         assert!(around.net.received.is_empty());
         let mut saturated = RxRefusals {
-            pressure: u16::MAX,
+            no_place_to_wait: u16::MAX,
+            late: u16::MAX - 1,
             ..RxRefusals::default()
         };
-        saturated.count(RxRefusal::Pressure);
-        assert_eq!(saturated.pressure, u16::MAX);
+        saturated.count(RxRefusal::NoPlaceToWait);
+        saturated.count(RxRefusal::Late);
+        saturated.count(RxRefusal::Late);
+        assert_eq!(
+            (saturated.no_place_to_wait, saturated.late),
+            (u16::MAX, u16::MAX)
+        );
     });
 }
 
@@ -662,6 +789,47 @@ fn the_reorder_keeps_a_place_for_the_frame_that_closes_its_hole() {
         around.port.land(&qos_data(101, 101), meta());
         let _ = engine.received(&mut around.turn());
         assert_eq!(&tags(&around)[..3], [100, 101, 102]);
+    });
+}
+
+/// P10 of the model (`tasks/205`, P2): the frame that closes the hole
+/// arrives at the last free place with a full network. It closes the hole
+/// in the reorder and is itself refused for no place to wait; what it lets
+/// go waits in the places it holds, and goes in order at the network's
+/// return.
+#[test]
+fn the_holes_frame_at_the_last_place_moves_the_window_and_is_refused() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.net.lend_limit = 1;
+        around.net.copy_room = 0;
+        around.port.land(&qos_data(100, 100), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.net.lent.len(), 1);
+        // 102 to 107 retained: with 100 lent, one place is left.
+        for sequence in 102..108 {
+            around
+                .port
+                .land(&qos_data(sequence, sequence as u8), meta());
+            let _ = engine.received(&mut around.turn());
+        }
+        around.port.land(&qos_data(101, 101), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(
+            refusals(&mut engine),
+            RxRefusals {
+                no_place_to_wait: 1,
+                ..RxRefusals::default()
+            },
+            "101 at the last place"
+        );
+        assert_eq!(around.port.places_held(), 7, "100 lent; 102 to 107 wait");
+        // The return: 102 goes, 101 does not come again.
+        around.net.lent.clear();
+        let _ = engine.returned(&mut around.turn());
+        assert_eq!(lent_tag(&around), 102);
     });
 }
 
