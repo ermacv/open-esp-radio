@@ -85,7 +85,6 @@ impl MockMmio {
     pub(super) fn set_tx_completion(&mut self, queue: u8, completion: MacTxCompletionObservation) {
         self.tx_completions[usize::from(queue)] = Some(completion);
     }
-
 }
 
 /// A walker model that behaves as plain registers: a rung doorbell reads
