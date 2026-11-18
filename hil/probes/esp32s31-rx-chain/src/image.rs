@@ -385,9 +385,12 @@ fn direct_future(
 ) -> DirectRun {
     async move {
         use oer_chips_esp32s31_hal::radio::ieee80211::{
-            client::WifiCold, init::MacColdStartConfig,
+            client::{WifiClocked, WifiCold},
+            init::{MacColdStartConfig, initialize_wifi_mac},
         };
-        use oer_chips_esp32s31_radio_client::wifi::{WifiJoin, WifiTrack};
+        use oer_chips_esp32s31_radio_client::wifi::{
+            MacColdSources, WifiJoin, WifiMacReset, WifiResetMac, WifiTrack,
+        };
         use oer_chips_esp32s31_radio_system::ClientBackend;
         let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
             .map_err(|_| oer_portable_diagnostics::name!("direct-channel"; 32))?;
@@ -422,18 +425,40 @@ fn direct_future(
                 wifi: joined.wifi,
                 channel,
                 tx_ceiling,
-                mac: MacColdStartConfig {
-                    handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
-                    station_address: station,
-                    access_point_address: ap,
-                },
-                slow_clock: platform.mac_slow_clock_calibration(),
-                delay_random,
             },
         )?
         .await
         .map_err(|_| oer_portable_diagnostics::name!("direct-track"; 32))?;
+        // The block's reset is the radio system's; the cold preparation is
+        // this owner's, as the backend's start takes the block.
         let (access, clocks) = tracked.wifi.into_running();
+        let WifiMacReset { clocks, reset, pti } = backend
+            .reset_mac(WifiResetMac {
+                clocks,
+                channel: channel.channel().channel(),
+            })
+            .await;
+        let mut clocked = WifiClocked::from_running(access, clocks);
+        let mut sources = MacColdSources {
+            pti,
+            tx_power: tracked.report.tx_power,
+            slow_clock: platform.mac_slow_clock_calibration(),
+            delay_random,
+        };
+        initialize_wifi_mac(
+            reset,
+            &mut sources,
+            &mut clocked.cold_mac_hal(),
+            &EmbassyClock,
+            MacColdStartConfig {
+                handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
+                station_address: station,
+                access_point_address: ap,
+            },
+        )
+        .await
+        .map_err(|_| oer_portable_diagnostics::name!("direct-prepare-mac"; 32))?;
+        let (access, clocks) = clocked.into_running();
         Ok(DirectOutput {
             access,
             _clocks: clocks,

@@ -338,16 +338,20 @@ fn every_abandoned_radio_kind_and_client_slot_is_distinct_and_keeps_its_epoch() 
 #[test]
 fn a_tracked_members_mac_reset_returns_the_member_and_the_payload_and_the_cell() {
     let (cell, inbox, mint) = client();
-    let (cell, answer) = complete(cell.reset_mac(mint.track(mint.untracked()), 61), inbox, |request| {
-        let Request::ResetMac(member, lent, responder) = request else {
-            panic!("reset_mac");
-        };
-        assert_eq!(lent, 61);
-        responder.answer(MacResetAnswer {
-            member,
-            payload: 62,
-        });
-    });
+    let (cell, answer) = complete(
+        cell.reset_mac(mint.track(mint.untracked()), 61),
+        inbox,
+        |request| {
+            let Request::ResetMac(member, lent, responder) = request else {
+                panic!("reset_mac");
+            };
+            assert_eq!(lent, 61);
+            responder.answer(MacResetAnswer {
+                member,
+                payload: 62,
+            });
+        },
+    );
     assert_eq!(answer.payload, 62);
     // The cell came back whole: the member can post its next request.
     let _next = cell.leave(Leaving::Tracked(answer.member), 63);

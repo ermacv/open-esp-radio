@@ -15,7 +15,8 @@ use oer_chips_esp32s31_hal::radio::ieee80211::client::{
     ClockPoisoned, StoppedInstallation, WifiClocked, WifiClocksOn, WifiCold, WifiPowered,
 };
 use oer_chips_esp32s31_hal::radio::ieee80211::init::{
-    MacBlockReset, MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacTxPowerSource,
+    MacBlockReset, MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy,
+    MacSlowClockCalibration, MacSlowClockCalibrationSource, MacTxPowerSource,
 };
 use oer_chips_esp32s31_hal::types::MacTxPowerPair;
 use oer_chips_esp32s31_radio_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
@@ -167,14 +168,17 @@ pub struct WifiMacReset {
     pub pti: [MacCoexPti; 4],
 }
 
-/// The values the MAC's cold preparation reads: the reset's coexistence
-/// priorities (events 1, 3, 10, 15, in `MacColdCoexPti::query` order) and the
-/// calibrated TX power profile under the member's ceiling, which the
-/// member's last `track` or `retune` report gave it.
+/// The values the MAC's cold preparation reads, all held by value: the
+/// reset's coexistence priorities (events 1, 3, 10, 15, in
+/// `MacColdCoexPti::query` order), the calibrated TX power profile under the
+/// member's ceiling, which its last `track` or `retune` report gave it, and
+/// the Wi-Fi platform's slow-clock calibration and delay entropy.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacColdSources {
     pub pti: [MacCoexPti; 4],
     pub tx_power: PhyTxTargetPowerProfile,
+    pub slow_clock: MacSlowClockCalibration,
+    pub delay_random: u32,
 }
 
 /// The coexistence events the cold preparation queries, in its order.
@@ -194,6 +198,18 @@ impl MacCoexPtiSource for MacColdSources {
             MacCoexEvent::Event10 => ten,
             MacCoexEvent::Event15 => fifteen,
         }
+    }
+}
+
+impl MacSlowClockCalibrationSource for MacColdSources {
+    fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
+        self.slow_clock
+    }
+}
+
+impl MacDelayEntropy for MacColdSources {
+    fn mac_delay_random(&mut self) -> u32 {
+        self.delay_random
     }
 }
 
@@ -220,6 +236,8 @@ mod tests {
                     .into()
             }),
             tx_power: PhyState::default().tx_target_power_profile(),
+            slow_clock: MacSlowClockCalibration::Unavailable,
+            delay_random: 0x1234_5678,
         }
     }
 
@@ -229,6 +247,16 @@ mod tests {
         for (event, value) in MAC_COEX_EVENTS.into_iter().zip([1, 3, 10, 15]) {
             assert_eq!(sources.mac_coex_pti(event).value(), value);
         }
+    }
+
+    #[test]
+    fn the_platform_values_pass_through() {
+        let mut sources = sources();
+        assert_eq!(sources.mac_delay_random(), 0x1234_5678);
+        assert_eq!(
+            sources.mac_slow_clock_calibration(),
+            MacSlowClockCalibration::Unavailable
+        );
     }
 
     #[test]

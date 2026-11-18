@@ -14,11 +14,9 @@
 //! first role an application happens to use.
 
 use oer_chips_esp32s31_hal::radio::ieee80211::init::{
-    MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacColdStartConfig, MacColdStartError,
-    MacColdStartOutcome, MacDelayEntropy, MacSlowClockCalibration, MacSlowClockCalibrationSource,
-    MacTxPowerSource, initialize_wifi_mac,
+    MacColdStartConfig, MacColdStartError, MacColdStartOutcome, MacSlowClockCalibrationSource,
+    initialize_wifi_mac,
 };
-use oer_chips_esp32s31_hal::types::MacTxPowerPair;
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::client::{WifiClocked, WifiCold},
     system::root::WifiPartition,
@@ -283,11 +281,9 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform, T: oer_portable_time::Time
         payload: WifiMacReset { clocks, reset, pti },
     } = reset;
     let mut wifi = WifiClocked::from_running(access, clocks);
-    let mut sources = PreparationSources {
-        radio: MacColdSources {
-            pti,
-            tx_power: report.tx_power,
-        },
+    let mut sources = MacColdSources {
+        pti,
+        tx_power: report.tx_power,
         slow_clock: platform.mac_slow_clock_calibration(),
         delay_random: config.mac.delay_random,
     };
@@ -324,37 +320,4 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform, T: oer_portable_time::Time
         cell,
         Ok(enter_esp32s31_wifi_runtime(wifi, member, platform, report)),
     ))
-}
-
-/// What the cold preparation reads: the radio system's values from the
-/// reset's answer and the member's power profile, and the Wi-Fi platform's
-/// slow-clock calibration and delay entropy.
-struct PreparationSources {
-    radio: MacColdSources,
-    slow_clock: MacSlowClockCalibration,
-    delay_random: u32,
-}
-
-impl MacCoexPtiSource for PreparationSources {
-    fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
-        self.radio.mac_coex_pti(event)
-    }
-}
-
-impl MacTxPowerSource for PreparationSources {
-    fn mac_tx_power_pair(&mut self, rate: u8) -> MacTxPowerPair {
-        self.radio.mac_tx_power_pair(rate)
-    }
-}
-
-impl MacSlowClockCalibrationSource for PreparationSources {
-    fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
-        self.slow_clock
-    }
-}
-
-impl MacDelayEntropy for PreparationSources {
-    fn mac_delay_random(&mut self) -> u32 {
-        self.delay_random
-    }
 }

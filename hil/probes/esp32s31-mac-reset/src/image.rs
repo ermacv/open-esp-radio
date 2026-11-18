@@ -719,11 +719,11 @@ async fn tune(
         radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
     let mut observer = NoopPhyTargetObserver;
     let selection = clocked.channel_transaction(platform, transaction);
-    // As `radio-system`'s `channel::lower_ghz2_4_channel`.
-    let (channel_or_frequency, cbw) = match channel.width() {
-        ChannelWidth::Mhz20 => (u16::from(channel.primary()), 0),
-        ChannelWidth::Mhz40Above => (channel.center_frequency_mhz(), 2),
-        ChannelWidth::Mhz40Below => (channel.center_frequency_mhz(), 3),
+    let (by_frequency, cbw) = lowered(channel.width());
+    let channel_or_frequency = if by_frequency {
+        channel.center_frequency_mhz()
+    } else {
+        u16::from(channel.primary())
     };
     let mut operation = core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
         timer,
@@ -741,7 +741,35 @@ async fn tune(
     Ok(())
 }
 
-/// The MAC's cold preparation.
+/// The lowered channel width of the probe's channel, as `radio-system`'s
+/// `channel::lower_ghz2_4_channel` gives it: what the radio system's MAC
+/// reset writes back into the PHY's channel field.
+const fn probe_cbw() -> u8 {
+    lowered(probe_width()).1
+}
+
+/// The probe's channel width: 40 MHz below for the foreign words, 20 MHz
+/// otherwise.
+const fn probe_width() -> ChannelWidth {
+    if cfg!(feature = "foreign") {
+        ChannelWidth::Mhz40Below
+    } else {
+        ChannelWidth::Mhz20
+    }
+}
+
+/// `radio-system`'s `channel::lower_ghz2_4_channel` for the probe's channel:
+/// the PHY's channel-or-frequency argument and its `cbw`.
+const fn lowered(width: ChannelWidth) -> (bool, u8) {
+    match width {
+        ChannelWidth::Mhz20 => (false, 0),
+        ChannelWidth::Mhz40Above => (true, 2),
+        ChannelWidth::Mhz40Below => (true, 3),
+    }
+}
+
+/// The MAC's cold preparation: the block's reset, then the preparation that
+/// takes its proof.
 async fn cold(
     radio: &mut Radio,
     clocked: &mut WifiClocked,
@@ -749,8 +777,9 @@ async fn cold(
     timer: &CooperativeTimer,
     mac: MacColdStartConfig,
 ) -> Result<(), ()> {
-    let mut hal = clocked.cold_mac_hal(radio);
-    initialize_wifi_mac(sources, &mut hal, timer, mac)
+    let reset = radio.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+    let mut hal = clocked.cold_mac_hal();
+    initialize_wifi_mac(reset, sources, &mut hal, timer, mac)
         .await
         .map(|_outcome| ())
         .map_err(|_| ())
@@ -823,12 +852,9 @@ async fn session(
         true,
     )
     .map_err(|_| (phase::RX_ENABLE, 0))?;
-    #[cfg(not(feature = "foreign"))]
-    let width = ChannelWidth::Mhz20;
-    // A 40 MHz channel, so that the PHY's channel nibble is not zero.
-    #[cfg(feature = "foreign")]
-    let width = ChannelWidth::Mhz40Below;
-    let channel = Ghz2_4Channel::new(CHANNEL, width).map_err(|_| (phase::CHANNEL, 0))?;
+    // A 40 MHz channel for the foreign words, so that the PHY's channel
+    // nibble is not zero.
+    let channel = Ghz2_4Channel::new(CHANNEL, probe_width()).map_err(|_| (phase::CHANNEL, 0))?;
     apart!(tune(
         &mut slot,
         &mut clocked,
@@ -883,7 +909,7 @@ async fn session(
         for repetition in 0..FOREIGN_REPETITIONS {
             let index = u32::try_from(repetition).unwrap_or(u32::MAX);
             foreign(journal, held(&mut slot)?, index, 0);
-            clocked.reset_mac(held(&mut slot)?);
+            let _pulse = held(&mut slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             foreign(journal, held(&mut slot)?, index, 1);
             apart!(cold(
                 held(&mut slot)?,
@@ -919,7 +945,7 @@ async fn session(
             }
             slot = Some(transaction.reunite());
             foreign(journal, held(&mut slot)?, index, 3);
-            clocked.reset_mac(held(&mut slot)?);
+            let _pulse = held(&mut slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             foreign(journal, held(&mut slot)?, index, 4);
             apart!(cold(
                 held(&mut slot)?,
@@ -1288,7 +1314,7 @@ async fn part_one(
         let pulse_cycle = oer_portable_riscv::cycle32();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(held(slot)?);
+            let _pulse = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             clocked.into_running()
         };
         access = pulsed;
@@ -1309,8 +1335,9 @@ async fn part_one(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(held(slot)?);
-                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+                let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                let mut hal = clocked.cold_mac_hal();
+                initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
             access = running;
@@ -1380,7 +1407,7 @@ async fn part_one(
         let before = access.receive_dma_snapshot();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(held(slot)?);
+            let _pulse = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             clocked.into_running()
         };
         access = pulsed;
@@ -1389,8 +1416,9 @@ async fn part_one(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(held(slot)?);
-                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+                let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                let mut hal = clocked.cold_mac_hal();
+                initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
             access = running;
@@ -1434,7 +1462,7 @@ async fn part_one(
             .map_err(|code| (phase::RECEIVE, code | 0x1000_0000))?;
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(held(slot)?);
+            let _pulse = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             clocked.into_running()
         };
         access = pulsed;
@@ -1454,8 +1482,9 @@ async fn part_one(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(held(slot)?);
-                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+                let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                let mut hal = clocked.cold_mac_hal();
+                initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
             access = running;
@@ -1647,8 +1676,9 @@ async fn cases(
     let halted = ring.try_stop(access.rx_dma()).map_err(|_| fail(0x01))?;
     let mut clocked = WifiClocked::from_running(access, clocks_on);
     let cold = {
-        let mut hal = clocked.cold_mac_hal(held(slot)?);
-        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+        let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+        let mut hal = clocked.cold_mac_hal();
+        initialize_wifi_mac(reset, &mut *sources, &mut hal, timer, mac).await
     };
     cold.map_err(|_| fail(0x02))?;
     (access, clocks_on) = clocked.into_running();
@@ -1660,7 +1690,7 @@ async fn cases(
     // Case 1: the pulse mid-run, then `track` after the entry.
     mark(30);
     let mut clocked = WifiClocked::from_running(access, clocks_on);
-    clocked.reset_mac(held(slot)?);
+    let _pulse = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
     set_wifi_rx(held(slot)?, membership.as_ref().ok_or(fail(0x10))?, true)
         .map_err(|_| fail(0x11))?;
     apart!(tune(slot, &mut clocked, timer, &mut platform, channel))?;
@@ -1668,8 +1698,9 @@ async fn cases(
     let halted = ring.try_stop(access.rx_dma()).map_err(|_| fail(0x12))?;
     let mut clocked = WifiClocked::from_running(access, clocks_on);
     let cold = {
-        let mut hal = clocked.cold_mac_hal(held(slot)?);
-        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+        let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+        let mut hal = clocked.cold_mac_hal();
+        initialize_wifi_mac(reset, &mut *sources, &mut hal, timer, mac).await
     };
     cold.map_err(|_| fail(0x13))?;
     (access, clocks_on) = clocked.into_running();
@@ -1723,8 +1754,9 @@ async fn cases(
         .map_err(|_| fail(0x3f))?;
     apart!(tune(slot, &mut clocked, timer, &mut platform, channel))?;
     let cold = {
-        let mut hal = clocked.cold_mac_hal(held(slot)?);
-        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+        let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+        let mut hal = clocked.cold_mac_hal();
+        initialize_wifi_mac(reset, &mut *sources, &mut hal, timer, mac).await
     };
     cold.map_err(|_| fail(0x40))?;
     (access, clocks_on) = clocked.into_running();
