@@ -520,17 +520,6 @@ impl<P> Clone for TxSlot<P> {
 
 impl<P> Copy for TxSlot<P> {}
 
-impl<P> core::fmt::Debug for TxSlot<P> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("TxSlot")
-            .field("front", &self.front)
-            .field("behind", &self.behind)
-            .field("body", &self.body)
-            .field("len", &self.len)
-            .finish()
-    }
-}
-
 /// Why a slot's geometry is refused, before any slot is built.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TxSlotRefused {
@@ -597,11 +586,6 @@ impl<P> TxSlot<P> {
     /// The slot's octets.
     pub const fn len(self) -> usize {
         self.len
-    }
-
-    /// The longest body.
-    pub const fn body(self) -> usize {
-        self.body
     }
 
     /// Where the headroom begins: behind the port's octets in front.

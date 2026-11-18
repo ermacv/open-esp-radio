@@ -1977,23 +1977,23 @@ mod tx_slot {
         );
         assert!(TxSlot::<Port>::new(MODEL_TX_BODY, needed).is_ok());
         assert_eq!(
-            TxSlot::<Port>::new(MODEL_TX_BODY, needed - 1).unwrap_err(),
-            TxSlotRefused::Short
+            TxSlot::<Port>::new(MODEL_TX_BODY, needed - 1).err(),
+            Some(TxSlotRefused::Short)
         );
         // The longest front and the body against the MPDU the model sends
         // without its MIC and FCS: 42 + 2 262 = 2 304.
         assert!(TxSlot::<Port>::new(2_262, 4_096).is_ok());
         assert_eq!(
-            TxSlot::<Port>::new(2_263, 4_096).unwrap_err(),
-            TxSlotRefused::MpduTooLong
+            TxSlot::<Port>::new(2_263, 4_096).err(),
+            Some(TxSlotRefused::MpduTooLong)
         );
         assert_eq!(
-            TxSlot::<ModelPort<'static, 0, 0, MODEL_PLACES, 14>>::new(100, 4_096).unwrap_err(),
-            TxSlotRefused::BodyOffWord
+            TxSlot::<ModelPort<'static, 0, 0, MODEL_PLACES, 14>>::new(100, 4_096).err(),
+            Some(TxSlotRefused::BodyOffWord)
         );
         assert_eq!(
-            TxSlot::<Port>::new(usize::MAX, usize::MAX).unwrap_err(),
-            TxSlotRefused::Overflow
+            TxSlot::<Port>::new(usize::MAX, usize::MAX).err(),
+            Some(TxSlotRefused::Overflow)
         );
     }
 }
