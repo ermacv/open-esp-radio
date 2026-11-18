@@ -396,7 +396,7 @@ impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize, const WINDO
     RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
     /// The earliest inactivity or reorder-gap deadline of the running
-    /// agreements, read without a view.
+    /// agreements: the one place it is read.
     pub fn deadline(&self) -> Option<Instant> {
         self.banks
             .iter()
@@ -537,14 +537,6 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
     /// order.
     pub fn retained(&self) -> usize {
         self.frames.iter().filter(|frame| frame.is_some()).count()
-    }
-
-    /// The earliest inactivity or reorder-gap deadline.
-    pub fn deadline(&self) -> Option<Instant> {
-        self.banks
-            .iter()
-            .filter_map(|bank| bank.active()?.deadline())
-            .min()
     }
 
     /// End this role's agreements: each running one waits to be removed
