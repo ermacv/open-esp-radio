@@ -88,21 +88,23 @@ impl SharedRadioRegisters {
             .phy_baseband_config_oracle
             .wifi_mac
             .read_i2c_tx_rate_control();
-        let init = self.shared_radio.shared_radio_init_control.read_radio_init_control();
+        let init = self
+            .shared_radio
+            .shared_radio_init_control
+            .read_radio_init_control();
         let narrow = |value: u32| u8::try_from(value).unwrap_or(u8::MAX);
         ForeignWifiMacWords {
-            primary_20_channel_offset: narrow(u32::from(channel.primary_20_channel_offset().get())),
+            primary_20_channel_offset: narrow(channel.primary_20_channel_offset().get()),
             minimum_power: narrow(
-                (u32::from(channel.minimum_power_high().get()) << 4)
-                    | u32::from(channel.minimum_power_low().get()),
+                (channel.minimum_power_high().get() << 4) | channel.minimum_power_low().get(),
             ),
-            channel_bits_10_16: narrow(u32::from(channel.bits_10_16_opaque().get())),
+            channel_bits_10_16: narrow(channel.bits_10_16_opaque().get()),
             channel_bit_17: channel.bit_17_opaque(),
-            channel_bits_18_31: u16::try_from(u32::from(channel.bits_18_31_opaque().get()))
+            channel_bits_18_31: u16::try_from(channel.bits_18_31_opaque().get())
                 .unwrap_or(u16::MAX),
-            i2c_bits_0_1: narrow(u32::from(i2c.bits_0_1_opaque().get())),
+            i2c_bits_0_1: narrow(i2c.bits_0_1_opaque().get()),
             i2c_bits_18_25: i2c.bits_18_25_opaque(),
-            init_low: u16::try_from(u32::from(init.bits_0_11_opaque().get())).unwrap_or(u16::MAX),
+            init_low: u16::try_from(init.bits_0_11_opaque().get()).unwrap_or(u16::MAX),
             init_bit_31: init.bit_31_opaque(),
         }
     }
