@@ -121,6 +121,11 @@ pub trait Client: sealed::Sealed + Sized + 'static {
     type Leave: Send;
     /// What `leave` gives back.
     type Left: Send;
+    /// What a tracked member lends to have its MAC's block reset; a client
+    /// with no such reset has an uninhabited type here.
+    type ResetMac: Send;
+    /// What the reset gives back: the lent value and the reset's proof.
+    type MacReset: Send;
 
     /// A `join` handed back unchanged.
     fn join_returned(join: Self::Join) -> Self::JoinReturned;
@@ -178,6 +183,11 @@ pub enum Request<K: Client> {
         Leaving<K>,
         K::Leave,
         Responder<'static, (Leaving<K>, K::Leave), Left<K>>,
+    ),
+    ResetMac(
+        Member<K, Tracked>,
+        K::ResetMac,
+        Responder<'static, (Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>,
     ),
 }
 
@@ -276,6 +286,13 @@ pub struct RetunedMember<K: Client> {
 pub type RetuneAnswer<K> =
     Result<RetunedMember<K>, Failed<(Member<K, Tracked>, <K as Client>::RetuneReturned)>>;
 
+/// The answer to `reset_mac`: the member and what the reset gave back. The
+/// reset has no refusal and no failure of its own.
+pub struct MacResetAnswer<K: Client> {
+    pub member: Member<K, Tracked>,
+    pub payload: K::MacReset,
+}
+
 /// Whether the PHY domain survived.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainHealth {
@@ -291,12 +308,13 @@ pub struct Left<K: Client> {
 }
 
 // The idle posters stay inside Pending, so even though each operation has a
-// typed slot, the client can post only one request across all four slots.
+// typed slot, the client can post only one request across all five slots.
 struct ClientSlot<K: Client> {
     join: RequestSlot<K::Join, JoinAnswer<K>>,
     track: RequestSlot<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
     retune: RequestSlot<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
     leave: RequestSlot<(Leaving<K>, K::Leave), Left<K>>,
+    reset_mac: RequestSlot<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>,
 }
 
 impl<K: Client> ClientSlot<K> {
@@ -306,6 +324,7 @@ impl<K: Client> ClientSlot<K> {
             track: RequestSlot::new(doorbell, bit, RequestKind::Track.diagnostic_code()),
             retune: RequestSlot::new(doorbell, bit, RequestKind::Retune.diagnostic_code()),
             leave: RequestSlot::new(doorbell, bit, RequestKind::Leave.diagnostic_code()),
+            reset_mac: RequestSlot::new(doorbell, bit, RequestKind::ResetMac.diagnostic_code()),
         }
     }
 
@@ -315,6 +334,7 @@ impl<K: Client> ClientSlot<K> {
             track: self.track.claim()?,
             retune: self.retune.claim()?,
             leave: self.leave.claim()?,
+            reset_mac: self.reset_mac.claim()?,
             epoch: 0,
         })
     }
@@ -335,6 +355,7 @@ pub struct MembershipCell<K: Client> {
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
     leave: Poster<(Leaving<K>, K::Leave), Left<K>>,
+    reset_mac: Poster<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>,
     epoch: u32,
 }
 
@@ -349,7 +370,7 @@ impl<K: Client> MembershipCell<K> {
     pub fn join(self, join: K::Join) -> Pending<K, JoinAnswer<K>> {
         Pending::new(
             self.join.post(join),
-            (self.track, self.retune, self.leave),
+            (self.track, self.retune, self.leave, self.reset_mac),
             self.epoch,
         )
     }
@@ -362,7 +383,7 @@ impl<K: Client> MembershipCell<K> {
     ) -> Pending<K, TrackAnswer<K>> {
         Pending::new(
             self.track.post((member, track)),
-            (self.join, self.retune, self.leave),
+            (self.join, self.retune, self.leave, self.reset_mac),
             self.epoch,
         )
     }
@@ -375,7 +396,7 @@ impl<K: Client> MembershipCell<K> {
     ) -> Pending<K, RetuneAnswer<K>> {
         Pending::new(
             self.retune.post((member, retune)),
-            (self.join, self.track, self.leave),
+            (self.join, self.track, self.leave, self.reset_mac),
             self.epoch,
         )
     }
@@ -384,7 +405,24 @@ impl<K: Client> MembershipCell<K> {
     pub fn leave(self, member: Leaving<K>, leave: K::Leave) -> Pending<K, Left<K>> {
         Pending::new(
             self.leave.post((member, leave)),
-            (self.join, self.track, self.retune),
+            (self.join, self.track, self.retune, self.reset_mac),
+            self.epoch,
+        )
+    }
+
+    /// Have a tracked member's MAC block reset by the radio system, which
+    /// alone writes the shared reset word and the words inside the block
+    /// that are not the member's. Accepted at the post; answered with the
+    /// reset's proof and no failure. A tracked member is tuned, so the reset
+    /// rewrites the PHY's channel field for that channel.
+    pub fn reset_mac(
+        self,
+        member: Member<K, Tracked>,
+        reset: K::ResetMac,
+    ) -> Pending<K, MacResetAnswer<K>> {
+        Pending::new(
+            self.reset_mac.post((member, reset)),
+            (self.join, self.track, self.retune, self.leave),
             self.epoch,
         )
     }
@@ -407,10 +445,11 @@ impl<K: Client> sealed::Reply<K> for JoinAnswer<K> {
         Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
         Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
         Poster<(Leaving<K>, K::Leave), Left<K>>,
+        Poster<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>,
     );
     fn reunite(
         join: Poster<Self::Request, Self>,
-        (track, retune, leave): Self::Idle,
+        (track, retune, leave, reset_mac): Self::Idle,
         epoch: u32,
     ) -> MembershipCell<K> {
         MembershipCell {
@@ -418,6 +457,7 @@ impl<K: Client> sealed::Reply<K> for JoinAnswer<K> {
             track,
             retune,
             leave,
+            reset_mac,
             epoch,
         }
     }
@@ -428,15 +468,23 @@ impl<K: Client> sealed::Reply<K> for JoinAnswer<K> {
 reply!(TrackAnswer<K>, (Member<K, Untracked>, K::Track), track,
     join: Poster<K::Join, JoinAnswer<K>>,
     retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
-    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>,
+    reset_mac: Poster<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>);
 reply!(RetuneAnswer<K>, (Member<K, Tracked>, K::Retune), retune,
     join: Poster<K::Join, JoinAnswer<K>>,
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
-    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>,
+    reset_mac: Poster<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>);
 reply!(Left<K>, (Leaving<K>, K::Leave), leave,
     join: Poster<K::Join, JoinAnswer<K>>,
     track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
-    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>);
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    reset_mac: Poster<(Member<K, Tracked>, K::ResetMac), MacResetAnswer<K>>);
+reply!(MacResetAnswer<K>, (Member<K, Tracked>, K::ResetMac), reset_mac,
+    join: Poster<K::Join, JoinAnswer<K>>,
+    track: Poster<(Member<K, Untracked>, K::Track), TrackAnswer<K>>,
+    retune: Poster<(Member<K, Tracked>, K::Retune), RetuneAnswer<K>>,
+    leave: Poster<(Leaving<K>, K::Leave), Left<K>>);
 
 /// A posted request: a future of its typed answer and returned cell, or a
 /// typed abandonment terminal without a reusable cell. A spent future stays
@@ -505,10 +553,13 @@ impl<K: Client> ClientInbox<K> {
         if let Some(((member, retune), responder)) = self.slot.retune.take_request() {
             return Some(Request::Retune(member, retune, responder));
         }
+        if let Some(((member, leave), responder)) = self.slot.leave.take_request() {
+            return Some(Request::Leave(member, leave, responder));
+        }
         self.slot
-            .leave
+            .reset_mac
             .take_request()
-            .map(|((member, leave), responder)| Request::Leave(member, leave, responder))
+            .map(|((member, reset), responder)| Request::ResetMac(member, reset, responder))
     }
 }
 
