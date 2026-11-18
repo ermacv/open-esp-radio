@@ -860,38 +860,52 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                 cell,
                 failure,
                 prepared,
-            } => match failure {
-                // The partition came back at the stage the join reached:
-                // the client never became a member.
-                RadioStartFailure::Join { .. } => (
-                    Ok(()),
-                    BootLeft::Prepared {
-                        prepared,
-                        cell: Some(cell),
-                    },
-                ),
-                RadioStartFailure::Track { failed, .. } => {
-                    let (member, wifi) = failed.returned;
-                    let (left, cell) = match cell
-                        .leave(
+            } => {
+                // An untracked member after a failed tracking, a tracked one
+                // after a failed preparation: either leaves.
+                let (member, wifi) = match failure {
+                    // The partition came back at the stage the join reached:
+                    // the client never became a member.
+                    RadioStartFailure::Join { .. } => {
+                        return (
+                            Ok(()),
+                            BootLeft::Prepared {
+                                prepared,
+                                cell: Some(cell),
+                            },
+                        );
+                    }
+                    RadioStartFailure::Track { failed, .. } => {
+                        let (member, wifi) = failed.returned;
+                        (
                             oer_chips_esp32s31_radio_client::Leaving::Untracked(member),
-                            oer_chips_esp32s31_radio_client::wifi::WifiLeave { wifi },
+                            wifi,
                         )
-                        .await
-                    {
-                        Ok((cell, left)) => {
-                            (crate::failure::convert::released(left.domain), Some(cell))
-                        }
-                        Err(reason) => (
-                            Err(crate::failure::ReleaseCause::LeaveUnanswered(
-                                reason.observations(),
-                            )),
-                            None,
-                        ),
-                    };
-                    (left, BootLeft::Left { prepared, cell })
-                }
-            },
+                    }
+                    RadioStartFailure::Prepare { member, wifi, .. } => (
+                        oer_chips_esp32s31_radio_client::Leaving::Tracked(member),
+                        wifi,
+                    ),
+                };
+                let (left, cell) = match cell
+                    .leave(
+                        member,
+                        oer_chips_esp32s31_radio_client::wifi::WifiLeave { wifi },
+                    )
+                    .await
+                {
+                    Ok((cell, left)) => {
+                        (crate::failure::convert::released(left.domain), Some(cell))
+                    }
+                    Err(reason) => (
+                        Err(crate::failure::ReleaseCause::LeaveUnanswered(
+                            reason.observations(),
+                        )),
+                        None,
+                    ),
+                };
+                (left, BootLeft::Left { prepared, cell })
+            }
             Self::Started {
                 radio,
                 transmitter,
@@ -1275,7 +1289,8 @@ pub(crate) async fn install<W: Binding>(
         }
     };
     let single = [s1, s2, s3, s4];
-    let started = start_esp32s31_radio(cell, wifi, Platform { power: None }, start).await;
+    let started =
+        start_esp32s31_radio(cell, wifi, Platform { power: None }, start, &EmbassyClock).await;
     let (cell, stopped) = match started {
         Ok(started) => started,
         Err(quarantine) => {
