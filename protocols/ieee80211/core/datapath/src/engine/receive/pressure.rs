@@ -19,6 +19,8 @@
 //!   at the last place it is copied, when nothing waits and the network can
 //!   copy it, or refused for no place to wait. A unit the reorder lets go
 //!   waits, or is lent, in the place it already holds.
+//! - A unit that does not decapsulate is refused for its reason when it is
+//!   offered: it never waits and keeps no place past the round.
 //! - A unit that waited `late` from its own moment is refused at the head,
 //!   every late head in one round; a held link's unit is refused when it
 //!   reaches the head; a stopping data's goes back.
@@ -40,7 +42,8 @@ pub(super) enum Need<L> {
     /// may not borrow).
     Copies(u8),
     /// Its bytes do not decapsulate: it is refused for the reason when it
-    /// is delivered (behind what waits, in its order).
+    /// is offered, before the queue, its place and its link (a refusal
+    /// keeps no order).
     Unread(RxRefusal),
 }
 
@@ -210,7 +213,8 @@ impl<H> Pressure<H> {
         }
     }
 
-    /// A unit for the network in its order: a held link's refused; behind
+    /// A unit for the network in its order: one that does not decapsulate
+    /// refused for its reason; a held link's refused; behind
     /// a unit that waits it waits too (the room has two dimensions: a
     /// later unit could be lent where the waiting one cannot be copied),
     /// else it is delivered; a newcomer at the last free place keeps no
@@ -229,6 +233,12 @@ impl<H> Pressure<H> {
         now: Instant,
         room: &mut Room,
     ) -> Decision<H, L> {
+        // A unit that does not decapsulate is never delivered: refused for
+        // its own defect at once, whatever waits, its place and its link.
+        let need = match need {
+            Need::Unread(reason) => return Decision::Refused(handle, reason),
+            need @ (Need::Lendable(_) | Need::Copies(_)) => need,
+        };
         if link == Link::Held {
             return Decision::Refused(handle, RxRefusal::LinkHeld);
         }
@@ -286,6 +296,8 @@ fn room_for<L>(need: Need<L>, place: Place, room: &mut Room) -> Option<Answer<L>
         },
         (Need::Lendable(_), Place::Last) => 1,
         (Need::Copies(count), _) => usize::from(count),
+        // At the head only from a unit whose view is gone, which does not
+        // happen (`Round::unit`): the offer refuses every other at once.
         (Need::Unread(reason), _) => return Some(Answer::Refuse(reason)),
     };
     room.copies(copies).map(Answer::Copy)

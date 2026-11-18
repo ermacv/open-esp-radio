@@ -96,6 +96,17 @@ struct World {
     delivered: Option<usize>,
     arrived: usize,
     left: Bounds,
+    /// What the search reached, for its coverage (not in the key).
+    reached: Reached,
+}
+
+/// The cases the search must reach.
+#[derive(Clone, Copy, Debug, Default)]
+struct Reached {
+    /// Offers of a unit that does not decapsulate while one waits.
+    unread_behind: usize,
+    /// Offers of a unit that does not decapsulate at the last place.
+    unread_at_last: usize,
 }
 
 /// One step of a path.
@@ -147,6 +158,7 @@ impl World {
             delivered: None,
             arrived: 0,
             left,
+            reached: Reached::default(),
         }
     }
 
@@ -309,6 +321,10 @@ impl World {
     fn offer(&mut self, unit: u8, room: &mut Room, problems: &mut Problems) {
         let outside = self.retained.len();
         let last = self.places_taken() + 1 >= self.staging;
+        if let Need::Unread(_) = Self::need(unit) {
+            self.reached.unread_behind += usize::from(!self.waits.is_empty());
+            self.reached.unread_at_last += usize::from(last);
+        }
         let decision = self.core.offer(
             unit,
             Self::need(unit),
@@ -351,6 +367,13 @@ impl World {
         }
         if !head {
             self.offered.push(unit);
+        }
+        if let Need::Unread(own) = Self::need(unit)
+            && !matches!(decision, Decision::Refused(_, reason) if reason == own)
+        {
+            problems.push(
+                "P7 a unit that does not decapsulate was not refused at once for its own reason",
+            );
         }
         let delivered = matches!(decision, Decision::Lend(..) | Decision::Copy(..));
         if delivered && self.link == Link::Held {
@@ -557,11 +580,13 @@ enum Origin {
 /// What a search found: the states it passed, or a problem and its path.
 struct Found {
     states: usize,
+    reached: Reached,
     problem: Option<(&'static str, Vec<Step>)>,
 }
 
 fn search(staging: usize, loans: u8, left: Bounds, ceiling: usize) -> Found {
     let mut seen = HashSet::new();
+    let mut reached = Reached::default();
     let mut stack = std::vec![(World::new(staging, loans, left), Vec::new())];
     while let Some((world, path)) = stack.pop() {
         if !seen.insert(world.key()) {
@@ -573,14 +598,18 @@ fn search(staging: usize, loans: u8, left: Bounds, ceiling: usize) -> Found {
         );
         for step in world.steps() {
             let mut next = world.clone();
+            next.reached = Reached::default();
             let mut problems = Problems::new();
             next.apply(step, &mut problems);
             next.check(&mut problems);
+            reached.unread_behind += next.reached.unread_behind;
+            reached.unread_at_last += next.reached.unread_at_last;
             let mut path = path.clone();
             path.push(step);
             if let Some(problem) = problems.first() {
                 return Found {
                     states: seen.len(),
+                    reached,
                     problem: Some((problem, path)),
                 };
             }
@@ -589,6 +618,7 @@ fn search(staging: usize, loans: u8, left: Bounds, ceiling: usize) -> Found {
     }
     Found {
         states: seen.len(),
+        reached,
         problem: None,
     }
 }
@@ -604,6 +634,11 @@ fn run(name: &str, staging: usize, loans: u8, left: Bounds, ceiling: usize) {
     if let Some((problem, path)) = found.problem {
         panic!("PROBLEM {problem}\n    by {path:?}");
     }
+    assert!(
+        found.reached.unread_behind > 0 && found.reached.unread_at_last > 0,
+        "the search did not reach a unit that does not decapsulate behind a waiting one and at the last place: {:?}",
+        found.reached
+    );
 }
 
 /// The model's numbers: four places, one loan.
