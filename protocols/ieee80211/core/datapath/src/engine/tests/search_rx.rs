@@ -943,11 +943,16 @@ fn run(bounds: Bounds, agreement: Agreement, ceiling: usize) {
     assert!(found.problems.is_empty());
 }
 
-/// The most nodes a search at the ordinary bounds visits (about 7 000
-/// and 26 000 today) and one at named bounds: ceilings against an
-/// explosion, several times what they take, never a pinned figure.
-const ORDINARY_CEILING: usize = 150_000;
-const NAMED_CEILING: usize = 3_000_000;
+/// Each bound's ceiling of nodes: about three times what it takes today
+/// (the ordinary 7 052 and 26 209; the named 322 298, 386 917, 412 363
+/// and 236 696), a ceiling against an explosion that stops a search within
+/// a minute or two of where it should have ended, never a pinned figure.
+const ORDINARY_CEILING: usize = 25_000;
+const AGREED_ORDINARY_CEILING: usize = 80_000;
+const SEVEN_FRAMES_CEILING: usize = 1_000_000;
+const SIX_FRAMES_HOLD_CEILING: usize = 1_200_000;
+const AGREED_SIX_CEILING: usize = 1_250_000;
+const AGREED_FIVE_HOLD_CEILING: usize = 750_000;
 
 /// The search at the model's bounds, in the ordinary test run.
 #[test]
@@ -982,18 +987,43 @@ fn every_order_under_a_receive_agreement_keeps_its_properties() {
             holds: 1,
         },
         Agreement::Tid0,
-        ORDINARY_CEILING,
+        AGREED_ORDINARY_CEILING,
     );
 }
 
-/// The search at the bounds the model's mutants run at. Named, not run by
-/// default: its size and time are in the pull request.
+/// A named search: `bounds` under `agreement`, stopped at `ceiling`
+/// nodes. Named, not run by default; each is run by name once a pull
+/// request, under `ulimit -v`, its time and peak memory in it, and stopped
+/// if it has not ended in five minutes.
+fn named(bounds: Bounds, agreement: Agreement, ceiling: usize) {
+    run(bounds, agreement, ceiling);
+}
+
+/// Depth without a hold: seven frames, two returns, two copies freed.
 #[test]
-#[ignore = "the mutants' bounds: run by name"]
-fn every_receive_order_at_the_mutants_bounds() {
-    run(
+#[ignore = "a named bound: run by name"]
+fn every_receive_order_at_seven_frames() {
+    named(
         Bounds {
             units: 7,
+            returns: 2,
+            stops: 1,
+            frees: 2,
+            gaps: 0,
+            holds: 0,
+        },
+        Agreement::None,
+        SEVEN_FRAMES_CEILING,
+    );
+}
+
+/// A hold with depth: six frames and one hold.
+#[test]
+#[ignore = "a named bound: run by name"]
+fn every_receive_order_at_six_frames_with_a_hold() {
+    named(
+        Bounds {
+            units: 6,
             returns: 2,
             stops: 1,
             frees: 2,
@@ -1001,17 +1031,35 @@ fn every_receive_order_at_the_mutants_bounds() {
             holds: 1,
         },
         Agreement::None,
-        NAMED_CEILING,
+        SIX_FRAMES_HOLD_CEILING,
     );
 }
 
-/// The agreement's search at the model's mutants' bounds. Named.
+/// The agreement's depth without a hold: six frames, a gap.
 #[test]
-#[ignore = "the mutants' bounds: run by name"]
-fn every_order_under_a_receive_agreement_at_the_mutants_bounds() {
-    run(
+#[ignore = "a named bound: run by name"]
+fn every_order_under_a_receive_agreement_at_six_frames() {
+    named(
         Bounds {
             units: 6,
+            returns: 2,
+            stops: 1,
+            frees: 1,
+            gaps: 1,
+            holds: 0,
+        },
+        Agreement::Tid0,
+        AGREED_SIX_CEILING,
+    );
+}
+
+/// The agreement with a hold: five frames, a gap and a hold.
+#[test]
+#[ignore = "a named bound: run by name"]
+fn every_order_under_a_receive_agreement_at_five_frames_with_a_hold() {
+    named(
+        Bounds {
+            units: 5,
             returns: 2,
             stops: 1,
             frees: 1,
@@ -1019,6 +1067,6 @@ fn every_order_under_a_receive_agreement_at_the_mutants_bounds() {
             holds: 1,
         },
         Agreement::Tid0,
-        NAMED_CEILING,
+        AGREED_FIVE_HOLD_CEILING,
     );
 }
