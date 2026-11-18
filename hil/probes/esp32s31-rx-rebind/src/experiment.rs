@@ -476,6 +476,7 @@ impl State {
         frame: &Frame,
         index: usize,
         length: usize,
+        word0_at_take: oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
     ) -> Result<(), Name<32>> {
         let descriptor = storage
             .descriptors()
@@ -577,7 +578,8 @@ impl State {
         }
         let view = RxSegment {
             descriptor_address: 0,
-            descriptor_word0: descriptor.word0(),
+            // `tasks/199`: the control word as completed, before the detach.
+            descriptor_word0: word0_at_take,
             buffer: frame,
             next_descriptor_address: 0,
         };
@@ -819,6 +821,11 @@ fn scan(
         // `tasks/194`: the late word of the head's buffer at the take.
         let taken_spare = usize::try_from(*state.expected.get(head).ok_or(name!("expected"; 32))?)
             .map_err(|_| name!("expected"; 32))?;
+        let word0_at_take = storage
+            .descriptors()
+            .get(head)
+            .ok_or(name!("head-descriptor"; 32))?
+            .word0();
         let take_cycle = oer_portable_riscv::cycle32();
         let word_at_take = [
             bank.read_word(taken_spare, LATE_WORD),
@@ -933,7 +940,9 @@ fn scan(
                     bump(count);
                 }
             }
-            if let Err(error) = state.check_frame(segment, storage, bank, frame, head, length) {
+            if let Err(error) =
+                state.check_frame(segment, storage, bank, frame, head, length, word0_at_take)
+            {
                 unit.retain_for_deferred_recycle();
                 return Err(error);
             }
