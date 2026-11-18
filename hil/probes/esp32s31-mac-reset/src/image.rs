@@ -395,7 +395,7 @@ const WIDTH: usize = 22;
 #[cfg(not(any(feature = "transmit", feature = "receiver", feature = "foreign")))]
 const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS + CASES;
 #[cfg(feature = "foreign")]
-const ROWS: usize = 1 + 3 * FOREIGN_REPETITIONS;
+const ROWS: usize = 2 + 6 * FOREIGN_REPETITIONS;
 /// `tasks/184` A: the repetitions of the pulse between two reads.
 #[cfg(feature = "foreign")]
 const FOREIGN_REPETITIONS: usize = 10;
@@ -786,6 +786,10 @@ async fn session(
         &clocks,
         identity
     ))?;
+    // `tasks/185` 1: the words between the PHY's registration and the
+    // Wi-Fi power entry's pulse.
+    #[cfg(feature = "foreign")]
+    foreign(journal, held(&mut slot)?, 0, 9);
     // enter: coexistence, common power, the modem clocks, the PHY's client.
     let radio = held(&mut slot)?;
     let (coexisting, _participants) = radio.enter_coex(coex);
@@ -891,9 +895,52 @@ async fn session(
             .map_err(|()| (phase::MAC_COLD, 1))?;
             foreign(journal, held(&mut slot)?, index, 2);
         }
+        // `tasks/185` 1: the PHY's two writes again after the preparation,
+        // the channel and the registration's I2C TX-rate fields; read;
+        // pulse; read; prepare; read.
+        for repetition in 0..FOREIGN_REPETITIONS {
+            let index = u32::try_from(repetition).unwrap_or(u32::MAX);
+            apart!(tune(
+                &mut slot,
+                &mut clocked,
+                &timer,
+                &mut platform,
+                channel
+            ))?;
+            let radio = slot.take().ok_or((phase::CHANNEL, 3))?;
+            let mut transaction = clocked.channel_transaction(
+                &mut platform,
+                radio
+                    .detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel),
+            );
+            {
+                let (mut hal, _) = transaction.parts_mut();
+                oer_chips_esp32s31_hal::radio::phy::baseband::configure_i2c_tx_rate(&mut hal);
+            }
+            slot = Some(transaction.reunite());
+            foreign(journal, held(&mut slot)?, index, 3);
+            clocked.reset_mac(held(&mut slot)?);
+            foreign(journal, held(&mut slot)?, index, 4);
+            apart!(cold(
+                held(&mut slot)?,
+                &mut clocked,
+                &mut sources,
+                &timer,
+                mac
+            ))
+            .map_err(|()| (phase::MAC_COLD, 2))?;
+            foreign(journal, held(&mut slot)?, index, 5);
+        }
         // Every owner stays held until the leased host reset.
         let _held = (
-            slot, membership, coexisting, power, clocked, mac_irq, power_irq, pilot,
+            slot,
+            &mut membership,
+            &mut coexisting,
+            &mut power,
+            clocked,
+            &mut mac_irq,
+            &mut power_irq,
+            &mut pilot,
         );
         return Ok(());
     }
@@ -936,9 +983,11 @@ async fn session(
     }
 }
 
-/// `tasks/184` A: record the three foreign words of `WIFI_MAC` at `point`
-/// (0 before the pulse, 1 after it, 2 after the cold preparation) of
-/// `repetition`.
+/// `tasks/184` A and `tasks/185` 1: record the three foreign words of
+/// `WIFI_MAC` at `point` of `repetition`: 0 before the pulse, 1 after it,
+/// 2 after the cold preparation; 3 after the channel and the I2C TX-rate
+/// fields written again, 4 after the pulse, 5 after the preparation; 9
+/// between the PHY's registration and the Wi-Fi power entry.
 #[cfg(feature = "foreign")]
 fn foreign(journal: &mut Journal, radio: &Radio, repetition: u32, point: u32) {
     let words = radio.foreign_wifi_mac_words();
