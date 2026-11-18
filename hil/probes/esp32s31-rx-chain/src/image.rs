@@ -78,10 +78,7 @@ struct DirectOutput {
     access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
     _clocks: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
     /// The station's address: case D counts the units addressed to it.
-    #[cfg_attr(
-        any(not(feature = "laps"), feature = "irq"),
-        expect(dead_code, reason = "case D's alone")
-    )]
+    #[cfg_attr(not(feature = "laps"), expect(dead_code, reason = "case D's alone"))]
     station: [u8; 6],
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
@@ -671,7 +668,15 @@ async fn run_direct(
     #[cfg(all(feature = "laps", not(feature = "irq")))]
     let observation = laps::run(console, storage, &mut ring, access, output.station).await;
     #[cfg(feature = "irq")]
-    let observation = b6::run(console, storage, &mut ring, access, &mut mac_irq).await;
+    let observation = b6::run(
+        console,
+        storage,
+        &mut ring,
+        access,
+        &mut mac_irq,
+        output.station,
+    )
+    .await;
     access.wifi_mac_hal().request_channel_stop();
     let deadline = EmbassyClock
         .now()

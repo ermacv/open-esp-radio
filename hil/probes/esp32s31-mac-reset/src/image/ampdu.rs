@@ -50,7 +50,11 @@ const fn base(case: Case) -> u32 {
 }
 const QUIET_MS: u32 = 1_500;
 /// The largest aggregate.
+#[cfg(not(feature = "b6"))]
 const SUBFRAMES: usize = 8;
+/// B6 (`tasks/177`): aggregates of up to 32 short subframes.
+#[cfg(feature = "b6")]
+const SUBFRAMES: usize = 32;
 /// How long an aggregate's completion is awaited.
 const COMPLETION_MS: u32 = 100;
 /// The bitmaps hold cell G's singles too (zero in cell F).
@@ -71,6 +75,15 @@ static RETENTION: static_cell::StaticCell<RetainedAmpduDmaStorage<Lease, SUBFRAM
 /// usable Block Ack, other statuses, completions not seen in time.
 type Ends = [u32; 5];
 
+#[cfg_attr(
+    feature = "b6",
+    allow(
+        unreachable_code,
+        unused_variables,
+        unused_mut,
+        reason = "B6 sends its own stages in place of cell F's"
+    )
+)]
 pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
         frames,
@@ -186,6 +199,41 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         #[cfg(feature = "gcell")]
         pn,
     };
+    // B6 (`tasks/177`): in place of cell F's stages.
+    #[cfg(feature = "b6")]
+    {
+        let fast = HtRate::new(
+            HtMcs::Mcs7,
+            HtGuardInterval::Short400Ns,
+            HtChannelWidth::Mhz20,
+        );
+        // MCS0's aggregate bytes are capped at 6 490 (`vendor_ampdu_byte_limit`):
+        // four full subframes, where MCS7 takes eight.
+        for (rate, full) in [(fast, 8_usize), (rate, 4)] {
+            sender.rate = rate;
+            for (length, size) in [(B6_FULL, full), (B6_SHORT, 16), (B6_SHORT, SUBFRAMES)] {
+                let mut row: Ends = [0; 5];
+                for _ in 0..B6_AGGREGATES {
+                    sender.send_plain(access, length, size, &mut row).await?;
+                }
+                journal.record(
+                    Kind::AmpduSent,
+                    &[
+                        u32::from(rate.code()),
+                        length as u32,
+                        size as u32,
+                        row[0],
+                        row[1],
+                        row[2],
+                        row[3],
+                        row[4],
+                    ],
+                );
+            }
+        }
+        mark(102);
+        return Ok(());
+    }
     // The control (`tasks/173`): QoS Data without A-MSDU, 2 then 8 a PPDU.
     let mut acked = [0_u32; WORDS];
     let mut ends: [Ends; 2] = [[0; 5]; 2];
@@ -267,6 +315,15 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
     mark(102);
     Ok(())
 }
+
+/// B6's subframes: full-size and short QoS Data MPDUs, TID 0, no A-MSDU.
+#[cfg(feature = "b6")]
+const B6_FULL: usize = 1_500;
+#[cfg(feature = "b6")]
+const B6_SHORT: usize = 100;
+/// Aggregates of each rate, length and size.
+#[cfg(feature = "b6")]
+const B6_AGGREGATES: u32 = 300;
 
 /// The owner and what every aggregate of the run shares.
 struct Aggregates<'a, 'o> {
@@ -389,6 +446,88 @@ impl Aggregates<'_, '_> {
         self.owner
             .release_completed(cookie, drop)
             .map_err(|_| (tx_phase::RELEASE, 0x5a))?;
+        Ok(())
+    }
+
+    /// B6: one aggregate of `size` QoS Data subframes of `length` octets,
+    /// case C's control header, the body each octet its offset; awaited,
+    /// its end counted in `row`.
+    #[cfg(feature = "b6")]
+    async fn send_plain(
+        &mut self,
+        access: &mut RadioAccess,
+        length: usize,
+        size: usize,
+        row: &mut Ends,
+    ) -> Result<(), Failure> {
+        let (station, peer) = (self.station, self.peer);
+        let cookie = self.owner.begin().map_err(|_| (tx_phase::FRAME, 0x60))?;
+        for slot in 0..size {
+            let control = (self.sequence << 4).to_le_bytes();
+            self.sequence = (self.sequence + 1) % 4096;
+            let lease = self.frames.lease_frame(slot as u8, length + 8, |_| 0)?;
+            self.owner
+                .intake(cookie, lease, |frame| {
+                    for (offset, cell) in frame.iter_mut().take(length).enumerate() {
+                        *cell = match offset {
+                            22 | 23 => control.get(offset - 22).copied().unwrap_or(0),
+                            // The QoS Control: TID 0, no A-MSDU.
+                            24 | 25 => 0,
+                            _ if offset < 26 => byte(Case::Control, station, peer, 0, offset),
+                            _ => offset as u8,
+                        };
+                    }
+                    u16::try_from(length).ok()
+                })
+                .map_err(|_| (tx_phase::FRAME, 0x61 | (slot as u32) << 8))?;
+        }
+        let aggregate = self
+            .owner
+            .prepare_format(cookie, |_| Some(0), false)
+            .map_err(|_| (tx_phase::FRAME, 0x62))?;
+        let mut config = HtAmpduTxConfig::new(self.rate, aggregate.bytes, aggregate.subframes)
+            .ok_or((tx_phase::FRAME, 0x63))?;
+        config.data_power_primary = self.frames.power;
+        config.data_power_alternate = self.frames.power;
+        config.timeout = TIMEOUT;
+        self.owner
+            .submit(access, cookie, LegacyTxQueue::BestEffort, config)
+            .map_err(|_| (tx_phase::START, 0x64))?;
+        let deadline = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(COMPLETION_MS))
+            .ok_or((tx_phase::COMPLETION, 0x65))?;
+        let completion = loop {
+            match self.owner.acknowledge_completion(access) {
+                Ok(Some(CompletionObservation::Observed(completion))) => break Some(completion),
+                Ok(_) => {}
+                Err(_) => return Err((tx_phase::COMPLETION, 0x66)),
+            }
+            if EmbassyClock.now() >= deadline {
+                break None;
+            }
+            if let Some(at) = EmbassyClock.now().checked_add(Duration::from_micros(20)) {
+                EmbassyClock.wait_until(at).await;
+            }
+        };
+        row[0] = row[0].saturating_add(1);
+        let Some(completion) = completion else {
+            row[4] = row[4].saturating_add(1);
+            return Err((tx_phase::COMPLETION, 0x67));
+        };
+        match completion.tx.status() {
+            0 => row[1] = row[1].saturating_add(1),
+            _ => row[3] = row[3].saturating_add(1),
+        }
+        if completion.valid_block_ack().is_some() {
+            row[2] = row[2].saturating_add(1);
+        }
+        self.owner
+            .detach_completed(access, cookie)
+            .map_err(|_| (tx_phase::RELEASE, 0x68))?;
+        self.owner
+            .release_completed(cookie, drop)
+            .map_err(|_| (tx_phase::RELEASE, 0x69))?;
         Ok(())
     }
 }

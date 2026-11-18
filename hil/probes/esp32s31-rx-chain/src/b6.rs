@@ -82,7 +82,11 @@ pub(super) async fn run(
     ring: &mut RxRingLive<'_, COUNT>,
     access: &mut RadioAccess,
     irq: &mut MacInterruptRegisters,
+    station: [u8; 6],
 ) -> Result<(), oer_portable_diagnostics::Name<32>> {
+    // The receive agreement (`tasks/177`): programmed for the first sender
+    // of a frame to this station, as cell F's receiver programs it.
+    let mut agreement = None;
     let mut line = heapless::String::<512>::new();
     let _ = writeln!(line, "B6 begin v=1 count={COUNT} window_ms={WINDOW_MS}");
     usb::text(console, line.as_bytes()).await;
@@ -185,6 +189,31 @@ pub(super) async fn run(
             counts.descriptors = counts.descriptors.saturating_add(count as u32);
             let mut stamp = None;
             let mut done = 0_u32;
+            if agreement.is_none()
+                && let Ok(first) = unit.step(0)
+                && let (Some(to), Some(from)) = (
+                    first.bytes().get(HEADER + 4..HEADER + 10),
+                    first.bytes().get(HEADER + 10..HEADER + 16),
+                )
+                && to == station
+                && let Ok(peer) = <[u8; 6]>::try_from(from)
+            {
+                use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::hardware::{
+                    S31RxBlockAckAgreement, program,
+                };
+                agreement = Some(program(
+                    &mut access.wifi_mac_hal(),
+                    S31RxBlockAckAgreement {
+                        hardware_index: 0,
+                        interface: oer_chips_esp32s31_hal::types::MacInterface::Station,
+                        peer,
+                        tid: 0,
+                        starting_sequence:
+                            oer_protocols_ieee80211_wire::sequence::SequenceNumber::ZERO,
+                        window: 64,
+                    },
+                ));
+            }
             for step in 0..count {
                 let step = unit
                     .step(step)
@@ -253,6 +282,9 @@ pub(super) async fn run(
         &after.wrapping_delta_since(before),
     )
     .await;
+    line.clear();
+    let _ = writeln!(line, "B6 agreement={agreement:?}");
+    usb::text(console, line.as_bytes()).await;
     Ok(())
 }
 
