@@ -23,7 +23,10 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::{
     CompletionObservation, HtAmpduTxConfig, HtChannelWidth, HtGuardInterval, HtMcs, HtRate,
     LegacyTxQueue,
-    ampdu::{HtAmpduTxResources, HtAmpduTxStorage, RetainedAmpduDmaStorage, RetainedDmaAmpduTx},
+    ampdu::{
+        AmpduIntakeRefused, HtAmpduTxResources, HtAmpduTxStorage, RetainedAmpduDmaStorage,
+        RetainedDmaAmpduTx,
+    },
 };
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
@@ -211,12 +214,13 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         // four full subframes, where MCS7 takes eight.
         for (rate, full) in [(fast, 8_usize), (rate, 4)] {
             sender.rate = rate;
-            // The aggregate's byte ceiling: the rate's vendor table (MCS7
-            // 65 535, MCS0 6 490), above the owner's default of 8 191 (the
-            // HT exponent 0), as far as the A-MPDU length allows.
+            // The aggregate's byte ceiling: the rate's vendor table (MCS0
+            // 6 490), or, where it has none (`None`: MCS7 with the short
+            // guard interval), the A-MPDU length's own 65 535, above the
+            // owner's default of 8 191 (`tasks/178`).
             sender
                 .owner
-                .configure_max_aggregate_bytes(rate.vendor_ampdu_byte_limit().unwrap_or(0x1fff))
+                .configure_max_aggregate_bytes(rate.vendor_ampdu_byte_limit().unwrap_or(u16::MAX))
                 .map_err(|_| (tx_phase::FRAME, 0x6a))?;
             for (length, size) in [(B6_FULL, full), (B6_SHORT, 16), (B6_SHORT, SUBFRAMES)] {
                 let mut row: Ends = [0; 5];
@@ -334,6 +338,17 @@ const B6_SHORT: usize = 100;
 #[cfg(feature = "b6")]
 const B6_AGGREGATES: u32 = 300;
 
+/// An intake's refusal as the failure's code keeps it (`tasks/178`):
+/// 1 length, 2 full, 3 declined, 4 a fault.
+const fn refusal(refused: &AmpduIntakeRefused) -> u32 {
+    match refused {
+        AmpduIntakeRefused::Length => 1,
+        AmpduIntakeRefused::Full => 2,
+        AmpduIntakeRefused::Declined => 3,
+        AmpduIntakeRefused::Fault(_) => 4,
+    }
+}
+
 /// The owner and what every aggregate of the run shares.
 struct Aggregates<'a, 'o> {
     owner: &'o mut RetainedDmaAmpduTx<'static, Lease, SUBFRAMES>,
@@ -389,7 +404,12 @@ impl Aggregates<'_, '_> {
                     }
                     u16::try_from(length).ok()
                 })
-                .map_err(|_| (tx_phase::FRAME, 0x51 | (slot as u32) << 8))?;
+                .map_err(|(_, refused)| {
+                    (
+                        tx_phase::FRAME,
+                        0x51 | (slot as u32) << 8 | refusal(&refused) << 16,
+                    )
+                })?;
         }
         let aggregate = self
             .owner
@@ -488,7 +508,12 @@ impl Aggregates<'_, '_> {
                     }
                     u16::try_from(length).ok()
                 })
-                .map_err(|_| (tx_phase::FRAME, 0x61 | (slot as u32) << 8))?;
+                .map_err(|(_, refused)| {
+                    (
+                        tx_phase::FRAME,
+                        0x61 | (slot as u32) << 8 | refusal(&refused) << 16,
+                    )
+                })?;
         }
         let aggregate = self
             .owner

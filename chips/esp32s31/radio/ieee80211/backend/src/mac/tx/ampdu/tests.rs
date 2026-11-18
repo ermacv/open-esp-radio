@@ -1653,3 +1653,55 @@ fn an_aggregate_past_the_last_generation_begins_on_a_live_cookie() {
     let mut storage = core::pin::pin!(storage);
     assert_eq!(storage.as_mut().begin(), Ok(TxCookie(1)));
 }
+
+/// The geometry of the reset probe's B6 sender (`tasks/178`): a 32-slot
+/// owner and a pool of 1 512-byte slots (8 metadata, 1 500 frame, 4 FCS),
+/// unprotected 1 490-octet subframes. Under the owner's default ceiling of
+/// 8 191 bytes the sixth is refused as `AggregateFull`, which is what the
+/// probe met: HT MCS7 with the short guard interval has no vendor ceiling
+/// (`vendor_ampdu_byte_limit` is `None`), and the probe read that `None` as
+/// the default. Under the A-MPDU length's own 65 535 eight are taken.
+#[test]
+fn the_b6_probes_full_subframes_meet_the_default_ceiling() {
+    let fast = HtRate::new(
+        crate::mac::tx::HtMcs::Mcs7,
+        crate::mac::tx::HtGuardInterval::Short400Ns,
+        crate::mac::tx::HtChannelWidth::Mhz20,
+    );
+    assert_eq!(fast.vendor_ampdu_byte_limit(), None);
+    for (ceiling, taken, refusal) in [
+        (None, 5, Some(HtAmpduTxError::AggregateFull)),
+        (Some(u16::MAX), 8, None),
+    ] {
+        let mut storage = core::pin::pin!(HtAmpduTxStorage::<32>::new());
+        let pool = frame_pool::<1512, 33>();
+        let mut retention = RetainedAmpduDmaStorage::new();
+        let mut owner = RetainedDmaAmpduTx::new_model(storage.as_mut(), &mut retention).unwrap();
+        if let Some(ceiling) = ceiling {
+            owner.configure_max_aggregate_bytes(ceiling).unwrap();
+        }
+        let cookie = owner.begin().unwrap();
+        for slot in 0..taken {
+            commit(
+                &mut owner,
+                cookie,
+                frame(&pool, slot, 1498, |_| {}),
+                1490,
+                0,
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            commit(
+                &mut owner,
+                cookie,
+                frame(&pool, taken, 1498, |_| {}),
+                1490,
+                0
+            )
+            .err(),
+            refusal
+        );
+        owner.cancel(cookie, drop).unwrap();
+    }
+}
