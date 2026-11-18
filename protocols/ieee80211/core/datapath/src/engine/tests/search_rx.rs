@@ -12,9 +12,13 @@
 //! test's network show; each is named by the model's number (`P1` …
 //! `P14`), and the model's properties without a twin here are named in
 //! the pull request. States are merged by their whole key, the engine's
-//! and the model port's included; the waiting units' moments enter it
-//! after the head's, and the search reaches a head's bound only by its own
-//! move.
+//! and the model port's included. The waiting units' moments enter it as
+//! their order with its ties, and the agreements' gap deadline as its place
+//! in that order: the values go, the order stays. This loses no world the
+//! rule tells apart: the rule reads a moment only against a deadline (a
+//! head is late, a gap is due), the search's clock moves only to a
+//! deadline (`Late`, `Gap`) or by a step's microsecond, which changes no
+//! deadline's order, and between steps no unit is late (P8).
 
 use super::*;
 use std::string::String;
@@ -812,17 +816,16 @@ impl<'id> World<'id> {
         }
     }
 
-    /// The world's waiting moments after the oldest's, for the key.
-    fn relative_waits(&self) -> Vec<(u8, u64)> {
-        let first = self
-            .waits
-            .iter()
-            .map(|(_, since)| *since)
-            .min()
-            .unwrap_or(0);
+    /// The world's waiting units for the key: each id with the rank of its
+    /// moment among the waiting, equal moments equal ranks (the values go,
+    /// the order stays).
+    fn relative_waits(&self) -> Vec<(u8, usize)> {
+        let mut moments: Vec<u64> = self.waits.iter().map(|(_, since)| *since).collect();
+        moments.sort_unstable();
+        moments.dedup();
         self.waits
             .iter()
-            .map(|(id, since)| (*id, since - first))
+            .map(|(id, since)| (*id, moments.iter().position(|at| at == since).unwrap_or(0)))
             .collect()
     }
 

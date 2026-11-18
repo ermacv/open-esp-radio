@@ -3820,7 +3820,7 @@ where
             };
             std::format!(
                 "{name}|{}|{}|{}",
-                running.receive.key(),
+                running.receive.key(running.agreements.deadline()),
                 match &running.interface {
                     Interface::Idle {
                         gate: g, key: k, ..

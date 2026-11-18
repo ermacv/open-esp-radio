@@ -395,6 +395,15 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize, 
 impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize, const WINDOW: usize>
     RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
+    /// The earliest inactivity or reorder-gap deadline of the running
+    /// agreements, read without a view.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.banks
+            .iter()
+            .filter_map(|bank| bank.active()?.deadline())
+            .min()
+    }
+
     /// The slots [`Self::slots_home`] gave, back in their banks, each free.
     pub fn slots_back(&mut self, slots: [T::Slot; BANKS]) {
         for (bank, slot) in self.banks.iter_mut().zip(slots) {

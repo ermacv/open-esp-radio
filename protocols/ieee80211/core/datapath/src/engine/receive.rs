@@ -293,22 +293,34 @@ impl<'id> Receive<'id> {
     }
 
     /// The receive half's state, for the engine's search: the places that
-    /// wait, each with its moment after the head's (the search's clock moves
-    /// only to a head's bound), the refusals.
+    /// wait, the order of their deadlines with their ties and, beside them,
+    /// the agreements' `gap` deadline's place in the same order (the
+    /// values go, the order stays: the search's clock moves only to a
+    /// deadline, or by a step that changes no deadline's order), the
+    /// refusals. No waiting unit is late between steps: a round refuses
+    /// every late head (P8).
     #[cfg(test)]
-    pub(super) fn key(&self) -> std::string::String {
-        let head = self.waiting.front().map(|(_, since)| *since);
-        let waiting: std::vec::Vec<(u8, u64)> = self
+    pub(super) fn key(&self, gap: Option<Instant>) -> std::string::String {
+        let deadlines = || {
+            self.waiting
+                .iter()
+                .map(|(_, since)| since.checked_add(self.late))
+        };
+        let mut order: std::vec::Vec<Option<Instant>> = deadlines().chain([gap]).collect();
+        if gap.is_none() {
+            order.pop();
+        }
+        order.sort_unstable();
+        order.dedup();
+        let rank = |at: Option<Instant>| order.iter().position(|seen| *seen == at);
+        let waiting: std::vec::Vec<(u8, Option<usize>)> = self
             .waiting
             .iter()
-            .map(|(unit, since)| {
-                let after = head
-                    .and_then(|head| since.checked_duration_since(head))
-                    .map_or(0, |after| after.as_micros());
-                (unit.place(), after)
-            })
+            .zip(deadlines())
+            .map(|((unit, _), at)| (unit.place(), rank(at)))
             .collect();
-        std::format!("{waiting:?}|{:?}", self.refusals)
+        let gap = gap.and_then(|gap| rank(Some(gap)));
+        std::format!("{waiting:?}|gap {gap:?}|{:?}", self.refusals)
     }
 
     /// One round over `port`, the links as `links` names them.
