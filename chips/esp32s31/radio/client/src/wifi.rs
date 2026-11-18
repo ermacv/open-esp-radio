@@ -158,17 +158,19 @@ pub struct WifiResetMac {
 }
 
 /// The answer to `reset_mac`: the clocks' proof back, the reset's proof the
-/// cold preparation takes, and the values the preparation reads.
+/// cold preparation takes, and the coexistence priorities of the four
+/// events the preparation queries, in [`MAC_COEX_EVENTS`] order, copied at
+/// the reset.
 pub struct WifiMacReset {
     pub clocks: WifiClocksOn,
     pub reset: MacBlockReset,
-    pub sources: MacColdSources,
+    pub pti: [MacCoexPti; 4],
 }
 
-/// The values of the radio system's that the MAC's cold preparation reads,
-/// copied at the reset: the coexistence priorities of the four events it
-/// queries, in `MacColdCoexPti::query` order (events 1, 3, 10, 15), and the
-/// calibrated TX power profile under the member's ceiling.
+/// The values the MAC's cold preparation reads: the reset's coexistence
+/// priorities (events 1, 3, 10, 15, in `MacColdCoexPti::query` order) and the
+/// calibrated TX power profile under the member's ceiling, which the
+/// member's last `track` or `retune` report gave it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MacColdSources {
     pub pti: [MacCoexPti; 4],
@@ -201,6 +203,47 @@ impl MacTxPowerSource for MacColdSources {
         MacTxPowerPair {
             primary: pair.primary,
             alternate: pair.alternate,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_chips_esp32s31_radio_phy::PhyState;
+
+    fn sources() -> MacColdSources {
+        MacColdSources {
+            pti: [1, 3, 10, 15].map(|value| {
+                oer_chips_family_radio_coex::CoexPti::new(value)
+                    .expect("a coexistence priority")
+                    .into()
+            }),
+            tx_power: PhyState::default().tx_target_power_profile(),
+        }
+    }
+
+    #[test]
+    fn each_coex_event_reads_its_own_priority() {
+        let mut sources = sources();
+        for (event, value) in MAC_COEX_EVENTS.into_iter().zip([1, 3, 10, 15]) {
+            assert_eq!(sources.mac_coex_pti(event).value(), value);
+        }
+    }
+
+    #[test]
+    fn the_tx_power_pairs_are_the_profiles() {
+        let mut sources = sources();
+        let profile = PhyState::default().tx_target_power_profile();
+        for rate in 0..=40 {
+            let pair = profile.pair(rate);
+            assert_eq!(
+                sources.mac_tx_power_pair(rate),
+                MacTxPowerPair {
+                    primary: pair.primary,
+                    alternate: pair.alternate,
+                }
+            );
         }
     }
 }

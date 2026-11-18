@@ -16,7 +16,7 @@
 use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 use oer_chips_esp32s31_radio_phy::executor::boundary::Boundary;
 
-use oer_chips_esp32s31_hal::radio::ieee80211::init::{MacCoexPti, initialize_wifi_mac};
+use oer_chips_esp32s31_hal::radio::ieee80211::init::MacCoexPti;
 use oer_chips_esp32s31_hal::{
     radio::domain::{
         CoexAbsent, Coexisting, CommonPower, CommonRadioPowerError, ModemClockError,
@@ -29,7 +29,8 @@ use oer_chips_esp32s31_radio_client::{
     PhyFault, PhyPreparation, Poison, PoisonCause, RcSlow, RegistrationFailure, RegistrationFault,
     RequestKind,
     wifi::{
-        RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
+        MAC_COEX_EVENTS, RetuneReport, TrackReport, Wifi, WifiJoin, WifiJoined, WifiLeave, WifiLeft,
+        WifiMacReset, WifiResetMac, WifiRetune,
         WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
@@ -49,7 +50,6 @@ use crate::owned_operation;
 
 use crate::{
     ClientBackend, CloseFault, Exit, Fault, LastClientLeft, PhyDomain,
-    mac_sources::{MAC_COEX_EVENTS, MacSources},
 };
 
 mod modem_sleep;
@@ -680,9 +680,6 @@ where
             mut wifi,
             channel,
             tx_ceiling,
-            mac,
-            slow_clock,
-            delay_random,
         } = track;
         let Some(membership) = self.wifi.membership.take() else {
             return Err(Failed {
@@ -810,64 +807,21 @@ where
             }
         };
 
-        let mut sources = MacSources {
-            pti: MAC_COEX_EVENTS.map(|event| {
-                MacCoexPti::from(
-                    require_radio(self.radio.as_ref(), self.radio_fault)
-                        .coex_pti(event.coex_event()),
-                )
-            }),
-            tx_power,
-            slow_clock,
-            delay_random,
-        };
-        let mac_outcome = {
-            let mut hal = wifi.cold_mac_hal(require_radio(self.radio.as_mut(), self.radio_fault));
-            // Track prepares MAC configuration and IRQs with its common gates
-            // held. Only the later runtime owner can supply an RX-ring proof.
-            initialize_wifi_mac(&mut sources, &mut hal, &self.timer, mac).await
-        };
-        match mac_outcome {
-            Ok(mac) => {
-                self.wifi.membership = Some(membership);
-                Ok(WifiTracked {
-                    wifi,
-                    report: TrackReport {
-                        probe_priority: crate::mac_sources::probe_priority(
-                            require_radio(self.radio.as_ref(), self.radio_fault).coex_pti_table(),
-                        ),
-                        tracking_micros,
-                        temperature,
-                        tx_power,
-                        mac,
-                    },
-                })
-            }
-            Err(_handshake) => {
-                // ClientFailed: the handshake times out after only the
-                // WIFIMAC reset pulse in the shared MODEM_RST_CONF, which
-                // sets and clears Wi-Fi's own reset bit and leaves the
-                // register as it was; the half-started MAC is Wi-Fi's
-                // partition. The TX power queries come later and read only
-                // the owned profile. Wi-Fi's RX enable is cleared again.
-                let cleared = set_wifi_rx(
-                    require_radio(self.radio.as_mut(), self.radio_fault),
-                    &membership,
-                    false,
-                );
-                self.wifi.membership = Some(membership);
-                if let Err(error) = cleared {
-                    return Err(Failed {
-                        returned: wifi,
-                        cause: wifi_poisoned(RequestKind::Track, PoisonCause::Domain(error)),
-                    });
-                }
-                Err(Failed {
-                    returned: wifi,
-                    cause: Failure::ClientFailed,
-                })
-            }
-        }
+        // The MAC's reset and cold preparation are not the actor's: the
+        // tracked member asks for the reset (`reset_mac`) and prepares its
+        // own MAC.
+        self.wifi.membership = Some(membership);
+        Ok(WifiTracked {
+            wifi,
+            report: TrackReport {
+                probe_priority: crate::mac_sources::probe_priority(
+                    require_radio(self.radio.as_ref(), self.radio_fault).coex_pti_table(),
+                ),
+                tracking_micros,
+                temperature,
+                tx_power,
+            },
+        })
     }
 
     async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
@@ -938,6 +892,21 @@ where
                 temperature: state.temperature_observation(),
             },
         })
+    }
+
+    async fn reset_mac(&mut self, reset: WifiResetMac) -> WifiMacReset {
+        let WifiResetMac { clocks, channel } = reset;
+        let lowered = crate::channel::lower_ghz2_4_channel(channel);
+        let radio = require_radio(self.radio.as_mut(), self.radio_fault);
+        // One step, no await: the pulse, the PHY's channel field of the
+        // tuned channel and Wi-Fi's constants in the block's foreign words.
+        let proof = radio.reset_wifi_mac_block(&clocks, lowered.cbw);
+        let pti = MAC_COEX_EVENTS.map(|event| MacCoexPti::from(radio.coex_pti(event.coex_event())));
+        WifiMacReset {
+            clocks,
+            reset: proof,
+            pti,
+        }
     }
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {

@@ -25,6 +25,7 @@ oer-protocols-ieee80211-contracts-port = { path = "../../../../protocols/ieee802
 
 [dev-dependencies]
 oer-chips-esp32s31-hal = { path = "../../hal", features = ["test-support"] }
+oer-chips-family-radio-coex = { path = "../../../family/radio/coex" }
 
 [lints]
 workspace = true

@@ -8,9 +8,6 @@ use embassy_futures::{
     select::{Either, select},
     yield_now,
 };
-use oer_chips_esp32s31_hal::radio::ieee80211::init::{
-    MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
-};
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::client::{WifiClocked, WifiCold},
     system::root::RadioHardware,
@@ -18,8 +15,8 @@ use oer_chips_esp32s31_hal::{
 use oer_chips_esp32s31_radio_client::{
     ClientCells, Leaving, PhyFault, RcSlow, RegistrationFault, RequestKind, claim_for_host_test,
     wifi::{
-        RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiRetune,
-        WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
+        RetuneReport, TrackReport, WifiJoin, WifiJoined, WifiLeave, WifiLeft, WifiMacReset,
+        WifiResetMac, WifiRetune, WifiRetuned, WifiReturned, WifiTrack, WifiTracked,
     },
 };
 use oer_chips_esp32s31_radio_phy::{PhyCalibrationPath, PhyState};
@@ -62,6 +59,7 @@ enum Event {
     Enter,
     Track,
     Retune,
+    ResetMac,
     Exit,
     CloseRf,
     Tick,
@@ -239,10 +237,6 @@ impl ClientBackend<Wifi, RcSlow> for Model {
                 tracking_micros: Some(7),
                 temperature: PhyState::default().temperature_observation(),
                 tx_power: PhyState::default().tx_target_power_profile(),
-                mac: MacColdStartOutcome {
-                    handshake_samples: 1,
-                    handshake_observations: 2,
-                },
             },
         })
     }
@@ -266,6 +260,19 @@ impl ClientBackend<Wifi, RcSlow> for Model {
                 tx_power: PhyState::default().tx_target_power_profile(),
             },
         })
+    }
+
+    async fn reset_mac(&mut self, reset: WifiResetMac) -> WifiMacReset {
+        self.push(Event::ResetMac);
+        WifiMacReset {
+            clocks: reset.clocks,
+            reset: oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset::for_host_model(),
+            pti: [1, 3, 10, 15].map(|value| {
+                oer_chips_family_radio_coex::CoexPti::new(value)
+                    .expect("a coexistence priority")
+                    .into()
+            }),
+        }
     }
 
     async fn exit(&mut self, leave: WifiLeave) -> (WifiLeft, Exit) {
@@ -323,13 +330,6 @@ fn track_request(wifi: WifiClocked) -> WifiTrack {
                 chip_maximum_mbm: 2000,
                 owner_cap_mbm: None,
             }),
-        mac: MacColdStartConfig {
-            handshake_deadline: oer_portable_time::Duration::from_millis(1),
-            station_address: [2, 0, 0, 0, 0, 1],
-            access_point_address: [2, 0, 0, 0, 0, 2],
-        },
-        slow_clock: MacSlowClockCalibration::Unavailable,
-        delay_random: 0,
     }
 }
 
@@ -1229,4 +1229,81 @@ fn a_join_the_phy_refused_names_the_refusal_after_either_rollback() {
         panic!("an unfinished rollback poisons the domain")
     };
     assert_eq!(poison.cause, PoisonCause::RollbackAfterRefusal(refusal));
+}
+
+/// A tracked member's MAC reset: posted with its clocks' proof, answered
+/// with the reset's proof, the coexistence priorities and the proof back,
+/// and answered in a poisoned domain too, as a leave is.
+#[test]
+fn a_tracked_members_mac_reset_is_answered_with_its_proof_even_when_poisoned() {
+    for poisoned in [false, true] {
+        let model = model(Script {
+            poison_retune: poisoned,
+            ..Default::default()
+        });
+        run(&model, clock(), |cells| async move {
+            let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+            let joined = joined.ok().expect("join");
+            let (mut cell, tracked) = cell
+                .track(joined.member, track_request(joined.payload.wifi))
+                .await
+                .unwrap();
+            let tracked = tracked.ok().expect("track");
+            let (mut member, mut wifi) = (tracked.member, tracked.payload.wifi);
+            if poisoned {
+                let config = track_request(wifi);
+                let (next, answer) = cell
+                    .retune(
+                        member,
+                        WifiRetune {
+                            wifi: config.wifi,
+                            channel: config.channel,
+                            tx_ceiling: config.tx_ceiling,
+                        },
+                    )
+                    .await
+                    .unwrap();
+                let Err(Failed { returned, .. }) = answer else {
+                    panic!("the retune poisons");
+                };
+                (member, wifi) = returned;
+                cell = next;
+            }
+            let (access, clocks) = wifi.into_running();
+            let (cell, reset) = cell
+                .reset_mac(
+                    member,
+                    WifiResetMac {
+                        clocks,
+                        channel: Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap(),
+                    },
+                )
+                .await
+                .unwrap();
+            let WifiMacReset { clocks, reset: proof, pti } = reset.payload;
+            assert_eq!(pti.map(|pti| pti.value()), [1, 3, 10, 15]);
+            let oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset { .. } = proof;
+            let wifi = WifiClocked::from_running(access, clocks);
+            let (_, left) = cell
+                .leave(Leaving::Tracked(reset.member), WifiLeave { wifi })
+                .await
+                .unwrap();
+            assert_eq!(
+                left.domain == DomainHealth::Healthy,
+                !poisoned,
+                "{:?}",
+                left.domain
+            );
+        });
+        let mut expected = vec![REGISTERED, Event::Enter, Event::Track];
+        if poisoned {
+            expected.push(Event::Retune);
+        }
+        expected.extend([Event::ResetMac, Event::Exit]);
+        // A poisoned domain keeps its RF as it was (the actor's rule).
+        if !poisoned {
+            expected.push(Event::CloseRf);
+        }
+        assert_eq!(model.log(), expected);
+    }
 }
