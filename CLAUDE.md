@@ -84,6 +84,21 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   is a sum" cannot both hold, the sum holds: the copy is recorded for the
   audit of copies and frames and is removed where the image's reports
   show its cost.
+- **DMA memory.** Memory the hardware reads or writes has three facts, and
+  one layer answers each: its place (a fixed address in the chip's DMA
+  window, a fact of the link: `portable/memory`), its layout (what the
+  hardware reads there: the PAC's generated layouts) and its custody (who
+  may touch the bytes now: the HAL's atoms). Custody is a value, never an
+  inspected state: a buffer's handle is held by the CPU and gives slices, or
+  is lent and gives nothing; lending takes the handle and only a release
+  proof gives it back. A release proof is a claim about the hardware (it
+  no longer reads or writes this memory), made by the one HAL atom that
+  observed it and citing its stand record. Words the hardware shares for
+  good (a descriptor, a receive header) are read through the layout's
+  volatile accessors and never lie under a slice. Above the HAL there is no
+  address: pools, spares and what to do under pressure are policy there. An
+  existing pool or state machine in `portable/memory` or in the HAL's DMA
+  modules is debt to remove, never a precedent to repeat.
 - **A state is a sum.** A state is an enum whose variant holds
   exactly what exists in it: two fields that are not independent are one
   enum, and a fact that can be derived is not stored. An `Option` is a
@@ -101,9 +116,11 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   installation its removal. A stop leaves its block as its start found it,
   so that a second run is as the first. A block has one owner, which resets
   it once, when it takes it: no start resets a block, and no code resets a
-  block of another owner. A port holds state about its hardware only: no
-  count or delay of a policy, no plan for later, nothing that outlives a
-  stop.
+  block of another owner. A word that serves several blocks has one writing
+  context: its owner gives each block's owner an operation, and does in it
+  what the word's other users need. A port holds state about its hardware
+  only: no count or delay of a policy, no plan for later, nothing that
+  outlives a stop.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item
@@ -162,11 +179,13 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   contracts cover memory safety; operation order and lifecycle are enforced by
   `&mut` ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
   access; generated register code has none), `portable/riscv` (architectural
-  instructions), `portable/memory` (cells, placement, DMA proofs, typed symbol
+  instructions), `portable/memory` (cells, placement, DMA custody, typed symbol
   exports), `portable/waker`, Espressif interrupt bindings in
   `chips/family/platform/interrupt-table`, the PAC's one root claim, probe
-  images, the placement constructor, the HAL's PSRAM owner (slice creation)
-  and the HAL's protocol core, narrow and with `// SAFETY:`; crates above the
+  images, the placement constructor, the HAL's PSRAM owner (slice creation),
+  the HAL's DMA release proofs (one constructor a kind of observation, each
+  citing its stand record) and the HAL's protocol core, narrow and with
+  `// SAFETY:`; crates above the
   HAL forbid it. Moving an existing site into its narrow home may raise the
   home's count only by the moved sites, when the touched crates' total falls
   and no calling crate's count grows; each site retains its narrow contract
@@ -177,10 +196,21 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   compiler fixtures are test inputs.
 - **Execution.** The critical section is hart-local. An interrupt handler
   never shares a lock with a task. A task waker stays on its executor's
-  hart; no waker crosses harts. A signal names its raisers at compile time;
-  a raising handler sits strictly above the receiving executor, with the
-  exceptions listed in [Execution](docs/architecture.md#execution). Driver
-  code never blocks or spins; it yields to its executor. The one exception
+  hart; no waker crosses harts. Between the interrupt handlers and the
+  application an interrupt level runs one task, with a hardware timer of
+  its own where it has delays: the task gives the CPU up only by waiting
+  for its event or its timer, by ending, or to a higher level, and no task
+  is sliced for another's sake. A radio's interrupt handler only latches
+  status and posts events; what must react sooner than the application is
+  the task of a level below the handlers. A driver's handler, its levels'
+  tasks and its port's task are on one hart; only the network stack may be
+  on another. Several tasks on one level between the handlers and the
+  application, and work cut into steps so that they may share it, are debt
+  to remove, never a precedent to repeat. A signal names its raisers at
+  compile time; a raising handler sits strictly above what it wakes, an
+  executor or a level's task, with the exceptions listed in
+  [Execution](docs/architecture.md#execution). Driver code never blocks or
+  spins; it yields to its executor or leaves its level. The one exception
   is a named settle of a known length up to 20 µs. Before an executor exists
   (the bootstrap and early boot), console output may wait for room in the
   USB FIFO up to a bounded budget per record, and hardware bring-up (PLL,
