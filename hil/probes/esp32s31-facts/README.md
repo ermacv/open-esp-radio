@@ -1191,3 +1191,28 @@ These leaves observe the ROM download state the loader leaves: no bootloader
 ran, so cache buses, printf slots and reset causes differ from a flash boot.
 They make no PSRAM or flash access from hart 1 and observe the CLIC only after
 the CSR snapshot.
+
+## CLIC levels and the software entry of a level
+
+Selections 310–316 run on hart 0 with hart 1 contained, no RF and no routed
+source except where named (`src/image/levels.rs`). Lines are external lines
+from 16, hardware-vectored and positive-edge, at level n with control byte
+`(n << 5) - 1` (three level bits). A pend is the typed read-modify-write of the
+line's own `CTRL` word setting `IP`, with MIE cleared across it; each line has
+its own word, so the write touches no other line. The handler logs 16-bit
+events `kind << 14 | line << 8 | mintstatus.MIL` (kind 0 enter, 1 exit, 2
+mark of a pend after the write, 3 storm guard). Every trial waits 60,000
+cycles with MIE set. Records `tag | 0xff` give `(repeat, events, entries)`;
+`tag | record << 16 | repeat << 24` carry six events each. The ROM RTC watchdog is fed before every trial.
+
+| Selection | Experiment, ten repeats each |
+| --- | --- |
+| 310 | Levels 1–7 on lines 16–22, siblings at the same levels on 23–29. The thread pends level 1; level n's handler pends its sibling, level n−1's sibling, then level n+1 |
+| 311 | Level 3 (line 32) pended by the thread pends level 1 (line 30) |
+| 312 | Level 2 (line 31) pended from the thread, then from level 1's handler |
+| 313 | Level 2's handler pends its own line on its first entry |
+| 314 | Line 34 pended between line 33 (edge, pended, disabled) and line 35 (FROM_CPU2, level-triggered in variants 0–2, edge in 3–5), all level 2; the source rises before the pend, between its read and write, or after it. `0x3500 + v`: `(repeat, entries of 34, 35, 33 in bytes 0–2 and IP of 34, 35, 33 in bits 24–26, all entries)`; `0x3580 + v`/`0x35c0 + v`: the three words before and after the pend |
+| 315 | Two pends of line 31 with MIE cleared (`0x3600`: `(repeat, IP, entries)`), then level 3's handler pends level 1 twice (`0x3700` events) |
+| 316 | 100 samples: level 3's handler pends level 1 and returns; cycles from the pend's write to level 1's first cycle read (`0x3800` every third sample, `0x38ff`: `(min, max, valid)`) |
+
+These are isolated observations, not a latency bound.

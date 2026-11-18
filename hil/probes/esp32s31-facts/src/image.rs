@@ -24,6 +24,7 @@ mod ble_wave2;
 mod generic;
 mod hart1_entry;
 mod irq_observer;
+mod levels;
 mod lp_ack_race;
 mod lp_lanes;
 mod lp_softreset;
@@ -140,6 +141,9 @@ fn halt() -> ! {
 #[unsafe(no_mangle)]
 extern "C" fn facts_irq() {
     let cycle = oer_portable_riscv::cycle32();
+    if levels::interrupt(cycle) {
+        return;
+    }
     IRQ_CYCLE.store(cycle, Ordering::Relaxed);
     IRQ_PC.store(oer_portable_riscv::read_mepc() as u32, Ordering::Relaxed);
     if generic::interrupt() {
@@ -229,6 +233,34 @@ enum Action {
 // The sole registration point. Reset is selected explicitly; it cannot run
 // accidentally as part of the non-reset batch (request 0).
 const PROBES: &[Probe] = &[
+    Probe {
+        id: 310,
+        run: Action::Thread(levels::nesting),
+    },
+    Probe {
+        id: 311,
+        run: Action::Thread(levels::from_higher_once),
+    },
+    Probe {
+        id: 312,
+        run: Action::Thread(levels::from_lower),
+    },
+    Probe {
+        id: 313,
+        run: Action::Thread(levels::own_handler),
+    },
+    Probe {
+        id: 314,
+        run: Action::Thread(levels::neighbours),
+    },
+    Probe {
+        id: 315,
+        run: Action::Thread(levels::twice),
+    },
+    Probe {
+        id: 316,
+        run: Action::Thread(levels::latency),
+    },
     Probe {
         id: 232,
         run: Action::Thread(hart1_entry::main_path),
