@@ -43,6 +43,7 @@ pub enum RequestKind {
     Track,
     Retune,
     Leave,
+    ResetMac,
 }
 
 impl RequestKind {
@@ -53,6 +54,7 @@ impl RequestKind {
             Self::Track => 2,
             Self::Retune => 3,
             Self::Leave => 4,
+            Self::ResetMac => 5,
         }
     }
 }

@@ -43,6 +43,7 @@ impl DiagnosticPath for RequestKind {
             Self::Track => "Track",
             Self::Retune => "Retune",
             Self::Leave => "Leave",
+            Self::ResetMac => "ResetMac",
         });
     }
 }

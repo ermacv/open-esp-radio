@@ -58,6 +58,10 @@ impl Client for Bluetooth {
     type Retune = Infallible;
     type Retuned = Infallible;
     type RetuneReturned = Infallible;
+    /// Bluetooth's controller domains are reset by its own driver with the
+    /// domain lent: it posts no MAC reset.
+    type ResetMac = Infallible;
+    type MacReset = Infallible;
     type Leave = Installation;
     type Left = BluetoothLeft;
 
