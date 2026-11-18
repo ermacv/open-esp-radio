@@ -293,3 +293,30 @@ fn split_coex_ports_borrow_the_actual_domain_priority_table() {
     let (timers, _clock) = radio.coex_ports();
     assert_eq!(timers.pti(event).value(), 3);
 }
+
+/// The block's reset writes the reset bit set, then cleared, then the
+/// foreign words: none of the write-back precedes the pulse that clears it.
+#[test]
+fn the_mac_block_reset_pulses_before_it_writes_back() {
+    #[derive(Debug, PartialEq)]
+    enum Write {
+        Reset(bool),
+        WriteBack(u8),
+    }
+    struct Port(std::vec::Vec<Write>);
+    impl super::MacBlockResetPort for Port {
+        fn set_wifi_mac_reset(&mut self, asserted: bool) {
+            self.0.push(Write::Reset(asserted));
+        }
+        fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
+            self.0.push(Write::WriteBack(cbw));
+        }
+    }
+    let mut port = Port(std::vec::Vec::new());
+    let crate::radio::ieee80211::init::MacBlockReset { .. } =
+        super::reset_wifi_mac_block(&mut port, 3);
+    assert_eq!(
+        port.0,
+        [Write::Reset(true), Write::Reset(false), Write::WriteBack(3)]
+    );
+}

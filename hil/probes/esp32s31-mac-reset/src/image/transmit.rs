@@ -931,7 +931,7 @@ pub(super) async fn series(
         let pulse_cycle = oer_portable_riscv::cycle32();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(held(slot)?);
+            let _pulse = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
             clocked.into_running()
         };
         access = pulsed;
@@ -956,8 +956,9 @@ pub(super) async fn series(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(held(slot)?);
-                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+                let reset = held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                let mut hal = clocked.cold_mac_hal();
+                initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
             access = running;

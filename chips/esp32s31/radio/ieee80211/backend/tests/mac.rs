@@ -1,7 +1,6 @@
 use oer_chips_esp32s31_hal::radio::ieee80211::init::MacInterfaceAddressHardware;
 use oer_chips_esp32s31_hal::types::{MacDelaySlot, MacLegacyRate};
 use oer_protocols_ieee80211_contracts_port::backend::RateScheduleKind;
-use std::{cell::RefCell, rc::Rc};
 
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::descriptor::{
     DESCRIPTOR_BYTES, RxDescriptor, TxDescriptor, rx_armed_word, rx_landed_word, rx_rearm_word,
@@ -17,12 +16,12 @@ use oer_protocols_ieee80211_wire::he::{HeMuSigBMimoUser, HeMuSigBNonMimoUser, He
 use {
     oer_chips_esp32s31_hal::{
         radio::ieee80211::init::{
-            MAC_COLD_HANDSHAKE_DEADLINE, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
+            MAC_COLD_HANDSHAKE_DEADLINE, MacBlockReset, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
             MacColdAntennaHardware, MacColdCoexHardware, MacColdCoexPti, MacColdCryptoHardware,
             MacColdHalTailHardware, MacColdHandshakeHardware, MacColdHeHardware,
             MacColdLastRxBufferHardware, MacColdPrepareHardware, MacColdRxBufferHardware,
             MacColdRxPolicyHardware, MacColdStartConfig, MacColdStartError, MacColdTxRxHardware,
-            MacDelayEntropy, MacLowRateHardware, MacResetHardware, MacSlowClockCalibration,
+            MacDelayEntropy, MacLowRateHardware, MacSlowClockCalibration,
             MacSlowClockCalibrationSource, MacTxPowerSource, initialize_wifi_mac,
         },
         types::{MacTxPowerPair, MacTxPowerTable},

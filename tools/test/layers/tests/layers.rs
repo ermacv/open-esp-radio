@@ -4260,6 +4260,160 @@ fn a_right_is_forged_only_by_tests() {
     assert!(found.is_empty(), "a product reaches `forge`: {found:?}");
 }
 
+/// The package a manifest's dependency `alias` names, in any of its tables.
+fn dependency_package(manifest: &toml::Value, alias: &str) -> Option<String> {
+    let targets = manifest
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|targets| targets.values());
+    core::iter::once(manifest)
+        .chain(targets)
+        .flat_map(|scope| {
+            ["dependencies", "build-dependencies", "dev-dependencies"]
+                .into_iter()
+                .filter_map(move |table| scope.get(table).and_then(toml::Value::as_table))
+        })
+        .find_map(|dependencies| dependencies.get(alias))
+        .map(|spec| {
+            spec.get("package")
+                .and_then(toml::Value::as_str)
+                .unwrap_or(alias)
+                .to_owned()
+        })
+}
+
+/// The features that turn `door` on: `door` itself and every package
+/// feature that forwards to one of them, to a fixed point.
+fn features_reaching(
+    packages: &BTreeMap<String, toml::Value>,
+    door: (&str, &str),
+) -> BTreeSet<(String, String)> {
+    let mut reaching = BTreeSet::from([(door.0.to_owned(), door.1.to_owned())]);
+    loop {
+        let mut added = false;
+        for manifest in packages.values() {
+            let Some(name) = manifest["package"]["name"].as_str() else {
+                continue;
+            };
+            let Some(features) = manifest.get("features").and_then(toml::Value::as_table) else {
+                continue;
+            };
+            for (feature, items) in features {
+                let forwards = items.as_array().into_iter().flatten().any(|item| {
+                    item.as_str()
+                        .and_then(|item| item.split_once('/'))
+                        .and_then(|(alias, target)| {
+                            dependency_package(manifest, alias.trim_end_matches('?'))
+                                .map(|package| (package, target.to_owned()))
+                        })
+                        .is_some_and(|forwarded| reaching.contains(&forwarded))
+                });
+                if forwards && reaching.insert((name.to_owned(), feature.clone())) {
+                    added = true;
+                }
+            }
+        }
+        if !added {
+            return reaching;
+        }
+    }
+}
+
+/// The HAL's `test-support` feature is the door of its host constructors,
+/// `MacBlockReset::for_host_model` among them, which make what only an
+/// operation on the hardware may make. No normal or build dependency of
+/// any package turns it on, directly or through a feature of its own that
+/// forwards to it, and no package turns such a feature on by default; a
+/// dev-dependency does (the tests).
+///
+/// One normal dependency turns it on today and is recorded here as debt:
+/// the register probe's host-target table
+/// (`hil/probes/esp32s31-register`, `[target.'cfg(not(target_arch =
+/// "riscv32"))'.dependencies]`).
+#[test]
+fn the_hals_host_constructors_are_reached_only_by_tests() {
+    const HAL: &str = "oer-chips-esp32s31-hal";
+    const FEATURE: &str = "test-support";
+    const DEBT: &[&str] = &["hil/probes/esp32s31-register [dependencies]"];
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let workspace = &workspace["workspace"];
+    let packages = packages(&root);
+    let reaching = features_reaching(&packages, (HAL, FEATURE));
+    let mut found = Vec::new();
+    let mut tests = 0;
+    for (path, manifest) in &packages {
+        for (package, feature) in &reaching {
+            for table in ["dependencies", "build-dependencies"] {
+                if enables_feature(manifest, workspace, table, package, feature) {
+                    found.push(format!("{path} [{table}]"));
+                }
+            }
+            if enables_feature(manifest, workspace, "dev-dependencies", package, feature) {
+                tests += 1;
+            }
+            if manifest["package"]["name"].as_str() == Some(package.as_str()) {
+                let defaults = manifest
+                    .get("features")
+                    .and_then(|features| features.get("default"))
+                    .and_then(toml::Value::as_array);
+                assert!(
+                    !defaults.is_some_and(|defaults| defaults
+                        .iter()
+                        .any(|f| f.as_str() == Some(feature.as_str()))),
+                    "{package} turns {feature}, which reaches the HAL's {FEATURE}, on by default"
+                );
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    assert!(tests > 0, "no test turns the HAL's host constructors on");
+    assert_eq!(
+        found, DEBT,
+        "a product reaches the HAL's host constructors (or a recorded debt left)"
+    );
+}
+
+#[test]
+fn a_feature_forwarding_to_a_door_reaches_it() {
+    let manifest = |text: &str| toml::from_str::<toml::Value>(text).expect("manifest");
+    let packages = BTreeMap::from([
+        (
+            "hal".to_owned(),
+            manifest("[package]\nname = \"hal\"\n[features]\ntest-support = []"),
+        ),
+        (
+            "backend".to_owned(),
+            manifest(
+                "[package]\nname = \"backend\"\n[dependencies]\nh = { package = \"hal\", path = \"x\" }\n[features]\ntest-support = [\"h?/test-support\"]\nother = []",
+            ),
+        ),
+        (
+            "station".to_owned(),
+            manifest(
+                "[package]\nname = \"station\"\n[dependencies]\nbackend = { path = \"y\" }\n[features]\nhost = [\"backend/test-support\"]",
+            ),
+        ),
+    ]);
+    let reaching = features_reaching(&packages, ("hal", "test-support"));
+    let pairs = |names: &[(&str, &str)]| {
+        names
+            .iter()
+            .map(|(p, f)| ((*p).to_owned(), (*f).to_owned()))
+            .collect::<BTreeSet<_>>()
+    };
+    assert_eq!(
+        reaching,
+        pairs(&[
+            ("hal", "test-support"),
+            ("backend", "test-support"),
+            ("station", "host"),
+        ])
+    );
+}
+
 #[test]
 fn a_feature_turned_on_by_an_inherited_or_a_target_entry_is_found() {
     let workspace: toml::Value = toml::from_str(
@@ -6503,7 +6657,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/system/src/esp32s31.rs",
-        44,
+        43,
         BY_RADIO_SYSTEM,
     ),
     (

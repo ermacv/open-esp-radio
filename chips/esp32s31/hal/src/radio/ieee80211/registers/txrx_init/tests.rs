@@ -1,7 +1,5 @@
 //! The `mac_txrx_init` transactions over host memory.
 
-use oer_chips_esp32s31_pac::{instances, wifi_mac::SharedRadioInitControl};
-
 use super::MacDelaySlot;
 use crate::radio::ieee80211::registers::{HostWords, element};
 
@@ -101,11 +99,8 @@ fn callbacks_publish_the_delays_and_response_rate_tables() {
 }
 
 #[test]
-fn suffix_stops_the_walker_and_publishes_the_shared_initialization() {
+fn suffix_stops_the_walker_and_publishes_its_own_words() {
     let mut memory = HostWords::filled(0);
-    let mut shared_words = std::vec![0; instances::wifi_mac::SIZE.div_ceil(4)];
-    let mut shared =
-        SharedRadioInitControl::host(&mut shared_words).expect("the part's host words");
     {
         let mut owners = memory.owners();
         owners.rx_dma.dma.modify_rx_control(|w| {
@@ -113,12 +108,8 @@ fn suffix_stops_the_walker_and_publishes_the_shared_initialization() {
         });
         owners
             .registers
-            .initialize_mac_txrx_suffix(&mut shared, &mut owners.rx_dma);
+            .initialize_mac_txrx_suffix(&mut owners.rx_dma);
     }
-    assert_eq!(
-        shared.read_radio_init_control().bits_0_11_opaque().get(),
-        0x0f0
-    );
 
     let owners = memory.owners();
     assert!(!owners.rx_dma.dma.read_rx_control().walker_enable());

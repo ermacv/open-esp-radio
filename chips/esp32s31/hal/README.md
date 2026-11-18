@@ -42,6 +42,13 @@ controller engine, scheduler and modem timer, the boot policy and waits in
 `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker.
 
+The Wi-Fi MAC's block reset, `RadioDomain::reset_wifi_mac_block`, is the
+radio domain's owner's: it pulses `RST_WIFIMAC` in the shared reset word and
+writes back the PHY's and the shared radio's words inside the block. Its
+proof, `MacBlockReset`, is taken by the cold preparation
+(`radio::ieee80211::init::initialize_wifi_mac`), which is the Wi-Fi owner's
+and runs on the Wi-Fi partition alone.
+
 Shared radio membership, epoch policy, common power, semantic verification,
 cold-baseline restore and clock refcounts live in `oer-chips-family-radio-power`;
 HAL supplies owned atom ports and affine proofs.

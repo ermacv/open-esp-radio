@@ -217,7 +217,7 @@ where
                     Ok(payload) => {
                         self.actor.core.tracked();
                         Ok(TrackedMember {
-                            member: self.actor.core.mint.track(member),
+                            member: self.actor.core.mint.track(member, ()),
                             payload,
                         })
                     }
@@ -230,7 +230,7 @@ where
                     }
                 })
             }
-            Request::Retune(_, never, _) => match never {},
+            Request::Retune(_, never, _) | Request::ResetMac(_, never, _) => match never {},
             Request::Leave(member, installation, responder) => {
                 self.actor
                     .core

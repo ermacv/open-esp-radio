@@ -3,24 +3,31 @@
 //!
 //! The Wi-Fi bring-up and common MAC startup happen once per Wi-Fi epoch,
 //! through the client's membership cell: `join` powers and clocks the
-//! client and enters it into the shared PHY domain, and `track` runs the
-//! initial tracking, the RX enable, the initial channel and cold MAC
-//! preparation; the actor does the shared steps of both. Station, access-point,
+//! client and enters it into the shared PHY domain, `track` runs the
+//! initial tracking, the RX enable and the initial channel, and the tracked
+//! member's `reset_mac` has the radio system reset the MAC's block. The
+//! actor does the shared steps of all three. Then the Wi-Fi owner takes its
+//! block: the cold MAC preparation runs here, in this task, on the Wi-Fi
+//! partition alone, and takes the reset's proof. Station, access-point,
 //! scan and monitor owners are materialized later from the returned stopped
 //! frontier; startup therefore cannot accidentally lock the radio into the
 //! first role an application happens to use.
 
 use oer_chips_esp32s31_hal::radio::ieee80211::init::{
-    MacColdStartConfig, MacSlowClockCalibrationSource,
+    MacColdStartConfig, MacColdStartError, MacColdStartOutcome, MacSlowClockCalibrationSource,
+    initialize_wifi_mac,
 };
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::client::{WifiClocked, WifiCold},
     system::root::WifiPartition,
 };
 use oer_chips_esp32s31_radio_client::{
-    Failed, Failure, Joined, Member, MembershipCell, PhyPreparation, RfEpoch, TrackedMember,
-    Untracked,
-    wifi::{TrackReport, Wifi, WifiJoin, WifiJoined, WifiReturned, WifiTrack, WifiTracked},
+    Failed, Failure, Joined, MacResetAnswer, Member, MembershipCell, PhyPreparation, RfEpoch,
+    Tracked, TrackedMember, Untracked,
+    wifi::{
+        MacColdSources, TrackReport, Wifi, WifiJoin, WifiJoined, WifiMacReset, WifiResetMac,
+        WifiReturned, WifiTrack, WifiTracked,
+    },
 };
 use oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
 use oer_portable_time::Duration;
@@ -134,8 +141,11 @@ pub struct WifiStartReport {
     pub epoch: RfEpoch,
     /// How the join prepared the PHY domain.
     pub phy: PhyPreparation,
-    /// The initial tracking, TX power profile and cold MAC preparation.
+    /// The initial tracking and TX power profile.
     pub track: TrackReport,
+    /// The Wi-Fi owner's cold MAC preparation, after the radio system's
+    /// reset of the block.
+    pub mac: MacColdStartOutcome,
 }
 
 /// A bring-up that did not complete, with what the radio system returned.
@@ -155,6 +165,15 @@ pub enum RadioStartFailure<W> {
         failed: Failed<(Member<Wifi, Untracked>, WifiClocked)>,
         platform: W,
     },
+    /// The cold preparation's handshake did not see the MAC ready by its
+    /// deadline, after the radio system's reset; the client is a tracked
+    /// member, which must leave through its cell.
+    Prepare {
+        member: Member<Wifi, Tracked>,
+        wifi: WifiClocked,
+        error: MacColdStartError,
+        platform: W,
+    },
 }
 
 impl<W> RadioStartFailure<W> {
@@ -164,6 +183,8 @@ impl<W> RadioStartFailure<W> {
         let cause = match self {
             Self::Join { failed, .. } => failed.cause,
             Self::Track { failed, .. } => failed.cause,
+            // The preparation touches the Wi-Fi partition alone.
+            Self::Prepare { .. } => return false,
         };
         cause.poison().is_some()
     }
@@ -178,11 +199,12 @@ impl<W> RadioStartFailure<W> {
 ///
 /// Dropping the future loses no answer: it stays in the cell, whose token
 /// this future holds while a request is posted.
-pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
+pub async fn start_esp32s31_radio<W: WifiMacPlatform, T: oer_portable_time::Timer>(
     cell: MembershipCell<Wifi>,
     partition: WifiPartition,
     mut platform: W,
     config: RadioStartConfig,
+    timer: &T,
 ) -> Result<
     (
         MembershipCell<Wifi>,
@@ -216,13 +238,6 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         wifi,
         channel: config.wifi.initial_channel,
         tx_ceiling: config.wifi.tx_ceiling,
-        mac: MacColdStartConfig {
-            handshake_deadline: config.mac.handshake_deadline,
-            station_address: config.mac.station_address.get(),
-            access_point_address: config.mac.access_point_address.get(),
-        },
-        slow_clock: platform.mac_slow_clock_calibration(),
-        delay_random: config.mac.delay_random,
     };
     let (cell, tracked) = match cell.track(member, request).await {
         Ok(answer) => answer,
@@ -240,12 +255,57 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform>(
         Ok(tracked) => tracked,
         Err(failed) => return Ok((cell, Err(RadioStartFailure::Track { failed, platform }))),
     };
+    // The Wi-Fi owner takes its block: the radio system resets it, then the
+    // cold preparation runs here.
+    let (access, clocks) = wifi.into_running();
+    let (cell, reset) = match cell.reset_mac(member, WifiResetMac { clocks }).await {
+        Ok(answer) => answer,
+        Err(reason) => {
+            return Err(oer_portable_memory::RequestQuarantine::new(
+                reason,
+                Some(platform),
+            ));
+        }
+    };
+    let MacResetAnswer {
+        member,
+        payload: WifiMacReset { clocks, reset, pti },
+    } = reset;
+    let mut wifi = WifiClocked::from_running(access, clocks);
+    let mut sources = MacColdSources {
+        pti,
+        tx_power: report.tx_power,
+        slow_clock: platform.mac_slow_clock_calibration(),
+        delay_random: config.mac.delay_random,
+    };
+    let mac = MacColdStartConfig {
+        handshake_deadline: config.mac.handshake_deadline,
+        station_address: config.mac.station_address.get(),
+        access_point_address: config.mac.access_point_address.get(),
+    };
+    let prepared =
+        initialize_wifi_mac(reset, &mut sources, &mut wifi.cold_mac_hal(), timer, mac).await;
+    let mac = match prepared {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Ok((
+                cell,
+                Err(RadioStartFailure::Prepare {
+                    member,
+                    wifi,
+                    error,
+                    platform,
+                }),
+            ));
+        }
+    };
     platform.install_phy_tx_power_profile(report.tx_power);
     let report = WifiStartReport {
         initial_channel: config.wifi.initial_channel.channel().channel(),
         epoch,
         phy,
         track: report,
+        mac,
     };
     Ok((
         cell,

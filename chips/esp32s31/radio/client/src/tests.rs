@@ -20,6 +20,16 @@ fn epochs_are_minted_in_order() {
     assert_ne!(first, second);
 }
 
+#[test]
+fn a_tracked_member_holds_what_the_mint_tuned_it_to_until_a_retune() {
+    let mint = MemberMint::new();
+    let member = mint.track::<TestClient>(mint.untracked(), 6);
+    assert_eq!(mint.tuned(&member), 6);
+    let member = mint.retune(member, 11);
+    assert_eq!(mint.tuned(&member), 11);
+    mint.retire(crate::Leaving::Tracked(member));
+}
+
 #[derive(Debug)]
 enum TestClient {}
 
@@ -37,6 +47,9 @@ impl Client for TestClient {
     type RetuneReturned = u32;
     type Leave = u32;
     type Left = u32;
+    type ResetMac = u32;
+    type MacReset = u32;
+    type Tuned = u8;
 
     fn join_returned(join: u32) -> u32 {
         join
@@ -110,7 +123,7 @@ fn pending_track_returns_the_track_answer_and_cell() {
         };
         assert_eq!(payload, 21);
         responder.answer(Ok(TrackedMember {
-            member: mint.track(member),
+            member: mint.track(member, 6),
             payload: 22,
         }));
     });
@@ -123,7 +136,7 @@ fn pending_track_returns_the_track_answer_and_cell() {
 fn pending_retune_returns_the_retune_answer_and_cell() {
     let (cell, inbox, mint) = client();
     let (cell, answer) = complete(
-        cell.retune(mint.track(mint.untracked()), 31),
+        cell.retune(mint.track(mint.untracked(), 6), 31),
         inbox,
         |request| {
             let Request::Retune(member, payload, responder) = request else {
@@ -200,7 +213,7 @@ fn refused_requests_return_the_original_payload_membership_and_cell() {
 
     let (cell3, inbox, mint) = client();
     let (cell3, retuned) = complete(
-        cell3.retune(mint.track(mint.untracked()), 73),
+        cell3.retune(mint.track(mint.untracked(), 6), 73),
         inbox,
         |request| {
             let Request::Retune(member, payload, responder) = request else {
@@ -243,6 +256,7 @@ fn an_abandoned_actor_response_returns_an_error_without_a_new_cell() {
     assert!(inbox.slot.track.claim().is_none());
     assert!(inbox.slot.retune.claim().is_none());
     assert!(inbox.slot.leave.claim().is_none());
+    assert!(inbox.slot.reset_mac.claim().is_none());
 }
 
 fn abandoned<O: sealed::Reply<TestClient>>(
@@ -257,6 +271,7 @@ fn abandoned<O: sealed::Reply<TestClient>>(
         Request::Track(_, _, responder) => drop(responder),
         Request::Retune(_, _, responder) => drop(responder),
         Request::Leave(_, _, responder) => drop(responder),
+        Request::ResetMac(_, _, responder) => drop(responder),
     }
     let Poll::Ready(Err(error)) = pending.as_mut().poll(&mut cx) else {
         panic!("abandoned request must report its source identity");
@@ -277,6 +292,7 @@ fn every_abandoned_radio_kind_and_client_slot_is_distinct_and_keeps_its_epoch() 
             RequestKind::Track,
             RequestKind::Retune,
             RequestKind::Leave,
+            RequestKind::ResetMac,
         ] {
             let doorbell = Box::leak(Box::new(Doorbell::new()));
             let slot = Box::leak(Box::new(ClientSlot::<TestClient>::new(
@@ -306,10 +322,13 @@ fn every_abandoned_radio_kind_and_client_slot_is_distinct_and_keeps_its_epoch() 
                 RequestKind::Join => abandoned(cell.join(11), inbox),
                 RequestKind::Track => abandoned(cell.track(mint.untracked(), 21), inbox),
                 RequestKind::Retune => {
-                    abandoned(cell.retune(mint.track(mint.untracked()), 31), inbox)
+                    abandoned(cell.retune(mint.track(mint.untracked(), 6), 31), inbox)
                 }
                 RequestKind::Leave => {
                     abandoned(cell.leave(Leaving::Untracked(mint.untracked()), 41), inbox)
+                }
+                RequestKind::ResetMac => {
+                    abandoned(cell.reset_mac(mint.track(mint.untracked(), 6), 51), inbox)
                 }
             };
             let expected_epoch = if kind == RequestKind::Join {
@@ -324,5 +343,27 @@ fn every_abandoned_radio_kind_and_client_slot_is_distinct_and_keeps_its_epoch() 
             assert!(observations.insert(error.observations()));
         }
     }
-    assert_eq!(observations.len(), 8);
+    assert_eq!(observations.len(), 10);
+}
+
+#[test]
+fn a_tracked_members_mac_reset_returns_the_member_and_the_payload_and_the_cell() {
+    let (cell, inbox, mint) = client();
+    let (cell, answer) = complete(
+        cell.reset_mac(mint.track(mint.untracked(), 6), 61),
+        inbox,
+        |request| {
+            let Request::ResetMac(member, lent, responder) = request else {
+                panic!("reset_mac");
+            };
+            assert_eq!(lent, 61);
+            responder.answer(MacResetAnswer {
+                member,
+                payload: 62,
+            });
+        },
+    );
+    assert_eq!(answer.payload, 62);
+    // The cell came back whole: the member can post its next request.
+    let _next = cell.leave(Leaving::Tracked(answer.member), 63);
 }

@@ -11,8 +11,16 @@ contain no Bluetooth state.
 - `join`: prepare the PHY domain (register it, or wake closed RF), mint a new
   RF epoch when RF opened, enter the client. A first member that fails
   without poisoning closes RF again.
-- `track`: the initial tracking and what the client contract adds to it; the
-  member becomes `Tracked`.
+- `track`: the initial tracking and what the client contract adds to it (for
+  Wi-Fi the RX enable and the initial channel, no MAC work); the member
+  becomes `Tracked`, holding what the backend tuned it to (`Tuning`; for
+  Wi-Fi the channel), which a successful `retune` replaces.
+- `reset_mac`: a tracked member's MAC block reset in one step with no await:
+  the pulse, the PHY's channel field of the channel the member holds (no
+  request names a channel), Wi-Fi's
+  constants of the foreign words (`RadioDomain::reset_wifi_mac_block`), and
+  the coexistence priorities its cold preparation reads. Answered always,
+  poisoned domain included, as `leave` is.
 - `leave`: exit the client; the last member's exit mints `LastClientLeft`,
   which only `close_rf` consumes. A recoverable close leaves RF open in the
   same epoch.

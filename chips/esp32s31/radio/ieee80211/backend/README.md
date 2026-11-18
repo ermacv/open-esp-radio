@@ -44,8 +44,11 @@ on the station: the MAC's queues").
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
   radio client's channel retune through owned HAL transactions. P3 latches
   power events. Caller-supplied coexistence intent selects the publication PTI.
-- **MAC preparation and start.** Cold preparation programs configuration
-  with the common MAC gates closed and never writes an interrupt bank;
+- **MAC preparation and start.** The driver takes its block once: `join`,
+  `track`, the tracked member's `reset_mac` request, then its own cold
+  preparation in its own task, which takes the reset's proof. Cold
+  preparation programs configuration on the Wi-Fi partition alone, with the
+  common MAC gates closed, and never writes an interrupt bank;
   runtime start requires the
   prepared RX ring's DMA proof, then opens the gates with MAC stop held,
   publishes BASE once, enables the walker and resumes RX, each step after its

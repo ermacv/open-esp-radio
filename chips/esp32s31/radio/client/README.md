@@ -5,22 +5,31 @@ The client contract of the ESP32-S31 radio system (docs/architecture.md,
 PHY domain, without the actor itself.
 
 - `claim()` returns the actor's end and the clients' cells once per image.
-  Each client has one `MembershipCell`; `join`, `track` and `leave` post
-  synchronously and return a `Pending` future of the answer and the cell.
+  Each client has one `MembershipCell`; `join`, `track`, `retune`, `leave`
+  and `reset_mac` post synchronously and return a `Pending` future of the
+  answer and the cell.
 - The cell is lock-free: it holds the `oer-portable-memory` `RequestSlot`, a
   four-state CAS protocol with two atomic wakers (`docs/unsafe.md`); the
   crate forbids unsafe code.
 - `Member<K, Untracked | Tracked>` is the PHY membership typestate; only
-  `track` produces `Tracked`, which alone permits RF use. `RfEpoch` changes at
-  every registration and RF wake.
+  `track` produces `Tracked`, which alone permits RF use. A tracked member
+  holds what the actor tuned it to (`Client::Tuned`: Wi-Fi's channel,
+  Bluetooth's `()`), set by the actor's `MemberMint` at `track` and replaced
+  at a successful `retune`; nothing else sets or reads it. `RfEpoch` changes
+  at every registration and RF wake.
 - A failed request hands back what it lent; `Failure` (`Refused`,
   `ClientFailed`, `PhyRefused`, `PoisonedAfterRefusal`, `Poisoned`) says what the failure touched, as the table on
   `Failure` defines.
 - `LpClock<RcSlow>` is the board's low-power clock, claimed once.
-- `wifi` holds the Wi-Fi payloads. The actor brings the Wi-Fi MAC up in
-  `track`, after the initial tracking, the RX enable and the initial channel;
-  the driver lends its clocked client for that request and gets it back with
-  the MAC up.
+- `wifi` holds the Wi-Fi payloads. `track` is the initial tracking, the RX
+  enable and the initial channel; the driver lends its clocked client and
+  gets it back tuned. A tracked member's `reset_mac` lends the proof of its
+  clocks (`WifiClocksOn`) and gets back the proof, the
+  MAC block's reset proof (`MacBlockReset`, neither `Copy` nor `Clone`) and
+  the coexistence priorities of its cold preparation; it has no refusal and
+  no failure, and is answered in a poisoned domain too. The cold preparation
+  is the member's own; `MacColdSources` holds what it reads. Bluetooth's
+  `ResetMac` is uninhabited.
 - With `bluetooth`, `bluetooth::claim()` supplies the second cell for the same
   actor. Its requests carry configuration and installation numbers; the BLE
   backend retains membership and controller memory. `Permission` derives the

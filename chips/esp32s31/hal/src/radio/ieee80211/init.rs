@@ -50,17 +50,54 @@ pub use crate::types::{MacInterruptMask, MacTxPowerPair, MacTxPowerTable};
 /// initialization and is not controlled by this mask.
 pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATION;
 
-/// The Wi-Fi MAC reset pulse, which runs through the shared radio owner.
+/// The proof that the Wi-Fi MAC's block was reset, with the Wi-Fi module
+/// clocks on, and the foreign words inside it written back: what the cold
+/// preparation takes. Only [`RadioDomain::reset_wifi_mac_block`] makes one;
+/// it is used once.
 ///
-/// The Wi-Fi module clocks (`wifi_clock_enable()`) are already on: the
-/// clocked Wi-Fi client of the radio domain proves them.
-pub trait MacResetHardware {
-    fn set_wifi_mac_reset(&mut self, asserted: bool);
+/// [`RadioDomain::reset_wifi_mac_block`]: crate::radio::domain::RadioDomain::reset_wifi_mac_block
+///
+/// ```compile_fail
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// fn requires_copy<T: Copy>() {}
+/// requires_copy::<MacBlockReset>();
+/// ```
+///
+/// ```compile_fail
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// fn requires_clone<T: Clone>() {}
+/// requires_clone::<MacBlockReset>();
+/// ```
+///
+/// ```compile_fail
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// let _made = MacBlockReset { _private: () };
+/// ```
+///
+/// One reset serves one preparation: the proof is moved into it.
+///
+/// ```compile_fail,E0382
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// fn twice(reset: MacBlockReset) {
+///     let _first = reset;
+///     let _second = reset;
+/// }
+/// ```
+#[must_use = "a reset's proof is taken by the cold preparation"]
+pub struct MacBlockReset {
+    _private: (),
 }
 
-impl MacResetHardware for crate::radio::ieee80211::mac::WifiMacColdHal<'_> {
-    fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        self.set_wifi_mac_reset(asserted);
+impl MacBlockReset {
+    /// The proof of the pulse just made; only the reset operation calls it.
+    pub(crate) const fn after_pulse() -> Self {
+        Self { _private: () }
+    }
+
+    /// A proof for a host model of the preparation, which has no block.
+    #[cfg(any(test, feature = "test-support"))]
+    pub const fn for_host_model() -> Self {
+        Self::after_pulse()
     }
 }
 
@@ -98,8 +135,9 @@ pub struct MacColdStartConfig {
 /// ordered MAC writes come from the complete pinned `libpp.a` bodies named in
 /// this module's documentation.
 ///
-/// This function owns no descriptor storage and leaves all common MAC gates
-/// closed. It prepares IRQ policy without routing a CPU interrupt or opening
+/// It runs after the radio system's reset of the block (`reset`), in the
+/// Wi-Fi owner's own task, on the Wi-Fi partition alone. This function owns
+/// no descriptor storage and leaves all common MAC gates closed. It prepares IRQ policy without routing a CPU interrupt or opening
 /// the RX walker. The runtime owner selects its role policy, prepares the ring
 /// and supplies its memory/binding and live proofs to `WifiMacHal::prepare_mac_runtime` and
 /// `WifiMacHal::start_mac_runtime`.
@@ -116,24 +154,23 @@ pub async fn initialize_wifi_mac<
         + MacColdRxPolicyHardware
         + MacColdTxRxHardware
         + MacInterfaceAddressHardware
-        + MacLowRateHardware
-        + MacResetHardware,
+        + MacLowRateHardware,
     P: MacCoexPtiSource + MacDelayEntropy + MacSlowClockCalibrationSource + MacTxPowerSource,
     T: Timer,
 >(
+    reset: MacBlockReset,
     platform: &mut P,
     mmio: &mut M,
     timer: &T,
     config: MacColdStartConfig,
 ) -> Result<MacColdStartOutcome, MacColdStartError> {
-    // Match the vendor lifecycle's `wifi_reset_mac()` after
-    // `wifi_clock_enable()`, which the clocked Wi-Fi client already proves.
-    // An earlier reset can occur while the MAC functional clock is still
-    // gated, so it is not sufficient to establish a cold MAC register state
-    // after a warm SoC reset. Reset only WIFIMAC here; the calibrated Wi-Fi
-    // baseband remains live.
-    mmio.set_wifi_mac_reset(true);
-    mmio.set_wifi_mac_reset(false);
+    // The vendor lifecycle's `wifi_reset_mac()` after `wifi_clock_enable()`
+    // is the radio system's (`RadioDomain::reset_wifi_mac_block`, which
+    // `reset` proves): only it writes the shared reset word. A reset under a
+    // gated MAC clock does not make a cold MAC, which is why it takes the
+    // clocks' proof. The preparation consumes the proof: one reset, one
+    // preparation.
+    let MacBlockReset { _private: () } = reset;
 
     let outcome = run_cold_handshake(mmio, timer, config.handshake_deadline).await?;
     // The handshake is complete, but no receive addresses or ring exist yet.

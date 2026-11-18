@@ -201,12 +201,32 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
         phy: PhyPreparation,
         lp: &LpClock<S>,
     ) -> Result<K::Joined, Failed<K::JoinReturned>>;
-    /// Run `K`'s initial tracking and what its client contract adds to it.
-    async fn track(&mut self, track: K::Track) -> Result<K::Tracked, Failed<K::TrackReturned>>;
-    /// Change a stopped tracked client's channel without changing membership.
-    async fn retune(&mut self, retune: K::Retune) -> Result<K::Retuned, Failed<K::RetuneReturned>>;
+    /// Run `K`'s initial tracking and what its client contract adds to it,
+    /// with what it tuned the member to.
+    async fn track(
+        &mut self,
+        track: K::Track,
+    ) -> Result<Tuning<K, K::Tracked>, Failed<K::TrackReturned>>;
+    /// Change a stopped tracked client's channel without changing
+    /// membership, with what it tuned the member to.
+    async fn retune(
+        &mut self,
+        retune: K::Retune,
+    ) -> Result<Tuning<K, K::Retuned>, Failed<K::RetuneReturned>>;
     /// Exit `K` from the domain, coexistence included.
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit);
+    /// Reset a tracked member's MAC block and write back what the domain
+    /// keeps inside it for `tuned`, what the actor last tuned the member to;
+    /// answered always, with the reset's proof. A client with no such reset
+    /// has an uninhabited `ResetMac`.
+    async fn reset_mac(&mut self, tuned: K::Tuned, reset: K::ResetMac) -> K::MacReset;
+}
+
+/// A backend's successful `track` or `retune`: the client's payload and
+/// what the backend tuned the member to, which the actor's mint gives it.
+pub struct Tuning<K: Client, P> {
+    pub payload: P,
+    pub tuned: K::Tuned,
 }
 
 mod actor_core;
@@ -386,10 +406,10 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
                     }));
                 }
                 responder.answer(match Boundary::new(self.backend.track(track)).await {
-                    Ok(payload) => {
+                    Ok(Tuning { payload, tuned }) => {
                         self.core.tracked();
                         Ok(TrackedMember {
-                            member: self.core.mint.track(member),
+                            member: self.core.mint.track(member, tuned),
                             payload,
                         })
                     }
@@ -410,8 +430,11 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
                     }));
                 }
                 responder.answer(match Boundary::new(self.backend.retune(retune)).await {
-                    Ok(payload) => {
-                        Ok(oer_chips_esp32s31_radio_client::RetunedMember { member, payload })
+                    Ok(Tuning { payload, tuned }) => {
+                        Ok(oer_chips_esp32s31_radio_client::RetunedMember {
+                            member: self.core.mint.retune(member, tuned),
+                            payload,
+                        })
                     }
                     Err(Failed { returned, cause }) => {
                         self.core.failed(cause);
@@ -421,6 +444,14 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
                         })
                     }
                 })
+            }
+            Request::ResetMac(member, reset, responder) => {
+                // No refusal and no failure: answered as a leave is, poisoned
+                // domain or not.
+                let tuned = self.core.mint.tuned(&member);
+                let payload = Boundary::new(self.backend.reset_mac(tuned, reset)).await;
+                responder
+                    .answer(oer_chips_esp32s31_radio_client::MacResetAnswer { member, payload })
             }
             Request::Leave(member, leave, responder) => {
                 self.core.leaving(matches!(member, Leaving::Tracked(_)));
@@ -465,6 +496,8 @@ const fn phy_refused_join(
 mod channel;
 #[cfg(target_arch = "riscv32")]
 mod esp32s31;
+#[cfg(any(target_arch = "riscv32", test))]
+mod mac_reset;
 #[cfg(any(target_arch = "riscv32", test))]
 mod mac_sources;
 #[cfg(target_arch = "riscv32")]

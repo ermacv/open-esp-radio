@@ -4,17 +4,21 @@
 //! the actor registers the PHY domain or wakes closed RF, enables
 //! coexistence, enters common power, enables the Wi-Fi module clocks and
 //! enters Wi-Fi into the PHY client set. It lends the clocked client to
-//! `track` and gets it back with the MAC up: the actor runs the initial
-//! tracking, enables Wi-Fi RX, selects the initial channel and runs the MAC
-//! cold initialization. It lends the clocked client, with the MAC stopped, to
-//! `leave` and gets it back cold.
+//! `track` and gets it back tuned: the actor runs the initial tracking,
+//! enables Wi-Fi RX and selects the initial channel. A tracked member lends
+//! its clocks' proof to `reset_mac` and gets it back with the proof of its
+//! MAC block's reset and the values its cold preparation reads; the
+//! preparation is the member's own. It lends the clocked client, with the MAC
+//! stopped, to `leave` and gets it back cold.
 
 use oer_chips_esp32s31_hal::radio::ieee80211::client::{
-    ClockPoisoned, StoppedInstallation, WifiClocked, WifiCold, WifiPowered,
+    ClockPoisoned, StoppedInstallation, WifiClocked, WifiClocksOn, WifiCold, WifiPowered,
 };
 use oer_chips_esp32s31_hal::radio::ieee80211::init::{
-    MacCoexPti, MacColdStartConfig, MacColdStartOutcome, MacSlowClockCalibration,
+    MacBlockReset, MacCoexEvent, MacCoexPti, MacCoexPtiSource, MacDelayEntropy,
+    MacSlowClockCalibration, MacSlowClockCalibrationSource, MacTxPowerSource,
 };
+use oer_chips_esp32s31_hal::types::MacTxPowerPair;
 use oer_chips_esp32s31_radio_phy::{PhyTxTargetPowerProfile, tracking::TemperatureObservation};
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
@@ -42,6 +46,9 @@ impl Client for Wifi {
     type RetuneReturned = WifiClocked;
     type Leave = WifiLeave;
     type Left = WifiLeft;
+    type ResetMac = WifiResetMac;
+    type MacReset = WifiMacReset;
+    type Tuned = Ghz2_4Channel;
 
     fn join_returned(join: WifiJoin) -> WifiReturned {
         WifiReturned::Cold(join.wifi)
@@ -80,17 +87,14 @@ pub struct WifiJoined {
     pub phy: PhyPreparation,
 }
 
-/// `track`: the clocked client and the MAC bring-up inputs.
+/// `track`: the clocked client, the initial channel and its TX ceiling.
 pub struct WifiTrack {
     pub wifi: WifiClocked,
     pub channel: Permitted<oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>>,
     pub tx_ceiling: TxCeiling,
-    pub mac: MacColdStartConfig,
-    pub slow_clock: MacSlowClockCalibration,
-    pub delay_random: u32,
 }
 
-/// What the initial tracking and the MAC bring-up observed.
+/// What the initial tracking and the channel observed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TrackReport {
     /// The initial tracking's duration; `None` when tracking was not due.
@@ -100,10 +104,9 @@ pub struct TrackReport {
     pub temperature: TemperatureObservation,
     pub tx_power: PhyTxTargetPowerProfile,
     pub probe_priority: ProbePriority,
-    pub mac: MacColdStartOutcome,
 }
 
-/// A successful `track`: the clocked client with the MAC up.
+/// A successful `track`: the clocked client, tuned.
 pub struct WifiTracked {
     pub wifi: WifiClocked,
     pub report: TrackReport,
@@ -147,4 +150,129 @@ pub struct WifiRetuned {
 pub struct ProbePriority {
     pub packet: MacCoexPti,
     pub scheduler: MacCoexPti,
+}
+
+/// `reset_mac`: a tracked member's clocks' proof. The channel whose PHY
+/// field inside the MAC's block the reset writes back is the one the actor
+/// tuned the member to, which the member holds.
+pub struct WifiResetMac {
+    pub clocks: WifiClocksOn,
+}
+
+/// The answer to `reset_mac`: the clocks' proof back, the reset's proof the
+/// cold preparation takes, and the coexistence priorities of the four
+/// events the preparation queries, in [`MAC_COEX_EVENTS`] order, copied at
+/// the reset.
+pub struct WifiMacReset {
+    pub clocks: WifiClocksOn,
+    pub reset: MacBlockReset,
+    pub pti: [MacCoexPti; 4],
+}
+
+/// The values the MAC's cold preparation reads, all held by value: the
+/// reset's coexistence priorities (events 1, 3, 10, 15, in
+/// `MacColdCoexPti::query` order), the calibrated TX power profile under the
+/// member's ceiling, which its last `track` or `retune` report gave it, and
+/// the Wi-Fi platform's slow-clock calibration and delay entropy.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MacColdSources {
+    pub pti: [MacCoexPti; 4],
+    pub tx_power: PhyTxTargetPowerProfile,
+    pub slow_clock: MacSlowClockCalibration,
+    pub delay_random: u32,
+}
+
+/// The coexistence events the cold preparation queries, in its order.
+pub const MAC_COEX_EVENTS: [MacCoexEvent; 4] = [
+    MacCoexEvent::Event1,
+    MacCoexEvent::Event3,
+    MacCoexEvent::Event10,
+    MacCoexEvent::Event15,
+];
+
+impl MacCoexPtiSource for MacColdSources {
+    fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
+        let [one, three, ten, fifteen] = self.pti;
+        match event {
+            MacCoexEvent::Event1 => one,
+            MacCoexEvent::Event3 => three,
+            MacCoexEvent::Event10 => ten,
+            MacCoexEvent::Event15 => fifteen,
+        }
+    }
+}
+
+impl MacSlowClockCalibrationSource for MacColdSources {
+    fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
+        self.slow_clock
+    }
+}
+
+impl MacDelayEntropy for MacColdSources {
+    fn mac_delay_random(&mut self) -> u32 {
+        self.delay_random
+    }
+}
+
+impl MacTxPowerSource for MacColdSources {
+    fn mac_tx_power_pair(&mut self, rate: u8) -> MacTxPowerPair {
+        let pair = self.tx_power.pair(rate);
+        MacTxPowerPair {
+            primary: pair.primary,
+            alternate: pair.alternate,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_chips_esp32s31_radio_phy::PhyState;
+
+    fn sources() -> MacColdSources {
+        MacColdSources {
+            pti: [1, 3, 10, 15].map(|value| {
+                oer_chips_family_radio_coex::CoexPti::new(value)
+                    .expect("a coexistence priority")
+                    .into()
+            }),
+            tx_power: PhyState::default().tx_target_power_profile(),
+            slow_clock: MacSlowClockCalibration::Unavailable,
+            delay_random: 0x1234_5678,
+        }
+    }
+
+    #[test]
+    fn each_coex_event_reads_its_own_priority() {
+        let mut sources = sources();
+        for (event, value) in MAC_COEX_EVENTS.into_iter().zip([1, 3, 10, 15]) {
+            assert_eq!(sources.mac_coex_pti(event).value(), value);
+        }
+    }
+
+    #[test]
+    fn the_platform_values_pass_through() {
+        let mut sources = sources();
+        assert_eq!(sources.mac_delay_random(), 0x1234_5678);
+        assert_eq!(
+            sources.mac_slow_clock_calibration(),
+            MacSlowClockCalibration::Unavailable
+        );
+    }
+
+    #[test]
+    fn the_tx_power_pairs_are_the_profiles() {
+        let mut sources = sources();
+        let profile = PhyState::default().tx_target_power_profile();
+        for rate in 0..=40 {
+            let pair = profile.pair(rate);
+            assert_eq!(
+                sources.mac_tx_power_pair(rate),
+                MacTxPowerPair {
+                    primary: pair.primary,
+                    alternate: pair.alternate,
+                }
+            );
+        }
+    }
 }
