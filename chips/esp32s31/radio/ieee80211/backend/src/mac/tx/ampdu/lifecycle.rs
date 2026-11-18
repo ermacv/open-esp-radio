@@ -2,7 +2,7 @@
 
 use core::pin::Pin;
 
-use oer_chips_esp32s31_hal::types::{MacHeTriggerTxQueueSnapshot, MacTxAbortCause};
+use oer_chips_esp32s31_hal::types::MacHeTriggerTxQueueSnapshot;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use super::{
@@ -182,19 +182,6 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
             .then(|| self.frame_lengths.get(index).copied())
             .flatten()
             .zip(self.hardware_mic_lengths.get(index).copied())
-    }
-
-    pub fn begin_timeout_abort<H: HtAmpduHardware>(
-        self: Pin<&mut Self>,
-        hardware: &mut H,
-        cookie: TxCookie,
-        cause: MacTxAbortCause,
-    ) -> Result<bool, HtAmpduTxError> {
-        let storage = self.project();
-        if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {
-            return Err(HtAmpduTxError::Stale);
-        }
-        Ok(hardware.begin_tx_timeout_abort(storage.queue.hardware_index(), cause))
     }
 
     /// Permanently quarantine an aggregate an abort left on the air, whose

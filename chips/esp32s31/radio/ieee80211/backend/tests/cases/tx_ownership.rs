@@ -1,5 +1,6 @@
 use crate::{support::*, *};
 use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::CompletionObservation;
+use oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::TxAbortEnd;
 
 fn observed<T>(event: CompletionObservation<T>) -> T {
     match event {
@@ -344,7 +345,7 @@ fn tx_completion_decodes_the_blob_ack_snr_byte() {
 }
 
 #[test]
-fn tx_slot_preserves_the_semantic_timeout_abort_order() {
+fn tx_slot_aborts_its_queue_in_the_vendors_order_in_one_step() {
     let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
     let mut mmio = MockMmio::default();
     let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
@@ -358,42 +359,62 @@ fn tx_slot_preserves_the_semantic_timeout_abort_order() {
 
     mmio.set_tx_timeout_pending(0, true);
     mmio.set_tx_queue_attached(0, true);
+    let before = mmio.operations().len();
 
     assert_eq!(
-        slot.as_mut().begin_timeout_abort(
+        slot.as_mut().abort_timeout(
             &mut mmio,
             cookie,
-            oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge
+            oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge,
+            &oer_portable_time_virtual::SkipClock::new(),
         ),
-        Ok(true)
+        Ok(TxAbortEnd::Detached)
     );
-    slot.as_mut()
-        .finish_timeout_abort(&mut mmio, cookie)
-        .unwrap();
 
     assert_eq!(slot.state(), TxDmaState::Free);
     assert!(!mmio.tx_queue_attached[0]);
     assert!(!mmio.tx_timeout_pending[0]);
+    let abort: Vec<_> = mmio.operations()[before..]
+        .iter()
+        .filter(|operation| !matches!(operation, Operation::Fence))
+        .cloned()
+        .collect();
+    assert_eq!(
+        abort,
+        [
+            Operation::ForceTxCca,
+            Operation::SettleTxAbort,
+            Operation::InvalidateTxQueue(0),
+            Operation::ReleaseTxCca,
+            Operation::DisableTxQueue(0),
+            Operation::AcknowledgeTxTimeout(0),
+        ]
+    );
+}
 
-    let invalidation = mmio
-        .operations()
-        .iter()
-        .position(|operation| *operation == Operation::DisableTxQueue(0))
+#[test]
+fn a_tx_slot_whose_queue_the_mac_took_stays_hardware_owned_after_its_abort() {
+    let mut slot = core::pin::pin!(TxSlot::<512>::new_model().unwrap());
+    let mut mmio = MockMmio::default();
+    let cookie = free_slot(slot.as_mut()).reserve(512, 100).unwrap();
+    slot.as_mut()
+        .submit_legacy_q0(
+            &mut mmio,
+            cookie,
+            LegacyTxConfig::management(MacLegacyRate::Ofdm6M, 100),
+        )
         .unwrap();
-    let cca_release = mmio
-        .operations()
-        .iter()
-        .position(|operation| *operation == Operation::ReleaseTxCca)
-        .unwrap();
-    let timeout_clear = mmio
-        .operations()
-        .iter()
-        .position(|operation| {
-            *operation == Operation::AcknowledgeTxEvent(0, MacTxDetachReason::Timeout)
-        })
-        .unwrap();
-    assert!(invalidation < cca_release);
-    assert!(cca_release < timeout_clear);
+    mmio.set_tx_queue_attached(0, false);
+    assert_eq!(
+        slot.as_mut().abort_timeout(
+            &mut mmio,
+            cookie,
+            oer_chips_esp32s31_hal::types::MacTxAbortCause::Forced,
+            &oer_portable_time_virtual::SkipClock::new(),
+        ),
+        Ok(TxAbortEnd::OnAir)
+    );
+    assert_eq!(slot.state(), TxDmaState::HardwareOwned);
 }
 
 #[test]

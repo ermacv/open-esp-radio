@@ -30,6 +30,7 @@ use oer_chips_esp32s31_hal::types::{
     MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareFault,
     MacTxPrepareRefused, MacTxProtection, MacTxQueueDetached,
 };
+use oer_chips_esp32s31_hal::types::{MacTxAbortOutcome, MacTxQueueAborted};
 
 pub use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::TxDmaState;
 #[cfg(any(test, feature = "test-support"))]
@@ -273,7 +274,16 @@ pub trait TxHardware {
         &mut self,
         queue: MacTxQueueIndex,
     ) -> Option<MacHtAmpduCompletionObservation>;
-    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex, cause: MacTxAbortCause) -> bool;
+    /// Abort `queue` by the vendor's sequence in one step, its settle
+    /// measured on `clock`
+    /// ([`WifiMacHal::abort_tx_queue`](oer_chips_esp32s31_hal::radio::ieee80211::mac::WifiMacHal::abort_tx_queue)).
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+        clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R>;
     fn with_tx_queue_detached<R>(
         &mut self,
         queue: MacTxQueueIndex,
@@ -344,8 +354,14 @@ impl TxHardware for WifiMacHal<'_> {
         WifiMacHal::take_block_ack_completion(self, queue)
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex, cause: MacTxAbortCause) -> bool {
-        WifiMacHal::begin_tx_timeout_abort(self, queue, cause)
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+        clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
+        WifiMacHal::abort_tx_queue(self, queue, cause, clock, aborted)
     }
 
     fn with_tx_queue_detached<R>(
@@ -420,8 +436,14 @@ impl TxHardware for RadioAccess {
         TxHardware::take_block_ack_completion(&mut self.wifi_mac_hal(), queue)
     }
 
-    fn begin_tx_timeout_abort(&mut self, queue: MacTxQueueIndex, cause: MacTxAbortCause) -> bool {
-        TxHardware::begin_tx_timeout_abort(&mut self.wifi_mac_hal(), queue, cause)
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+        clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
+        TxHardware::abort_tx_queue(&mut self.wifi_mac_hal(), queue, cause, clock, aborted)
     }
 
     fn with_tx_queue_detached<R>(
@@ -676,9 +698,11 @@ const fn prepare_refusal(refused: MacTxPrepareRefused) -> TxError {
     }
 }
 
-/// How a settled abort left its queue.
+/// How a queue's abort left it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TxAbortEnd {
+    /// A timeout-edge abort found no edge: nothing was written.
+    NoEdge,
     /// The queue let go: the frames never went on the air.
     Detached,
     /// The PPDU went on the air first: its completion ends it.
@@ -3566,26 +3590,35 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         }
     }
 
-    /// Starts the recovered two-phase abort of this queue.
-    ///
-    /// `SOURCE[PROMOTED_LMAC_TX]` forces CCA to three before its
-    /// fixed 16-us settling interval. `Ok(false)` means that `cause` needs a
-    /// timeout edge this queue does not have, and leaves all registers
-    /// untouched.
-    pub fn begin_timeout_abort<H: TxHardware>(
+    /// Abort the queue of a hardware-owned slot in one step, by the vendor's
+    /// sequence with its 16 us settle on `clock`
+    /// ([`TxHardware::abort_tx_queue`]). A queue that was still valid is
+    /// disabled and its slot freed ([`TxAbortEnd::Detached`]); one the MAC
+    /// already took is left to its completion ([`TxAbortEnd::OnAir`]), the
+    /// slot hardware-owned. A timeout-edge abort with no edge writes nothing
+    /// ([`TxAbortEnd::NoEdge`]).
+    pub fn abort_timeout<H: TxHardware, C: oer_portable_time::Clock + ?Sized>(
         self: Pin<&mut Self>,
         hardware: &mut H,
         cookie: TxCookie,
         cause: MacTxAbortCause,
-    ) -> Result<bool, TxError> {
+        clock: &C,
+    ) -> Result<TxAbortEnd, TxError> {
         let slot = self.get_mut();
         if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
             return Err(TxError::Stale);
         }
-        if !hardware.begin_tx_timeout_abort(slot.queue.hardware_index(), cause) {
-            return Ok(false);
+        match hardware.abort_tx_queue(slot.queue.hardware_index(), cause, clock, |aborted| {
+            slot.dma.release_aborted(aborted)
+        }) {
+            MacTxAbortOutcome::NoEdge => Ok(TxAbortEnd::NoEdge),
+            MacTxAbortOutcome::OnAir => Ok(TxAbortEnd::OnAir),
+            MacTxAbortOutcome::Aborted(released) => {
+                released.map_err(map_dma_storage_error)?;
+                slot.active = TxCookie(0);
+                Ok(TxAbortEnd::Detached)
+            }
         }
-        Ok(true)
     }
 
     /// Permanently quarantine a hardware-owned slot until the radio resets.
@@ -3626,44 +3659,6 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
                 Ok(true)
             }
             MacTxDetachOutcome::OnAir
-            | MacTxDetachOutcome::Failed
-            | MacTxDetachOutcome::Detached(Err(_)) => {
-                slot.dma.quarantine();
-                Err(TxError::DetachFailed)
-            }
-        }
-    }
-
-    /// Finishes a queue abort after at least 16 us of settling.
-    ///
-    /// The caller owns the one timer edge between this method and
-    /// [`begin_timeout_abort`](Self::begin_timeout_abort). The register order
-    /// matches the reviewed vendor path: invalidate, release forced CCA,
-    /// disable a queue that was still valid, then clear its timeout bit.
-    /// [`TxAbortEnd::OnAir`] leaves the slot hardware-owned, for its
-    /// completion or a [`require_reset`](Self::require_reset).
-    pub fn finish_timeout_abort<H: TxHardware>(
-        self: Pin<&mut Self>,
-        hardware: &mut H,
-        cookie: TxCookie,
-    ) -> Result<TxAbortEnd, TxError> {
-        let slot = self.get_mut();
-        if slot.dma.state() != TxDmaState::HardwareOwned || cookie != slot.active {
-            return Err(TxError::Stale);
-        }
-        let descriptor_head = slot.dma.binding().descriptor_address();
-        match hardware.with_tx_queue_detached(
-            slot.queue.hardware_index(),
-            descriptor_head,
-            MacTxDetachReason::Timeout,
-            |detached| slot.dma.release_aborted(detached),
-        ) {
-            MacTxDetachOutcome::OnAir => Ok(TxAbortEnd::OnAir),
-            MacTxDetachOutcome::Detached(Ok(())) => {
-                slot.active = TxCookie(0);
-                Ok(TxAbortEnd::Detached)
-            }
-            MacTxDetachOutcome::NoEvent
             | MacTxDetachOutcome::Failed
             | MacTxDetachOutcome::Detached(Err(_)) => {
                 slot.dma.quarantine();

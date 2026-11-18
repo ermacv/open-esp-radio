@@ -260,11 +260,18 @@ fn no_completion_is_taken_while_none_is_pending() {
             .take_mac_block_ack_completion(MacTxQueueIndex::constant::<0>())
             .is_none()
     );
-    assert!(!memory.owners().registers.begin_mac_tx_timeout_abort(
-        MacTxQueueIndex::constant::<0>(),
-        MacTxAbortCause::TimeoutEdge
-    ));
+    let clock = TickingClock::default();
+    assert_eq!(
+        memory.owners().registers.abort_mac_tx(
+            MacTxQueueIndex::constant::<0>(),
+            MacTxAbortCause::TimeoutEdge,
+            &clock,
+            |_| ()
+        ),
+        MacTxAbortOutcome::NoEdge
+    );
     assert!(before.changes(&memory).is_empty());
+    assert_eq!(clock.elapsed(), oer_portable_time::Duration::from_micros(0));
 }
 
 #[test]
@@ -281,57 +288,70 @@ fn a_completed_queue_detaches_with_its_descriptor_head() {
     assert_eq!(before.changes(&memory).len(), 1);
 }
 
-#[test]
-fn a_forced_abort_begins_without_a_timeout_edge() {
-    let before = HostWords::filled(0);
-    let mut memory = before.clone();
-    assert!(
-        memory
-            .owners()
-            .registers
-            .begin_mac_tx_timeout_abort(MacTxQueueIndex::constant::<0>(), MacTxAbortCause::Forced)
-    );
-    assert_eq!(before.changes(&memory).len(), 1);
+/// A clock that moves one microsecond at every read, so a settle ends.
+#[derive(Default)]
+struct TickingClock {
+    reads: core::cell::Cell<u64>,
 }
 
-#[test]
-fn an_abort_of_a_valid_queue_detaches_without_a_timeout_edge() {
-    let mut memory = HostWords::filled(0);
-    let queue = MacTxQueueIndex::constant::<0>();
+impl TickingClock {
+    fn elapsed(&self) -> oer_portable_time::Duration {
+        oer_portable_time::Duration::from_micros(self.reads.get().saturating_sub(1))
+    }
+}
+
+impl oer_portable_time::Clock for TickingClock {
+    fn now(&self) -> oer_portable_time::Instant {
+        let reads = self.reads.get();
+        self.reads.set(reads + 1);
+        oer_portable_time::Instant::from_micros(reads)
+    }
+}
+
+fn valid_queue(memory: &mut HostWords, queue: MacTxQueueIndex, valid: bool) {
     memory
         .owners()
         .registers
         .mac
         .wifi_mac_tx_queue_control
         .modify_control_n(queue::bank(queue), |writer| {
-            writer.set_valid(true).set_enable(true);
+            writer.set_valid(valid).set_enable(true);
         });
-    let outcome =
-        memory
-            .owners()
-            .registers
-            .with_detached_mac_tx(queue, MacTxDetachReason::Timeout, |_| ());
-    assert_eq!(outcome, MacTxDetachOutcome::Detached(()));
+}
+
+#[test]
+fn a_forced_abort_of_a_valid_queue_settles_then_disables_it() {
+    let mut memory = HostWords::filled(0);
+    let queue = MacTxQueueIndex::constant::<0>();
+    valid_queue(&mut memory, queue, true);
+    let clock = TickingClock::default();
+    let outcome = memory.owners().registers.abort_mac_tx(
+        queue,
+        MacTxAbortCause::Forced,
+        &clock,
+        |_aborted| 7,
+    );
+    assert_eq!(outcome, MacTxAbortOutcome::Aborted(7));
+    // The vendor's delay ran whole before the queue was sampled.
+    assert!(clock.elapsed() >= MAC_TX_ABORT_SETTLE.limit());
+    let registers = &memory.owners().registers;
+    let control = &registers.mac.wifi_mac_tx_queue_control;
+    assert!(!queue::queue_enabled(control, queue));
+    assert!(!queue::queue_valid(control, queue));
 }
 
 #[test]
 fn an_abort_that_finds_valid_clear_leaves_the_queue_to_its_completion() {
     let mut memory = HostWords::filled(0);
     let queue = MacTxQueueIndex::constant::<0>();
-    memory
-        .owners()
-        .registers
-        .mac
-        .wifi_mac_tx_queue_control
-        .modify_control_n(queue::bank(queue), |writer| {
-            writer.set_enable(true);
-        });
+    valid_queue(&mut memory, queue, false);
+    let clock = TickingClock::default();
     let outcome =
         memory
             .owners()
             .registers
-            .with_detached_mac_tx(queue, MacTxDetachReason::Timeout, |_| ());
-    assert_eq!(outcome, MacTxDetachOutcome::OnAir);
+            .abort_mac_tx(queue, MacTxAbortCause::Forced, &clock, |_| ());
+    assert_eq!(outcome, MacTxAbortOutcome::OnAir);
     assert!(queue::queue_enabled(
         &memory.owners().registers.mac.wifi_mac_tx_queue_control,
         queue

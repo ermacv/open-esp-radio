@@ -16,8 +16,8 @@ use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_ampdu_storage::{
 };
 use oer_chips_esp32s31_hal::system::memory::dma_static::PlacedBacking;
 use oer_chips_esp32s31_hal::types::{
-    MacHeTxProgram, MacHtTxProgram, MacLegacyTxProgram, MacTxAbortCause, MacTxDetachOutcome,
-    MacTxDetachReason, MacTxPrepareRefused,
+    MacHeTxProgram, MacHtTxProgram, MacLegacyTxProgram, MacTxAbortCause, MacTxAbortOutcome,
+    MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused,
 };
 use oer_protocols_ieee80211_wire::frame::set_retry_bit;
 
@@ -479,16 +479,6 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         Ok(completion)
     }
 
-    pub fn begin_timeout_abort<H: HtAmpduHardware>(
-        &mut self,
-        hardware: &mut H,
-        cookie: TxCookie,
-        cause: MacTxAbortCause,
-    ) -> Result<bool, HtAmpduTxError> {
-        self.metadata_mut()?
-            .begin_timeout_abort(hardware, cookie, cause)
-    }
-
     /// Detach a collision-owned aggregate, handing every lease to
     /// `returned` in commit order once the queue confirmed its detach.
     pub fn abort_collision<H: HtAmpduHardware>(
@@ -534,13 +524,16 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         Ok(true)
     }
 
-    /// Finish a settled abort, handing every lease to `returned` in commit
-    /// order once the queue confirmed its detach; [`TxAbortEnd::OnAir`] keeps
-    /// them for the completion.
-    pub fn finish_timeout_abort<H: HtAmpduHardware>(
+    /// Abort the aggregate's queue in one step, by the vendor's sequence
+    /// with its 16 us settle on `clock`, handing every lease to `returned` in
+    /// commit order once the queue let go; [`TxAbortEnd::OnAir`] keeps them
+    /// for the completion, [`TxAbortEnd::NoEdge`] writes nothing.
+    pub fn abort_timeout<H: HtAmpduHardware, C: oer_portable_time::Clock + ?Sized>(
         &mut self,
         hardware: &mut H,
         cookie: TxCookie,
+        cause: MacTxAbortCause,
+        clock: &C,
         returned: impl FnMut(B),
     ) -> Result<TxAbortEnd, HtAmpduTxError> {
         let queue = {
@@ -553,22 +546,17 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             }
             storage.queue.hardware_index()
         };
-        let descriptor_head = self.dma_mut()?.descriptor_head()?;
         let outcome = {
             let dma = self.dma_mut()?;
-            hardware.with_tx_queue_detached(
-                queue,
-                descriptor_head,
-                MacTxDetachReason::Timeout,
-                |detached| dma.release_aborted(detached, returned),
-            )
+            hardware.abort_tx_queue(queue, cause, clock, |aborted| {
+                dma.release_aborted(aborted, returned)
+            })
         };
         match outcome {
-            MacTxDetachOutcome::OnAir => return Ok(TxAbortEnd::OnAir),
-            MacTxDetachOutcome::Detached(Ok(())) => {}
-            MacTxDetachOutcome::NoEvent
-            | MacTxDetachOutcome::Failed
-            | MacTxDetachOutcome::Detached(Err(_)) => {
+            MacTxAbortOutcome::NoEdge => return Ok(TxAbortEnd::NoEdge),
+            MacTxAbortOutcome::OnAir => return Ok(TxAbortEnd::OnAir),
+            MacTxAbortOutcome::Aborted(Ok(())) => {}
+            MacTxAbortOutcome::Aborted(Err(_)) => {
                 self.quarantine();
                 return Err(HtAmpduTxError::DetachFailed);
             }
@@ -1048,23 +1036,6 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
             self.detach_aborted(hardware, cookie, MacTxDetachReason::Collision)?,
             Some(TxAbortEnd::Detached)
         ))
-    }
-
-    /// Finish a settled abort, keeping the batch's backings for a retention
-    /// or a release; [`TxAbortEnd::OnAir`] keeps the batch on the air for its
-    /// completion.
-    pub fn finish_timeout_abort_retained<H: HtAmpduHardware>(
-        &mut self,
-        hardware: &mut H,
-        cookie: TxCookie,
-    ) -> Result<TxAbortEnd, HtAmpduTxError> {
-        match self.detach_aborted(hardware, cookie, MacTxDetachReason::Timeout)? {
-            Some(end) => Ok(end),
-            None => {
-                self.quarantine();
-                Err(HtAmpduTxError::DetachFailed)
-            }
-        }
     }
 
     fn detach_aborted<H: HtAmpduHardware>(

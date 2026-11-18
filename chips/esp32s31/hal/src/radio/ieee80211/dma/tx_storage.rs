@@ -269,11 +269,11 @@ impl<L> PinnedTxDmaStorage<L> {
 
     pub fn release_aborted(
         &mut self,
-        detached: MacTxQueueDetached<'_>,
+        detached: impl crate::types::MacTxQueueReleased,
     ) -> Result<(), TxDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
-            return Err(TxDmaStorageError::Address);
-        }
+        detached
+            .releases(self.binding.descriptor_head.bits())
+            .map_err(|_| TxDmaStorageError::Address)?;
         self.transition_to_free(TxDmaState::HardwareOwned)
     }
 

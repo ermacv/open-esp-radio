@@ -38,9 +38,13 @@ pub(super) enum Operation {
     InitializeRxBufferPrefix,
     ConfigureOpenPromiscuousReceive,
     ForceTxCca,
+    /// The abort's settle between forcing CCA and sampling the queue.
+    SettleTxAbort,
+    InvalidateTxQueue(u8),
     DisableTxQueue(u8),
     ReleaseTxCca,
     AcknowledgeTxEvent(u8, MacTxDetachReason),
+    AcknowledgeTxTimeout(u8),
     Fence,
 }
 
@@ -507,20 +511,47 @@ impl TxHardware for MockMmio {
         self.tx_completions[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
         &mut self,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         cause: oer_chips_esp32s31_hal::types::MacTxAbortCause,
-    ) -> bool {
+        _clock: &C,
+        aborted: impl for<'aborted> FnOnce(
+            oer_chips_esp32s31_hal::types::MacTxQueueAborted<'aborted>,
+        ) -> R,
+    ) -> oer_chips_esp32s31_hal::types::MacTxAbortOutcome<R> {
+        use oer_chips_esp32s31_hal::types::MacTxAbortOutcome;
         let queue = queue.get() as u8;
+        let index = usize::from(queue);
         if cause == oer_chips_esp32s31_hal::types::MacTxAbortCause::TimeoutEdge
-            && !self.tx_timeout_pending[usize::from(queue)]
+            && !self.tx_timeout_pending[index]
         {
-            return false;
+            return MacTxAbortOutcome::NoEdge;
         }
+        // The vendor's order: force CCA, settle, invalidate, release CCA,
+        // disable a queue that was valid, acknowledge the timeout.
         self.operations.push(Operation::ForceTxCca);
         self.record_fence();
-        true
+        self.operations.push(Operation::SettleTxAbort);
+        let was_valid = self.tx_queue_attached[index];
+        self.operations.push(Operation::InvalidateTxQueue(queue));
+        self.operations.push(Operation::ReleaseTxCca);
+        if was_valid {
+            self.operations.push(Operation::DisableTxQueue(queue));
+            self.tx_queue_attached[index] = false;
+        }
+        if self.tx_timeout_pending[index] {
+            self.operations.push(Operation::AcknowledgeTxTimeout(queue));
+            self.tx_timeout_pending[index] = false;
+        }
+        self.record_fence();
+        if was_valid {
+            MacTxAbortOutcome::Aborted(aborted(
+                oer_chips_esp32s31_hal::types::MacTxQueueAborted::new_model(),
+            ))
+        } else {
+            MacTxAbortOutcome::OnAir
+        }
     }
 
     fn with_tx_queue_detached<R>(
@@ -543,14 +574,6 @@ impl TxHardware for MockMmio {
                 self.operations
                     .push(Operation::AcknowledgeTxEvent(queue, reason));
                 self.tx_collision_pending[index] = false;
-            }
-            MacTxDetachReason::Timeout => {
-                self.operations.push(Operation::DisableTxQueue(queue));
-                self.tx_queue_attached[index] = false;
-                self.operations.push(Operation::ReleaseTxCca);
-                self.operations
-                    .push(Operation::AcknowledgeTxEvent(queue, reason));
-                self.tx_timeout_pending[index] = false;
             }
             MacTxDetachReason::Completed => {
                 self.operations.push(Operation::DisableTxQueue(queue));

@@ -286,23 +286,8 @@ fn check_management_transmissions(
                 }),
             )
             .unwrap();
-        let progress = if matches!(observation, HardwareTimeout) {
-            assert_eq!(progress, WifiTxProgress::Pending);
-            // The contention window is retained through the bounded abort settle.
-            assert_eq!(
-                owner
-                    .policy()
-                    .contention_exponent(LegacyTxQueue::BestEffort),
-                4 + expected_retries.total().min(6)
-            );
-            owner.timer.advance_to(owner.next_deadline().unwrap());
-            let OrdinaryTxAccess::Active(active) = owner.access() else {
-                panic!("the timeout settle retains its owner");
-            };
-            active.service(&mut hardware, WifiTxWake::Deadline).unwrap()
-        } else {
-            progress
-        };
+        // A hardware timeout's abort settles and detaches within this one
+        // service: the attempt ends in the same step.
         assert_eq!(
             progress,
             if terminal {

@@ -12,8 +12,9 @@ use crate::tx::WifiTxWake;
 use oer_chips_esp32s31_hal::layouts::{DmaRef, WifiTxDmaDescriptor};
 use oer_chips_esp32s31_hal::types::{
     MacCcmpKeyIdentity, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
-    MacKeyInstallOutcome, MacLegacyTxProgram, MacTxAbortCause, MacTxCompletionObservation,
-    MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused, MacTxQueueDetached,
+    MacKeyInstallOutcome, MacLegacyTxProgram, MacTxAbortCause, MacTxAbortOutcome,
+    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused,
+    MacTxQueueAborted, MacTxQueueDetached,
 };
 use oer_protocols_ieee80211_contracts_port::PhyRate;
 use oer_protocols_ieee80211_wire::phy::LegacyRate;
@@ -55,8 +56,8 @@ pub(crate) struct Hardware {
     /// A queue whose abort finds VALID clear: the hardware took the PPDU.
     pub(crate) taken_by_air: [bool; 4],
     pub(crate) collision_pending: [bool; 4],
-    /// The MAC-wide CCA a timeout abort forces until its detach.
-    pub(crate) cca_forced: bool,
+    /// The queue aborts taken, each one step.
+    pub(crate) aborts: usize,
     pub(crate) installed_keys: Vec<(u8, MacCcmpKeyIdentity)>,
     pub(crate) key_material: Vec<(u8, [u8; 16])>,
     pub(crate) reject_key_writes: usize,
@@ -134,18 +135,23 @@ impl TxHardware for Hardware {
         self.block_ack_completion[usize::from(queue)].take()
     }
 
-    fn begin_tx_timeout_abort(
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
         &mut self,
         queue: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         cause: MacTxAbortCause,
-    ) -> bool {
-        let queue = queue.get() as u8;
-        if cause == MacTxAbortCause::TimeoutEdge && !self.timeout_pending[usize::from(queue)] {
-            return false;
+        _clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
+        let queue = usize::from(queue.get() as u8);
+        if cause == MacTxAbortCause::TimeoutEdge && !self.timeout_pending[queue] {
+            return MacTxAbortOutcome::NoEdge;
         }
-        assert!(!self.cca_forced, "one timeout abort forces CCA at a time");
-        self.cca_forced = true;
-        true
+        self.aborts += 1;
+        self.timeout_pending[queue] = false;
+        if self.taken_by_air[queue] {
+            return MacTxAbortOutcome::OnAir;
+        }
+        MacTxAbortOutcome::Aborted(aborted(MacTxQueueAborted::new_model()))
     }
 
     fn with_tx_queue_detached<R>(
@@ -158,14 +164,6 @@ impl TxHardware for Hardware {
         let queue = queue.get() as u8;
         let queue = usize::from(queue);
         let pending = match reason {
-            MacTxDetachReason::Timeout => {
-                self.timeout_pending[queue] = false;
-                self.cca_forced = false;
-                if self.taken_by_air[queue] {
-                    return MacTxDetachOutcome::OnAir;
-                }
-                true
-            }
             MacTxDetachReason::Collision => core::mem::take(&mut self.collision_pending[queue]),
             MacTxDetachReason::Completed => true,
         };
