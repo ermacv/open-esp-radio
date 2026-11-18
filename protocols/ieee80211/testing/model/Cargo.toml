@@ -17,6 +17,7 @@ oer-portable-time = { path = "../../../../portable/time" }
 oer-protocols-ieee80211-testing-conformance = { path = "../conformance" }
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true

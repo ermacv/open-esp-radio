@@ -90,6 +90,20 @@ pub trait Harness<
     fn record(&self) -> Self::Record;
     /// What the hardware holds.
     fn state(&self) -> Self::State;
+    /// The port's own octets of its transmit slots (in front of the
+    /// headroom, behind a body and its MIC's room), as the port checked
+    /// them after each write and at each publication.
+    fn port_octets(&self) -> PortOctets;
+}
+
+/// The port's own octets of its transmit slots, as the port finds them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PortOctets {
+    /// As the port wrote them, at every check.
+    Whole,
+    /// Written by someone else at a check: the engine or the network wrote
+    /// outside the headroom and the body.
+    Overwritten,
 }
 
 /// The rights the suite runs an installation with.
@@ -725,8 +739,18 @@ where
             .expect("the arena has slots");
         place.write(memory, header);
     }
+    assert_eq!(
+        harness.port_octets(),
+        PortOctets::Whole,
+        "the writes leave the port's octets in front of the headroom and behind the body whole"
+    );
     let how = how(harness.port());
     let on_air = harness.port().publish(arena, how, &open, NOW);
+    assert_eq!(
+        harness.port_octets(),
+        PortOctets::Whole,
+        "the port's octets are whole at the publication"
+    );
     let sent = on_air.sent();
     assert!(!sent.is_empty(), "one frame goes at least");
     assert_eq!(
@@ -822,6 +846,34 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
     );
     assert!(went.sent.len() > 1, "the prefix is an aggregate");
     assert!(!went.single, "an aggregate's outcome is an aggregate's");
+}
+
+/// **The port's octets are the port's**: the engine and the network
+/// write nothing in front of the headroom or behind a body and its MIC's
+/// room. Three frames of `body` octets, the longest the port's slots hold,
+/// are written and published; the port finds its own octets whole after
+/// the writes and at the publication.
+pub fn the_ports_octets_stay_the_ports<
+    'id,
+    H,
+    const S: usize,
+    const G: usize,
+    const A: usize,
+    const D: usize,
+>(
+    harness: &mut H,
+    rights: Rights<'id, S, G, A, D>,
+    length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
+    body: u16,
+) where
+    H: Harness<'id, S, G, A, D>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let went = publication(harness, rights, length, body, 3, |port| {
+        Ppdu::Single(alone(port))
+    });
+    assert_eq!(went.sent, FrameSet::prefix(1), "the first frame goes");
+    assert_eq!(harness.port_octets(), PortOctets::Whole);
 }
 
 /// **7. A single publication** sends the arena's first frame as one MPDU

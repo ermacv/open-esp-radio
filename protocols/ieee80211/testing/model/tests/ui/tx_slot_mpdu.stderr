@@ -1,0 +1,16 @@
+error[E0080]: evaluation panicked: the longest MPDU of the body is one the port transmits
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_contracts_port::TxSlotOf::<'_, oer_protocols_ieee80211_testing_model::ModelPort<'_, 0, 0, 8, 12>, 2263, 4096>::SLOT` failed here
+  |
+ ::: $WORKSPACE/protocols/ieee80211/contracts/port/src/data.rs
+  |
+  |             panic!("the longest MPDU of the body is one the port transmits")
+  |             ---------------------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+  --> tests/ui/tx_slot_mpdu.rs:10:34
+   |
+10 | pub const LONGER: TxSlot<Port> = TxSlotOf::<'static, Port, 2_263, 4_096>::SLOT; // ui-error@outside: E0080: evaluation panicked: the...
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

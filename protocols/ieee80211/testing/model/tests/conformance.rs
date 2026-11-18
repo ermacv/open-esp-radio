@@ -15,7 +15,8 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
     Air, Anomaly, HardwareState, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES,
-    MODEL_SHORT_AMPDU_MCS, ModelCaps, ModelLayout, ModelLink, ModelMemory, ModelPort, Programmed,
+    MODEL_SHORT_AMPDU_MCS, MODEL_TX_BODY, ModelCaps, ModelLayout, ModelLink, ModelMemory,
+    ModelPort, Programmed,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -97,6 +98,13 @@ impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA> for
     }
     fn state(&self) -> HardwareState {
         self.port.state()
+    }
+    fn port_octets(&self) -> suite::PortOctets {
+        if self.port.counts().overwritten == 0 {
+            suite::PortOctets::Whole
+        } else {
+            suite::PortOctets::Overwritten
+        }
     }
 }
 
@@ -180,6 +188,19 @@ fn a_single_publication_sends_the_first_frame() {
             rights,
             MpduLength::new(1_526).unwrap(),
             1_500,
+        );
+    });
+}
+
+#[test]
+fn the_ports_octets_stay_the_ports() {
+    // Three frames of the longest body the model's slots hold.
+    installed(|mut model, rights| {
+        suite::the_ports_octets_stay_the_ports(
+            &mut model,
+            rights,
+            MpduLength::new(MODEL_TX_BODY + 26).unwrap(),
+            MODEL_TX_BODY as u16,
         );
     });
 }
