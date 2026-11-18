@@ -1,0 +1,6 @@
+# The first stage of a mutation run (tools/README.md, "Mutation testing"):
+# the library's tests without the searches over every order of events,
+# which take most of a crate's test time and run for every mutant. The
+# second stage gives its arguments anew for what this one missed.
+additional_cargo_test_args = ["--lib", "--", "--skip", "tests::search"]
+minimum_test_timeout = 20

@@ -885,7 +885,7 @@ pub(super) struct Found {
     pub problems: Vec<(&'static str, String)>,
 }
 
-pub(super) fn search(bounds: Bounds, agreement: Agreement) -> Found {
+pub(super) fn search(bounds: Bounds, agreement: Agreement, ceiling: usize) -> Found {
     let mut found = Found {
         nodes: 0,
         ways: 0,
@@ -907,6 +907,14 @@ pub(super) fn search(bounds: Bounds, agreement: Agreement) -> Found {
             continue;
         }
         found.nodes += 1;
+        // A ceiling against an explosion, not a pinned figure.
+        if found.nodes > ceiling {
+            found.problems.push((
+                "the search passed its ceiling of nodes",
+                std::format!("{} nodes over a ceiling of {ceiling}", found.nodes),
+            ));
+            break;
+        }
         if path.len() >= DEPTH {
             continue;
         }
@@ -919,9 +927,9 @@ pub(super) fn search(bounds: Bounds, agreement: Agreement) -> Found {
     found
 }
 
-fn run(bounds: Bounds, agreement: Agreement) {
+fn run(bounds: Bounds, agreement: Agreement, ceiling: usize) {
     let start = Clock::now();
-    let found = search(bounds, agreement);
+    let found = search(bounds, agreement, ceiling);
     std::println!(
         "receive search {bounds:?} {agreement:?}: {} states, {} ways, depth {}, {:?}",
         found.nodes,
@@ -934,6 +942,12 @@ fn run(bounds: Bounds, agreement: Agreement) {
     }
     assert!(found.problems.is_empty());
 }
+
+/// The most nodes a search at the ordinary bounds visits (about 7 000
+/// and 26 000 today) and one at named bounds: ceilings against an
+/// explosion, several times what they take, never a pinned figure.
+const ORDINARY_CEILING: usize = 150_000;
+const NAMED_CEILING: usize = 3_000_000;
 
 /// The search at the model's bounds, in the ordinary test run.
 #[test]
@@ -948,16 +962,19 @@ fn every_order_of_the_receive_sections_keeps_its_properties() {
             holds: 1,
         },
         Agreement::None,
+        ORDINARY_CEILING,
     );
 }
 
 /// The same under a receive agreement: the reorder's order, its gap, the
-/// place it keeps free, in the ordinary test run.
+/// place it keeps free, a hold, in the ordinary test run (four frames: the
+/// retry of a number, the fifth, is the named search's, within the
+/// ordinary run's 30 s).
 #[test]
 fn every_order_under_a_receive_agreement_keeps_its_properties() {
     run(
         Bounds {
-            units: 5,
+            units: 4,
             returns: 2,
             stops: 1,
             frees: 1,
@@ -965,6 +982,7 @@ fn every_order_under_a_receive_agreement_keeps_its_properties() {
             holds: 1,
         },
         Agreement::Tid0,
+        ORDINARY_CEILING,
     );
 }
 
@@ -983,6 +1001,7 @@ fn every_receive_order_at_the_mutants_bounds() {
             holds: 1,
         },
         Agreement::None,
+        NAMED_CEILING,
     );
 }
 
@@ -1000,5 +1019,6 @@ fn every_order_under_a_receive_agreement_at_the_mutants_bounds() {
             holds: 1,
         },
         Agreement::Tid0,
+        NAMED_CEILING,
     );
 }
