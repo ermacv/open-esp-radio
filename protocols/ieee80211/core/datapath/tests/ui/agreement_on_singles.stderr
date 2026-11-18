@@ -1,7 +1,7 @@
-error[E0599]: no method named `tx_agreement` found for struct `NamedTid<'_, Engine<'_, ModelPort<'_, 17, 4>, Singles, T, 2, 8, 17, 2, 2, 7>>` in the current scope
+error[E0599]: no method named `tx_agreement` found for struct `NamedTid<'_, Engine<'_, ModelPort<'_, 17, 4, 8>, Singles, T, 2, 8, 17, 2, 2, 7>>` in the current scope
   --> tests/ui/agreement_on_singles.rs:32:15
    |
 32 |         named.tx_agreement(); // ui-error: E0599
-   |               ^^^^^^^^^^^^ method not found in `NamedTid<'_, Engine<'_, ModelPort<'_, 17, 4>, Singles, T, 2, 8, 17, 2, 2, 7>>`
+   |               ^^^^^^^^^^^^ method not found in `NamedTid<'_, Engine<'_, ModelPort<'_, 17, 4, 8>, Singles, T, 2, 8, 17, 2, 2, 7>>`
    |
    = note: the method was found for `NamedTid<'a, Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS, WINDOW>>`

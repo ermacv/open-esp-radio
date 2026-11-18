@@ -502,7 +502,12 @@ impl Drop for ModelLent {
 /// its controller and `DATA` of an access point's data, staging received
 /// units into `PLACES` places ([`MODEL_PLACES`] unless a search names
 /// fewer).
-pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize = MODEL_PLACES> {
+pub struct ModelPort<
+    'id,
+    const SINGLES: usize,
+    const DATA: usize,
+    const PLACES: usize = MODEL_PLACES,
+> {
     key: PortKey<'id>,
     issuer: GateIssuer<'id>,
     phase: Phase,
@@ -555,7 +560,9 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ModelPort<'id, SINGLES, DATA, PLACES> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
+    ModelPort<'id, SINGLES, DATA, PLACES>
+{
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
     pub fn new(
@@ -1007,7 +1014,9 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> RadioPor
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort<'id>
+    for ModelPort<'id, SINGLES, DATA, PLACES>
+{
     type Link = ModelLink;
     type Memory = ModelMemory;
     type Ack = ();
@@ -1623,7 +1632,9 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ModelPort<'id, SINGLES, DATA, PLACES> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
+    ModelPort<'id, SINGLES, DATA, PLACES>
+{
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
         if let Some(place) = self.groups.get_mut(usize::from(index)) {
