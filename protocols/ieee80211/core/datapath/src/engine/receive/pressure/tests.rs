@@ -103,10 +103,10 @@ struct World {
 /// The cases the search must reach.
 #[derive(Clone, Copy, Debug, Default)]
 struct Reached {
-    /// A unit that does not decapsulate offered while one waits.
-    unread_behind: bool,
-    /// A unit that does not decapsulate offered at the last place.
-    unread_at_last: bool,
+    /// Offers of a unit that does not decapsulate while one waits.
+    unread_behind: usize,
+    /// Offers of a unit that does not decapsulate at the last place.
+    unread_at_last: usize,
 }
 
 /// One step of a path.
@@ -322,8 +322,8 @@ impl World {
         let outside = self.retained.len();
         let last = self.places_taken() + 1 >= self.staging;
         if let Need::Unread(_) = Self::need(unit) {
-            self.reached.unread_behind |= !self.waits.is_empty();
-            self.reached.unread_at_last |= last;
+            self.reached.unread_behind += usize::from(!self.waits.is_empty());
+            self.reached.unread_at_last += usize::from(last);
         }
         let decision = self.core.offer(
             unit,
@@ -598,11 +598,12 @@ fn search(staging: usize, loans: u8, left: Bounds, ceiling: usize) -> Found {
         );
         for step in world.steps() {
             let mut next = world.clone();
+            next.reached = Reached::default();
             let mut problems = Problems::new();
             next.apply(step, &mut problems);
             next.check(&mut problems);
-            reached.unread_behind |= next.reached.unread_behind;
-            reached.unread_at_last |= next.reached.unread_at_last;
+            reached.unread_behind += next.reached.unread_behind;
+            reached.unread_at_last += next.reached.unread_at_last;
             let mut path = path.clone();
             path.push(step);
             if let Some(problem) = problems.first() {
@@ -634,7 +635,7 @@ fn run(name: &str, staging: usize, loans: u8, left: Bounds, ceiling: usize) {
         panic!("PROBLEM {problem}\n    by {path:?}");
     }
     assert!(
-        found.reached.unread_behind && found.reached.unread_at_last,
+        found.reached.unread_behind > 0 && found.reached.unread_at_last > 0,
         "the search did not reach a unit that does not decapsulate behind a waiting one and at the last place: {:?}",
         found.reached
     );
