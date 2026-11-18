@@ -207,6 +207,10 @@ pub trait ClientBackend<K: Client, S: LpSource>: PhyDomain {
     async fn retune(&mut self, retune: K::Retune) -> Result<K::Retuned, Failed<K::RetuneReturned>>;
     /// Exit `K` from the domain, coexistence included.
     async fn exit(&mut self, leave: K::Leave) -> (K::Left, Exit);
+    /// Reset a tracked member's MAC block and write back what the domain
+    /// keeps inside it; answered always, with the reset's proof. A client
+    /// with no such reset has an uninhabited `ResetMac`.
+    async fn reset_mac(&mut self, reset: K::ResetMac) -> K::MacReset;
 }
 
 mod actor_core;
@@ -421,6 +425,12 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
                         })
                     }
                 })
+            }
+            Request::ResetMac(member, reset, responder) => {
+                // No refusal and no failure: answered as a leave is, poisoned
+                // domain or not.
+                let payload = Boundary::new(self.backend.reset_mac(reset)).await;
+                responder.answer(oer_chips_esp32s31_radio_client::MacResetAnswer { member, payload })
             }
             Request::Leave(member, leave, responder) => {
                 self.core.leaving(matches!(member, Leaving::Tracked(_)));

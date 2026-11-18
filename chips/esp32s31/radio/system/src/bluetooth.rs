@@ -230,7 +230,7 @@ where
                     }
                 })
             }
-            Request::Retune(_, never, _) => match never {},
+            Request::Retune(_, never, _) | Request::ResetMac(_, never, _) => match never {},
             Request::Leave(member, installation, responder) => {
                 self.actor
                     .core
