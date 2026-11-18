@@ -80,8 +80,8 @@ use oer_protocols_ieee80211_contracts_port::{
     RateSupport, ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead,
     RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged,
     StagedPlaces, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped,
-    Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, ValueCommand,
-    ValueEnd, ValueKind, WidthSet, WithdrawCause,
+    Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, TxSlot, TxSlotOf, UnitsHome,
+    ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -165,6 +165,21 @@ impl Ieee80211Capabilities for ModelCaps {
 pub const MODEL_ARENA_SLOTS: u8 = 32;
 /// The model's staging places.
 pub const MODEL_PLACES: usize = 8;
+/// The model's octets in front of a transmit slot's headroom: not the
+/// S31's 8, so that a chip's number written where the port's belongs fails
+/// on the model.
+pub const MODEL_TX_FRONT: usize = 12;
+/// The model's octets behind a body and its MIC's room: not the S31's 4.
+pub const MODEL_TX_BEHIND: usize = 8;
+/// The longest body the model's transmit slots hold: the slots' owner's
+/// number (the suite sends bodies of 2 000).
+pub const MODEL_TX_BODY: usize = 2_048;
+/// The octets of a model transmit slot.
+pub const MODEL_TX_SLOT: usize = 2_128;
+/// What the model writes in its own octets in front of the headroom.
+const FRONT_OCTET: u8 = 0xf5;
+/// What the model writes in its own octets behind a body and its MIC.
+const BEHIND_OCTET: u8 = 0xb5;
 /// The descriptors of the model's ring.
 pub const MODEL_RING: usize = 16;
 /// The station's group key slots.
@@ -296,6 +311,10 @@ pub struct Counts {
     /// The units neither a data, a management nor a control frame: given
     /// back to the ring at their staging.
     pub dropped: u32,
+    /// The checks that found the model's own octets of a transmit slot
+    /// (in front of the headroom, behind the body and its MIC) not as it
+    /// wrote them, after a write or at a publication.
+    pub overwritten: u32,
 }
 
 /// A part of the modelled hardware that is on or off, or one of the
@@ -400,12 +419,15 @@ enum Phase {
 }
 
 /// One frame of an arena.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Frame {
     memory: ModelMemory,
     header: u8,
     /// The headroom after the engine wrote the front.
     front: [u8; HEADROOM],
+    /// The frame's transmit slot: the model's octets in front, the
+    /// headroom, the body, its MIC's room, the model's octets behind.
+    slot: Vec<u8>,
     /// The publications it went in.
     attempts: u8,
 }
@@ -507,6 +529,7 @@ pub struct ModelPort<
     const SINGLES: usize,
     const DATA: usize,
     const PLACES: usize = MODEL_PLACES,
+    const TX_FRONT: usize = MODEL_TX_FRONT,
 > {
     key: PortKey<'id>,
     issuer: GateIssuer<'id>,
@@ -541,6 +564,8 @@ pub struct ModelPort<
     commanding: Commanding,
     record: Vec<Programmed>,
     counts: Counts,
+    /// The transmit slots' geometry, checked at build.
+    tx: TxSlot<Self>,
 }
 
 const fn queue_index(category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory) -> usize {
@@ -553,6 +578,49 @@ const fn queue_index(category: oer_protocols_ieee80211_wire::qos::WmmAccessCateg
     }
 }
 
+/// A transmit slot as the model lays it out for `memory`: its own octets
+/// in front of the headroom and behind the body and its MIC's room, the
+/// network's front in the headroom, the body's octets (the memory's id),
+/// the MIC's room empty. A body longer than the slot's runs into the
+/// model's octets behind: [`whole`] finds them overwritten.
+fn lay_out<P>(tx: TxSlot<P>, memory: &ModelMemory) -> Vec<u8> {
+    let body = usize::from(memory.len);
+    let mut slot = std::vec![0; tx.len().max(tx.body_at().saturating_add(body))];
+    if let Some(front) = slot.get_mut(tx.front()) {
+        front.fill(FRONT_OCTET);
+    }
+    if let Some(behind) = tx.behind(body)
+        && let Some(octets) = slot.get_mut(behind)
+    {
+        octets.fill(BEHIND_OCTET);
+    }
+    let headroom = tx.headroom_at();
+    if let Some(room) = slot.get_mut(headroom..headroom.saturating_add(HEADROOM)) {
+        for (to, from) in room.iter_mut().zip(memory.front) {
+            *to = from;
+        }
+    }
+    let tag = memory.id.to_le_bytes()[0];
+    if let Some(octets) = slot.get_mut(tx.body_at()..tx.body_at().saturating_add(body)) {
+        octets.fill(tag);
+    }
+    slot
+}
+
+/// Whether a slot's octets in front of the headroom and behind a body of
+/// `body` octets and its MIC's room are the model's, as [`lay_out`] wrote
+/// them.
+fn whole<P>(tx: TxSlot<P>, slot: &[u8], body: u16) -> bool {
+    let front = slot
+        .get(tx.front())
+        .is_some_and(|octets| octets.iter().all(|octet| *octet == FRONT_OCTET));
+    let behind = tx.behind(usize::from(body)).is_some_and(|range| {
+        slot.get(range)
+            .is_some_and(|octets| octets.iter().all(|octet| *octet == BEHIND_OCTET))
+    });
+    front && behind
+}
+
 const fn side_index(side: ArenaSide) -> usize {
     match side {
         ArenaSide::First => 0,
@@ -560,8 +628,8 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
-    ModelPort<'id, SINGLES, DATA, PLACES>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
+    ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
 {
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
@@ -597,6 +665,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
             commanding: Commanding::Idle,
             record: Vec::new(),
             counts: Counts::default(),
+            tx: TxSlotOf::<'id, Self, MODEL_TX_BODY, MODEL_TX_SLOT>::SLOT,
         }
     }
 
@@ -876,8 +945,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> RadioPort<'id>
-    for ModelPort<'id, SINGLES, DATA, PLACES>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
+    RadioPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
 {
     type Caps = ModelCaps;
     type Channel = SupportedChannel<ModelCaps>;
@@ -1014,11 +1083,13 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> RadioPor
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort<'id>
-    for ModelPort<'id, SINGLES, DATA, PLACES>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
+    DataPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
 {
     type Link = ModelLink;
     type Memory = ModelMemory;
+    const TX_FRONT: usize = TX_FRONT;
+    const TX_BEHIND: usize = MODEL_TX_BEHIND;
     type Ack = ();
     type BlockAck = ();
     type Denial = ();
@@ -1098,8 +1169,30 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort
         body: Self::Memory,
         header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     ) {
-        let mut front = body.front;
-        let written = header(&mut front);
+        let mut slot = lay_out(self.tx, &body);
+        let headroom = self.tx.headroom_at();
+        // The engine writes the front into the slot's headroom itself.
+        let written = match slot
+            .get_mut(headroom..headroom.saturating_add(HEADROOM))
+            .and_then(|room| <&mut [u8; HEADROOM]>::try_from(room).ok())
+        {
+            Some(room) => header(room),
+            None => {
+                // The slot holds its headroom by its geometry.
+                self.counts.overwritten = self.counts.overwritten.saturating_add(1);
+                let mut room = body.front;
+                header(&mut room)
+            }
+        };
+        let mut front = [0; HEADROOM];
+        if let Some(room) = slot.get(headroom..headroom.saturating_add(HEADROOM)) {
+            for (to, from) in front.iter_mut().zip(room) {
+                *to = *from;
+            }
+        }
+        if !whole(self.tx, &slot, body.len) {
+            self.counts.overwritten = self.counts.overwritten.saturating_add(1);
+        }
         let header = u8::try_from(written.get()).unwrap_or(u8::MAX);
         self.fronts.retain(|(id, _)| *id != body.id);
         self.fronts.push((
@@ -1115,6 +1208,7 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort
                 memory: body,
                 header,
                 front,
+                slot,
                 attempts: 0,
             });
         }
@@ -1157,6 +1251,15 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort
                 .max(1)
                 .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX))
                 .min(prefix.unwrap_or(u8::MAX).max(1));
+            let broken = buffer
+                .frames
+                .iter()
+                .filter(|frame| !whole(self.tx, &frame.slot, frame.memory.len))
+                .count();
+            self.counts.overwritten = self
+                .counts
+                .overwritten
+                .saturating_add(u32::try_from(broken).unwrap_or(u32::MAX));
             buffer.sent = sent;
             buffer.went = if sent > 1 {
                 Went::Aggregate
@@ -1632,8 +1735,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
-    ModelPort<'id, SINGLES, DATA, PLACES>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
+    ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
 {
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
@@ -1673,8 +1776,8 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize>
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ReceivePort<'id>
-    for ModelPort<'id, SINGLES, DATA, PLACES>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize, const TX_FRONT: usize>
+    ReceivePort<'id> for ModelPort<'id, SINGLES, DATA, PLACES, TX_FRONT>
 {
     type Meta = RxMeta;
     type Lent = ModelLent;
@@ -1785,5 +1888,112 @@ impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ReceiveP
         } else {
             Rest::Signal
         }
+    }
+}
+
+#[cfg(test)]
+mod tx_slot {
+    use super::*;
+
+    type Port = ModelPort<'static, 0, 0>;
+    const SLOT: TxSlot<Port> = TxSlotOf::<'static, Port, MODEL_TX_BODY, MODEL_TX_SLOT>::SLOT;
+
+    fn memory(len: u16) -> ModelMemory {
+        ModelMemory {
+            id: 7,
+            len,
+            front: [0x11; HEADROOM],
+        }
+    }
+
+    /// The model lays its own octets out in front of the headroom and
+    /// behind the body and its MIC's room, and finds them whole.
+    #[test]
+    fn a_slot_is_laid_out_around_the_body_and_found_whole() {
+        let body = 100;
+        let slot = lay_out(SLOT, &memory(body));
+        assert_eq!(slot.len(), MODEL_TX_SLOT);
+        assert!(
+            slot[..MODEL_TX_FRONT]
+                .iter()
+                .all(|octet| *octet == FRONT_OCTET)
+        );
+        assert_eq!(
+            &slot[MODEL_TX_FRONT..MODEL_TX_FRONT + HEADROOM],
+            &[0x11; HEADROOM]
+        );
+        let body_at = MODEL_TX_FRONT + HEADROOM;
+        assert_eq!(body_at % 4, 0, "the body lies on a word");
+        assert!(slot[body_at..body_at + 100].iter().all(|octet| *octet == 7));
+        let behind = body_at + 100 + oer_protocols_ieee80211_contracts_port::MIC_ROOM;
+        assert_eq!(SLOT.behind(100), Some(behind..behind + MODEL_TX_BEHIND));
+        assert!(
+            slot[behind - 8..behind].iter().all(|octet| *octet == 0),
+            "the MIC's room"
+        );
+        assert!(
+            slot[behind..behind + MODEL_TX_BEHIND]
+                .iter()
+                .all(|octet| *octet == BEHIND_OCTET)
+        );
+        assert!(whole(SLOT, &slot, body));
+    }
+
+    /// An octet written in front of the headroom, or behind the body and
+    /// its MIC, is found; one in the MIC's room is not the model's.
+    #[test]
+    fn an_octet_written_outside_the_headroom_and_the_body_is_found() {
+        let body = 100;
+        let behind = SLOT.behind(100).unwrap().start;
+        for at in [0, MODEL_TX_FRONT - 1, behind, behind + MODEL_TX_BEHIND - 1] {
+            let mut slot = lay_out(SLOT, &memory(body));
+            slot[at] ^= 1;
+            assert!(!whole(SLOT, &slot, body), "an octet at {at}");
+        }
+        let mut slot = lay_out(SLOT, &memory(body));
+        slot[behind - 1] ^= 1;
+        assert!(
+            whole(SLOT, &slot, body),
+            "the MIC's room is the port's to fill"
+        );
+    }
+
+    /// A body longer than the slot's runs into the model's octets behind.
+    #[test]
+    fn a_body_longer_than_the_slots_is_found() {
+        let body = MODEL_TX_BODY as u16 + 1;
+        let slot = lay_out(SLOT, &memory(body));
+        assert!(!whole(SLOT, &slot, body));
+    }
+
+    /// The slot refuses at run time what it refuses at build.
+    #[test]
+    fn the_constructor_refuses_at_run_time_what_the_build_refuses() {
+        use oer_protocols_ieee80211_contracts_port::{TxSlotRefused, tx_slot};
+        let needed = tx_slot::<Port>(MODEL_TX_BODY).unwrap();
+        assert_eq!(
+            needed,
+            MODEL_TX_FRONT + HEADROOM + MODEL_TX_BODY + 8 + MODEL_TX_BEHIND
+        );
+        assert!(TxSlot::<Port>::new(MODEL_TX_BODY, needed).is_ok());
+        assert_eq!(
+            TxSlot::<Port>::new(MODEL_TX_BODY, needed - 1).err(),
+            Some(TxSlotRefused::Short)
+        );
+        // The longest front and the body against the MPDU the model sends
+        // without its MIC and FCS: 42 + 2 262 = 2 304.
+        assert!(TxSlot::<Port>::new(2_262, 4_096).is_ok());
+        assert_eq!(
+            TxSlot::<Port>::new(2_263, 4_096).err(),
+            Some(TxSlotRefused::MpduTooLong)
+        );
+        assert_eq!(
+            TxSlot::<ModelPort<'static, 0, 0, MODEL_PLACES, 14>>::new(100, 4_096).err(),
+            Some(TxSlotRefused::BodyOffWord)
+        );
+        assert_eq!(
+            TxSlot::<Port>::new(usize::MAX, usize::MAX).err(),
+            Some(TxSlotRefused::Overflow)
+        );
     }
 }

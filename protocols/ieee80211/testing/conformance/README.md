@@ -11,7 +11,8 @@ portable support alone.
 A backend's test implements `Harness` (its port, a channel, network memory
 and a link, frames landed on the receive ring, the anomalies it can raise,
 a MAC held busy, the air held and released, what the hardware was asked to
-program and its state) and calls each property with an installation's
+program and its state, whether its own octets of its transmit slots are
+whole) and calls each property with an installation's
 rights (`Rights`). The suite keeps the rights in its own places and checks
 the port's answers against them; it reads no bookkeeping of the port's.
 
@@ -24,6 +25,7 @@ the port's answers against them; it reads no bookkeeping of the port's.
 | `a_unit_is_in_one_place` | A unit taken in a round stays in its place, named by its handle; one not taken goes back at the close |
 | `a_publication_sends_the_prefix_its_rate_admits` | An aggregate at a rate that admits less than the arena holds sends the longest prefix as an A-MPDU; the rest stay with no attempt spent |
 | `a_single_publication_sends_the_first_frame` | A single publication sends the first frame as one MPDU; the rest stay |
+| `the_ports_octets_stay_the_ports` | Frames of the longest body the port's slots hold are written and published; the port finds its octets in front of the headroom (`TX_FRONT`) and behind the body and its MIC's room (`TX_BEHIND`) whole after the writes and at the publication, as at every publication of the other properties |
 | `an_aggregate_of_one_frame_ends_single` | An aggregate whose rate admits one frame sends it alone by its plan, and its outcome says one MPDU went |
 | `an_unclassifiable_frame_goes_back_at_its_staging` | A unit that is no data, management or control frame is counted and returned to the ring; the round hands the others |
 | `a_round_services_the_ring_once` | A round services the ring once and hands what that service staged |

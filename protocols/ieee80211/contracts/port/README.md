@@ -76,6 +76,24 @@ the engine to write the MPDU's front flush against the body; `HeaderLen`
 says where the MPDU begins. The headroom holds what the network wrote
 there: a data MSDU's Ethernet header is its last 14 octets.
 
+**A transmit slot is the port's memory around a body.** A port states two
+numbers of its transmit memory: `DataPort::TX_FRONT`, the octets it needs
+in front of the headroom (what its hardware reads before the MPDU), and
+`DataPort::TX_BEHIND`, the octets behind a body and its MIC's room
+whatever the cipher (what its hardware appends: an FCS). The MIC's room is
+the contract's one constant, `MIC_ROOM`: the longest MIC of the ciphers it
+carries (CCMP's 8). Nothing above the port writes the port's octets.
+`tx_slot::<P>(body)` is a slot's length for a body of `body` octets; the
+body's length is not the contract's number but the slots' owner's. The
+owner names its slot in a const item, `TxSlotOf::<P, BODY, LEN>::SLOT`, built
+by `TxSlot::new`, which refuses (`TxSlotRefused`) a body that would not lie
+on a word (the network writes an IP datagram there and reads its header in
+words), a slot shorter than `tx_slot` and a body whose longest MPDU (the
+engine's longest front, 42, and the body) is longer than the capability's
+`max_mpdu_length`, which counts the MPDU without its MIC and FCS (IEEE Std
+802.11-2020, 9.2.3, 12.5.3.2); the headroom holds each role's longest front
+by the role's own const check. A geometry it refuses does not build.
+
 `publish(arena, how, gate, now)` puts the arena on the air as its `Ppdu`
 says: `Single(plan)` its first frame as one MPDU, acknowledged, by the
 plan; `Aggregate { rate, spacing, protection, alone }` the longest prefix

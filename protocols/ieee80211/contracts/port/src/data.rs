@@ -477,6 +477,172 @@ impl HeaderLen {
     }
 }
 
+/// The room behind a body for its MIC: the longest MIC of the ciphers the
+/// contract carries, CCMP's 8 octets (IEEE Std 802.11-2020, 12.5.3.2). The
+/// port appends it to a protected MPDU; a cipher with a longer MIC changes
+/// this line, and every slot follows.
+pub const MIC_ROOM: usize = oer_protocols_ieee80211_wire::ccmp::CCMP_MIC_LEN;
+
+/// The length of a transmit slot for a body of `body` octets: the port's
+/// octets in front of the headroom ([`DataPort::TX_FRONT`]), the
+/// [`HEADROOM`], the body, its MIC's room ([`MIC_ROOM`]) and the port's
+/// octets behind them ([`DataPort::TX_BEHIND`]); `None` past `usize`.
+pub const fn tx_slot<'id, P: DataPort<'id>>(body: usize) -> Option<usize> {
+    let Some(front) = P::TX_FRONT.checked_add(HEADROOM) else {
+        return None;
+    };
+    let Some(body) = front.checked_add(body) else {
+        return None;
+    };
+    let Some(mic) = body.checked_add(MIC_ROOM) else {
+        return None;
+    };
+    mic.checked_add(P::TX_BEHIND)
+}
+
+/// A transmit slot's geometry for port `P`, checked: the one value a
+/// slot's owner is built from, made in a const item of the owner by
+/// [`TxSlot::new`], the constructor that refuses the same numbers at run
+/// time.
+pub struct TxSlot<P> {
+    front: usize,
+    behind: usize,
+    body: usize,
+    len: usize,
+    port: PhantomData<fn() -> P>,
+}
+
+impl<P> Clone for TxSlot<P> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<P> Copy for TxSlot<P> {}
+
+/// Why a slot's geometry is refused, before any slot is built.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxSlotRefused {
+    /// The body would not lie on a word.
+    BodyOffWord,
+    /// The slot is shorter than [`tx_slot`] of its body.
+    Short,
+    /// The longest MPDU of the body is longer than the port transmits.
+    MpduTooLong,
+    /// The lengths overflow `usize`.
+    Overflow,
+}
+
+impl<P> TxSlot<P> {
+    /// A slot of `len` octets for bodies of at most `body` octets, when:
+    ///
+    /// - the body lies on a word (`BODY_ALIGNMENT`): the network writes an
+    ///   MSDU's payload, an IP datagram, from there and reads its header
+    ///   in words, as in its own memory;
+    /// - `len` holds [`tx_slot`] of `body`: the port's octets in front,
+    ///   the headroom, the body, its MIC's room and the port's octets
+    ///   behind;
+    /// - the longest MPDU of such a body is one `P` transmits: the longest
+    ///   front the engine writes (`WRITTEN`: header, CCMP header,
+    ///   LLC/SNAP) and the body, against the capability's
+    ///   `max_mpdu_length`, which counts the MPDU without its MIC and FCS
+    ///   (IEEE Std 802.11-2020, 9.2.3: an MPDU is its header, its body
+    ///   and its FCS; 12.5.3.2: the MIC follows the data inside the body).
+    ///
+    /// # Errors
+    ///
+    /// [`TxSlotRefused`] names the relation that does not hold.
+    pub const fn new<'id>(body: usize, len: usize) -> Result<Self, TxSlotRefused>
+    where
+        P: DataPort<'id>,
+    {
+        let Some(at) = P::TX_FRONT.checked_add(HEADROOM) else {
+            return Err(TxSlotRefused::Overflow);
+        };
+        if at % BODY_ALIGNMENT != 0 {
+            return Err(TxSlotRefused::BodyOffWord);
+        }
+        let Some(needed) = tx_slot::<P>(body) else {
+            return Err(TxSlotRefused::Overflow);
+        };
+        if needed > len {
+            return Err(TxSlotRefused::Short);
+        }
+        let Some(mpdu) = WRITTEN.checked_add(body) else {
+            return Err(TxSlotRefused::Overflow);
+        };
+        if mpdu > <P::Caps as crate::Ieee80211Capabilities>::CAPS.max_mpdu_length as usize {
+            return Err(TxSlotRefused::MpduTooLong);
+        }
+        Ok(Self {
+            front: P::TX_FRONT,
+            behind: P::TX_BEHIND,
+            body,
+            len,
+            port: PhantomData,
+        })
+    }
+
+    /// The slot's octets.
+    pub const fn len(self) -> usize {
+        self.len
+    }
+
+    /// Where the headroom begins: behind the port's octets in front.
+    pub const fn headroom_at(self) -> usize {
+        self.front
+    }
+
+    /// Where the body begins: behind the headroom, on a word.
+    pub const fn body_at(self) -> usize {
+        // Inside `len`, which `new` found in `usize`.
+        self.front.saturating_add(HEADROOM)
+    }
+
+    /// The port's octets in front of the headroom.
+    pub const fn front(self) -> core::ops::Range<usize> {
+        0..self.front
+    }
+
+    /// The port's octets behind a body of `body` octets and its MIC's
+    /// room, when the slot holds such a body.
+    pub const fn behind(self, body: usize) -> Option<core::ops::Range<usize>> {
+        if body > self.body {
+            None
+        } else {
+            // Inside `len`, which `new` found in `usize`.
+            let at = self.body_at().saturating_add(body).saturating_add(MIC_ROOM);
+            Some(at..at.saturating_add(self.behind))
+        }
+    }
+}
+
+/// The slot of `LEN` octets for bodies of at most `BODY` of port `P`,
+/// checked at build: what a slot's owner names in its own const item
+/// ([`Self::SLOT`]); a geometry [`TxSlot::new`] refuses does not build.
+pub struct TxSlotOf<'id, P, const BODY: usize, const LEN: usize> {
+    port: PhantomData<(Brand<'id>, fn() -> P)>,
+}
+
+impl<'id, P: DataPort<'id>, const BODY: usize, const LEN: usize> TxSlotOf<'id, P, BODY, LEN> {
+    /// The checked slot.
+    pub const SLOT: TxSlot<P> = match TxSlot::new(BODY, LEN) {
+        Ok(slot) => slot,
+        Err(TxSlotRefused::BodyOffWord) => {
+            panic!("the body lies on a word: the port's front and the headroom are whole words")
+        }
+        Err(TxSlotRefused::Short) => {
+            panic!(
+                "a slot holds the port's octets, the headroom, the body, its MIC and the port's octets behind"
+            )
+        }
+        Err(TxSlotRefused::MpduTooLong) => {
+            panic!("the longest MPDU of the body is one the port transmits")
+        }
+        Err(TxSlotRefused::Overflow) => panic!("a slot's lengths fit usize"),
+    };
+}
+
 /// How an arena goes on the air.
 pub enum Ppdu<'id, K> {
     /// The arena's first frame as one MPDU, acknowledged, by this plan.
@@ -729,6 +895,14 @@ pub trait DataPort<'id>: RadioPort<'id> {
     type Link;
     /// The MSDU's memory, by its handle.
     type Memory;
+    /// Octets the port's transmit memory needs in front of the
+    /// [`HEADROOM`], in the same memory: what the hardware reads before
+    /// the MPDU. Nothing above the port writes them.
+    const TX_FRONT: usize;
+    /// Octets the port's transmit memory needs behind a body and its MIC's
+    /// room ([`MIC_ROOM`]), whatever the cipher: what the hardware appends.
+    /// Nothing above the port writes them.
+    const TX_BEHIND: usize;
     /// The evidence of a single's acknowledgement.
     type Ack;
     /// The evidence of an aggregate's BlockAck.
