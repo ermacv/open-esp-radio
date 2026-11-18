@@ -53,8 +53,11 @@ pub use owner::{
 pub use request::{AmpduFrameLayout, AmpduFrameSize, HeAmpduPolicy};
 
 use crate::mac::tx::{LegacyTxQueue, TxCompletion, TxCookie, TxDmaState};
-pub const TX_AMPDU_METADATA_SIZE: usize = 8;
-const TX_FCS_SIZE: u16 = 4;
+/// The entry before each subframe's MPDU, the HAL's layout's.
+pub const TX_AMPDU_METADATA_SIZE: usize =
+    oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TX_ENTRY_BYTES;
+/// The FCS room after each MPDU, the HAL's layout's (four bytes).
+const TX_FCS_SIZE: u16 = oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TX_FCS_BYTES as u16;
 const TX_AMPDU_DEFAULT_MAX_BYTES: u16 = 0x1fff;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

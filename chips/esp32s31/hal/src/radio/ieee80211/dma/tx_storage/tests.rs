@@ -52,6 +52,20 @@ fn storage() -> PinnedTxDmaStorage<Lease> {
     storage
 }
 
+/// A layout of an empty MPDU at `capacity` bytes, made over a scratch
+/// buffer of 128: the storage checks it against the buffer it holds.
+fn layout(capacity: u32) -> crate::radio::ieee80211::tx_frame::TxFrame {
+    use crate::radio::ieee80211::tx_frame::{TxCapacity, TxEntry, TxFrame};
+    TxFrame::lay_out(
+        &mut [0; 128],
+        0,
+        0,
+        TxEntry::default(),
+        TxCapacity::Exactly(capacity),
+    )
+    .expect("a layout within the scratch buffer")
+}
+
 fn prepared_head(authority: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
     authority.descriptor_head().bits()
 }
@@ -64,7 +78,7 @@ fn hardware_owned_head(authority: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescr
 fn publication_records_hardware_owner_before_start_token() {
     let mut storage = storage();
     free(&mut storage).into_buffer().unwrap()[..4].copy_from_slice(&[1, 2, 3, 4]);
-    free(&mut storage).reserve(64, 4).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
 
     let mut start_address = 0;
     let publication = storage.publication().unwrap();
@@ -89,7 +103,7 @@ fn the_descriptor_publishes_the_attached_buffer() {
     let mut buffer = lease(pool, 1);
     let address = buffer.dma_region().unwrap().start().get();
     assert!(storage.attach(buffer).is_ok());
-    free(&mut storage).reserve(64, 8).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
     let published = storage
         .storage
         .as_ref()
@@ -111,7 +125,7 @@ fn a_bare_descriptor_lends_no_buffer_and_reserves_nothing() {
         Some(TxDmaStorageError::Backing)
     );
     assert_eq!(
-        free(&mut storage).reserve(64, 8),
+        free(&mut storage).reserve(layout(64)),
         Err(TxDmaStorageError::Backing)
     );
     assert_eq!(storage.state(), TxDmaState::Free);
@@ -122,7 +136,7 @@ fn a_bare_descriptor_lends_no_buffer_and_reserves_nothing() {
 fn a_reservation_cannot_exceed_the_attached_buffer() {
     let mut storage = storage();
     assert_eq!(
-        free(&mut storage).reserve(65, 8),
+        free(&mut storage).reserve(layout(65)),
         Err(TxDmaStorageError::InvalidLength)
     );
     assert_eq!(storage.state(), TxDmaState::Free);
@@ -139,7 +153,7 @@ fn a_buffer_attaches_only_to_a_free_empty_descriptor_and_detaches_only_when_free
     let refused = storage.attach(second).err().expect("one buffer");
     assert_eq!(refused.dma_region(), region);
     drop(refused);
-    free(&mut storage).reserve(64, 8).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
     assert!(storage.detach().is_none(), "a reserved descriptor keeps it");
     storage.publication().unwrap().commit(|_| {});
     assert!(storage.detach().is_none(), "the hardware owns it");
@@ -161,7 +175,7 @@ fn dropping_a_free_owner_returns_its_buffer_and_a_published_one_leaks_it() {
     {
         let mut storage = bare();
         assert!(storage.attach(lease(pool, 1)).is_ok());
-        free(&mut storage).reserve(64, 8).unwrap();
+        free(&mut storage).reserve(layout(64)).unwrap();
         storage.publication().unwrap().commit(|_| {});
     }
     assert_eq!(pool.claimed_slots(), 1, "the hardware may still read it");
@@ -170,7 +184,7 @@ fn dropping_a_free_owner_returns_its_buffer_and_a_published_one_leaks_it() {
 #[test]
 fn dropped_publication_remains_cancellable_software_state() {
     let mut storage = storage();
-    free(&mut storage).reserve(32, 16).unwrap();
+    free(&mut storage).reserve(layout(32)).unwrap();
     {
         let _publication = storage.publication().unwrap();
     }
@@ -184,7 +198,7 @@ fn dropped_publication_remains_cancellable_software_state() {
 #[test]
 fn completed_storage_is_not_reused_before_explicit_release() {
     let mut storage = storage();
-    free(&mut storage).reserve(64, 8).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.mark_completed().unwrap();
 
@@ -199,7 +213,7 @@ fn completed_storage_is_not_reused_before_explicit_release() {
 #[test]
 fn detach_proof_must_name_the_active_descriptor() {
     let mut storage = storage();
-    free(&mut storage).reserve(64, 8).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.mark_completed().unwrap();
 
@@ -216,7 +230,7 @@ fn detach_proof_must_name_the_active_descriptor() {
 #[test]
 fn reset_required_storage_remains_quarantined() {
     let mut storage = storage();
-    free(&mut storage).reserve(64, 8).unwrap();
+    free(&mut storage).reserve(layout(64)).unwrap();
     storage.publication().unwrap().commit(|_| {});
     storage.require_reset().unwrap();
 

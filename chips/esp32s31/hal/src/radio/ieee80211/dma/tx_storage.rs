@@ -13,6 +13,7 @@ use crate::system::memory::dma_address::PlacedRegion;
 use crate::system::memory::dma_static::{Placed, PlacedBacking};
 use core::{marker::PhantomPinned, mem::ManuallyDrop, pin::Pin};
 
+use crate::radio::ieee80211::tx_frame::TxFrame;
 use crate::types::MacTxQueueDetached;
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma, StableDmaRange};
 use pin_project::pin_project;
@@ -335,22 +336,15 @@ impl<L: PlacedBacking> PinnedTxDmaStorage<L> {
     }
 
     /// The private transition is callable only through the free loan.
-    fn reserve_free(
-        &mut self,
-        buffer_capacity: u32,
-        transfer_length: u32,
-    ) -> Result<(), TxDmaStorageError> {
+    fn reserve_free(&mut self, frame: TxFrame) -> Result<(), TxDmaStorageError> {
         let Some(attached) = self.backing.as_mut() else {
             return Err(TxDmaStorageError::Backing);
         };
-        if buffer_capacity == 0
-            || buffer_capacity > attached.region.len()
-            || transfer_length == 0
-            || transfer_length > buffer_capacity
-        {
+        // The layout was made over a buffer; this is the one attached.
+        if frame.descriptor_capacity() > attached.region.len() {
             return Err(TxDmaStorageError::InvalidLength);
         }
-        let word0 = tx_owned_word(buffer_capacity, transfer_length)
+        let word0 = tx_owned_word(frame.descriptor_capacity(), frame.transfer_length())
             .ok_or(TxDmaStorageError::InvalidLength)?;
         // The CPU's last write to the buffer precedes this edge: make it
         // visible before the descriptor names the buffer.
@@ -405,15 +399,12 @@ impl<'owner, L: PlacedBacking> TxDmaFree<'owner, L> {
             .ok_or(TxDmaStorageError::Backing)
     }
 
-    /// Consume free authority and publish a software-owned descriptor. A
-    /// rejected external length, or no attached buffer, leaves the
-    /// allocation free.
-    pub fn reserve(
-        self,
-        buffer_capacity: u32,
-        transfer_length: u32,
-    ) -> Result<(), TxDmaStorageError> {
-        self.owner.reserve_free(buffer_capacity, transfer_length)
+    /// Consume free authority and publish a software-owned descriptor for
+    /// `frame`, the attached buffer's layout ([`TxFrame::lay_out`]). A layout
+    /// larger than the buffer, or no attached buffer, leaves the allocation
+    /// free.
+    pub fn reserve(self, frame: TxFrame) -> Result<(), TxDmaStorageError> {
+        self.owner.reserve_free(frame)
     }
 }
 

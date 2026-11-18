@@ -17,5 +17,7 @@ pub mod registers;
 
 pub mod station_wake;
 
+pub mod tx_frame;
+
 /// Role-neutral hardware cold-start before DMA and interrupt publication.
 pub mod init;

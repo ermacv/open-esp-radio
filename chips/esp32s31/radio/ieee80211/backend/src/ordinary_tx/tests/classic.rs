@@ -90,7 +90,9 @@ fn classic_transmitter_lends_only_its_current_phase_and_returns_idle_after_detac
 fn reserved_descriptor_never_lends_classic_idle_authority() {
     use crate::ordinary_tx::OrdinaryTxAccess;
     let mut slot = slot();
-    let cookie = queued_free_slot(slot.as_mut()).reserve(64, 32).unwrap();
+    let cookie = queued_free_slot(slot.as_mut())
+        .reserve(test_frame(64, 32))
+        .unwrap();
     let owner = OrdinaryTxOwner::new(WifiTxResources {
         slot,
         policy: WifiTxRuntimePolicy::vendor_defaults(),
@@ -406,4 +408,24 @@ fn management_broadcast_never_retries() {
             );
         }
     }
+}
+
+/// A layout of `transfer` bytes (the entry, an MPDU and its FCS) at
+/// `capacity`, made over a scratch buffer: the slot checks it against the
+/// buffer it holds.
+fn test_frame(
+    capacity: u32,
+    transfer: usize,
+) -> oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TxFrame {
+    use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::{
+        TX_ENTRY_BYTES, TX_FCS_BYTES, TxCapacity, TxEntry, TxFrame,
+    };
+    TxFrame::lay_out(
+        &mut [0; 2048],
+        transfer - TX_ENTRY_BYTES - TX_FCS_BYTES,
+        0,
+        TxEntry::default(),
+        TxCapacity::Exactly(capacity),
+    )
+    .expect("a layout within the scratch buffer")
 }

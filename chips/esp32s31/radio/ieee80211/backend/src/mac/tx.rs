@@ -3135,13 +3135,16 @@ impl<'owner, const BUFFER_SIZE: usize> TxSlotFree<'owner, BUFFER_SIZE> {
         self.slot.as_mut().get_mut().work = crate::mac::tx_work::MacTxWork::new();
     }
 
-    pub fn reserve(self, buffer_capacity: u32, transfer_length: u32) -> Result<TxCookie, TxError> {
+    /// Reserve the slot's descriptor for `frame`, the layout of its buffer
+    /// ([`TxFrame::lay_out`](oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TxFrame::lay_out)).
+    pub fn reserve(
+        self,
+        frame: oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TxFrame,
+    ) -> Result<TxCookie, TxError> {
         let slot = self.slot.get_mut();
         let generation = next_generation(slot.generation_cursor);
         match slot.dma.access() {
-            TxDmaAccess::Free(free) => free
-                .reserve(buffer_capacity, transfer_length)
-                .map_err(map_dma_storage_error)?,
+            TxDmaAccess::Free(free) => free.reserve(frame).map_err(map_dma_storage_error)?,
             _ => return Err(TxError::Stale),
         };
         slot.generation_cursor = generation;

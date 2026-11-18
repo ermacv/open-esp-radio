@@ -26,6 +26,7 @@ use crate::mac::{
     },
 };
 pub use crate::tx::{WifiTxEntropy, WifiTxPowerPair, WifiTxPowerProfile, WifiTxResources};
+use oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::{TxCapacity, TxEntry, TxFrame};
 use oer_chips_esp32s31_hal::types::{MacInterface, MacTxAbortCause};
 use oer_protocols_ieee80211_contracts_port::{MacTxResult, MacTxStatus};
 use oer_protocols_ieee80211_contracts_port::{ManagementTxPlan, VifRole};
@@ -34,10 +35,13 @@ use oer_protocols_ieee80211_wire::{phy::PhyRate, qos::WmmAccessCategory};
 
 use crate::tx::{WifiTxProgress, WifiTxWake, capped_power};
 
-pub const TX_METADATA_SIZE: usize = 8;
+/// The entry before the MPDU, the HAL's layout's.
+pub const TX_METADATA_SIZE: usize =
+    oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TX_ENTRY_BYTES;
 /// Hardware-appended CCMP MIC bytes accounted for by descriptor publication.
 pub const TX_CCMP_MIC_SIZE: usize = 8;
-pub const TX_FCS_SIZE: usize = 4;
+/// The FCS room after the MPDU, the HAL's layout's.
+pub const TX_FCS_SIZE: usize = oer_chips_esp32s31_hal::radio::ieee80211::tx_frame::TX_FCS_BYTES;
 /// First Frame Control byte of a BlockAckReq: control type, subtype eight.
 const BLOCK_ACK_REQUEST_FRAME_CONTROL: u8 = 0x84;
 
@@ -537,8 +541,8 @@ struct ActiveTx {
     external_contention: bool,
     retry: FixedRateRetry,
     frame_length: usize,
-    descriptor_capacity: u32,
-    transfer_length: u32,
+    /// The buffer's layout, reserved again at every publication.
+    frame: TxFrame,
     route: ActiveTxRoute,
     hardware_mic_length: usize,
     hardware_key_selector: u8,
@@ -1192,28 +1196,6 @@ where
         if self.active.is_some() {
             return Err(OrdinaryTxError::Tx(TxError::QueueActive));
         }
-        let hardware_frame_length = plan
-            .frame_length
-            .checked_add(plan.hardware_mic_length + TX_FCS_SIZE)
-            .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
-        let transfer_length = TX_METADATA_SIZE
-            .checked_add(hardware_frame_length)
-            .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
-        let minimum_capacity = transfer_length
-            .checked_add(3)
-            .map(|length| length & !3)
-            .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
-        let descriptor_capacity = plan.descriptor_capacity.unwrap_or(
-            u32::try_from(minimum_capacity).map_err(|_| OrdinaryTxError::BufferSizeOverflow)?,
-        );
-        if usize::try_from(descriptor_capacity).map_err(|_| OrdinaryTxError::BufferSizeOverflow)?
-            < transfer_length
-            || descriptor_capacity as usize > BUFFER_SIZE
-        {
-            return Err(OrdinaryTxError::BufferSizeOverflow);
-        }
-        let hardware_frame_length = u32::try_from(hardware_frame_length)
-            .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
         let (receiver, response) = {
             let frame = self
                 .free_buffer()?
@@ -1249,20 +1231,17 @@ where
         }
         let retry =
             FixedRateRetry::new(plan.exchange.initial_rate, plan.exchange.publication_limit);
-        {
-            let buffer = self.free_buffer()?;
-            let (length, metadata) = buffer
-                .get_mut(..TX_METADATA_SIZE)
-                .and_then(<[u8]>::split_first_chunk_mut::<4>)
-                .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
-            *length = hardware_frame_length.to_le_bytes();
-            metadata.fill(0);
-            buffer
-                .get_mut(..transfer_length)
-                .and_then(|transfer| transfer.get_mut(TX_METADATA_SIZE + plan.frame_length..))
-                .ok_or(OrdinaryTxError::BufferSizeOverflow)?
-                .fill(0);
-        }
+        // The entry and the MIC and FCS room, by the HAL's layout; the MPDU
+        // is the caller's, already in place.
+        let frame = TxFrame::lay_out(
+            self.free_buffer()?,
+            plan.frame_length,
+            plan.hardware_mic_length,
+            TxEntry::default(),
+            plan.descriptor_capacity
+                .map_or(TxCapacity::Minimal, TxCapacity::Exactly),
+        )
+        .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?;
 
         let mut active = ActiveTx {
             external_contention: false,
@@ -1270,9 +1249,7 @@ where
             single_attempt,
             retry,
             frame_length: plan.frame_length,
-            descriptor_capacity,
-            transfer_length: u32::try_from(transfer_length)
-                .map_err(|_| OrdinaryTxError::BufferSizeOverflow)?,
+            frame,
             route: ActiveTxRoute::new(
                 LegacyTxQueue::from_access_category(plan.exchange.access_category),
                 plan.interface,
@@ -1680,9 +1657,7 @@ where
         {
             trace::encoded_mpdu(frame);
         }
-        let cookie = self
-            .free_slot()?
-            .reserve(active.descriptor_capacity, active.transfer_length)?;
+        let cookie = self.free_slot()?.reserve(active.frame)?;
         let protection = match self.submit_reserved_attempt(hardware, cookie, active) {
             Ok(protection) => protection,
             Err(error) => {
