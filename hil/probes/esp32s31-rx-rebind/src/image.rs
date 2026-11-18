@@ -624,7 +624,7 @@ async fn run_direct(
     // anything runs.
     usb::text(
         console,
-        b"REBIND begin v=3 channel=13 count=32 buffer=640 spares=192 pool=32..176 reserved=176..192 segment_ms=2500 holds=8,1 arms=fixed8,rebind8,fixed1,rebind1x3\n",
+        b"REBIND begin v=3 channel=13 count=32 buffer=640 spares=192 pool=32..176 reserved=176..192 segment_ms=2500 holds=0 arms=(fixed0,rebind0)x7,fixed0 at_last=admitted (tasks/193)\n",
     )
     .await
     .map_err(|_| oer_portable_diagnostics::name!("console-write"; 32))?;
