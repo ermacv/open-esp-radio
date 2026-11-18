@@ -36,11 +36,9 @@ fn unavailable_calibration_preserves_provenance_even_when_the_field_is_zero() {
 
 #[test]
 fn cold_start_prepares_mac_without_opening_its_core() {
-    let clock_trace = Rc::new(RefCell::new(Vec::new()));
     let mut platform = MockPlatform::default();
     let mut mmio = MockMmio {
         cold_handshake_ready_after: Some(0),
-        cold_start_clock_trace: Some(clock_trace.clone()),
         ..MockMmio::default()
     };
 
@@ -50,6 +48,7 @@ fn cold_start_prepares_mac_without_opening_its_core() {
     let outcome = run(
         &clock,
         initialize_wifi_mac(
+            MacBlockReset::for_host_model(),
             &mut platform,
             &mut mmio,
             &clock,
@@ -71,27 +70,19 @@ fn cold_start_prepares_mac_without_opening_its_core() {
 
     assert_eq!(outcome.handshake_samples, 0);
     assert_eq!(outcome.handshake_observations, 1);
+    // The block's reset is the radio system's, before the preparation: the
+    // preparation begins with the handshake. The MAC's interrupt banks are
+    // the radio interrupt handler's: the cold sequence neither clears them
+    // after the handshake nor publishes the station mask.
     assert_eq!(
-        *clock_trace.borrow(),
+        &mmio.operations()[..2],
         [
-            ColdStartClockEdge::SetWifiMacReset(true),
-            ColdStartClockEdge::SetWifiMacReset(false),
-        ]
-    );
-    // The MAC's interrupt banks are the radio interrupt handler's: the
-    // cold sequence neither clears them after the handshake nor publishes
-    // the station mask.
-    assert_eq!(
-        &mmio.operations()[..4],
-        [
-            Operation::SetWifiMacReset(true),
-            Operation::SetWifiMacReset(false),
             Operation::RequestColdHandshake,
             Operation::SampleColdHandshake,
         ]
     );
     assert_eq!(
-        &mmio.operations()[4..11],
+        &mmio.operations()[2..9],
         [
             Operation::HoldMacRuntime,
             Operation::InitializeTxRxPrefix,
@@ -103,11 +94,11 @@ fn cold_start_prepares_mac_without_opening_its_core() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[11],
+        mmio.operations()[9],
         Operation::InitializeTxPower(_)
     ));
     assert_eq!(
-        &mmio.operations()[12..18],
+        &mmio.operations()[10..16],
         [
             Operation::InitializeHeSuffix,
             Operation::InitializeLastRxBufferTable,
@@ -118,11 +109,11 @@ fn cold_start_prepares_mac_without_opening_its_core() {
         ]
     );
     assert!(matches!(
-        mmio.operations()[18],
+        mmio.operations()[16],
         Operation::InitializeColdCoex(_)
     ));
     assert_eq!(
-        &mmio.operations()[19..],
+        &mmio.operations()[17..],
         [
             Operation::ProgramInterfaceAddress(MacInterface::Station, station),
             Operation::ProgramInterfaceAddress(MacInterface::AccessPoint, access_point),
@@ -169,6 +160,7 @@ fn cold_mac_handshake_resamples_every_ten_microseconds_until_ready() {
     let outcome = run(
         &clock,
         initialize_wifi_mac(
+            MacBlockReset::for_host_model(),
             &mut platform,
             &mut mmio,
             &clock,
@@ -199,6 +191,7 @@ fn cold_mac_handshake_timeout_stops_mac_initialization() {
     let error = run(
         &clock,
         initialize_wifi_mac(
+            MacBlockReset::for_host_model(),
             &mut platform,
             &mut mmio,
             &clock,
@@ -219,11 +212,7 @@ fn cold_mac_handshake_timeout_stops_mac_initialization() {
             deadline,
         }
     );
-    let mut expected = vec![
-        Operation::SetWifiMacReset(true),
-        Operation::SetWifiMacReset(false),
-        Operation::RequestColdHandshake,
-    ];
+    let mut expected = vec![Operation::RequestColdHandshake];
     expected.extend([Operation::SampleColdHandshake; 4]);
     assert_eq!(mmio.operations(), expected);
 }

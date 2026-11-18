@@ -35,7 +35,6 @@ pub(super) enum Operation {
     InitializeHePrefix,
     InitializeTxPower(MacTxPowerTable),
     InitializeHeSuffix,
-    SetWifiMacReset(bool),
     InitializeRxBufferPrefix,
     ConfigureOpenPromiscuousReceive,
     ForceTxCca,
@@ -45,20 +44,12 @@ pub(super) enum Operation {
     Fence,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ColdStartClockEdge {
-    SetWifiMacReset(bool),
-}
-
-pub(super) type ColdStartClockTrace = Rc<RefCell<Vec<ColdStartClockEdge>>>;
-
 #[derive(Default)]
 pub(super) struct MockMmio {
     pub(super) operations: Vec<Operation>,
     /// Not-ready samples before the ready edge; `None` never becomes ready.
     pub(super) cold_handshake_ready_after: Option<u32>,
     pub(super) cold_handshake_samples: u32,
-    pub(super) cold_start_clock_trace: Option<ColdStartClockTrace>,
     pub(super) mac_gates_closed: bool,
     pub(super) runtime_stop_held: bool,
     pub(super) tx_completions: [Option<MacTxCompletionObservation>; 4],
@@ -95,18 +86,6 @@ impl MockMmio {
         self.tx_completions[usize::from(queue)] = Some(completion);
     }
 
-    pub(super) fn record_clock_edge(&self, edge: ColdStartClockEdge) {
-        if let Some(trace) = &self.cold_start_clock_trace {
-            trace.borrow_mut().push(edge);
-        }
-    }
-}
-
-impl MacResetHardware for MockMmio {
-    fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        self.record_clock_edge(ColdStartClockEdge::SetWifiMacReset(asserted));
-        self.operations.push(Operation::SetWifiMacReset(asserted));
-    }
 }
 
 /// A walker model that behaves as plain registers: a rung doorbell reads
