@@ -55,6 +55,9 @@ ccmp = ["amsdu"]
 # Cell F's receiver (`tasks/161`): the A-MPDUs' subframes under a receive
 # Block Ack agreement for TID 0 programmed through the backend.
 ampdu = ["amsdu"]
+# Cell G's receiver (`tasks/174`): cell F's aggregates under CCMP, the key
+# and the agreement both.
+gcell = ["ccmp", "ampdu"]
 # Case D's second geometry: 256-byte buffers in place of 128.
 ring256 = []
 

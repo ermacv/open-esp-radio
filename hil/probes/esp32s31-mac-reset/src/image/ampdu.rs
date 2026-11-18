@@ -10,9 +10,13 @@
 //! what the receiver completed. First [`HELLO`] single frames give the
 //! receiver this board's address; the probe draws no backoff.
 use super::amsdu::AmsduParts;
+#[cfg(feature = "gcell")]
+use super::transmit::start_keyed;
 use super::transmit::{Lease, ORDINARY_SLOT, TIMEOUT, await_completion, start, tx_phase};
 use super::*;
-use crate::case_c::{CELL_F_AMSDU_FRAMES, CELL_F_FRAMES, CELL_F_OCTETS, CELL_F_PAIRS, Case, byte};
+#[cfg(feature = "gcell")]
+use crate::case_c::{CCMP_HEADER, CCMP_MIC, CELL_G_SINGLES, TEMPORAL_KEY, protected_byte};
+use crate::case_c::{CELL_F_AMSDU_FRAMES, CELL_F_OCTETS, CELL_F_PAIRS, Case, byte};
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::dma::tx_ampdu_storage::AmpduDmaStorage, system::memory::dma_static::Placed,
 };
@@ -25,13 +29,33 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
 
 const HELLO: u32 = 40;
+/// Cell G: the pairwise key's entry on both boards, the station's
+/// (`STA_PAIRWISE_HARDWARE_INDEX`), and the selector the MAC seals under.
+#[cfg(feature = "gcell")]
+const KEY: u8 = 4;
+/// Cell G's protected subframes: the CCMP header behind the QoS header; the
+/// MAC appends the MIC.
+#[cfg(feature = "gcell")]
+const PROTECTION: usize = CCMP_HEADER;
+#[cfg(not(feature = "gcell"))]
+const PROTECTION: usize = 0;
+/// Each case's first counter in the aggregates: cell G's singles come first.
+const fn base(case: Case) -> u32 {
+    #[cfg(feature = "gcell")]
+    if matches!(case, Case::Control | Case::Amsdu2) {
+        return CELL_G_SINGLES;
+    }
+    let _ = case;
+    0
+}
 const QUIET_MS: u32 = 1_500;
 /// The largest aggregate.
 const SUBFRAMES: usize = 8;
 /// How long an aggregate's completion is awaited.
 const COMPLETION_MS: u32 = 100;
-const WORDS: usize = (CELL_F_FRAMES as usize).div_ceil(32);
-const AMSDU_WORDS: usize = (CELL_F_AMSDU_FRAMES as usize).div_ceil(32);
+/// The bitmaps hold cell G's singles too (zero in cell F).
+const WORDS: usize = (crate::case_c::cell_g_frames(Case::Control) as usize).div_ceil(32);
+const AMSDU_WORDS: usize = (crate::case_c::cell_g_frames(Case::Amsdu2) as usize).div_ceil(32);
 /// The A-MSDU stage's cases, in the order of their aggregates.
 const AMSDU_CASES: [Case; 3] = [Case::Amsdu1, Case::Amsdu2, Case::AmsduLong];
 
@@ -95,6 +119,62 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         HtGuardInterval::Long800Ns,
         HtChannelWidth::Mhz20,
     );
+    // Cell G: the key, then the control of single MPDUs the MAC seals.
+    #[cfg(feature = "gcell")]
+    let mut pn = 0_u64;
+    #[cfg(feature = "gcell")]
+    {
+        let mut hal = access.wifi_mac_hal();
+        hal.configure_ccmp_association(
+            oer_chips_esp32s31_hal::types::MacInterface::Station,
+            oer_chips_esp32s31_hal::types::MacSppMode::Unauthenticated,
+        );
+        let installed = hal.install_station_ccmp_entry(
+            KEY,
+            oer_chips_esp32s31_hal::types::MacCcmpKeyIdentity::Pairwise { peer },
+            &TEMPORAL_KEY,
+        );
+        if installed != oer_chips_esp32s31_hal::types::MacKeyInstallOutcome::Installed {
+            return Err((tx_phase::POOL, 0x44));
+        }
+        let mut singles = [[0_u32; 3]; 2];
+        for round in 0..CELL_G_SINGLES {
+            for (at, case) in [Case::Amsdu2, Case::Control].into_iter().enumerate() {
+                pn = pn.saturating_add(1);
+                let counter = case.counter(round);
+                let length = case.length() + CCMP_HEADER;
+                let lease = frames.lease_frame(ORDINARY_SLOT, length + CCMP_MIC, |offset| {
+                    if offset < length {
+                        protected_byte(case, station, peer, counter, pn, offset)
+                    } else {
+                        0
+                    }
+                })?;
+                start_keyed(
+                    access,
+                    ordinary,
+                    lease,
+                    length + CCMP_MIC,
+                    frames.power,
+                    TIMEOUT,
+                    KEY,
+                )?;
+                let ended = await_completion(access, ordinary, 0).await?;
+                if let Some(cell) = singles.get_mut(at).and_then(|row| {
+                    row.get_mut(match ended.status {
+                        0 => 0,
+                        5 => 1,
+                        _ => 2,
+                    })
+                }) {
+                    *cell = cell.saturating_add(1);
+                }
+            }
+        }
+        for (case, row) in [Case::Amsdu2, Case::Control].iter().zip(singles) {
+            journal.record(Kind::AmpduSent, &[case.tag(), 1, row[0], row[1], row[2]]);
+        }
+    }
     mark(101);
     let mut sender = Aggregates {
         owner: &mut owner,
@@ -103,11 +183,13 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         peer,
         rate,
         sequence: 0,
+        #[cfg(feature = "gcell")]
+        pn,
     };
     // The control (`tasks/173`): QoS Data without A-MSDU, 2 then 8 a PPDU.
     let mut acked = [0_u32; WORDS];
     let mut ends: [Ends; 2] = [[0; 5]; 2];
-    let mut index = 0_u32;
+    let mut index = base(Case::Control);
     for (size, aggregates) in [(2_usize, CELL_F_PAIRS), (SUBFRAMES, CELL_F_OCTETS)] {
         let row = ends
             .get_mut(usize::from(size == SUBFRAMES))
@@ -146,7 +228,9 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
                 if *sent >= limit {
                     continue;
                 }
-                sender.send(access, case, *sent, size, row, acked).await?;
+                sender
+                    .send(access, case, base(case) + *sent, size, row, acked)
+                    .await?;
                 *sent = sent.saturating_add(size as u32);
             }
         }
@@ -193,6 +277,9 @@ struct Aggregates<'a, 'o> {
     rate: HtRate,
     /// The next subframe's sequence number, counted over the whole run.
     sequence: u16,
+    /// Cell G: the last packet number drawn.
+    #[cfg(feature = "gcell")]
+    pn: u64,
 }
 
 impl Aggregates<'_, '_> {
@@ -216,13 +303,21 @@ impl Aggregates<'_, '_> {
             *kept = self.sequence;
             let control = (self.sequence << 4).to_le_bytes();
             self.sequence = (self.sequence + 1) % 4096;
-            let length = case.length();
+            let length = case.length() + PROTECTION;
+            #[cfg(feature = "gcell")]
+            let pn = {
+                self.pn = self.pn.saturating_add(1);
+                self.pn
+            };
             let lease = self.frames.lease_frame(slot as u8, length + 8, |_| 0)?;
             self.owner
                 .intake(cookie, lease, |frame| {
                     for (offset, cell) in frame.iter_mut().take(length).enumerate() {
                         *cell = match offset {
                             22 | 23 => control.get(offset - 22).copied().unwrap_or(0),
+                            #[cfg(feature = "gcell")]
+                            _ => protected_byte(case, station, peer, counter, pn, offset),
+                            #[cfg(not(feature = "gcell"))]
                             _ => byte(case, station, peer, counter, offset),
                         };
                     }
@@ -239,6 +334,10 @@ impl Aggregates<'_, '_> {
         config.data_power_primary = self.frames.power;
         config.data_power_alternate = self.frames.power;
         config.timeout = TIMEOUT;
+        #[cfg(feature = "gcell")]
+        {
+            config.hardware_key_selector = KEY;
+        }
         self.owner
             .submit(access, cookie, LegacyTxQueue::BestEffort, config)
             .map_err(|_| (tx_phase::START, 0x54))?;

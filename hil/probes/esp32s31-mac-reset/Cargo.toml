@@ -61,6 +61,9 @@ ccmp = ["amsdu"]
 # Cell F of `tasks/161`: case C's QoS cases in A-MPDUs through the backend's
 # A-MPDU owner, the control first, in place of case C's rounds.
 ampdu = ["amsdu", "dep:oer-chips-esp32s31-radio-ieee80211-backend"]
+# Cell G of `tasks/161` (`tasks/174`): cell F's aggregates under CCMP sealed
+# by this board's MAC, after single sealed MPDUs as the control.
+gcell = ["ampdu"]
 
 [lints]
 workspace = true

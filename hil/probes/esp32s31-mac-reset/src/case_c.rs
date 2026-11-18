@@ -254,6 +254,17 @@ pub const fn cell_f_frames(case: Case) -> u32 {
         Case::Provenance700 | Case::Provenance1500 => 0,
     }
 }
+/// Cell G's control: single MPDUs sealed by the sender's MAC, of each of
+/// these, before the aggregates.
+pub const CELL_G_SINGLES: u32 = 200;
+/// The frames cell G sends of `case`: its singles first (the control and
+/// the A-MSDU of two short subframes), then cell F's aggregates, numbered on.
+pub const fn cell_g_frames(case: Case) -> u32 {
+    match case {
+        Case::Control | Case::Amsdu2 => CELL_G_SINGLES + cell_f_frames(case),
+        _ => cell_f_frames(case),
+    }
+}
 /// Cell E's rounds: at least 1 000 frames of each QoS case.
 pub const CELL_ROUNDS: u32 = 1_100;
 pub const CCMP_HEADER: usize = 8;

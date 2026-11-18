@@ -562,7 +562,10 @@ mod c {
         } else {
             case.length()
         };
-        match mpdu.and_then(|mpdu| Some((mpdu, held.checked_sub(mpdu)?))) {
+        // A unit the MAC decrypted holds no MIC (`HW_RX_CCMP_MIC_CUT_20261118`):
+        // the bytes held are the tail's less the MIC.
+        let cut = if protected { case_c::CCMP_MIC } else { 0 };
+        match mpdu.and_then(|mpdu| Some((mpdu, held.checked_sub(mpdu.checked_sub(cut)?)?))) {
             Some((mpdu, padding @ 0..4)) if mpdu == length => {
                 if let Some(slot) = counts.padding.get_mut(padding) {
                     *slot = slot.saturating_add(1);
@@ -652,8 +655,10 @@ mod c {
             let mut absent = 0_u32;
             // Cell F sends its control and its A-MSDU cases in numbers of
             // their own.
-            #[cfg(feature = "ampdu")]
+            #[cfg(all(feature = "ampdu", not(feature = "gcell")))]
             let rounds = case_c::cell_f_frames(*case);
+            #[cfg(feature = "gcell")]
+            let rounds = case_c::cell_g_frames(*case);
             #[cfg(not(feature = "ampdu"))]
             let rounds = RECEIVED_ROUNDS;
             for round in 0..rounds {
@@ -720,9 +725,15 @@ mod c {
             }
         }
         line.clear();
-        #[cfg(feature = "ccmp")]
+        #[cfg(feature = "gcell")]
+        let _ = writeln!(
+            line,
+            "CASE unknown={} key={:?} agreement={:?}",
+            cases.unknown, cases.key, cases.agreement
+        );
+        #[cfg(all(feature = "ccmp", not(feature = "gcell")))]
         let _ = writeln!(line, "CASE unknown={} key={:?}", cases.unknown, cases.key);
-        #[cfg(feature = "ampdu")]
+        #[cfg(all(feature = "ampdu", not(feature = "gcell")))]
         let _ = writeln!(
             line,
             "CASE unknown={} agreement={:?}",

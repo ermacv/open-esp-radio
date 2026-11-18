@@ -354,6 +354,20 @@ pub(super) fn start(
     power: u8,
     timeout: u16,
 ) -> Result<(), Failure> {
+    start_keyed(access, descriptor, lease, length, power, timeout, 0)
+}
+
+/// [`start`] under hardware key `key`: the MAC seals the frame with that
+/// entry's key and appends its MIC, for which `length` already holds room.
+pub(super) fn start_keyed(
+    access: &mut RadioAccess,
+    descriptor: &mut Descriptor,
+    lease: Lease,
+    length: usize,
+    power: u8,
+    timeout: u16,
+    key: u8,
+) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
@@ -363,8 +377,9 @@ pub(super) fn start(
     free.reserve(total.next_multiple_of(4) as u32, total as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
-    let program = MacLegacyTxProgram::new(&publication, parameters(length, power, timeout))
-        .ok_or((tx_phase::START, 5))?;
+    let mut parameters = parameters(length, power, timeout);
+    parameters.hardware_key_selector = key;
+    let program = MacLegacyTxProgram::new(&publication, parameters).ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
         .map_err(|_| (tx_phase::START, 6))?;
