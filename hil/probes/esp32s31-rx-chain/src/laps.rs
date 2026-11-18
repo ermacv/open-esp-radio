@@ -606,6 +606,22 @@ mod c {
         cases: &Cases,
     ) {
         for (case, per) in CASES.iter().zip(&cases.per) {
+            // Cell E sends the QoS cases and, before them, unprotected hello
+            // frames of case 5's layout; it sends no round of cases 5 and 6,
+            // so they have no absent rounds to count (`tasks/172`).
+            if cfg!(feature = "ccmp") && !case.qos() {
+                line.clear();
+                let _ = writeln!(
+                    line,
+                    "CASE tag={} hello units={} length_disagrees={} mismatch_units={}",
+                    case.tag(),
+                    per.units,
+                    per.length_disagrees,
+                    per.mismatch_units,
+                );
+                usb::text(console, line.as_bytes()).await;
+                continue;
+            }
             let mut missing = heapless::Vec::<u32, MISSING>::new();
             let mut absent = 0_u32;
             for round in 0..RECEIVED_ROUNDS {
