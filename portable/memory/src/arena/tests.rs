@@ -249,6 +249,8 @@ fn a_span_lies_between_the_floor_and_the_buffer_end() {
         Span::new(20, 30).expect("fits")
     );
     assert_eq!(Span::<Tx>::new(0, 16), Some(Span::FULL));
+    assert_ne!(Span::<Rx>::new(8, 1), Span::new(8, 2), "another end");
+    assert_ne!(Span::<Rx>::new(8, 1), Span::new(9, 1), "another start");
 }
 
 #[test]
