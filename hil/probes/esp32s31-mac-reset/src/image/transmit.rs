@@ -55,10 +55,11 @@ const SLOTS: usize = 2 * ABANDONED + 2;
 #[cfg(all(feature = "amsdu", not(feature = "ampdu")))]
 const SLOTS: usize = 2;
 /// Cell F: an aggregate's eight subframes, then the ordinary frames' slot.
-#[cfg(all(feature = "ampdu", not(feature = "b6")))]
+#[cfg(all(feature = "ampdu", not(any(feature = "b6", feature = "stream-ampdu"))))]
 pub(super) const SLOTS: usize = 9;
-/// B6: an aggregate's 32 subframes, then the ordinary frames' slot.
-#[cfg(feature = "b6")]
+/// B6 and `tasks/193`'s aggregates: up to 32 subframes, then the ordinary
+/// frames' slot.
+#[cfg(any(feature = "b6", feature = "stream-ampdu"))]
 pub(super) const SLOTS: usize = 33;
 /// The ordinary frames' slot.
 pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
