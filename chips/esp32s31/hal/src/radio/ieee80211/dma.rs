@@ -9,6 +9,7 @@ pub mod descriptor;
 mod descriptor_publish_tests;
 pub mod ring_index;
 pub mod rx_dma;
+pub mod rx_rebind;
 pub mod rx_ring;
 pub mod rx_storage;
 pub mod space;
