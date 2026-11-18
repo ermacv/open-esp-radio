@@ -20,10 +20,10 @@ error[E0599]: no method named `tx_agreement` found for struct `UnnamedTids<'a, E
   --> tests/ui/agreement_without_a_name.rs:24:25
    |
 24 |                 unnamed.tx_agreement(); // ui-error: E0599
-   |                         ^^^^^^^^^^^^ method not found in `UnnamedTids<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
+   |                         ^^^^^^^^^^^^ method not found in `UnnamedTids<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2, 7>>`
 
 error[E0599]: no method named `tx_agreement` found for struct `DrainingTid<'a, E>` in the current scope
   --> tests/ui/agreement_without_a_name.rs:29:26
    |
 29 |                 draining.tx_agreement(); // ui-error: E0599
-   |                          ^^^^^^^^^^^^ method not found in `DrainingTid<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
+   |                          ^^^^^^^^^^^^ method not found in `DrainingTid<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2, 7>>`

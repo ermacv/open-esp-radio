@@ -122,11 +122,32 @@ pub enum AgreementStop {
     Clear,
 }
 
-/// The most frames one agreement retains, and the most in-order releases
-/// waiting for delivery: a 16-MPDU window. The image chooses the number of
-/// banks and the retained frames independently, at most this many.
+/// The receive window a composition takes when it names none: 16 MPDUs.
+/// The window (`WINDOW` of [`RxBlockAckStorage`]) is the most frames one
+/// agreement retains and the most in-order releases waiting for delivery;
+/// it is the composition's choice, from 1 to the capabilities'
+/// `rx_block_ack_max_window`, and at most the retained frames.
 pub const RX_BLOCK_ACK_WINDOW: usize = 16;
-const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
+/// What is wrong with a receive window of `window` over `frames` retained
+/// frames under a capability of `max_window`, if anything: the window is 1
+/// to the capability, the retained frames hold a whole window, and the
+/// in-order releases are counted in a byte.
+pub(crate) const fn window_refusal(
+    window: usize,
+    frames: usize,
+    max_window: u16,
+) -> Option<&'static str> {
+    if window == 0 || window > max_window as usize {
+        Some("the receive window is 1 to the capabilities' rx_block_ack_max_window")
+    } else if frames < window {
+        Some("the retained frames hold a whole window: WINDOW <= FRAMES")
+    } else if window > u8::MAX as usize {
+        Some("the in-order releases are counted in a byte")
+    } else {
+        None
+    }
+}
+
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;
 
@@ -153,7 +174,8 @@ pub struct RxView<'a> {
     pub bytes: &'a [u8],
 }
 
-type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
+type Session<T, const WINDOW: usize> =
+    RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
 
 /// Whether an agreement's success response is owed.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -163,7 +185,7 @@ enum Reply {
 }
 
 /// One agreement bank, a sum of where its slot is.
-enum Bank<T: RxBlockAckTypes> {
+enum Bank<T: RxBlockAckTypes, const WINDOW: usize> {
     /// Free: its slot.
     Free(T::Slot),
     /// A request accepted: its slot and agreement wait for the command
@@ -176,7 +198,10 @@ enum Bank<T: RxBlockAckTypes> {
     /// Its addition runs in the port.
     AddCommand { negotiation: RxBlockAckNegotiation },
     /// The agreement runs.
-    Active { session: Session<T>, reply: Reply },
+    Active {
+        session: Session<T, WINDOW>,
+        reply: Reply,
+    },
     /// Ended: the agreement of `tid` waits for the command place to be
     /// removed.
     Ending { running: T::Running, tid: u8 },
@@ -191,7 +216,7 @@ enum Bank<T: RxBlockAckTypes> {
     InTransition,
 }
 
-impl<T: RxBlockAckTypes> Bank<T> {
+impl<T: RxBlockAckTypes, const WINDOW: usize> Bank<T, WINDOW> {
     /// The TID the bank is not free for: its agreement's, added, running or
     /// ending.
     fn tid(&self) -> Option<u8> {
@@ -205,14 +230,14 @@ impl<T: RxBlockAckTypes> Bank<T> {
         }
     }
 
-    const fn active(&self) -> Option<&Session<T>> {
+    const fn active(&self) -> Option<&Session<T, WINDOW>> {
         match self {
             Self::Active { session, .. } => Some(session),
             _ => None,
         }
     }
 
-    const fn active_mut(&mut self) -> Option<&mut Session<T>> {
+    const fn active_mut(&mut self) -> Option<&mut Session<T, WINDOW>> {
         match self {
             Self::Active { session, .. } => Some(session),
             _ => None,
@@ -257,7 +282,7 @@ pub enum RetainRoom {
     Full,
 }
 
-struct Header<E> {
+struct Header<E, const WINDOW: usize> {
     association: Option<(E, Bssid)>,
     pending: heapless::Deque<[u8; ADDBA_ACTION_BODY_LEN], PENDING>,
     ready: [u8; WINDOW],
@@ -266,24 +291,42 @@ struct Header<E> {
     gap_timeout: Duration,
 }
 
-/// Placed backing selected by an image: `BANKS` agreement slots and
-/// `FRAMES` retained frames of association identity `E`. Frame storage
-/// holds the frames' handles, never their bytes.
-pub struct RxBlockAckStorage<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize> {
-    header: Header<E>,
-    banks: [Bank<T>; BANKS],
+/// Placed backing selected by an image: `BANKS` agreement slots, `FRAMES`
+/// retained frames of association identity `E` and the receive window
+/// `WINDOW`. Frame storage holds the frames' handles, never their bytes.
+pub struct RxBlockAckStorage<
+    T: RxBlockAckTypes,
+    E,
+    const BANKS: usize,
+    const FRAMES: usize,
+    const WINDOW: usize,
+> {
+    header: Header<E, WINDOW>,
+    banks: [Bank<T, WINDOW>; BANKS],
     frames: [Option<T::Frame>; FRAMES],
+    /// The relations were checked: no storage is built without them.
+    _fits: WindowFits,
 }
 
-impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
-    RxBlockAckStorage<T, E, BANKS, FRAMES>
+/// The proof that a storage's relations hold, of no size: made only by
+/// [`RxBlockAckStorage::GEOMETRY`], and held by every storage.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowFits(());
+
+impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize, const WINDOW: usize>
+    RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
-    pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
-        const {
-            if FRAMES == 0 || FRAMES > WINDOW {
-                panic!("RX storage must reserve one to RX_BLOCK_ACK_WINDOW existing frame credits");
-            }
+    /// The storage's relations, checked where it is built
+    /// ([`window_refusal`]).
+    pub const GEOMETRY: WindowFits = {
+        if let Some(refusal) = window_refusal(WINDOW, FRAMES, T::Caps::CAPS.rx_block_ack_max_window)
+        {
+            panic!("{}", refusal);
         }
+        WindowFits(())
+    };
+
+    pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
         Self {
             header: Header {
                 association: None,
@@ -295,10 +338,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
             },
             banks: slots.map(Bank::Free),
             frames: [const { None }; FRAMES],
+            _fits: Self::GEOMETRY,
         }
     }
 
-    pub fn view(&mut self) -> RxBlockAckView<'_, T, E> {
+    pub fn view(&mut self) -> RxBlockAckView<'_, T, E, WINDOW> {
         RxBlockAckView {
             header: &mut self.header,
             banks: &mut self.banks,
@@ -348,8 +392,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
     }
 }
 
-impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize>
-    RxBlockAckStorage<T, E, BANKS, FRAMES>
+impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize, const WINDOW: usize>
+    RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
     /// The slots [`Self::slots_home`] gave, back in their banks, each free.
     pub fn slots_back(&mut self, slots: [T::Slot; BANKS]) {
@@ -364,9 +408,9 @@ impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize>
 pub struct BanksBusy;
 
 /// The loans a service carries, including through stop and restart.
-pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E> {
-    header: &'a mut Header<E>,
-    banks: &'a mut [Bank<T>],
+pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E, const WINDOW: usize> {
+    header: &'a mut Header<E, WINDOW>,
+    banks: &'a mut [Bank<T, WINDOW>],
     frames: &'a mut [Option<T::Frame>],
 }
 
@@ -408,7 +452,7 @@ pub enum RxBlockAckRefused {
     Capacity(RxBlockAckCapacity),
 }
 
-impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
+impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T, E, WINDOW> {
     fn queue(&mut self, response: [u8; ADDBA_ACTION_BODY_LEN]) -> bool {
         self.header.pending.push_back(response).is_ok()
     }
@@ -761,10 +805,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             .filter_map(Bank::active)
             .map(|active| usize::from(active.window()).saturating_sub(1))
             .sum();
+        // At most the window, which is at most the capabilities' (`new`).
         let capacity = self.frames.len().saturating_sub(reserved).min(WINDOW);
-        let capacity = u16::try_from(capacity)
-            .unwrap_or(u16::MAX)
-            .min(T::Caps::CAPS.rx_block_ack_max_window);
+        let capacity = u16::try_from(capacity).unwrap_or(u16::MAX);
         let negotiation = match RxBlockAckNegotiation::request(
             parsed,
             T::Caps::CAPS.rx_block_ack_max_tid,

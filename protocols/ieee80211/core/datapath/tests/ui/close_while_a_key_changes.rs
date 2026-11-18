@@ -4,7 +4,7 @@ use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
 use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
 
 pub type Station<'id, T> =
-    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 
 // An open gate offers no closing while a key changes: the controller asks
 // again after the key's end.

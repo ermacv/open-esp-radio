@@ -34,7 +34,7 @@ pub use banks::{
     AddbaOutcome, AgreementStop, BankCommand, BankTicket, BanksBusy, RX_BLOCK_ACK_WINDOW,
     ReorderCause, ReplyPlace, RetainRoom, RxAgreements, RxBlockAckCapacity, RxBlockAckEvent,
     RxBlockAckRefused, RxBlockAckReplyBody, RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView,
-    RxDisposition, RxView,
+    RxDisposition, RxView, WindowFits,
 };
 pub use originator::{
     DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,

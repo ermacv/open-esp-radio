@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
 use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
 
 pub type Station<'id, T> =
-    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 pub type AccessPoint<'id, T> = Engine<
     'id,
     ModelPort<'id, 17, DATA_SINGLES>,
@@ -17,6 +17,7 @@ pub type AccessPoint<'id, T> = Engine<
     17,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    7,
 >;
 
 // An open gate offers no opening: a shut gate does.

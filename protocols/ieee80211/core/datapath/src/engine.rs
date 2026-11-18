@@ -432,8 +432,8 @@ impl<'id, K: Ieee80211Capabilities> RxBlockAckTypes for EngineAgreements<'id, K>
 /// The receive agreements of the data: `AGREEMENTS` banks, each the port's
 /// slot, and the reorder's frames (its window; the engine's count keeps a
 /// place free for the frame that closes a hole).
-type Agreements<'id, K, const AGREEMENTS: usize> =
-    RxBlockAckStorage<EngineAgreements<'id, K>, u8, AGREEMENTS, RX_BLOCK_ACK_WINDOW>;
+type Agreements<'id, K, const AGREEMENTS: usize, const WINDOW: usize> =
+    RxBlockAckStorage<EngineAgreements<'id, K>, u8, AGREEMENTS, WINDOW, WINDOW>;
 
 /// The stopping data's agreement slots, taken in place when every bank is
 /// free; `None` otherwise, and nothing moved.
@@ -445,8 +445,9 @@ fn agreement_slots<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 >(
-    data: &mut Data<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>,
+    data: &mut Data<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
 ) -> Option<[AgreementSlot<'id>; AGREEMENTS]> {
     match data {
         Data::Stopping(running) => running.agreements.slots_home().ok(),
@@ -463,6 +464,7 @@ struct Running<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > {
     form: F::Running<'id, K>,
     /// The controller's single places, which the engine does not lend.
@@ -471,7 +473,7 @@ struct Running<
     groups: [GroupSlot<'id>; GROUPS],
     /// The receive agreements and the reorder: a station's, which phase B
     /// alone admits; an access point's banks stay free.
-    agreements: Agreements<'id, K, AGREEMENTS>,
+    agreements: Agreements<'id, K, AGREEMENTS, WINDOW>,
     /// The received units the engine holds for the network.
     receive: Receive<'id>,
 }
@@ -485,14 +487,15 @@ enum Data<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > {
     /// The installation machine holds the rights.
     Stopped,
     /// The data flows.
-    Flowing(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>),
+    Flowing(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
     /// Asked to stop: every link ended; what is on the air or in the gate's
     /// closing ends first.
-    Stopping(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>),
+    Stopping(Running<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>),
 }
 
 /// A link's state.
@@ -554,6 +557,22 @@ fn earliest(first: Rest, second: Rest) -> Rest {
     }
 }
 
+/// What is wrong with an engine over `staging` places with the receive
+/// window `window` under a capability of `max_window`, if anything: a port
+/// stages into at most the contract's places; the window is 1 to the
+/// capability; the reorder's frames (the window) leave a staging place free.
+const fn engine_refusal(staging: usize, window: usize, max_window: u16) -> Option<&'static str> {
+    if staging > PLACES {
+        Some("a port stages into at most the contract's PLACES")
+    } else if window == 0 || window > max_window as usize {
+        Some("the receive window is 1 to the capabilities' rx_block_ack_max_window")
+    } else if window >= staging {
+        Some("the receive window is below the port's staging places: WINDOW < STAGING")
+    } else {
+        None
+    }
+}
+
 /// The receive half's policy values, the composition's.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReceivePolicy {
@@ -565,10 +584,12 @@ pub struct ReceivePolicy {
     pub gap: Duration,
 }
 
-/// The engine of one interface: `PEERS` peers, a pool of `POOL` MSDUs, and
-/// the data's rights of a layout of `SINGLES` single places of its
-/// controller, `GROUPS` group key slots and `AGREEMENTS` receive
-/// agreements.
+/// The engine of one interface: `PEERS` peers, a pool of `POOL` MSDUs, the
+/// data's rights of a layout of `SINGLES` single places of its controller,
+/// `GROUPS` group key slots and `AGREEMENTS` receive agreements, and the
+/// receive window `WINDOW` (16 unless the composition names another, from 1
+/// to the port's `rx_block_ack_max_window`; the reorder holds a window of
+/// frames, `WINDOW < STAGING`).
 pub struct Engine<
     'id,
     P: ReceivePort<'id>,
@@ -579,6 +600,7 @@ pub struct Engine<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize = RX_BLOCK_ACK_WINDOW,
 > {
     /// The MSDUs a section takes at most.
     budget: u8,
@@ -587,11 +609,18 @@ pub struct Engine<
     /// The links made: a link's generation, which its receive agreements
     /// belong to.
     links: u8,
-    data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>,
+    data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS, WINDOW>,
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<F::Entry<P::Link, T>>; PEERS],
     queues: TxQueues<P::Memory, POOL, PEERS>,
+    /// The relations were checked: no engine is built without them.
+    _fits: EngineFits,
 }
+
+/// The proof that an engine's relations hold, of no size: made only by
+/// [`Engine::GEOMETRY`], and held by every engine.
+#[derive(Clone, Copy, Debug)]
+pub struct EngineFits(());
 
 /// The seal of the forms' halves: only this crate makes one, so only the
 /// engine's sections call them.
@@ -714,21 +743,21 @@ pub trait Sections<'id, P: ReceivePort<'id>> {
 /// The engine type of a handle's methods.
 macro_rules! engine {
     () => {
-        Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
+        Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS, WINDOW>
     };
 }
 
 /// A station's engine type.
 macro_rules! station {
     () => {
-        Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS>
+        Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS, WINDOW>
     };
 }
 
 /// An access point's engine type.
 macro_rules! access_point {
     () => {
-        Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
+        Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS, WINDOW>
     };
 }
 
@@ -742,18 +771,27 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > engine!()
 {
+    /// The engine's relations, checked where it is built: a port stages
+    /// into at most the contract's places; the receive window is 1 to the
+    /// port's `rx_block_ack_max_window`, and the reorder's frames (the
+    /// window) leave a staging place free (`WINDOW <= FRAMES < STAGING`).
+    pub const GEOMETRY: EngineFits = {
+        if let Some(refusal) =
+            engine_refusal(P::STAGING, WINDOW, P::Caps::CAPS.rx_block_ack_max_window)
+        {
+            panic!("{}", refusal);
+        }
+        EngineFits(())
+    };
+
     /// The engine of stopped data, taking at most `budget` MSDUs a section
     /// (at least one), its receive half under `policy`: the composition's
     /// policy values. Built in its place, a `const` item or a placed
     /// initializer.
     pub const fn new(budget: u8, policy: ReceivePolicy) -> Self {
-        const {
-            if P::STAGING > PLACES {
-                panic!("a port stages into at most the contract's PLACES");
-            }
-        }
         Self {
             budget: if budget == 0 { 1 } else { budget },
             policy,
@@ -761,6 +799,7 @@ impl<
             data: Data::Stopped,
             entries: [const { Entry::Free }; PEERS],
             queues: TxQueues::new(),
+            _fits: Self::GEOMETRY,
         }
     }
 
@@ -1073,6 +1112,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > engine!()
 where
     Self: Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1514,6 +1554,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > RxReply<'_, engine!()>
 {
     /// The Action body to send.
@@ -1600,6 +1641,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > FlowingData<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1716,6 +1758,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > StoppingData<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1753,6 +1796,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > LinkedPeer<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1898,6 +1942,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > UnnamedTids<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1939,6 +1984,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > DrainingTid<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -1975,6 +2021,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > NamedTid<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -2022,6 +2069,7 @@ fn unhold<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 >(
     engine: &mut engine!(),
     peer: u8,
@@ -2050,6 +2098,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > ShutGate<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -2092,6 +2141,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > OpenGate<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -2127,6 +2177,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > StoppedData<'a, engine!()>
 where
     engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>, Key = T>,
@@ -2153,6 +2204,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > FreePeer<'a, station!()>
 where
     P::Ack: Copy,
@@ -2197,6 +2249,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > FreePeer<'a, access_point!()>
 where
     P::Ack: Copy,
@@ -2228,6 +2281,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > LinkedPeer<'a, station!()>
 where
     P::Ack: Copy,
@@ -2257,6 +2311,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > IdleKey<'a, station!()>
 where
     P::Ack: Copy,
@@ -2295,6 +2350,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > NamedTid<'a, station!()>
 where
     P::Ack: Copy,
@@ -2341,6 +2397,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > LinkedPeer<'a, station!()>
 where
     P::Ack: Copy,
@@ -2375,6 +2432,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > station!()
 {
     /// The port's A-MPDU limits at the rate the aggregate rate selection
@@ -2438,6 +2496,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > Sections<'id, P> for station!()
 where
     P::Ack: Copy,
@@ -2523,6 +2582,7 @@ where
             budget,
             policy: _,
             links: _,
+            _fits: _,
         } = self
         else {
             return 0;
@@ -3079,6 +3139,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > Sections<'id, P> for access_point!()
 where
     P::Ack: Copy,
@@ -3463,7 +3524,7 @@ where
                             _ => None,
                         })
                 },
-                reorder: Reordering::<'_, 'id, P::Caps, AGREEMENTS>::AccessPoint,
+                reorder: Reordering::<'_, 'id, P::Caps, AGREEMENTS, WINDOW>::AccessPoint,
             },
         )
     }
@@ -3520,6 +3581,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > access_point!()
 {
     /// Write `msdu` of `queue` by copy into its queue's data place and
@@ -3721,6 +3783,7 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
+    const WINDOW: usize,
 > engine!()
 where
     F::Running<'id, P::Caps>: Keyed,
@@ -3731,50 +3794,59 @@ where
     /// search that merges equal states.
     pub(crate) fn key(&self) -> std::string::String {
         use core::fmt::Write;
-        let running =
-            |name: &str, running: &Running<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>| {
-                let gate = |gate: &Gate<'id>| match gate {
-                    Gate::Shut => "shut",
-                    Gate::Open(_) => "open",
-                };
-                let key = |key: &StationKey<'id, T>| match key {
-                    StationKey::Empty(_) => "empty",
-                    StationKey::Installed(..) => "installed",
-                };
-                std::format!(
-                    "{name}|{}|{}|{}",
-                    running.receive.key(),
-                    match &running.interface {
-                        Interface::Idle {
-                            gate: g, key: k, ..
-                        } => std::format!("idle {} {}", gate(g), key(k)),
-                        Interface::Keying { gate: g, step, .. } => std::format!(
-                            "keying {} {}",
-                            gate(g),
-                            match step {
-                                KeyStep::Removing {
-                                    then: KeyTarget::Install(_),
-                                    ..
-                                } => "removing, then installing",
-                                KeyStep::Removing {
-                                    then: KeyTarget::Empty,
-                                    ..
-                                } => "removing",
-                                KeyStep::Installing { .. } => "installing",
-                            }
-                        ),
-                        Interface::Closing { key: k, .. } => std::format!("closing {}", key(k)),
-                        Interface::Agreeing {
-                            gate: g,
-                            key: k,
-                            ticket,
-                            ..
-                        } => std::format!("agreeing {ticket:?} {} {}", gate(g), key(k)),
-                        Interface::InTransition => std::string::String::from("moving"),
-                    },
-                    running.form.key()
-                )
+        let running = |name: &str,
+                       running: &Running<
+            'id,
+            F,
+            P::Caps,
+            T,
+            SINGLES,
+            GROUPS,
+            AGREEMENTS,
+            WINDOW,
+        >| {
+            let gate = |gate: &Gate<'id>| match gate {
+                Gate::Shut => "shut",
+                Gate::Open(_) => "open",
             };
+            let key = |key: &StationKey<'id, T>| match key {
+                StationKey::Empty(_) => "empty",
+                StationKey::Installed(..) => "installed",
+            };
+            std::format!(
+                "{name}|{}|{}|{}",
+                running.receive.key(),
+                match &running.interface {
+                    Interface::Idle {
+                        gate: g, key: k, ..
+                    } => std::format!("idle {} {}", gate(g), key(k)),
+                    Interface::Keying { gate: g, step, .. } => std::format!(
+                        "keying {} {}",
+                        gate(g),
+                        match step {
+                            KeyStep::Removing {
+                                then: KeyTarget::Install(_),
+                                ..
+                            } => "removing, then installing",
+                            KeyStep::Removing {
+                                then: KeyTarget::Empty,
+                                ..
+                            } => "removing",
+                            KeyStep::Installing { .. } => "installing",
+                        }
+                    ),
+                    Interface::Closing { key: k, .. } => std::format!("closing {}", key(k)),
+                    Interface::Agreeing {
+                        gate: g,
+                        key: k,
+                        ticket,
+                        ..
+                    } => std::format!("agreeing {ticket:?} {} {}", gate(g), key(k)),
+                    Interface::InTransition => std::string::String::from("moving"),
+                },
+                running.form.key()
+            )
+        };
         let mut key = std::format!(
             "{}|{}|",
             self.budget,

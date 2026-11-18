@@ -190,24 +190,43 @@ pub(super) enum Flow {
 
 /// What a round knows of the links: the data's flow, a frame's linked
 /// peer, and a station's receive agreements.
-pub(super) struct Links<'a, 'id, F, K: Ieee80211Capabilities, const BANKS: usize> {
+pub(super) struct Links<
+    'a,
+    'id,
+    F,
+    K: Ieee80211Capabilities,
+    const BANKS: usize,
+    const WINDOW: usize,
+> {
     pub(super) flow: Flow,
     pub(super) peer_of: F,
-    pub(super) reorder: Reordering<'a, 'id, K, BANKS>,
+    pub(super) reorder: Reordering<'a, 'id, K, BANKS, WINDOW>,
 }
 
 /// Whose data a round reads: a station's, with its receive agreements, or
 /// an access point's, which has none in phase B.
-pub(super) enum Reordering<'a, 'id, K: Ieee80211Capabilities, const BANKS: usize> {
-    Station(Reorder<'a, 'id, K, BANKS>),
+pub(super) enum Reordering<
+    'a,
+    'id,
+    K: Ieee80211Capabilities,
+    const BANKS: usize,
+    const WINDOW: usize,
+> {
+    Station(Reorder<'a, 'id, K, BANKS, WINDOW>),
     AccessPoint,
 }
 
 /// A station's receive agreements, lent a round: the reorder, the
 /// station's address and its access point's, whether it admits agreements,
 /// and its link's generation (`None` without a link).
-pub(super) struct Reorder<'a, 'id, K: Ieee80211Capabilities, const BANKS: usize> {
-    pub(super) agreements: &'a mut Agreements<'id, K, BANKS>,
+pub(super) struct Reorder<
+    'a,
+    'id,
+    K: Ieee80211Capabilities,
+    const BANKS: usize,
+    const WINDOW: usize,
+> {
+    pub(super) agreements: &'a mut Agreements<'id, K, BANKS, WINDOW>,
     pub(super) local: [u8; 6],
     pub(super) bssid: Option<Bssid>,
     pub(super) admitted: RxAgreements,
@@ -284,13 +303,13 @@ impl<'id> Receive<'id> {
     }
 
     /// One round over `port`, the links as `links` names them.
-    pub(super) fn round<P, N, C, F, K, const BANKS: usize>(
+    pub(super) fn round<P, N, C, F, K, const BANKS: usize, const WINDOW: usize>(
         &mut self,
         port: &mut P,
         network: &mut N,
         told: &mut C,
         now: Instant,
-        links: Links<'_, 'id, F, K, BANKS>,
+        links: Links<'_, 'id, F, K, BANKS, WINDOW>,
     ) -> Rest
     where
         P: ReceivePort<'id>,
@@ -445,11 +464,11 @@ impl<'id> Receive<'id> {
 
     /// A taken data unit or control frame through the reorder: delivered
     /// now (its handle back), or retained or given back (`None`).
-    fn reordered<P, K, const BANKS: usize>(
+    fn reordered<P, K, const BANKS: usize, const WINDOW: usize>(
         &mut self,
         round: &mut Round<'_, 'id, P>,
         handle: UnitHandle<'id>,
-        reorder: &mut Reorder<'_, 'id, K, BANKS>,
+        reorder: &mut Reorder<'_, 'id, K, BANKS, WINDOW>,
         now: Instant,
     ) -> Option<UnitHandle<'id>>
     where
@@ -509,10 +528,10 @@ impl<'id> Receive<'id> {
         clippy::too_many_arguments,
         reason = "the round, the reorder, the network's room and end, the controller and the links"
     )]
-    fn ready<P, N, C, F, K, const BANKS: usize>(
+    fn ready<P, N, C, F, K, const BANKS: usize, const WINDOW: usize>(
         &mut self,
         round: &mut Round<'_, 'id, P>,
-        reorder: &mut Option<&mut Reorder<'_, 'id, K, BANKS>>,
+        reorder: &mut Option<&mut Reorder<'_, 'id, K, BANKS, WINDOW>>,
         room: &mut Room,
         network: &mut N,
         told: &mut C,
