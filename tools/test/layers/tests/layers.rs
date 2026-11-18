@@ -4188,11 +4188,26 @@ fn enables_feature(
     package: &str,
     feature: &str,
 ) -> bool {
+    enables_feature_where(manifest, workspace, table, package, feature, |_| true)
+}
+
+/// [`enables_feature`] over the manifest's own table and those of its
+/// `[target.'…']` tables whose key `admits` takes.
+fn enables_feature_where(
+    manifest: &toml::Value,
+    workspace: &toml::Value,
+    table: &str,
+    package: &str,
+    feature: &str,
+    admits: impl Fn(&str) -> bool,
+) -> bool {
     let targets = manifest
         .get("target")
         .and_then(toml::Value::as_table)
         .into_iter()
-        .flat_map(|targets| targets.values());
+        .flat_map(|targets| targets.iter())
+        .filter(|(key, _)| admits(key))
+        .map(|(_, scope)| scope);
     let names = |spec: &toml::Value| {
         spec.get("features")
             .and_then(toml::Value::as_array)
@@ -4327,16 +4342,15 @@ fn features_reaching(
 /// forwards to it, and no package turns such a feature on by default; a
 /// dev-dependency does (the tests).
 ///
-/// One normal dependency turns it on today and is recorded here as debt:
-/// the register probe's host-target table
-/// (`hil/probes/esp32s31-register`, `[target.'cfg(not(target_arch =
-/// "riscv32"))'.dependencies]`).
+/// A table under `[target.'…']` whose platform is false for the image's
+/// target cannot enter an image and is a host table: it does not count
+/// ([`reaches_the_image`]).
 #[test]
 fn the_hals_host_constructors_are_reached_only_by_tests() {
     const HAL: &str = "oer-chips-esp32s31-hal";
     const FEATURE: &str = "test-support";
-    const DEBT: &[&str] = &["hil/probes/esp32s31-register [dependencies]"];
     let root = root();
+    let image = ImageTarget::of(&root);
     let workspace = read_toml(&root.join("Cargo.toml"));
     let workspace = &workspace["workspace"];
     let packages = packages(&root);
@@ -4346,7 +4360,9 @@ fn the_hals_host_constructors_are_reached_only_by_tests() {
     for (path, manifest) in &packages {
         for (package, feature) in &reaching {
             for table in ["dependencies", "build-dependencies"] {
-                if enables_feature(manifest, workspace, table, package, feature) {
+                if enables_feature_where(manifest, workspace, table, package, feature, |key| {
+                    image.reaches(key)
+                }) {
                     found.push(format!("{path} [{table}]"));
                 }
             }
@@ -4370,10 +4386,102 @@ fn the_hals_host_constructors_are_reached_only_by_tests() {
     found.sort();
     found.dedup();
     assert!(tests > 0, "no test turns the HAL's host constructors on");
-    assert_eq!(
-        found, DEBT,
-        "a product reaches the HAL's host constructors (or a recorded debt left)"
+    assert!(
+        found.is_empty(),
+        "a product reaches the HAL's host constructors: {found:?}"
     );
+}
+
+/// The image's target: its triple from the ISA's facts and its `cfg` set.
+struct ImageTarget {
+    name: String,
+    cfg: Vec<cargo_platform::Cfg>,
+}
+
+impl ImageTarget {
+    /// SOURCE: `chips/family/facts/layers/isa/rv32imafc.toml` (`rust-target`)
+    /// and `rustc --print cfg --target riscv32imafc-unknown-none-elf` of the
+    /// pinned toolchain (the image's `cfg`, `debug_assertions` left out: a
+    /// release image has none).
+    fn of(root: &Path) -> Self {
+        let isa = read_toml(&root.join("chips/family/facts/layers/isa/rv32imafc.toml"));
+        let name = isa["rust-target"]
+            .as_str()
+            .expect("the ISA names its Rust target")
+            .to_owned();
+        Self::named(name)
+    }
+
+    fn named(name: String) -> Self {
+        const CFG: &[&str] = &[
+            r#"panic="abort""#,
+            r#"target_abi="""#,
+            r#"target_arch="riscv32""#,
+            r#"target_endian="little""#,
+            r#"target_env="""#,
+            r#"target_feature="a""#,
+            r#"target_feature="c""#,
+            r#"target_feature="m""#,
+            r#"target_feature="zaamo""#,
+            r#"target_feature="zalrsc""#,
+            r#"target_feature="zca""#,
+            r#"target_feature="zicsr""#,
+            r#"target_has_atomic="16""#,
+            r#"target_has_atomic="32""#,
+            r#"target_has_atomic="8""#,
+            r#"target_has_atomic="ptr""#,
+            r#"target_os="none""#,
+            r#"target_pointer_width="32""#,
+            r#"target_vendor="unknown""#,
+        ];
+        let cfg = CFG
+            .iter()
+            .map(|cfg| cfg.parse().expect("a cfg of the image's target"))
+            .collect();
+        Self { name, cfg }
+    }
+
+    /// Whether a `[target.'key']` table can enter an image: its platform
+    /// holds for the image's target, or cannot be decided.
+    fn reaches(&self, key: &str) -> bool {
+        key.parse::<cargo_platform::Platform>()
+            .map_or(true, |platform| platform.matches(&self.name, &self.cfg))
+    }
+}
+
+#[test]
+fn a_target_table_counts_only_where_it_can_enter_the_image() {
+    let image = ImageTarget::named("riscv32imafc-unknown-none-elf".to_owned());
+    let workspace: toml::Value = toml::from_str("").expect("workspace");
+    let manifest: toml::Value = toml::from_str(
+        r#"[target.'cfg(not(target_arch = "riscv32"))'.dependencies]
+        hal = { path = "x", features = ["test-support"] }"#,
+    )
+    .expect("manifest");
+    let reaches = |manifest: &toml::Value| {
+        enables_feature_where(
+            manifest,
+            &workspace,
+            "dependencies",
+            "hal",
+            "test-support",
+            |key| image.reaches(key),
+        )
+    };
+    assert!(!reaches(&manifest), "a host table");
+    let held: toml::Value = toml::from_str(
+        r#"[target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
+        hal = { path = "x", features = ["test-support"] }"#,
+    )
+    .expect("manifest");
+    assert!(reaches(&held), "a table for the image's target");
+    let named: toml::Value = toml::from_str(
+        r#"[target.riscv32imafc-unknown-none-elf.dependencies]
+        hal = { path = "x", features = ["test-support"] }"#,
+    )
+    .expect("manifest");
+    assert!(reaches(&named), "a table named by the image's triple");
+    assert!(image.reaches("cfg(not"), "an undecidable key counts");
 }
 
 #[test]
@@ -5140,10 +5248,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("SharedPhyAccess::analog_i2c_reset_is_released", SAMPLED_BIT),
     ("SharedPhyAccess::tx_dc_measurement_is_ready", SAMPLED_BIT),
     ("TaskControl::head_present", SAMPLED_BIT),
-    (
-        "TxHardware::begin_tx_timeout_abort",
-        "decision: P3, the transmit slot the hardware never ends",
-    ),
 ];
 
 #[test]

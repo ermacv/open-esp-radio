@@ -22,8 +22,9 @@ use crate::types::{
     MacHeTid, MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
     MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
     MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence,
-    MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxCompletionObservation,
-    MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused, MacTxQueueDetached,
+    MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxAbortOutcome,
+    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused,
+    MacTxQueueAborted, MacTxQueueDetached,
 };
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
@@ -563,12 +564,15 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac().ordinary_tx_queue_snapshot(queue)
     }
 
-    pub fn begin_tx_timeout_abort(
+    /// [`WifiRadioRegisters::abort_mac_tx`](crate::radio::ieee80211::registers::WifiRadioRegisters::abort_mac_tx).
+    pub fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
         &mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,
-    ) -> bool {
-        self.pac_mut().begin_mac_tx_timeout_abort(queue, cause)
+        clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
+        self.pac_mut().abort_mac_tx(queue, cause, clock, aborted)
     }
 
     pub fn with_tx_queue_detached<R>(

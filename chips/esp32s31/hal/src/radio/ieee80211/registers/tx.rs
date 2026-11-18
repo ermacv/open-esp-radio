@@ -893,9 +893,94 @@ impl MacHtAmpduCompletionObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacTxDetachReason {
     Collision,
-    /// A settled abort, whichever [`MacTxAbortCause`] began it.
-    Timeout,
     Completed,
+}
+
+/// The fixed settle of a queue's abort, between forcing CCA and the
+/// queue's detach.
+///
+/// SOURCE: complete `libpp[lmac.o]::lmacStopTransmit` (`PROMOTED_LMAC_TX`)
+/// forces CCA to three and delays 16 us before it samples VALID.
+pub const MAC_TX_ABORT_SETTLE: oer_portable_time::settle::SettleLimit =
+    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(16))
+    {
+        Some(limit) => limit,
+        None => panic!("the abort's settle is within a settle's limit"),
+    };
+
+/// How one queue's abort ([`WifiRadioRegisters::abort_mac_tx`]) ended.
+#[derive(Debug, Eq, PartialEq)]
+pub enum MacTxAbortOutcome<T> {
+    /// A [`MacTxAbortCause::TimeoutEdge`] abort found no edge: nothing was
+    /// written.
+    NoEdge,
+    /// VALID was already clear: the MAC took the PPDU before CCA was forced.
+    /// The queue keeps its descriptors; only its own completion ends them.
+    OnAir,
+    /// The queue was valid and is disabled; the callback consumed the proof.
+    Aborted(T),
+}
+
+/// A queue's proof that it let its chain go, which a storage's release
+/// takes: a detach names the descriptor the queue held, which the storage
+/// confirms is its own; an abort ([`MacTxQueueAborted`]) disabled the queue
+/// that held the storage's published chain and reads no address back.
+pub trait MacTxQueueReleased: sealed::Released {
+    /// The release of the chain whose head is `descriptor_head`, or the
+    /// detached queue's other chain.
+    fn releases(&self, descriptor_head: u32) -> Result<(), ForeignChain>;
+}
+
+/// A detached queue held a chain whose head is not the storage's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ForeignChain;
+
+mod sealed {
+    pub trait Released {}
+}
+
+impl sealed::Released for MacTxQueueDetached<'_> {}
+impl MacTxQueueReleased for MacTxQueueDetached<'_> {
+    fn releases(&self, descriptor_head: u32) -> Result<(), ForeignChain> {
+        if self.confirms_descriptor_head(descriptor_head) {
+            Ok(())
+        } else {
+            Err(ForeignChain)
+        }
+    }
+}
+
+impl sealed::Released for MacTxQueueAborted<'_> {}
+impl MacTxQueueReleased for MacTxQueueAborted<'_> {
+    /// The abort holds the queue the storage published to: no address is
+    /// read back, and nothing is left to confirm.
+    fn releases(&self, _descriptor_head: u32) -> Result<(), ForeignChain> {
+        Ok(())
+    }
+}
+
+/// Proof that an abort disabled one queue while it was still valid, so the
+/// queue no longer owns its TX chain.
+///
+/// It borrows the register owner, as [`MacTxQueueDetached`] does, and is
+/// made only by [`WifiRadioRegisters::abort_mac_tx`]. It carries no
+/// descriptor address: the abort reads none back to decide.
+pub struct MacTxQueueAborted<'registers> {
+    _registers: PhantomData<&'registers mut ()>,
+}
+
+impl MacTxQueueAborted<'_> {
+    const fn new() -> Self {
+        Self {
+            _registers: PhantomData,
+        }
+    }
+
+    /// Construct an abort's proof in a native model with no asynchronous DMA.
+    #[cfg(any(test, feature = "test-support"))]
+    pub const fn new_model() -> Self {
+        Self::new()
+    }
 }
 
 /// What begins the abort of a published queue.
@@ -1794,23 +1879,59 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         })
     }
 
-    /// Force CCA for the abort of `queue`; `false` leaves every register
-    /// untouched when a [`MacTxAbortCause::TimeoutEdge`] has no edge.
+    /// Abort `queue` by the vendor's sequence, in one step: force CCA to
+    /// three, settle [`MAC_TX_ABORT_SETTLE`], sample VALID and clear it,
+    /// release CCA, disable the queue if it was still valid, then
+    /// acknowledge its timeout edge if one is pending. A
+    /// [`MacTxAbortCause::TimeoutEdge`] abort with no edge writes nothing.
     ///
-    /// SOURCE: `libpp[lmac.o]::lmacStopTransmit` forces CCA to three before
-    /// its 16 us delay whatever the queue's state.
-    pub fn begin_mac_tx_timeout_abort(
-        &mut self,
+    /// Nothing is read back to decide: a queue that was valid is disabled and
+    /// its chain returns through `aborted`; one that was not is on the air.
+    ///
+    /// SOURCE: complete `libpp[lmac.o]::lmacStopTransmit`
+    /// (`PROMOTED_LMAC_TX`): CCA forced, the 16 us delay, VALID sampled and
+    /// cleared, CCA released, the queue disabled only if it was valid.
+    pub fn abort_mac_tx<'registers, C: oer_portable_time::Clock + ?Sized, R>(
+        &'registers mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,
-    ) -> bool {
+        clock: &C,
+        aborted: impl FnOnce(MacTxQueueAborted<'registers>) -> R,
+    ) -> MacTxAbortOutcome<R> {
         let common = &mut self.mac.wifi_mac_tx_common;
+        let queue_control = &mut self.mac.wifi_mac_tx_queue_control;
         if cause == MacTxAbortCause::TimeoutEdge && !queue::timeout_pending(common, queue) {
-            return false;
+            return MacTxAbortOutcome::NoEdge;
         }
         let _ = queue::set_cca_force(common, 3);
         oer_portable_riscv::fence();
-        true
+        // The vendor's fixed delay: the attempt yields once the limit has
+        // passed, and a settle that ends unsettled has passed it too.
+        let start = clock.now();
+        let limit = MAC_TX_ABORT_SETTLE.limit();
+        match oer_portable_time::settle::settle(
+            oer_portable_time::settle::Settle::new(MAC_TX_ABORT_SETTLE, clock),
+            || (clock.now().saturating_duration_since(start) >= limit).then_some(()),
+        ) {
+            Ok(()) | Err(oer_portable_time::settle::Unsettled) => {}
+        }
+        let was_valid = queue::queue_valid(queue_control, queue);
+        queue::invalidate_queue(queue_control, queue);
+        let _ = queue::set_cca_force(common, 0);
+        if was_valid {
+            queue::disable_queue(queue_control, queue);
+        }
+        // Sampled after the disable: an edge rising until then would
+        // otherwise stay for the queue's next publication.
+        if queue::timeout_pending(common, queue) {
+            queue::acknowledge_timeout(common, queue);
+        }
+        oer_portable_riscv::fence();
+        if was_valid {
+            MacTxAbortOutcome::Aborted(aborted(MacTxQueueAborted::new()))
+        } else {
+            MacTxAbortOutcome::OnAir
+        }
     }
 
     /// Execute one detach transaction and consume its proof before allowing
@@ -1837,30 +1958,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 queue::disable_queue(queue_control, queue);
                 oer_portable_riscv::fence();
                 queue::acknowledge_collision(common, queue);
-            }
-            MacTxDetachReason::Timeout => {
-                // SOURCE: complete `libpp[lmac.o]::lmacStopTransmit` samples
-                // VALID, clears it, releases CCA and disables only a queue
-                // that was still valid.
-                let was_valid = queue::queue_valid(queue_control, queue);
-                queue::invalidate_queue(queue_control, queue);
-                let _ = queue::set_cca_force(common, 0);
-                if was_valid {
-                    queue::disable_queue(queue_control, queue);
-                }
-                // Sampled after the disable: an edge rising until then would
-                // otherwise stay for the queue's next publication.
-                let timed_out = queue::timeout_pending(common, queue);
-                if timed_out {
-                    queue::acknowledge_timeout(common, queue);
-                }
-                // The hardware took the PPDU before CCA was forced. The
-                // vendor's branch proves no detach, so only the queue's own
-                // completion, or its own timeout, returns the descriptors.
-                if !was_valid && (!timed_out || queue::queue_enabled(queue_control, queue)) {
-                    oer_portable_riscv::fence();
-                    return MacTxDetachOutcome::OnAir;
-                }
             }
             MacTxDetachReason::Completed => {
                 // A completion edge was consumed separately before this

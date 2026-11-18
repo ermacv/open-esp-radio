@@ -443,11 +443,11 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
 
     pub fn release_aborted(
         &mut self,
-        detached: MacTxQueueDetached<'_>,
+        detached: impl crate::types::MacTxQueueReleased,
     ) -> Result<(), AmpduDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptors.base()) {
-            return Err(AmpduDmaStorageError::Address);
-        }
+        detached
+            .releases(self.binding.descriptors.base())
+            .map_err(|_| AmpduDmaStorageError::Address)?;
         self.clear_to_free(AmpduDmaState::HardwareOwned)
     }
 
@@ -753,7 +753,7 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
     /// retained lease to `returned`, in the order they were pushed.
     pub fn release_aborted(
         &mut self,
-        detached: MacTxQueueDetached<'_>,
+        detached: impl crate::types::MacTxQueueReleased,
         returned: impl FnMut(B),
     ) -> Result<(), AmpduDmaStorageError> {
         self.dma_mut()?.release_aborted(detached)?;

@@ -7,11 +7,11 @@
 pub use crate::radio::bluetooth::BluetoothMemoryListSelector;
 /// The Wi-Fi MAC value types of the HAL's register operations.
 pub use crate::radio::ieee80211::registers::{
-    ExtraSoftApRxBlockAckEntrySnapshot, MAC_MINIMUM_TX_POWER_DBM, MAC_TX_POWER_RATE_COUNT,
-    MAC_TX_TIMEOUT_MAX, MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity,
-    MacCoexPrioritySnapshot, MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation,
-    MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
-    MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
+    ExtraSoftApRxBlockAckEntrySnapshot, MAC_MINIMUM_TX_POWER_DBM, MAC_TX_ABORT_SETTLE,
+    MAC_TX_POWER_RATE_COUNT, MAC_TX_TIMEOUT_MAX, MacApReceivePolicySnapshot, MacAssociationId,
+    MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex,
+    MacHeAssociation, MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError,
+    MacHeBssColor, MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
     MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHePeerConfig, MacHeRate,
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbStatistics, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
@@ -28,10 +28,11 @@ pub use crate::radio::ieee80211::registers::{
     MacRxDmaSnapshot, MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxLane,
     MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacSppMode,
     MacStaApReceivePlan, MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxAbortCause,
-    MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason,
-    MacTxPowerPair, MacTxPowerTable, MacTxPrepareFault, MacTxPrepareRefused, MacTxProtection,
-    MacTxPtiCount, MacTxPtiProgram, MacTxQueueDetached, MacTxQueueIndex, MacTxStatisticsSnapshot,
-    RxBlockAckEntrySnapshot, StaTbttSchedule, TxBlockAckPayload,
+    MacTxAbortOutcome, MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome,
+    MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxPrepareFault, MacTxPrepareRefused,
+    MacTxProtection, MacTxPtiCount, MacTxPtiProgram, MacTxQueueAborted, MacTxQueueDetached,
+    MacTxQueueIndex, MacTxQueueReleased, MacTxStatisticsSnapshot, RxBlockAckEntrySnapshot,
+    StaTbttSchedule, TxBlockAckPayload,
 };
 
 pub use crate::radio::phy::restore::{

@@ -9,7 +9,7 @@
 //! use the independent valid-BlockAck observation; raw TX status alone cannot
 //! prove either receipt or absence of the solicited response.
 
-use core::{ops::ControlFlow, pin::Pin};
+use core::pin::Pin;
 use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataEntry, WifiTxMetadataEntryMut};
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
@@ -38,11 +38,6 @@ pub const TX_METADATA_SIZE: usize = 8;
 /// Hardware-appended CCMP MIC bytes accounted for by descriptor publication.
 pub const TX_CCMP_MIC_SIZE: usize = 8;
 pub const TX_FCS_SIZE: usize = 4;
-/// Settle interval between the forced-CCA edge of a queue's timeout abort
-/// and its detach (`SOURCE[PROMOTED_LMAC_TX]`, see
-/// `TxSlot::begin_timeout_abort`).
-pub(crate) const TX_ABORT_SETTLE: oer_portable_time::Duration =
-    oer_portable_time::Duration::from_micros(16);
 /// First Frame Control byte of a BlockAckReq: control type, subtype eight.
 const BLOCK_ACK_REQUEST_FRAME_CONTROL: u8 = 0x84;
 
@@ -488,16 +483,9 @@ impl<const BUFFER_SIZE: usize> QueuedSingleAttempt<'_, BUFFER_SIZE> {
         self.active.route.queue()
     }
 
-    /// The publication deadline, or the end of the abort settle while one
-    /// runs.
+    /// The publication deadline.
     pub const fn deadline(&self) -> oer_portable_time::Instant {
         self.active.deadline
-    }
-
-    /// Whether the queue's timeout abort is settling: CCA is forced until
-    /// its detach.
-    pub const fn abort_settling(&self) -> bool {
-        matches!(self.active.phase, OrdinaryTxPhase::AbortSettling)
     }
 
     /// The slot the hardware reads, for observation.
@@ -607,7 +595,6 @@ impl ActiveTx {
 
 enum OrdinaryTxPhase {
     Published,
-    AbortSettling,
     /// An abort found the PPDU on the air: only its completion ends it, and
     /// the deadline is the last one.
     PastAbort,
@@ -1072,11 +1059,6 @@ where
     /// one past an abort that left the PPDU on the air quarantines the
     /// descriptor.
     ///
-    /// The timeout abort forces the MAC-wide CCA until its detach releases
-    /// it, so `may_begin_timeout_abort` must be `false` while another queue's
-    /// abort settles; the attempt then stays pending with its timeout latched
-    /// in the queue state until it is serviced again.
-    ///
     /// On an error the descriptor and its slot stay in the returned quarantine;
     /// only a radio reset can recover it.
     pub(crate) fn service_queued_single_attempt<H: TxHardware>(
@@ -1084,7 +1066,6 @@ where
         hardware: &mut H,
         queued: QueuedSingleAttempt<'slot, BUFFER_SIZE>,
         wake: WifiTxWake,
-        may_begin_timeout_abort: bool,
     ) -> Result<
         QueuedSingleAttemptProgress<'slot, BUFFER_SIZE>,
         QueuedSingleAttemptFailed<'slot, BUFFER_SIZE>,
@@ -1097,7 +1078,7 @@ where
             });
         }
         core::mem::swap(&mut self.slot, &mut slot);
-        let result = self.service_shared_edge(hardware, active, wake, may_begin_timeout_abort);
+        let result = self.service_shared_edge(hardware, active, wake);
         core::mem::swap(&mut self.slot, &mut slot);
         match result {
             Ok(Step::Pending(active)) => {
@@ -1122,14 +1103,9 @@ where
         hardware: &mut H,
         active: ActiveTx,
         wake: WifiTxWake,
-        may_begin_timeout_abort: bool,
     ) -> Result<Step, OrdinaryTxError> {
         use crate::mac::irq::EVENT_TX_TIMEOUT;
 
-        let active = match self.service_abort_settle(hardware, active)? {
-            ControlFlow::Continue(active) => active,
-            ControlFlow::Break(step) => return Ok(step),
-        };
         let events = match wake {
             WifiTxWake::Interrupt { events } => events,
             WifiTxWake::Deadline => 0,
@@ -1160,15 +1136,13 @@ where
             }
             return Ok(Step::Pending(active));
         }
-        if (events & EVENT_TX_TIMEOUT != 0 || expired)
-            && may_begin_timeout_abort
-            && self.slot.as_mut().begin_timeout_abort(
-                hardware,
-                active.cookie,
-                abort_cause(expired),
-            )?
-        {
-            return self.start_abort_settle(active);
+        if events & EVENT_TX_TIMEOUT != 0 || expired {
+            return Ok(
+                match self.abort_attempt(hardware, active, abort_cause(expired))? {
+                    Ok(step) => step,
+                    Err(active) => Step::Pending(active),
+                },
+            );
         }
         Ok(Step::Pending(active))
     }
@@ -1347,10 +1321,6 @@ where
         active: ActiveTx,
         wake: WifiTxWake,
     ) -> Result<Step, OrdinaryTxError> {
-        let active = match self.service_abort_settle(hardware, active)? {
-            ControlFlow::Continue(active) => active,
-            ControlFlow::Break(step) => return Ok(step),
-        };
         let interrupt_events = match wake {
             WifiTxWake::Interrupt { events } => events,
             WifiTxWake::Deadline => 0,
@@ -1398,14 +1368,12 @@ where
             return Ok(Step::Pending(active));
         }
         if tx_events == EVENT_TX_TIMEOUT || expired {
-            if !self.slot.as_mut().begin_timeout_abort(
-                hardware,
-                active.cookie,
-                abort_cause(expired),
-            )? {
-                return self.reset_required(active, TxResetReason::TimeoutInterruptWithoutState);
-            }
-            return self.start_abort_settle(active);
+            return match self.abort_attempt(hardware, active, abort_cause(expired))? {
+                Ok(step) => Ok(step),
+                Err(active) => {
+                    self.reset_required(active, TxResetReason::TimeoutInterruptWithoutState)
+                }
+            };
         }
 
         Ok(Step::Pending(active))
@@ -1424,12 +1392,7 @@ where
         let progress = self.poll_once(hardware)?;
         if progress == WifiTxProgress::Pending {
             let next_poll = self.timer.now().saturating_add(poll_interval);
-            let deadline = match self.active.as_ref() {
-                Some(active) if matches!(active.phase, OrdinaryTxPhase::AbortSettling) => {
-                    active.deadline
-                }
-                _ => self.next_deadline().unwrap_or(next_poll).min(next_poll),
-            };
+            let deadline = self.next_deadline().unwrap_or(next_poll).min(next_poll);
             self.timer.wait_until(deadline).await;
         }
         Ok(progress)
@@ -1453,10 +1416,6 @@ where
         hardware: &mut H,
         active: ActiveTx,
     ) -> Result<Step, OrdinaryTxError> {
-        let active = match self.service_abort_settle(hardware, active)? {
-            ControlFlow::Continue(active) => active,
-            ControlFlow::Break(step) => return Ok(step),
-        };
         if let Some(event) = self.acknowledge_completion(hardware, &active)? {
             match event {
                 CompletionObservation::Observed((completion, block_ack)) => {
@@ -1476,14 +1435,12 @@ where
             }
             return Ok(Step::Pending(active));
         }
-        if self
-            .slot
-            .as_mut()
-            .begin_timeout_abort(hardware, active.cookie, abort_cause(expired))?
-        {
-            return self.start_abort_settle(active);
-        }
-        Ok(Step::Pending(active))
+        Ok(
+            match self.abort_attempt(hardware, active, abort_cause(expired))? {
+                Ok(step) => step,
+                Err(active) => Step::Pending(active),
+            },
+        )
     }
 
     /// Take the queue's completion; a BlockAckReq's completion carries the
@@ -1514,49 +1471,32 @@ where
             }))
     }
 
-    fn start_abort_settle(&mut self, mut active: ActiveTx) -> Result<Step, OrdinaryTxError> {
-        // Start the interval after the hardware abort request has completed.
-        let Some(deadline) = self.timer.now().checked_add(TX_ABORT_SETTLE) else {
-            self.slot.as_mut().require_reset(active.cookie)?;
-            return Err(OrdinaryTxError::DeadlineOverflow);
-        };
-        active.phase = OrdinaryTxPhase::AbortSettling;
-        active.deadline = deadline;
-        Ok(Step::Pending(active))
-    }
-
-    /// Serve a settling abort; [`ControlFlow::Continue`] hands on an attempt
-    /// with no abort settling, whose completion may already have come.
-    fn service_abort_settle<H: TxHardware>(
+    /// Abort the attempt's queue in one step
+    /// ([`TxSlot::abort_timeout`](crate::mac::tx::TxSlot::abort_timeout)):
+    /// a queue that let go ends the attempt as aborted; one the MAC took
+    /// keeps it for its completion until the completion timeout. A
+    /// timeout-edge abort with no edge hands the attempt back unchanged.
+    fn abort_attempt<H: TxHardware>(
         &mut self,
         hardware: &mut H,
         mut active: ActiveTx,
-    ) -> Result<ControlFlow<Step, ActiveTx>, OrdinaryTxError> {
-        if !matches!(active.phase, OrdinaryTxPhase::AbortSettling) {
-            return Ok(ControlFlow::Continue(active));
-        }
-        // Late completion and repeated IRQs cannot bypass the hardware settle
-        // interval. Abort detach, not completion acknowledgement, owns release.
-        let now = self.timer.now();
-        if now < active.deadline {
-            return Ok(ControlFlow::Break(Step::Pending(active)));
-        }
+        cause: MacTxAbortCause,
+    ) -> Result<Result<Step, ActiveTx>, OrdinaryTxError> {
         match self
             .slot
             .as_mut()
-            .finish_timeout_abort(hardware, active.cookie)?
+            .abort_timeout(hardware, active.cookie, cause, &self.timer)?
         {
-            TxAbortEnd::Detached => self
-                .finish_aborted_attempt(hardware, active, true)
-                .map(ControlFlow::Break),
+            TxAbortEnd::NoEdge => Ok(Err(active)),
+            TxAbortEnd::Detached => self.finish_aborted_attempt(hardware, active, true).map(Ok),
             TxAbortEnd::OnAir => {
-                let Some(deadline) = now.checked_add(active.completion_timeout) else {
+                let Some(deadline) = self.timer.now().checked_add(active.completion_timeout) else {
                     self.slot.as_mut().require_reset(active.cookie)?;
                     return Err(OrdinaryTxError::DeadlineOverflow);
                 };
                 active.phase = OrdinaryTxPhase::PastAbort;
                 active.deadline = deadline;
-                Ok(ControlFlow::Continue(active))
+                Ok(Ok(Step::Pending(active)))
             }
         }
     }

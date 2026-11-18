@@ -22,8 +22,8 @@ use oer_chips_esp32s31_hal::{
     system::memory::dma_static::{PlacedBacking, PlacedTxLease, PlacedTxPool},
     types::{
         MacInterface, MacLegacyRate, MacLegacyTxParameters, MacLegacyTxProgram,
-        MacLegacyTxResponse, MacTxAbortCause, MacTxControlFrame, MacTxDetachOutcome,
-        MacTxDetachReason, MacTxProtection, MacTxQueueIndex,
+        MacLegacyTxResponse, MacTxAbortCause, MacTxAbortOutcome, MacTxControlFrame,
+        MacTxDetachOutcome, MacTxDetachReason, MacTxProtection, MacTxQueueIndex,
     },
 };
 use oer_portable_memory::{FrameLen, PinnedDmaTxPool, PinnedDmaTxRadioLease};
@@ -410,15 +410,13 @@ fn abort(access: &mut RadioAccess, descriptor: &mut Descriptor) -> Result<Option
     if let Some(observation) = access.wifi_mac_hal().take_tx_completion(QUEUE) {
         return complete(access, descriptor, observation, 0).map(Some);
     }
-    let _forced = access
-        .wifi_mac_hal()
-        .begin_tx_timeout_abort(QUEUE, MacTxAbortCause::Forced);
-    match access.wifi_mac_hal().with_tx_queue_detached(
+    match access.wifi_mac_hal().abort_tx_queue(
         QUEUE,
-        MacTxDetachReason::Timeout,
-        |detached| descriptor.release_aborted(detached),
+        MacTxAbortCause::Forced,
+        &EmbassyClock,
+        |aborted| descriptor.release_aborted(aborted),
     ) {
-        MacTxDetachOutcome::Detached(Ok(())) => {
+        MacTxAbortOutcome::Aborted(Ok(())) => {
             let _lease = descriptor.detach();
             Ok(Some(Ended {
                 how: 1,
@@ -426,9 +424,9 @@ fn abort(access: &mut RadioAccess, descriptor: &mut Descriptor) -> Result<Option
                 detail: 0,
             }))
         }
-        MacTxDetachOutcome::OnAir => Ok(None),
-        MacTxDetachOutcome::Detached(Err(_)) => Err((tx_phase::RELEASE, 1)),
-        MacTxDetachOutcome::NoEvent | MacTxDetachOutcome::Failed => Err((tx_phase::RELEASE, 2)),
+        MacTxAbortOutcome::OnAir => Ok(None),
+        MacTxAbortOutcome::Aborted(Err(_)) => Err((tx_phase::RELEASE, 1)),
+        MacTxAbortOutcome::NoEdge => Err((tx_phase::RELEASE, 2)),
     }
 }
 

@@ -22,13 +22,14 @@ fn host_pool<
 }
 mod length_budget;
 use crate::mac::tx::CommitTxDma;
+use crate::mac::tx::TxAbortEnd;
 use crate::mac::tx::{
     HeAmpduTxConfig, HeRate, HtAmpduDensity, HtAmpduTxConfig, HtRate, TxHardware,
 };
 use oer_chips_esp32s31_hal::types::{
     MacHeTbTidLimit, MacHeTid, MacHtAmpduCompletionObservation, MacHtTxProgram, MacLegacyTxProgram,
-    MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
-    MacTxQueueDetached,
+    MacTxAbortCause, MacTxAbortOutcome, MacTxCompletionObservation, MacTxDetachOutcome,
+    MacTxDetachReason, MacTxQueueAborted, MacTxQueueDetached,
 };
 use oer_portable_memory::{PinnedDmaTxPool, PinnedDmaTxRadioLease, PreparedTxDma};
 
@@ -90,12 +91,14 @@ impl TxHardware for CompletionHardware {
         None
     }
 
-    fn begin_tx_timeout_abort(
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
         &mut self,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacTxAbortCause,
-    ) -> bool {
-        false
+        _: &C,
+        _: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
+        MacTxAbortOutcome::NoEdge
     }
 
     fn with_tx_queue_detached<R>(
@@ -231,13 +234,15 @@ impl TxHardware for DetachingCompletionHardware {
         None
     }
 
-    fn begin_tx_timeout_abort(
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
         &mut self,
         _: oer_chips_esp32s31_hal::types::MacTxQueueIndex,
         _: MacTxAbortCause,
-    ) -> bool {
+        _: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
         self.abort_requested = true;
-        true
+        MacTxAbortOutcome::Aborted(aborted(MacTxQueueAborted::new_model()))
     }
 
     fn with_tx_queue_detached<R>(
@@ -571,8 +576,8 @@ fn retained_dma_owner_quarantines_hardware_owned_backing_without_drop_panic() {
 }
 
 #[test]
-fn retained_abort_releases_backing_only_after_successful_detach() {
-    for detach_failed in [false, true] {
+fn a_retained_abort_releases_its_backing_once_its_queue_let_go() {
+    {
         let mut storage = core::pin::pin!(HtAmpduTxStorage::<2>::new());
         let pool: PlacedTxPool<256, 0, 0, 1> = host_pool(std::boxed::Box::leak(
             std::boxed::Box::new(PinnedDmaTxPool::new()),
@@ -600,7 +605,6 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
         .unwrap();
         let aggregate = prepared(&mut owner, cookie).unwrap();
         let mut hardware = DetachingCompletionHardware::successful();
-        hardware.detach_failed = detach_failed;
         owner
             .submit(
                 &mut hardware,
@@ -610,32 +614,32 @@ fn retained_abort_releases_backing_only_after_successful_detach() {
             )
             .unwrap();
 
-        assert!(
-            owner
-                .begin_timeout_abort(&mut hardware, cookie, MacTxAbortCause::TimeoutEdge)
-                .unwrap()
+        let clock = oer_portable_time_virtual::SkipClock::new();
+        assert_eq!(
+            owner.abort_timeout(
+                &mut hardware,
+                cookie,
+                MacTxAbortCause::TimeoutEdge,
+                &clock,
+                drop
+            ),
+            Ok(TxAbortEnd::Detached)
         );
         assert!(hardware.abort_requested);
-        assert_eq!(owner.held_backing_count(), 1);
-        assert_eq!(pool.claimed_slots(), 1);
-        // The caller retains the owner while waiting for the settle deadline.
-        let result = owner.finish_timeout_abort(&mut hardware, cookie, drop);
-        if detach_failed {
-            assert_eq!(result, Err(HtAmpduTxError::DetachFailed));
-            drop(owner);
-            assert_eq!(storage.state(), TxDmaState::ResetRequired);
-            assert_eq!(pool.claimed_slots(), 1);
-        } else {
-            result.unwrap();
-            assert_eq!(owner.held_backing_count(), 0);
-            assert_eq!(pool.claimed_slots(), 0);
-            assert_eq!(
-                owner.finish_timeout_abort(&mut hardware, cookie, drop),
-                Err(HtAmpduTxError::Stale)
-            );
-            drop(owner);
-            assert_eq!(storage.state(), TxDmaState::Free);
-        }
+        assert_eq!(owner.held_backing_count(), 0);
+        assert_eq!(pool.claimed_slots(), 0);
+        assert_eq!(
+            owner.abort_timeout(
+                &mut hardware,
+                cookie,
+                MacTxAbortCause::TimeoutEdge,
+                &clock,
+                drop
+            ),
+            Err(HtAmpduTxError::Stale)
+        );
+        drop(owner);
+        assert_eq!(storage.state(), TxDmaState::Free);
     }
 }
 

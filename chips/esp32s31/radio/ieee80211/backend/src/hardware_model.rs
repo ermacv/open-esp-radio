@@ -56,9 +56,9 @@ use oer_chips_esp32s31_hal::{
         MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation,
         MacHtTxProgram, MacInterface, MacInterruptEvents, MacInterruptObservation,
         MacKeyEntryIndex, MacKeyInstallOutcome, MacLegacyTxProgram, MacPti, MacSppMode,
-        MacStaApReceivePlan, MacTxAbortCause, MacTxCompletionObservation, MacTxDetachOutcome,
-        MacTxDetachReason, MacTxPrepareFault, MacTxPrepareRefused, MacTxQueueDetached,
-        MacTxQueueIndex, StaTbttSchedule,
+        MacStaApReceivePlan, MacTxAbortCause, MacTxAbortOutcome, MacTxCompletionObservation,
+        MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareFault, MacTxPrepareRefused,
+        MacTxQueueAborted, MacTxQueueDetached, MacTxQueueIndex, StaTbttSchedule,
     },
 };
 use oer_chips_family_platform_interrupt_table::{
@@ -202,7 +202,6 @@ struct State {
     /// HE20 association it holds; `None` after a removal or before any.
     he_bss: Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)>,
     he: Option<oer_chips_esp32s31_hal::types::MacHeAssociation>,
-    cca_forced: bool,
     breaks: Vec<RuleBreak>,
     counts: AtomCounts,
     clock: Rc<dyn Fn() -> u64>,
@@ -230,7 +229,6 @@ impl Atoms {
             tx_blocked: false,
             he_bss: None,
             he: None,
-            cca_forced: false,
             breaks: Vec::new(),
             counts: AtomCounts::default(),
             clock,
@@ -574,16 +572,32 @@ impl TxHardware for ModelRegisters {
             .queue(queue.get() as u8, |place| place.block_ack.take())
     }
 
-    fn begin_tx_timeout_abort(&mut self, _queue: MacTxQueueIndex, cause: MacTxAbortCause) -> bool {
+    fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
+        &mut self,
+        queue: MacTxQueueIndex,
+        cause: MacTxAbortCause,
+        _clock: &C,
+        aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
+    ) -> MacTxAbortOutcome<R> {
         // The model raises no timeout edge: only the port's forced abort.
         if cause == MacTxAbortCause::TimeoutEdge {
-            return false;
+            return MacTxAbortOutcome::NoEdge;
         }
         self.atoms.with(|state| {
-            state.cca_forced = true;
             state.counts.aborts = state.counts.aborts.saturating_add(1);
         });
-        true
+        let index = queue.get() as u8;
+        // An adverse input: this abort's end is the test's.
+        if self.atoms.queue(index, |place| place.taken_by_air) {
+            return MacTxAbortOutcome::OnAir;
+        }
+        self.atoms.queue(index, |place| {
+            place.on_air = false;
+            place.ended = false;
+            place.named = None;
+            place.format = None;
+        });
+        MacTxAbortOutcome::Aborted(aborted(MacTxQueueAborted::new_model()))
     }
 
     fn with_tx_queue_detached<R>(
@@ -599,12 +613,7 @@ impl TxHardware for ModelRegisters {
             MacTxDetachReason::Completed => Some(place.ended),
             // The model raises no collision edge.
             MacTxDetachReason::Collision => None,
-            // An adverse input: this abort's end is the test's.
-            MacTxDetachReason::Timeout => Some(!place.taken_by_air),
         });
-        if reason == MacTxDetachReason::Timeout {
-            self.atoms.with(|state| state.cca_forced = false);
-        }
         match outcome {
             None => MacTxDetachOutcome::NoEvent,
             Some(false) => {
