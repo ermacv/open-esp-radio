@@ -11,7 +11,7 @@ pub mod values;
 pub use super::coex::external::{ExternalCoexPriority, ExternalCoexRole, ExternalCoexWires};
 pub use super::coex::timer_bank::{CoexTimerBankRegisters, CoexTimerRegister};
 pub use clock_device::ModemClockDevice;
-pub use ownership::SharedRadioRegisters;
+pub use ownership::{ForeignWifiMacWords, SharedRadioRegisters};
 pub use platform::{PlatformClockPowerObservation, PlatformPllSourceBaseline, WifiPowerBaseline};
 pub use shared_clock::*;
 pub use syscon::*;

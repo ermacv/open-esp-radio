@@ -67,6 +67,12 @@ gcell = ["ampdu"]
 # B6 of `tasks/144` (`tasks/177`): aggregates of full and short subframes at
 # HT MCS7 and MCS0 to the probe polling its receive cause.
 b6 = ["ampdu"]
+# Part A of `tasks/184`: the three words inside `WIFI_MAC` that are the
+# PHY's and the shared radio's, read before an `RST_WIFIMAC` pulse, after
+# it and after the cold preparation again, ten times, on a 40 MHz channel;
+# then (`tasks/185`) with the PHY's channel and I2C TX-rate writes made
+# again after the preparation, before the pulse.
+foreign = []
 
 [lints]
 workspace = true

@@ -285626,7 +285626,7 @@ pub mod wifi_mac {
 
     /// The `I2C_TX_RATE_CONTROL` register.
     ///
-    /// Complete phy_i2c_txrate_init replaces both evidenced rate fields before dispatching TX-gain compensation.
+    /// Complete phy_i2c_txrate_init replaces both evidenced rate fields before dispatching TX-gain compensation. The word lies inside the WIFI_MAC block: an RST_WIFIMAC pulse returns both fields to 0, and the PHY registration, which runs before the MAC's first reset in the vendor's start as in ours, leaves no effect past that reset; the vendor's station runs with 0 (SOURCE: HW_WIFIMAC_RESET_FOREIGN_WORDS_20261118).
     pub mod i2c_tx_rate_control {
         /// The bits of the register's declared fields.
         pub const FIELDS: u32 = 0x03fc0003;

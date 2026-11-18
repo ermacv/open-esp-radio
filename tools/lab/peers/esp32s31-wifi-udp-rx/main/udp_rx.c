@@ -46,6 +46,7 @@
 #include "lwip/stats.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "soc/soc.h"
 
 #if defined(OER_UDP_RX_FAST)
 #include "lwip/pbuf.h"
@@ -1022,6 +1023,65 @@ static void command_dump(void)
     reply_ok("DUMP");
 }
 
+/* The three words inside the Wi-Fi MAC block (`WIFI_MAC`, 0x20104000) that
+ * the open driver's register model gives to the PHY and the shared radio:
+ * CHANNEL_TX_OFFSET_CONTROL, I2C_TX_RATE_CONTROL, RADIO_INIT_CONTROL
+ * (chips/esp32s31/registers/types/wifi-mac.toml). */
+#define WIFI_MAC_BASE 0x20104000u
+#define CHANNEL_TX_OFFSET_CONTROL (WIFI_MAC_BASE + 0x400u)
+#define I2C_TX_RATE_CONTROL (WIFI_MAC_BASE + 0x48cu)
+#define RADIO_INIT_CONTROL (WIFI_MAC_BASE + 0xc24u)
+
+/* `REGS`: the three words, read now. */
+static void command_regs(void)
+{
+    printf("@REGS started=%d channel_tx_offset=0x%08" PRIx32 " i2c_tx_rate=0x%08" PRIx32
+           " radio_init=0x%08" PRIx32 "\n",
+           s_started ? 1 : 0, REG_READ(CHANNEL_TX_OFFSET_CONTROL), REG_READ(I2C_TX_RATE_CONTROL),
+           REG_READ(RADIO_INIT_CONTROL));
+    reply_ok("REGS");
+}
+
+/* `START <channel>`: start the station without a network, HT only, 40 MHz
+ * with the secondary channel below, on `channel`, power save off: the radio
+ * running as JOIN starts it, for `REGS`. */
+static void command_start(char **argv, int argc)
+{
+    unsigned long channel;
+    if (argc != 2 || !parse_unsigned(argv[1], 13, &channel) || channel < 5) {
+        reply_error("START", "invalid");
+        return;
+    }
+    if (s_started) {
+        reply_error("START", "started-before");
+        return;
+    }
+    esp_err_t error = esp_wifi_start();
+    if (error != ESP_OK) {
+        reply_esp_error("START", "start", error);
+        return;
+    }
+    s_started = true;
+    if ((error = esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G |
+                                                        WIFI_PROTOCOL_11N)) != ESP_OK) {
+        reply_esp_error("START", "set_protocol", error);
+        return;
+    }
+    if ((error = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW40)) != ESP_OK) {
+        reply_esp_error("START", "set_bandwidth", error);
+        return;
+    }
+    if ((error = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) {
+        reply_esp_error("START", "set_ps", error);
+        return;
+    }
+    if ((error = esp_wifi_set_channel((uint8_t)channel, WIFI_SECOND_CHAN_BELOW)) != ESP_OK) {
+        reply_esp_error("START", "set_channel", error);
+        return;
+    }
+    reply_ok("START");
+}
+
 static void dispatch(char *line)
 {
     char *argv[7];
@@ -1038,6 +1098,10 @@ static void dispatch(char *line)
         command_rx(argv, argc);
     } else if (strcmp(argv[0], "REPORT") == 0) {
         command_report(argv, argc);
+    } else if (strcmp(argv[0], "REGS") == 0 && argc == 1) {
+        command_regs();
+    } else if (strcmp(argv[0], "START") == 0) {
+        command_start(argv, argc);
     } else if (strcmp(argv[0], "DUMP") == 0 && argc == 1) {
         command_dump();
     } else if (strcmp(argv[0], "SYNC") == 0 && argc == 1) {

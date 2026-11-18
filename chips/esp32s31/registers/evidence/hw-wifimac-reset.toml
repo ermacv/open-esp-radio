@@ -1,0 +1,8 @@
+# SOURCE: what an RST_WIFIMAC pulse does to the words inside WIFI_MAC that
+# are the PHY's and the shared radio's; raw evidence is outside git.
+schema = 1
+
+[[sources]]
+id = "HW_WIFIMAC_RESET_FOREIGN_WORDS_20261118"
+kind = "unattested-hil-observation"
+description = "SOURCE: s31-a rev v0.0, runs fw1 (3e380aea6, lease 1472) and fw2 (df20faf8c, lease 1473) of tasks/184 and 185, probe esp32s31-mac-reset --features foreign (PR #1339), channel 13 HT40 below; typed reads of CHANNEL_TX_OFFSET_CONTROL, I2C_TX_RATE_CONTROL and RADIO_INIT_CONTROL through RadioDomain::foreign_wifi_mac_words, ten repetitions, all identical. After the PHY's registration and before the Wi-Fi power entry, I2C_TX_RATE_CONTROL holds the registration's 2 and 0x55. After the cold preparation, the channel tuned again (PRIMARY_20_CHANNEL_OFFSET 1) and configure_i2c_tx_rate run again, an RST_WIFIMAC pulse returns PRIMARY_20_CHANNEL_OFFSET to 0, MINIMUM_POWER 0x35 to 0x33, BIT_17 1 to 0 and both I2C_TX_RATE_CONTROL fields to 0; BITS_10_16 0x4d, BITS_18_31 0x3072, RADIO_INIT_CONTROL BITS_0_11 0x0f0 and BIT_31 0 read the same before and after, and RADIO_INIT_CONTROL BITS_0_11 reads 0x0f0 before any Wi-Fi preparation. Beside it, s31-b running the vendor station (tools/lab peer wifi-udp-rx-peer, START 13 and REGS, started HT40 below with no network, not associated, leases 1474 and 1475) reads 0xc1cb3751, 0x00000000 and 0x000000f0. Blobray libnet80211::wifi_hw_start calls g_osi_funcs_p->_phy_enable (offset 212) at +0xbe..0xc2, before wifi_reset_mac at +0xce. A Bluetooth baseband, other channels and widths and an associated vendor station were not exercised. Details: PR #1339 and oer-notes tasks/185, 186; logs in evidence/184."

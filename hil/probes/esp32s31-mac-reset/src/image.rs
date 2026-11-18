@@ -386,11 +386,19 @@ enum Kind {
     /// Cell F's sender: the Block Ack's bit of each subframe, 32 to a word.
     #[cfg(feature = "ampdu")]
     AmpduAcked = 18,
+    /// `tasks/184` A: the foreign words at one point of one repetition.
+    #[cfg(feature = "foreign")]
+    Foreign = 19,
 }
 
 const WIDTH: usize = 22;
-#[cfg(not(any(feature = "transmit", feature = "receiver")))]
+#[cfg(not(any(feature = "transmit", feature = "receiver", feature = "foreign")))]
 const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS + CASES;
+#[cfg(feature = "foreign")]
+const ROWS: usize = 2 + 6 * FOREIGN_REPETITIONS;
+/// `tasks/184` A: the repetitions of the pulse between two reads.
+#[cfg(feature = "foreign")]
+const FOREIGN_REPETITIONS: usize = 10;
 #[cfg(feature = "receiver")]
 const ROWS: usize = 8;
 #[cfg(feature = "transmit")]
@@ -711,10 +719,16 @@ async fn tune(
         radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
     let mut observer = NoopPhyTargetObserver;
     let selection = clocked.channel_transaction(platform, transaction);
+    // As `radio-system`'s `channel::lower_ghz2_4_channel`.
+    let (channel_or_frequency, cbw) = match channel.width() {
+        ChannelWidth::Mhz20 => (u16::from(channel.primary()), 0),
+        ChannelWidth::Mhz40Above => (channel.center_frequency_mhz(), 2),
+        ChannelWidth::Mhz40Below => (channel.center_frequency_mhz(), 3),
+    };
     let mut operation = core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
         timer,
-        u16::from(channel.primary()),
-        0,
+        channel_or_frequency,
+        cbw,
         selection,
         &mut observer,
     ));
@@ -772,6 +786,10 @@ async fn session(
         &clocks,
         identity
     ))?;
+    // `tasks/185` 1: the words between the PHY's registration and the
+    // Wi-Fi power entry's pulse.
+    #[cfg(feature = "foreign")]
+    foreign(journal, held(&mut slot)?, 0, 9);
     // enter: coexistence, common power, the modem clocks, the PHY's client.
     let radio = held(&mut slot)?;
     let (coexisting, _participants) = radio.enter_coex(coex);
@@ -805,8 +823,12 @@ async fn session(
         true,
     )
     .map_err(|_| (phase::RX_ENABLE, 0))?;
-    let channel =
-        Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20).map_err(|_| (phase::CHANNEL, 0))?;
+    #[cfg(not(feature = "foreign"))]
+    let width = ChannelWidth::Mhz20;
+    // A 40 MHz channel, so that the PHY's channel nibble is not zero.
+    #[cfg(feature = "foreign")]
+    let width = ChannelWidth::Mhz40Below;
+    let channel = Ghz2_4Channel::new(CHANNEL, width).map_err(|_| (phase::CHANNEL, 0))?;
     apart!(tune(
         &mut slot,
         &mut clocked,
@@ -854,40 +876,137 @@ async fn session(
     };
     apart!(cold(radio, &mut clocked, &mut sources, &timer, mac))
         .map_err(|()| (phase::MAC_COLD, 0))?;
-    let (access, clocks_on) = clocked.into_running();
+    #[cfg(feature = "foreign")]
+    {
+        mark(1);
+        journal.record(Kind::Up, &[u32::from(channel.center_frequency_mhz())]);
+        for repetition in 0..FOREIGN_REPETITIONS {
+            let index = u32::try_from(repetition).unwrap_or(u32::MAX);
+            foreign(journal, held(&mut slot)?, index, 0);
+            clocked.reset_mac(held(&mut slot)?);
+            foreign(journal, held(&mut slot)?, index, 1);
+            apart!(cold(
+                held(&mut slot)?,
+                &mut clocked,
+                &mut sources,
+                &timer,
+                mac
+            ))
+            .map_err(|()| (phase::MAC_COLD, 1))?;
+            foreign(journal, held(&mut slot)?, index, 2);
+        }
+        // `tasks/185` 1: the PHY's two writes again after the preparation,
+        // the channel and the registration's I2C TX-rate fields; read;
+        // pulse; read; prepare; read.
+        for repetition in 0..FOREIGN_REPETITIONS {
+            let index = u32::try_from(repetition).unwrap_or(u32::MAX);
+            apart!(tune(
+                &mut slot,
+                &mut clocked,
+                &timer,
+                &mut platform,
+                channel
+            ))?;
+            let radio = slot.take().ok_or((phase::CHANNEL, 3))?;
+            let mut transaction = clocked.channel_transaction(
+                &mut platform,
+                radio
+                    .detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel),
+            );
+            {
+                let (mut hal, _) = transaction.parts_mut();
+                oer_chips_esp32s31_hal::radio::phy::baseband::configure_i2c_tx_rate(&mut hal);
+            }
+            slot = Some(transaction.reunite());
+            foreign(journal, held(&mut slot)?, index, 3);
+            clocked.reset_mac(held(&mut slot)?);
+            foreign(journal, held(&mut slot)?, index, 4);
+            apart!(cold(
+                held(&mut slot)?,
+                &mut clocked,
+                &mut sources,
+                &timer,
+                mac
+            ))
+            .map_err(|()| (phase::MAC_COLD, 2))?;
+            foreign(journal, held(&mut slot)?, index, 5);
+        }
+        // Every owner stays held until the leased host reset.
+        let _held = (
+            slot,
+            &mut membership,
+            &mut coexisting,
+            &mut power,
+            clocked,
+            &mut mac_irq,
+            &mut power_irq,
+            &mut pilot,
+        );
+        return Ok(());
+    }
+    #[cfg(not(feature = "foreign"))]
+    {
+        let (access, clocks_on) = clocked.into_running();
 
-    // The series is polled in a frame of its own: inlined into this
-    // function's poll, its temporaries would lie on the stack beside the
-    // PHY's deepest calls on the radio executor's interrupt stack.
-    let result = {
-        let mut series = core::pin::pin!(series(
-            Owners {
-                slot: &mut slot,
-                mac_irq: &mut mac_irq,
-                power_irq: &mut power_irq,
-                sources: &mut sources,
-                timer: &timer,
-                client: Client {
-                    coex: &mut coexisting,
-                    power: &mut power,
-                    membership: &mut membership,
-                    pilot: &mut pilot,
-                    clocks: &clocks,
+        // The series is polled in a frame of its own: inlined into this
+        // function's poll, its temporaries would lie on the stack beside the
+        // PHY's deepest calls on the radio executor's interrupt stack.
+        let result = {
+            let mut series = core::pin::pin!(series(
+                Owners {
+                    slot: &mut slot,
+                    mac_irq: &mut mac_irq,
+                    power_irq: &mut power_irq,
+                    sources: &mut sources,
+                    timer: &timer,
+                    client: Client {
+                        coex: &mut coexisting,
+                        power: &mut power,
+                        membership: &mut membership,
+                        pilot: &mut pilot,
+                        clocks: &clocks,
+                    },
+                    station,
                 },
-                station,
-            },
-            access,
-            clocks_on,
-            mac,
-            channel,
-            seed,
-            journal,
-        ));
-        core::future::poll_fn(|context| poll_apart(series.as_mut(), context)).await
-    };
-    // Every owner stays held until the leased host reset.
-    let _held = (slot, membership, coexisting, power);
-    result
+                access,
+                clocks_on,
+                mac,
+                channel,
+                seed,
+                journal,
+            ));
+            core::future::poll_fn(|context| poll_apart(series.as_mut(), context)).await
+        };
+        // Every owner stays held until the leased host reset.
+        let _held = (slot, membership, coexisting, power);
+        return result;
+    }
+}
+
+/// `tasks/184` A and `tasks/185` 1: record the three foreign words of
+/// `WIFI_MAC` at `point` of `repetition`: 0 before the pulse, 1 after it,
+/// 2 after the cold preparation; 3 after the channel and the I2C TX-rate
+/// fields written again, 4 after the pulse, 5 after the preparation; 9
+/// between the PHY's registration and the Wi-Fi power entry.
+#[cfg(feature = "foreign")]
+fn foreign(journal: &mut Journal, radio: &Radio, repetition: u32, point: u32) {
+    let words = radio.foreign_wifi_mac_words();
+    journal.record(
+        Kind::Foreign,
+        &[
+            repetition,
+            point,
+            words.primary_20_channel_offset.get(),
+            (words.minimum_power_high.get() << 4) | words.minimum_power_low.get(),
+            words.channel_bits_10_16.get(),
+            u32::from(words.channel_bit_17),
+            words.channel_bits_18_31.get(),
+            words.i2c_bits_0_1.get(),
+            u32::from(words.i2c_bits_18_25),
+            words.init_low.get(),
+            u32::from(words.init_bit_31),
+        ],
+    );
 }
 
 /// What the series borrows from the session.
