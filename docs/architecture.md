@@ -1211,8 +1211,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   writing context. The answer is the reset's proof (`MacBlockReset`) and the
   coexistence priorities. The Wi-Fi owner then runs its cold preparation in
   its own task, on its own partition, and the preparation takes the proof.
-  A stop's last resort is the same request, whose proof first returns the
-  transmit chains the MAC held. Brownout policy belongs to the bootstrap.
+  Brownout policy belongs to the bootstrap.
 - **Regulatory domain.** `oer-protocols-radio-regulatory` holds a validated domain (a
   generated subset of `wireless-regdb`) fixed for an installation; without
   one no radio installs. Every tune, install, scan and transmission of all

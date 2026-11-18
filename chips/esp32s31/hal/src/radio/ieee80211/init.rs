@@ -52,9 +52,8 @@ pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATI
 
 /// The proof that the Wi-Fi MAC's block was reset, with the Wi-Fi module
 /// clocks on, and the foreign words inside it written back: what the cold
-/// preparation takes, and what returns the transmit chains the MAC held
-/// (P12). Only [`RadioDomain::reset_wifi_mac_block`] makes one; it is used
-/// once.
+/// preparation takes. Only [`RadioDomain::reset_wifi_mac_block`] makes one;
+/// it is used once.
 ///
 /// [`RadioDomain::reset_wifi_mac_block`]: crate::radio::domain::RadioDomain::reset_wifi_mac_block
 ///
@@ -73,6 +72,16 @@ pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATI
 /// ```compile_fail
 /// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
 /// let _made = MacBlockReset { _private: () };
+/// ```
+///
+/// One reset serves one preparation: the proof is moved into it.
+///
+/// ```compile_fail,E0382
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// fn twice(reset: MacBlockReset) {
+///     let _first = reset;
+///     let _second = reset;
+/// }
 /// ```
 #[must_use = "a reset's proof is taken by the cold preparation"]
 pub struct MacBlockReset {
