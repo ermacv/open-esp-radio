@@ -336,8 +336,18 @@ fn pending(s: &Session<'_>, line: u32) -> u32 {
     })
 }
 
+/// The line's described fields at their positions in the word: `IP` 0,
+/// `IE` 8, `ATTR_SHV` 16, `ATTR_TRIG` 17-18, `ATTR_MODE` 22-23, `CTL` 24-31.
 fn word(s: &Session<'_>, line: u32) -> u32 {
-    index(line).map_or(0, |i| s.interrupt_matrix.clic[0].read_ctrl(i).record_word())
+    index(line).map_or(0, |i| {
+        let w = s.interrupt_matrix.clic[0].read_ctrl(i);
+        u32::from(w.ip())
+            | u32::from(w.ie()) << 8
+            | u32::from(w.attr_shv()) << 16
+            | w.attr_trig().get() << 17
+            | w.attr_mode().get() << 22
+            | u32::from(w.ctl()) << 24
+    })
 }
 
 /// 310 (Q1): the thread pends level 1's primary line. The handler of level
