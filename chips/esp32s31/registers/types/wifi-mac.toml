@@ -9030,7 +9030,7 @@ class = "plain"
 [[registers]]
 name = "I2C_TX_RATE_CONTROL"
 offset = 0x48c
-description = "Complete phy_i2c_txrate_init replaces both evidenced rate fields before dispatching TX-gain compensation."
+description = "Complete phy_i2c_txrate_init replaces both evidenced rate fields before dispatching TX-gain compensation. The word lies inside the WIFI_MAC block: an RST_WIFIMAC pulse returns both fields to 0, and the PHY registration, which runs before the MAC's first reset in the vendor's start as in ours, leaves no effect past that reset; the vendor's station runs with 0 (SOURCE: HW_WIFIMAC_RESET_FOREIGN_WORDS_20261118)."
 
 [[registers.fields]]
 name = "BITS_0_1_OPAQUE"

@@ -4,6 +4,7 @@ use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
 use super::{CoexTimerBankRegisters, CoexTimerRegister};
 use crate::radio::phy::RadioPhyRegisters;
 use oer_chips_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
+use oer_portable_mmio::Bits;
 
 /// The fields of the three words inside the `WIFI_MAC` block that are not
 /// the Wi-Fi MAC's (the PHY's channel offset word, the PHY's I2C TX rate
@@ -13,24 +14,26 @@ use oer_chips_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPerip
 /// decided on by nothing. `minimum_power` and `channel_bit_17` are the
 /// Wi-Fi cold preparation's in the first word, `init_low` its low twelve
 /// bits of the last; `init_bit_31` is the Bluetooth baseband's.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ForeignWifiMacWords {
     /// `CHANNEL_TX_OFFSET_CONTROL.PRIMARY_20_CHANNEL_OFFSET` [3:0], the PHY's.
-    pub primary_20_channel_offset: u8,
-    /// `MINIMUM_POWER_HIGH`:`MINIMUM_POWER_LOW` [9:4].
-    pub minimum_power: u8,
+    pub primary_20_channel_offset: Bits<4>,
+    /// `MINIMUM_POWER_LOW` [7:4].
+    pub minimum_power_low: Bits<4>,
+    /// `MINIMUM_POWER_HIGH` [9:8].
+    pub minimum_power_high: Bits<2>,
     /// `BITS_10_16_OPAQUE` [16:10].
-    pub channel_bits_10_16: u8,
+    pub channel_bits_10_16: Bits<7>,
     /// `BIT_17_OPAQUE` [17].
     pub channel_bit_17: bool,
     /// `BITS_18_31_OPAQUE` [31:18].
-    pub channel_bits_18_31: u16,
+    pub channel_bits_18_31: Bits<14>,
     /// `I2C_TX_RATE_CONTROL.BITS_0_1_OPAQUE` [1:0], the PHY's.
-    pub i2c_bits_0_1: u8,
+    pub i2c_bits_0_1: Bits<2>,
     /// `I2C_TX_RATE_CONTROL.BITS_18_25_OPAQUE` [25:18], the PHY's.
     pub i2c_bits_18_25: u8,
     /// `RADIO_INIT_CONTROL.BITS_0_11_OPAQUE` [11:0].
-    pub init_low: u16,
+    pub init_low: Bits<12>,
     /// `RADIO_INIT_CONTROL.BIT_31_OPAQUE` [31].
     pub init_bit_31: bool,
 }
@@ -92,19 +95,16 @@ impl SharedRadioRegisters {
             .shared_radio
             .shared_radio_init_control
             .read_radio_init_control();
-        let narrow = |value: u32| u8::try_from(value).unwrap_or(u8::MAX);
         ForeignWifiMacWords {
-            primary_20_channel_offset: narrow(channel.primary_20_channel_offset().get()),
-            minimum_power: narrow(
-                (channel.minimum_power_high().get() << 4) | channel.minimum_power_low().get(),
-            ),
-            channel_bits_10_16: narrow(channel.bits_10_16_opaque().get()),
+            primary_20_channel_offset: channel.primary_20_channel_offset(),
+            minimum_power_low: channel.minimum_power_low(),
+            minimum_power_high: channel.minimum_power_high(),
+            channel_bits_10_16: channel.bits_10_16_opaque(),
             channel_bit_17: channel.bit_17_opaque(),
-            channel_bits_18_31: u16::try_from(channel.bits_18_31_opaque().get())
-                .unwrap_or(u16::MAX),
-            i2c_bits_0_1: narrow(i2c.bits_0_1_opaque().get()),
+            channel_bits_18_31: channel.bits_18_31_opaque(),
+            i2c_bits_0_1: i2c.bits_0_1_opaque(),
             i2c_bits_18_25: i2c.bits_18_25_opaque(),
-            init_low: u16::try_from(init.bits_0_11_opaque().get()).unwrap_or(u16::MAX),
+            init_low: init.bits_0_11_opaque(),
             init_bit_31: init.bit_31_opaque(),
         }
     }
