@@ -29,10 +29,9 @@
 //! - a waiting unit of a link the controller holds is refused when it
 //!   reaches the head ([`RxRefusal::LinkHeld`]).
 
-use heapless::Deque;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    EthernetAddresses, PLACES, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
+    EthernetAddresses, ReceivePort, Received, Rest as PortRest, Round, RxCryptoStatus,
     RxEvidence, RxHead, RxHeader, RxMetadata, UnitHandle,
 };
 use oer_protocols_ieee80211_core_installation::Rest;
@@ -42,9 +41,12 @@ use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::security::LinkProtection;
 
 use super::{Agreements, Carrying, Network, Told};
+
+mod pressure;
+use pressure::{Carried, Decision, Hands, Link, Need, Pressure, Taken};
 use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{
-    RetainRoom, RxAgreements, RxBlockAckRefused, RxDisposition, RxView,
+    RxAgreements, RxBlockAckRefused, RxDisposition, RxView,
 };
 use oer_protocols_ieee80211_wire::address::Bssid;
 use oer_protocols_ieee80211_wire::block_ack::frame::{BlockAckAction, parse_block_ack_action};
@@ -98,6 +100,7 @@ pub struct LendPermit(());
 pub struct CopyPermit(());
 
 /// Permits to copy the frames of one unit.
+#[derive(Debug)]
 struct CopyPermits(u8);
 
 impl CopyPermits {
@@ -239,33 +242,18 @@ pub(super) struct Reorder<
 
 /// The receive half's state while the data runs.
 pub(super) struct Receive<'id> {
-    /// Data units taken for the network, each with the moment it began to
-    /// wait, oldest first.
-    waiting: Deque<(UnitHandle<'id>, Instant), PLACES>,
-    /// How long a unit may wait for the network: the composition's.
-    late: Duration,
-    /// The units the network holds: one more a loan, fewer by what a round
-    /// reclaims.
-    lent: u8,
+    /// The pressure rule: what waits for the network, the units it holds.
+    pressure: Pressure<UnitHandle<'id>>,
     refusals: RxRefusals,
     /// The MSDUs of the unit being delivered, found before any is written:
     /// kept in place and filled again for each unit.
     msdus: heapless::Vec<Msdu, AMSDU_MSDUS>,
 }
 
-/// What became of a unit offered to the network.
-enum Delivery<'id> {
-    /// Delivered or refused: it is no longer the engine's.
-    Done,
-    /// The network has no room: it waits, taken.
-    Wait(UnitHandle<'id>),
-}
-
 impl<'id> Receive<'id> {
     pub(super) const fn new(late: Duration) -> Self {
         Self {
-            waiting: Deque::new(),
-            late,
+            pressure: Pressure::new(late),
             refusals: RxRefusals {
                 link_held: 0,
                 no_place_to_wait: 0,
@@ -276,7 +264,6 @@ impl<'id> Receive<'id> {
                 reorder: 0,
                 place: 0,
             },
-            lent: 0,
             msdus: heapless::Vec::new(),
         }
     }
@@ -284,7 +271,7 @@ impl<'id> Receive<'id> {
     /// The units waiting for the network, for the crate's search.
     #[cfg(test)]
     pub(super) fn waiting(&self) -> usize {
-        self.waiting.len()
+        self.pressure.waiting()
     }
 
     /// The refusals counted so far.
@@ -292,35 +279,17 @@ impl<'id> Receive<'id> {
         self.refusals
     }
 
-    /// The receive half's state, for the engine's search: the places that
-    /// wait, the order of their deadlines with their ties and, beside them,
-    /// the agreements' `gap` deadline's place in the same order (the
-    /// values go, the order stays: the search's clock moves only to a
-    /// deadline, or by a step that changes no deadline's order), the
-    /// refusals. No waiting unit is late between steps: a round refuses
-    /// every late head (P8).
+    /// The receive half's state, for the engine's search: the core's (the
+    /// places that wait, the order of their deadlines with their ties, the
+    /// agreements' `gap` deadline's place in it, the units lent) and the
+    /// refusals.
     #[cfg(test)]
     pub(super) fn key(&self, gap: Option<Instant>) -> std::string::String {
-        let deadlines = || {
-            self.waiting
-                .iter()
-                .map(|(_, since)| since.checked_add(self.late))
-        };
-        let mut order: std::vec::Vec<Option<Instant>> = deadlines().chain([gap]).collect();
-        if gap.is_none() {
-            order.pop();
-        }
-        order.sort_unstable();
-        order.dedup();
-        let rank = |at: Option<Instant>| order.iter().position(|seen| *seen == at);
-        let waiting: std::vec::Vec<(u8, Option<usize>)> = self
-            .waiting
-            .iter()
-            .zip(deadlines())
-            .map(|((unit, _), at)| (unit.place(), rank(at)))
-            .collect();
-        let gap = gap.and_then(|gap| rank(Some(gap)));
-        std::format!("{waiting:?}|gap {gap:?}|{:?}", self.refusals)
+        std::format!(
+            "{}|{:?}",
+            self.pressure.key(gap, UnitHandle::place),
+            self.refusals
+        )
     }
 
     /// One round over `port`, the links as `links` names them.
@@ -349,9 +318,7 @@ impl<'id> Receive<'id> {
             Reordering::AccessPoint => None,
         };
         let mut round = Round::open(port, now);
-        self.lent = self
-            .lent
-            .saturating_sub(u8::try_from(round.reclaimed()).unwrap_or(u8::MAX));
+        self.pressure.reclaimed(round.reclaimed());
         let mut room = network.room();
         // A link that ended, or a stopping data, ends its agreements: what
         // the reorder retains goes back undelivered.
@@ -365,38 +332,26 @@ impl<'id> Receive<'id> {
                 agreements.tick(now, &mut ());
             }
         }
-        // What waits goes first, from its head: a stopping data's goes
-        // back; a held link's and a late one are refused; the rest is
-        // delivered while the network has room.
-        while let Some((handle, since)) = self.waiting.pop_front() {
-            if flow == Flow::Stopping {
-                round.release(handle);
-                continue;
-            }
-            if held(&round, &handle, &peer_of) {
-                round.release(handle);
-                self.refusals.count(RxRefusal::LinkHeld);
-                continue;
-            }
-            if now
-                .checked_duration_since(since)
-                .is_some_and(|waited| waited >= self.late)
-            {
-                round.release(handle);
-                self.refusals.count(RxRefusal::Late);
-                continue;
-            }
-            match self.deliver(&mut round, handle, &mut room, network, Taken::InPlace) {
-                Delivery::Done => {}
-                Delivery::Wait(handle) => {
-                    if let Err((handle, _)) = self.waiting.push_front((handle, since)) {
-                        // One was just taken from it: this does not happen.
-                        round.release(handle);
-                        self.refusals.count(RxRefusal::Place);
-                    }
-                    break;
-                }
-            }
+        // What waits goes first, from its head, as the core decides with
+        // what the round reads of each: until the head still waits.
+        {
+            let Self {
+                pressure,
+                refusals,
+                msdus,
+            } = self;
+            pressure.drain(
+                flow,
+                now,
+                &mut room,
+                &mut RoundHands {
+                    round: &mut round,
+                    msdus,
+                    refusals,
+                    network,
+                    peer_of: &peer_of,
+                },
+            );
         }
         // Then what the reorder released, in its order.
         self.ready(
@@ -450,13 +405,13 @@ impl<'id> Receive<'id> {
                     Route::Control | Route::Network | Route::Eapol => {
                         let control = matches!(view.head, RxHead::Control(_));
                         let handle = unit.take();
-                        // The places taken before the frame joins: the
-                        // reorder's retained (a release keeps their
-                        // places), the lent and the waiting.
-                        let retained = reorder
+                        // The places taken outside the core before the frame
+                        // joins: the reorder's retained (a release keeps
+                        // their places).
+                        let outside = reorder
                             .as_mut()
                             .map_or(0, |reorder| reorder.agreements.view().retained());
-                        let taken = self.newcomer::<P>(retained);
+                        let taken = Taken::Newcomer { outside };
                         let place = handle.place();
                         let delivered = match &mut reorder {
                             Some(reorder) => self.reordered(&mut round, handle, reorder, now),
@@ -491,10 +446,7 @@ impl<'id> Receive<'id> {
         }
         let rest = round.close();
         // The head's bound: the oldest waiting unit's moment and `late`.
-        let bound = self
-            .waiting
-            .front()
-            .and_then(|(_, since)| since.checked_add(self.late));
+        let bound = self.pressure.bound();
         // The reorder's gap and the agreements' inactivity wake too.
         let deadline = reorder
             .as_mut()
@@ -517,20 +469,6 @@ impl<'id> Receive<'id> {
         }
     }
 
-    /// How a newcomer from the ring is taken: at the last free place it may
-    /// keep no place (`tasks/206`), so that a place stays free for the
-    /// control plane. `retained` are the reorder's.
-    fn newcomer<P: ReceivePort<'id>>(&self, retained: usize) -> Taken {
-        let kept = retained
-            .saturating_add(usize::from(self.lent))
-            .saturating_add(self.waiting.len());
-        if kept.saturating_add(1) >= P::STAGING {
-            Taken::LastPlace
-        } else {
-            Taken::Newcomer
-        }
-    }
-
     /// A taken data unit or control frame through the reorder: delivered
     /// now (its handle back), or retained or given back (`None`).
     fn reordered<P, K, const BANKS: usize, const WINDOW: usize>(
@@ -545,18 +483,9 @@ impl<'id> Receive<'id> {
         K: Ieee80211Capabilities,
     {
         let mut agreements = reorder.agreements.view();
-        // One place stays free for the frame that closes a hole: the
-        // retained, the lent and the waiting with this one leave it.
-        let used = agreements
-            .retained()
-            .saturating_add(usize::from(self.lent))
-            .saturating_add(self.waiting.len())
-            .saturating_add(1);
-        let retain = if used < P::STAGING {
-            RetainRoom::Free
-        } else {
-            RetainRoom::Full
-        };
+        // One place stays free for the frame that closes a hole: the core's
+        // rule, beside the reorder's retained.
+        let retain = self.pressure.retain_room(agreements.retained(), P::STAGING);
         let control = round
             .unit(&handle)
             .is_some_and(|view| matches!(view.head, RxHead::Control(_)));
@@ -631,11 +560,11 @@ impl<'id> Receive<'id> {
     }
 
     /// A unit the reorder let go in order: EAPOL to the controller, read in
-    /// place and back; a held link's data refused; other data to the
-    /// network, behind what waits.
+    /// place and back; data offered to the pressure rule with its need and
+    /// link, and what it decides carried out.
     #[allow(
         clippy::too_many_arguments,
-        reason = "the round, the unit, the network's room and end, the controller and the links"
+        reason = "the round, the unit, the network's room and end, the controller, the links, the clock and its place"
     )]
     fn next_in_order<P, N, C, F>(
         &mut self,
@@ -668,152 +597,146 @@ impl<'id> Receive<'id> {
             round.release(handle);
             return;
         }
-        if held(round, &handle, peer_of) {
-            round.release(handle);
-            self.refusals.count(RxRefusal::LinkHeld);
-            return;
-        }
-        self.offer(round, handle, room, network, now, taken);
-    }
-
-    /// A unit for the network in its order: behind a unit that waits it
-    /// waits too (the room has two dimensions: a later unit could be lent
-    /// where the waiting one cannot be copied), else it is offered. A
-    /// newcomer at the last free place keeps no place: it is refused rather
-    /// than wait.
-    fn offer<P, N>(
-        &mut self,
-        round: &mut Round<'_, 'id, P>,
-        handle: UnitHandle<'id>,
-        room: &mut Room,
-        network: &mut N,
-        now: Instant,
-        taken: Taken,
-    ) where
-        P: ReceivePort<'id>,
-        N: Network<P::Memory, P::Lent>,
-    {
-        let waits = if self.waiting.is_empty() {
-            match self.deliver(round, handle, room, network, taken) {
-                Delivery::Done => return,
-                Delivery::Wait(handle) => handle,
-            }
-        } else {
-            handle
-        };
-        if taken == Taken::LastPlace {
-            round.release(waits);
-            self.refusals.count(RxRefusal::NoPlaceToWait);
-            return;
-        }
-        if let Err((handle, _)) = self.waiting.push_back((waits, now)) {
-            // A place a unit: the deque has one for each.
-            round.release(handle);
-            self.refusals.count(RxRefusal::Place);
-        }
-    }
-
-    /// Offer the taken unit to the network: lent, copied, waiting, or
-    /// refused.
-    fn deliver<P, N>(
-        &mut self,
-        round: &mut Round<'_, 'id, P>,
-        handle: UnitHandle<'id>,
-        room: &mut Room,
-        network: &mut N,
-        taken: Taken,
-    ) -> Delivery<'id>
-    where
-        P: ReceivePort<'id>,
-        N: Network<P::Memory, P::Lent>,
-    {
-        let Some(view) = round.unit(&handle) else {
-            round.release(handle);
-            self.refusals.count(RxRefusal::Place);
-            return Delivery::Done;
-        };
-        let lendable = view.lendable();
-        if let Err(reason) = msdus(&view, &mut self.msdus) {
-            round.release(handle);
-            self.refusals.count(reason);
-            return Delivery::Done;
-        }
-        let msdus = &self.msdus;
-        let single = msdus.len() == 1;
-        // Lend while the network has room to borrow (a newcomer at the last
-        // place keeps none: not a loan), else copy while it has room to
-        // copy, else wait.
-        if let (true, Some(lendable), false) = (single, lendable, taken == Taken::LastPlace)
-            && let Some(permit) = room.lend()
-        {
-            let Some(msdu) = msdus.first().copied() else {
-                round.release(handle);
-                self.refusals.count(RxRefusal::Place);
-                return Delivery::Done;
-            };
-            if round.write_addresses(&handle, msdu.addresses).is_err() {
-                round.release(handle);
-                self.refusals.count(RxRefusal::Place);
-                return Delivery::Done;
-            }
-            let span = msdu.span;
-            let lent = round.lend(handle, lendable);
-            self.lent = self.lent.saturating_add(1);
-            network.lent(permit, lent, span);
-            return Delivery::Done;
-        }
-        if let Some(mut permits) = room.copies(msdus.len()) {
-            for msdu in msdus {
-                if round.write_addresses(&handle, msdu.addresses).is_err() {
-                    self.refusals.count(RxRefusal::Place);
-                    continue;
-                }
-                let start = usize::from(msdu.span.offset);
-                let end = start.saturating_add(usize::from(msdu.span.length));
-                match (
-                    permits.take(),
-                    round
-                        .unit(&handle)
-                        .and_then(|view| view.bytes.get(start..end)),
-                ) {
-                    (Some(permit), Some(frame)) => network.copied(permit, frame),
-                    _ => self.refusals.count(RxRefusal::Place),
-                }
-            }
-            // Copied: the unit goes back at the round's close.
-            round.release(handle);
-            return Delivery::Done;
-        }
-        Delivery::Wait(handle)
+        let Self {
+            pressure,
+            refusals,
+            msdus,
+        } = self;
+        pressure.offer(
+            handle,
+            taken,
+            P::STAGING,
+            now,
+            room,
+            &mut RoundHands {
+                round,
+                msdus,
+                refusals,
+                network,
+                peer_of,
+            },
+        );
     }
 }
 
-/// How a data unit for the network holds its place.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Taken {
-    /// It held a place before this round: the reorder let it go, or it
-    /// waited.
-    InPlace,
-    /// A newcomer from the ring with a place free after it.
-    Newcomer,
-    /// A newcomer at the last free place: it keeps no place.
-    LastPlace,
+/// The round's hands for the pressure rule: it reads a unit's need from its
+/// bytes and its link from the links, and carries out what the core decides
+/// (the loan, the copies, the release, the count).
+struct RoundHands<'h, 'r, 'id, P: ReceivePort<'id>, N, F> {
+    round: &'h mut Round<'r, 'id, P>,
+    msdus: &'h mut heapless::Vec<Msdu, AMSDU_MSDUS>,
+    refusals: &'h mut RxRefusals,
+    network: &'h mut N,
+    peer_of: &'h F,
 }
 
-/// Whether a unit is a held link's (or of no link): the controller holds
-/// it, and its data is refused.
-fn held<'id, P, F>(round: &Round<'_, 'id, P>, handle: &UnitHandle<'id>, peer_of: &F) -> bool
+impl<'id, P, N, F> Hands<UnitHandle<'id>> for RoundHands<'_, '_, 'id, P, N, F>
+where
+    P: ReceivePort<'id>,
+    N: Network<P::Memory, P::Lent>,
+    F: Fn(&RxHeader) -> Option<RxPeer>,
+{
+    /// Its link and its need; its MSDUs are left for the delivery, which
+    /// follows at once.
+    fn read(&mut self, unit: &UnitHandle<'id>) -> (Need, Link) {
+        (
+            need(self.round, unit, self.msdus),
+            link(self.round, unit, self.peer_of),
+        )
+    }
+
+    /// Carry out what the core decided of a unit, its MSDUs the ones the
+    /// read before found.
+    fn carry(&mut self, decision: Decision<UnitHandle<'id>>) -> Carried {
+        let round = &mut *self.round;
+        match decision {
+            Decision::Kept => {}
+            Decision::Back(handle) => round.release(handle),
+            Decision::Refused(handle, reason) => {
+                round.release(handle);
+                self.refusals.count(reason);
+            }
+            Decision::Lend(handle, permit) => {
+                let lendable = round.unit(&handle).and_then(|view| view.lendable());
+                let msdu = self.msdus.first().copied();
+                match (lendable, msdu) {
+                    (Some(lendable), Some(msdu))
+                        if round.write_addresses(&handle, msdu.addresses).is_ok() =>
+                    {
+                        let lent = round.lend(handle, lendable);
+                        self.network.lent(permit, lent, msdu.span);
+                    }
+                    // A lendable unit's need had its MSDU and its view: this
+                    // does not happen. The loan the core counted comes back.
+                    _ => {
+                        round.release(handle);
+                        self.refusals.count(RxRefusal::Place);
+                        return Carried::LoanUnmade;
+                    }
+                }
+            }
+            Decision::Copy(handle, mut permits) => {
+                for msdu in self.msdus.iter() {
+                    if round.write_addresses(&handle, msdu.addresses).is_err() {
+                        self.refusals.count(RxRefusal::Place);
+                        continue;
+                    }
+                    let start = usize::from(msdu.span.offset);
+                    let end = start.saturating_add(usize::from(msdu.span.length));
+                    match (
+                        permits.take(),
+                        round
+                            .unit(&handle)
+                            .and_then(|view| view.bytes.get(start..end)),
+                    ) {
+                        (Some(permit), Some(frame)) => self.network.copied(permit, frame),
+                        _ => self.refusals.count(RxRefusal::Place),
+                    }
+                }
+                // Copied: the unit goes back at the round's close.
+                round.release(handle);
+            }
+        }
+        Carried::Done
+    }
+}
+
+/// What a unit needs of the network, from its bytes: one MSDU it may lend,
+/// else the frames to copy, else the reason it is unread. Its MSDUs are left
+/// in `msdus` for the delivery.
+fn need<'id, P: ReceivePort<'id>>(
+    round: &Round<'_, 'id, P>,
+    handle: &UnitHandle<'id>,
+    msdus: &mut heapless::Vec<Msdu, AMSDU_MSDUS>,
+) -> Need {
+    let Some(view) = round.unit(handle) else {
+        // `None` does not happen (`Round::unit`).
+        msdus.clear();
+        return Need::Unread(RxRefusal::Place);
+    };
+    if let Err(reason) = self::msdus(&view, msdus) {
+        return Need::Unread(reason);
+    }
+    match (msdus.len(), view.lendable()) {
+        (1, Some(_)) => Need::Lendable,
+        (count, _) => Need::Copies(u8::try_from(count).unwrap_or(u8::MAX)),
+    }
+}
+
+/// Whether a unit's link carries: a held link's (or of no link) is held.
+fn link<'id, P, F>(round: &Round<'_, 'id, P>, handle: &UnitHandle<'id>, peer_of: &F) -> Link
 where
     P: ReceivePort<'id>,
     F: Fn(&RxHeader) -> Option<RxPeer>,
 {
-    round
+    let held = round
         .unit(handle)
         .and_then(|view| match view.head {
             RxHead::Frame(header) => peer_of(header),
             RxHead::Control(_) => None,
         })
-        .is_none_or(|from| from.carrying == Carrying::Held)
+        .is_none_or(|from| from.carrying == Carrying::Held);
+    if held { Link::Held } else { Link::Carrying }
 }
 
 /// Where a staged unit goes.
