@@ -215,9 +215,10 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         for (rate, full) in [(fast, 8_usize), (rate, 4)] {
             sender.rate = rate;
             // The aggregate's byte ceiling: the rate's vendor table (MCS0
-            // 6 490), or, where it has none (`None`: MCS7 with the short
-            // guard interval), the A-MPDU length's own 65 535, above the
-            // owner's default of 8 191 (`tasks/178`).
+            // 6 490), or, where it names none (`None`, MCS7 with the short
+            // guard interval: the agreed or static limit applies), the
+            // receiving probe's declared A-MPDU maximum, 65 535; both above
+            // the owner's default of 8 191 (`tasks/178`).
             sender
                 .owner
                 .configure_max_aggregate_bytes(rate.vendor_ampdu_byte_limit().unwrap_or(u16::MAX))

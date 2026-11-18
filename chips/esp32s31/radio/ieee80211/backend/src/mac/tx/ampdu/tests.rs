@@ -1658,9 +1658,11 @@ fn an_aggregate_past_the_last_generation_begins_on_a_live_cookie() {
 /// owner and a pool of 1 512-byte slots (8 metadata, 1 500 frame, 4 FCS),
 /// unprotected 1 490-octet subframes. Under the owner's default ceiling of
 /// 8 191 bytes the sixth is refused as `AggregateFull`, which is what the
-/// probe met: HT MCS7 with the short guard interval has no vendor ceiling
-/// (`vendor_ampdu_byte_limit` is `None`), and the probe read that `None` as
-/// the default. Under the A-MPDU length's own 65 535 eight are taken.
+/// probe met: for HT MCS7 with the short guard interval the vendor table
+/// names no limit (`vendor_ampdu_byte_limit` is `None`: the agreed or static
+/// limit applies, the receiver's declared A-MPDU maximum), and the probe
+/// read that `None` as the default. Under the probe's receiver's declared
+/// 65 535 eight are taken.
 #[test]
 fn the_b6_probes_full_subframes_meet_the_default_ceiling() {
     let fast = HtRate::new(
