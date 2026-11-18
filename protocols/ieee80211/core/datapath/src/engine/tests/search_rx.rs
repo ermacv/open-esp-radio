@@ -365,6 +365,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
 
     fn apply(&mut self, action: Move) {
         let refused_before = self.refusals();
+        let engine_refused_before = self.engine.rx_refusals();
         let waits_before = self.waits.clone();
         let link_before = self.link;
         let retained_before = self.retained();
@@ -536,6 +537,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
             &waits_before,
             link_before,
             places_before,
+            engine_refused_before,
         );
     }
 
@@ -631,6 +633,7 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         waits_before: &[(u8, u64)],
         link_before: Link,
         places_before: usize,
+        engine_refused_before: RxRefusals,
     ) {
         let now = self.around.micros;
         let waiting = self.waiting();
@@ -873,6 +876,11 @@ impl<'id, const P: usize, const W: usize> World<'id, P, W> {
         }
         if self.stopped && accounted > self.arrived.len() {
             self.problems.push("a unit is in two places");
+        }
+        // P13: a stop refuses nothing: what waited goes back unread.
+        if action == Move::Stop && self.engine.rx_refusals() != engine_refused_before {
+            self.problems
+                .push("P13 the stop refused what waited instead of giving it back");
         }
         if self.stopped && action == Move::Stop && waiting > 0 {
             self.problems

@@ -840,6 +840,16 @@ impl<
         )
     }
 
+    /// The receive refusals, the stopping data's included, for the crate's
+    /// search.
+    #[cfg(test)]
+    pub(crate) fn rx_refusals(&self) -> RxRefusals {
+        match &self.data {
+            Data::Flowing(running) | Data::Stopping(running) => running.receive.refusals(),
+            Data::Stopped => RxRefusals::default(),
+        }
+    }
+
     /// The received units the engine holds: waiting for the network, and
     /// retained by the reorder, for the crate's search.
     #[cfg(test)]
