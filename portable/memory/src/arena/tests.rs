@@ -52,14 +52,29 @@ crate::arena! {
 const RX_BASE: u32 = 0x4000_1000;
 const TX_BASE: u32 = 0x4000_2000;
 
-struct Counted;
+/// A notify of its own and its counter, for one test: tests run in
+/// parallel and share no counter.
+macro_rules! counted {
+    ($name:ident) => {
+        struct $name;
 
-static NOTIFIED: AtomicU32 = AtomicU32::new(0);
+        impl $name {
+            fn count() -> u32 {
+                Self::counter().load(Ordering::Relaxed)
+            }
 
-impl ReturnNotify for Counted {
-    fn notify() {
-        NOTIFIED.fetch_add(1, Ordering::Relaxed);
-    }
+            fn counter() -> &'static AtomicU32 {
+                static NOTIFIED: AtomicU32 = AtomicU32::new(0);
+                &NOTIFIED
+            }
+        }
+
+        impl ReturnNotify for $name {
+            fn notify() {
+                Self::counter().fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    };
 }
 
 fn release<B: Brand>(lent: Lent<B>, start: usize, len: usize) -> Released<B> {
@@ -73,6 +88,7 @@ fn release<B: Brand>(lent: Lent<B>, start: usize, len: usize) -> Released<B> {
 // One test holds each place: a brand's place is taken once.
 #[test]
 fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
+    counted!(Counted);
     let (arena, fresh) = Arena::<Rx, { 40 * 64 }>::claim().expect("the first claim");
     assert!(
         Arena::<Rx, { 40 * 64 }>::claim().is_none(),
@@ -115,7 +131,7 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
 
     // Returning: each drop sets its bit and notifies, on another thread; the
     // take gives each handle once, whole, and then nothing.
-    let before = NOTIFIED.load(Ordering::Relaxed);
+    assert_eq!(Counted::count(), 0);
     let units: Vec<_> = handles
         .drain(..)
         .chain([handle])
@@ -124,7 +140,7 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
     std::thread::spawn(move || drop(units))
         .join()
         .expect("the returner");
-    assert_eq!(NOTIFIED.load(Ordering::Relaxed) - before, 40);
+    assert_eq!(Counted::count(), 40);
     let mut indices: Vec<_> = arena
         .returned()
         .map(|handle| {
@@ -142,6 +158,7 @@ fn custody_moves_from_the_cpu_to_the_hardware_and_back_by_a_release() {
     arena.bytes_mut(unit.handle_mut()).fill(7);
     assert!(arena.bytes(unit.handle()).iter().all(|&byte| byte == 7));
     drop(unit);
+    assert_eq!(Counted::count(), 41);
     let again: Vec<_> = arena.returned().map(|handle| handle.index).collect();
     assert_eq!(again, [39]);
 }
@@ -155,7 +172,9 @@ fn a_brand_without_shared_bytes_gives_its_whole_buffer() {
     assert_eq!(last.index, 2);
     assert_eq!(arena.bytes_mut(&mut last).len(), 16);
     arena.bytes_mut(&mut last)[3] = 0x5A;
-    let short = last.with_span(Span::fixed::<3, 7>());
+    let short = last
+        .narrow(Span::fixed::<3, 7>())
+        .unwrap_or_else(|_| panic!("inside the whole buffer"));
     assert_eq!(arena.bytes(&short).len(), 7);
     assert_eq!(arena.bytes(&short).first(), Some(&0x5A));
     let (lent, address) = arena.lend(short);
@@ -199,6 +218,7 @@ macro_rules! geometry {
 }
 
 geometry!(Most: MAX_BUFFERS, 65_532, 0);
+geometry!(OneWord: 3, 16, 0);
 geometry!(TooMany: MAX_BUFFERS + 1, 4, 0);
 geometry!(NoBuffer: 0, 4, 0);
 geometry!(Highest: 1, 65_532, 65_531);
@@ -255,10 +275,12 @@ fn a_span_lies_between_the_floor_and_the_buffer_end() {
 
 #[test]
 fn a_one_word_brand_reads_only_its_word() {
+    counted!(Counted);
     // Bits no buffer of the brand can set are never a handle.
-    Tx::returned().word(1).fetch_or(1, Ordering::Relaxed);
-    drop(Returning::<Tx, Counted>::new(Handle::full(2)));
-    let indices: Vec<_> = Returned::<Tx> {
+    OneWord::returned().word(1).fetch_or(1, Ordering::Relaxed);
+    drop(Returning::<OneWord, Counted>::new(Handle::full(2)));
+    assert_eq!(Counted::count(), 1);
+    let indices: Vec<_> = Returned::<OneWord> {
         word: 0,
         bits: 0,
         brand: PhantomData,
@@ -266,4 +288,44 @@ fn a_one_word_brand_reads_only_its_word() {
     .map(|handle| (handle.index, handle.span()))
     .collect();
     assert_eq!(indices, [(2, Span::FULL)]);
+}
+
+#[test]
+fn a_span_only_narrows_in_a_holders_hands() {
+    // OneWord: floor 0, size 16; a unit released as bytes 4 to 12.
+    let unit = Handle::<OneWord> {
+        index: 1,
+        span: Span::fixed::<4, 8>(),
+    };
+    let widened = [
+        Span::fixed::<0, 16>(),
+        Span::fixed::<3, 8>(),
+        Span::fixed::<4, 9>(),
+        Span::fixed::<0, 4>(),
+        Span::fixed::<12, 4>(),
+    ];
+    let mut unit = unit;
+    for span in widened {
+        unit = match unit.narrow(span) {
+            Ok(_) => panic!("{span:?} reaches outside 4..12"),
+            Err(refused) => refused.into_handle(),
+        };
+        assert_eq!(
+            (unit.index, unit.span),
+            (1, Span::fixed::<4, 8>()),
+            "unchanged"
+        );
+    }
+    let same = unit
+        .narrow(Span::fixed::<4, 8>())
+        .unwrap_or_else(|_| panic!("its own span"));
+    let later = same
+        .narrow(Span::fixed::<6, 6>())
+        .unwrap_or_else(|_| panic!("starts later, ends at the end"));
+    assert_eq!(later.span, Span::fixed::<6, 6>());
+    let empty = later
+        .narrow(Span::fixed::<12, 0>())
+        .unwrap_or_else(|_| panic!("the empty span at the end"));
+    assert!(empty.span.is_empty());
+    assert!(empty.narrow(Span::fixed::<11, 1>()).is_err(), "no way back");
 }

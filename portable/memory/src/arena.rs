@@ -252,9 +252,17 @@ impl<B: Brand> Handle<B> {
         self.span
     }
 
-    /// The handle with the span `span`: the bytes a writer means to lend.
-    pub fn with_span(self, span: Span<B>) -> Self {
-        Self { span, ..self }
+    /// The handle narrowed to `span`, which lies inside its present span: a
+    /// writer narrows a whole buffer to what it lends, a reader a unit to
+    /// what it reads. A span reaching outside the present one gives the
+    /// handle back unchanged: in a holder's hands a span never grows (it
+    /// grows only by a fresh or a returned handle).
+    pub fn narrow(self, span: Span<B>) -> Result<Self, NotInside<B>> {
+        if span.start >= self.span.start && span.end <= self.span.end {
+            Ok(Self { span, ..self })
+        } else {
+            Err(NotInside { handle: self })
+        }
     }
 
     fn full(index: u16) -> Self {
@@ -262,6 +270,19 @@ impl<B: Brand> Handle<B> {
             index,
             span: Span::FULL,
         }
+    }
+}
+
+/// The refusal of [`Handle::narrow`]: the span reached outside the handle's
+/// own; the handle, unchanged.
+pub struct NotInside<B: Brand> {
+    handle: Handle<B>,
+}
+
+impl<B: Brand> NotInside<B> {
+    /// The handle, as it was.
+    pub fn into_handle(self) -> Handle<B> {
+        self.handle
     }
 }
 
