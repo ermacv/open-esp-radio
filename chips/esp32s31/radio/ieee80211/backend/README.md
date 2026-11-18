@@ -66,9 +66,13 @@ on the station: the MAC's queues").
   starts directly in the ring. SOURCE[HW18_RX_COMMITTED_PREFIX_20261027] in
   `chips/esp32s31/registers/evidence/hw-rx-radio.toml` supports the exact-prefix
   hardware assumption for three measured accepted chains.
-- **Protocol RX.** Protected Data is validated through the MAC's CCMP
-  validator, which retains its public header and PN, and removes the verified MIC
-  trailer before protocol delivery. Integrity is hardware evidence only after
+- **Protocol RX.** Protected Data is validated through this crate's CCMP
+  validator (`mac::rx`), which retains its public header and PN, and removes
+  whatever MIC bytes the unit still holds before protocol delivery. The hardware
+  itself writes no MIC into a unit it decrypted: the unit holds the header, the
+  CCMP header and the plaintext, 8 bytes short of the RX-control tail's length
+  less the FCS. SOURCE[HW_RX_CCMP_MIC_CUT_20261118] in
+  `chips/esp32s31/registers/evidence/hw-rx-radio.toml`. Integrity is hardware evidence only after
   that validation; replay admission remains in the protocol. The borrowed view
   keeps its original DMA lease and on-air length. Raw monitor normalization
   does not assert cipher integrity.
