@@ -499,8 +499,10 @@ impl Drop for ModelLent {
 }
 
 /// The model port of one installation, with `SINGLES` single places of
-/// its controller and `DATA` of an access point's data.
-pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize> {
+/// its controller and `DATA` of an access point's data, staging received
+/// units into `PLACES` places ([`MODEL_PLACES`] unless a search names
+/// fewer).
+pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize = MODEL_PLACES> {
     key: PortKey<'id>,
     issuer: GateIssuer<'id>,
     phase: Phase,
@@ -553,7 +555,7 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ModelPort<'id, SINGLES, DATA, PLACES> {
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
     pub fn new(
@@ -577,8 +579,8 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
                 .map(|_| Vec::new())
                 .collect(),
             ring: VecDeque::new(),
-            places: (0..MODEL_PLACES).map(|_| None).collect(),
-            frontier: MODEL_PLACES,
+            places: (0..PLACES).map(|_| None).collect(),
+            frontier: PLACES,
             returns: Rc::new(Cell::new(0)),
             acknowledge: None,
             prefix: None,
@@ -867,8 +869,8 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize> RadioPort<'id>
-    for ModelPort<'id, SINGLES, DATA>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> RadioPort<'id>
+    for ModelPort<'id, SINGLES, DATA, PLACES>
 {
     type Caps = ModelCaps;
     type Channel = SupportedChannel<ModelCaps>;
@@ -1005,7 +1007,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> RadioPort<'id>
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'id, SINGLES, DATA> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> DataPort<'id> for ModelPort<'id, SINGLES, DATA, PLACES> {
     type Link = ModelLink;
     type Memory = ModelMemory;
     type Ack = ();
@@ -1621,7 +1623,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ModelPort<'id, SINGLES, DATA, PLACES> {
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
         if let Some(place) = self.groups.get_mut(usize::from(index)) {
@@ -1660,12 +1662,12 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
     }
 }
 
-impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
-    for ModelPort<'id, SINGLES, DATA>
+impl<'id, const SINGLES: usize, const DATA: usize, const PLACES: usize> ReceivePort<'id>
+    for ModelPort<'id, SINGLES, DATA, PLACES>
 {
     type Meta = RxMeta;
     type Lent = ModelLent;
-    const STAGING: usize = MODEL_PLACES;
+    const STAGING: usize = PLACES;
 
     fn round_open(&mut self, _seal: &Sealed, _now: Instant) -> usize {
         self.call();
@@ -1760,7 +1762,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
     fn round_close(&mut self, _seal: &Sealed, back: u64) -> Rest {
         self.call();
         self.counts.closes = self.counts.closes.saturating_add(1);
-        for place in 0..MODEL_PLACES {
+        for place in 0..PLACES {
             if back & (1_u64 << place) != 0
                 && let Some(slot) = self.places.get_mut(place)
             {

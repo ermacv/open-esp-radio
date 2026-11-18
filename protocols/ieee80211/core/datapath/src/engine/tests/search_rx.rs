@@ -70,8 +70,8 @@ const PLAIN: [(Kind, u16); 8] = [
 
 /// The frames that may arrive under an agreement, the first `units` of
 /// them, in any order, each with its number: one before the first, an
-/// A-MSDU, the first, a management frame, a retry of a number sent, then
-/// a gap (the model's list, ordered so that each
+/// A-MSDU, the first, a management frame, then retries of the numbers sent
+/// (all within the small port's window of three, from 0) (the model's list, ordered so that each
 /// kind is within the ordinary bounds).
 const AGREED: [(Kind, u16); 8] = [
     (Kind::Data, 1),
@@ -79,8 +79,8 @@ const AGREED: [(Kind, u16); 8] = [
     (Kind::Data, 0),
     (Kind::Management, 0),
     (Kind::Data, 1),
-    (Kind::Data, 3),
-    (Kind::Data, 5),
+    (Kind::Data, 2),
+    (Kind::Data, 0),
     (Kind::Management, 0),
 ];
 
@@ -126,9 +126,11 @@ enum Link {
     Held,
 }
 
-struct World<'id> {
-    engine: StationEngine<'id, 2>,
-    around: Around<'id, STATION_SINGLES, 0>,
+/// The world over a model port of `P` staging places, the receive window
+/// `W`.
+struct World<'id, const P: usize, const W: usize> {
+    engine: StationEngineOn<'id, 2, P, W>,
+    around: Around<'id, STATION_SINGLES, 0, P>,
     left: Bounds,
     agreement: Agreement,
     /// Each arrived frame's index of its mode's list, by its id less one.
@@ -157,9 +159,9 @@ struct World<'id> {
     problems: Vec<&'static str>,
 }
 
-impl<'id> World<'id> {
-    fn new(run: Running<'id, STATION_SINGLES, 0>, bounds: Bounds, agreement: Agreement) -> Self {
-        let mut engine = StationEngine::<'_, 2>::new(4, POLICY);
+impl<'id, const P: usize, const W: usize> World<'id, P, W> {
+    fn new(run: Running<'id, STATION_SINGLES, 0, P>, bounds: Bounds, agreement: Agreement) -> Self {
+        let mut engine = StationEngineOn::<'_, 2, P, W>::new(4, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = LEND;
         around.net.copy_room = 0;
@@ -572,7 +574,7 @@ impl<'id> World<'id> {
         if order.windows(2).any(|pair| pair[0] >= pair[1]) {
             self.problems.push("P3 data left out of its order");
         }
-        let places = oer_protocols_ieee80211_testing_model::MODEL_PLACES;
+        let places = P;
         // P6 (and P10's place): while the data flows a place is free when a
         // round closes, the one the control plane and the hole's frame pass.
         if !self.stopped && self.around.port.places_held() >= places {
@@ -860,9 +862,13 @@ struct Visit {
     key: String,
 }
 
-fn replay(path: &[Move], bounds: Bounds, agreement: Agreement) -> Visit {
-    running::<STATION_SINGLES, 0, _>(|run| {
-        let mut world = World::new(run, bounds, agreement);
+fn replay<const P: usize, const W: usize>(
+    path: &[Move],
+    bounds: Bounds,
+    agreement: Agreement,
+) -> Visit {
+    crate::model::running_on::<STATION_SINGLES, 0, P, _>(|run| {
+        let mut world = World::<P, W>::new(run, bounds, agreement);
         for (index, action) in path.iter().enumerate() {
             if index + 1 == path.len() {
                 world.problems.clear();
@@ -885,7 +891,11 @@ pub(super) struct Found {
     pub problems: Vec<(&'static str, String)>,
 }
 
-pub(super) fn search(bounds: Bounds, agreement: Agreement, ceiling: usize) -> Found {
+pub(super) fn search<const P: usize, const W: usize>(
+    bounds: Bounds,
+    agreement: Agreement,
+    ceiling: usize,
+) -> Found {
     let mut found = Found {
         nodes: 0,
         ways: 0,
@@ -895,7 +905,7 @@ pub(super) fn search(bounds: Bounds, agreement: Agreement, ceiling: usize) -> Fo
     let mut seen = std::collections::HashSet::new();
     let mut stack: Vec<Vec<Move>> = std::vec![Vec::new()];
     while let Some(path) = stack.pop() {
-        let visit = replay(&path, bounds, agreement);
+        let visit = replay::<P, W>(&path, bounds, agreement);
         found.ways += 1;
         found.depth = found.depth.max(path.len());
         for problem in visit.problems {
@@ -927,11 +937,11 @@ pub(super) fn search(bounds: Bounds, agreement: Agreement, ceiling: usize) -> Fo
     found
 }
 
-fn run(bounds: Bounds, agreement: Agreement, ceiling: usize) {
+fn run<const P: usize, const W: usize>(bounds: Bounds, agreement: Agreement, ceiling: usize) {
     let start = Clock::now();
-    let found = search(bounds, agreement, ceiling);
+    let found = search::<P, W>(bounds, agreement, ceiling);
     std::println!(
-        "receive search {bounds:?} {agreement:?}: {} states, {} ways, depth {}, {:?}",
+        "receive search, {P} places, window {W}, {bounds:?} {agreement:?}: {} states, {} ways, depth {}, {:?}",
         found.nodes,
         found.ways,
         found.depth,
@@ -943,21 +953,38 @@ fn run(bounds: Bounds, agreement: Agreement, ceiling: usize) {
     assert!(found.problems.is_empty());
 }
 
-/// Each bound's ceiling of nodes: about three times what it takes today
-/// (the ordinary 7 052 and 26 209; the named 322 298, 386 917, 412 363
-/// and 236 696), a ceiling against an explosion that stops a search within
-/// a minute or two of where it should have ended, never a pinned figure.
-const ORDINARY_CEILING: usize = 25_000;
-const AGREED_ORDINARY_CEILING: usize = 80_000;
-const SEVEN_FRAMES_CEILING: usize = 1_000_000;
-const SIX_FRAMES_HOLD_CEILING: usize = 1_200_000;
-const AGREED_SIX_CEILING: usize = 1_250_000;
-const AGREED_FIVE_HOLD_CEILING: usize = 750_000;
+/// The search's main configuration takes the model's numbers
+/// (`design/engine-model-rx.py`): four staging places, a loan of one, a
+/// window of three, so that the last free place lies three units deep. The
+/// model port's eight places with the tests' window of seven stay as one
+/// ordinary bound, for what only a larger port shows.
+const SMALL_PLACES: usize = 4;
+const SMALL_WINDOW: usize = 3;
+const LARGE_PLACES: usize = oer_protocols_ieee80211_testing_model::MODEL_PLACES;
+const LARGE_WINDOW: usize = MODEL_WINDOW;
 
-/// The search at the model's bounds, in the ordinary test run.
+/// Each bound's ceiling of nodes: about three times what it takes today,
+/// a ceiling against an explosion that stops a search within a minute or
+/// two of where it should have ended, never a pinned figure.
+const SMALL_CEILING: usize = SMALL_CEILING_NODES;
+const SMALL_AGREED_CEILING: usize = SMALL_AGREED_CEILING_NODES;
+const LARGE_CEILING: usize = LARGE_CEILING_NODES;
+const SMALL_DEEP_CEILING: usize = SMALL_DEEP_CEILING_NODES;
+const SMALL_HOLD_CEILING: usize = SMALL_HOLD_CEILING_NODES;
+const SMALL_AGREED_DEEP_CEILING: usize = SMALL_AGREED_DEEP_CEILING_NODES;
+const SMALL_AGREED_HOLD_CEILING: usize = SMALL_AGREED_HOLD_CEILING_NODES;
+const SMALL_CEILING_NODES: usize = 1_000_000;
+const SMALL_AGREED_CEILING_NODES: usize = 1_000_000;
+const LARGE_CEILING_NODES: usize = 25_000;
+const SMALL_DEEP_CEILING_NODES: usize = 3_000_000;
+const SMALL_HOLD_CEILING_NODES: usize = 3_000_000;
+const SMALL_AGREED_DEEP_CEILING_NODES: usize = 3_000_000;
+const SMALL_AGREED_HOLD_CEILING_NODES: usize = 3_000_000;
+
+/// The small port at its ordinary bounds, without an agreement.
 #[test]
 fn every_order_of_the_receive_sections_keeps_its_properties() {
-    run(
+    run::<SMALL_PLACES, SMALL_WINDOW>(
         Bounds {
             units: 4,
             returns: 2,
@@ -967,17 +994,15 @@ fn every_order_of_the_receive_sections_keeps_its_properties() {
             holds: 1,
         },
         Agreement::None,
-        ORDINARY_CEILING,
+        SMALL_CEILING,
     );
 }
 
 /// The same under a receive agreement: the reorder's order, its gap, the
-/// place it keeps free, a hold, in the ordinary test run (four frames: the
-/// retry of a number, the fifth, is the named search's, within the
-/// ordinary run's 30 s).
+/// place it keeps free, a hold.
 #[test]
 fn every_order_under_a_receive_agreement_keeps_its_properties() {
-    run(
+    run::<SMALL_PLACES, SMALL_WINDOW>(
         Bounds {
             units: 4,
             returns: 2,
@@ -987,40 +1012,40 @@ fn every_order_under_a_receive_agreement_keeps_its_properties() {
             holds: 1,
         },
         Agreement::Tid0,
-        AGREED_ORDINARY_CEILING,
+        SMALL_AGREED_CEILING,
     );
 }
 
-/// A named search: `bounds` under `agreement`, stopped at `ceiling`
-/// nodes. Named, not run by default; each is run by name once a pull
-/// request, under `ulimit -v`, its time and peak memory in it, and stopped
-/// if it has not ended in five minutes.
-fn named(bounds: Bounds, agreement: Agreement, ceiling: usize) {
-    run(bounds, agreement, ceiling);
-}
-
-/// Depth without a hold: seven frames, two returns, two copies freed.
+/// The model port's eight places, without an agreement: what only a larger
+/// port shows.
 #[test]
-#[ignore = "a named bound: run by name"]
-fn every_receive_order_at_seven_frames() {
-    named(
+fn every_order_over_eight_places_keeps_its_properties() {
+    run::<LARGE_PLACES, LARGE_WINDOW>(
         Bounds {
-            units: 7,
+            units: 4,
             returns: 2,
             stops: 1,
-            frees: 2,
+            frees: 1,
             gaps: 0,
-            holds: 0,
+            holds: 1,
         },
         Agreement::None,
-        SEVEN_FRAMES_CEILING,
+        LARGE_CEILING,
     );
 }
 
-/// A hold with depth: six frames and one hold.
+/// A named search over the small port: `bounds` under `agreement`, stopped
+/// at `ceiling` nodes. Named, not run by default; each is run by name once
+/// a pull request, under `ulimit -v`, its time and peak memory in it, and
+/// stopped if it has not ended in five minutes.
+fn named(bounds: Bounds, agreement: Agreement, ceiling: usize) {
+    run::<SMALL_PLACES, SMALL_WINDOW>(bounds, agreement, ceiling);
+}
+
+/// Depth without a hold: six frames, two returns, two copies freed.
 #[test]
 #[ignore = "a named bound: run by name"]
-fn every_receive_order_at_six_frames_with_a_hold() {
+fn every_receive_order_at_six_frames() {
     named(
         Bounds {
             units: 6,
@@ -1028,10 +1053,28 @@ fn every_receive_order_at_six_frames_with_a_hold() {
             stops: 1,
             frees: 2,
             gaps: 0,
+            holds: 0,
+        },
+        Agreement::None,
+        SMALL_DEEP_CEILING,
+    );
+}
+
+/// A hold with depth: five frames and one hold.
+#[test]
+#[ignore = "a named bound: run by name"]
+fn every_receive_order_at_five_frames_with_a_hold() {
+    named(
+        Bounds {
+            units: 5,
+            returns: 2,
+            stops: 1,
+            frees: 2,
+            gaps: 0,
             holds: 1,
         },
         Agreement::None,
-        SIX_FRAMES_HOLD_CEILING,
+        SMALL_HOLD_CEILING,
     );
 }
 
@@ -1049,7 +1092,7 @@ fn every_order_under_a_receive_agreement_at_six_frames() {
             holds: 0,
         },
         Agreement::Tid0,
-        AGREED_SIX_CEILING,
+        SMALL_AGREED_DEEP_CEILING,
     );
 }
 
@@ -1067,6 +1110,6 @@ fn every_order_under_a_receive_agreement_at_five_frames_with_a_hold() {
             holds: 1,
         },
         Agreement::Tid0,
-        AGREED_FIVE_HOLD_CEILING,
+        SMALL_AGREED_HOLD_CEILING,
     );
 }
