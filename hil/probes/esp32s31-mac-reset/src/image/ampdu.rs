@@ -211,6 +211,13 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         // four full subframes, where MCS7 takes eight.
         for (rate, full) in [(fast, 8_usize), (rate, 4)] {
             sender.rate = rate;
+            // The aggregate's byte ceiling: the rate's vendor table (MCS7
+            // 65 535, MCS0 6 490), above the owner's default of 8 191 (the
+            // HT exponent 0), as far as the A-MPDU length allows.
+            sender
+                .owner
+                .configure_max_aggregate_bytes(rate.vendor_ampdu_byte_limit().unwrap_or(0x1fff))
+                .map_err(|_| (tx_phase::FRAME, 0x6a))?;
             for (length, size) in [(B6_FULL, full), (B6_SHORT, 16), (B6_SHORT, SUBFRAMES)] {
                 let mut row: Ends = [0; 5];
                 for _ in 0..B6_AGGREGATES {
