@@ -311,6 +311,16 @@ impl Facts {
                 properties.insert("cores".into(), Value::Integer(count));
             }
         }
+        // The interrupt stacks' guards are the stack policy's (`stack.toml`),
+        // which writes them into an image's profile: a chip does not state them.
+        if table
+            .get("interrupts")
+            .is_some_and(|interrupts| interrupts.get("irq-stack-guard-bytes").is_some())
+        {
+            return Err(at(
+                "interrupts.irq-stack-guard-bytes is the stack policy's, not a chip fact".into(),
+            ));
+        }
         expand_rules(&mut table).map_err(at)?;
         let stated: Stated = table
             .try_into()
@@ -1110,7 +1120,7 @@ pub(crate) mod tests {
         );
     }
     #[test]
-    fn redundant_core_count_and_hart_guards_must_agree_at_build_time() {
+    fn redundant_core_count_must_agree_and_a_chip_states_no_guard() {
         let layers = crate::load(&mut crate::tracked::Tracked, "esp32s31").unwrap();
         let mut table = layers.table;
         for registry in crate::REGISTRY {
@@ -1134,16 +1144,15 @@ pub(crate) mod tests {
             .unwrap()
             .as_table_mut()
             .unwrap()
-            .get_mut("irq-stack-guard-bytes")
-            .unwrap()
-            .as_table_mut()
-            .unwrap()
-            .remove("1");
+            .insert(
+                "irq-stack-guard-bytes".into(),
+                toml::toml! { 0 = 4096 }.into(),
+            );
         assert!(
             Facts::from_table("esp32s31", "synthetic", table)
                 .unwrap_err()
                 .to_string()
-                .contains("every hart")
+                .contains("the stack policy's")
         );
     }
 }

@@ -29,6 +29,8 @@ pub(crate) struct CompileInput<'a> {
     instrumentation: &'a Instrumentation,
     policy: &'a StackPolicy,
     task_stack_proven: bool,
+    /// The task stacks' reserve the image chose under a proven bound.
+    task_stack_reserve: Option<u32>,
     critical_section_hart: u32,
     harts: &'a [u32],
     irq_stacks: &'a crate::irq_stack::IrqStackChoices,
@@ -55,7 +57,7 @@ pub(crate) fn build(
     spec: &ImageSpec,
     profile: &oer_tools_chip_profile::Profile,
     instrumentation: &Instrumentation,
-    task_stack_proven: bool,
+    task_stack: crate::task_stack::TaskStackChoices,
     critical_section_hart: u32,
     harts: &[u32],
     irq_stacks: &crate::irq_stack::IrqStackChoices,
@@ -82,10 +84,14 @@ pub(crate) fn build(
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
     // The image's declared harts resolve the policy's launch templates.
-    // The image's own interrupt-stack margin, where it sets one.
+    // The image's own interrupt-stack margin, where it sets one, its choice
+    // of the guard, and its task stacks' reserve under a proven bound.
+    let task_stack_proven = task_stack.proven;
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?
         .for_image(harts)?
-        .with_image_irq_stack_margin(irq_stacks.margin_percent);
+        .with_image_irq_stack_margin(irq_stacks.margin_percent)
+        .with_image_irq_stack_guard(irq_stacks.guard)
+        .with_image_task_stack_reserve(task_stack.reserve);
     if task_stack_proven {
         // One source of the size: the bound, not also the policy.
         policy.proven_task_stacks()?;
@@ -103,6 +109,7 @@ pub(crate) fn build(
             instrumentation,
             policy: &policy,
             task_stack_proven,
+            task_stack_reserve: task_stack.reserve,
             critical_section_hart,
             harts,
             irq_stacks,

@@ -1249,7 +1249,7 @@ pub(crate) mod tests {
     fn contract() -> Contract {
         oer_chips_family_facts::tracked::ids()
             .into_iter()
-            .map(|id| oer_tools_chip_profile::Profile::tracked(id).unwrap())
+            .map(crate::stack::contract::tracked_profile)
             .find_map(|profile| {
                 let margin = crate::stack::contract::tracked_margin(&profile.facts.id);
                 Contract::of(&profile, margin)

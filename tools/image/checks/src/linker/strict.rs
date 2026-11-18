@@ -44,6 +44,14 @@ pub struct Spec {
     /// (`irq-stack-margin-percent`); absent, the stack policy's.
     #[serde(default)]
     pub irq_stack_margin_percent: Option<u32>,
+    /// Whether the image places its interrupt stacks' guards
+    /// (`irq-stack-guard`).
+    #[serde(default)]
+    pub irq_stack_guard: oer_tools_chip_profile::policy::IrqStackGuard,
+    /// The task stacks' reserve the image chose under a proven bound
+    /// (`task-stack-reserve-bytes`); absent, the stack policy's.
+    #[serde(default)]
+    pub task_stack_reserve_bytes: Option<u32>,
 }
 
 impl Spec {
@@ -66,7 +74,9 @@ impl Spec {
             inputs,
         )?
         .for_image(&self.harts)?
-        .with_image_irq_stack_margin(self.irq_stack_margin_percent);
+        .with_image_irq_stack_margin(self.irq_stack_margin_percent)
+        .with_image_irq_stack_guard(self.irq_stack_guard)
+        .with_image_task_stack_reserve(self.task_stack_reserve_bytes);
         let profile = policy.runtime_profile(&profile)?;
         let mut image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
         image.hold_irq_stacks_to(&policy)?;

@@ -49,8 +49,10 @@ named as `harts` names them) plus its guard, with no margin added. A size
 has one source: a hart with neither a proof nor a declaration fails the
 build naming the key and the hart, and a declaration for a hart whose bound
 is proven fails naming the proof. The diagnostic flag of a probe build
-changes neither. Hart 0's stack is rounded to hart 1's guard so that the
-guard is always placed; what limits a stack is the SRAM, and stacks that do
+changes neither. The guards are the stack policy's (`irq_stack_guard_bytes`),
+placed unless the image declines them (`irq-stack-guard = "declined"`:
+zero guard bytes for every hart). Hart 0's stack is rounded to hart 1's
+placed guard so that the guard is aligned; what limits a stack is the SRAM, and stacks that do
 not fit fail with their figures. The SRAM left for strict code is counted
 from the selected sizes, so the placeholder does not change the result.
 Guard coverage and unknown reachable frames are reported, never gates.
@@ -79,9 +81,14 @@ policy's `core.N.task_stack`, passed as `TASK_STACK_HART<N>_BYTES`. Each bottom
 is aligned to 64 bytes within `.psram.task_stacks` and carries the runtime's
 stack watchpoint, so the size has no other constraint; the 16 bytes keep the
 stack pointer aligned. The first-pass bound must be complete and rest only on
-admitted assumptions. After the second link the bound must differ by at most
-64 bytes and bound plus reserve must fit the allocation; otherwise the link
-fails with figures and attempts nothing further. A policy that also sets
+admitted assumptions. After the second link the bound must equal the first
+link's, as an interrupt stack's must (the second link changes only the
+stacks' sizes and symbols), and bound plus reserve must fit the allocation;
+otherwise the link fails with both bounds and attempts nothing further. The
+reserve is the policy's `minimum_free_bytes` unless the image sets
+`task-stack-reserve-bytes` (zero included) beside `task-stack = "proven"`;
+the key without the proven bound fails the build, since under a partial
+bound the reserve covers the unresolved sites. A policy that also sets
 `allocation_bytes` names the size twice and is an error. The image's
 placement range for the stack is then exactly the linked size.
 A declared launch template links its `launch_bytes` in the first link. A

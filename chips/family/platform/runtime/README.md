@@ -106,6 +106,34 @@ watchdog. The exported bound of three exception frames participates in IRQ stack
 sums. These guarantees require intact SRAM, trap entry and local mask code;
 capture and retention remain best effort.
 
+The hart's debug triggers (`debug-triggers` in the chip facts, 4 on the S31)
+are the platform's in part: trigger 0 watches the word at the bottom of the
+hart's task stack, trigger 2 the guard below its interrupt stack, and
+trigger 1 stays free; both used triggers are checked against the count at
+compile time. A trigger a connected debugger owns (`tdata1.dmode`) stays its
+own and watches nothing for the runtime. Armed (`mcontrol` M-mode, store,
+NAPOT, action 0, timing 0), a store into a watched region raises a
+breakpoint exception (`mcause` 3) at the storing instruction. The
+trap enters the common exception entry on the interrupt stack below the
+current `sp`; the entry clears `tcontrol.mte`, so its own frame inside the
+guard does not trigger again, and the guard holds that frame when the
+exception bound plus the largest reached frame fits it (the guard table of
+`interrupt-stack.txt`). The handler (`trap::handle`) commits `mcause`,
+`mepc` and `mtval` as the retained CPU-exception record (`Domain::CpuException`)
+and resets through the platform's reset (`fatal::reset_claimed`); the next
+boot's `adoption::run` reports the record. What
+`mtval` holds for a trigger hit on this core is not established. A store
+that lowers `sp` past the guard in one frame, or a write that skips it, is
+not caught.
+
+An image may decline its interrupt stacks' guards (`irq-stack-guard =
+"declined"`); the build script then leaves `irq_stack_guard` unset and the
+runtime compiles no arming code, and the linker places no guard bytes. Such
+an image loses that watch and nothing else: an overflow of hart 0's
+interrupt stack runs below the SRAM's start, one of hart 1's into the top of
+hart 0's stack, and neither is reported. The task stack's watch (trigger 0)
+is not part of that choice.
+
 `retained_fault` owns a boot-initialized SRAM election. `claim` returns an
 exclusive terminal claim or typed `Reentered`, without waiting. The winning
 claim and every slot it commits remain held until reset. The same terminal

@@ -5,8 +5,9 @@
 //! margin) + guard`; a hart whose bound is not proven takes the size its
 //! image declares (`[package.metadata.open-radio] irq-stack`) plus its guard.
 //! A size has one source: a declaration where the bound is proven, or neither
-//! a proof nor a declaration, fails the build. The guard is always placed,
-//! and the stack is rounded so that the next hart's guard is aligned; what
+//! a proof nor a declaration, fails the build. The guard is the stack
+//! policy's, placed unless the image declines it (`irq-stack-guard`), and the
+//! stack is rounded so that the next hart's placed guard is aligned; what
 //! limits the allocation is the SRAM it is placed in.
 
 use crate::{Result, interrupts::InterruptStacks};
@@ -311,6 +312,25 @@ mod tests {
         assert_eq!(planned[0].guard_bytes, 4096);
         assert_eq!(planned[1].guard_bytes, 1024);
         assert_eq!(planned[0].bytes % 1024, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn declined_guards_place_no_bytes_and_hart_zero_is_not_rounded() -> Result<()> {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let mut second = stacks.harts[0].clone();
+        second.core = 1;
+        stacks.harts.push(second);
+        stacks.contract.interrupts.irq_stack_guard_bytes = [(0, 0), (1, 0)].into_iter().collect();
+        stacks.allocations.clear();
+        let planned = select(&stacks, &[])?;
+        // align16(ceil(1000 * 1.1)) = 1104 for each hart, nothing above it.
+        for allocation in &planned {
+            assert_eq!((allocation.guard_bytes, allocation.bytes), (0, 1104));
+        }
+        link(&mut stacks, &planned);
+        verify(&stacks, &planned)?;
         Ok(())
     }
 

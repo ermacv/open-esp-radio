@@ -39,10 +39,26 @@ impl Contract {
 /// tests that build a [`Contract`] from a tracked profile.
 #[cfg(test)]
 pub(crate) fn tracked_margin(id: &str) -> u32 {
-    let text = oer_chips_family_facts::tracked::text(&format!("chips/{id}/facts/stack.toml"))
-        .expect("a tracked stack policy");
-    toml::from_str::<oer_tools_chip_profile::policy::StackPolicy>(text)
-        .expect("a stack policy")
+    tracked_policy(id)
         .irq_stack_margin_percent()
         .expect("a margin")
+}
+
+#[cfg(test)]
+fn tracked_policy(id: &str) -> oer_tools_chip_profile::policy::StackPolicy {
+    let text = oer_chips_family_facts::tracked::text(&format!("chips/{id}/facts/stack.toml"))
+        .expect("a tracked stack policy");
+    toml::from_str(text).expect("a stack policy")
+}
+
+/// The tracked chip `id`'s profile with its stack policy's interrupt guards
+/// written in, as `StackPolicy::runtime_profile` writes them for an image
+/// that places them.
+#[cfg(test)]
+pub(crate) fn tracked_profile(id: &str) -> oer_tools_chip_profile::Profile {
+    let mut profile = oer_tools_chip_profile::Profile::tracked(id).expect("a tracked profile");
+    if let Some(interrupts) = profile.facts.interrupts.as_mut() {
+        interrupts.irq_stack_guard_bytes = tracked_policy(id).irq_stack_guard_bytes;
+    }
+    profile
 }

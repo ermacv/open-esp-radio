@@ -33,7 +33,40 @@ impl InterruptStacks {
         frames
     }
 
+    /// Whether the image declines `hart`'s guard: the stack policy wrote
+    /// zero bytes for it into the image's profile.
+    pub(crate) fn guard_declined(&self, hart: u32) -> bool {
+        self.contract.interrupts.irq_stack_guard_bytes.get(&hart) == Some(&0)
+    }
+
+    /// What an image that declines `hart`'s guard loses: where an overflow of
+    /// its stack runs, unwatched. The harts' stacks lie in order from the
+    /// SRAM's start, each one's top the next one's bottom.
+    pub(crate) fn declined_loss(&self, hart: u32) -> String {
+        let below = self
+            .contract
+            .interrupts
+            .harts
+            .iter()
+            .copied()
+            .take_while(|&other| other != hart)
+            .last();
+        match below {
+            None => format!(
+                "hart {hart} declines its guard: no trigger watches its interrupt stack, and an \
+                 overflow runs below the SRAM's start unreported"
+            ),
+            Some(other) => format!(
+                "hart {hart} declines its guard: no trigger watches its interrupt stack, and an \
+                 overflow runs into the top of hart {other}'s interrupt stack unreported"
+            ),
+        }
+    }
+
     pub(crate) fn guard_problem(&self, hart: &HartStack) -> Option<String> {
+        if self.guard_declined(hart.core) {
+            return None;
+        }
         let frames = self.hart_frames(hart);
         let guard = match self.guard_bytes(hart.core) {
             Ok(guard) => u64::from(guard),
@@ -72,6 +105,10 @@ impl InterruptStacks {
             "Interrupt guards (bytes; E includes the exception entry)\nhart\tguard\tE\tlargest frame\tE + frame\tspare\tfunction\n",
         );
         for hart in &self.harts {
+            if self.guard_declined(hart.core) {
+                let _ = writeln!(out, "{}	{}", hart.core, self.declined_loss(hart.core));
+                continue;
+            }
             let frames = self.hart_frames(hart);
             let guard = match self.guard_bytes(hart.core) {
                 Ok(guard) => guard,
@@ -139,6 +176,28 @@ mod tests {
                 .render()
                 .contains("0\t4096\t432\t3664\t4096\t0\texception_helper")
         );
+    }
+
+    #[test]
+    fn a_declined_guard_warns_of_nothing_and_its_line_names_what_is_lost() {
+        let mut report = report(Some(3665));
+        report
+            .contract
+            .interrupts
+            .irq_stack_guard_bytes
+            .insert(0, 0);
+        let linked = report.allocations.get_mut(&0).unwrap();
+        linked.guard_bytes = 0;
+        linked.bytes = 0x8000;
+        for policy in [Required::Product, Required::Diagnostic] {
+            assert!(report.check(policy).unwrap().is_empty());
+        }
+        let rendered = report.render();
+        assert!(
+            rendered.contains("0\thart 0 declines its guard: no trigger watches its interrupt stack, and an overflow runs below the SRAM's start unreported"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("exception_helper"), "{rendered}");
     }
 
     #[test]

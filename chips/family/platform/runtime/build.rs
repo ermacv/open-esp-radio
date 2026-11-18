@@ -9,6 +9,12 @@
 //! from this build directory, a library search path of every image that
 //! links the runtime, and sets `chip_vectors`. Without a chip (host tests of
 //! this package alone) it generates nothing.
+//!
+//! It also sets `irq_stack_guard` unless the image declines its interrupt
+//! stacks' guards (`OPEN_RADIO_IRQ_STACK_GUARD`, which the image pipeline
+//! sets from `[package.metadata.open-radio] irq-stack-guard`; absent, as in
+//! host tests, the key's default, placed): only then is the guard's arming
+//! compiled.
 
 use std::path::{Path, PathBuf};
 
@@ -16,6 +22,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=DEP_OER_CHIPS_FAMILY_PLATFORM_PORT_CHIP");
     println!("cargo::rustc-check-cfg=cfg(chip_vectors)");
+    println!("cargo::rustc-check-cfg=cfg(irq_stack_guard)");
+    println!("cargo:rerun-if-env-changed=OPEN_RADIO_IRQ_STACK_GUARD");
+    match std::env::var("OPEN_RADIO_IRQ_STACK_GUARD").as_deref() {
+        Err(std::env::VarError::NotPresent) | Ok("placed") => {
+            println!("cargo::rustc-cfg=irq_stack_guard");
+        }
+        Ok("declined") => {}
+        Ok(other) => {
+            return Err(format!(
+                "OPEN_RADIO_IRQ_STACK_GUARD is \"placed\" or \"declined\", not {other:?}"
+            )
+            .into());
+        }
+        Err(std::env::VarError::NotUnicode(value)) => {
+            return Err(format!("OPEN_RADIO_IRQ_STACK_GUARD {value:?} is not UTF-8").into());
+        }
+    }
     let Some(id) = std::env::var_os("DEP_OER_CHIPS_FAMILY_PLATFORM_PORT_CHIP") else {
         return Ok(());
     };

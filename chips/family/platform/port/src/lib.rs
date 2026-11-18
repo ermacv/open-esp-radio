@@ -47,7 +47,7 @@ mod geometry {
     include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
 }
 #[cfg(chip_geometry)]
-pub use geometry::{BOOT_HART, HARTS, Hart, InvalidHart, SecondaryHart};
+pub use geometry::{BOOT_HART, DEBUG_TRIGGERS, HARTS, Hart, InvalidHart, SecondaryHart};
 
 /// The early console writer: what a record writes before any driver owns
 /// the console.

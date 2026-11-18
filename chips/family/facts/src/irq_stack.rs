@@ -27,9 +27,10 @@ pub fn irq_stack_with_margin(bound: u64, margin_percent: u32) -> Result<u64> {
 impl InterruptContract {
     /// A hart's allocation holding `usable` bytes above its guard:
     /// `align16(usable) + guard`, so that the following hart's bottom, which
-    /// is this stack's top, is aligned to that hart's NAPOT guard. The guard
-    /// is always placed; what limits the allocation is the SRAM it is placed
-    /// in, which the link checks.
+    /// is this stack's top, is aligned to that hart's NAPOT guard. A guard of
+    /// zero is an image that declines it: no guard bytes and no alignment to
+    /// one. What limits the allocation is the SRAM it is placed in, which the
+    /// link checks.
     pub fn irq_stack_allocation(&self, hart: u32, usable: u64) -> Result<IrqStackAllocation> {
         let mut harts = self.harts.iter().skip_while(|&&core| core != hart);
         harts
@@ -40,8 +41,10 @@ impl InterruptContract {
             .checked_next_multiple_of(16)
             .and_then(|bytes| bytes.checked_add(u64::from(guard_bytes)))
             .ok_or("IRQ stack allocation overflows u64")?;
+        // The next hart's NAPOT guard, or 16 where it has none (the last
+        // hart, or an image that declines the guards).
         let alignment = match harts.next() {
-            Some(&next) => self.irq_stack_guard(next)?,
+            Some(&next) => self.irq_stack_guard(next)?.max(16),
             None => 16,
         };
         let bytes = bytes
@@ -63,10 +66,14 @@ mod tests {
     use super::*;
     use alloc::string::ToString;
 
+    /// The chip's contract with the S31 stack policy's guards written in,
+    /// as `StackPolicy::runtime_profile` writes them.
     fn contract(chip: &str) -> InterruptContract {
-        crate::tests::tracked(chip)
+        let mut contract = crate::tests::tracked(chip)
             .interrupts
-            .expect("a staged chip has an interrupt contract")
+            .expect("a staged chip has an interrupt contract");
+        contract.irq_stack_guard_bytes = [(0, 4096), (1, 1024)].into_iter().collect();
+        contract
     }
 
     #[test]
@@ -84,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn no_maximum_limits_a_stack_and_the_guard_is_always_placed() {
+    fn no_maximum_limits_a_stack_and_a_placed_guard_is_below_it() {
         let contract = contract("esp32s31");
         for &hart in &contract.harts {
             let guard = contract.irq_stack_guard(hart).unwrap();
@@ -122,15 +129,18 @@ mod tests {
     }
 
     #[test]
-    fn zero_alignment_returns_an_error() {
-        let mut invalid = contract("esp32s31");
-        invalid.irq_stack_guard_bytes.insert(1, 0);
-        assert!(
-            invalid
-                .irq_stack_allocation(0, 1)
-                .unwrap_err()
-                .to_string()
-                .contains("alignment 0")
-        );
+    fn declined_guards_place_no_bytes_and_no_rounding() {
+        let mut declined = contract("esp32s31");
+        declined.irq_stack_guard_bytes = [(0, 0), (1, 0)].into_iter().collect();
+        for hart in [0, 1] {
+            let allocation = declined.irq_stack_allocation(hart, 1102).unwrap();
+            assert_eq!(
+                allocation,
+                IrqStackAllocation {
+                    bytes: 1104,
+                    guard_bytes: 0
+                }
+            );
+        }
     }
 }

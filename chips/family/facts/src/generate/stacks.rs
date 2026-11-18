@@ -103,7 +103,7 @@ impl Vectors {
         for hart in 0..self.harts {
             let _ = writeln!(
                 text,
-                "HartStacks {{ irq: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_top)), task: range(addr_of!(__runtime_cpu{hart}_task_stack_bottom), addr_of!(__runtime_cpu{hart}_task_stack_top)), guard: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_guard_end)).len() }},"
+                "HartStacks {{ irq: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_top)), task: range(addr_of!(__runtime_cpu{hart}_task_stack_bottom), addr_of!(__runtime_cpu{hart}_task_stack_top)), #[cfg(irq_stack_guard)] guard: range(addr_of!(__runtime_cpu{hart}_irq_stack_bottom), addr_of!(__runtime_cpu{hart}_irq_stack_guard_end)).len() }},"
             );
         }
         text.push_str("] }; }\n");
@@ -176,6 +176,8 @@ mod tests {
             .args([
                 "--edition=2024",
                 "--crate-type=lib",
+                // The runtime's image that places its interrupt guards.
+                "--cfg=irq_stack_guard",
                 "--emit=llvm-ir",
                 "-Copt-level=3",
             ])

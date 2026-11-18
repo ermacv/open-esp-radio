@@ -8,7 +8,10 @@ and bootstrap stack bounds and mandatory placement prerequisites remain gates.
 Stack guards are reported, never a gate, in build, run and analysis: insufficient
 exception-plus-frame coverage and unknown reachable frames produce report rows.
 The IRQ bound plus the image's margin remains a gate against the stack's
-linked allocation, excluding its guard; the guard is always placed.
+linked allocation, excluding its guard. The guard is the stack policy's,
+placed unless the image declines it; for a declining image the guard table
+names, per hart, what is lost: no trigger watches the stack, and an overflow
+runs below the SRAM's start (hart 0) or into the top of the hart below.
 
 Every staged build also audits the final bootstrap ELF before encoding it.
 All executable sections and ordinary constants must lie wholly in the chip's

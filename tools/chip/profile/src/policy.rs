@@ -67,7 +67,44 @@ pub struct StackPolicy {
     /// The bootstrap image's only stack.
     #[serde(default)]
     pub bootstrap_stack: Option<TaskStack>,
+    /// The guard below each used hart's interrupt stack, by hart: a power of
+    /// two of at least 16 bytes, its NAPOT watch (debug trigger 2). An image
+    /// that declines the guard places none ([`IrqStackGuard`]).
+    #[serde(default)]
+    pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
+    /// The image's choice of the interrupt stacks' guard; not in the policy
+    /// file (`[package.metadata.open-radio] irq-stack-guard`).
+    #[serde(skip)]
+    pub irq_stack_guard: IrqStackGuard,
 }
+
+/// Whether an image places its interrupt stacks' guards.
+#[derive(Clone, Copy, Debug, Default, Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum IrqStackGuard {
+    /// The policy's guard below each stack, watched by its trigger.
+    #[default]
+    Placed,
+    /// No guard bytes, no rounding to the next hart's guard and no arming
+    /// code: an overflow of hart 0's stack runs below the SRAM's start, one
+    /// of hart 1's into the top of hart 0's stack.
+    Declined,
+}
+
+impl IrqStackGuard {
+    /// The value the runtime's build script reads
+    /// ([`IRQ_STACK_GUARD_ENV`]).
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Placed => "placed",
+            Self::Declined => "declined",
+        }
+    }
+}
+
+/// The variable that carries an image's [`IrqStackGuard`] to the runtime's
+/// build script, which compiles the guard's arming only when it is placed.
+pub const IRQ_STACK_GUARD_ENV: &str = "OPEN_RADIO_IRQ_STACK_GUARD";
 
 /// A frame exception applies to exactly one implementation in its ELF.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -465,6 +502,21 @@ impl StackPolicy {
                 }
             }
         }
+        for (&hart, &bytes) in &self.irq_stack_guard_bytes {
+            if bytes < 16 || !bytes.is_power_of_two() {
+                return Err(format!(
+                    "hart {hart}'s interrupt guard must be a power of two of at least 16 bytes"
+                )
+                .into());
+            }
+        }
+        if !self.irq_stack_guard_bytes.is_empty()
+            && !self.irq_stack_guard_bytes.keys().eq(self.core.keys())
+        {
+            return Err(
+                "the interrupt guards must name every hart of the policy exactly once".into(),
+            );
+        }
         if !self.default_task_stack_bytes.is_empty() {
             if self.default_task_stack_bytes.len() != self.core.len() {
                 return Err("task defaults must cover every hart".into());
@@ -685,6 +737,52 @@ impl StackPolicy {
         self
     }
 
+    /// This policy with the image's choice of the interrupt stacks' guard
+    /// (`[package.metadata.open-radio] irq-stack-guard`).
+    #[must_use]
+    pub fn with_image_irq_stack_guard(mut self, guard: IrqStackGuard) -> Self {
+        self.irq_stack_guard = guard;
+        self
+    }
+
+    /// This policy with the task stacks' reserve the image chose under a
+    /// proven bound (`[package.metadata.open-radio] task-stack-reserve-bytes`,
+    /// zero included): every runtime task stack's `minimum_free_bytes`. The
+    /// caller admits it only for an image that declares its task stacks
+    /// proven: under a partial bound the reserve covers the unresolved sites
+    /// and stays the policy's.
+    #[must_use]
+    pub fn with_image_task_stack_reserve(mut self, bytes: Option<u32>) -> Self {
+        if let Some(bytes) = bytes {
+            for stacks in self.core.values_mut() {
+                if let Slot::Used(stack) = &mut stacks.task_stack {
+                    stack.minimum_free_bytes = bytes;
+                }
+            }
+        }
+        self
+    }
+
+    /// The guard below hart `hart`'s interrupt stack in this image: the
+    /// policy's, or zero where the image declines it.
+    ///
+    /// # Errors
+    ///
+    /// The image places the guard and the policy names none for the hart.
+    pub fn irq_stack_guard_bytes(&self, hart: u32) -> Result<u32> {
+        match self.irq_stack_guard {
+            IrqStackGuard::Declined => Ok(0),
+            IrqStackGuard::Placed => {
+                self.irq_stack_guard_bytes
+                    .get(&hart)
+                    .copied()
+                    .ok_or_else(|| {
+                        format!("the stack policy names no interrupt guard for hart {hart}").into()
+                    })
+            }
+        }
+    }
+
     /// The margin above an interrupt stack's proven bound, in percent.
     ///
     /// # Errors
@@ -697,7 +795,15 @@ impl StackPolicy {
 
     /// Explicit per-hart inputs; absent allocations use that hart's chip default.
     pub fn runtime_environment(&self) -> Vec<(String, String)> {
+        // A policy that names no stacks (the move limit alone) carries no
+        // stack's choice.
         let mut variables = Vec::new();
+        if !self.core.is_empty() {
+            variables.push((
+                IRQ_STACK_GUARD_ENV.to_owned(),
+                self.irq_stack_guard.name().to_owned(),
+            ));
+        }
         for (&hart, stacks) in &self.core {
             if let Some(task) = stacks.task_stack.used() {
                 variables.push((
@@ -815,6 +921,12 @@ impl StackPolicy {
             })
         });
         interrupts.harts.retain(|hart| !unused.contains(hart));
+        // The guards are the policy's and the image's choice, not the chip's.
+        interrupts.irq_stack_guard_bytes = interrupts
+            .harts
+            .iter()
+            .map(|&hart| Ok((hart, self.irq_stack_guard_bytes(hart)?)))
+            .collect::<Result<_>>()?;
         // A used interrupt stack is sized at link time: its range lies in
         // SRAM with no size fixed, and the SRAM region limits it.
         for (&hart, stacks) in &self.core {
@@ -1094,8 +1206,69 @@ mod tests {
                 ),
             ]),
             bootstrap_stack: None,
+            irq_stack_guard_bytes: [(0, 4096), (1, 1024)].into_iter().collect(),
+            irq_stack_guard: IrqStackGuard::Placed,
         }
     }
+    #[test]
+    fn the_policy_writes_its_guards_and_a_declining_image_gets_none() {
+        let base = profile();
+        let placed = policy().runtime_profile(&base).unwrap();
+        assert_eq!(
+            placed
+                .facts
+                .interrupts
+                .as_ref()
+                .unwrap()
+                .irq_stack_guard_bytes,
+            BTreeMap::from([(0, 4096)])
+        );
+        assert!(
+            policy()
+                .runtime_environment()
+                .contains(&(IRQ_STACK_GUARD_ENV.into(), "placed".into()))
+        );
+        let declining = policy().with_image_irq_stack_guard(IrqStackGuard::Declined);
+        let declined = declining.runtime_profile(&base).unwrap();
+        assert_eq!(
+            declined
+                .facts
+                .interrupts
+                .as_ref()
+                .unwrap()
+                .irq_stack_guard_bytes,
+            BTreeMap::from([(0, 0)])
+        );
+        assert!(
+            declining
+                .runtime_environment()
+                .contains(&(IRQ_STACK_GUARD_ENV.into(), "declined".into()))
+        );
+    }
+
+    #[test]
+    fn guards_are_powers_of_two_for_every_hart_of_the_policy() {
+        for guards in [
+            BTreeMap::from([(0, 4096)]),
+            BTreeMap::from([(0, 4096), (1, 1024), (2, 1024)]),
+            BTreeMap::from([(0, 0), (1, 1024)]),
+            BTreeMap::from([(0, 4095), (1, 1024)]),
+        ] {
+            let mut invalid = policy();
+            invalid.irq_stack_guard_bytes = guards.clone();
+            assert!(invalid.validate().is_err(), "{guards:?}");
+        }
+    }
+
+    #[test]
+    fn an_image_reserve_replaces_every_task_stacks_minimum_free_bytes() {
+        let chosen = policy().with_image_task_stack_reserve(Some(0));
+        for root in chosen.runtime_task_stacks() {
+            assert_eq!(root.stack.minimum_free_bytes, 0);
+        }
+        assert_eq!(policy().with_image_task_stack_reserve(None), policy());
+    }
+
     #[test]
     fn an_image_keeps_its_interrupt_stacks_unsized_in_sram() {
         let base = profile();
@@ -1103,14 +1276,8 @@ mod tests {
         let image = policy().runtime_profile(&base).unwrap();
         let contract = image.facts.interrupts.as_ref().unwrap();
         assert_eq!(contract.harts, [0]);
-        assert_eq!(
-            contract.irq_stack_guard_bytes,
-            base.facts
-                .interrupts
-                .as_ref()
-                .unwrap()
-                .irq_stack_guard_bytes
-        );
+        // The used hart's guard is the policy's.
+        assert_eq!(contract.irq_stack_guard_bytes, BTreeMap::from([(0, 4096)]));
         let bottom = format!("__runtime_cpu{}_irq_stack_bottom", 0);
         let range = image
             .facts
@@ -1291,6 +1458,13 @@ mod default_tests {
                     .collect::<Vec<_>>()
                     .join(","),
             );
+            source.push_str("}\nirq_stack_guard_bytes={");
+            source.push_str(
+                &(0..harts)
+                    .map(|hart| format!("{hart}=1024"))
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
             source.push_str("}\n");
             for hart in 0..harts {
                 if hart == 0 || hart == last {
@@ -1306,9 +1480,7 @@ mod default_tests {
             let mut base = crate::Profile::tracked("esp32s31").unwrap();
             base.facts.properties.cores = harts as u8;
             let contract = base.facts.interrupts.as_mut().unwrap();
-            let guard = contract.irq_stack_guard_bytes[&contract.boot_hart];
             contract.harts = (0..harts).collect();
-            contract.irq_stack_guard_bytes = (0..harts).map(|hart| (hart, guard)).collect();
             let placement = base.facts.placement.as_mut().unwrap();
             let task_template = placement
                 .range
@@ -1370,6 +1542,7 @@ mod launch_tests {
 
     const TEMPLATE: &str = "schema = 6\nmax_move_bytes = 4096\ncoverage_policy = 'c.toml'\n\
         default_task_stack_bytes = { 0 = 65536, 1 = 0 }\n\
+        irq_stack_guard_bytes = { 0 = 4096, 1 = 1024 }\n\
         [core.0.task_stack]\nroot = 'runtime_main'\nstorage_symbol = 's'\n\
         minimum_free_bytes = 4096\n[core.0.interrupt_stack]\n\
         [core.1.task_stack]\nlaunch = 'declared'\nroot = 'runtime_secondary_main_h1'\n\

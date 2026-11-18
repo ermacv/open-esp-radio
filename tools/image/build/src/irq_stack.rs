@@ -7,14 +7,20 @@
 //!   as `harts` names them (`boot`, or the hart's number): the bytes the
 //!   stack holds above its guard. A declaration for a hart whose bound is
 //!   proven fails the link, naming the proof: a size has one source.
+//! - `irq-stack-guard`: `"placed"` (the default) or `"declined"`. Declined,
+//!   no guard bytes are placed, hart 0's stack is not rounded to hart 1's
+//!   guard and the runtime compiles no arming code; an overflow of hart 0's
+//!   stack then runs below the SRAM's start and one of hart 1's into the top
+//!   of hart 0's stack.
 
-use oer_tools_chip_profile::Profile;
+use oer_tools_chip_profile::{Profile, policy::IrqStackGuard};
 use oer_tools_image_checks::linker::irq_stacks::{DECLARATION, DeclaredIrqStack};
 use serde_json::Value;
 
 use crate::Result;
 
 const MARGIN: &str = "irq-stack-margin-percent";
+const GUARD: &str = "irq-stack-guard";
 
 /// What an image chose for its interrupt stacks.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -23,6 +29,8 @@ pub struct IrqStackChoices {
     pub margin_percent: Option<u32>,
     /// The sizes of stacks whose bound is not proven.
     pub declared: Vec<DeclaredIrqStack>,
+    /// Whether the image places the stacks' guards.
+    pub guard: IrqStackGuard,
 }
 
 /// The choices `package` makes in the workspace `metadata`.
@@ -46,6 +54,16 @@ pub(crate) fn of_metadata(
                     format!("{package}: `{MARGIN}` is a whole number of per cent, not {value}")
                 })?,
         ),
+    };
+    let guard = match crate::manifest::declared(metadata, package, GUARD)? {
+        None => IrqStackGuard::Placed,
+        Some(serde_json::Value::String(value)) if value == "placed" => IrqStackGuard::Placed,
+        Some(serde_json::Value::String(value)) if value == "declined" => IrqStackGuard::Declined,
+        Some(other) => {
+            return Err(
+                format!("{package}: `{GUARD}` is \"placed\" or \"declined\", not {other}").into(),
+            );
+        }
     };
     let mut declared = Vec::new();
     if let Some(value) = crate::manifest::declared(metadata, package, DECLARATION)? {
@@ -95,6 +113,7 @@ pub(crate) fn of_metadata(
     Ok(IrqStackChoices {
         margin_percent,
         declared,
+        guard,
     })
 }
 
@@ -163,6 +182,24 @@ mod tests {
     }
 
     #[test]
+    fn the_guard_is_placed_unless_the_image_declines_it() {
+        for (open_radio, guard) in [
+            (serde_json::json!({}), IrqStackGuard::Placed),
+            (
+                serde_json::json!({ "irq-stack-guard": "placed" }),
+                IrqStackGuard::Placed,
+            ),
+            (
+                serde_json::json!({ "irq-stack-guard": "declined" }),
+                IrqStackGuard::Declined,
+            ),
+        ] {
+            let choices = of_metadata(&metadata(open_radio), "image", &profile()).unwrap();
+            assert_eq!(choices.guard, guard);
+        }
+    }
+
+    #[test]
     fn a_malformed_choice_is_refused_naming_its_key() {
         for (open_radio, key) in [
             (
@@ -194,6 +231,8 @@ mod tests {
                 serde_json::json!({ "irq-stack": { "boot": 16, "0": 16 } }),
                 DECLARATION,
             ),
+            (serde_json::json!({ "irq-stack-guard": "none" }), GUARD),
+            (serde_json::json!({ "irq-stack-guard": false }), GUARD),
         ] {
             let error = of_metadata(&metadata(open_radio.clone()), "image", &profile())
                 .unwrap_err()

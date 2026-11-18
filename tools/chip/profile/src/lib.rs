@@ -407,36 +407,27 @@ mod tests {
     }
 
     #[test]
-    fn each_hart_has_its_own_guard() {
-        for (chip, guards) in [("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)]))] {
-            let contract = Profile::tracked(chip).unwrap().facts.interrupts.unwrap();
-            assert_eq!(contract.irq_stack_guard_bytes, guards);
-        }
+    fn the_chip_states_no_guard_and_the_stack_policy_gives_each_hart_its_own() {
+        let contract = Profile::tracked("esp32s31")
+            .unwrap()
+            .facts
+            .interrupts
+            .unwrap();
+        assert!(contract.irq_stack_guard_bytes.is_empty());
+        let policy: crate::policy::StackPolicy =
+            toml::from_str(include_str!("../../../../chips/esp32s31/facts/stack.toml")).unwrap();
+        policy.validate().unwrap();
+        assert_eq!(
+            policy.irq_stack_guard_bytes,
+            BTreeMap::from([(0, 4096), (1, 1024)])
+        );
     }
 
     #[test]
-    fn a_guard_contract_rejects_missing_extra_and_invalid_harts_or_sizes() {
+    fn a_chip_with_duplicate_harts_is_refused() {
         let repository = repository();
         let path = repository.path().join("chips/esp32s31/facts/chip.toml");
         let source = std::fs::read_to_string(&path).unwrap();
-        for guards in [
-            "1024", // The old common value is no longer a contract.
-            "{}",
-            "{ \"0\" = 4096 }",
-            "{ \"0\" = 4096, \"1\" = 1024, \"2\" = 1024 }",
-            "{ \"0\" = 0, \"1\" = 1024 }",
-            "{ \"0\" = 4095, \"1\" = 1024 }",
-        ] {
-            std::fs::write(
-                &path,
-                source.replace("{ \"0\" = 4096, \"1\" = 1024 }", guards),
-            )
-            .unwrap();
-            assert!(
-                Profile::load(repository.path(), "esp32s31").is_err(),
-                "{guards}"
-            );
-        }
         std::fs::write(&path, source.replace("harts = [0, 1]", "harts = [0, 0]")).unwrap();
         assert!(Profile::load(repository.path(), "esp32s31").is_err());
     }

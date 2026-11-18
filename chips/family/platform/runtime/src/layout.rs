@@ -103,6 +103,8 @@ pub fn sections() -> Sections {
 pub(crate) struct HartStacks {
     pub irq: Range<usize>,
     pub task: Range<usize>,
+    /// The interrupt stack's guard bytes, in an image that places them.
+    #[cfg(irq_stack_guard)]
     pub guard: usize,
 }
 

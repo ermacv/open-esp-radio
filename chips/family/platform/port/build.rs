@@ -24,10 +24,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("cargo::rerun-if-changed={}", root.join(file).display());
     }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("cargo sets OUT_DIR")?);
-    std::fs::write(
-        out.join("geometry.rs"),
-        oer_chips_family_facts::generate::hart_geometry(vectors.harts, vectors.boot_hart)?,
-    )?;
+    let mut geometry =
+        oer_chips_family_facts::generate::hart_geometry(vectors.harts, vectors.boot_hart)?;
+    geometry.push_str(&oer_chips_family_facts::generate::debug_triggers(&facts)?);
+    std::fs::write(out.join("geometry.rs"), geometry)?;
     println!("cargo::rustc-cfg=chip_geometry");
     println!("cargo::metadata=chip={id}");
     Ok(())

@@ -2,6 +2,11 @@
 //! `[package.metadata.open-radio] task-stack = "proven"`. The check then
 //! fails the build on any unresolved path of a task stack's bound, where an
 //! image that declares nothing passes it with a warning.
+//!
+//! An image that declares them proven may choose their reserve,
+//! `task-stack-reserve-bytes` (zero included; absent, the stack policy's
+//! `minimum_free_bytes`). Under a partial bound the reserve covers the
+//! unresolved sites and stays the policy's: a declaration then fails.
 
 use std::path::Path;
 
@@ -11,6 +16,16 @@ use crate::Result;
 
 const KEY: &str = "task-stack";
 const PROVEN: &str = "proven";
+const RESERVE: &str = "task-stack-reserve-bytes";
+
+/// What an image chose for its task stacks.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TaskStackChoices {
+    /// The bounds are declared proven.
+    pub proven: bool,
+    /// The reserve above a proven bound; `None` takes the policy's.
+    pub reserve: Option<u32>,
+}
 
 /// Whether `package`, in the workspace at `root`, declares its task stacks
 /// proven.
@@ -19,8 +34,31 @@ const PROVEN: &str = "proven";
 ///
 /// `cargo metadata` fails, the workspace has no `package`, or its
 /// declaration is malformed.
-pub fn declared_proven(root: &Path, package: &str) -> Result<bool> {
-    proven_of_metadata(&crate::manifest::workspace_metadata(root)?, package)
+pub fn declared(root: &Path, package: &str) -> Result<TaskStackChoices> {
+    of_metadata(&crate::manifest::workspace_metadata(root)?, package)
+}
+
+pub(crate) fn of_metadata(metadata: &Value, package: &str) -> Result<TaskStackChoices> {
+    let proven = proven_of_metadata(metadata, package)?;
+    let reserve = match crate::manifest::declared(metadata, package, RESERVE)? {
+        None => None,
+        Some(_) if !proven => {
+            return Err(format!(
+                "{package}: `{RESERVE}` needs `{KEY} = \"{PROVEN}\"`: under a partial bound the \
+                 reserve covers the unresolved sites and stays the stack policy's"
+            )
+            .into());
+        }
+        Some(value) => Some(
+            value
+                .as_u64()
+                .and_then(|bytes| u32::try_from(bytes).ok())
+                .ok_or_else(|| {
+                    format!("{package}: `{RESERVE}` is a number of bytes, not {value}")
+                })?,
+        ),
+    };
+    Ok(TaskStackChoices { proven, reserve })
 }
 
 fn proven_of_metadata(metadata: &Value, package: &str) -> Result<bool> {
@@ -50,6 +88,56 @@ mod tests {
         assert!(proven_of_metadata(&metadata(serde_json::json!("proven")), "image").unwrap());
         assert!(!proven_of_metadata(&metadata(Value::Null), "image").unwrap());
         assert!(!proven_of_metadata(&metadata(Value::Null), "other").unwrap());
+    }
+
+    fn image(open_radio: Value) -> Value {
+        serde_json::json!({ "packages": [
+            { "name": "image", "metadata": { "open-radio": open_radio } },
+        ] })
+    }
+
+    #[test]
+    fn a_proven_image_chooses_its_reserve_zero_included_else_the_policy_s() {
+        let proven = serde_json::json!({ "task-stack": "proven" });
+        assert_eq!(
+            of_metadata(&image(proven), "image").unwrap(),
+            TaskStackChoices {
+                proven: true,
+                reserve: None
+            }
+        );
+        for bytes in [0, 4096] {
+            let choices = of_metadata(
+                &image(serde_json::json!({ "task-stack": "proven", "task-stack-reserve-bytes": bytes })),
+                "image",
+            )
+            .unwrap();
+            assert_eq!(
+                choices,
+                TaskStackChoices {
+                    proven: true,
+                    reserve: Some(bytes)
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn a_reserve_without_a_proven_bound_fails_naming_why() {
+        let error = of_metadata(
+            &image(serde_json::json!({ "task-stack-reserve-bytes": 0 })),
+            "image",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("partial bound"), "{error}");
+        let error = of_metadata(
+            &image(serde_json::json!({ "task-stack": "proven", "task-stack-reserve-bytes": -1 })),
+            "image",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains(RESERVE), "{error}");
     }
 
     #[test]

@@ -122,8 +122,8 @@ retained-reserved-tail = 24
 [staged]
 flash-tuning-reference-bytes = 0x1_0000
 
-# The chip's harts and the guard of each one's interrupt stack; the family
-# states the rest of the interrupt contract.
+# The chip's harts; the family states the rest of the interrupt contract (the
+# interrupt stacks' guards are the stack policy's, `stack.toml`).
 # SOURCE: ESP-IDF 4d80c1b2 soc/esp32s31/include/soc/soc_caps.h
 # SOC_CPU_CORES_NUM; the list is the sole HP-hart cardinality.
 [interrupts]
@@ -131,7 +131,13 @@ flash-tuning-reference-bytes = 0x1_0000
 # the primary reset path is hart zero; nonzero IDs enter the secondary path.
 boot-hart = 0
 harts = [0, 1]
-irq-stack-guard-bytes = { "0" = 4096, "1" = 1024 }
+# The debug triggers of each hart, shared by breakpoints and watchpoints. The
+# platform's runtime arms trigger 0 (the task stack's bottom word) and
+# trigger 2 (the interrupt stack's guard, unless the image declines it);
+# trigger 1 is free.
+# SOURCE: ESP-IDF 4d80c1b2 components/soc/esp32s31/include/soc/soc_caps.h:196-197
+# SOC_CPU_BREAKPOINTS_NUM 4, SOC_CPU_WATCHPOINTS_NUM 4 (a public header).
+debug-triggers = 4
 
 # A secondary hart starts only through the image's declared hart set and the
 # runtime root's one-shot launch permit: the HAL's `Cores::start_secondary`
