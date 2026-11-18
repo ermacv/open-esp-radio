@@ -1249,3 +1249,21 @@ fn the_slots_back_serve_again() {
         Some(BankCommand::Add { slot: 10, .. })
     ));
 }
+
+#[test]
+fn a_window_is_refused_exactly_at_its_bounds() {
+    let capability = "the receive window is 1 to the capabilities' rx_block_ack_max_window";
+    let frames = "the retained frames hold a whole window: WINDOW <= FRAMES";
+    assert_eq!(window_refusal(16, 16, 64), None);
+    assert_eq!(window_refusal(64, 64, 64), None);
+    assert_eq!(window_refusal(1, 1, 1), None);
+    assert_eq!(window_refusal(16, 32, 64), None);
+    assert_eq!(window_refusal(0, 16, 64), Some(capability));
+    assert_eq!(window_refusal(65, 65, 64), Some(capability));
+    assert_eq!(window_refusal(16, 15, 64), Some(frames));
+    assert_eq!(
+        window_refusal(256, 256, u16::MAX),
+        Some("the in-order releases are counted in a byte")
+    );
+    assert_eq!(window_refusal(255, 255, u16::MAX), None);
+}

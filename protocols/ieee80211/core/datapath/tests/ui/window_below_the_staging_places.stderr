@@ -1,13 +1,13 @@
 error[E0080]: evaluation panicked: the receive window is below the port's staging places: WINDOW < STAGING
  --> $RUST/core/src/panic.rs
   |
-  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_core_datapath::engine::Engine::<'_, oer_protocols_ieee80211_testing_model::ModelPort<'_, 8, 0>, oer_protocols_ieee80211_core_datapath::engine::Arenas, (), 1, 8, 8, 2, 2, 8>::GEOMETRY` failed here
+  |         $crate::panicking::panic_display(&$arg);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_core_datapath::engine::Engine::<'_, oer_protocols_ieee80211_testing_model::ModelPort<'_, 8, 0>, oer_protocols_ieee80211_core_datapath::engine::Arenas, (), 1, 8, 8, 2, 2, 8>::GEOMETRY` failed here
   |
  ::: src/engine.rs
   |
-  |             panic!("the receive window is below the port's staging places: WINDOW < STAGING");
-  |             --------------------------------------------------------------------------------- in this macro invocation
+  |             panic!("{}", refusal);
+  |             --------------------- in this macro invocation
 
 note: erroneous constant encountered
   --> tests/ui/window_below_the_staging_places.rs:25:22

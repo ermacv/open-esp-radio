@@ -1939,3 +1939,18 @@ fn of_two_rests_the_round_or_the_earlier_wake_comes() {
     );
     assert_eq!(super::earliest(at(4), Rest::Round), Rest::Round);
 }
+
+#[test]
+fn an_engines_window_is_refused_exactly_at_its_bounds() {
+    let staging = "a port stages into at most the contract's PLACES";
+    let capability = "the receive window is 1 to the capabilities' rx_block_ack_max_window";
+    let below = "the receive window is below the port's staging places: WINDOW < STAGING";
+    assert_eq!(engine_refusal(PLACES, 16, 64), None);
+    assert_eq!(engine_refusal(PLACES + 1, 16, 64), Some(staging));
+    assert_eq!(engine_refusal(17, 16, 64), None);
+    assert_eq!(engine_refusal(16, 16, 64), Some(below));
+    assert_eq!(engine_refusal(2, 1, 1), None);
+    assert_eq!(engine_refusal(8, 0, 64), Some(capability));
+    assert_eq!(engine_refusal(64, 33, 32), Some(capability));
+    assert_eq!(engine_refusal(64, 32, 32), None);
+}

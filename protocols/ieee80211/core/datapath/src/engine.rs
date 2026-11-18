@@ -557,6 +557,22 @@ fn earliest(first: Rest, second: Rest) -> Rest {
     }
 }
 
+/// What is wrong with an engine over `staging` places with the receive
+/// window `window` under a capability of `max_window`, if anything: a port
+/// stages into at most the contract's places; the window is 1 to the
+/// capability; the reorder's frames (the window) leave a staging place free.
+const fn engine_refusal(staging: usize, window: usize, max_window: u16) -> Option<&'static str> {
+    if staging > PLACES {
+        Some("a port stages into at most the contract's PLACES")
+    } else if window == 0 || window > max_window as usize {
+        Some("the receive window is 1 to the capabilities' rx_block_ack_max_window")
+    } else if window >= staging {
+        Some("the receive window is below the port's staging places: WINDOW < STAGING")
+    } else {
+        None
+    }
+}
+
 /// The receive half's policy values, the composition's.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReceivePolicy {
@@ -756,14 +772,10 @@ impl<
     /// port's `rx_block_ack_max_window`, and the reorder's frames (the
     /// window) leave a staging place free (`WINDOW <= FRAMES < STAGING`).
     pub const GEOMETRY: () = {
-        if P::STAGING > PLACES {
-            panic!("a port stages into at most the contract's PLACES");
-        }
-        if WINDOW == 0 || WINDOW > P::Caps::CAPS.rx_block_ack_max_window as usize {
-            panic!("the receive window is 1 to the capabilities' rx_block_ack_max_window");
-        }
-        if WINDOW >= P::STAGING {
-            panic!("the receive window is below the port's staging places: WINDOW < STAGING");
+        if let Some(refusal) =
+            engine_refusal(P::STAGING, WINDOW, P::Caps::CAPS.rx_block_ack_max_window)
+        {
+            panic!("{}", refusal);
         }
     };
 

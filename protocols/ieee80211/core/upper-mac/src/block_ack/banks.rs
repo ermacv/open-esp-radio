@@ -128,6 +128,26 @@ pub enum AgreementStop {
 /// it is the composition's choice, from 1 to the capabilities'
 /// `rx_block_ack_max_window`, and at most the retained frames.
 pub const RX_BLOCK_ACK_WINDOW: usize = 16;
+/// What is wrong with a receive window of `window` over `frames` retained
+/// frames under a capability of `max_window`, if anything: the window is 1
+/// to the capability, the retained frames hold a whole window, and the
+/// in-order releases are counted in a byte.
+pub(crate) const fn window_refusal(
+    window: usize,
+    frames: usize,
+    max_window: u16,
+) -> Option<&'static str> {
+    if window == 0 || window > max_window as usize {
+        Some("the receive window is 1 to the capabilities' rx_block_ack_max_window")
+    } else if frames < window {
+        Some("the retained frames hold a whole window: WINDOW <= FRAMES")
+    } else if window > u8::MAX as usize {
+        Some("the in-order releases are counted in a byte")
+    } else {
+        None
+    }
+}
+
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;
 
@@ -289,18 +309,12 @@ pub struct RxBlockAckStorage<
 impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize, const WINDOW: usize>
     RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
-    /// The storage's relations, checked where it is built: the window is 1
-    /// to the capabilities' `rx_block_ack_max_window`, and the retained
-    /// frames hold a whole window.
+    /// The storage's relations, checked where it is built
+    /// ([`window_refusal`]).
     pub const GEOMETRY: () = {
-        if WINDOW == 0 || WINDOW > T::Caps::CAPS.rx_block_ack_max_window as usize {
-            panic!("the receive window is 1 to the capabilities' rx_block_ack_max_window");
-        }
-        if FRAMES < WINDOW {
-            panic!("the retained frames hold a whole window: WINDOW <= FRAMES");
-        }
-        if WINDOW > u8::MAX as usize {
-            panic!("the in-order releases are counted in a byte");
+        if let Some(refusal) = window_refusal(WINDOW, FRAMES, T::Caps::CAPS.rx_block_ack_max_window)
+        {
+            panic!("{}", refusal);
         }
     };
 

@@ -1,13 +1,13 @@
 error[E0080]: evaluation panicked: the retained frames hold a whole window: WINDOW <= FRAMES
  --> $RUST/core/src/panic.rs
   |
-  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage::<oer_protocols_ieee80211_core_datapath::engine::EngineAgreements<'_, oer_protocols_ieee80211_testing_model::ModelCaps>, u8, 1, 15, 16>::GEOMETRY` failed here
+  |         $crate::panicking::panic_display(&$arg);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage::<oer_protocols_ieee80211_core_datapath::engine::EngineAgreements<'_, oer_protocols_ieee80211_testing_model::ModelCaps>, u8, 1, 15, 16>::GEOMETRY` failed here
   |
  ::: $WORKSPACE/protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs
   |
-  |             panic!("the retained frames hold a whole window: WINDOW <= FRAMES");
-  |             ------------------------------------------------------------------- in this macro invocation
+  |             panic!("{}", refusal);
+  |             --------------------- in this macro invocation
 
 note: erroneous constant encountered
   --> tests/ui/window_within_the_frames.rs:25:22
