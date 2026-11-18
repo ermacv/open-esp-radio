@@ -6503,7 +6503,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/system/src/esp32s31.rs",
-        44,
+        43,
         BY_RADIO_SYSTEM,
     ),
     (

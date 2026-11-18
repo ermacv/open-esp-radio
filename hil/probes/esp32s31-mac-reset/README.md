@@ -6,7 +6,9 @@ answers them for receive in part one; part two (`--features transmit`,
 below) answers their transmit halves.
 
 1. **A pulse mid-run.** With the receive walker live on a busy channel,
-   `RST_WIFIMAC` is asserted and released (`WifiClocked::reset_mac`). After
+   `RST_WIFIMAC` is asserted and released by the radio domain's MAC block
+   reset (`RadioDomain::reset_wifi_mac_block`, which also writes back the
+   PHY's and the shared radio's words inside the block). After
    it: the MAC's activity field (`channel_active_state`), the MAC's raw
    interrupt image and the power bank's latched causes, the walker's
    registers (`receive_dma_snapshot`); then, in the vendor's order
@@ -15,8 +17,8 @@ below) answers their transmit halves.
    buffer of the ring, and a changed word is a write of a bus master that
    went on.
 2. **A second run after it.** The walker's stop, the owner's cold
-   preparation alone (`initialize_wifi_mac`, which begins with the pulse
-   and the cold handshake), the channel selected again (no new calibration), the ring rebuilt and
+   preparation alone (the block's reset, then `initialize_wifi_mac`, which
+   takes its proof and begins with the cold handshake), the channel selected again (no new calibration), the ring rebuilt and
    published once more after the MAC's gates are open (`prepare_halted`,
    `reopen_mac_core`, `into_halted`, `prepare_halted`: a BASE written into
    the gates the cold preparation holds is not kept) and the port's start;
@@ -46,10 +48,11 @@ writes it:
 | enter | `enter_coex`, `WifiCold::power_up`, `WifiPowered::enable_clocks`, `WifiClocked::set_initialized`, `phy_ready`, `client::<WifiPhyMembership>`, `join_wifi` | the same, in that order; a failure ends the session instead of rolling back |
 | track: tracking | `maintain_concurrent_phy` when the join says tracking is due | the same |
 | track: RX | `set_wifi_rx(true)` | the same |
-| track: channel | `lower_ghz2_4_channel`, `detach(Operation::Channel)`, `channel_transaction`, `select_concurrent_wifi_channel` | the same; channel 13, 20 MHz lowered to its primary number and CBW 0 by hand (the radio system's function is crate-private) |
+| track: channel | `lower_ghz2_4_channel`, `detach(Operation::Channel)`, `channel_transaction`, `select_concurrent_wifi_channel` | the same; channel 13 (40 MHz below with `foreign`, else 20 MHz) lowered by hand as that crate-private function does |
 | track: power | `phy_state().tx_target_power_profile().with_maximum_quarter_dbm(ceiling)` | the same, the ceiling as the RX-chain probe computes it (Germany, the board's limits) |
-| track: MAC | `MacSources` (the four coexistence events, the power profile, the slow-clock calibration, the delay entropy), `cold_mac_hal`, `initialize_wifi_mac` | `Sources`, the same values (no slow-clock calibration, as the RX-chain probe answers), `cold_mac_hal`, `initialize_wifi_mac` |
-| running | `into_running` | the same; `from_running` and `reset_mac` around each pulse |
+| reset | `reset_mac`: `reset_wifi_mac_block` and the four coexistence events | `reset_wifi_mac_block` on the held domain |
+| prepare (the backend's) | `MacColdSources` (the coexistence events, the power profile, the slow-clock calibration, the delay entropy), `cold_mac_hal`, `initialize_wifi_mac` with the reset's proof | `Sources`, the same values (no slow-clock calibration, as the RX-chain probe answers), `cold_mac_hal`, `initialize_wifi_mac` with the reset's proof |
+| running | `into_running` | the same; `from_running` and `reset_wifi_mac_block` around each pulse |
 
 Each receive start, the first, after an ordinary stop and after a pulse's
 cold preparation, follows the removed port's `port_start` (the knowledge

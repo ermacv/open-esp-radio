@@ -430,7 +430,8 @@ impl<K: Client, S: LpSource, B: PhyDomain, T: oer_portable_time::Timer> RadioSys
                 // No refusal and no failure: answered as a leave is, poisoned
                 // domain or not.
                 let payload = Boundary::new(self.backend.reset_mac(reset)).await;
-                responder.answer(oer_chips_esp32s31_radio_client::MacResetAnswer { member, payload })
+                responder
+                    .answer(oer_chips_esp32s31_radio_client::MacResetAnswer { member, payload })
             }
             Request::Leave(member, leave, responder) => {
                 self.core.leaving(matches!(member, Leaving::Tracked(_)));

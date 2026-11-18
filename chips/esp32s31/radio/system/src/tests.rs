@@ -1280,7 +1280,11 @@ fn a_tracked_members_mac_reset_is_answered_with_its_proof_even_when_poisoned() {
                 )
                 .await
                 .unwrap();
-            let WifiMacReset { clocks, reset: proof, pti } = reset.payload;
+            let WifiMacReset {
+                clocks,
+                reset: proof,
+                pti,
+            } = reset.payload;
             assert_eq!(pti.map(|pti| pti.value()), [1, 3, 10, 15]);
             let oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset { .. } = proof;
             let wifi = WifiClocked::from_running(access, clocks);
