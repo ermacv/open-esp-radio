@@ -4392,6 +4392,60 @@ fn the_hals_host_constructors_are_reached_only_by_tests() {
     );
 }
 
+/// The image's target's `cfg` set, as `rustc --print cfg --target
+/// riscv32imafc-unknown-none-elf` of the pinned toolchain prints it,
+/// `debug_assertions` left out (a release image has none);
+/// [`the_image_cfg_set_is_the_pinned_compilers`] compares the two.
+const IMAGE_CFG: &[&str] = &[
+    r#"panic="abort""#,
+    r#"target_abi="""#,
+    r#"target_arch="riscv32""#,
+    r#"target_endian="little""#,
+    r#"target_env="""#,
+    r#"target_feature="a""#,
+    r#"target_feature="c""#,
+    r#"target_feature="m""#,
+    r#"target_feature="zaamo""#,
+    r#"target_feature="zalrsc""#,
+    r#"target_feature="zca""#,
+    r#"target_feature="zicsr""#,
+    r#"target_has_atomic="16""#,
+    r#"target_has_atomic="32""#,
+    r#"target_has_atomic="8""#,
+    r#"target_has_atomic="ptr""#,
+    r#"target_has_atomic_primitive_alignment="16""#,
+    r#"target_has_atomic_primitive_alignment="32""#,
+    r#"target_has_atomic_primitive_alignment="8""#,
+    r#"target_has_atomic_primitive_alignment="ptr""#,
+    r#"target_os="none""#,
+    r#"target_pointer_width="32""#,
+    r#"target_vendor="unknown""#,
+];
+
+/// The guard's `cfg` set is the pinned compiler's for the image's target:
+/// a copy that went stale at a toolchain change would let the guard pass a
+/// table it should count.
+#[test]
+fn the_image_cfg_set_is_the_pinned_compilers() {
+    let root = root();
+    let target = ImageTarget::of(&root);
+    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let output = std::process::Command::new(rustc)
+        .current_dir(&root)
+        .args(["--print", "cfg", "--target", &target.name])
+        .output()
+        .expect("the pinned rustc runs");
+    assert!(output.status.success(), "rustc --print cfg failed");
+    let printed: BTreeSet<String> = String::from_utf8(output.stdout)
+        .expect("UTF-8 cfg lines")
+        .lines()
+        .filter(|line| *line != "debug_assertions")
+        .map(str::to_owned)
+        .collect();
+    let listed: BTreeSet<String> = IMAGE_CFG.iter().map(|cfg| (*cfg).to_owned()).collect();
+    assert_eq!(listed, printed, "the image's cfg set differs from rustc's");
+}
+
 /// The image's target: its triple from the ISA's facts and its `cfg` set.
 struct ImageTarget {
     name: String,
@@ -4413,28 +4467,7 @@ impl ImageTarget {
     }
 
     fn named(name: String) -> Self {
-        const CFG: &[&str] = &[
-            r#"panic="abort""#,
-            r#"target_abi="""#,
-            r#"target_arch="riscv32""#,
-            r#"target_endian="little""#,
-            r#"target_env="""#,
-            r#"target_feature="a""#,
-            r#"target_feature="c""#,
-            r#"target_feature="m""#,
-            r#"target_feature="zaamo""#,
-            r#"target_feature="zalrsc""#,
-            r#"target_feature="zca""#,
-            r#"target_feature="zicsr""#,
-            r#"target_has_atomic="16""#,
-            r#"target_has_atomic="32""#,
-            r#"target_has_atomic="8""#,
-            r#"target_has_atomic="ptr""#,
-            r#"target_os="none""#,
-            r#"target_pointer_width="32""#,
-            r#"target_vendor="unknown""#,
-        ];
-        let cfg = CFG
+        let cfg = IMAGE_CFG
             .iter()
             .map(|cfg| cfg.parse().expect("a cfg of the image's target"))
             .collect();
