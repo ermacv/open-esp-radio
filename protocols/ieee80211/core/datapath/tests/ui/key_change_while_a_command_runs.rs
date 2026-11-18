@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
 use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
 
 pub type Station<'id, T> =
-    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 
 // A key's place offers its change only while no command runs: not while a
 // key changes, nor while the gate closes, nor while a receive agreement's

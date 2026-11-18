@@ -1,5 +1,5 @@
 error[E0599]: no method named `open` found for struct `OpenGate<'a, E>` in the current scope
-  --> tests/ui/open_of_a_gate_not_shut.rs:29:14
+  --> tests/ui/open_of_a_gate_not_shut.rs:30:14
    |
-29 |         gate.open(); // ui-error: E0599
-   |              ^^^^ method not found in `OpenGate<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2>>`
+30 |         gate.open(); // ui-error: E0599
+   |              ^^^^ method not found in `OpenGate<'_, Engine<'_, ModelPort<'_, 8, 0>, Arenas, T, 1, 8, 8, 2, 2, 7>>`

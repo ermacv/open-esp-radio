@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
 use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
 
 pub type Station<'id, T> =
-    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
+    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS, 7>;
 
 // A transmit agreement begins on the TID whose named number was told: a
 // linked peer, a TID not named and a TID whose number is not told yet offer

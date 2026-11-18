@@ -1,0 +1,26 @@
+#![no_std]
+use oer_protocols_ieee80211_core_datapath::engine::{Arenas, Engine, EngineAgreements};
+use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckStorage;
+use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelPort};
+
+pub type Station<const WINDOW: usize> = Engine<
+    'static,
+    ModelPort<'static, 8, 0>,
+    Arenas,
+    (),
+    1,
+    8,
+    8,
+    MODEL_GROUPS,
+    MODEL_AGREEMENTS,
+    WINDOW,
+>;
+pub type Agreements<const FRAMES: usize, const WINDOW: usize> =
+    RxBlockAckStorage<EngineAgreements<'static, ModelCaps>, u8, 1, FRAMES, WINDOW>;
+
+// The model port stages into eight places: a window of seven leaves one free.
+#[cfg(not(ui_reject))]
+pub const FITS: () = Station::<7>::GEOMETRY;
+#[cfg(ui_reject)]
+pub const FITS: () = Station::<8>::GEOMETRY;
+// ui-error@outside: E0080: evaluation panicked: the receive window is below the port's staging places: WINDOW < STAGING

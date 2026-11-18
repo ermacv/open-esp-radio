@@ -101,7 +101,7 @@ fn header_of(bytes: &[u8]) -> RxHead {
     RxHead::of(bytes).unwrap()
 }
 
-impl<'v, E: Copy + Eq> Given<'v, E> for RxBlockAckView<'v, Types, E> {
+impl<'v, E: Copy + Eq, const WINDOW: usize> Given<'v, E> for RxBlockAckView<'v, Types, E, WINDOW> {
     fn given(
         &mut self,
         now: Instant,
@@ -162,8 +162,8 @@ impl<'v, E: Copy + Eq> Given<'v, E> for RxBlockAckView<'v, Types, E> {
 
 /// Carry out every command the banks owe, each ending at once: an
 /// addition runs, a removal empties its slot.
-fn drive<E: Copy + Eq>(
-    view: &mut RxBlockAckView<'_, Types, E>,
+fn drive<E: Copy + Eq, const WINDOW: usize>(
+    view: &mut RxBlockAckView<'_, Types, E, WINDOW>,
     port: &mut Recording,
     events: &mut impl EventSink<RxBlockAckEvent>,
 ) {
@@ -265,7 +265,7 @@ fn delivered(disposition: RxDisposition<Types>) -> Option<Vec<u8>> {
 
 #[test]
 fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8, 8>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -300,7 +300,7 @@ fn an_admitted_request_installs_one_agreement_and_owes_its_success_response() {
 
 #[test]
 fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across_it() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     let body = encode_addba_request(
@@ -361,7 +361,7 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
 
 #[test]
 fn a_station_without_agreements_declines_through_the_reply_queue() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -387,7 +387,7 @@ fn a_station_without_agreements_declines_through_the_reply_queue() {
 
 #[test]
 fn reordered_data_is_retained_then_released_in_sequence_order() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -423,7 +423,7 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
 
 #[test]
 fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -450,7 +450,7 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
 
 #[test]
 fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -481,7 +481,7 @@ fn inactivity_ends_the_agreement_with_a_delba_and_returns_its_slot() {
 
 #[test]
 fn a_new_association_returns_every_bank_and_retained_frame_first() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -544,7 +544,7 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
 
 #[test]
 fn an_external_reply_place_never_panics_or_changes_another_bank() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -573,7 +573,7 @@ impl EventSink<RxBlockAckEvent> for Kept {
 #[test]
 fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
     let mut events = Kept::default();
-    let mut storage = RxBlockAckStorage::<Types, u8, 1, 8>::new([0], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u8, 1, 8, 8>::new([0], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -670,7 +670,7 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     let reads = Cell::new(0);
     let mut common = meta();
     common.ampdu = RxEvidence::HardwareObserved(true);
-    let mut storage = RxBlockAckStorage::<CountedTypes<'_>, u8, 1, 8>::new([0], GAP);
+    let mut storage = RxBlockAckStorage::<CountedTypes<'_>, u8, 1, 8, 8>::new([0], GAP);
     let mut view = storage.view();
     let counted = Counted {
         meta: common,
@@ -712,14 +712,18 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
         }]
     ));
     assert_eq!(
-        core::mem::size_of::<RxBlockAckView<'_, Types, u8>>(),
-        core::mem::size_of::<(&mut Header<u8>, &mut [Bank<Types>], &mut [Option<Frame>])>()
+        core::mem::size_of::<RxBlockAckView<'_, Types, u8, 8>>(),
+        core::mem::size_of::<(
+            &mut Header<u8, 8>,
+            &mut [Bank<Types, 8>],
+            &mut [Option<Frame>]
+        )>()
     );
 }
 
 #[test]
 fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4, 4>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     assert!(!view.retained() != 0);
@@ -753,7 +757,7 @@ fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() 
 
 #[test]
 fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 4, 4>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -834,11 +838,13 @@ fn requested(events: &[RxBlockAckEvent]) -> Vec<(u8, u16, AddbaOutcome)> {
         .collect()
 }
 
-#[test]
-fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
-    for (asked, window) in [(0, 16), (8, 8), (64, 16)] {
+/// Under the receive window `WINDOW`, with as many frames: each request
+/// records what it asked and gets at most the window.
+fn requests_get_their_window<const WINDOW: usize>() {
+    let whole = u16::try_from(WINDOW).unwrap();
+    for (asked, window) in [(0, whole), (8, 8), (64, whole)] {
         let mut events = Kept::default();
-        let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+        let mut storage = RxBlockAckStorage::<Types, u32, 2, WINDOW, WINDOW>::new([10, 11], GAP);
         let mut view = storage.view();
         let mut port = Recording::default();
         view.offered(
@@ -871,9 +877,44 @@ fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
 }
 
 #[test]
+fn each_request_records_the_asked_buffer_size_and_the_window_it_got() {
+    requests_get_their_window::<16>();
+    requests_get_their_window::<32>();
+}
+
+#[test]
+fn the_window_binds_below_the_frames() {
+    // Thirty-two frames under a window of 16: a request for 64 gets 16, a
+    // second TID the frames the first leaves.
+    let mut events = Kept::default();
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 32, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    for (dialog, tid) in [(5, 0), (6, 1)] {
+        view.offered(
+            now(1),
+            7,
+            bssid(),
+            request_for(dialog, tid, 64),
+            RxAgreements::Admitted,
+            &mut port,
+            &mut events,
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        requested(&events.0),
+        [
+            (0, 64, AddbaOutcome::Accepted { window: 16 }),
+            (1, 64, AddbaOutcome::Accepted { window: 16 }),
+        ]
+    );
+}
+
+#[test]
 fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
     let mut events = Kept::default();
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     for (dialog, tid) in [(5, 0), (6, 1)] {
@@ -907,10 +948,10 @@ fn a_second_concurrent_tid_records_the_one_frame_left_for_it() {
 #[test]
 fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outcome() {
     let mut events = Kept::default();
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    let mut offer = |view: &mut RxBlockAckView<'_, Types, u32>, action, supported| {
+    let mut offer = |view: &mut RxBlockAckView<'_, Types, u32, 8>, action, supported| {
         view.offered(
             now(1),
             7,
@@ -957,7 +998,7 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
 /// back, and the frame that closes the hole is still taken.
 #[test]
 fn a_full_room_gives_back_what_would_be_retained_and_takes_the_holes_frame() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -970,7 +1011,7 @@ fn a_full_room_gives_back_what_would_be_retained_and_takes_the_holes_frame() {
         &mut (),
     )
     .unwrap();
-    let full = |view: &mut RxBlockAckView<'_, Types, u32>, sequence: u16| {
+    let full = |view: &mut RxBlockAckView<'_, Types, u32, 8>, sequence: u16| {
         let frame = qos_data(0, sequence);
         let bytes = frame.0.clone();
         let header = header_of(&bytes);
@@ -997,7 +1038,7 @@ fn a_full_room_gives_back_what_would_be_retained_and_takes_the_holes_frame() {
 /// keeps them, its removal frees them.
 #[test]
 fn the_slots_come_back_once_every_bank_is_free() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8, 8>::new([10, 11], GAP);
     let mut port = Recording::default();
     storage
         .view()
@@ -1020,7 +1061,7 @@ fn the_slots_come_back_once_every_bank_is_free() {
 /// An addition that expired in the port frees its bank and starts nothing.
 #[test]
 fn an_expired_addition_frees_its_bank() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     view.offer(
         now(1),
@@ -1045,14 +1086,17 @@ fn an_expired_addition_frees_its_bank() {
 }
 
 /// Offer `action` to `view`, admitted, without carrying out any command.
-fn asked(view: &mut RxBlockAckView<'_, Types, u32>, action: BlockAckAction) {
+fn asked<const WINDOW: usize>(
+    view: &mut RxBlockAckView<'_, Types, u32, WINDOW>,
+    action: BlockAckAction,
+) {
     tried(view, action).unwrap();
 }
 
 /// Offer `action` to `view`, admitted: a request left unanswered is the
 /// refusal of its capacity.
-fn tried(
-    view: &mut RxBlockAckView<'_, Types, u32>,
+fn tried<const WINDOW: usize>(
+    view: &mut RxBlockAckView<'_, Types, u32, WINDOW>,
     action: BlockAckAction,
 ) -> Result<(), RxBlockAckRefused> {
     view.offer(
@@ -1067,7 +1111,7 @@ fn tried(
 }
 
 /// The responses `view` owes, each taken as sent.
-fn replies(view: &mut RxBlockAckView<'_, Types, u32>) -> usize {
+fn replies<const WINDOW: usize>(view: &mut RxBlockAckView<'_, Types, u32, WINDOW>) -> usize {
     let mut count = 0;
     while let Some(reply) = view.next_reply() {
         view.sent(reply.place);
@@ -1080,7 +1124,7 @@ fn replies(view: &mut RxBlockAckView<'_, Types, u32>) -> usize {
 /// agreement's own: one bank, one addition, one response after it.
 #[test]
 fn a_request_repeated_during_its_addition_takes_no_second_bank() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     asked(&mut view, request_for(5, 0, 8));
     // While the addition waits for its command.
@@ -1101,7 +1145,7 @@ fn a_request_repeated_during_its_addition_takes_no_second_bank() {
 /// bank: the peer asks again once the bank is free.
 #[test]
 fn a_request_during_its_tids_end_is_unanswered() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -1143,7 +1187,7 @@ fn a_request_during_its_tids_end_is_unanswered() {
 /// still answered: only an admitted one waits for the bank.
 #[test]
 fn a_declined_request_is_answered_while_a_bank_frees() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     asked(&mut view, request_for(5, 0, 8));
     view.offer(
@@ -1162,7 +1206,7 @@ fn a_declined_request_is_answered_while_a_bank_frees() {
 /// An end that could not begin is owed again, to the same bank.
 #[test]
 fn an_end_owed_again_is_given_again() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8, 8>::new([10], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
     view.offered(
@@ -1193,7 +1237,7 @@ fn an_end_owed_again_is_given_again() {
 /// The slots that went home come back, and the banks serve again.
 #[test]
 fn the_slots_back_serve_again() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8, 8>::new([10, 11], GAP);
     let slots = storage.slots_home().unwrap();
     assert!(!storage.is_free(), "away, the banks serve nothing");
     storage.slots_back(slots);

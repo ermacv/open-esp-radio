@@ -18,7 +18,8 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::{
-    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLent, ModelLink, ModelMemory, ModelPort,
+    Air, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES, ModelCaps, ModelLent, ModelLink,
+    ModelMemory, ModelPort,
 };
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::phy::{
@@ -52,6 +53,10 @@ pub(super) const PAYLOAD: usize = 100;
 pub(super) const ETHERNET: usize = 14;
 pub(super) const BEST_EFFORT: WmmAccessCategory = WmmAccessCategory::BestEffort;
 
+/// The tests' receive window: below the model port's eight staging places
+/// (`WINDOW < STAGING`).
+pub(super) const MODEL_WINDOW: usize = MODEL_PLACES - 1;
+
 /// A station's single places in the tests.
 pub(super) const STATION_SINGLES: usize = 8;
 /// An access point's controller's.
@@ -75,6 +80,7 @@ pub(super) type StationEngine<'id, const POOL: usize> = Engine<
     STATION_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    MODEL_WINDOW,
 >;
 
 /// An access point's engine of `PEERS` clients over the model port.
@@ -88,6 +94,7 @@ pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
     AP_SINGLES,
     MODEL_GROUPS,
     MODEL_AGREEMENTS,
+    MODEL_WINDOW,
 >;
 
 /// The network's end: what it offers, each MSDU's Ethernet frame, and what
@@ -1738,6 +1745,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         STATION_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
+        MODEL_WINDOW,
     >;
     type Ap = super::Running<
         'static,
@@ -1747,6 +1755,7 @@ fn the_sizes_of_the_values_built_into_a_variant() {
         AP_SINGLES,
         MODEL_GROUPS,
         MODEL_AGREEMENTS,
+        MODEL_WINDOW,
     >;
     std::println!(
         "copies: DataLink {}, StationLink {}, StationEntry {}, ClientLink {}, DataPlane {}, \
