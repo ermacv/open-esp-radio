@@ -20,7 +20,7 @@ pub type Agreements<const FRAMES: usize, const WINDOW: usize> =
 
 // The model's capabilities name a window of at most 64.
 #[cfg(not(ui_reject))]
-pub const FITS: () = Agreements::<64, 64>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_upper_mac::block_ack::WindowFits = Agreements::<64, 64>::GEOMETRY;
 #[cfg(ui_reject)]
-pub const FITS: () = Agreements::<65, 65>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_upper_mac::block_ack::WindowFits = Agreements::<65, 65>::GEOMETRY;
 // ui-error@outside: E0080: evaluation panicked: the receive window is 1 to the capabilities' rx_block_ack_max_window

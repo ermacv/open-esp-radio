@@ -20,7 +20,7 @@ pub type Agreements<const FRAMES: usize, const WINDOW: usize> =
 
 // The retained frames hold a whole window.
 #[cfg(not(ui_reject))]
-pub const FITS: () = Agreements::<16, 16>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_upper_mac::block_ack::WindowFits = Agreements::<16, 16>::GEOMETRY;
 #[cfg(ui_reject)]
-pub const FITS: () = Agreements::<15, 16>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_upper_mac::block_ack::WindowFits = Agreements::<15, 16>::GEOMETRY;
 // ui-error@outside: E0080: evaluation panicked: the retained frames hold a whole window: WINDOW <= FRAMES

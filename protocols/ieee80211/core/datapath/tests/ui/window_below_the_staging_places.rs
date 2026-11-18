@@ -20,7 +20,7 @@ pub type Agreements<const FRAMES: usize, const WINDOW: usize> =
 
 // The model port stages into eight places: a window of seven leaves one free.
 #[cfg(not(ui_reject))]
-pub const FITS: () = Station::<7>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_datapath::engine::EngineFits = Station::<7>::GEOMETRY;
 #[cfg(ui_reject)]
-pub const FITS: () = Station::<8>::GEOMETRY;
+pub const FITS: oer_protocols_ieee80211_core_datapath::engine::EngineFits = Station::<8>::GEOMETRY;
 // ui-error@outside: E0080: evaluation panicked: the receive window is below the port's staging places: WINDOW < STAGING

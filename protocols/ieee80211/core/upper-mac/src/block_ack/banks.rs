@@ -304,22 +304,29 @@ pub struct RxBlockAckStorage<
     header: Header<E, WINDOW>,
     banks: [Bank<T, WINDOW>; BANKS],
     frames: [Option<T::Frame>; FRAMES],
+    /// The relations were checked: no storage is built without them.
+    _fits: WindowFits,
 }
+
+/// The proof that a storage's relations hold, of no size: made only by
+/// [`RxBlockAckStorage::GEOMETRY`], and held by every storage.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowFits(());
 
 impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize, const WINDOW: usize>
     RxBlockAckStorage<T, E, BANKS, FRAMES, WINDOW>
 {
     /// The storage's relations, checked where it is built
     /// ([`window_refusal`]).
-    pub const GEOMETRY: () = {
+    pub const GEOMETRY: WindowFits = {
         if let Some(refusal) = window_refusal(WINDOW, FRAMES, T::Caps::CAPS.rx_block_ack_max_window)
         {
             panic!("{}", refusal);
         }
+        WindowFits(())
     };
 
     pub fn new(slots: [T::Slot; BANKS], gap_timeout: Duration) -> Self {
-        let () = Self::GEOMETRY;
         Self {
             header: Header {
                 association: None,
@@ -331,6 +338,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize, 
             },
             banks: slots.map(Bank::Free),
             frames: [const { None }; FRAMES],
+            _fits: Self::GEOMETRY,
         }
     }
 

@@ -613,7 +613,14 @@ pub struct Engine<
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<F::Entry<P::Link, T>>; PEERS],
     queues: TxQueues<P::Memory, POOL, PEERS>,
+    /// The relations were checked: no engine is built without them.
+    _fits: EngineFits,
 }
+
+/// The proof that an engine's relations hold, of no size: made only by
+/// [`Engine::GEOMETRY`], and held by every engine.
+#[derive(Clone, Copy, Debug)]
+pub struct EngineFits(());
 
 /// The seal of the forms' halves: only this crate makes one, so only the
 /// engine's sections call them.
@@ -771,12 +778,13 @@ impl<
     /// into at most the contract's places; the receive window is 1 to the
     /// port's `rx_block_ack_max_window`, and the reorder's frames (the
     /// window) leave a staging place free (`WINDOW <= FRAMES < STAGING`).
-    pub const GEOMETRY: () = {
+    pub const GEOMETRY: EngineFits = {
         if let Some(refusal) =
             engine_refusal(P::STAGING, WINDOW, P::Caps::CAPS.rx_block_ack_max_window)
         {
             panic!("{}", refusal);
         }
+        EngineFits(())
     };
 
     /// The engine of stopped data, taking at most `budget` MSDUs a section
@@ -784,7 +792,6 @@ impl<
     /// policy values. Built in its place, a `const` item or a placed
     /// initializer.
     pub const fn new(budget: u8, policy: ReceivePolicy) -> Self {
-        let () = Self::GEOMETRY;
         Self {
             budget: if budget == 0 { 1 } else { budget },
             policy,
@@ -792,6 +799,7 @@ impl<
             data: Data::Stopped,
             entries: [const { Entry::Free }; PEERS],
             queues: TxQueues::new(),
+            _fits: Self::GEOMETRY,
         }
     }
 
@@ -2574,6 +2582,7 @@ where
             budget,
             policy: _,
             links: _,
+            _fits: _,
         } = self
         else {
             return 0;
