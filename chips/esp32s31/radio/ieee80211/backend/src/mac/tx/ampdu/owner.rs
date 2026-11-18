@@ -9,7 +9,7 @@ use alloc::boxed::Box;
 
 use core::{ops::Deref, pin::Pin};
 
-use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataEntry, WifiTxMetadataEntryMut};
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_ampdu_storage::{
     AmpduDmaState, AmpduDmaStorage, AmpduDmaStorageError, PinnedAmpduDmaStorage, PushRefused,
     RetainedAmpduDma, RetainedAmpduDmaStorage, WrittenBuffer,
@@ -866,12 +866,12 @@ impl<B: PlacedBacking, const SLOTS: usize> RetainedDmaAmpduTx<'_, B, SLOTS> {
         let head = dma
             .software_region_mut(0)
             .ok()
-            .and_then(|region| region.first_chunk_mut::<{ WifiTxMetadataHead::SIZE }>())
+            .and_then(|region| region.first_chunk_mut::<{ WifiTxMetadataEntry::SIZE }>())
             .ok_or(HtAmpduTxError::BackingUnavailable { index: 0 })?;
-        let mut head = WifiTxMetadataHeadMut::new(head);
+        let mut head = WifiTxMetadataEntryMut::new(head);
         let control = head.control();
-        if control.he_smpdu() != he_smpdu {
-            head.set_control(control.with_he_smpdu(he_smpdu));
+        if control.single() != he_smpdu {
+            head.set_control(control.with_single(he_smpdu));
         }
         Ok(length)
     }

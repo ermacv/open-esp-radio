@@ -35,9 +35,9 @@ const FRAME: usize = 1_024;
 /// Case C's longest frame (`tasks/154`, `159`): the provenance series' 1 500.
 #[cfg(feature = "amsdu")]
 pub(super) const FRAME: usize = 1_500;
-/// The TX metadata before the frame in its buffer: the first word holds
-/// the MPDU's length with its FCS (`WIFI_TX_METADATA_HEAD`), the second is
-/// zero, as the backend's ordinary transmit writes it (`ordinary_tx.rs`,
+/// The TX metadata entry before the frame in its buffer
+/// (`WIFI_TX_METADATA_ENTRY`): the first word holds the MPDU's length with
+/// its FCS, the second is zero, as the backend's ordinary transmit writes it (`ordinary_tx.rs`,
 /// `TX_METADATA_SIZE`).
 const METADATA: usize = 8;
 /// The FCS the hardware appends, its room left zero after the frame.

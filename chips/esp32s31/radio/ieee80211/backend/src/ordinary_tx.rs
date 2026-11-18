@@ -10,7 +10,7 @@
 //! prove either receipt or absence of the solicited response.
 
 use core::{ops::ControlFlow, pin::Pin};
-use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+use oer_chips_esp32s31_hal::layouts::{WifiTxMetadataEntry, WifiTxMetadataEntryMut};
 use oer_portable_time::{Clock, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
 
@@ -1726,14 +1726,12 @@ where
         let rate = active.retry.current_rate();
         let metadata = self.free_buffer()?;
         let head = metadata
-            .first_chunk_mut::<{ WifiTxMetadataHead::SIZE }>()
+            .first_chunk_mut::<{ WifiTxMetadataEntry::SIZE }>()
             .ok_or(OrdinaryTxError::BufferSizeOverflow)?;
         // The HE S-MPDU bit selects the single-MPDU container geometry; the
         // low bits keep the MPDU+MIC+FCS length.
-        let mut head = WifiTxMetadataHeadMut::new(head);
-        let control = head
-            .control()
-            .with_he_smpdu(matches!(rate, TxPhyRate::He(_)));
+        let mut head = WifiTxMetadataEntryMut::new(head);
+        let control = head.control().with_single(matches!(rate, TxPhyRate::He(_)));
         head.set_control(control);
         #[cfg(all(oer_trace, oer_debug_control))]
         if let Some(frame) = metadata

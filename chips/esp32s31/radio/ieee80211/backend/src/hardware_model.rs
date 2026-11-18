@@ -20,7 +20,7 @@
 //! | `RX-EDGE` | a landed unit latches RX success, masked or not, its bytes already readable | `HW24_RX_MASKED_W1C_20261027`, `HW24_RX_POST_IRQ_BYTES_20261027` |
 //! | `IRQ-LINE` | the line stays asserted while an enabled event is latched | `BLOB_LIBPP_WDEV_PROCESS_FIQ`, in [`MacInterruptModel`] |
 //! | `TX-CHAIN` | a started queue follows its chain to the last descriptor | layout `WIFI_TX_DMA_DESCRIPTOR`; `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES` |
-//! | `TX-PSDU` | a buffer is the metadata prefix, then the PSDU its low twenty bits count | `BLOB_LIBPP_PP_HE_SMPDU_LENGTH`; layout `WIFI_TX_METADATA_HEAD` |
+//! | `TX-PSDU` | a buffer is the metadata prefix, then the PSDU its low twenty bits count | `BLOB_LIBPP_PP_HE_SMPDU_LENGTH`; layout `WIFI_TX_METADATA_ENTRY` |
 //! | `TX-DONE` | an ended PPDU latches its queue's completion and TX complete | `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES`, `BLOB_LIBPP_WDEV_PROCESS_FIQ` |
 //! | `TX-DETACH` | a taken completion's disable ends hardware ownership | `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES` |
 //! | `STOP-RUN` | a stop request leaves the MAC active, then idle | `BLOB_LIBPP_MAC_CHANNEL_SWITCH` |
