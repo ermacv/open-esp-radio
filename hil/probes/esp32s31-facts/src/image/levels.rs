@@ -13,7 +13,7 @@
 //! The handler records events (enter, exit, mark) with the line from mcause
 //! and the level from mintstatus; the host decodes their order. Nothing here
 //! decides a verdict.
-use super::{LEVEL_BITS, LINE, SOURCE, Session, emit, setup};
+use super::{LEVEL_BITS, LINE, SOURCE, Session, emit, generic::feed, setup};
 use core::{
     ptr,
     sync::atomic::{AtomicPtr, AtomicU32, Ordering},
@@ -298,12 +298,13 @@ fn end() {
     CLIC.store(ptr::null_mut(), Ordering::Release);
 }
 
-/// Emits the trial's events, six 16-bit events to a record:
-/// `(tag | record << 8 | repeat << 16, e0 | e1 << 16, e2 | e3 << 16, e4 | e5 << 16)`.
+/// Emits the trial's events: a header `(tag | 0xff, repeat, events,
+/// entries)`, then six 16-bit events to a record:
+/// `(tag | record << 16 | repeat << 24, e0 | e1 << 16, e2 | e3 << 16, e4 | e5 << 16)`.
 fn emit_events(tag: u32, repeat: u32) {
     let n = (EVENT_COUNT.load(Ordering::Relaxed) as usize).min(EVENT_CAPACITY);
     emit(
-        tag | 0xff00,
+        tag | 0xff,
         repeat,
         n as u32,
         ENTRIES.load(Ordering::Relaxed),
@@ -319,7 +320,7 @@ fn emit_events(tag: u32, repeat: u32) {
     let mut record = 0u32;
     while k < n {
         emit(
-            tag | record << 8 | repeat << 16,
+            tag | record << 16 | repeat << 24,
             word(k),
             word(k + 2),
             word(k + 4),
@@ -344,6 +345,7 @@ fn word(s: &Session<'_>, line: u32) -> u32 {
 /// n+1's primary line. Siblings record entry and exit only.
 pub(super) fn nesting(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
+        feed(s);
         setup(s);
         for n in 1..=7 {
             configure(s, PRIMARY + n as u32 - 1, n, true, true);
@@ -362,6 +364,7 @@ pub(super) fn nesting(s: &mut Session<'_>) {
 /// (level 1). 316 (Q2.5, second half): the handler pends LOW twice.
 fn from_higher(s: &mut Session<'_>, mode: Mode, tag: u32) {
     for repeat in 0..REPEATS {
+        feed(s);
         setup(s);
         configure(s, LOW, 1, true, true);
         configure(s, HIGH, 3, true, true);
@@ -381,6 +384,7 @@ pub(super) fn from_higher_once(s: &mut Session<'_>) {
 /// from LOW's handler (level 1).
 pub(super) fn from_lower(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
+        feed(s);
         setup(s);
         configure(s, LOW, 1, true, true);
         configure(s, MIDDLE, 2, true, true);
@@ -398,6 +402,7 @@ pub(super) fn from_lower(s: &mut Session<'_>) {
 /// 313 (Q2.3): MIDDLE's handler pends MIDDLE on its first entry.
 pub(super) fn own_handler(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
+        feed(s);
         setup(s);
         configure(s, MIDDLE, 2, true, true);
         begin(s, Mode::OwnHandler);
@@ -414,11 +419,12 @@ pub(super) fn own_handler(s: &mut Session<'_>) {
 /// variants 0-2, edge in 3-5), all level 2. With MIE cleared the source
 /// rises before the target's pend (0, 3), between its read and its write
 /// (1, 4) or after it (2, 5); then MIE is set. Record per trial:
-/// `(0x3500 | variant << 8, repeat, target | source << 8 | pending-line << 16
+/// `(0x3500 | variant, repeat, target | source << 8 | pending-line << 16
 /// entries, words)`, then the three words after the pend.
 pub(super) fn neighbours(s: &mut Session<'_>) {
     for variant in 0..6u32 {
         for repeat in 0..REPEATS {
+            feed(s);
             setup(s);
             s.interrupt_matrix
                 .interrupt_core0
@@ -473,14 +479,14 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
                     | pending(s, NEIGHBOUR_PENDING) << 2)
                     << 24;
             emit(
-                0x3500 | variant << 8,
+                0x3500 | variant,
                 repeat,
                 counts,
                 ENTRIES.load(Ordering::Relaxed),
             );
             if repeat == 0 {
-                emit(0x3580 | variant << 8, before[0], before[1], before[2]);
-                emit(0x35c0 | variant << 8, after[0], after[1], after[2]);
+                emit(0x3580 | variant, before[0], before[1], before[2]);
+                emit(0x35c0 | variant, after[0], after[1], after[2]);
             }
         }
     }
@@ -497,6 +503,7 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
 /// MIE set; then HIGH's handler pends LOW twice.
 pub(super) fn twice(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
+        feed(s);
         setup(s);
         configure(s, MIDDLE, 2, true, true);
         // Both pends before any entry: MIE stays cleared across them.
@@ -533,6 +540,7 @@ pub(super) fn latency(s: &mut Session<'_>) {
     let mut max = 0u32;
     let mut valid = 0u32;
     for sample in 0..SAMPLES {
+        feed(s);
         setup(s);
         configure(s, LOW, 1, true, true);
         configure(s, HIGH, 3, true, true);
