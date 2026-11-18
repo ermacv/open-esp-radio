@@ -69,7 +69,9 @@ pub trait Brand: sealed::Sealed + Sized + 'static {
 
 /// What is wrong with `B`'s geometry and its place of `BYTES` bytes, if
 /// anything: checked when [`arena!`](crate::arena!) declares the brand and
-/// again where an arena is built.
+/// again where an arena is built. At most `MAX_BUFFERS` buffers of at most
+/// 65 535 bytes make a place below 2^23 bytes, which fits the DMA address
+/// width.
 #[doc(hidden)]
 pub const fn geometry_refusal<B: Brand, const BYTES: usize>() -> Option<&'static str> {
     let Some(place) = B::COUNT.checked_mul(B::SIZE) else {
@@ -82,8 +84,6 @@ pub const fn geometry_refusal<B: Brand, const BYTES: usize>() -> Option<&'static
         Some("an arena has 1 to MAX_BUFFERS buffers")
     } else if place != BYTES {
         Some("an arena's place is COUNT buffers of SIZE bytes")
-    } else if BYTES > u32::MAX as usize {
-        Some("an arena's place fits the DMA address width")
     } else if B::SIZE > u16::MAX as usize || B::SIZE % 4 != 0 || B::FRONT % 4 != 0 {
         Some("a buffer is at most 65 535 bytes, in words, its front in words")
     } else if shared >= B::SIZE {
@@ -100,6 +100,8 @@ const fn region<B: Brand>() -> usize {
 
 /// The place of a brand's buffers: `BYTES = COUNT × SIZE` bytes, all zero at
 /// the start, which never move. Its address is the HAL placement's fact.
+#[derive(bytemuck::Zeroable)]
+#[zeroable(bound = "")]
 #[repr(C, align(4))]
 pub struct ArenaPlace<B: Brand, const BYTES: usize> {
     bytes: UnsafeCell<[u8; BYTES]>,
@@ -113,11 +115,6 @@ pub struct ArenaPlace<B: Brand, const BYTES: usize> {
 // nor `Clone`, made only by this module), shared for a `&Handle` and unique
 // for a `&mut Handle`; a lent buffer has no handle.
 unsafe impl<B: Brand, const BYTES: usize> Sync for ArenaPlace<B, BYTES> {}
-
-#[allow(unsafe_code, reason = "all zero bytes are the place's start")]
-// SAFETY: the place is bytes and a zero-sized marker; all zero is its
-// initial value.
-unsafe impl<B: Brand, const BYTES: usize> bytemuck::Zeroable for ArenaPlace<B, BYTES> {}
 
 impl<B: Brand, const BYTES: usize> DmaLayout for ArenaPlace<B, BYTES> {
     type Window = B::Window;

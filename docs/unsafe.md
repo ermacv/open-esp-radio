@@ -211,6 +211,14 @@ layouts; both the cell and the layouts derive `Zeroable`. `DmaWindow`,
 `oer-portable-memory`. Their two unsafe constructors preserve the placed-storage
 and retention contracts.
 
+`oer-portable-memory::arena` is the custody of DMA buffers. It has three kinds of
+`unsafe`: the slice over a held buffer's CPU bytes (shared and unique, one site
+each, reached only through the buffer's one `Handle`), `Sync` of the place, and
+`Released::assume`, the release proof's one constructor. Each kind of release is
+a HAL atom that calls it, citing its stand record. A place's address comes from
+`DmaRef` alone, made by the HAL's placement; the arena makes no address
+from a place.
+
 `oer-portable-riscv` (`portable/riscv`) is the only crate with `asm!` for architectural
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
 debug triggers, waits and barriers, and `illegal_instruction`, the

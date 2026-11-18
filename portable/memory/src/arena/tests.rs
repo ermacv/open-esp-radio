@@ -151,3 +151,72 @@ fn a_returned_set_reaches_its_every_word() {
         assert_eq!(set.word(word).load(Ordering::Relaxed), 1 << word);
     }
 }
+
+macro_rules! geometry {
+    ($name:ident: $count:expr, $size:expr, $front:expr, $back:expr) => {
+        enum $name {}
+        impl sealed::Sealed for $name {}
+        impl Brand for $name {
+            type Window = Window;
+            const COUNT: usize = $count;
+            const SIZE: usize = $size;
+            const FRONT: usize = $front;
+            const BACK: usize = $back;
+            fn returned() -> &'static ReturnedSet {
+                static RETURNED: ReturnedSet = ReturnedSet::new();
+                &RETURNED
+            }
+        }
+    };
+}
+
+geometry!(Most: MAX_BUFFERS, 65_532, 0, 0);
+geometry!(TooMany: MAX_BUFFERS + 1, 4, 0, 0);
+geometry!(NoBuffer: 0, 4, 0, 0);
+geometry!(Widest: 1, 65_532, 65_528, 0);
+geometry!(TooWide: 1, 65_536, 0, 0);
+geometry!(OddSize: 1, 6, 0, 0);
+geometry!(OddFront: 1, 8, 2, 0);
+geometry!(NoRegion: 1, 8, 4, 4);
+geometry!(OneByte: 1, 8, 4, 3);
+geometry!(Overflowing: 2, usize::MAX, 0, 0);
+geometry!(OverflowingShared: 1, 8, usize::MAX, 1);
+
+#[test]
+fn the_geometry_is_refused_exactly_at_its_bounds() {
+    assert_eq!(geometry_refusal::<Most, { MAX_BUFFERS * 65_532 }>(), None);
+    assert_eq!(geometry_refusal::<Widest, 65_532>(), None);
+    assert_eq!(geometry_refusal::<OneByte, 8>(), None);
+    assert_eq!(geometry_refusal::<Rx, { 40 * 64 }>(), None);
+    let buffers = Some("an arena has 1 to MAX_BUFFERS buffers");
+    assert_eq!(
+        geometry_refusal::<TooMany, { (MAX_BUFFERS + 1) * 4 }>(),
+        buffers
+    );
+    assert_eq!(geometry_refusal::<NoBuffer, 0>(), buffers);
+    let place = Some("an arena's place is COUNT buffers of SIZE bytes");
+    assert_eq!(geometry_refusal::<Rx, { 40 * 64 + 4 }>(), place);
+    assert_eq!(geometry_refusal::<Overflowing, 0>(), place);
+    let buffer = Some("a buffer is at most 65 535 bytes, in words, its front in words");
+    assert_eq!(geometry_refusal::<TooWide, 65_536>(), buffer);
+    assert_eq!(geometry_refusal::<OddSize, 6>(), buffer);
+    assert_eq!(geometry_refusal::<OddFront, 8>(), buffer);
+    let region = Some("a buffer's CPU region is not empty");
+    assert_eq!(geometry_refusal::<NoRegion, 8>(), region);
+    assert_eq!(geometry_refusal::<OverflowingShared, 8>(), region);
+}
+
+#[test]
+fn a_one_word_brand_reads_only_its_word() {
+    // Bits no buffer of the brand can set are never a handle.
+    Tx::returned().word(1).fetch_or(1, Ordering::Relaxed);
+    drop(Returning::<Tx, Counted>::new(Handle::full(2)));
+    let indices: Vec<_> = Returned::<Tx> {
+        word: 0,
+        bits: 0,
+        brand: PhantomData,
+    }
+    .map(|handle| (handle.index, handle.extent()))
+    .collect();
+    assert_eq!(indices, [(2, 16)]);
+}
