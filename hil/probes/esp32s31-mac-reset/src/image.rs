@@ -573,6 +573,8 @@ mod amsdu;
 mod ccmp;
 #[cfg(feature = "receiver")]
 mod receiver;
+#[cfg(feature = "stream")]
+mod stream;
 #[cfg(feature = "transmit")]
 mod transmit;
 #[cfg(all(feature = "transmit", feature = "receiver"))]

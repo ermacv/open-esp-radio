@@ -4061,7 +4061,7 @@ fn spares_are_never_lent_by_reference_or_lease() {
 }
 
 #[test]
-fn detach_before_last_refuses_last_without_a_write() {
+fn the_probe_door_detaches_and_rebinds_the_unit_at_last() {
     let (storage, _bank, mut mmio, mut live) = rebind_ring();
     let cursor = live.freeze_cursor(&mut mmio).unwrap();
     let first = storage
@@ -4081,13 +4081,10 @@ fn detach_before_last_refuses_last_without_a_write() {
         .unwrap()
         .expect("LAST itself is released");
     assert_eq!(last.head_index(), 1);
-    let before = storage.descriptors()[1].word0();
-    assert_eq!(
-        last.detach_before_last(&mut mmio, cursor),
-        Err(RxRingError::Corrupt)
-    );
-    assert_eq!(storage.descriptors()[1].word0(), before);
-    assert_eq!(last.rebind_next(4), Err(RxRingError::Corrupt));
+    // `tasks/193`: the experiment's door admits LAST (not NEXT's).
+    last.detach_before_last(&mut mmio, cursor)
+        .expect("LAST is detached");
+    last.rebind_next(4).expect("LAST is rebound");
     last.retain_for_deferred_recycle();
 }
 

@@ -1295,8 +1295,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
     /// TEMPORARY experiment: clear the owner bit of the completed, observed
     /// single descriptor `index` and fence, when `cursor` is current and
-    /// `index` lies strictly before its LAST. LAST, the descriptor NEXT
-    /// names and R are refused before any write.
+    /// `index` lies at or before its LAST (`tasks/193` admits LAST). The
+    /// descriptor NEXT names and R are refused before any write.
     pub(crate) fn detach_before_last<M: RxDma>(
         &mut self,
         mmio: &mut M,
@@ -1311,7 +1311,8 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
                 .ok_or(RxRingError::Corrupt)?;
         let next =
             descriptor_index::<COUNT>(cursor.next_descriptor_low, self.descriptor_table.base());
-        if last.get() == index || next.is_some_and(|next| next.get() == index) {
+        let _ = last;
+        if next.is_some_and(|next| next.get() == index) {
             return Err(RxRingError::Corrupt);
         }
         let word0 = self.detached_word(index)?;

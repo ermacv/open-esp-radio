@@ -73,6 +73,14 @@ b6 = ["ampdu"]
 # then (`tasks/185`) with the PHY's channel and I2C TX-rate writes made
 # again after the preparation, before the pulse.
 foreign = []
+# `tasks/193` (probe-only, branch `probe/rx-rebind-3`): the rebind probe's
+# three kinds of air. `stream`: 500-octet frames with their counter every
+# 64 octets, each awaited, one after another; `stream-isolated`: the same
+# with a pause between frames, so each is alone in the receiver's ring;
+# `stream-ampdu`: aggregates of 16 short QoS Data subframes back to back.
+stream = ["amsdu"]
+stream-isolated = ["stream"]
+stream-ampdu = ["ampdu"]
 
 [lints]
 workspace = true
