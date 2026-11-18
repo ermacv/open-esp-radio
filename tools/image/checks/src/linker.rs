@@ -147,11 +147,11 @@ fn link(
     let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
     // The analysis-only first ELF reserves the policy's placeholder without guards.
-    // The final link supplies the selected physical guards from the chip contract.
+    // The final link supplies the guards the stack policy and the image chose.
     let profile =
         oer_tools_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;
     if let Some(interrupts) = &profile.facts.interrupts {
-        for hart in interrupts.irq_stack_guard_bytes.keys() {
+        for hart in &interrupts.harts {
             arguments.push(format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").into());
         }
     }

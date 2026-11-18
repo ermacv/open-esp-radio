@@ -181,13 +181,17 @@ fn checks_hart_one_alignment_only_when_it_exists() {
 fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_state() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for chip in ["esp32s31"] {
-        let profile = oer_tools_chip_profile::Profile::load(&root, chip).unwrap();
-        let margin =
-            oer_tools_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))
+        let base = oer_tools_chip_profile::Profile::load(&root, chip).unwrap();
+        let harts = base.facts.interrupts.as_ref().unwrap().harts.clone();
+        // The image's profile: every hart declared, the policy's guards placed.
+        let policy =
+            oer_tools_chip_profile::policy::StackPolicy::load(&root.join(base.stack_policy()))
                 .unwrap()
-                .irq_stack_margin_percent()
+                .for_image(&harts)
                 .unwrap();
-        let contract = profile.facts.interrupts.unwrap();
+        let margin = policy.irq_stack_margin_percent().unwrap();
+        let profile = policy.runtime_profile(&base).unwrap();
+        let contract = profile.facts.interrupts.clone().unwrap();
         let mut sizes = vec![0; contract.harts.len()];
         for &hart in &contract.harts {
             let bound = if hart == 0 { 16192 } else { 1008 };

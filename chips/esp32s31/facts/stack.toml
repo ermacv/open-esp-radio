@@ -15,10 +15,18 @@ default_task_stack_bytes = { 0 = 0x30000, 1 = 0 }
 
 # Each used hart's SRAM interrupt stack is sized from its proven bound:
 # `align16(ceil(bound * (100 + irq_stack_margin_percent) / 100))` plus its
-# guard. An image whose bound for a hart is not proven declares that stack's
+# guard (`irq_stack_guard_bytes` below, unless the image declines it). An image whose bound for a hart is not proven declares that stack's
 # size itself (`[package.metadata.open-radio] irq-stack`). What limits a
 # stack is the SRAM it is placed in.
 irq_stack_margin_percent = 10
+# The guard below each used hart's interrupt stack, by hart: a NAPOT region
+# the runtime watches with debug trigger 2, a power of two of at least 16
+# bytes. Hart 0's stack is rounded up so that hart 1's guard above it is
+# aligned. An image declines the guard (`[package.metadata.open-radio]
+# irq-stack-guard = "declined"`): then no guard bytes, no rounding and no
+# arming code; an overflow of hart 0's stack runs below the SRAM's start and
+# one of hart 1's into the top of hart 0's stack.
+irq_stack_guard_bytes = { 0 = 4096, 1 = 1024 }
 # What the first, analysis-only link places for every used interrupt stack:
 # only large enough to link and to be analysed. No size is gated against it,
 # and the second link's allocation does not depend on it.

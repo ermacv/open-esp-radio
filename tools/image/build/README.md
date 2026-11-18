@@ -107,10 +107,14 @@ more: any unresolved path in a task stack's bound fails its build, with the
 unresolved sites listed, and `runtime-stack.txt` says the image sizes the
 stacks from their bound. A task stack whose image declares it proven is sized
 at link time to its bound (proven, or conditional on an admitted assumption)
-plus its policy's minimum free bytes, by the image linker (see the
+plus its reserve, by the image linker (see the
 [image linker](../linker/README.md)); `runtime-stack.txt` names the source of
-the size. A policy that also sets `allocation_bytes` is an error. Any other
-value of the key is an error. HIL retains its
+the size. The reserve is the policy's minimum free bytes unless the image
+sets `task-stack-reserve-bytes` (a byte count, zero included) beside
+`task-stack = "proven"`; the key without it fails the build, naming why:
+under a partial bound the reserve covers the unresolved sites and stays the
+policy's. A policy that also sets `allocation_bytes` is an error. Any other
+value of `task-stack` is an error. HIL retains its
 `Product`/`Diagnostic` interrupt policy according to image class: diagnostic
 images report strict/executor-task code placement violations and breaches of the
 hardware class as warnings; other images
@@ -314,14 +318,21 @@ in cached memory (flash, PSRAM) are listed. It writes all of this, each
 hart's levels and their critical paths to `interrupt-stack.txt`.
 Each hart's exception bound (including its entry frame) plus the largest
 own function frame reached at any of its levels, including the exception
-and executor tasks, is compared with that hart's `irq-stack-guard-bytes` in the chip's
-`chip.toml`: S31 hart 0 has 4096 bytes and hart 1 has 1024.
+and executor tasks, is compared with that hart's guard, the stack policy's
+`irq_stack_guard_bytes`: S31 hart 0 has 4096 bytes and hart 1 has 1024.
 Guard findings are reported, never gates in build, run or analysis. The image
-linker exports the actual physical guard as `__runtime_cpu{hart}_irq_stack_guard_bytes`;
-the runtime reads that absolute symbol and arms a trigger only for a nonzero guard.
+linker exports the physical guard as `__runtime_cpu{hart}_irq_stack_guard_bytes`;
+the runtime arms its trigger from that absolute symbol.
 The IRQ stacks occupy a separate NOLOAD section at the start of internal
-SRAM, before ISR code. A guard is NAPOT-aligned at its stack bottom and always
-placed: hart 0's stack is rounded to hart 1's guard. There is no shared
+SRAM, before ISR code. A guard is NAPOT-aligned at its stack bottom, and
+hart 0's stack is rounded to hart 1's guard. The guard is the image's choice:
+`irq-stack-guard = "declined"` under `[package.metadata.open-radio]`
+(`"placed"`, the default, otherwise) places no guard bytes, rounds no stack
+and compiles no arming code (the runtime's build script reads
+`OPEN_RADIO_IRQ_STACK_GUARD`, which the pipeline sets from the key). Such an
+image loses the watch: an overflow of hart 0's stack runs below the SRAM's
+start and one of hart 1's into the top of hart 0's stack, unreported; the
+guard table's line for each hart says so. There is no shared
 guard-size constant and no maximum. A stack with a proven bound takes
 `align16(ceil(bound * (100 + margin) / 100)) + guard`; the margin is the
 stack policy's `irq_stack_margin_percent` (10) unless the image sets

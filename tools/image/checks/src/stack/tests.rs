@@ -614,10 +614,16 @@ fn the_policy_names_each_stack_root_and_its_reserve() {
     );
     assert_eq!(
         base.runtime_environment(),
-        [(
-            format!("OPEN_RADIO_TASK_STACK_HART{}_MINIMUM_FREE_BYTES", 0),
-            "512".to_owned()
-        ),]
+        [
+            (
+                oer_tools_chip_profile::policy::IRQ_STACK_GUARD_ENV.to_owned(),
+                "placed".to_owned()
+            ),
+            (
+                format!("OPEN_RADIO_TASK_STACK_HART{}_MINIMUM_FREE_BYTES", 0),
+                "512".to_owned()
+            ),
+        ]
     );
     // An extension reuses its base unchanged.
     let nested = directory.path().join("hil");
@@ -840,7 +846,7 @@ fn the_fact_boot_identity_selects_which_partial_task_bound_can_pass() {
     for harts in [3, 7] {
         let boot = harts - 1;
         let mut contract = Contract::of(
-            &oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap(),
+            &crate::stack::contract::tracked_profile("esp32s31"),
             crate::stack::contract::tracked_margin("esp32s31"),
         )
         .unwrap();

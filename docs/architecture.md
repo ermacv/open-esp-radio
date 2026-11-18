@@ -662,7 +662,8 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   the jump and that the entry installs its own stack pointer first. There is no
   baseline of accepted holes, and an observed depth above a bound fails the run.
   The frame/move limit (4 KiB) is a reporting threshold: larger frames and
-  moves produce messages without failing the build. Stack guards are reported,
+  moves produce messages without failing the build. A stack guard is the
+  image's choice, placed unless the image declines it; it is reported,
   never a gate: frame coverage, unknown guard-window frames and guard storage
   cannot fail build, run or analysis. An interrupt stack is sized from its
   proven bound plus the image's margin, or from the size an image without

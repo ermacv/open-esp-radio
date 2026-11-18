@@ -339,7 +339,7 @@ fn a_nonruntime_link_ignores_the_specification_and_writes_no_fragment() {
 
 #[test]
 fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
-    for (chip, expected) in [("esp32s31", vec![(0, 4096), (1, 1024)])] {
+    for (chip, expected) in [("esp32s31", vec![0, 1])] {
         let directory = tempdir();
         let root = directory.path();
         for (path, text) in oer_chips_family_facts::tracked::FILES {
@@ -358,6 +358,8 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
                 irq_stack_margin_percent: None,
                 task_stack_proven: false,
                 harts: Vec::new(),
+                irq_stack_guard: oer_tools_chip_profile::policy::IrqStackGuard::Placed,
+                task_stack_reserve_bytes: None,
             })
             .unwrap(),
         )
@@ -374,7 +376,7 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
                 .filter(|argument| argument.starts_with("--defsym=__runtime_cpu"))
                 .collect();
             assert_eq!(guards.len(), expected.len());
-            for (hart, _) in &expected {
+            for hart in &expected {
                 assert!(guards.contains(
                     &format!("--defsym=__runtime_cpu{hart}_irq_stack_guard_bytes=0").as_str()
                 ));

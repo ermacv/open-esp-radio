@@ -114,7 +114,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
         instrumentation::Instrumentation::declared(&spec.root, &spec.application)?;
-    let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
+    let task_stack = task_stack::declared(&spec.root, &spec.application.package)?;
     let critical_section_hart =
         critical_section::declared(&spec.root, &spec.application.package, &profile)?;
     let harts = harts::declared(&spec.root, &spec.application, &profile)?;
@@ -124,7 +124,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
         spec,
         &profile,
         &instrumentation,
-        task_stack_proven,
+        task_stack,
         critical_section_hart,
         &harts,
         &irq_stacks,

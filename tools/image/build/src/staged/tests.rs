@@ -269,7 +269,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
             &spec,
             &profile,
             &Instrumentation::default(),
-            false,
+            crate::task_stack::TaskStackChoices::default(),
             profile.facts.interrupts.as_ref().unwrap().boot_hart,
             &[profile.facts.interrupts.as_ref().unwrap().boot_hart],
             &crate::irq_stack::IrqStackChoices::default(),

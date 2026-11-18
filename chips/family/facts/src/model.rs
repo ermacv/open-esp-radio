@@ -536,9 +536,15 @@ pub struct InterruptContract {
     pub harts: Vec<u32>,
     /// The hart that owns reset and primary image initialization.
     pub boot_hart: u32,
+    /// The debug triggers each hart has (breakpoints and watchpoints share
+    /// them); the platform's runtime names the ones it arms.
+    pub debug_triggers: u32,
     pub level_writers: Vec<LevelWriter>,
-    /// Guard bytes keyed by hart, with exactly one entry for every `harts` member.
-    #[serde(deserialize_with = "by_hart")]
+    /// The interrupt stacks' guard bytes keyed by hart: not a fact of the
+    /// chip but the stack policy's, which writes them into an image's
+    /// profile (`StackPolicy::runtime_profile`), zero for each hart of an
+    /// image that declines the guard. A chip file never states it.
+    #[serde(skip)]
     pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
 }
 
@@ -548,20 +554,6 @@ pub struct InterruptContract {
 pub enum TieBreak {
     /// The highest interrupt ID is selected first.
     HighestLine,
-}
-
-/// A table keyed by hart number, as TOML keys are strings.
-fn by_hart<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> core::result::Result<BTreeMap<u32, u32>, D::Error> {
-    BTreeMap::<String, u32>::deserialize(deserializer)?
-        .into_iter()
-        .map(|(hart, bytes)| {
-            hart.parse()
-                .map(|hart| (hart, bytes))
-                .map_err(|_| serde::de::Error::custom(format!("`{hart}` is not a hart number")))
-        })
-        .collect()
 }
 
 impl InterruptContract {
@@ -596,6 +588,9 @@ impl InterruptContract {
                     .into(),
             );
         }
+        if self.debug_triggers == 0 {
+            return Err("a hart has at least one debug trigger".into());
+        }
         if self.control_bits > 8 || self.level_bits > self.control_bits {
             return Err("CLIC level bits must fit the implemented control bits (at most 8)".into());
         }
@@ -604,22 +599,8 @@ impl InterruptContract {
             || !harts.contains(&self.boot_hart)
             || harts.len() != self.harts.len()
             || harts.is_empty()
-            || self
-                .irq_stack_guard_bytes
-                .keys()
-                .copied()
-                .collect::<alloc::collections::BTreeSet<_>>()
-                != harts
         {
-            return Err("interrupt guards must name every hart exactly once".into());
-        }
-        for (&hart, &bytes) in &self.irq_stack_guard_bytes {
-            if bytes < 16 || !bytes.is_power_of_two() {
-                return Err(format!(
-                    "hart {hart}'s interrupt guard must be a power of two of at least 16 bytes"
-                )
-                .into());
-            }
+            return Err("the harts are 0 to n - 1 with the boot hart among them".into());
         }
         Ok(())
     }

@@ -74,7 +74,13 @@ input values. Stack capacity and vector generation return the existing `Error`
 for missing guards, invalid alignment or arithmetic overflow. IRQ allocation
 returns both storage and the physical guard size for the bytes a stack must
 hold (its bound with the stack policy's or the image's margin, or the size
-the image declares); the guard is always placed and no maximum applies.
+the image declares); the guard is the stack policy's, written into the
+image's profile, and zero where the image declines it (no guard bytes and no
+rounding to it). No maximum applies. A chip states no guard: a chip file
+naming `irq-stack-guard-bytes` is refused. The chip states its debug
+triggers per hart (`debug-triggers`, generated as the platform port's
+`DEBUG_TRIGGERS`), which the runtime's guard triggers are checked against at
+compile time.
 
 ## Generated
 

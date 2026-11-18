@@ -128,7 +128,8 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     let policy =
         oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
             .for_image(&analysis.harts)?
-            .with_image_irq_stack_margin(analysis.irq_stack_margin_percent);
+            .with_image_irq_stack_margin(analysis.irq_stack_margin_percent)
+            .with_image_irq_stack_guard(analysis.irq_stack_guard);
     let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
@@ -236,6 +237,10 @@ fn analysis(
         harts: crate::harts::of_metadata(metadata, package, profile)?,
         irq_stacks: irq_stacks.declared,
         irq_stack_margin_percent: irq_stacks.margin_percent,
+        irq_stack_guard: irq_stacks.guard,
+        // A probe's task stacks are never declared proven: its reserve is the
+        // policy's.
+        task_stack_reserve_bytes: None,
     })
 }
 

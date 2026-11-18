@@ -5,9 +5,6 @@ use crate::{Result, stack::StackAudit};
 use oer_tools_chip_profile::policy::{StackPolicy, TaskStack};
 use serde::{Deserialize, Serialize};
 
-/// The largest change of the bound the relink may bring, as for the IRQ stacks.
-const BOUND_CHANGE_LIMIT_BYTES: u64 = 64;
-
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Allocation {
@@ -96,13 +93,17 @@ fn proven_bound(audit: &StackAudit, hart: u32, which: &str) -> Result<u64> {
     Ok(bytes)
 }
 
+/// The final link's bound equals the first's, as for the interrupt stacks
+/// (`irq_stacks::verify_bound`): the second link changes only the stack's
+/// size and its symbols, no frame or edge, so a difference is a fault of
+/// the analysis.
 fn verify_bound(planned: &Allocation, bound: u64) -> Result<()> {
-    if planned.first_bound.abs_diff(bound) > BOUND_CHANGE_LIMIT_BYTES {
+    if planned.first_bound != bound {
         return Err(format!(
-            "the task stack bound changed after relinking: {} -> {bound} bytes (difference {}, limit {BOUND_CHANGE_LIMIT_BYTES}); allocated {} bytes; no further link attempted",
-            planned.first_bound,
-            planned.first_bound.abs_diff(bound),
-            planned.bytes
+            "the task stack bound changed after relinking: first link {} bytes, final link \
+             {bound} bytes; the two links' bounds must be equal; allocated {} bytes; no further \
+             link attempted",
+            planned.first_bound, planned.bytes
         )
         .into());
     }
@@ -168,17 +169,28 @@ mod tests {
     }
 
     #[test]
-    fn a_bound_that_still_fits_passes_and_a_larger_change_stops_with_figures() {
+    fn an_equal_bound_passes_and_one_byte_apart_fails_with_both_bounds() {
         verify_bound(&planned(), 880).unwrap();
-        verify_bound(&planned(), 880 - 64).unwrap();
-        // 896 + 16384 = 17280 > 17264, within the 64-byte change limit.
-        let error = verify_bound(&planned(), 896).unwrap_err().to_string();
-        for figure in ["880", "896", "16384", "17280", "17264", "no further link"] {
-            assert!(error.contains(figure), "{error}");
+        for changed in [879, 881] {
+            let error = verify_bound(&planned(), changed).unwrap_err().to_string();
+            for figure in [
+                "first link 880 bytes",
+                &format!("final link {changed} bytes"),
+                "must be equal",
+                "allocated 17264 bytes",
+            ] {
+                assert!(error.contains(figure), "{error}");
+            }
         }
-        for bound in [880 + 65, 880 - 65] {
-            let error = verify_bound(&planned(), bound).unwrap_err().to_string();
-            assert!(error.contains("difference 65, limit 64"), "{error}");
+    }
+
+    #[test]
+    fn an_equal_bound_that_does_not_fit_its_reserve_stops_with_figures() {
+        let mut planned = planned();
+        planned.bytes = 17_000;
+        let error = verify_bound(&planned, 880).unwrap_err().to_string();
+        for figure in ["880", "16384", "17264", "17000", "no further link"] {
+            assert!(error.contains(figure), "{error}");
         }
     }
 

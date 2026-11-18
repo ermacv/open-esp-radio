@@ -1,5 +1,5 @@
 /// NAPOT `tdata2` watching exactly `bottom..bottom + bytes`.
-/// The chip contract supplies the IRQ guard size; the task guard watches
+/// The stack policy supplies the IRQ guard size; the task guard watches
 /// one four-byte word. Both must be aligned power-of-two regions.
 pub(super) const fn napot_guard(bottom: usize, bytes: usize) -> Result<usize, crate::BootError> {
     if bytes < 4 || !bytes.is_power_of_two() || bottom & (bytes - 1) != 0 {
@@ -8,15 +8,16 @@ pub(super) const fn napot_guard(bottom: usize, bytes: usize) -> Result<usize, cr
     Ok(bottom | (bytes / 2 - 1))
 }
 
-/// The linker may omit the IRQ guard to preserve the bound plus margin.
+/// Arm the guard below an interrupt stack. Compiled only in an image that
+/// places its guards (`irq_stack_guard`); there the linked guard is the
+/// stack policy's, never zero.
+#[cfg(irq_stack_guard)]
 pub(super) fn arm_interrupt_guard(
     bottom: usize,
     bytes: usize,
     arm: impl FnOnce(usize),
 ) -> Result<(), crate::BootError> {
-    if bytes != 0 {
-        arm(napot_guard(bottom, bytes)?);
-    }
+    arm(napot_guard(bottom, bytes)?);
     Ok(())
 }
 
@@ -24,13 +25,22 @@ pub(super) fn arm_interrupt_guard(
 mod tests {
     use super::napot_guard;
 
+    #[cfg(irq_stack_guard)]
     #[test]
-    fn an_omitted_interrupt_guard_does_not_arm_a_trigger() -> Result<(), crate::BootError> {
+    fn a_placed_guard_arms_its_region_and_a_missing_one_is_a_boot_error()
+    -> Result<(), crate::BootError> {
         let mut armed = None;
-        super::arm_interrupt_guard(0x2000_0000, 0, |value| armed = Some(value))?;
-        assert_eq!(armed, None);
         super::arm_interrupt_guard(0x2000_0000, 4096, |value| armed = Some(value))?;
         assert_eq!(armed, Some(napot_guard(0x2000_0000, 4096)?));
+        let mut armed = None;
+        assert_eq!(
+            super::arm_interrupt_guard(0x2000_0000, 0, |value| armed = Some(value)),
+            Err(crate::BootError::InvalidStackGuard {
+                bottom: 0x2000_0000,
+                bytes: 0
+            })
+        );
+        assert_eq!(armed, None);
         Ok(())
     }
 

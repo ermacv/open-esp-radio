@@ -137,8 +137,9 @@ contracts: [Hardware memory](hardware-memory.md).
   image's (`irq-stack-margin-percent`, zero included) or else the stack
   policy's (10%). A hart whose bound is not proven takes the size its image
   declares (`irq-stack`) plus its guard; neither, or both, fails the build.
-  No maximum limits a stack: the SRAM does. The guard is always placed, hart
-  0's stack rounded to hart 1's guard. The second link is final: its bound
+  No maximum limits a stack: the SRAM does. The guard is the stack policy's,
+  placed unless the image declines it (`irq-stack-guard = "declined"`), hart
+  0's stack rounded to hart 1's placed guard. The second link is final: its bound
   must equal the first link's, and a proven bound plus margin must fit the
   allocation minus the guard. Guard frame coverage, unknown frames and guard
   storage are reported, never gates. See the

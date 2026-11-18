@@ -362,8 +362,9 @@ A page never relaxes a rule above: where they differ, the rule above holds.
   growth is not a stop. An interrupt stack is sized from its proven bound
   plus the image's margin (the stack policy's unless the image sets its
   own, zero included); an image without the proof declares its size. What
-  limits it is the memory it is placed in. Stack guards are reported, never
-  a gate. A limit the owner sets for an image is its own gate.
+  limits it is the memory it is placed in. A stack guard is the image's
+  choice, placed unless the image declines it; it is reported, never a
+  gate. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
   the board's lease from the LAB service; never preempt another holder,
   wait. The owner's limits on secrets, eFuse writes, protected boards and hub

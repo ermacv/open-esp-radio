@@ -22,8 +22,9 @@
 //! interrupt or exception code raises an illegal-instruction exception instead
 //! of silently corrupting the interrupted task's registers (on a core without
 //! the F extension the field reads zero and the writes do nothing). A debug
-//! trigger watches each linked IRQ guard. Guard coverage is reported and does
-//! not guarantee overflow capture.
+//! trigger watches each linked IRQ guard, unless the image declines the
+//! guards (`irq_stack_guard` unset: no guard bytes and no arming code). Guard
+//! coverage is reported and does not guarantee overflow capture.
 //!
 //! The runtime linker script reserves every hart's task stack and sizes each
 //! interrupt stack from its bound or its image's declared size; this module finds them by
@@ -82,6 +83,19 @@ const IRQ_STACK_GUARD_TRIGGER: usize = 2;
 #[cfg(target_arch = "riscv32")]
 const TASK_STACK_GUARD_TRIGGER: usize = 0;
 
+/// Both triggers the runtime arms lie among the hart's debug triggers (the
+/// chip facts' `debug-triggers`).
+#[cfg(target_arch = "riscv32")]
+const _: () = {
+    let mut triggers: &[usize] = &[TASK_STACK_GUARD_TRIGGER, IRQ_STACK_GUARD_TRIGGER];
+    while let [trigger, rest @ ..] = triggers {
+        if *trigger >= oer_chips_family_platform_port::DEBUG_TRIGGERS {
+            panic!("the stack guards' triggers lie among the hart's debug triggers");
+        }
+        triggers = rest;
+    }
+};
+
 #[cfg(target_arch = "riscv32")]
 use crate::layout::{_runtime_mtvt, _start_trap};
 
@@ -95,7 +109,7 @@ fn interrupt_stack(hart: usize) -> Option<core::ops::Range<usize>> {
         .filter(|stack| !stack.is_empty())
 }
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", irq_stack_guard))]
 #[inline(always)]
 fn interrupt_stack_guard_bytes(hart: usize) -> Option<usize> {
     crate::layout::stack_symbols()
@@ -162,9 +176,14 @@ pub fn install_interrupt_stack<const H: u8>(
         unsafe { watermark::paint(bottom as *mut u32, stack.len() / 4) };
         painted.store(true, Ordering::Release);
     }
-    let guard =
-        interrupt_stack_guard_bytes(hart).ok_or(crate::BootError::NoInterruptStack { hart })?;
-    guard_interrupt_stack(bottom, guard)?;
+    // An image that declines the guard has no arming code: its stack has no
+    // guard bytes and no trigger watches it.
+    #[cfg(irq_stack_guard)]
+    {
+        let guard =
+            interrupt_stack_guard_bytes(hart).ok_or(crate::BootError::NoInterruptStack { hart })?;
+        guard_interrupt_stack(bottom, guard)?;
+    }
     let (mtvec, mtvt) = vectors_of(hart);
     // SAFETY: `mtvec` names `_start_trap`, which the assembly aligns to 64
     // bytes, and `mtvt` this hart's 256-byte-aligned table in SRAM; `top` is
@@ -223,7 +242,7 @@ fn invalid_hart() -> ! {
 ///
 /// Called with local interrupts disabled; the runtime reserves trigger 2
 /// for this hart's interrupt-stack guard.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", irq_stack_guard))]
 fn guard_interrupt_stack(bottom: usize, bytes: usize) -> Result<(), crate::BootError> {
     guard::arm_interrupt_guard(bottom, bytes, |data2| {
         oer_portable_riscv::arm_store_trigger(IRQ_STACK_GUARD_TRIGGER, data2);

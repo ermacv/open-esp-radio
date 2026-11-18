@@ -499,6 +499,20 @@ impl Vectors {
     }
 }
 
+/// The debug triggers of each hart, from the interrupt contract: the
+/// runtime checks the triggers it arms against it at compile time.
+pub fn debug_triggers(facts: &Facts) -> Result<String> {
+    let interrupts = facts
+        .interrupts
+        .as_ref()
+        .ok_or_else(|| format!("{}: the debug triggers need `[interrupts]`", facts.id))?;
+    interrupts.validate()?;
+    Ok(format!(
+        "/// The debug triggers each hart has, from the chip facts.\npub const DEBUG_TRIGGERS: usize = {};\n",
+        interrupts.debug_triggers
+    ))
+}
+
 /// The chip's checked HP-hart identities, shared by the PAC, HAL and vectors.
 pub fn hart_geometry(harts: u32, boot_hart: u32) -> Result<String> {
     if harts == 0 || harts > u32::from(u8::MAX) || boot_hart >= harts {
