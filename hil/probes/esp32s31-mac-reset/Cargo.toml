@@ -64,6 +64,9 @@ ampdu = ["amsdu", "dep:oer-chips-esp32s31-radio-ieee80211-backend"]
 # Cell G of `tasks/161` (`tasks/174`): cell F's aggregates under CCMP sealed
 # by this board's MAC, after single sealed MPDUs as the control.
 gcell = ["ampdu"]
+# B6 of `tasks/144` (`tasks/177`): aggregates of full and short subframes at
+# HT MCS7 and MCS0 to the probe polling its receive cause.
+b6 = ["ampdu"]
 
 [lints]
 workspace = true

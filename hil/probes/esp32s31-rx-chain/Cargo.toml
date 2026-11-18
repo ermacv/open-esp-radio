@@ -58,6 +58,10 @@ ampdu = ["amsdu"]
 # Cell G's receiver (`tasks/174`): cell F's aggregates under CCMP, the key
 # and the agreement both.
 gcell = ["ccmp", "ampdu"]
+# B6 of `tasks/144` (`tasks/176`): the receive cause and LAST polled together
+# under the access point's aggregates, in buffers of 1 664 bytes.
+irq = ["laps"]
+ring1664 = []
 # Case D's second geometry: 256-byte buffers in place of 128.
 ring256 = []
 

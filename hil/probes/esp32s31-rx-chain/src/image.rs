@@ -32,6 +32,9 @@ use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
+#[cfg(feature = "irq")]
+#[path = "b6.rs"]
+mod b6;
 /// Case C's frames, the sender's layout (`tasks/154`, `159`).
 #[cfg(feature = "amsdu")]
 #[path = "../../esp32s31-mac-reset/src/case_c.rs"]
@@ -40,16 +43,19 @@ mod case_c;
 #[cfg(feature = "laps")]
 #[path = "laps.rs"]
 #[cfg_attr(
-    feature = "amsdu",
-    allow(dead_code, reason = "case D's checks stand beside case C's")
+    any(feature = "amsdu", feature = "irq"),
+    allow(dead_code, reason = "case D's checks stand beside case C's and B6")
 )]
 mod laps;
 #[path = "traffic.rs"]
 mod traffic;
 
 const COUNT: usize = 32;
-#[cfg(not(feature = "ring256"))]
+#[cfg(not(any(feature = "ring256", feature = "ring1664")))]
 const BUFFER: usize = 128;
+/// B6's buffers (`tasks/176`): one full-size MPDU a descriptor.
+#[cfg(feature = "ring1664")]
+const BUFFER: usize = 1664;
 /// Case D's second geometry (`tasks/156`).
 #[cfg(feature = "ring256")]
 const BUFFER: usize = 256;
@@ -659,8 +665,18 @@ async fn run_direct(
     // Case D: the station's scan policy, so that a frame to its address is
     // taken and acknowledged whatever its BSSID, as the mac-reset probe and
     // the backend's `StaScanRxPolicyHardware` apply it.
-    #[cfg(feature = "laps")]
+    #[cfg(all(feature = "laps", not(feature = "irq")))]
     let observation = laps::run(console, storage, &mut ring, access, output.station).await;
+    #[cfg(feature = "irq")]
+    let observation = b6::run(
+        console,
+        storage,
+        &mut ring,
+        access,
+        &mut mac_irq,
+        output.station,
+    )
+    .await;
     access.wifi_mac_hal().request_channel_stop();
     let deadline = EmbassyClock
         .now()
