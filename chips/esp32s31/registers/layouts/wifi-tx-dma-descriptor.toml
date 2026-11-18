@@ -25,13 +25,19 @@ access = "shared"
 name = "TX_OWNED"
 bits = "31"
 writer = "cpu"
-description = "Set by software to hand the descriptor to the MAC. Whether the TX engine checks it as the RX walker checks OWNER is not verified."
+description = "Set by software to hand the descriptor to the MAC; the vendor's `owner` (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117). Whether the TX engine checks it as the RX walker checks OWNER is not verified."
 
 [[layout.words.fields]]
 name = "TX_LAST"
 bits = "30"
 writer = "cpu"
-description = "Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; not the RX RX_DONE."
+description = "Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; the vendor's `eof` (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117); not the RX RX_DONE."
+
+[[layout.words.fields]]
+name = "SOSF"
+bits = "29"
+writer = "cpu"
+description = "The vendor's `sosf`, as its receive descriptor's bit 29 is named; the vendor's prepend sets it on a frame's first descriptor on one path. This driver writes zero. Its effect is not established."
 
 [[layout.words.fields]]
 name = "LENGTH"
@@ -75,3 +81,11 @@ sources = ["PROMOTED_LMAC_TX", "PROMOTED_TX_AMPDU", "HIL_OPEN_STA_RATE_CONTROL_2
 provenance = "reviewed"
 accuracy = "exact"
 completeness = "complete"
+
+[[review]]
+entity = "WIFI_TX_DMA_DESCRIPTOR.CONTROL.SOSF"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117"]
+naming = "vendor"
+provenance = "observed"
+accuracy = "positional"
+completeness = "unknown"

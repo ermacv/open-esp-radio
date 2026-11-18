@@ -102,19 +102,26 @@ fn both_descriptors_have_the_same_geometry() {
 }
 
 #[test]
-fn the_tx_metadata_head_sets_only_the_container_bit() {
-    use oer_chips_esp32s31_pac::layouts::{WifiTxMetadataHead, WifiTxMetadataHeadMut};
+fn the_tx_metadata_entry_sets_only_the_field_it_names() {
+    use oer_chips_esp32s31_pac::layouts::{WifiTxMetadataEntry, WifiTxMetadataEntryMut};
 
-    let mut bytes = [0x1c, 0x00, 0x00, 0x00];
-    let mut head = WifiTxMetadataHeadMut::new(&mut bytes);
-    let control = head.control().with_he_smpdu(true);
-    head.set_control(control);
-    assert!(head.view().control().he_smpdu());
-    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x01]);
-    assert_eq!(bytes.len(), WifiTxMetadataHead::SIZE);
+    let mut bytes = [0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    assert_eq!(bytes.len(), WifiTxMetadataEntry::SIZE);
+    let mut entry = WifiTxMetadataEntryMut::new(&mut bytes);
+    let control = entry.control().with_single(true);
+    entry.set_control(control);
+    assert!(entry.view().control().single());
+    assert_eq!(entry.view().control().mpdu_len(), 0x1c);
+    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]);
 
-    let mut head = WifiTxMetadataHeadMut::new(&mut bytes);
-    let control = head.control().with_he_smpdu(false);
-    head.set_control(control);
-    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x00]);
+    let mut entry = WifiTxMetadataEntryMut::new(&mut bytes);
+    let control = entry.control().with_single(false);
+    entry.set_control(control);
+    let delimiters = entry.delimiters().with_htc(true);
+    entry.set_delimiters(delimiters);
+    assert_eq!(bytes, [0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01]);
+
+    let entry = WifiTxMetadataEntryMut::new(&mut bytes);
+    assert!(entry.view().delimiters().htc());
+    assert_eq!(entry.view().delimiters().deli_num(), 0);
 }

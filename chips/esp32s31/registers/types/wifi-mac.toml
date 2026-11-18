@@ -14040,7 +14040,7 @@ description = "Bounded HE SU formatter-required low control bit."
 name = "BITS_5_7_OPAQUE"
 bits = "7:5"
 class = "plain"
-description = "Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata head bits 26:25 into bits 6:5 (zero when the head's bits 27:25 are 0b100) and head bit 28 into bit 7 (WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those head bits, so an ordinary frame's value is zero."
+description = "Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata entry bits 26:25 into bits 6:5 (zero when the entry's bits 27:25 are 0b100) and entry bit 28 into bit 7 (WIFI_TX_METADATA_ENTRY.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those entry bits, so an ordinary frame's value is zero."
 
 [[registers.fields]]
 name = "CONTROL_REQUIRED_8"

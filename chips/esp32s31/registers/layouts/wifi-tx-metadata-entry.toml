@@ -1,0 +1,174 @@
+schema = 1
+
+[layout]
+name = "WIFI_TX_METADATA_ENTRY"
+description = """
+The vendor's "entry": the two words that precede a transmit frame in its
+buffer, which the CPU fills in before DMA publication and the MAC reads as
+its own. A buffer without them is refused at once (SOURCE:
+HW_WIFIMAC_TX_ENTRY_REQUIRED_20261117). Field names are the vendor's
+diagnostic's (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117); bits 15:14 of
+the first word and 31:25 of the second are not named there."""
+size = 8
+align = 1
+
+[layout.review]
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30", "HW_WIFIMAC_TX_ENTRY_REQUIRED_20261117"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "partial"
+
+[[layout.bytes]]
+name = "CONTROL"
+offset = 0x00
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "MPDU_LEN"
+bits = "13:0"
+writer = "cpu"
+description = "The MPDU's length with its FCS: the vendor's prepend fills it from the buffer's length less the entry, and its length setters mask these fourteen bits."
+
+[[layout.bytes.fields]]
+name = "SEQ"
+bits = "23:16"
+writer = "cpu"
+description = "The low eight bits of the frame's sequence number (its Sequence Control shifted right by four), as the vendor's prepend stores it."
+
+[[layout.bytes.fields]]
+name = "SINGLE"
+bits = "24"
+writer = "cpu"
+description = "The vendor's `single`. Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion."
+
+[[layout.bytes.fields]]
+name = "BITS_25_28_OPAQUE"
+opaque = true
+bits = "28:25"
+writer = "cpu"
+description = "Not named by the vendor's diagnostic. The vendor HE SU formatter copies bits 26:25 and 28 into the second HE SU vector word (HE_SU_SIGNAL_A2_LENGTH.BITS_5_7_OPAQUE) and clears that word's bit 8 when bits 27:25 are 0b100; every ordinary vendor TX path writes zero here."
+
+[[layout.bytes.fields]]
+name = "NULL_BYTE"
+bits = "31:29"
+writer = "cpu"
+description = "The vendor's `null_byte`, cleared by its prepend; its effect is not established."
+
+[[layout.bytes]]
+name = "DELIMITERS"
+offset = 0x04
+size = 4
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "DELI_NUM"
+bits = "7:0"
+writer = "cpu"
+description = "The vendor's `deli_num`: the subframe's count of delimiters, which the subframe length counts as four bytes each beyond one."
+
+[[layout.bytes.fields]]
+name = "CBW40_DELI_NUM"
+bits = "15:8"
+writer = "cpu"
+description = "The vendor's `cbw40_deli_num`: the delimiter count for a 40 MHz transmission, written beside `DELI_NUM` by the vendor's prepend."
+
+[[layout.bytes.fields]]
+name = "CBW80_DELI_NUM"
+bits = "23:16"
+writer = "cpu"
+description = "The vendor's `cbw80_deli_num`; no S31 path is established to use it."
+
+[[layout.bytes.fields]]
+name = "HTC"
+bits = "24"
+writer = "cpu"
+description = "The vendor's `htc`: the frame carries an HT/HE Control field, which the MAC inserts; the vendor's length setters add four bytes for it."
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL.MPDU_LEN"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL.SEQ"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL.SINGLE"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "complete"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL.BITS_25_28_OPAQUE"
+sources = ["BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "unknown"
+naming = "opaque"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.CONTROL.NULL_BYTE"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.DELIMITERS"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "descriptive"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.DELIMITERS.DELI_NUM"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.DELIMITERS.CBW40_DELI_NUM"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.DELIMITERS.CBW80_DELI_NUM"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117"]
+provenance = "derived"
+accuracy = "positional"
+completeness = "unknown"
+naming = "vendor"
+
+[[review]]
+entity = "WIFI_TX_METADATA_ENTRY.DELIMITERS.HTC"
+sources = ["BLOB_LIBPP_TX_METADATA_ENTRY_20261117", "BLOB_LIBPP_PP_HE_SMPDU_LENGTH", "HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30"]
+provenance = "derived"
+accuracy = "exact"
+completeness = "partial"
+naming = "vendor"

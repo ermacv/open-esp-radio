@@ -93,7 +93,7 @@ layouts = [
     "layouts/axi-dma-descriptor.toml",
     "layouts/wifi-rx-control-prefix.toml",
     "layouts/wifi-rx-control-tail.toml",
-    "layouts/wifi-tx-metadata-head.toml",
+    "layouts/wifi-tx-metadata-entry.toml",
     "layouts/ble-buffer-header.toml",
     "layouts/ble-rx-packet-prefix.toml",
     "layouts/ble-tx-packet-prefix.toml",

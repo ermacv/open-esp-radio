@@ -304978,7 +304978,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata head bits 26:25 into bits 6:5 (zero when the head's bits 27:25 are 0b100) and head bit 28 into bit 7 (WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those head bits, so an ordinary frame's value is zero.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata entry bits 26:25 into bits 6:5 (zero when the entry's bits 27:25 are 0b100) and entry bit 28 into bit 7 (WIFI_TX_METADATA_ENTRY.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those entry bits, so an ordinary frame's value is zero.
             #[inline]
             pub const fn bits_5_7_opaque(self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 5)
@@ -305037,7 +305037,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00000004) != 0
             }
 
-            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata head bits 26:25 into bits 6:5 (zero when the head's bits 27:25 are 0b100) and head bit 28 into bit 7 (WIFI_TX_METADATA_HEAD.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those head bits, so an ordinary frame's value is zero.
+            /// Observed source use; the individual hardware meaning is unknown. The vendor formatter copies TX metadata entry bits 26:25 into bits 6:5 (zero when the entry's bits 27:25 are 0b100) and entry bit 28 into bit 7 (WIFI_TX_METADATA_ENTRY.CONTROL.BITS_25_28_OPAQUE); every ordinary vendor TX path clears those entry bits, so an ordinary frame's value is zero.
             #[inline]
             pub const fn bits_5_7_opaque(&self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 5)
@@ -323841,11 +323841,32 @@ pub mod layouts {
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
 
+        /// Width of `SOSF` in bits.
+        pub const SOSF_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SOSF`.
+        pub const SOSF_MAX: u32 = 0x1;
+        /// The vendor's `sosf`, as its receive descriptor's bit 29 is named; the vendor's prepend sets it on a frame's first descriptor on one path. This driver writes zero. Its effect is not established.
+        ///
+        /// `SOSF`, bit 29; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117.
+        pub const fn sosf(self) -> bool {
+            self.0 & 0x20000000 != 0
+        }
+
+        /// This value with `SOSF` set to `value`.
+        pub const fn with_sosf(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x20000000)
+            } else {
+                Self(self.0 & 0xdfffffff)
+            }
+        }
+
         /// Width of `TX_LAST` in bits.
         pub const TX_LAST_WIDTH: u32 = 1;
         /// Greatest unsigned image of `TX_LAST`.
         pub const TX_LAST_MAX: u32 = 0x1;
-        /// Project-assigned name. Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; not the RX RX_DONE.
+        /// Project-assigned name. Set on the last descriptor of a chain and cleared on the others, as this driver builds TX chains; the vendor's `eof` (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117); not the RX RX_DONE.
         ///
         /// `TX_LAST`, bit 30; written by the CPU.
         /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
@@ -323866,7 +323887,7 @@ pub mod layouts {
         pub const TX_OWNED_WIDTH: u32 = 1;
         /// Greatest unsigned image of `TX_OWNED`.
         pub const TX_OWNED_MAX: u32 = 0x1;
-        /// Project-assigned name. Set by software to hand the descriptor to the MAC. Whether the TX engine checks it as the RX walker checks OWNER is not verified.
+        /// Project-assigned name. Set by software to hand the descriptor to the MAC; the vendor's `owner` (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117). Whether the TX engine checks it as the RX walker checks OWNER is not verified.
         ///
         /// `TX_OWNED`, bit 31; written by the CPU.
         /// SOURCE: PROMOTED_LMAC_TX, PROMOTED_TX_AMPDU, HIL_OPEN_STA_RATE_CONTROL_2026_07_30.
@@ -325041,50 +325062,64 @@ pub mod layouts {
         }
     }
 
-    /// The first word of the TX metadata that precedes a transmit frame in its
-    /// buffer: the CPU fills it in before DMA publication.
+    /// The vendor's "entry": the two words that precede a transmit frame in its
+    /// buffer, which the CPU fills in before DMA publication and the MAC reads as
+    /// its own. A buffer without them is refused at once (SOURCE:
+    /// HW_WIFIMAC_TX_ENTRY_REQUIRED_20261117). Field names are the vendor's
+    /// diagnostic's (SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117); bits 15:14 of
+    /// the first word and 31:25 of the second are not named there.
     ///
-    /// A decoder over the 4 bytes the hardware wrote, read only after the
+    /// A decoder over the 8 bytes the hardware wrote, read only after the
     /// handover that gives them to the CPU.
-    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30, HW_WIFIMAC_TX_ENTRY_REQUIRED_20261117.
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct WifiTxMetadataHead<'a> {
-        bytes: &'a [u8; 4],
+    pub struct WifiTxMetadataEntry<'a> {
+        bytes: &'a [u8; 8],
     }
 
-    impl<'a> WifiTxMetadataHead<'a> {
+    impl<'a> WifiTxMetadataEntry<'a> {
         /// The structure's size in bytes.
-        pub const SIZE: usize = 4;
+        pub const SIZE: usize = 8;
 
         /// Decode the structure from its bytes.
-        pub const fn new(bytes: &'a [u8; 4]) -> Self {
+        pub const fn new(bytes: &'a [u8; 8]) -> Self {
             Self { bytes }
         }
 
         /// The bytes this decoder reads.
-        pub const fn bytes(self) -> &'a [u8; 4] {
+        pub const fn bytes(self) -> &'a [u8; 8] {
             self.bytes
         }
 
         /// The `CONTROL` range: bytes 0x0..0x4, little-endian.
-        pub const fn control(self) -> WifiTxMetadataHeadControl {
-            WifiTxMetadataHeadControl(u32::from_le_bytes([
+        pub const fn control(self) -> WifiTxMetadataEntryControl {
+            WifiTxMetadataEntryControl(u32::from_le_bytes([
                 self.bytes[0],
                 self.bytes[1],
                 self.bytes[2],
                 self.bytes[3],
             ]))
         }
+
+        /// The `DELIMITERS` range: bytes 0x4..0x8, little-endian.
+        pub const fn delimiters(self) -> WifiTxMetadataEntryDelimiters {
+            WifiTxMetadataEntryDelimiters(u32::from_le_bytes([
+                self.bytes[4],
+                self.bytes[5],
+                self.bytes[6],
+                self.bytes[7],
+            ]))
+        }
     }
 
     /// Project-assigned name.
     ///
-    /// The `WIFI_TX_METADATA_HEAD.CONTROL` range.
-    /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+    /// The `WIFI_TX_METADATA_ENTRY.CONTROL` range.
+    /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub struct WifiTxMetadataHeadControl(u32);
+    pub struct WifiTxMetadataEntryControl(u32);
 
-    impl WifiTxMetadataHeadControl {
+    impl WifiTxMetadataEntryControl {
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -325095,20 +325130,66 @@ pub mod layouts {
             Self(bits)
         }
 
-        /// Width of `HE_SMPDU` in bits.
-        pub const HE_SMPDU_WIDTH: u32 = 1;
-        /// Greatest unsigned image of `HE_SMPDU`.
-        pub const HE_SMPDU_MAX: u32 = 0x1;
-        /// Project-assigned name. Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion.
+        /// Width of `MPDU_LEN` in bits.
+        pub const MPDU_LEN_WIDTH: u32 = 14;
+        /// Greatest unsigned image of `MPDU_LEN`.
+        pub const MPDU_LEN_MAX: u32 = 0x3fff;
+        /// The MPDU's length with its FCS: the vendor's prepend fills it from the buffer's length less the entry, and its length setters mask these fourteen bits.
         ///
-        /// `HE_SMPDU`, bit 24; written by the CPU.
-        /// SOURCE: BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
-        pub const fn he_smpdu(self) -> bool {
+        /// `MPDU_LEN`, bits 13:0; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH.
+        pub const fn mpdu_len(self) -> u16 {
+            (self.0 & 0x3fff) as u16
+        }
+
+        /// This value with `MPDU_LEN` set to `value`, or `None` when `value` does not
+        /// fit its 14 bits.
+        pub const fn with_mpdu_len(self, value: u16) -> Option<Self> {
+            if value > 0x3fff {
+                None
+            } else {
+                Some(Self((self.0 & 0xffffc000) | value as u32))
+            }
+        }
+
+        /// This value with `MPDU_LEN` set to `VALUE`, checked at compile time.
+        pub const fn with_mpdu_len_constant<const VALUE: u16>(self) -> Self {
+            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0xffffc000) | value as u32)
+        }
+
+        /// Width of `SEQ` in bits.
+        pub const SEQ_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `SEQ`.
+        pub const SEQ_MAX: u32 = 0xff;
+        /// The low eight bits of the frame's sequence number (its Sequence Control shifted right by four), as the vendor's prepend stores it.
+        ///
+        /// `SEQ`, bits 23:16; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117.
+        pub const fn seq(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `SEQ` set to `value`.
+        pub const fn with_seq(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+
+        /// Width of `SINGLE` in bits.
+        pub const SINGLE_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `SINGLE`.
+        pub const SINGLE_MAX: u32 = 0x1;
+        /// The vendor's `single`. Set by the HE S-MPDU preparation before DMA publication: selects the single-MPDU container geometry, with the delimiter accounted for by the hardware insertion.
+        ///
+        /// `SINGLE`, bit 24; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+        pub const fn single(self) -> bool {
             self.0 & 0x1000000 != 0
         }
 
-        /// This value with `HE_SMPDU` set to `value`.
-        pub const fn with_he_smpdu(self, value: bool) -> Self {
+        /// This value with `SINGLE` set to `value`.
+        pub const fn with_single(self, value: bool) -> Self {
             if value {
                 Self(self.0 | 0x1000000)
             } else {
@@ -325120,7 +325201,7 @@ pub mod layouts {
         pub const BITS_25_28_OPAQUE_WIDTH: u32 = 4;
         /// Greatest unsigned image of `BITS_25_28_OPAQUE`.
         pub const BITS_25_28_OPAQUE_MAX: u32 = 0xf;
-        /// Opaque: meaning not established. The vendor HE SU formatter copies bits 26:25 and 28 into the second HE SU vector word (HE_SU_SIGNAL_A2_LENGTH.BITS_5_7_OPAQUE) and clears that word's bit 8 when bits 27:25 are 0b100; every ordinary vendor TX path writes zero here.
+        /// Opaque: meaning not established. Not named by the vendor's diagnostic. The vendor HE SU formatter copies bits 26:25 and 28 into the second HE SU vector word (HE_SU_SIGNAL_A2_LENGTH.BITS_5_7_OPAQUE) and clears that word's bit 8 when bits 27:25 are 0b100; every ordinary vendor TX path writes zero here.
         ///
         /// `BITS_25_28_OPAQUE`, bits 28:25; written by the CPU.
         /// SOURCE: BLOB_LIBPP_HE_SU_A2_METADATA_COPY_20261108.
@@ -325144,28 +325225,148 @@ pub mod layouts {
             let value = VALUE;
             Self((self.0 & 0xe1ffffff) | (value as u32) << 25)
         }
+
+        /// Width of `NULL_BYTE` in bits.
+        pub const NULL_BYTE_WIDTH: u32 = 3;
+        /// Greatest unsigned image of `NULL_BYTE`.
+        pub const NULL_BYTE_MAX: u32 = 0x7;
+        /// The vendor's `null_byte`, cleared by its prepend; its effect is not established.
+        ///
+        /// `NULL_BYTE`, bits 31:29; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117.
+        pub const fn null_byte(self) -> u8 {
+            (self.0 >> 29) as u8
+        }
+
+        /// This value with `NULL_BYTE` set to `value`, or `None` when `value` does not
+        /// fit its 3 bits.
+        pub const fn with_null_byte(self, value: u8) -> Option<Self> {
+            if value > 0x7 {
+                None
+            } else {
+                Some(Self((self.0 & 0x1fffffff) | (value as u32) << 29))
+            }
+        }
+
+        /// This value with `NULL_BYTE` set to `VALUE`, checked at compile time.
+        pub const fn with_null_byte_constant<const VALUE: u8>(self) -> Self {
+            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            let value = VALUE;
+            Self((self.0 & 0x1fffffff) | (value as u32) << 29)
+        }
     }
 
-    /// A writer over the 4 bytes the CPU fills in: typed ranges, no raw
+    /// Project-assigned name.
+    ///
+    /// The `WIFI_TX_METADATA_ENTRY.DELIMITERS` range.
+    /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct WifiTxMetadataEntryDelimiters(u32);
+
+    impl WifiTxMetadataEntryDelimiters {
+        /// The range's little-endian value.
+        pub const fn bits(self) -> u32 {
+            self.0
+        }
+
+        /// The value of a range image; every bit pattern is one.
+        pub const fn from_bits(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// Width of `DELI_NUM` in bits.
+        pub const DELI_NUM_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `DELI_NUM`.
+        pub const DELI_NUM_MAX: u32 = 0xff;
+        /// The vendor's `deli_num`: the subframe's count of delimiters, which the subframe length counts as four bytes each beyond one.
+        ///
+        /// `DELI_NUM`, bits 7:0; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH.
+        pub const fn deli_num(self) -> u8 {
+            (self.0 & 0xff) as u8
+        }
+
+        /// This value with `DELI_NUM` set to `value`.
+        pub const fn with_deli_num(self, value: u8) -> Self {
+            Self((self.0 & 0xffffff00) | value as u32)
+        }
+
+        /// Width of `CBW40_DELI_NUM` in bits.
+        pub const CBW40_DELI_NUM_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `CBW40_DELI_NUM`.
+        pub const CBW40_DELI_NUM_MAX: u32 = 0xff;
+        /// The vendor's `cbw40_deli_num`: the delimiter count for a 40 MHz transmission, written beside `DELI_NUM` by the vendor's prepend.
+        ///
+        /// `CBW40_DELI_NUM`, bits 15:8; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117.
+        pub const fn cbw40_deli_num(self) -> u8 {
+            ((self.0 >> 8) & 0xff) as u8
+        }
+
+        /// This value with `CBW40_DELI_NUM` set to `value`.
+        pub const fn with_cbw40_deli_num(self, value: u8) -> Self {
+            Self((self.0 & 0xffff00ff) | (value as u32) << 8)
+        }
+
+        /// Width of `CBW80_DELI_NUM` in bits.
+        pub const CBW80_DELI_NUM_WIDTH: u32 = 8;
+        /// Greatest unsigned image of `CBW80_DELI_NUM`.
+        pub const CBW80_DELI_NUM_MAX: u32 = 0xff;
+        /// The vendor's `cbw80_deli_num`; no S31 path is established to use it.
+        ///
+        /// `CBW80_DELI_NUM`, bits 23:16; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117.
+        pub const fn cbw80_deli_num(self) -> u8 {
+            ((self.0 >> 16) & 0xff) as u8
+        }
+
+        /// This value with `CBW80_DELI_NUM` set to `value`.
+        pub const fn with_cbw80_deli_num(self, value: u8) -> Self {
+            Self((self.0 & 0xff00ffff) | (value as u32) << 16)
+        }
+
+        /// Width of `HTC` in bits.
+        pub const HTC_WIDTH: u32 = 1;
+        /// Greatest unsigned image of `HTC`.
+        pub const HTC_MAX: u32 = 0x1;
+        /// The vendor's `htc`: the frame carries an HT/HE Control field, which the MAC inserts; the vendor's length setters add four bytes for it.
+        ///
+        /// `HTC`, bit 24; written by the CPU.
+        /// SOURCE: BLOB_LIBPP_TX_METADATA_ENTRY_20261117, BLOB_LIBPP_PP_HE_SMPDU_LENGTH, HIL_VENDOR_HE_CONTROL_INSERTION_2026_07_30.
+        pub const fn htc(self) -> bool {
+            self.0 & 0x1000000 != 0
+        }
+
+        /// This value with `HTC` set to `value`.
+        pub const fn with_htc(self, value: bool) -> Self {
+            if value {
+                Self(self.0 | 0x1000000)
+            } else {
+                Self(self.0 & 0xfeffffff)
+            }
+        }
+    }
+
+    /// A writer over the 8 bytes the CPU fills in: typed ranges, no raw
     /// byte access outside this generated code.
     #[derive(Debug, Eq, PartialEq)]
-    pub struct WifiTxMetadataHeadMut<'a> {
-        bytes: &'a mut [u8; 4],
+    pub struct WifiTxMetadataEntryMut<'a> {
+        bytes: &'a mut [u8; 8],
     }
 
-    impl<'a> WifiTxMetadataHeadMut<'a> {
+    impl<'a> WifiTxMetadataEntryMut<'a> {
         /// Write through the structure's bytes.
-        pub const fn new(bytes: &'a mut [u8; 4]) -> Self {
+        pub const fn new(bytes: &'a mut [u8; 8]) -> Self {
             Self { bytes }
         }
 
         /// A read-only decoder over the bytes written so far.
-        pub const fn view(&self) -> WifiTxMetadataHead<'_> {
-            WifiTxMetadataHead::new(self.bytes)
+        pub const fn view(&self) -> WifiTxMetadataEntry<'_> {
+            WifiTxMetadataEntry::new(self.bytes)
         }
 
         /// Store the `CONTROL` range, little-endian.
-        pub fn set_control(&mut self, value: WifiTxMetadataHeadControl) {
+        pub fn set_control(&mut self, value: WifiTxMetadataEntryControl) {
             let bytes = value.bits().to_le_bytes();
             self.bytes[0] = bytes[0];
             self.bytes[1] = bytes[1];
@@ -325174,8 +325375,22 @@ pub mod layouts {
         }
 
         /// The `CONTROL` range as last stored.
-        pub const fn control(&self) -> WifiTxMetadataHeadControl {
+        pub const fn control(&self) -> WifiTxMetadataEntryControl {
             self.view().control()
+        }
+
+        /// Store the `DELIMITERS` range, little-endian.
+        pub fn set_delimiters(&mut self, value: WifiTxMetadataEntryDelimiters) {
+            let bytes = value.bits().to_le_bytes();
+            self.bytes[4] = bytes[0];
+            self.bytes[5] = bytes[1];
+            self.bytes[6] = bytes[2];
+            self.bytes[7] = bytes[3];
+        }
+
+        /// The `DELIMITERS` range as last stored.
+        pub const fn delimiters(&self) -> WifiTxMetadataEntryDelimiters {
+            self.view().delimiters()
         }
     }
 
