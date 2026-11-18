@@ -1133,3 +1133,44 @@ fn a_model_follows_a_published_chain_to_its_last_descriptor() {
         Err(TxChainUnreadable::OutsideBuffers)
     );
 }
+
+#[test]
+fn the_macs_reset_returns_a_held_chain_with_its_backings_in_order() {
+    use crate::radio::ieee80211::init::MacBlockReset;
+    let reset = MacBlockReset::for_host_model();
+    for completed in [false, true] {
+        let drops = Rc::new(Cell::new(0));
+        let mut owner = retained_owner();
+        owner.begin().unwrap();
+        for (offset, length) in [(8, 40), (16, 48)] {
+            push_at(
+                &mut owner,
+                TestBacking::new(drops.clone()),
+                written(offset, length),
+                |_| {},
+            )
+            .unwrap_or_else(|_| panic!("pushed"));
+        }
+        owner.publish_retained_chain(2).unwrap().commit(|_| {});
+        if completed {
+            owner.mark_completed().unwrap();
+        }
+        // No detach comes for a chain the MAC held at its reset: the proof
+        // takes it back.
+        let mut returned = 0;
+        owner.release_after_reset(&reset, |backing| {
+            returned += 1;
+            drop(backing);
+        });
+        assert_eq!((returned, drops.get()), (2, 2));
+        assert_eq!(owner.state(), AmpduDmaState::Free);
+        // The arena starts its next chain.
+        owner.begin().unwrap();
+    }
+    // An arena whose chain was never published gives nothing back.
+    let mut owner = retained_owner();
+    owner.begin().unwrap();
+    let mut returned = 0;
+    owner.release_after_reset(&reset, |_| returned += 1);
+    assert_eq!(returned, 0);
+}

@@ -451,6 +451,33 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         self.clear_to_free(AmpduDmaState::HardwareOwned)
     }
 
+    /// Take back a descriptor the MAC held when its block was reset (P12):
+    /// a published, completed, detached or kept-out chain becomes free, its
+    /// links cleared. The reset's proof (`MacBlockReset`, borrowed before the cold
+    /// preparation consumes it) shows the block was reset after the
+    /// publication: the MAC's reset leaves a queue VALID = ENABLE = 0 with no
+    /// descriptor address and writes none of the chains it held (runs 18, 19
+    /// and c6 of `tasks/144` A, `research/s31-wifi-hardware-knowledge-2026-11-18.md`
+    /// section 1). A free or reserved descriptor was never the MAC's and is
+    /// left as it is.
+    ///
+    /// Whether a chain was taken back.
+    pub fn release_after_reset(
+        &mut self,
+        _reset: &crate::radio::ieee80211::init::MacBlockReset,
+    ) -> bool {
+        match self.state() {
+            AmpduDmaState::HardwareOwned
+            | AmpduDmaState::Completed
+            | AmpduDmaState::Detached
+            | AmpduDmaState::ResetRequired => {
+                self.clear_published();
+                true
+            }
+            AmpduDmaState::Free | AmpduDmaState::Reserved => false,
+        }
+    }
+
     pub fn quarantine(&mut self) {
         *self.storage.as_mut().project().state = AmpduDmaState::ResetRequired;
     }
@@ -472,6 +499,12 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         if self.state() != expected {
             return Err(AmpduDmaStorageError::State);
         }
+        self.clear_published();
+        Ok(())
+    }
+
+    /// Clear every published descriptor and free the chain.
+    fn clear_published(&mut self) {
         let published_count = self.storage.as_ref().get_ref().published_count;
         for descriptor in self
             .storage
@@ -486,7 +519,6 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> PinnedAmpduDmaStorage<SLOTS, 
         let storage = self.storage.as_mut().project();
         *storage.published_count = 0;
         *storage.state = AmpduDmaState::Free;
-        Ok(())
     }
 }
 
@@ -759,6 +791,23 @@ impl<'retention, B, const SLOTS: usize, const BUFFER_SIZE: usize>
         self.dma_mut()?.release_aborted(detached)?;
         self.return_backings(returned);
         Ok(())
+    }
+
+    /// Take back the chain the MAC held when its block was reset and hand
+    /// every retained lease to `returned`, in the order they were pushed
+    /// ([`PinnedAmpduDmaStorage::release_after_reset`]).
+    pub fn release_after_reset(
+        &mut self,
+        reset: &crate::radio::ieee80211::init::MacBlockReset,
+        returned: impl FnMut(B),
+    ) {
+        if self
+            .dma
+            .as_mut()
+            .is_some_and(|dma| dma.release_after_reset(reset))
+        {
+            self.return_backings(returned);
+        }
     }
 
     pub fn quarantine(&mut self) {

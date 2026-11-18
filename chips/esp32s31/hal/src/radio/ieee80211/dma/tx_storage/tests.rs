@@ -265,3 +265,35 @@ fn zeroed_storage_is_the_free_storage_new_builds() {
         )
     );
 }
+
+#[test]
+fn the_macs_reset_returns_a_held_descriptor_and_leaves_one_it_never_held() {
+    use crate::radio::ieee80211::init::MacBlockReset;
+    let reset = MacBlockReset::for_host_model();
+    // Published, completed and kept-out descriptors come home free, and the
+    // buffer is the owner's again.
+    for end in 0..3 {
+        let mut storage = storage();
+        free(&mut storage).reserve(64, 8).unwrap();
+        storage.publication().unwrap().commit(|_| {});
+        match end {
+            0 => {}
+            1 => storage.mark_completed().unwrap(),
+            _ => storage.require_reset().unwrap(),
+        }
+        storage.release_after_reset(&reset);
+        assert_eq!(storage.state(), TxDmaState::Free);
+        assert!(matches!(storage.access(), TxDmaAccess::Free(_)));
+        // A second publication takes the same descriptor.
+        free(&mut storage).reserve(64, 8).unwrap();
+        storage.publication().unwrap().commit(|_| {});
+        assert_eq!(storage.state(), TxDmaState::HardwareOwned);
+        storage.release_after_reset(&reset);
+    }
+    // A reserved descriptor was never published: the reset leaves it.
+    let mut storage = storage();
+    free(&mut storage).reserve(64, 8).unwrap();
+    storage.release_after_reset(&reset);
+    assert_eq!(storage.state(), TxDmaState::Reserved);
+    storage.cancel_reservation().unwrap();
+}

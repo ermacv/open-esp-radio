@@ -277,6 +277,26 @@ impl<L> PinnedTxDmaStorage<L> {
         self.transition_to_free(TxDmaState::HardwareOwned)
     }
 
+    /// Take back a descriptor the MAC held when its block was reset (P12):
+    /// a published, completed or kept-out descriptor becomes free, its link
+    /// cleared. The reset's proof (`MacBlockReset`, borrowed before the cold
+    /// preparation consumes it) shows the block was reset after the
+    /// publication: the MAC's reset leaves a queue VALID = ENABLE = 0 with no
+    /// descriptor address and writes none of the chains it held (runs 18, 19
+    /// and c6 of `tasks/144` A, `research/s31-wifi-hardware-knowledge-2026-11-18.md`
+    /// section 1). A free or reserved descriptor was never the MAC's and is
+    /// left as it is.
+    pub fn release_after_reset(&mut self, _reset: &crate::radio::ieee80211::init::MacBlockReset) {
+        let storage = self.storage.as_mut().project();
+        match *storage.state {
+            TxDmaState::HardwareOwned | TxDmaState::Completed | TxDmaState::ResetRequired => {
+                storage.descriptor.as_ref().get_ref().clear();
+                *storage.state = TxDmaState::Free;
+            }
+            TxDmaState::Free | TxDmaState::Reserved => {}
+        }
+    }
+
     pub fn require_reset(&mut self) -> Result<(), TxDmaStorageError> {
         self.transition(TxDmaState::HardwareOwned, TxDmaState::ResetRequired)
     }

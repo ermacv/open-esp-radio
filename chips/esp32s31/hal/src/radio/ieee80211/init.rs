@@ -74,6 +74,16 @@ pub const MAC_STATION_INTERRUPT_MASK: MacInterruptMask = MacInterruptMask::STATI
 /// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
 /// let _made = MacBlockReset { _private: () };
 /// ```
+///
+/// One reset serves one preparation: the proof is moved into it.
+///
+/// ```compile_fail,E0382
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset;
+/// fn twice(reset: MacBlockReset) {
+///     let _first = reset;
+///     let _second = reset;
+/// }
+/// ```
 #[must_use = "a reset's proof is taken by the cold preparation"]
 pub struct MacBlockReset {
     _private: (),
