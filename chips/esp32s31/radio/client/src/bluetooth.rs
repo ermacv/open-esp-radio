@@ -62,6 +62,7 @@ impl Client for Bluetooth {
     /// domain lent: it posts no MAC reset.
     type ResetMac = Infallible;
     type MacReset = Infallible;
+    type Tuned = ();
     type Leave = Installation;
     type Left = BluetoothLeft;
 

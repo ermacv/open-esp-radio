@@ -1056,12 +1056,7 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         _clocks: &crate::radio::ieee80211::client::WifiClocksOn,
         cbw: u8,
     ) -> crate::radio::ieee80211::init::MacBlockReset {
-        let registers = self.registers_mut();
-        let phy = registers.radio_phy_mut();
-        phy.set_wifi_mac_reset(true);
-        phy.set_wifi_mac_reset(false);
-        registers.write_back_wifi_mac_foreign_words(cbw);
-        crate::radio::ieee80211::init::MacBlockReset::after_pulse()
+        reset_wifi_mac_block(self.registers_mut(), cbw)
     }
 
     /// Read the three words inside the `WIFI_MAC` block that this domain
@@ -1079,6 +1074,35 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub(crate) fn registers_mut(&mut self) -> &mut SharedRadioRegisters {
         &mut self.state_mut().registers
     }
+}
+
+/// The writes of [`RadioDomain::reset_wifi_mac_block`].
+pub(crate) trait MacBlockResetPort {
+    /// `RST_WIFIMAC`, asserted or released.
+    fn set_wifi_mac_reset(&mut self, asserted: bool);
+    /// What the domain keeps inside the block, for the lowered width `cbw`.
+    fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8);
+}
+
+impl MacBlockResetPort for SharedRadioRegisters {
+    fn set_wifi_mac_reset(&mut self, asserted: bool) {
+        self.radio_phy_mut().set_wifi_mac_reset(asserted);
+    }
+    fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
+        SharedRadioRegisters::write_back_wifi_mac_foreign_words(self, cbw);
+    }
+}
+
+/// Register transaction of [`RadioDomain::reset_wifi_mac_block`]: the pulse,
+/// then the write-back; nothing before the pulse, which would clear it.
+pub(crate) fn reset_wifi_mac_block(
+    port: &mut impl MacBlockResetPort,
+    cbw: u8,
+) -> crate::radio::ieee80211::init::MacBlockReset {
+    port.set_wifi_mac_reset(true);
+    port.set_wifi_mac_reset(false);
+    port.write_back_wifi_mac_foreign_words(cbw);
+    crate::radio::ieee80211::init::MacBlockReset::after_pulse()
 }
 
 /// Register transaction of [`RadioDomain::select_bluetooth_low_power_clock`].

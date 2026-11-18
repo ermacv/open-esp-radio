@@ -217,7 +217,7 @@ where
                     Ok(payload) => {
                         self.actor.core.tracked();
                         Ok(TrackedMember {
-                            member: self.actor.core.mint.track(member),
+                            member: self.actor.core.mint.track(member, ()),
                             payload,
                         })
                     }

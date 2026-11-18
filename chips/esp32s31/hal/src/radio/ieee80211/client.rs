@@ -309,8 +309,10 @@ impl WifiClocked {
         )
     }
 
-    /// Complete the one-way transition after cold MAC setup: the task-side
-    /// runtime owner and the proof that the clocks stay on. The MAC's
+    /// Split the clocked client into the task-side runtime owner and the
+    /// proof that the clocks stay on. The taking makes this split before the
+    /// MAC's reset, to lend the proof to it, and joins the two again
+    /// ([`Self::from_running`]) for the cold preparation. The MAC's
     /// interrupts stay masked until the radio interrupt handler activates
     /// them. This performs no MMIO.
     pub fn into_running(self) -> (RadioAccess, WifiClocksOn) {

@@ -59,7 +59,8 @@ enum Event {
     Enter,
     Track,
     Retune,
-    ResetMac,
+    /// The channel the actor handed the backend's reset: the member's.
+    ResetMac(Ghz2_4Channel),
     Exit,
     CloseRf,
     Tick,
@@ -101,6 +102,8 @@ struct Script {
     poison_retune: bool,
     /// The periodic tick of this number (from 1) fails.
     fail_tick: Option<usize>,
+    /// A tick waits inside its operation while this holds.
+    hold_tick: bool,
     ticks: usize,
     not_last: bool,
     close_recoverable: bool,
@@ -166,14 +169,20 @@ impl PhyDomain for Model {
     }
 
     async fn track_tick(&mut self) -> Result<(), Fault> {
-        let mut script = self.0.borrow_mut();
-        script.deadline = script
-            .deadline
-            .and_then(|deadline| deadline.checked_add(Duration::from_secs(1)));
-        script.log.push(Event::Tick);
-        script.ticks += 1;
-        if script.fail_tick == Some(script.ticks) {
-            return Err(Fault(TICK_CAUSE));
+        {
+            let mut script = self.0.borrow_mut();
+            script.deadline = script
+                .deadline
+                .and_then(|deadline| deadline.checked_add(Duration::from_secs(1)));
+            script.log.push(Event::Tick);
+            script.ticks += 1;
+            if script.fail_tick == Some(script.ticks) {
+                return Err(Fault(TICK_CAUSE));
+            }
+        }
+        // A tick the test holds stays inside its PHY operation until released.
+        while self.0.borrow().hold_tick {
+            yield_now().await;
         }
         Ok(())
     }
@@ -214,8 +223,12 @@ impl ClientBackend<Wifi, RcSlow> for Model {
         })
     }
 
-    async fn track(&mut self, track: WifiTrack) -> Result<WifiTracked, Failed<WifiClocked>> {
+    async fn track(
+        &mut self,
+        track: WifiTrack,
+    ) -> Result<Tuning<Wifi, WifiTracked>, Failed<WifiClocked>> {
         self.push(Event::Track);
+        let tuned = track.channel.channel().channel();
         if let Some(cause) = self.0.borrow_mut().track_answers.take() {
             return Err(Failed {
                 returned: track.wifi,
@@ -228,42 +241,52 @@ impl ClientBackend<Wifi, RcSlow> for Model {
                 cause: Failure::Poisoned(TRACK_POISON),
             });
         }
-        Ok(WifiTracked {
-            wifi: track.wifi,
-            report: TrackReport {
-                probe_priority: crate::mac_sources::probe_priority(
-                    oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
-                ),
-                tracking_micros: Some(7),
-                temperature: PhyState::default().temperature_observation(),
-                tx_power: PhyState::default().tx_target_power_profile(),
+        Ok(Tuning {
+            payload: WifiTracked {
+                wifi: track.wifi,
+                report: TrackReport {
+                    probe_priority: crate::mac_sources::probe_priority(
+                        oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
+                    ),
+                    tracking_micros: Some(7),
+                    temperature: PhyState::default().temperature_observation(),
+                    tx_power: PhyState::default().tx_target_power_profile(),
+                },
             },
+            tuned,
         })
     }
 
-    async fn retune(&mut self, retune: WifiRetune) -> Result<WifiRetuned, Failed<WifiClocked>> {
+    async fn retune(
+        &mut self,
+        retune: WifiRetune,
+    ) -> Result<Tuning<Wifi, WifiRetuned>, Failed<WifiClocked>> {
         self.push(Event::Retune);
+        let tuned = retune.channel.channel().channel();
         if self.0.borrow().poison_retune {
             return Err(Failed {
                 returned: retune.wifi,
                 cause: Failure::Poisoned(RETUNE_POISON),
             });
         }
-        Ok(WifiRetuned {
-            wifi: retune.wifi,
-            report: RetuneReport {
-                probe_priority: crate::mac_sources::probe_priority(
-                    oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
-                ),
-                micros: 11,
-                temperature: PhyState::default().temperature_observation(),
-                tx_power: PhyState::default().tx_target_power_profile(),
+        Ok(Tuning {
+            payload: WifiRetuned {
+                wifi: retune.wifi,
+                report: RetuneReport {
+                    probe_priority: crate::mac_sources::probe_priority(
+                        oer_chips_family_radio_coex::CoexPtiTable::VENDOR,
+                    ),
+                    micros: 11,
+                    temperature: PhyState::default().temperature_observation(),
+                    tx_power: PhyState::default().tx_target_power_profile(),
+                },
             },
+            tuned,
         })
     }
 
-    async fn reset_mac(&mut self, reset: WifiResetMac) -> WifiMacReset {
-        self.push(Event::ResetMac);
+    async fn reset_mac(&mut self, tuned: Ghz2_4Channel, reset: WifiResetMac) -> WifiMacReset {
+        self.push(Event::ResetMac(tuned));
         WifiMacReset {
             clocks: reset.clocks,
             reset: oer_chips_esp32s31_hal::radio::ieee80211::init::MacBlockReset::for_host_model(),
@@ -1231,6 +1254,151 @@ fn a_join_the_phy_refused_names_the_refusal_after_either_rollback() {
     assert_eq!(poison.cause, PoisonCause::RollbackAfterRefusal(refusal));
 }
 
+/// A request posted while the actor is inside a PHY operation (here the
+/// periodic tracking tick) waits behind it and is answered after it, once.
+#[test]
+fn a_mac_reset_posted_during_a_tracking_tick_is_answered_after_it() {
+    let model = model(Script {
+        deadline: Some(at(1_000_000)),
+        ..Default::default()
+    });
+    let shared = model.clone();
+    let clock = clock();
+    run(&model, clock, |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await
+            .unwrap();
+        let tracked = tracked.ok().expect("track");
+        shared.0.borrow_mut().hold_tick = true;
+        clock.advance_to(at(1_000_000));
+        // The actor enters the due tick and stays in it.
+        for _ in 0..64 {
+            if shared.log().contains(&Event::Tick) {
+                break;
+            }
+            yield_now().await;
+        }
+        assert!(shared.log().contains(&Event::Tick), "the tick is due");
+        let (access, clocks) = tracked.payload.wifi.into_running();
+        let mut reset = core::pin::pin!(cell.reset_mac(tracked.member, WifiResetMac { clocks }));
+        for _ in 0..64 {
+            assert!(
+                futures_poll_once(reset.as_mut()).await.is_none(),
+                "answered inside the tick"
+            );
+        }
+        assert!(
+            !shared
+                .log()
+                .iter()
+                .any(|event| matches!(event, Event::ResetMac(_)))
+        );
+        shared.0.borrow_mut().hold_tick = false;
+        let (cell, reset) = reset.await.unwrap();
+        let wifi = WifiClocked::from_running(access, reset.payload.clocks);
+        let _ = cell
+            .leave(Leaving::Tracked(reset.member), WifiLeave { wifi })
+            .await
+            .unwrap();
+    });
+    let log = model.log();
+    let tick = log.iter().position(|event| *event == Event::Tick).unwrap();
+    let resets: Vec<_> = log
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| matches!(event, Event::ResetMac(_)))
+        .map(|(at, _)| at)
+        .collect();
+    assert_eq!(resets.len(), 1, "{log:?}");
+    assert!(resets[0] > tick, "{log:?}");
+}
+
+/// Poll `future` once, then yield to the actor: its output, if it was ready.
+async fn futures_poll_once<F: Future>(mut future: core::pin::Pin<&mut F>) -> Option<F::Output> {
+    let polled = core::future::poll_fn(|cx| {
+        core::task::Poll::Ready(match future.as_mut().poll(cx) {
+            core::task::Poll::Ready(output) => Some(output),
+            core::task::Poll::Pending => None,
+        })
+    })
+    .await;
+    yield_now().await;
+    polled
+}
+
+/// The channel a reset writes back is the one the actor tuned the member
+/// to: the track's, until a successful retune replaces it.
+#[test]
+fn a_mac_reset_is_handed_the_members_tuned_channel_after_track_and_retune() {
+    let forty = Ghz2_4Channel::new(1, ChannelWidth::Mhz40Above).unwrap();
+    let model = model(Script::default());
+    run(&model, clock(), |cells| async move {
+        let (cell, joined) = cells.wifi.join(WifiJoin { wifi: cold() }).await.unwrap();
+        let joined = joined.ok().expect("join");
+        let (cell, tracked) = cell
+            .track(joined.member, track_request(joined.payload.wifi))
+            .await
+            .unwrap();
+        let tracked = tracked.ok().expect("track");
+        let (access, clocks) = tracked.payload.wifi.into_running();
+        let (cell, reset) = cell
+            .reset_mac(tracked.member, WifiResetMac { clocks })
+            .await
+            .unwrap();
+        let wifi = WifiClocked::from_running(access, reset.payload.clocks);
+        let (cell, retuned) = cell
+            .retune(
+                reset.member,
+                WifiRetune {
+                    wifi,
+                    channel: oer_protocols_radio_regulatory::TEST_DOMAIN
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(forty),
+                        )
+                        .unwrap(),
+                    tx_ceiling: oer_protocols_radio_regulatory::TEST_DOMAIN
+                        .permit(
+                            oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(forty),
+                        )
+                        .unwrap()
+                        .tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
+                            antenna_gain_mbm: 0,
+                            chip_maximum_mbm: 2000,
+                            owner_cap_mbm: None,
+                        }),
+                },
+            )
+            .await
+            .unwrap();
+        let retuned = retuned.ok().expect("retune");
+        let (access, clocks) = retuned.payload.wifi.into_running();
+        let (cell, reset) = cell
+            .reset_mac(retuned.member, WifiResetMac { clocks })
+            .await
+            .unwrap();
+        let wifi = WifiClocked::from_running(access, reset.payload.clocks);
+        let _ = cell
+            .leave(Leaving::Tracked(reset.member), WifiLeave { wifi })
+            .await
+            .unwrap();
+    });
+    let log = model.log();
+    let resets: Vec<_> = log
+        .iter()
+        .filter_map(|event| match event {
+            Event::ResetMac(channel) => Some(*channel),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        resets,
+        [Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap(), forty]
+    );
+}
+
 /// A tracked member's MAC reset: posted with its clocks' proof, answered
 /// with the reset's proof, the coexistence priorities and the proof back,
 /// and answered in a poisoned domain too, as a leave is.
@@ -1271,13 +1439,7 @@ fn a_tracked_members_mac_reset_is_answered_with_its_proof_even_when_poisoned() {
             }
             let (access, clocks) = wifi.into_running();
             let (cell, reset) = cell
-                .reset_mac(
-                    member,
-                    WifiResetMac {
-                        clocks,
-                        channel: Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap(),
-                    },
-                )
+                .reset_mac(member, WifiResetMac { clocks })
                 .await
                 .unwrap();
             let WifiMacReset {
@@ -1303,7 +1465,10 @@ fn a_tracked_members_mac_reset_is_answered_with_its_proof_even_when_poisoned() {
         if poisoned {
             expected.push(Event::Retune);
         }
-        expected.extend([Event::ResetMac, Event::Exit]);
+        expected.extend([
+            Event::ResetMac(Ghz2_4Channel::new(6, ChannelWidth::Mhz20).unwrap()),
+            Event::Exit,
+        ]);
         // A poisoned domain keeps its RF as it was (the actor's rule).
         if !poisoned {
             expected.push(Event::CloseRf);

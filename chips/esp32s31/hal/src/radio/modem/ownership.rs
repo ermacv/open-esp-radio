@@ -84,9 +84,12 @@ impl SharedRadioRegisters {
     /// each word has one writing context: the radio system's.
     ///
     /// - The PHY's channel nibble of `CHANNEL_TX_OFFSET_CONTROL`, by the
-    ///   channel change's own last writer of it, `phy_bb_cbw_chan_cfg`
-    ///   ([`crate::radio::phy::frequency::ops::configure_channel_cbw`]),
-    ///   with the tuned channel's `cbw`.
+    ///   first write of the channel change's own last writer of it,
+    ///   `phy_bb_cbw_chan_cfg`
+    ///   ([`crate::radio::phy::frequency::ops::write_channel_tx_offset`],
+    ///   which [`crate::radio::phy::frequency::ops::configure_channel_cbw`]
+    ///   calls), with the tuned channel's `cbw`. The channel's three
+    ///   baseband fields are outside the block and are not written.
     /// - Wi-Fi's minimum transmit power (`hal_set_tx_min_pwr(-11)`) and bit
     ///   17 of the same word, which `hal_he_init` writes.
     /// - The low twelve bits of `RADIO_INIT_CONTROL`, `0x0f0`, which
@@ -104,7 +107,7 @@ impl SharedRadioRegisters {
     pub(crate) fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
         let parts = &mut self.radio_phy.peripherals;
         write_back_wifi_mac_foreign_words(
-            &mut parts.phy_frequency_channel_oracle,
+            &mut parts.phy_frequency_channel_oracle.wifi_mac,
             &mut self.shared_radio.shared_radio_init_control,
             &parts.phy_agc_oracle.wifi_bb,
             cbw,
@@ -246,21 +249,24 @@ pub struct SharedBasebandParts {
 
 /// [`SharedRadioRegisters::write_back_wifi_mac_foreign_words`] over its
 /// parts, at any placement.
-pub(crate) fn write_back_wifi_mac_foreign_words<P: crate::radio::phy::registers::PhyPlacement>(
-    frequency: &mut crate::radio::phy::registers::FrequencyRegisters<P>,
-    init: &mut oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl<P::WifiMac>,
-    agc: &oer_chips_esp32s31_pac::wifi_bb::PhyAgcOracleWifiBb<P::WifiBb>,
+pub(crate) fn write_back_wifi_mac_foreign_words<
+    M: oer_portable_mmio::Placement,
+    B: oer_portable_mmio::Placement,
+>(
+    channel: &mut oer_chips_esp32s31_pac::wifi_mac::PhyFrequencyChannelOracleWifiMac<M>,
+    init: &mut oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl<M>,
+    agc: &oer_chips_esp32s31_pac::wifi_bb::PhyAgcOracleWifiBb<B>,
     cbw: u8,
 ) {
     use crate::radio::ieee80211::registers::he::init_suffix::{
         MINIMUM_POWER_HIGH, MINIMUM_POWER_LOW,
     };
-    crate::radio::phy::frequency::ops::configure_channel_cbw(frequency, u32::from(cbw));
-    frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
+    crate::radio::phy::frequency::ops::write_channel_tx_offset(channel, u32::from(cbw));
+    channel.modify_channel_tx_offset_control(|w| {
         w.set_minimum_power_low(Bits::constant::<MINIMUM_POWER_LOW>())
             .set_minimum_power_high(Bits::constant::<MINIMUM_POWER_HIGH>());
     });
-    frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
+    channel.modify_channel_tx_offset_control(|w| {
         w.set_bit_17_opaque(true);
     });
     init.modify_radio_init_control(|w| {
@@ -292,8 +298,41 @@ mod foreign_word_tests {
                 let mut init =
                     SharedRadioInitControl::host(&mut init_words).expect("the part's host words");
                 let agc = PhyAgcOracleWifiBb::host(&mut agc_words).expect("the part's host words");
+                let baseband = (
+                    frequency
+                        .wifi_bb
+                        .read_channel_cbw_control_0()
+                        .bits_0_1_opaque(),
+                    frequency
+                        .wifi_bb
+                        .read_channel_cbw_control_1()
+                        .bits_2_4_opaque(),
+                    frequency
+                        .wifi_bb
+                        .read_channel_cbw_control_1()
+                        .bits_0_1_opaque(),
+                );
                 // HT40 with the secondary below, as the radio system lowers it.
-                write_back_wifi_mac_foreign_words(&mut frequency, &mut init, &agc, 3);
+                write_back_wifi_mac_foreign_words(&mut frequency.wifi_mac, &mut init, &agc, 3);
+                // The baseband's channel fields are outside the MAC's block:
+                // the write-back leaves what the channel's selection wrote.
+                assert_eq!(
+                    (
+                        frequency
+                            .wifi_bb
+                            .read_channel_cbw_control_0()
+                            .bits_0_1_opaque(),
+                        frequency
+                            .wifi_bb
+                            .read_channel_cbw_control_1()
+                            .bits_2_4_opaque(),
+                        frequency
+                            .wifi_bb
+                            .read_channel_cbw_control_1()
+                            .bits_0_1_opaque(),
+                    ),
+                    baseband
+                );
                 let offsets = frequency.wifi_mac.read_channel_tx_offset_control();
                 assert_eq!(offsets.primary_20_channel_offset().get(), 1);
                 assert_eq!(offsets.minimum_power_low().get(), 5);

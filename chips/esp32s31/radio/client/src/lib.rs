@@ -70,7 +70,7 @@ use core::{
 };
 
 pub use lp_clock::{LpClock, LpSource, RcSlow, Xtal32k};
-pub use member::{Leaving, Member, MemberMint, RfEpoch, Tracked, Untracked};
+pub use member::{Leaving, Member, MemberMint, RfEpoch, State, Tracked, Untracked};
 pub use oer_portable_memory::{Awaiting, Doorbell, Poster, RequestSlot, Responder};
 pub use poison::{
     CalibrationTrackingFailure, CalibrationTrackingFault, PhyFault, Poison, PoisonCause,
@@ -126,6 +126,9 @@ pub trait Client: sealed::Sealed + Sized + 'static {
     type ResetMac: Send;
     /// What the reset gives back: the lent value and the reset's proof.
     type MacReset: Send;
+    /// What the actor tuned a tracked member to (for Wi-Fi its channel);
+    /// `()` for a client the actor tunes to nothing. The member holds it.
+    type Tuned: Copy + Send;
 
     /// A `join` handed back unchanged.
     fn join_returned(join: Self::Join) -> Self::JoinReturned;

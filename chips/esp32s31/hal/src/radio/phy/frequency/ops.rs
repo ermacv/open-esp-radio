@@ -558,15 +558,10 @@ pub fn configure_bss_cbw_suffix<P: PhyPlacement>(frequency: &mut FrequencyRegist
 pub fn configure_channel_cbw<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, cbw: u32) {
     let fields = channel_cbw_fields(cbw);
     // Lossless: each value is reduced below its field's width.
-    let tx_offset = Bits::<4>::truncate(u32::from(fields.tx_offset));
     let control_0 = Bits::<2>::truncate(u32::from(fields.control_0));
     let control_1_high = Bits::<3>::truncate(u32::from(fields.control_1_high));
     let control_1_low = Bits::<2>::truncate(u32::from(fields.control_1_low));
-    // Channel offset owns only the low nibble. Preserve the adjacent
-    // minimum-power setting, as both ROM channel setters do.
-    frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
-        w.set_primary_20_channel_offset(tx_offset);
-    });
+    write_channel_tx_offset(&mut frequency.wifi_mac, cbw);
     frequency.wifi_bb.modify_channel_cbw_control_0(|w| {
         w.set_bits_0_1_opaque(control_0);
     });
@@ -575,6 +570,24 @@ pub fn configure_channel_cbw<P: PhyPlacement>(frequency: &mut FrequencyRegisters
     });
     frequency.wifi_bb.modify_channel_cbw_control_1(|w| {
         w.set_bits_0_1_opaque(control_1_low);
+    });
+}
+
+/// The first of [`configure_channel_cbw`]'s writes alone: the channel's
+/// offset nibble of `CHANNEL_TX_OFFSET_CONTROL`, inside the `WIFI_MAC`
+/// block, from `channel_cbw_fields(cbw).tx_offset`. The radio domain writes
+/// it back after the MAC's block reset, which clears it; the baseband's
+/// words are outside that block.
+pub(crate) fn write_channel_tx_offset<P: oer_portable_mmio::Placement>(
+    wifi_mac: &mut oer_chips_esp32s31_pac::wifi_mac::PhyFrequencyChannelOracleWifiMac<P>,
+    cbw: u32,
+) {
+    // Lossless: the offset is reduced below the field's width.
+    let tx_offset = Bits::<4>::truncate(u32::from(channel_cbw_fields(cbw).tx_offset));
+    // Channel offset owns only the low nibble. Preserve the adjacent
+    // minimum-power setting, as both ROM channel setters do.
+    wifi_mac.modify_channel_tx_offset_control(|w| {
+        w.set_primary_20_channel_offset(tx_offset);
     });
 }
 

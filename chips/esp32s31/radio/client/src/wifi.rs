@@ -48,6 +48,7 @@ impl Client for Wifi {
     type Left = WifiLeft;
     type ResetMac = WifiResetMac;
     type MacReset = WifiMacReset;
+    type Tuned = Ghz2_4Channel;
 
     fn join_returned(join: WifiJoin) -> WifiReturned {
         WifiReturned::Cold(join.wifi)
@@ -151,11 +152,11 @@ pub struct ProbePriority {
     pub scheduler: MacCoexPti,
 }
 
-/// `reset_mac`: a tracked member's clocks' proof, and the channel it is tuned
-/// to, whose PHY field inside the MAC's block the reset writes back.
+/// `reset_mac`: a tracked member's clocks' proof. The channel whose PHY
+/// field inside the MAC's block the reset writes back is the one the actor
+/// tuned the member to, which the member holds.
 pub struct WifiResetMac {
     pub clocks: WifiClocksOn,
-    pub channel: Ghz2_4Channel,
 }
 
 /// The answer to `reset_mac`: the clocks' proof back, the reset's proof the

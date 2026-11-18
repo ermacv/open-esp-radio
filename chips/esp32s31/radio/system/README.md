@@ -13,9 +13,11 @@ contain no Bluetooth state.
   without poisoning closes RF again.
 - `track`: the initial tracking and what the client contract adds to it (for
   Wi-Fi the RX enable and the initial channel, no MAC work); the member
-  becomes `Tracked`.
+  becomes `Tracked`, holding what the backend tuned it to (`Tuning`; for
+  Wi-Fi the channel), which a successful `retune` replaces.
 - `reset_mac`: a tracked member's MAC block reset in one step with no await:
-  the pulse, the PHY's channel field of the member's channel, Wi-Fi's
+  the pulse, the PHY's channel field of the channel the member holds (no
+  request names a channel), Wi-Fi's
   constants of the foreign words (`RadioDomain::reset_wifi_mac_block`), and
   the coexistence priorities its cold preparation reads. Answered always,
   poisoned domain included, as `leave` is.

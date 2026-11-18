@@ -323,7 +323,10 @@ type DirectPrepare<'a> = impl core::future::Future<
     > + 'a;
 type DirectTrack<'a> = impl core::future::Future<
         Output = Result<
-            oer_chips_esp32s31_radio_client::wifi::WifiTracked,
+            oer_chips_esp32s31_radio_system::Tuning<
+                oer_chips_esp32s31_radio_client::wifi::Wifi,
+                oer_chips_esp32s31_radio_client::wifi::WifiTracked,
+            >,
             oer_chips_esp32s31_radio_client::Failed<
                 oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocked,
             >,
@@ -419,7 +422,10 @@ fn direct_future(
             .await
             .map_err(|_| oer_portable_diagnostics::name!("direct-enter"; 32))?;
         let mut platform = Platform;
-        let tracked = placed_track(
+        let oer_chips_esp32s31_radio_system::Tuning {
+            payload: tracked,
+            tuned,
+        } = placed_track(
             backend,
             WifiTrack {
                 wifi: joined.wifi,
@@ -432,12 +438,8 @@ fn direct_future(
         // The block's reset is the radio system's; the cold preparation is
         // this owner's, as the backend's start takes the block.
         let (access, clocks) = tracked.wifi.into_running();
-        let WifiMacReset { clocks, reset, pti } = backend
-            .reset_mac(WifiResetMac {
-                clocks,
-                channel: channel.channel().channel(),
-            })
-            .await;
+        let WifiMacReset { clocks, reset, pti } =
+            backend.reset_mac(tuned, WifiResetMac { clocks }).await;
         let mut clocked = WifiClocked::from_running(access, clocks);
         let mut sources = MacColdSources {
             pti,

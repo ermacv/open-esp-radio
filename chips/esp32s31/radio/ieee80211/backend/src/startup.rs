@@ -258,16 +258,7 @@ pub async fn start_esp32s31_radio<W: WifiMacPlatform, T: oer_portable_time::Time
     // The Wi-Fi owner takes its block: the radio system resets it, then the
     // cold preparation runs here.
     let (access, clocks) = wifi.into_running();
-    let (cell, reset) = match cell
-        .reset_mac(
-            member,
-            WifiResetMac {
-                clocks,
-                channel: config.wifi.initial_channel.channel().channel(),
-            },
-        )
-        .await
-    {
+    let (cell, reset) = match cell.reset_mac(member, WifiResetMac { clocks }).await {
         Ok(answer) => answer,
         Err(reason) => {
             return Err(oer_portable_memory::RequestQuarantine::new(

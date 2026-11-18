@@ -12,8 +12,11 @@ PHY domain, without the actor itself.
   four-state CAS protocol with two atomic wakers (`docs/unsafe.md`); the
   crate forbids unsafe code.
 - `Member<K, Untracked | Tracked>` is the PHY membership typestate; only
-  `track` produces `Tracked`, which alone permits RF use. `RfEpoch` changes at
-  every registration and RF wake.
+  `track` produces `Tracked`, which alone permits RF use. A tracked member
+  holds what the actor tuned it to (`Client::Tuned`: Wi-Fi's channel,
+  Bluetooth's `()`), set by the actor's `MemberMint` at `track` and replaced
+  at a successful `retune`; nothing else sets or reads it. `RfEpoch` changes
+  at every registration and RF wake.
 - A failed request hands back what it lent; `Failure` (`Refused`,
   `ClientFailed`, `PhyRefused`, `PoisonedAfterRefusal`, `Poisoned`) says what the failure touched, as the table on
   `Failure` defines.
@@ -21,7 +24,7 @@ PHY domain, without the actor itself.
 - `wifi` holds the Wi-Fi payloads. `track` is the initial tracking, the RX
   enable and the initial channel; the driver lends its clocked client and
   gets it back tuned. A tracked member's `reset_mac` lends the proof of its
-  clocks (`WifiClocksOn`) and the tuned channel and gets back the proof, the
+  clocks (`WifiClocksOn`) and gets back the proof, the
   MAC block's reset proof (`MacBlockReset`, neither `Copy` nor `Clone`) and
   the coexistence priorities of its cold preparation; it has no refusal and
   no failure, and is answered in a poisoned domain too. The cold preparation
