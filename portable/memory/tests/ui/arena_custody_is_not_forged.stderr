@@ -1,0 +1,16 @@
+error[E0451]: fields `index`, `extent` and `brand` of struct `oer_portable_memory::arena::Handle` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:38:28
+   |
+38 |     let _ = Handle::<Rx> { index: 0, extent: 52, brand: core::marker::PhantomData }; // ui-error: E0451
+   |                            ^^^^^     ^^^^^^      ^^^^^ private field
+   |                            |         |
+   |                            |         private field
+   |                            private field
+
+error[E0451]: fields `index` and `extent` of struct `oer_portable_memory::arena::Released` are private
+  --> tests/ui/arena_custody_is_not_forged.rs:40:30
+   |
+40 |     let _ = Released::<Rx> { index: 0, extent: Extent::FULL }; // ui-error: E0451
+   |                              ^^^^^     ^^^^^^ private field
+   |                              |
+   |                              private field

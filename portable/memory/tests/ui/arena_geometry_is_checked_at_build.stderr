@@ -1,0 +1,10 @@
+error[E0080]: evaluation panicked: a buffer's CPU region is not empty
+  --> tests/ui/arena_geometry_is_checked_at_build.rs:31:1
+   |
+31 | / oer_portable_memory::arena! { // ui-error: E0080
+32 | |     pub Tx: window Window, count 4, size 64, front 32, back 32,
+33 | |         placed by place as ZeroedStatic in ".dma.bss.ui_tx";
+34 | | }
+   | |_^ evaluation of `_::_` failed here
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `oer_portable_memory::arena` (in Nightly builds, run with -Z macro-backtrace for more info)

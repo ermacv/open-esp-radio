@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_lent_gives_no_bytes.rs:38:25
+   |
+38 |     let _ = arena.bytes(lent); // ui-error: E0308
+   |                   ----- ^^^^ expected `&Handle<Rx>`, found `&Lent<Rx>`
+   |                   |
+   |                   arguments to this method are incorrect
+   |
+   = note: expected reference `&Handle<Rx>`
+              found reference `&oer_portable_memory::arena::Lent<Rx>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn bytes<'h>(&self, handle: &'h Handle<B>) -> &'h [u8] {
+   |            ^^^^^

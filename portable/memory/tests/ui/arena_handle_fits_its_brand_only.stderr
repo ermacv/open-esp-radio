@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_handle_fits_its_brand_only.rs:38:22
+   |
+38 |     let _ = tx.bytes(&handle); // ui-error: E0308
+   |                ----- ^^^^^^^ expected `&Handle<Tx>`, found `&Handle<Rx>`
+   |                |
+   |                arguments to this method are incorrect
+   |
+   = note: expected reference `&oer_portable_memory::arena::Handle<Tx>`
+              found reference `&oer_portable_memory::arena::Handle<Rx>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn bytes<'h>(&self, handle: &'h Handle<B>) -> &'h [u8] {
+   |            ^^^^^
