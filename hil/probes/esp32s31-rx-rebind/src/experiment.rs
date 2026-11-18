@@ -74,6 +74,44 @@ const _: () = {
     }
 };
 
+/// `tasks/194`: the receive header's word the MAC writes late on a unit at
+/// LAST (bytes 48 to 51), and the header's length (the RX-control prefix).
+const LATE_WORD: usize = 12;
+const HEADER_BYTES: usize = 56;
+/// How long a take waits for the late word, in cycles of `mcycle` at
+/// 320 MHz: 64 us.
+const LATE_WINDOW_CYCLES: u32 = 64 * 320;
+const CYCLES_PER_US: u32 = 320;
+/// Late-write delay buckets of 1 us, the last one 63 us or more.
+const DELAY_BUCKETS: usize = 64;
+/// The violation kinds counted (`Kind` codes 1 to 8, and 9 for a copy
+/// difference outside the known late word).
+const KINDS: usize = 10;
+
+/// The late word of one class of takes (at LAST or not).
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+struct LateWord {
+    takes: u32,
+    changed: u32,
+    never: u32,
+    min: u32,
+    max: u32,
+    delay: [u32; DELAY_BUCKETS],
+}
+
+/// One act's descriptor words (control, buffer, next) before the detach
+/// and after the rebind, with the frozen cursor's NEXT and LAST lows.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+struct ActSnapshot {
+    before: [u32; 3],
+    after: [u32; 3],
+    next_low: u32,
+    last_low: u32,
+    valid: u32,
+}
+
 /// The canary of spare `spare`'s word `word`.
 pub(super) const fn canary(spare: usize, word: usize) -> u32 {
     0x5a00_0000 | ((spare as u32 & 0xff) << 16) | (word as u32 & 0xffff)
@@ -144,6 +182,28 @@ pub(super) struct State {
     agreement_peer: [u8; 6],
     agreement_peer_known: bool,
     agreement: bool,
+    /// `tasks/194`: violations by kind (index = `Kind` code; 9 = a copy
+    /// difference outside bytes 48 to 51).
+    kinds: [u32; KINDS],
+    /// Frames whose copy differed from the spare in bytes 48 to 51 alone.
+    known_late: u32,
+    /// Every differing byte of every frame, by offset in the buffer.
+    copy_offsets: [u32; BUFFER],
+    /// Frames whose header (bytes 0 to 55, the late word excepted) differed,
+    /// and frames whose bytes from 56 on differed.
+    header_differs: u32,
+    frame_differs: u32,
+    late_at_last: LateWord,
+    late_not_last: LateWord,
+    /// After a rebind at LAST, which of the buffer taken out and the spare
+    /// put in had the late word change: neither, old only, new only, both.
+    landing: [u32; 4],
+    /// The first violation stops the run; its descriptor, when known.
+    stop: bool,
+    stop_descriptor: u32,
+    /// The stopping descriptor's words when the stop was seen.
+    stop_now: [u32; 3],
+    acts: [ActSnapshot; COUNT],
 }
 
 /// The HAL's copy of one completed frame.
@@ -165,6 +225,9 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
         counts.reserve_min = u32::MAX;
         counts.counter_first = u32::MAX;
     }
+    state.late_at_last.min = u32::MAX;
+    state.late_not_last.min = u32::MAX;
+    state.stop_descriptor = u32::MAX;
     Ok((state, frame))
 }
 
@@ -244,6 +307,7 @@ impl State {
             bump(&mut self.counts(segment)?.retired_checks);
             let crc = crc_spare(bank, spare).ok_or(name!("pending-read"; 32))?;
             if crc != retired.crc {
+                self.stop_descriptor = retired.descriptor;
                 self.record(
                     segment,
                     Violation {
@@ -367,6 +431,12 @@ impl State {
         if let Some(counts) = self.counts.get_mut(segment) {
             bump(&mut counts.violations);
         }
+        if let Some(kind) = self.kinds.get_mut(violation.kind as usize) {
+            bump(kind);
+        }
+        // `tasks/194`: the first violation that is not the known late word
+        // stops the run (the known one is never recorded).
+        self.stop = true;
         if self.violations_total == 0 {
             self.first_violation = violation.kind;
         }
@@ -427,12 +497,45 @@ impl State {
             bank.read_word(spare, at / 4)
                 .and_then(|word| word.to_le_bytes().get(at % 4).copied())
         };
-        if let Some(offset) = (0..compared).find(|&i| frame.get(i).copied() != spare_byte(i)) {
+        // `tasks/194`: every byte of the frame, after its header settled.
+        // A difference in bytes 48 to 51 alone is the known late word,
+        // counted; any other is a violation.
+        let late = LATE_WORD * 4..LATE_WORD * 4 + 4;
+        let mut late_differs = false;
+        let mut header_differs = false;
+        let mut frame_differs = false;
+        let mut first_other = None;
+        for offset in 0..length {
+            if frame.get(offset).copied() == spare_byte(offset) {
+                continue;
+            }
+            if let Some(count) = self.copy_offsets.get_mut(offset) {
+                bump(count);
+            }
+            if late.contains(&offset) {
+                late_differs = true;
+                continue;
+            }
+            if offset < HEADER_BYTES {
+                header_differs = true;
+            } else {
+                frame_differs = true;
+            }
+            first_other.get_or_insert(offset);
+        }
+        if header_differs {
+            bump(&mut self.header_differs);
+        }
+        if frame_differs {
+            bump(&mut self.frame_differs);
+        }
+        if let Some(offset) = first_other {
             clean = false;
+            self.stop_descriptor = index as u32;
             self.record(
                 segment,
                 Violation {
-                    kind: Kind::Copy as u32,
+                    kind: 9,
                     segment: segment as u32,
                     spare: spare as u32,
                     offset: offset as u32,
@@ -440,6 +543,8 @@ impl State {
                     observed: u32::from(spare_byte(offset).unwrap_or(0)),
                 },
             );
+        } else if late_differs {
+            bump(&mut self.known_late);
         }
         let canary_words = (0..compared / 4)
             .filter(|&word| word_at(frame, word) == Some(canary(spare, word)))
@@ -699,6 +804,11 @@ fn scan(
                 .word0()
                 .length(),
         );
+        // `tasks/194`: the late word of the head's buffer at the take.
+        let taken_spare = usize::try_from(*state.expected.get(head).ok_or(name!("expected"; 32))?)
+            .map_err(|_| name!("expected"; 32))?;
+        let word_at_take = bank.read_word(taken_spare, LATE_WORD);
+        let take_cycle = oer_portable_riscv::cycle32();
         let copied = frontier.descriptor_count == 1
             && length != 0
             && length <= BUFFER
@@ -736,22 +846,56 @@ fn scan(
                 bump(&mut counts.chained);
             }
         }
-        if copied && let Err(error) = state.check_frame(segment, storage, bank, frame, head, length)
-        {
-            unit.retain_for_deferred_recycle();
-            return Err(error);
-        }
+        // `tasks/194`: a rebind (or a fixed segment's detach) is made at the
+        // take, before the late word; the header then settles, the copy is
+        // checked against the buffer taken out, and the act is finished.
+        let mut bound = None;
         if copied && (arm.rebind || *action) {
             if reserve == 0 {
                 // No armed descriptor ahead of the walker: excluded.
                 bump(&mut state.counts(segment)?.exhausted);
-            } else if let Err(error) = act(
-                state, segment, arm.rebind, bank, &mut unit, frozen, access, reserve, at_last,
-            ) {
+            } else {
+                match act_bind(
+                    state, segment, arm.rebind, bank, storage, &mut unit, frozen, access,
+                ) {
+                    Ok(made) => bound = Some(made),
+                    Err(error) => {
+                        unit.retain_for_deferred_recycle();
+                        return Err(error);
+                    }
+                }
+            }
+            *action = false;
+        }
+        if copied {
+            let changed = settle_late_word(bank, taken_spare, word_at_take, take_cycle);
+            let late = if at_last {
+                &mut state.late_at_last
+            } else {
+                &mut state.late_not_last
+            };
+            late.record(changed);
+            if let Some(bound) = bound
+                && let Some((spare, word_at_bind)) = bound.new
+                && at_last
+            {
+                let old_changed = changed.is_some();
+                let new_changed = bank.read_word(spare, LATE_WORD) != word_at_bind;
+                let outcome = usize::from(old_changed) | usize::from(new_changed) << 1;
+                if let Some(count) = state.landing.get_mut(outcome) {
+                    bump(count);
+                }
+            }
+            if let Err(error) = state.check_frame(segment, storage, bank, frame, head, length) {
                 unit.retain_for_deferred_recycle();
                 return Err(error);
             }
-            *action = false;
+        }
+        if let Some(bound) = bound
+            && let Err(error) = act_finish(state, segment, bank, bound, reserve, at_last)
+        {
+            unit.retain_for_deferred_recycle();
+            return Err(error);
         }
         if !state.agreement && state.agreement_peer_known {
             let peer = state.agreement_peer;
@@ -788,37 +932,147 @@ fn scan(
     state.service_pending(segment, storage, bank)?;
     state.check_retired(segment, bank, RETIRED_CHECKS_PER_SCAN)?;
     state.check_spares(segment, storage, bank, SPARE_CHECKS_PER_SCAN)?;
+    if state.stop && state.stop_now == [0; 3] {
+        state.stop_now = words_of(storage, state.stop_descriptor as usize);
+    }
     state.sample_hardware(segment, access)
 }
 
-/// Detach the taken unit in place. A rebind segment binds its next re-arm to
-/// an unbound spare of the pool and retires the old one with its CRC taken
-/// now, recording the armed reserve it is linked behind; a fixed segment
-/// rechecks the old spare once more before the same re-arm (a short window
-/// only).
+/// What [`act_bind`] did: the descriptor, its old spare and, for a
+/// rebind, the new spare with its late word at the bind.
+#[derive(Clone, Copy)]
+struct Bound {
+    index: usize,
+    old: u32,
+    rebind: bool,
+    new: Option<(usize, Option<u32>)>,
+}
+
+impl LateWord {
+    /// One take's late word: changed after `Some(cycles)`, or not within the
+    /// window.
+    fn record(&mut self, changed: Option<u32>) {
+        bump(&mut self.takes);
+        match changed {
+            Some(cycles) => {
+                bump(&mut self.changed);
+                self.min = self.min.min(cycles);
+                self.max = self.max.max(cycles);
+                let bucket = ((cycles / CYCLES_PER_US) as usize).min(DELAY_BUCKETS - 1);
+                if let Some(count) = self.delay.get_mut(bucket) {
+                    bump(count);
+                }
+            }
+            None => bump(&mut self.never),
+        }
+    }
+}
+
+/// Re-read spare `spare`'s late word until it differs from `at_take` or
+/// the window passed: the cycles from the take to the change.
+fn settle_late_word(
+    bank: &'static Spares,
+    spare: usize,
+    at_take: Option<u32>,
+    take_cycle: u32,
+) -> Option<u32> {
+    loop {
+        let now = oer_portable_riscv::cycle32();
+        let word = bank.read_word(spare, LATE_WORD);
+        let elapsed = now.wrapping_sub(take_cycle);
+        if word != at_take {
+            return Some(elapsed);
+        }
+        if elapsed >= LATE_WINDOW_CYCLES {
+            return None;
+        }
+    }
+}
+
+fn words_of(storage: &'static Storage, index: usize) -> [u32; 3] {
+    storage
+        .descriptors()
+        .get(index)
+        .map_or([0; 3], |descriptor| {
+            [
+                descriptor.word0().bits(),
+                descriptor.buffer_address(),
+                descriptor.next_address(),
+            ]
+        })
+}
+
+/// Detach the taken unit in place at the take and, in a rebind segment,
+/// bind its next re-arm to an unbound spare of the pool, recording the
+/// descriptor's words before and after with the cursor's NEXT and LAST.
 #[allow(clippy::too_many_arguments)]
-fn act(
+fn act_bind(
     state: &mut State,
     segment: usize,
     rebind: bool,
     bank: &'static Spares,
+    storage: &'static Storage,
     unit: &mut RxDmaCompletedUnit<'static, '_, '_, COUNT, BUFFER, BUFFER>,
     frozen: RxFrozenCursor,
     access: &mut RadioAccess,
-    reserve: usize,
-    at_last: bool,
-) -> Result<(), Name<32>> {
+) -> Result<Bound, Name<32>> {
     let index = unit.head_index();
+    let before = words_of(storage, index);
     unit.detach_before_last(access.rx_dma(), frozen)
         .map_err(|_| name!("detach"; 32))?;
     let old = *state.expected.get(index).ok_or(name!("expected"; 32))?;
+    bump(&mut state.counts(segment)?.detached);
+    let mut new = None;
+    if rebind {
+        match state.free_pop() {
+            Some(spare) => {
+                unit.rebind_next(spare).map_err(|_| name!("rebind"; 32))?;
+                new = Some((spare, bank.read_word(spare, LATE_WORD)));
+            }
+            None => bump(&mut state.counts(segment)?.spares_exhausted),
+        }
+    }
+    if let Some(snapshot) = state.acts.get_mut(index) {
+        *snapshot = ActSnapshot {
+            before,
+            after: words_of(storage, index),
+            next_low: frozen.next_descriptor_low(),
+            last_low: frozen.last_descriptor_low(),
+            valid: 1,
+        };
+    }
+    Ok(Bound {
+        index,
+        old,
+        rebind,
+        new,
+    })
+}
+
+/// Finish an act after the header settled: a fixed segment checks the
+/// detached buffer over a short window; a rebind retires the old spare
+/// with its CRC taken now and records the armed reserve.
+fn act_finish(
+    state: &mut State,
+    segment: usize,
+    bank: &'static Spares,
+    bound: Bound,
+    reserve: usize,
+    at_last: bool,
+) -> Result<(), Name<32>> {
+    let Bound {
+        index,
+        old,
+        rebind,
+        new,
+    } = bound;
     let old_spare = usize::try_from(old).map_err(|_| name!("expected"; 32))?;
     let crc = crc_spare(bank, old_spare).ok_or(name!("old-read"; 32))?;
-    bump(&mut state.counts(segment)?.detached);
     if !rebind {
         bump(&mut state.counts(segment)?.window_checks);
         let again = crc_spare(bank, old_spare).ok_or(name!("old-read"; 32))?;
         if again != crc {
+            state.stop_descriptor = index as u32;
             state.record(
                 segment,
                 Violation {
@@ -833,11 +1087,9 @@ fn act(
         }
         return Ok(());
     }
-    let Some(spare) = state.free_pop() else {
-        bump(&mut state.counts(segment)?.spares_exhausted);
+    let Some((spare, _)) = new else {
         return Ok(());
     };
-    unit.rebind_next(spare).map_err(|_| name!("rebind"; 32))?;
     let retired = Retired {
         spare: old,
         descriptor: index as u32,
@@ -934,6 +1186,9 @@ pub(super) async fn run(
             / 1000;
         let segment = usize::try_from(elapsed / SEGMENT_MS).map_err(|_| name!("segment"; 32))?;
         if segment >= SEGMENTS {
+            break;
+        }
+        if state.stop {
             break;
         }
         let due = now >= next_action;
@@ -1041,6 +1296,7 @@ fn kind(code: u32) -> Option<Kind> {
         Kind::Spare,
         Kind::Accounting,
         Kind::Content,
+        Kind::CopyOther,
     ]
     .into_iter()
     .find(|kind| *kind as u32 == code)
@@ -1173,6 +1429,88 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             violation.offset,
             violation.expected,
             violation.observed,
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+    }
+    // `tasks/194`.
+    line.clear();
+    writeln!(
+        &mut line,
+        "T194 kinds={:?} known_late={} header_differs={} frame_differs={} landing(neither,old,new,both)={:?} stopped={} stop_descriptor={}",
+        state.kinds,
+        state.known_late,
+        state.header_differs,
+        state.frame_differs,
+        state.landing,
+        state.stop,
+        state.stop_descriptor,
+    )
+    .map_err(|_| name!("format"; 32))?;
+    usb::text(console, line.as_bytes())
+        .await
+        .map_err(|_| name!("console-write"; 32))?;
+    for (tag, late) in [
+        ("at_last", &state.late_at_last),
+        ("not_last", &state.late_not_last),
+    ] {
+        line.clear();
+        writeln!(
+            &mut line,
+            "LATE {tag} takes={} changed={} never={} min_cycles={} max_cycles={} delay_us={:?}",
+            late.takes,
+            late.changed,
+            late.never,
+            if late.changed == 0 { 0 } else { late.min },
+            late.max,
+            late.delay,
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+    }
+    // The differing bytes by offset, eight offsets a line, non-zero only.
+    let mut pending = 0;
+    line.clear();
+    for (offset, count) in state.copy_offsets.iter().enumerate() {
+        if *count == 0 {
+            continue;
+        }
+        if pending == 0 {
+            line.clear();
+            let _ = write!(&mut line, "OFFSETS");
+        }
+        let _ = write!(&mut line, " {offset}:{count}");
+        pending += 1;
+        if pending == 8 {
+            let _ = writeln!(&mut line);
+            usb::text(console, line.as_bytes())
+                .await
+                .map_err(|_| name!("console-write"; 32))?;
+            pending = 0;
+        }
+    }
+    if pending != 0 {
+        let _ = writeln!(&mut line);
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+    }
+    if let Some(act) = state.acts.get(state.stop_descriptor as usize) {
+        line.clear();
+        writeln!(
+            &mut line,
+            "STOP descriptor={} act_valid={} before={:08x?} after={:08x?} next_low={:x} last_low={:x} now={:08x?}",
+            state.stop_descriptor,
+            act.valid,
+            act.before,
+            act.after,
+            act.next_low,
+            act.last_low,
+            state.stop_now,
         )
         .map_err(|_| name!("format"; 32))?;
         usb::text(console, line.as_bytes())

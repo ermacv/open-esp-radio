@@ -133,6 +133,9 @@ pub enum Kind {
     /// A committed frame's counters named two frames, or its bytes were not
     /// the sender's.
     Content = 8,
+    /// A frame's copy differed from its spare outside the receive header's
+    /// late word, bytes 48 to 51 (`tasks/194`).
+    CopyOther = 9,
 }
 
 impl Kind {
@@ -146,6 +149,7 @@ impl Kind {
             Self::Spare => "spare",
             Self::Accounting => "accounting",
             Self::Content => "content",
+            Self::CopyOther => "copy-other",
         }
     }
 }
