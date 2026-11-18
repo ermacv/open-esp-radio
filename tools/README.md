@@ -77,6 +77,12 @@ TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> --no-config \
   --in-diff target/mutants/pr.diff --output target/mutants --jobs 4 --iterate
 ```
 
+A search's binaries are built with `opt-level = 1` and the overflow checks
+kept, by the environment, never by a profile in the tree:
+`CARGO_PROFILE_TEST_OPT_LEVEL=1 CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true`, in a
+`CARGO_TARGET_DIR` of their own. The engine's five named receive bounds take
+62 s together that way, 160 s unoptimized.
+
 A crate whose slow tests are not in a module named `search` gets its own
 line in `.cargo/mutants.toml` when it has such tests; today it is the
 engine's (`oer-protocols-ieee80211-core-datapath`) alone. A crate's ordinary
