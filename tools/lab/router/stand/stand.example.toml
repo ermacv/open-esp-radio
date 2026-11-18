@@ -121,7 +121,7 @@ monitor_interface = "open-radio-mon"
 # actual AP capabilities are discovered from OpenWrt. The run applies its
 # channel, mode, WPA2 credentials and WMM, verifies hostapd and channel
 # geometry, then restores the original settings.
-phys = ["legacy", "ht20", "ht40", "he20"]
+phys = ["legacy", "ht20", "ht40", "he20", "he40"]
 # Uses the laptop's Intel adapter as an independent passive observer while
 # OpenWrt remains the AP. Requires the schema-10 open-radio-net helper.
 independent_laptop_monitor = true

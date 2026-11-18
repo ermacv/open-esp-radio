@@ -9,12 +9,14 @@
 use std::{sync::atomic::Ordering, time::Duration};
 
 use oer_tools_lab_arbiter::journal::{AirtimeChange, AirtimePhase, BoardEventKind, Journal};
-use oer_tools_lab_client::protocol::{RouterAccessCategory, RouterChannelWidth, RouterOperation};
+use oer_tools_lab_client::protocol::{
+    RouterAccessCategory, RouterFormat, RouterOperation, RouterWidth,
+};
 use oer_tools_lab_model::Stand;
 use oer_tools_lab_router::{
     mac::Mac,
     monitor,
-    router::{ChannelWidth, Profile},
+    router::{ChannelWidth, Format, PhyMode, Profile},
     ssh::{Remote, Ssh},
     station::{
         self,
@@ -88,6 +90,7 @@ pub(crate) fn run(
             ssid,
             passphrase,
             channel,
+            format,
             width,
             forward_host,
         } => {
@@ -105,10 +108,15 @@ pub(crate) fn run(
                 ssid,
                 passphrase,
             )?
-            .width(match width {
-                RouterChannelWidth::Ht20 => ChannelWidth::Ht20,
-                RouterChannelWidth::Ht40 => ChannelWidth::Ht40,
-                RouterChannelWidth::He20 => ChannelWidth::He20,
+            .mode(PhyMode {
+                format: match format {
+                    RouterFormat::Ht => Format::Ht,
+                    RouterFormat::He => Format::He,
+                },
+                width: match width {
+                    RouterWidth::Mhz20 => ChannelWidth::Mhz20,
+                    RouterWidth::Mhz40 => ChannelWidth::Mhz40,
+                },
             });
             let profile = match forward_host {
                 Some(host) => profile.forwarding_host(*host),

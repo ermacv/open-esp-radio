@@ -39,8 +39,11 @@ diagnostics need the trace build: the measuring image refuses them.
 ## Load
 
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
-datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
-overload. Level 0 means no pacing, in every direction the case has: the host
+datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels, e.g. to
+overload. The path case asks the router for HT at 40 MHz;
+`OER_WIFI_LOAD_FORMAT` (`ht` or `he`) and `OER_WIFI_LOAD_WIDTH` (`20` or
+`40`) replace the format and the width, and any other value (the old `ht20`,
+`ht40` and `he20` among them) is refused before the stand. Level 0 means no pacing, in every direction the case has: the host
 sends RX load, and the image sends TX load, one datagram after another as
 fast as the socket takes them until the window ends (the datagram burst does
 not apply). A refused host send is counted in `host_send_failed` and the next
@@ -48,8 +51,12 @@ datagram follows at once. Once the window's deadline has passed no new send
 starts; a send already started may finish after it. An
 unpaced level has no offered rate: its `offered_mbps` and `offered_total_mbps`
 are `null`, and its name reads `<case> unpaced`. A level above 0 is paced at
-that total, half each way for `rx-tx`. `OER_WIFI_LOAD_WIDTH=he20` asks the router for its HE20 station
-profile and the station's join for HE20 (experimental, off otherwise); the
+that total, half each way for `rx-tx`. `OER_WIFI_LOAD_FORMAT=he` with
+`OER_WIFI_LOAD_WIDTH=20` asks the router for HE at 20 MHz and the station's
+join for HE20 (experimental, off otherwise). The S31 station's HE is 20 MHz
+only (`ESP32S31_HE_CHANNEL_WIDTH_SET`): HE at 40 MHz is refused for it before
+the stand, while the vendor run takes every pair; the router refuses a pair
+its radio does not run; the
 path case prints the PHY the station associated in, and each level's `rx`
 and `tx` counts name the HE-SU MPDUs (`HE`). Each level is one run of the image's load service: a 5 s
 (`OER_WIFI_LOAD_SECONDS` replaces it, 1 to 60) measuring window after a
@@ -397,8 +404,8 @@ and are read, with the environment, before anything reaches the stand;
 `rx` joins first. The program writes the peer unless the board runs it,
 applies the same station profile with a generated network and hands it to
 the peer on its console, then offers each level as `rx` does
-(`OER_WIFI_LOAD_MBPS`, `OER_WIFI_LOAD_SECONDS`, `OER_WIFI_LOAD_PROBES` and
-`OER_WIFI_LOAD_WIDTH` apply). Each level records the same `rx` counts by the
+(`OER_WIFI_LOAD_MBPS`, `OER_WIFI_LOAD_SECONDS`, `OER_WIFI_LOAD_PROBES`,
+`OER_WIFI_LOAD_FORMAT` and `OER_WIFI_LOAD_WIDTH` apply). Each level records the same `rx` counts by the
 load header, `rtt` and the access point's `link.router` view, and in `vendor`
 the peer's report of that run: its counts, its IP stack's and driver's
 counters over the window (`window`, snapshots at the window's start and end,

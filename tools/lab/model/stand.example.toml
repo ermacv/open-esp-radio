@@ -92,7 +92,7 @@ ssh_target = "example-router"
 wireless_interface = "phy0-ap0"
 ingress_interface = "br-lan"
 monitor_interface = "example-mon"
-phys = ["legacy", "ht20", "ht40", "he20"]
+phys = ["legacy", "ht20", "ht40", "he20", "he40"]
 independent_laptop_monitor = true
 # Its address on the wired network this host reaches it by: a load run
 # checks that the host's route to the station network goes through it.
