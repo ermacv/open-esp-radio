@@ -10,7 +10,6 @@ use oer_chips_family_radio_coex::{
 
 use crate::{
     radio::coex::CoexClockPort,
-    radio::ieee80211::mac::WifiMacColdHal,
     types::{CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource},
 };
 
@@ -38,12 +37,6 @@ pub fn timer_clock(
         XTAL_MHZ,
         real_chip,
     ))
-}
-
-impl CoexClockHardware for WifiMacColdHal<'_> {
-    fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
-        timer_clock(self.sample_coexistence_low_power_clock(), true)
-    }
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement> CoexClockHardware for CoexClockPort<'_, P> {

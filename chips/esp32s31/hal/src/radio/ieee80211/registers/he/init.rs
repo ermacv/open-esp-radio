@@ -1,7 +1,6 @@
 //! The bounded prefix of complete `hal_he_init`, through `hal_init_tb_tx`.
 
-use oer_chips_esp32s31_pac::wifi_bb::PhyAgcOracleWifiBb;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters};
 
@@ -11,10 +10,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete `libpp.a[hal_mac_ctl.o]` parent and leaves recorded
     /// as `BLOB_LIBPP_HAL_HE_INIT_PREFIX` (an older libpp), with the pinned
     /// library's differences `BLOB_LIBPP_HAL_HE_INIT_PIN_20261108`. The transaction is
-    /// twenty-two fresh-read RMW edges plus one final volatile status/sync read
-    /// of the shared PHY's AGC word, which `agc` lends.
+    /// twenty-two fresh-read RMW edges. The leaf's final read of the shared
+    /// PHY's AGC word is not the Wi-Fi owner's: the radio system's MAC reset
+    /// performs it (`RadioDomain::reset_wifi_mac_block`).
     /// It stops immediately before the parent calls `hal_init_tx_pwr`.
-    pub fn initialize_mac_he_prefix<A: Placement>(&mut self, agc: &PhyAgcOracleWifiBb<A>) {
+    pub fn initialize_mac_he_prefix(&mut self) {
         let options = &mut self.mac.wifi_mac_he_init_suffix;
         // SOURCE: BLOB_LIBPP_HAL_HE_INIT_PIN_20261108, `hal_he_init`
         // +0x0e..0x18 clears bit 31, then +0x1a..0x24 clears bit 30 alone.
@@ -103,10 +103,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .set_bpsk_ersu(false);
         });
 
-        // The complete leaf performs this read after all BF writes even though
-        // its value is unused. Preserve it because MMIO reads may acknowledge
-        // or synchronize hardware state.
-        let _ = agc.read_agc_init_high_control().bits_24_31_opaque();
+        // The complete leaf reads the shared PHY's AGC word here and discards
+        // it; that read belongs to the radio system's MAC reset.
 
         self.mac
             .wifi_mac_rx_bssid_list

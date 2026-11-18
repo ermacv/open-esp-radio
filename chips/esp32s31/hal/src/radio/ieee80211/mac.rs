@@ -29,11 +29,7 @@ use crate::types::{
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
 use oer_portable_memory::PreparedTxDma;
 
-use crate::{
-    radio::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters},
-    radio::modem::SharedRadioRegisters,
-    types::CoexistenceLowPowerClockObservation,
-};
+use crate::radio::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 
 /// Complete identity of one hardware MAC interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,55 +40,38 @@ pub struct MacInterfaceIdentity {
 }
 
 /// The owners one cold MAC transaction borrows: a clocked Wi-Fi client's MAC
-/// and RX walker, with the shared radio owner borrowed from the arbiter
-/// lease. The MAC's interrupt banks are the radio interrupt handler's and
-/// stay masked through the cold transition.
+/// and RX walker, the Wi-Fi partition alone. The words of the `WIFI_MAC`
+/// block that are the PHY's and the shared radio's are the radio system's
+/// MAC reset's (`RadioDomain::reset_wifi_mac_block`). The MAC's interrupt
+/// banks are the radio interrupt handler's and stay masked through the cold
+/// transition.
 struct ColdRegisters<'registers> {
     mac: &'registers mut WifiRadioRegisters,
     rx_dma: &'registers mut WifiRxDmaRegisters,
-    shared: &'registers mut SharedRadioRegisters,
-}
-
-impl ColdRegisters<'_> {
-    fn parts(&mut self) -> (&mut WifiRadioRegisters, &mut SharedRadioRegisters) {
-        (self.mac, self.shared)
-    }
 }
 
 /// Closed HAL authority for the one-way cold Wi-Fi MAC transition.
 ///
-/// The capability is borrowed from a clocked Wi-Fi client with the arbiter
-/// lease, and cannot be stored beyond them. It exposes reviewed cold transactions only;
+/// The capability is borrowed from a clocked Wi-Fi client and cannot be
+/// stored beyond it; the preparation it serves takes the proof of the MAC's
+/// reset (`MacBlockReset`). It exposes reviewed cold transactions only;
 /// neither the PAC owner nor arbitrary register access is available.
 pub struct WifiMacColdHal<'registers> {
     registers: ColdRegisters<'registers>,
 }
 
 impl<'registers> WifiMacColdHal<'registers> {
-    pub(crate) fn from_leased(
+    pub(crate) fn from_partition(
         mac: &'registers mut WifiRadioRegisters,
         rx_dma: &'registers mut WifiRxDmaRegisters,
-        shared: &'registers mut SharedRadioRegisters,
     ) -> Self {
         Self {
-            registers: ColdRegisters {
-                mac,
-                rx_dma,
-                shared,
-            },
+            registers: ColdRegisters { mac, rx_dma },
         }
     }
 
     fn mac(&mut self) -> &mut WifiRadioRegisters {
-        self.registers.parts().0
-    }
-
-    pub fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        self.registers
-            .parts()
-            .1
-            .radio_phy_mut()
-            .set_wifi_mac_reset(asserted);
+        self.registers.mac
     }
 
     pub fn initialize_antenna(&mut self) {
@@ -127,7 +106,7 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_hal_tail(&mut self, slow_clock_calibration: crate::types::MacRtcCalibration) {
-        let ColdRegisters { mac, rx_dma, .. } = &mut self.registers;
+        let ColdRegisters { mac, rx_dma } = &mut self.registers;
         mac.initialize_mac_hal_tail(rx_dma, slow_clock_calibration)
     }
 
@@ -138,17 +117,16 @@ impl<'registers> WifiMacColdHal<'registers> {
     /// caller samples it with [`Self::sample_handshake_ready`] under its own
     /// deadline.
     pub fn request_handshake(&mut self) {
-        self.registers.parts().0.request_mac_cold_start();
+        self.mac().request_mac_cold_start();
     }
 
     /// Sample whether the cold MAC start is ready.
     pub fn sample_handshake_ready(&mut self) -> bool {
-        self.registers.parts().0.sample_mac_cold_start_ready()
+        self.mac().sample_mac_cold_start_ready()
     }
 
     pub fn initialize_he_prefix(&mut self) {
-        let (mac, shared) = self.registers.parts();
-        mac.initialize_mac_he_prefix(shared.radio_phy().phy_agc_oracle_wifi_bb());
+        self.mac().initialize_mac_he_prefix();
     }
 
     pub fn initialize_tx_power(&mut self, table: &MacTxPowerTable) {
@@ -156,12 +134,7 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_he_suffix(&mut self) {
-        let (mac, shared) = self.registers.parts();
-        mac.initialize_mac_he_suffix(
-            shared
-                .radio_phy_mut()
-                .phy_frequency_channel_oracle_wifi_mac_mut(),
-        );
+        self.mac().initialize_mac_he_suffix();
     }
 
     pub fn initialize_last_rx_buffer_table(&mut self) {
@@ -185,13 +158,8 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn initialize_txrx_suffix(&mut self) {
-        let ColdRegisters {
-            mac,
-            rx_dma,
-            shared,
-            ..
-        } = &mut self.registers;
-        mac.initialize_mac_txrx_suffix(shared.shared_radio_init_control_mut(), rx_dma);
+        let ColdRegisters { mac, rx_dma } = &mut self.registers;
+        mac.initialize_mac_txrx_suffix(rx_dma);
     }
 
     pub fn program_interface_address(&mut self, interface: MacInterface, address: [u8; 6]) {
@@ -209,20 +177,6 @@ impl<'registers> WifiMacColdHal<'registers> {
 
     pub fn disable_open_mac_promiscuous_receive(&mut self) {
         self.mac().disable_open_mac_promiscuous_receive();
-    }
-}
-
-impl WifiMacColdHal<'_> {
-    /// Sample the shared coexistence low-power clock selection once.
-    ///
-    /// Each call performs fresh reads; `None` reports an unreviewed encoding.
-    pub fn sample_coexistence_low_power_clock(
-        &mut self,
-    ) -> Option<CoexistenceLowPowerClockObservation> {
-        self.registers
-            .parts()
-            .1
-            .sample_coexistence_low_power_clock()
     }
 }
 

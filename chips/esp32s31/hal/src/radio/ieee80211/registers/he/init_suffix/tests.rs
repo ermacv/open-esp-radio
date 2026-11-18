@@ -1,34 +1,23 @@
 //! The HE init suffix and its sibling leaves over host memory.
 
-use std::vec;
-
-use oer_chips_esp32s31_pac::{instances, wifi_mac::PhyFrequencyChannelOracleWifiMac};
-
 use super::MacHeTxMpduLengthLink;
 use crate::radio::ieee80211::registers::{HostWords, element};
 
 /// Run the suffix over memory filled with `fill`; return the Wi-Fi memory
-/// after it and the channel word's memory after it.
-fn run(fill: u32) -> (HostWords, std::vec::Vec<u32>) {
+/// after it. The PHY's channel TX-offset word is the radio system's MAC
+/// reset's, not the suffix's.
+fn run(fill: u32) -> HostWords {
     let mut words = HostWords::filled(fill);
-    let mut channel = vec![fill; instances::wifi_mac::SIZE.div_ceil(4)];
     {
-        let mut part =
-            PhyFrequencyChannelOracleWifiMac::host(&mut channel).expect("the part's host words");
         let mut owners = words.owners();
-        owners.registers.initialize_mac_he_suffix(&mut part);
+        owners.registers.initialize_mac_he_suffix();
     }
-    (words, channel)
+    words
 }
 
 #[test]
 fn the_suffix_from_zero_publishes_the_vendor_baseline() {
-    let (mut words, mut channel) = run(0);
-    let part = PhyFrequencyChannelOracleWifiMac::host(&mut channel).expect("the part's host words");
-    let offsets = part.read_channel_tx_offset_control();
-    assert_eq!(offsets.minimum_power_low().get(), 5);
-    assert_eq!(offsets.minimum_power_high().get(), 3);
-    assert!(offsets.bit_17_opaque());
+    let mut words = run(0);
 
     let owners = words.owners();
     let suffix = &owners.registers.mac.wifi_mac_he_init_suffix;
@@ -81,7 +70,7 @@ fn the_suffix_from_zero_publishes_the_vendor_baseline() {
 
 #[test]
 fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
-    let (mut words, _) = run(u32::MAX);
+    let mut words = run(u32::MAX);
     let owners = words.owners();
     let registers = &owners.registers;
     for index in 0..oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT {
@@ -126,7 +115,7 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
 fn every_link_word_is_stored_whole() {
     // From all ones, each link word reads zero in every bit, not only in
     // its two link fields: the init stores the whole word.
-    let (words, _) = run(u32::MAX);
+    let words = run(u32::MAX);
     let zero_words = words
         .wifi_mac_he_init_suffix
         .iter()

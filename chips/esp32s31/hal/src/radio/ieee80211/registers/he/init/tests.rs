@@ -1,30 +1,23 @@
 //! The HE init prefix over host memory: what it sets, what it keeps.
 
-use std::vec;
-
-use oer_chips_esp32s31_pac::{instances, wifi_bb::PhyAgcOracleWifiBb};
-
 use crate::radio::ieee80211::registers::HostWords;
 
 /// Run the prefix over memory filled with `fill`; return the memory before
-/// and after and the AGC word's memory before and after.
-fn run(fill: u32) -> (HostWords, HostWords, std::vec::Vec<u32>, std::vec::Vec<u32>) {
+/// and after. The prefix borrows nothing of the PHY: its AGC read is the
+/// radio system's MAC reset's.
+fn run(fill: u32) -> (HostWords, HostWords) {
     let before = HostWords::filled(fill);
     let mut after = before.clone();
-    let agc_before = vec![fill; instances::wifi_bb::SIZE.div_ceil(4)];
-    let mut agc_after = agc_before.clone();
     {
-        let agc = PhyAgcOracleWifiBb::host(&mut agc_after).expect("the part's host words");
         let mut owners = after.owners();
-        owners.registers.initialize_mac_he_prefix(&agc);
+        owners.registers.initialize_mac_he_prefix();
     }
-    (before, after, agc_before, agc_after)
+    (before, after)
 }
 
 #[test]
 fn the_prefix_from_zero_sets_every_vendor_field() {
-    let (before, mut after, agc_before, agc_after) = run(0);
-    assert_eq!(agc_before, agc_after, "the AGC word is only read");
+    let (before, mut after) = run(0);
     let changes = before.changes(&after);
     assert!(
         changes.iter().all(
@@ -97,7 +90,7 @@ fn the_prefix_from_zero_sets_every_vendor_field() {
 
 #[test]
 fn the_prefix_from_ones_clears_its_bits_and_keeps_the_others() {
-    let (_, mut after, _, _) = run(u32::MAX);
+    let (_, mut after) = run(u32::MAX);
     let owners = after.owners();
     let registers = &owners.registers;
     let options = registers

@@ -1,6 +1,5 @@
 //! The direct `mac_txrx_init` transactions.
 
-use oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl;
 use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters, bits, element};
@@ -191,13 +190,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Apply all nine direct RMW edges after the three HE callbacks.
     ///
     /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_txrx_init`,
-    /// offsets `0xee..0x16e`. The shared radio initialization word belongs
-    /// to the shared radio partition; its owner lends it.
-    pub fn initialize_mac_txrx_suffix(
-        &mut self,
-        shared_init: &mut SharedRadioInitControl<M::Mac>,
-        rx_dma: &mut WifiRxDmaRegisters<M>,
-    ) {
+    /// offsets `0xee..0x16e`. The vendor's write of the shared radio
+    /// initialization word's low twelve bits is the radio system's MAC
+    /// reset's (`RadioDomain::reset_wifi_mac_block`): the Bluetooth baseband
+    /// writes that word too, and one context writes it.
+    pub fn initialize_mac_txrx_suffix(&mut self, rx_dma: &mut WifiRxDmaRegisters<M>) {
         let callbacks = &mut self.mac.wifi_mac_txrx_callbacks;
         callbacks.modify_bb_rx_hang_control(|w| {
             w.set_bit_31_opaque(true);
@@ -207,9 +204,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         let init = &mut self.mac.wifi_mac_txrx_suffix;
         init.modify_default_image_a(|w| {
-            w.set_bits_0_11_opaque(Bits::constant::<0x0f0>());
-        });
-        shared_init.modify_radio_init_control(|w| {
             w.set_bits_0_11_opaque(Bits::constant::<0x0f0>());
         });
         init.modify_field_control(|w| {

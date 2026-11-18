@@ -79,6 +79,38 @@ impl SharedRadioRegisters {
         &self.radio_phy
     }
 
+    /// Write back, after an `RST_WIFIMAC` pulse, what the block's other
+    /// owners keep in it, and Wi-Fi's constants of those same words, so that
+    /// each word has one writing context: the radio system's.
+    ///
+    /// - The PHY's channel nibble of `CHANNEL_TX_OFFSET_CONTROL`, by the
+    ///   channel change's own last writer of it, `phy_bb_cbw_chan_cfg`
+    ///   ([`crate::radio::phy::frequency::ops::configure_channel_cbw`]),
+    ///   with the tuned channel's `cbw`.
+    /// - Wi-Fi's minimum transmit power (`hal_set_tx_min_pwr(-11)`) and bit
+    ///   17 of the same word, which `hal_he_init` writes.
+    /// - The low twelve bits of `RADIO_INIT_CONTROL`, `0x0f0`, which
+    ///   `mac_txrx_init` writes; the Bluetooth baseband's bit 31 is cleared
+    ///   by the pulse already and is not written.
+    /// - `I2C_TX_RATE_CONTROL` is not written: the vendor's station runs
+    ///   with it cleared.
+    /// - The read of the PHY's AGC word that `hal_he_init`'s prefix makes
+    ///   and discards.
+    ///
+    /// SOURCE: HW_WIFIMAC_RESET_FOREIGN_WORDS_20261118 (what the pulse
+    /// clears); complete pinned `libpp.a[hal_mac_ctl.o]::hal_he_init`,
+    /// `libpp.a[hal_mac_tx.o]::hal_set_tx_min_pwr` and
+    /// `libpp.a[hal_mac.o]::mac_txrx_init` (the constants).
+    pub(crate) fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
+        let parts = &mut self.radio_phy.peripherals;
+        write_back_wifi_mac_foreign_words(
+            &mut parts.phy_frequency_channel_oracle,
+            &mut self.shared_radio.shared_radio_init_control,
+            &parts.phy_agc_oracle.wifi_bb,
+            cbw,
+        );
+    }
+
     /// Read the three foreign words of the `WIFI_MAC` block
     /// ([`ForeignWifiMacWords`]), without effect.
     pub fn foreign_wifi_mac_words(&self) -> ForeignWifiMacWords {
@@ -210,4 +242,69 @@ pub struct SharedBasebandParts {
         oer_chips_esp32s31_pac::ieee802154::SharedBasebandResetIdleStatus,
     pub(crate) shared_baseband_tx_timing: oer_chips_esp32s31_pac::bt_bb::SharedBasebandTxTiming,
     pub(crate) zbbb_radio_control: oer_chips_esp32s31_pac::bt_bb::ZbbbRadioControl,
+}
+
+/// [`SharedRadioRegisters::write_back_wifi_mac_foreign_words`] over its
+/// parts, at any placement.
+pub(crate) fn write_back_wifi_mac_foreign_words<P: crate::radio::phy::registers::PhyPlacement>(
+    frequency: &mut crate::radio::phy::registers::FrequencyRegisters<P>,
+    init: &mut oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl<P::WifiMac>,
+    agc: &oer_chips_esp32s31_pac::wifi_bb::PhyAgcOracleWifiBb<P::WifiBb>,
+    cbw: u8,
+) {
+    use crate::radio::ieee80211::registers::he::init_suffix::{
+        MINIMUM_POWER_HIGH, MINIMUM_POWER_LOW,
+    };
+    crate::radio::phy::frequency::ops::configure_channel_cbw(frequency, u32::from(cbw));
+    frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
+        w.set_minimum_power_low(Bits::constant::<MINIMUM_POWER_LOW>())
+            .set_minimum_power_high(Bits::constant::<MINIMUM_POWER_HIGH>());
+    });
+    frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
+        w.set_bit_17_opaque(true);
+    });
+    init.modify_radio_init_control(|w| {
+        w.set_bits_0_11_opaque(Bits::constant::<0x0f0>());
+    });
+    // The complete `hal_he_init` prefix reads this word and discards it; the
+    // read is kept because an MMIO read may synchronize hardware state.
+    let _ = agc.read_agc_init_high_control().bits_24_31_opaque();
+}
+
+#[cfg(test)]
+mod foreign_word_tests {
+    use super::write_back_wifi_mac_foreign_words;
+    use crate::radio::phy::registers::FrequencyRegisters;
+    use oer_chips_esp32s31_pac::{
+        instances, wifi_bb::PhyAgcOracleWifiBb, wifi_mac::SharedRadioInitControl,
+    };
+
+    #[test]
+    fn the_write_back_sets_the_channels_nibble_wifis_constants_and_nothing_of_bluetooth() {
+        for fill in [0, u32::MAX] {
+            let mut frequency_words = std::vec![fill; 0x10000];
+            let mut init_words = std::vec![fill; instances::wifi_mac::SIZE.div_ceil(4)];
+            let mut agc_words = std::vec![fill; instances::wifi_bb::SIZE.div_ceil(4)];
+            let agc_before = agc_words.clone();
+            {
+                let mut frequency =
+                    FrequencyRegisters::host(&mut frequency_words).expect("host block");
+                let mut init =
+                    SharedRadioInitControl::host(&mut init_words).expect("the part's host words");
+                let agc = PhyAgcOracleWifiBb::host(&mut agc_words).expect("the part's host words");
+                // HT40 with the secondary below, as the radio system lowers it.
+                write_back_wifi_mac_foreign_words(&mut frequency, &mut init, &agc, 3);
+                let offsets = frequency.wifi_mac.read_channel_tx_offset_control();
+                assert_eq!(offsets.primary_20_channel_offset().get(), 1);
+                assert_eq!(offsets.minimum_power_low().get(), 5);
+                assert_eq!(offsets.minimum_power_high().get(), 3);
+                assert!(offsets.bit_17_opaque());
+                let control = init.read_radio_init_control();
+                assert_eq!(control.bits_0_11_opaque().get(), 0x0f0);
+                // The Bluetooth baseband's bit keeps what it held.
+                assert_eq!(control.bit_31_opaque(), fill == u32::MAX);
+            }
+            assert_eq!(agc_words, agc_before, "the AGC word is only read");
+        }
+    }
 }

@@ -1,8 +1,7 @@
 //! The complete post-power `hal_he_init` suffix and the HE BSR, ER-SU and
 //! MPDU-length-table leaves beside it.
 
-use oer_chips_esp32s31_pac::wifi_mac::PhyFrequencyChannelOracleWifiMac;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacPlacement, WifiRadioRegisters, byte, element, halfword,
@@ -20,8 +19,8 @@ const MPDU_LENGTH_LINK_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::he_scrat
 /// result of `hal_get_tx_min_pwr` as the element's minimum.
 pub const MAC_MINIMUM_TX_POWER_DBM: i8 = -11;
 /// The signed six-bit field's low four bits and high two bits.
-const MINIMUM_POWER_LOW: u32 = (MAC_MINIMUM_TX_POWER_DBM as u8 & 0x0f) as u32;
-const MINIMUM_POWER_HIGH: u32 = ((MAC_MINIMUM_TX_POWER_DBM as u8 >> 4) & 0x03) as u32;
+pub(crate) const MINIMUM_POWER_LOW: u32 = (MAC_MINIMUM_TX_POWER_DBM as u8 & 0x0f) as u32;
+pub(crate) const MINIMUM_POWER_HIGH: u32 = ((MAC_MINIMUM_TX_POWER_DBM as u8 >> 4) & 0x03) as u32;
 
 /// One hardware TX MPDU-length link-table entry.
 ///
@@ -116,13 +115,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete pinned `libpp.a[hal_mac_ctl.o]` parent and
     /// reached leaves recorded as `BLOB_LIBPP_HAL_HE_INIT_SUFFIX`. The order
     /// below is 163 writes/RMWs plus both conditional multi-BSSID guard reads.
-    /// It starts after the separate `dbg_read_tx_power` traversal. `channel`
-    /// is the shared PHY's channel TX-offset word, which the leaf updates
-    /// twice.
-    pub fn initialize_mac_he_suffix<C: Placement>(
-        &mut self,
-        channel: &mut PhyFrequencyChannelOracleWifiMac<C>,
-    ) {
+    /// It starts after the separate `dbg_read_tx_power` traversal. The
+    /// vendor's two updates of the PHY's channel TX-offset word inside the
+    /// `WIFI_MAC` block (`hal_set_tx_min_pwr(-11)` and bit 17) are the radio
+    /// system's MAC reset's (`RadioDomain::reset_wifi_mac_block`), the one
+    /// context that writes that word.
+    pub fn initialize_mac_he_suffix(&mut self) {
         let init = &mut self.mac.wifi_mac_he_init_suffix;
 
         // Complete hal_he_set_ersu(0), followed by its complete
@@ -152,11 +150,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             );
         });
 
-        // Complete hal_set_tx_min_pwr(-11), then the parent field update.
-        channel.modify_channel_tx_offset_control(|w| {
-            w.set_minimum_power_low(Bits::constant::<MINIMUM_POWER_LOW>())
-                .set_minimum_power_high(Bits::constant::<MINIMUM_POWER_HIGH>());
-        });
+        // Here the vendor's hal_set_tx_min_pwr(-11): the MAC reset's.
         init.modify_he_default_control(|w| {
             w.set_mpdu_length_offset(Bits::constant::<0x17c>());
         });
@@ -214,9 +208,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_high_window(Bits::constant::<31>());
         });
 
-        channel.modify_channel_tx_offset_control(|w| {
-            w.set_bit_17_opaque(true);
-        });
+        // Here the vendor sets bit 17 of the channel TX-offset word: the MAC
+        // reset's.
         init.modify_dump_complete_hesigb(|w| {
             w.set_enable(false);
         });

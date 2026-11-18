@@ -1042,6 +1042,28 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.registers().radio_phy().register_image(index)
     }
 
+    /// Reset the Wi-Fi MAC's block for its member, whose clocks `_clocks`
+    /// proves on, and write back what the block's other owners keep in it;
+    /// `cbw` is the channel the member is tuned to, lowered for the PHY. The
+    /// answer is the reset's proof, which the member's cold preparation
+    /// takes. A few writes and one read, with no wait and no failure.
+    ///
+    /// The pulse is `modem_clock_module_mac_reset(PERIPH_WIFI_MODULE)`'s,
+    /// through `modem_syscon_ll_reset_wifimac`; the write-back is
+    /// [`SharedRadioRegisters::write_back_wifi_mac_foreign_words`].
+    pub fn reset_wifi_mac_block(
+        &mut self,
+        _clocks: &crate::radio::ieee80211::client::WifiClocksOn,
+        cbw: u8,
+    ) -> crate::radio::ieee80211::init::MacBlockReset {
+        let registers = self.registers_mut();
+        let phy = registers.radio_phy_mut();
+        phy.set_wifi_mac_reset(true);
+        phy.set_wifi_mac_reset(false);
+        registers.write_back_wifi_mac_foreign_words(cbw);
+        crate::radio::ieee80211::init::MacBlockReset::after_pulse()
+    }
+
     /// Read the three words inside the `WIFI_MAC` block that this domain
     /// owns, without effect, for a probe's observation of the block's reset.
     pub fn foreign_wifi_mac_words(&self) -> crate::radio::modem::ForeignWifiMacWords {

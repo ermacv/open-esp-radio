@@ -271,26 +271,12 @@ impl WifiClocked {
         self.initialized
     }
 
-    /// Pulse the Wi-Fi MAC reset, as
-    /// `modem_clock_module_mac_reset(PERIPH_WIFI_MODULE)` does through
-    /// `modem_syscon_ll_reset_wifimac`.
-    pub fn reset_mac<B: PlatformClockBackend, T>(&mut self, radio: &mut RadioDomain<B, T>) {
-        let phy = radio.registers_mut().radio_phy_mut();
-        phy.set_wifi_mac_reset(true);
-        phy.set_wifi_mac_reset(false);
-    }
-
-    /// Borrow the cold MAC HAL for one transaction, with the shared radio
-    /// owner borrowed from the radio domain.
-    ///
-    /// Clock and modem-source configuration of the exclusive route are
-    /// no-ops here: the radio domain enabled the Wi-Fi module clocks already.
-    pub fn cold_mac_hal<'hal, B: PlatformClockBackend, T>(
-        &'hal mut self,
-        radio: &'hal mut RadioDomain<B, T>,
-    ) -> WifiMacColdHal<'hal> {
+    /// Borrow the cold MAC HAL over the Wi-Fi partition alone, for the cold
+    /// preparation that follows the radio system's reset of the block
+    /// (`initialize_wifi_mac` takes that reset's proof).
+    pub fn cold_mac_hal(&mut self) -> WifiMacColdHal<'_> {
         let WifiClientRegisters { mac, rx_dma } = &mut self.registers;
-        WifiMacColdHal::from_leased(mac, rx_dma, radio.registers_mut())
+        WifiMacColdHal::from_partition(mac, rx_dma)
     }
 
     /// Borrow the runtime MAC HAL over the MAC alone.
