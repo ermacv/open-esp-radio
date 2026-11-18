@@ -423,12 +423,10 @@ mod c {
     use super::*;
 
     /// The rounds the sender sends: case C's, or cell E's.
-    #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+    #[cfg(not(feature = "ccmp"))]
     const RECEIVED_ROUNDS: u32 = ROUNDS;
     #[cfg(feature = "ccmp")]
     const RECEIVED_ROUNDS: u32 = case_c::CELL_ROUNDS;
-    #[cfg(all(feature = "ampdu", not(feature = "ccmp")))]
-    const RECEIVED_ROUNDS: u32 = case_c::CELL_F_FRAMES;
 
     /// The sender's quiet that ends the run once it has begun.
     pub(super) const QUIET_MS: u32 = 5_000;
@@ -652,7 +650,13 @@ mod c {
             }
             let mut missing = heapless::Vec::<u32, MISSING>::new();
             let mut absent = 0_u32;
-            for round in 0..RECEIVED_ROUNDS {
+            // Cell F sends its control and its A-MSDU cases in numbers of
+            // their own.
+            #[cfg(feature = "ampdu")]
+            let rounds = case_c::cell_f_frames(*case);
+            #[cfg(not(feature = "ampdu"))]
+            let rounds = RECEIVED_ROUNDS;
+            for round in 0..rounds {
                 let seen = per
                     .seen
                     .get((round / 32) as usize)

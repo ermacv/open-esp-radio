@@ -242,6 +242,18 @@ pub fn byte(case: Case, sender: [u8; 6], receiver: [u8; 6], counter: u32, offset
 pub const CELL_F_PAIRS: u32 = 600;
 pub const CELL_F_OCTETS: u32 = 150;
 pub const CELL_F_FRAMES: u32 = 2 * CELL_F_PAIRS + 8 * CELL_F_OCTETS;
+/// Cell F's A-MSDU stage: each A-MSDU case's frames, half in aggregates of 2
+/// and half in aggregates of 8 (the long one in aggregates of 2 alone: eight
+/// would outlast an HT MCS0 PPDU).
+pub const CELL_F_AMSDU_FRAMES: u32 = 1_200;
+/// The frames cell F sends of `case`.
+pub const fn cell_f_frames(case: Case) -> u32 {
+    match case {
+        Case::Control => CELL_F_FRAMES,
+        Case::Amsdu1 | Case::Amsdu2 | Case::AmsduLong => CELL_F_AMSDU_FRAMES,
+        Case::Provenance700 | Case::Provenance1500 => 0,
+    }
+}
 /// Cell E's rounds: at least 1 000 frames of each QoS case.
 pub const CELL_ROUNDS: u32 = 1_100;
 pub const CCMP_HEADER: usize = 8;
