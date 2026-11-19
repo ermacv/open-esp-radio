@@ -46,7 +46,7 @@ const ROWS_MAX: usize = 4 * PER_AIR as usize + 512;
 #[cfg(not(feature = "short"))]
 const A2_BUDGET_S: u32 = 11 * 60;
 #[cfg(not(feature = "short"))]
-const RESET_BUDGET_S: u32 = 34 * 60;
+const RESET_BUDGET_S: u32 = 30 * 60;
 /// The short pass of a lease (`tasks/222`): about a minute in all.
 #[cfg(feature = "short")]
 const A2_BUDGET_S: u32 = 30;
@@ -231,7 +231,14 @@ pub(super) async fn series(
     let mut before = Record::new();
     let mut record = Record::new();
     rows.reference = access.wifi_mac_hal().experiment_receive_filter_words();
-    for part in [Part::A2, Part::Reset] {
+    // `tasks/224`: one part a boot, so that no reset comes before (a2).
+    #[cfg(feature = "only-a2")]
+    let parts = [Part::A2];
+    #[cfg(feature = "only-reset")]
+    let parts = [Part::Reset];
+    #[cfg(not(any(feature = "only-a2", feature = "only-reset")))]
+    let parts = [Part::A2, Part::Reset];
+    for part in parts {
         mark(110 + part as u32);
         let end = EmbassyClock
             .now()

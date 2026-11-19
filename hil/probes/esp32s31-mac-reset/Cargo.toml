@@ -90,6 +90,9 @@ settle = ["dep:oer-chips-esp32s31-radio-ieee80211-backend"]
 long-run = []
 # `tasks/222`: the short pass of a lease, every part for about a minute.
 short = ["settle"]
+# `tasks/224`: one part a boot.
+only-a2 = ["settle"]
+only-reset = ["settle"]
 
 [lints]
 workspace = true
