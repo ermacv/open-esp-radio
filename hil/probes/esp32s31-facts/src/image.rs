@@ -74,10 +74,16 @@ core::arch::global_asm!(
 );
 
 // SAFETY: addresses only; definitions and extents are supplied by facts.x.
+// The two `mnxti` functions of the trap assembly touch no memory: the read
+// returns the CSR, the claim returns it and mstatus after setting MIE, which
+// only their callers inside a handler of `levels::mnxti` ask for.
 unsafe extern "C" {
     safe static _facts_start_trap: [u8; 0];
     safe static _facts_mtvt: [u8; 0];
+    safe static _facts_mnxti_mtvt: [u8; 0];
     safe static __runtime_cpu0_irq_stack_top: [u8; 0];
+    safe fn facts_mnxti_read() -> u32;
+    safe fn facts_mnxti_claim() -> u64;
 }
 
 type ThresholdEntry = unsafe extern "C" fn(*mut [u32; 6], *const pac::hp_system::FromCpu2, u32);
@@ -188,6 +194,32 @@ extern "C" fn facts_irq() {
     }
 }
 
+/// The cycle counter's low word where `_facts_start_trap` leaves a trap,
+/// before its paths part: selection 329's start.
+// SAFETY: unique exported word; only the trap assembly stores it.
+#[unsafe(no_mangle)]
+static FACTS_MNXTI_STAMP: AtomicU32 = AtomicU32::new(0);
+
+// SAFETY: the included common trap entry calls this ABI with a pointer to its
+// frame and leaves by its answer (see trap.s): a non-vectored line's interrupt
+// or an exception that `levels::mnxti` expects, else the recorded fault.
+#[unsafe(no_mangle)]
+extern "C" fn facts_trap(frame: usize) -> u32 {
+    let cycle = oer_portable_riscv::cycle32();
+    match levels::mnxti::trap(cycle) {
+        Some(leave) => leave,
+        None => facts_exception(frame),
+    }
+}
+
+// SAFETY: `_facts_mnxti_mtvt`'s word of the chained line is this C-ABI
+// function, which selection 329's claim calls inside a handler.
+#[unsafe(no_mangle)]
+extern "C" fn facts_mnxti_chained() {
+    let cycle = oer_portable_riscv::cycle32();
+    levels::mnxti::chained(cycle);
+}
+
 // SAFETY: the included trap entry calls this ABI with a pointer to its frame;
 // the probe only records architectural diagnostics and never returns.
 #[unsafe(no_mangle)]
@@ -264,6 +296,30 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 322,
         run: Action::Thread(levels::clear_from_higher),
+    },
+    Probe {
+        id: 324,
+        run: Action::Thread(levels::mnxti::present),
+    },
+    Probe {
+        id: 325,
+        run: Action::Thread(levels::mnxti::read_only),
+    },
+    Probe {
+        id: 326,
+        run: Action::Thread(levels::mnxti::claim),
+    },
+    Probe {
+        id: 327,
+        run: Action::Thread(levels::mnxti::qualifies),
+    },
+    Probe {
+        id: 328,
+        run: Action::Thread(levels::mnxti::vectored),
+    },
+    Probe {
+        id: 329,
+        run: Action::Thread(levels::mnxti::saving),
     },
     Probe {
         id: 323,
@@ -1099,7 +1155,20 @@ fn boot_address(s: &mut Session<'_>) {
     );
 }
 
+/// The vector table a selection installs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Table {
+    /// Every line's word the vectored entry.
+    Facts,
+    /// The same, but the chained line's word a C-ABI function (324-329).
+    Mnxti,
+}
+
 fn setup(s: &mut Session<'_>) {
+    setup_with(s, Table::Facts);
+}
+
+fn setup_with(s: &mut Session<'_>, table: Table) {
     oer_portable_riscv::disable_interrupts();
     contain(s);
     let matrix = &mut s.interrupt_matrix;
@@ -1128,7 +1197,10 @@ fn setup(s: &mut Session<'_>) {
         oer_portable_riscv::install_trap_stack(
             ptr::addr_of!(_facts_start_trap) as usize
                 | oer_portable_riscv::machine::MTVEC_CLIC_MODE,
-            ptr::addr_of!(_facts_mtvt) as usize,
+            match table {
+                Table::Facts => ptr::addr_of!(_facts_mtvt) as usize,
+                Table::Mnxti => ptr::addr_of!(_facts_mnxti_mtvt) as usize,
+            },
             ptr::addr_of!(__runtime_cpu0_irq_stack_top) as usize,
         );
     }

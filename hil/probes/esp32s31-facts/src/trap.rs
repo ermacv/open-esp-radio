@@ -66,6 +66,7 @@ core::arch::global_asm!(
     fs = const oer_portable_riscv::machine::status::FS_MASK,
     mie = const oer_portable_riscv::machine::status::MIE,
     mintthresh = const oer_portable_riscv::clic::MINTTHRESH,
+    mnxti = const oer_portable_riscv::clic::MNXTI,
     tcontrol = const oer_portable_riscv::trigger::TCONTROL,
     mte = const oer_portable_riscv::trigger::TCONTROL_MTE,
     mpte_shift = const (oer_portable_riscv::trigger::TCONTROL_MPTE.trailing_zeros() - oer_portable_riscv::trigger::TCONTROL_MTE.trailing_zeros()),

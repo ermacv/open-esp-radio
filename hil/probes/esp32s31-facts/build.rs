@@ -59,6 +59,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         asm.push_str(".word _facts_irq\n");
     }
     asm.push_str(".endm\n");
+    // Selections 324-329's table: the same entries, but the chained line's,
+    // a C-ABI function that 329 reaches through `mnxti`.
+    let chain = first as usize + 27;
+    if chain >= count {
+        return Err("the chained line lies past the CLIC's lines".into());
+    }
+    asm.push_str(".macro FACTS_MNXTI_TABLE\n");
+    asm.push_str(&format!(
+        ".balign {}\n.word 0\n",
+        (count * 4).next_power_of_two()
+    ));
+    for line in 1..count {
+        asm.push_str(if line == chain {
+            ".word facts_mnxti_chained\n"
+        } else {
+            ".word _facts_irq\n"
+        });
+    }
+    asm.push_str(".endm\n");
     std::fs::write(out.join("vectors.s"), asm)?;
     std::fs::write(
         out.join("facts.x"),

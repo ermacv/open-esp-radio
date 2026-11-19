@@ -1230,6 +1230,55 @@ once and line 34 `v` times, with its pending bit read clear after the
 window. `last` is the last trial's `entries of 34 | entries of 32 << 8 |
 IP of 34 << 16`.
 
+## The next-interrupt CSR `mnxti`
+
+Selections 324–329 (tasks/255) try `mnxti` (CSR 0x345) on hart 0. Its
+source is the draft `riscv-fast-interrupt` v0.9 (`src/clic.adoc`, "Next
+Interrupt Handler Address and Interrupt-Enable CSRs"), which was never
+ratified and which no vendor source uses. The `mnxti` instructions live in
+the probe's trap assembly (`facts_mnxti_read`, `facts_mnxti_claim` and the
+common entry's chained exit), not in `portable/riscv`.
+
+The lines are not hardware-vectored (`SHV` clear; 328's B excepted) and
+positive-edge, so they enter at mtvec's base, the common entry. It calls
+`facts_trap`, which:
+- finds the line in `mcause`'s exception code (bits 11:0, bit 31 set);
+- records an exception that a selection expects (`mcause`, `mepc`,
+  `mtval`) and leaves past the instruction.
+
+The installed table is `_facts_mnxti_mtvt`: the same words, but line 43's
+is the C-ABI function `facts_mnxti_chained`.
+
+| Line | Level | Role |
+| --- | --- | --- |
+| 40 | 2 | P, the context |
+| 41 | 5 | A, the handler that reads or claims |
+| 42 | varies | B, pended in A |
+| 43 | 3 | C, the chained line |
+
+A runs with MIE cleared. Every common-entry handler clears its own pending
+byte first, since the hardware does not clear it for a line it does not
+vector. A records the byte it found (the common words). Each case runs a
+hundred trials, each from its own setup with a 60,000-cycle window.
+
+| Selection | Case | Records |
+| --- | --- | --- |
+| 324 | `mnxti` read from the thread, MIE clear, nothing pending | `(0x3b00, reads, zeros, traps)`, `(0x3b01, mcause, mepc, mtval)` of the last trap, `(0x3b02, last value, mtvt, 0)` |
+| 325 | in A, B (level 3) pended, read without a claim: B's table word, `mcause` and `mintstatus` unchanged, B still pending | `(0x3c00, trials, held, value)`, `(0x3c01, B's word, mcause, mintstatus)` before, `(0x3c02, mcause, mintstatus, B pending)` after |
+| 326 | in A, B pended, the claim `csrrsi mnxti, MIE`: B's word, B's bit clear, `mcause` code B's, `mintstatus` level B's, MIE set | `(0x3d00, trials, held, value)`, `(0x3d01, mstatus, mcause, mintstatus)`, `(0x3d02, B pending, B's word, B's control byte)` |
+| 327 | A entered from P's handler (`mcause.mpil` P's); B at 3, 4, 6 (qualify), 2, 1, and 3 with `mintthresh` at level 4 (do not) | per case c: `(0x3e00 + c, trials, held, value)`, `(0x3e10 + c, mcause, mintstatus, B pending)` |
+| 328 | in A, a hardware-vectored B (level 3) pended, read | `(0x3f00, trials, zeros, value)`, `(0x3f01, B's word, B pending, 0)` |
+| 329 | A pends C, then leaves through the exit (variant 0: A's frame restored, `mret`, C entered at the common entry and its frame saved) or through the claim (1: `csrrsi`, the load of C's word, the jump, in A's frame) | `(0x4000 + v, trials, held, 0)`, `(0x4010 + v, least, most, last)` cycles |
+
+Every case except 324 also records the common words: `(tag + 0x80 or
+0x3e20 + c / 0x4020 + v, A's entries, the byte A found, traps | strays <<
+16)`.
+
+In 329 both variants run from one stamp: the cycle counter stored where
+the common entry leaves a handler, before its paths part. They run to the
+first statement of C's handler (`facts_trap`'s, or the chained
+function's), prologue included.
+
 ## A hart's pending store stays its own
 
 Selection 323 (tasks/253, 254) releases hart 1 as 232 does. MIE is

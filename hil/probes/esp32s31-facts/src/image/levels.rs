@@ -15,6 +15,8 @@
 //! and the level from mintstatus; the host decodes their order. Nothing here
 //! decides a verdict.
 use super::{LEVEL_BITS, LINE, SOURCE, Session, emit, generic::feed, setup};
+
+pub(super) mod mnxti;
 use core::{
     ptr,
     sync::atomic::{AtomicPtr, AtomicU32, Ordering},
@@ -134,22 +136,22 @@ fn log(kind: u32, line: u32) {
     }
 }
 
-/// One access to the lent CLIC with MIE cleared; MIE is set again after it.
-/// Called only while MIE is set (the window, or a handler).
+/// One access to the lent CLIC with MIE cleared; MIE is restored as it was
+/// after it (set in the window and in a vectored handler, clear in a
+/// handler of the common entry).
 fn masked<R>(f: impl FnOnce(&mut pac::ownership::InterruptMatrixPeripherals) -> R) -> Option<R> {
-    oer_portable_riscv::disable_interrupts();
-    let clic = CLIC.load(Ordering::Acquire);
-    let out = if clic.is_null() {
-        None
-    } else {
-        // SAFETY: the thread lends its exclusive CLIC owner for the window
-        // and does not use its own borrow until it revokes the loan with MIE
-        // cleared. Every access here runs with MIE cleared on this one hart,
-        // so this is the only live borrow derived from the loan.
-        Some(f(unsafe { &mut *clic }))
-    };
-    oer_portable_riscv::enable_interrupts();
-    out
+    oer_portable_riscv::interrupt_free(|| {
+        let clic = CLIC.load(Ordering::Acquire);
+        if clic.is_null() {
+            None
+        } else {
+            // SAFETY: the thread lends its exclusive CLIC owner for the window
+            // and does not use its own borrow until it revokes the loan with MIE
+            // cleared. Every access here runs with MIE cleared on this one hart,
+            // so this is the only live borrow derived from the loan.
+            Some(f(unsafe { &mut *clic }))
+        }
+    })
 }
 
 /// The pend: the line's pending byte stored whole as 0x01, on hart 0's
@@ -283,6 +285,24 @@ pub(super) fn interrupt(cycle: u32) -> bool {
 /// Configures a line with MIE cleared and the session's own borrow: enable
 /// off, then attributes and control, then the enable as asked.
 fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: bool) {
+    configure_as(s, line, level, edge, enable, Vectoring::Hardware);
+}
+
+/// How a line enters: through its table word or through the common entry.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Vectoring {
+    Hardware,
+    Common,
+}
+
+fn configure_as(
+    s: &mut Session<'_>,
+    line: u32,
+    level: usize,
+    edge: bool,
+    enable: bool,
+    vectoring: Vectoring,
+) {
     let (Some(i), Some(&control)) = (index(line), LEVEL_CONTROL.get(level.wrapping_sub(1))) else {
         return;
     };
@@ -292,11 +312,12 @@ fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: b
     clear_in(&s.interrupt_matrix, line);
     let clic = &mut s.interrupt_matrix.clic[0];
     clic.modify_attr(i, |w| {
-        w.set_shv(true).set_trig(if edge {
-            pac::clic::attr::Trig::PositiveEdge
-        } else {
-            pac::clic::attr::Trig::PositiveLevel
-        });
+        w.set_shv(vectoring == Vectoring::Hardware)
+            .set_trig(if edge {
+                pac::clic::attr::Trig::PositiveEdge
+            } else {
+                pac::clic::attr::Trig::PositiveLevel
+            });
     });
     clic.modify_ctl(i, |w| {
         w.set_ctl(control);

@@ -92,18 +92,57 @@
     .endm
 
     // Exceptions enter at mtvec's base (CLIC mode: 64-byte aligned), as does
-    // an interrupt of a non-vectored line, which the table never configures.
-    // The handler records the fault and never returns.
+    // an interrupt of a non-vectored line. `facts_trap` records a fault and
+    // never returns, or returns how to leave: 1 the exit, 3 the exit past the
+    // trapping instruction, 2 the exit after the next interrupt that `mnxti`
+    // claims, called through its table word as a C-ABI function. The cycle
+    // counter is stored at one point before the paths part (selection 329).
     .balign 64
     .global _facts_start_trap
     .type _facts_start_trap, @function
 _facts_start_trap:
     TRAP_ENTER
     mv a0, sp
-    call facts_exception
-3:
-    j 3b
+    call facts_trap
+    csrr t1, mcycle
+    la t2, FACTS_MNXTI_STAMP
+    sw t1, 0(t2)
+    li t1, 2
+    beq a0, t1, 5f
+    li t1, 3
+    bne a0, t1, 4f
+    lw t0, {frame_mepc}(sp)
+    addi t0, t0, 4
+    sw t0, {frame_mepc}(sp)
+    j 4f
+5:
+    csrrsi a0, {mnxti}, {mie}
+    beqz a0, 4f
+    lw t0, 0(a0)
+    jalr t0
+4:
+    j _facts_irq_exit
     .size _facts_start_trap, . - _facts_start_trap
+
+    // `mnxti` read without a claim, in a0.
+    .balign 4
+    .global facts_mnxti_read
+    .type facts_mnxti_read, @function
+facts_mnxti_read:
+    csrr a0, {mnxti}
+    ret
+    .size facts_mnxti_read, . - facts_mnxti_read
+
+    // `mnxti`'s claim (`csrrsi mnxti, MIE`): its value in a0 and mstatus
+    // read right after it in a1. MIE stays as the claim left it.
+    .balign 4
+    .global facts_mnxti_claim
+    .type facts_mnxti_claim, @function
+facts_mnxti_claim:
+    csrrsi a0, {mnxti}, {mie}
+    csrr a1, mstatus
+    ret
+    .size facts_mnxti_claim, . - facts_mnxti_claim
 
     // One hardware-vector entry: enter, turn the triggers on when they were
     // on in what the trap interrupted (MTE = MPTE), admit nesting (the CLIC
@@ -167,5 +206,11 @@ _facts_irq_exit:
 _facts_mtvt:
     FACTS_VECTOR_TABLE
     .size _facts_mtvt, . - _facts_mtvt
+
+    .global _facts_mnxti_mtvt
+    .type _facts_mnxti_mtvt, @object
+_facts_mnxti_mtvt:
+    FACTS_MNXTI_TABLE
+    .size _facts_mnxti_mtvt, . - _facts_mnxti_mtvt
 
     .option pop
