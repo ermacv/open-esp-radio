@@ -1,4 +1,6 @@
-//! Each injected fault owns its own entry, allocation and counter.
+//! Each injected fault owns its own entry, allocation and counter. An
+//! occupied handler cell, which only the crate reaches, is its own test
+//! (`src/tests.rs`).
 use oer_chips_family_platform_interrupt_table::{
     BindFaultCode, Controller, Entry, Error, LineExpectation, LineObservation, Quarantined, Router,
 };
@@ -39,7 +41,6 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
     handler_attributes: [];
     contexts { hardware: 1; keeper: 3; }
     storage: StorageToken = Owned<0> => on_owned::<0>, line 20, context hardware, hart 0, Hardware;
-    handler: HandlerToken = Owned<1> => on_owned::<1>, line 21, context hardware, hart 0, Hardware;
     task: TaskToken = OwnedTask => on_task, line 22, context keeper, hart 0, LevelTask;
 }
 
@@ -121,23 +122,6 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     );
     drop(error);
     assert_eq!(storage_drops.load(Ordering::Relaxed), 0);
-    assert!(observed.lock().unwrap().writes.is_empty());
-
-    let previous_drops = drops();
-    let previous = Box::leak(Box::new(Owned(Arc::clone(&previous_drops))));
-    let _installed = HandlerToken::cell().install(previous).ok().unwrap();
-    let handler_drops = drops();
-    let error = fault(router.bind(tokens.handler, Owned(Arc::clone(&handler_drops))));
-    assert_eq!((error.fault.line, error.fault.hart), (21, 0));
-    assert_eq!(
-        error.fault.diagnostic(),
-        (BindFaultCode::HandlerOccupied, [21, 0, 0, 0])
-    );
-    drop(error);
-    assert_eq!(handler_drops.load(Ordering::Relaxed), 0);
-    assert_eq!(previous_drops.load(Ordering::Relaxed), 0);
-    assert!(HandlerToken::cell().with(|_| ()).is_some());
-    assert_eq!(observed.lock().unwrap().routed(1), None);
     assert!(observed.lock().unwrap().writes.is_empty());
 
     // A level task's entry is named as any entry: by its line and hart.

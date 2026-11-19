@@ -1,5 +1,6 @@
 disallowed-methods = [
     { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::vector", reason = "an entry's part and its witness are lent by its vector alone, which interrupt_table! generates" },
     # Clippy uses the nearest config; retain every common workspace ban.
     { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
     { path = "oer_portable_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },

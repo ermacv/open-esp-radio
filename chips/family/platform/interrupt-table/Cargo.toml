@@ -19,6 +19,7 @@ tempfile = "=3.27.0"
 
 [dev-dependencies]
 oer-chips-family-platform-interrupt-table = { path = ".", features = ["host-signal"] }
+oer-portable-riscv = { path = "../../../../portable/riscv", features = ["host-hart"] }
 
 [lints]
 workspace = true

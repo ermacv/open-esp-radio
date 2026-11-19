@@ -465,6 +465,72 @@ impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> InterruptGrant
     }
 }
 
+impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
+    /// The hart's pending bytes in their static place, which its level
+    /// tasks' raisers store through a line's handle ([`LinePend`]).
+    pub const fn pending_bytes(&self) -> &'static ClicPending<H> {
+        self.pending
+    }
+}
+
+/// The handle of one line's pending byte on hart `H`, the line fixed at
+/// build: a level task's raisers pend its line through it, and it reaches
+/// no other line
+/// ([`PendLine`](oer_chips_family_platform_interrupt_table::PendLine)).
+///
+/// ```
+/// use oer_chips_esp32s31_hal::system::platform::LinePend;
+/// fn keeper(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<0, 34> {
+///     LinePend::new(bytes)
+/// }
+/// # let _: fn(_) -> _ = keeper;
+/// ```
+///
+/// A line the CLIC has not does not build:
+///
+/// ```compile_fail,E0080
+/// use oer_chips_esp32s31_hal::system::platform::LinePend;
+/// fn past(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<0, 48> {
+///     LinePend::new(bytes)
+/// }
+/// # let past: fn(_) -> _ = past;
+/// # core::hint::black_box(past);
+/// ```
+pub struct LinePend<
+    const H: u8,
+    const LINE: u8,
+    P: Placement + 'static = Fixed<{ instances::clic::BASE }>,
+> {
+    bytes: &'static ClicPending<H, P>,
+}
+
+impl<const H: u8, const LINE: u8, P: Placement + 'static> LinePend<H, LINE, P> {
+    /// Line `LINE`'s element of the pending bytes, made at build.
+    const INDEX: Index<{ clic::ip::COUNT }> = match Index::new(LINE as usize) {
+        Ok(index) => index,
+        Err(_) => panic!("a line's pending byte lies in the CLIC"),
+    };
+
+    /// The handle of line `LINE` in hart `H`'s pending bytes.
+    pub const fn new(bytes: &'static ClicPending<H, P>) -> Self {
+        let _index = Self::INDEX;
+        Self { bytes }
+    }
+}
+
+impl<const H: u8, const LINE: u8, P: Placement + 'static>
+    oer_chips_family_platform_interrupt_table::PendLine<H> for LinePend<H, LINE, P>
+where
+    ClicPending<H, P>: Sync,
+{
+    const LINE: u8 = LINE;
+
+    #[inline(always)]
+    fn pend(&self, hart: &OnHart<H>) {
+        self.bytes.pend_line(Self::INDEX, hart);
+    }
+}
+
 /// One hart's interrupt-matrix bank and that hart's own CLIC, the router's
 /// [`Controller`]: hart 0's by default ([`InterruptCore0`]), hart 1's over
 /// [`InterruptCore1`] ([`Hart1Controller`]). It holds the proof of its hart

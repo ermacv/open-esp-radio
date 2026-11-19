@@ -69,6 +69,10 @@
 
 mod binding;
 pub use binding::{BindFault, BindFaultCode, BindFaultKind, Quarantined};
+mod here;
+pub use here::Here;
+mod pend;
+pub use pend::{Pend, PendLine};
 mod router;
 pub use router::{
     Bound, Controller, Error, EventAuthority, LineExpectation, LineObservation, Router, Silent,
@@ -260,9 +264,6 @@ pub trait Entry: Sized {
     /// The place the bound part lives in.
     #[doc(hidden)]
     fn storage() -> &'static static_cell::StaticCell<Self::Part>;
-    /// The cell the entry's handler borrows the part from.
-    #[doc(hidden)]
-    fn cell() -> &'static oer_portable_memory::HandlerCell<Self::Part>;
 }
 
 /// The handler of a [`Class::Executor`] entry, named by type: one round of
@@ -680,7 +681,7 @@ macro_rules! interrupt_table {
         $(
             $(#[cfg($cfg:meta)])*
             $(#[doc = $doc:literal])*
-            $field:ident: $token:ident = $part:ty => $handler:path,
+            $field:ident: $token:ident = $part:ty => $handler:path $(, with $here:ident)?,
                 line $line:literal, context $context:ident, hart $hart:literal,
                 $class:ident $(($violation:ident, $reason:literal))?;
         )*
@@ -715,9 +716,6 @@ macro_rules! interrupt_table {
                         $crate::__private::StaticCell::new();
                     &STORAGE
                 }
-                fn cell() -> &'static $crate::__private::HandlerCell<$part> {
-                    Self::PROOF.cell()
-                }
             }
 
             $(#[cfg($cfg)])*
@@ -730,7 +728,7 @@ macro_rules! interrupt_table {
 
             $(#[cfg($cfg)])*
             impl $token {
-                $crate::__interrupt_handler!($handler_attributes, $token, $class, $handler, $hart, $line);
+                $crate::__interrupt_handler!($handler_attributes, $token, $class, $handler, [$($here)?], $hart, $line);
             }
         )*
 
@@ -883,24 +881,39 @@ macro_rules! interrupt_sources {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __interrupt_handler {
-    ([$(#[$attribute:meta])*], $token:ident, Executor, $handler:path, $hart:literal, $line:literal) => {
+    ([$(#[$attribute:meta])*], $token:ident, Executor, $handler:path, [], $hart:literal, $line:literal) => {
         $crate::__private::link_fn! {
             interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
             $(#[$attribute])*
             extern "C" fn __handler() {
-                let handler: fn(&mut <$token as $crate::Entry>::Part) =
-                    <$handler as $crate::ExecutorHandler<<$token as $crate::Entry>::Part>>::handle;
-                let _ = <$token as $crate::Entry>::PROOF.cell().with(handler);
+                #[allow(clippy::disallowed_methods, reason = "the entry's vector is its entry point's one caller")]
+                $crate::__private::vector::<$token>(|part, _here| {
+                    <$handler as $crate::ExecutorHandler<<$token as $crate::Entry>::Part>>::handle(part)
+                });
             }
         }
     };
-    ([$(#[$attribute:meta])*], $token:ident, $class:ident, $handler:path, $hart:literal, $line:literal) => {
+    ([$(#[$attribute:meta])*], $token:ident, $class:ident, $handler:path, [here], $hart:literal, $line:literal) => {
         $crate::__private::link_fn! {
             interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
             $(#[$attribute])*
             extern "C" fn __handler() {
-                let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
-                let _ = <$token as $crate::Entry>::PROOF.cell().with(handler);
+                let handler: fn(&mut <$token as $crate::Entry>::Part, $crate::Here<'_, $token>) = $handler;
+                #[allow(clippy::disallowed_methods, reason = "the entry's vector is its entry point's one caller")]
+                $crate::__private::vector::<$token>(handler);
+            }
+        }
+    };
+    ([$(#[$attribute:meta])*], $token:ident, $class:ident, $handler:path, [], $hart:literal, $line:literal) => {
+        $crate::__private::link_fn! {
+            interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
+            $(#[$attribute])*
+            extern "C" fn __handler() {
+                #[allow(clippy::disallowed_methods, reason = "the entry's vector is its entry point's one caller")]
+                $crate::__private::vector::<$token>(|part, _here| {
+                    let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
+                    handler(part)
+                });
             }
         }
     };
@@ -964,6 +977,19 @@ pub mod __private {
     pub use oer_portable_riscv::clic;
     pub use static_cell::StaticCell;
 
+    /// The one entry point of every entry's vector: lend the entry's part
+    /// and the witness of the call ([`Here`](crate::Here)) to `handler`.
+    /// Before the binding placed the part the line is disabled and silent,
+    /// so the cell always holds it; a cell found empty or lent runs nothing
+    /// and never panics. Root Clippy policy forbids every call but the
+    /// table macro's vector (`disallowed-methods`).
+    #[inline(always)]
+    pub fn vector<E: crate::Entry>(handler: for<'call> fn(&mut E::Part, crate::Here<'call, E>)) {
+        let _ = E::PROOF
+            .cell()
+            .with(|part| handler(part, crate::Here::new()));
+    }
+
     /// A type-specific handler/cell mapping. No conversion between entries.
     pub struct EntryProof<E: crate::Entry> {
         handler: extern "C" fn(),
@@ -982,7 +1008,10 @@ pub mod __private {
         pub fn handler(&self) -> extern "C" fn() {
             self.handler
         }
-        pub fn cell(&self) -> &'static HandlerCell<E::Part> {
+        /// The cell the entry's handler borrows the part from: only this
+        /// crate reaches it, the router to place the part and the vector's
+        /// entry point to lend it.
+        pub(crate) fn cell(&self) -> &'static HandlerCell<E::Part> {
             self.cell
         }
     }
@@ -1451,6 +1480,15 @@ macro_rules! __fake_parts {
         impl $crate::InterruptSources for PairIrq {
             const SOURCES: &'static [u16] = &[4, 7];
         }
+        /// A part whose handler cell a test occupies before its binding,
+        /// source 2; it counts the calls of its handler.
+        #[derive(Default)]
+        pub struct OccupiedIrq {
+            pub handled: u32,
+        }
+        impl $crate::InterruptSource for OccupiedIrq {
+            const SOURCE: u16 = 2;
+        }
         /// A part every build leaves out, source 6.
         #[allow(dead_code, reason = "no build binds the absent part")]
         pub struct AbsentIrq;
@@ -1623,6 +1661,50 @@ macro_rules! __fake_controller {
     };
 }
 
+/// A table of hart 0 with an interrupt-mode executor, the keeper's level
+/// task on line 34 and a hardware handler that pends the task through its
+/// witness, at the given levels; a fake handle of a line (`FakePendLine`,
+/// counting its pends in `PENDS`) and the keeper's pend (`KeeperPend`, set
+/// in `PEND`), for this crate's examples of [`Pend`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __fake_pend {
+    (executor $executor:literal, keeper $keeper:literal, handler $handler:literal, line $line:literal) => {
+        $crate::__fake_parts!();
+        $crate::__fake_controller!();
+        /// The fake handle of the keeper's line.
+        pub struct FakePendLine;
+        /// The pends of the fake line.
+        pub static PENDS: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new(0);
+        impl $crate::PendLine<0> for FakePendLine {
+            const LINE: u8 = $line;
+            fn pend(&self, _hart: &oer_portable_riscv::OnHart<0>) {
+                PENDS.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        /// The keeper's pend: by the timer's handler and the radio
+        /// executor's tasks.
+        pub type KeeperPend = $crate::Pend<KeeperToken, TimerToken, RadioToken, FakePendLine, 0>;
+        /// The keeper's pend, once set.
+        pub static PEND: ::std::sync::OnceLock<KeeperPend> = ::std::sync::OnceLock::new();
+        pub fn on_keeper(_: &mut KeeperPart) {}
+        /// The timer's handler: it pends the keeper through its witness.
+        pub fn on_timer(_: &mut TimerIrq, here: $crate::Here<'_, TimerToken>) {
+            if let Some(pend) = PEND.get() {
+                pend.from_handler(&here);
+            }
+        }
+        $crate::interrupt_table! {
+            lines: FAKE_LINES,
+            handler_attributes: [];
+            contexts { radio_executor: $executor; keeper: $keeper; radio: $handler; }
+            radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
+            timer: TimerToken = TimerIrq => on_timer, with here, line 21, context radio, hart 0, Hardware;
+            keeper: KeeperToken = KeeperPart => on_keeper, line 34, context keeper, hart 0, LevelTask;
+        }
+    };
+}
+
 /// The fake parts and controller and an interrupt table over the fake
 /// parts; once per binary, as [`interrupt_table!`].
 #[doc(hidden)]
@@ -1643,6 +1725,10 @@ macro_rules! __fake_table {
         pub fn on_pair(part: &mut PairIrq) {
             part.handled += 1;
         }
+        /// The handler of the occupied entry: one more call on its part.
+        pub fn on_occupied(part: &mut OccupiedIrq) {
+            part.handled += 1;
+        }
         /// The handler of the keeper's level task: one more run on its
         /// part.
         pub fn on_keeper(part: &mut KeeperPart) {
@@ -1656,6 +1742,9 @@ macro_rules! __fake_table {
             timer: TimerToken = TimerIrq => on_timer, line 16, context app_wake, hart 0, Hardware;
             radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 1, Executor;
             pair: PairToken = PairIrq => on_pair, line 18, context app_wake, hart 0, Hardware;
+            /// An entry whose handler cell a test occupies before its
+            /// binding.
+            occupied: OccupiedToken = OccupiedIrq => on_occupied, line 19, context app_wake, hart 0, Hardware;
             /// A level task on hart 0, between the radio's executor and the
             /// handlers above it.
             keeper: KeeperToken = KeeperPart => on_keeper, line 34, context keeper, hart 0, LevelTask;
