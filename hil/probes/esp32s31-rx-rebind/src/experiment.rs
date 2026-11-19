@@ -38,7 +38,11 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Duration, Instant, settle::Settle};
 
+#[cfg(not(feature = "long-segments"))]
 const SEGMENT_MS: u64 = 2500;
+/// `tasks/234`: c1's full run, a thousand exits a kind of air.
+#[cfg(feature = "long-segments")]
+const SEGMENT_MS: u64 = 20_000;
 /// One detach (and, in a rebind segment, one rebind) at most this often.
 const ACTION_MS: u32 = 80;
 /// The longest wait for the sender's first frame.
@@ -136,6 +140,9 @@ struct ExhaustEvent {
     tail: u32,
     tail_words: [u32; 3],
     next_words: [u32; 3],
+    /// `tasks/234`: the hole's ring index and words at the first exit.
+    hole: u32,
+    hole_words: [u32; 3],
     /// `tasks/219` c1: the exits of an exit segment, by what NEXT named
     /// when the walker stood: nothing, the hole, another descriptor.
     exits: u32,
@@ -283,6 +290,11 @@ pub(super) struct State {
     /// `tasks/219` c1: the hole's ring index plus one, zero while no hole
     /// is kept.
     hole_plus_one: u32,
+    /// `tasks/234`: when the taker began to stall behind the hole
+    /// (microseconds plus one, zero while not stalled), and whether the
+    /// 20 ms record of this stall was taken.
+    stall_from_plus_one: u32,
+    stall_traced: bool,
     /// Microseconds since the segments' clock start, set every pass.
     now_us: u32,
     /// The run's first data sequence number from the sender and its time,
@@ -881,6 +893,9 @@ fn reload(ring: &mut RxRingLive<'_, COUNT>, access: &mut RadioAccess) -> Result<
     .map_err(|_| name!("reload"; 32))
 }
 
+/// `tasks/234`: a stall of this long behind the hole is recorded once.
+const STALL_TRACE_US: u32 = 20_000;
+
 /// Serve one scan: up to `UNITS_PER_SCAN` units, each taken only outside
 /// the segment's hold, checked and recycled through the production append; a
 /// rebind segment rebinds every one, a fixed segment detaches one when
@@ -992,10 +1007,12 @@ fn scan(
             // `tasks/219` c1: with the hole kept, units stay in the ring
             // until the walker stands: NEXT names nothing or the hole.
             let hole = state.hole_plus_one as usize - 1;
+            // `tasks/234`: NEXT on the head is judged as any other NEXT, by
+            // the cursor read twice: a walker that stood on the oldest
+            // completed unit is the stall's state too.
             let stands = match next {
                 None => Some(0),
                 Some(at) if at == hole => Some(1),
-                Some(at) if at == head => None,
                 Some(_) => {
                     // NEXT on another descriptor: stands only if nothing
                     // armed lies ahead of it. `tasks/230`: the cursor, the
@@ -1016,8 +1033,19 @@ fn scan(
             };
             let Some(kind) = stands else {
                 bump(&mut state.counts(segment)?.held_back);
+                // The stall's clock, and one record of the ring after 20 ms
+                // of it.
+                if state.stall_from_plus_one == 0 {
+                    state.stall_from_plus_one = state.now_us.saturating_add(1);
+                } else if !state.stall_traced
+                    && state.now_us.saturating_sub(state.stall_from_plus_one) >= STALL_TRACE_US
+                {
+                    state.stall_traced = true;
+                    ring.experiment_trace(8, access.rx_dma());
+                }
                 break;
             };
+            state.stall_from_plus_one = 0;
             // c2: what the ring holds the first time the walker stood.
             let tail = ring.topology_snapshot().tail_index;
             let tail_words = words_of(storage, tail);
@@ -1029,6 +1057,8 @@ fn scan(
                     event.tail = tail as u32;
                     event.tail_words = tail_words;
                     event.next_words = next_words;
+                    event.hole = hole as u32;
+                    event.hole_words = words_of(storage, hole);
                     event.out_us = state.now_us;
                 }
                 bump(&mut event.exits);
@@ -1814,13 +1844,15 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         writeln!(
             &mut line,
             "C2 {segment} arm={} next={} last={} tail={} tail_words={:x?} next_words={:x?} \
-             exits={} next_zero={} next_hole={} next_other={}",
+             hole={} hole_words={:x?} exits={} next_zero={} next_hole={} next_other={}",
             if arm.exit() { "exit" } else { "exhaust" },
             event.next,
             event.last,
             event.tail,
             event.tail_words,
             event.next_words,
+            event.hole,
+            event.hole_words,
             event.exits,
             event.exit_next_zero,
             event.exit_next_hole,

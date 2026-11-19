@@ -88,6 +88,8 @@ stream-ampdu = ["ampdu"]
 settle = ["dep:oer-chips-esp32s31-radio-ieee80211-backend"]
 # `tasks/219`: the sender's `stream` and `stream-ampdu` run 600 s a turn.
 long-run = []
+# `tasks/234`: the sender's air for c1's full run, 330 s.
+ring-run = []
 # `tasks/222`: the short pass of a lease, every part for about a minute.
 short = ["settle"]
 # `tasks/224`: one part a boot.

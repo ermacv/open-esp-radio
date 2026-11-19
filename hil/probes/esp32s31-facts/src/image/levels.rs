@@ -236,7 +236,7 @@ pub(super) fn interrupt(cycle: u32) -> bool {
             NEIGHBOUR_PENDING => count(2),
             _ => {}
         },
-        Mode::BytePend if line == LOW => count(0),
+        Mode::BytePend if line == BYTE_LINE => count(0),
         Mode::Latency if line == HIGH => {
             let _ = masked(|clic| {
                 pend_in(clic, LOW);
@@ -585,6 +585,10 @@ pub(super) fn latency(s: &mut Session<'_>) {
 /// at 0x1000, one word a line).
 const CLIC_BASE: usize = 0x1080_0000;
 const CTRL_OFFSET: usize = 0x1000;
+/// 317's line (`tasks/234`): level 1's primary line, which 310 and
+/// `#1341`'s run pended from the thread and nested with no spurious entry;
+/// LOW (30) entered eight times before any pend in run 233.
+const BYTE_LINE: u32 = PRIMARY;
 /// The pends of 317.
 const BYTE_PENDS: u32 = 100;
 
@@ -618,7 +622,7 @@ fn pend_byte(line: u32) {
     log(MARK, line);
 }
 
-/// 317 (`tasks/219` c4): a hundred pends of LOW (level 1, edge) by one
+/// 317 (`tasks/219` c4): a hundred pends of [`BYTE_LINE`] (level 1, edge) by one
 /// byte store each, from the thread with MIE set. Each is to give one entry;
 /// after it the line's `IE`, attributes and `CTL` read as configured and
 /// `IP` clear. Emits `(0x38f0, the word before anything, after its pending
@@ -630,16 +634,16 @@ pub(super) fn byte_pend(s: &mut Session<'_>) {
     // `tasks/230`: the line's word before anything, then its pending bit
     // cleared with the line disabled, before it is enabled: a bit already
     // set is seen, not guessed.
-    let first = word(s, LOW);
-    configure(s, LOW, 1, true, false);
-    if let Some(i) = index(LOW) {
+    let first = word(s, BYTE_LINE);
+    configure(s, BYTE_LINE, 1, true, false);
+    if let Some(i) = index(BYTE_LINE) {
         s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_ip(false);
         });
     }
-    let cleared = word(s, LOW);
-    configure(s, LOW, 1, true, true);
-    let baseline = word(s, LOW);
+    let cleared = word(s, BYTE_LINE);
+    configure(s, BYTE_LINE, 1, true, true);
+    let baseline = word(s, BYTE_LINE);
     emit(0x38f0, first, cleared, baseline);
     begin(s, Mode::BytePend);
     oer_portable_riscv::enable_interrupts();
@@ -647,12 +651,12 @@ pub(super) fn byte_pend(s: &mut Session<'_>) {
     let mut left = 0_u32;
     for _ in 0..BYTE_PENDS {
         let before = LINE_ENTRIES[0].load(Ordering::Relaxed);
-        pend_byte(LOW);
+        pend_byte(BYTE_LINE);
         let start = oer_portable_riscv::cycle32();
         while LINE_ENTRIES[0].load(Ordering::Relaxed) == before
             && oer_portable_riscv::cycle32().wrapping_sub(start) < WINDOW
         {}
-        let now = word_masked(LOW);
+        let now = word_masked(BYTE_LINE);
         changed += u32::from(now & !1 != baseline & !1);
         left += now & 1;
     }

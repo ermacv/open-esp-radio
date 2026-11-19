@@ -44,6 +44,8 @@ exhaust = []
 # `tasks/219` c1 and c2: exits out of a ring with one hole; the hold of
 # `tasks/200` in two segments, for what NEXT holds without the hole.
 exit = []
+# `tasks/234`: segments of 20 s, for c1's full run.
+long-segments = []
 
 [dev-dependencies]
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
