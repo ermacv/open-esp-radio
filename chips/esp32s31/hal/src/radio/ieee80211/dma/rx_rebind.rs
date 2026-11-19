@@ -400,3 +400,18 @@ pub(crate) fn trace_keep(words: impl Fn(usize) -> u32) {
         }
     }
 }
+
+/// TEMPORARY experiment (`tasks/235`, probe branch only): NEXT read after
+/// the old tail's link was written and before the doorbell, at the last
+/// append.
+static NEXT_BEFORE_BELL: AtomicU32 = AtomicU32::new(0);
+
+/// Note NEXT between the link and the doorbell.
+pub(crate) fn note_next_before_bell(next: u32) {
+    NEXT_BEFORE_BELL.store(next, Ordering::Relaxed);
+}
+
+/// NEXT between the last append's link and its doorbell.
+pub fn next_before_bell() -> u32 {
+    NEXT_BEFORE_BELL.load(Ordering::Relaxed)
+}

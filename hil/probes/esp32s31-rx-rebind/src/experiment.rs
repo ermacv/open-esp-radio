@@ -142,6 +142,11 @@ pub(super) struct RawCauses {
     /// by 20 ms, the armed descriptors left at 20 ms, the MAC's buffer-full
     /// counter at the start and at 20 ms, the bits after the exit.
     first: [[u32; 8]; RAW_STALLS],
+    /// `tasks/235` 3: scans while stalled and after an exit, and those of
+    /// them where NEXT read zero.
+    stalled_scans: u32,
+    next_zero_stalled: u32,
+    next_zero_after_exit: u32,
     /// Scans after an exit, and the bits set in them.
     after_exit: u32,
     after_exit_bits: [u32; 2],
@@ -196,6 +201,11 @@ struct ExhaustEvent {
     exit_next_zero: u32,
     exit_next_hole: u32,
     exit_next_other: u32,
+    /// `tasks/235`: NEXT on the armed, empty tail whose link is zero.
+    exit_next_tail: u32,
+    /// `tasks/235` 5: at the exhaust segment's record, the cursor read
+    /// again was unchanged.
+    out_stable: u32,
     /// The MAC's counters (MPDU, FCS error, buffer full, data success).
     hw_at_hold: [u16; 4],
     hw_at_out: [u16; 4],
@@ -344,6 +354,10 @@ pub(super) struct State {
     stall_traced: bool,
     /// This stall's 20 ms reading was taken.
     stall_recorded: bool,
+    /// The MAC's counters when this stall began.
+    stall_hw: [u16; 4],
+    /// `tasks/235`: the first exits, and the exits by when the walker moved.
+    exits: ExitLog,
     /// Scans after an exit still to be read as "after the exit".
     after_exit_scans: u32,
     /// `tasks/234` addition: the raw causes of both interrupt banks.
@@ -946,6 +960,28 @@ fn reload(ring: &mut RxRingLive<'_, COUNT>, access: &mut RadioAccess) -> Result<
     .map_err(|_| name!("reload"; 32))
 }
 
+/// `tasks/235` 2: the longest wait for the old tail's completion after an
+/// exit's doorbell, 10 ms at 320 MHz.
+const EXIT_WAIT_CYCLES: u32 = 3_200_000;
+
+/// `tasks/235`: the exits of a run.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+pub(super) struct ExitLog {
+    /// The first exits: the kind | the old tail << 8 | moved before the
+    /// doorbell << 16; the MAC's MPDU count | buffer-full << 16 at the
+    /// stall's start and at the exit; cycles from the doorbell to the old
+    /// tail's completion (`u32::MAX` not within the wait).
+    first: [[u32; 4]; EXIT_ROWS],
+    used: usize,
+    moved_before_bell: u32,
+    moved_after_bell: u32,
+    not_completed: u32,
+    completed_max: u32,
+}
+
+const EXIT_ROWS: usize = 64;
+
 /// `tasks/234`: a stall of this long behind the hole is recorded once.
 const STALL_TRACE_US: u32 = 20_000;
 
@@ -992,7 +1028,10 @@ fn scan(
         irq.acknowledge_mac_interrupt_raw(raw0);
         let stalled = arm.exit() && state.hole_plus_one != 0 && state.stall_from_plus_one != 0;
         let raw = &mut state.raw;
+        let next_zero = access.receive_dma_snapshot().next_descriptor_low == 0;
         if stalled {
+            raw.stalled_scans = raw.stalled_scans.saturating_add(1);
+            raw.next_zero_stalled = raw.next_zero_stalled.saturating_add(u32::from(next_zero));
             let left = {
                 let snapshot = access.receive_dma_snapshot();
                 let tail = ring.topology_snapshot().tail_index;
@@ -1027,6 +1066,9 @@ fn scan(
             if state.after_exit_scans != 0 {
                 state.after_exit_scans -= 1;
                 raw.after_exit = raw.after_exit.saturating_add(1);
+                raw.next_zero_after_exit = raw
+                    .next_zero_after_exit
+                    .saturating_add(u32::from(next_zero));
                 for (bank, word) in words.iter().enumerate() {
                     if let Some(bits) = raw.after_exit_bits.get_mut(bank) {
                         *bits |= word;
@@ -1085,7 +1127,12 @@ fn scan(
                     let tail = ring.topology_snapshot().tail_index;
                     let tail_words = words_of(storage, tail);
                     let next_words = words_of(storage, next as usize);
+                    // `tasks/235` 5: the cursor read again after the words.
+                    let again = access.receive_dma_snapshot();
+                    let stable = again.next_descriptor_low == frozen.next_descriptor_low()
+                        && again.last_descriptor_low == frozen.last_descriptor_low();
                     if let Some(event) = state.exhaust_events.get_mut(segment) {
+                        event.out_stable = u32::from(stable);
                         event.out_us = now;
                         event.next = next;
                         event.last = last;
@@ -1134,7 +1181,13 @@ fn scan(
                     if !still {
                         bump(&mut state.counts(segment)?.cursor_moved);
                     }
-                    (still && !armed && tail != next.unwrap_or(usize::MAX)).then_some(2)
+                    // `tasks/235`: an exhausted ring is NEXT on the accepted
+                    // tail, the tail armed, empty and its link zero.
+                    if still && armed && named[2] == 0 && tail == next.unwrap_or(usize::MAX) {
+                        Some(3)
+                    } else {
+                        (still && !armed && tail != next.unwrap_or(usize::MAX)).then_some(2)
+                    }
                 }
             };
             let Some(kind) = stands else {
@@ -1144,6 +1197,7 @@ fn scan(
                 if state.stall_from_plus_one == 0 {
                     state.stall_from_plus_one = state.now_us.saturating_add(1);
                     state.stall_recorded = false;
+                    state.stall_hw = State::hardware_now(access);
                     let raw0 = irq.mac_interrupt_raw().bits();
                     let raw1 = access.wifi_mac_hal().experiment_interrupt_1_raw();
                     let full = State::hardware_now(access)[2];
@@ -1203,6 +1257,7 @@ fn scan(
                 match kind {
                     0 => bump(&mut event.exit_next_zero),
                     1 => bump(&mut event.exit_next_hole),
+                    3 => bump(&mut event.exit_next_tail),
                     _ => bump(&mut event.exit_next_other),
                 }
             }
@@ -1210,6 +1265,9 @@ fn scan(
             ring.experiment_trace(4, access.rx_dma());
             // The exit: the hole, bound to its spare at its take, armed and
             // linked behind the tail with the walker standing (reserve 0).
+            let old_tail = ring.topology_snapshot().tail_index;
+            let old_tail_low = frozen.next_descriptor_low();
+            let hw_at_stand = State::hardware_now(access);
             let credit = storage
                 .claim_deferred_recycle(ring, frozen)
                 .map_err(|_| name!("exit-claim"; 32))?
@@ -1218,8 +1276,42 @@ fn scan(
                 Ok(_) | Err(RxRingError::ReloadPending) => {}
                 Err(_) => return Err(name!("exit-append"; 32)),
             }
+            // `tasks/235` 2: whether the walker had moved by the doorbell,
+            // and how long the old tail took to complete after it.
+            let before_bell =
+                oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::next_before_bell();
+            let bell = oer_portable_riscv::cycle32();
+            let mut completed = None;
+            while oer_portable_riscv::cycle32().wrapping_sub(bell) < EXIT_WAIT_CYCLES {
+                if words_of(storage, old_tail)[0] & (1 << 30) != 0 {
+                    completed = Some(oer_portable_riscv::cycle32().wrapping_sub(bell));
+                    break;
+                }
+            }
             reload(ring, access)?;
             ring.experiment_trace(5, access.rx_dma());
+            let moved = before_bell != old_tail_low;
+            let log = &mut state.exits;
+            if kind == 3 {
+                if moved {
+                    log.moved_before_bell = log.moved_before_bell.saturating_add(1);
+                } else {
+                    log.moved_after_bell = log.moved_after_bell.saturating_add(1);
+                }
+                match completed {
+                    Some(cycles) => log.completed_max = log.completed_max.max(cycles),
+                    None => log.not_completed = log.not_completed.saturating_add(1),
+                }
+            }
+            if let Some(row) = log.first.get_mut(log.used) {
+                *row = [
+                    kind as u32 | (old_tail as u32) << 8 | u32::from(moved) << 16,
+                    u32::from(state.stall_hw[0]) | u32::from(state.stall_hw[2]) << 16,
+                    u32::from(hw_at_stand[0]) | u32::from(hw_at_stand[2]) << 16,
+                    completed.unwrap_or(u32::MAX),
+                ];
+                log.used += 1;
+            }
             state.hole_plus_one = 0;
             // `tasks/221`: the cursor and the bound read anew; the oldest
             // unit is the next pass's take, the next hole.
@@ -1915,6 +2007,34 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         usb::text(console, line.as_bytes())
             .await
             .map_err(|_| name!("console-write"; 32))?;
+        line.clear();
+        writeln!(
+            &mut line,
+            "NEXTZERO stalled_scans={} stalled={} after_exit_scans={} after_exit={}",
+            raw.stalled_scans, raw.next_zero_stalled, raw.after_exit, raw.next_zero_after_exit
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+        let log = &state.exits;
+        line.clear();
+        writeln!(
+            &mut line,
+            "EXITS moved_before_bell={} moved_after_bell={} not_completed={} completed_cycles_max={}",
+            log.moved_before_bell, log.moved_after_bell, log.not_completed, log.completed_max
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+        for row in log.first.iter().take(log.used) {
+            line.clear();
+            writeln!(&mut line, "EXIT {row:x?}").map_err(|_| name!("format"; 32))?;
+            usb::text(console, line.as_bytes())
+                .await
+                .map_err(|_| name!("console-write"; 32))?;
+        }
         for row in raw.first.iter().take((raw.stalls as usize).min(RAW_STALLS)) {
             line.clear();
             writeln!(&mut line, "RAWS {row:x?}").map_err(|_| name!("format"; 32))?;
@@ -2035,7 +2155,8 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         writeln!(
             &mut line,
             "C2 {segment} arm={} next={} last={} tail={} tail_words={:x?} next_words={:x?} \
-             hole={} hole_words={:x?} exits={} next_zero={} next_hole={} next_other={}",
+             hole={} hole_words={:x?} exits={} next_zero={} next_hole={} next_other={} next_tail={} \
+             out_stable={}",
             if arm.exit() { "exit" } else { "exhaust" },
             event.next,
             event.last,
@@ -2048,6 +2169,8 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             event.exit_next_zero,
             event.exit_next_hole,
             event.exit_next_other,
+            event.exit_next_tail,
+            event.out_stable,
         )
         .map_err(|_| name!("format"; 32))?;
         usb::text(console, line.as_bytes())

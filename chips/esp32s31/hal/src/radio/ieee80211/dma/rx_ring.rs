@@ -2387,6 +2387,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         accepted_tail.publish_next(Some(head));
         mmio.fence();
         self.ring.experiment_trace(6, mmio);
+        crate::radio::ieee80211::dma::rx_rebind::note_next_before_bell(mmio.next_descriptor_low());
         mmio.request_reload(&self.ring.binding);
         mmio.fence();
         self.ring.experiment_trace(7, mmio);
