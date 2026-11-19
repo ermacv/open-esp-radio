@@ -41,7 +41,7 @@ use oer_chips_esp32s31_hal::radio::ieee80211::dma::descriptor::cursor_ring_index
 const PER_AIR: u32 = 1_000;
 /// The parts' rows: two parts, two kinds of air, and a margin for stops on
 /// an air of neither kind.
-const ROWS_MAX: usize = 4 * PER_AIR as usize + 512;
+const ROWS_MAX: usize = 3_500;
 /// Each part's budget (`tasks/222`: the two under fifty minutes).
 #[cfg(not(feature = "short"))]
 const A2_BUDGET_S: u32 = 11 * 60;
@@ -190,16 +190,32 @@ enum Air {
 /// after the cold preparation and the channel, before the walker's start;
 /// `10` the cycles of `hal_deinit`'s handshake wait | bit 31 when it did not
 /// clear | bit 30 LAST zero and bit 29 NEXT zero just after the start.
-type Row = [u32; 12];
+///
+/// `12` to `16` (`tasks/231`, S2's rows, read after the start): the
+/// baseband watchdog's status, control and enable words; the MAC's
+/// activity field (bit 0 transmitting, bit 1 receiving) | the interrupt
+/// `ENABLE` as the HAL names it << 8 (0 disabled, 1 the station's, 2 other)
+/// | the walker's enable << 16 | the reload's pending bit << 17; the
+/// interrupt `RAW` word.
+type Row = [u32; 17];
 
 /// The first start's filter words and the first sets that differ from
 /// them after a start.
 const DIFFERING: usize = 16;
+/// The silent starts read again.
+const SILENT: usize = 64;
 
 #[derive(bytemuck::Zeroable)]
 pub(super) struct Rows {
     rows: [Row; ROWS_MAX],
     used: usize,
+    /// The first silent starts of S2 read again after their window: the
+    /// row's word `0`, `Row`'s `12` to `16`, NEXT, LAST.
+    pub(super) silent: [[u32; 8]; SILENT],
+    pub(super) silent_used: usize,
+    /// `tasks/231`: for each part (3 to 9) and air, the windows before a
+    /// stop in which each `RAW` bit was set.
+    pub(super) raw_counts: [[[u32; 32]; 3]; 7],
     /// Stops past [`ROWS_MAX`], counted and not kept.
     pub(super) dropped: u32,
     pub(super) reference: [u32; 8],
@@ -271,6 +287,31 @@ struct Series {
     agreement_peer: Option<[u8; 6]>,
     /// The receive agreement programmed since the last cold preparation.
     agreement: bool,
+}
+
+/// The diagnostic words of `Row`'s `12` to `16` (`tasks/231`).
+fn diagnostics(
+    slot: &mut Option<Radio>,
+    access: &mut RadioAccess,
+    mac_irq: &MacInterruptRegisters,
+) -> Result<[u32; 5], Failure> {
+    let [status, control, enable] = held(slot)?.experiment_baseband_watchdog_words();
+    let dma = access.receive_dma_snapshot();
+    let mask = match mac_irq.mac_interrupt_enable() {
+        oer_chips_esp32s31_hal::radio::ieee80211::registers::MacInterruptEnableState::Disabled => 0,
+        oer_chips_esp32s31_hal::radio::ieee80211::registers::MacInterruptEnableState::Station => 1,
+        oer_chips_esp32s31_hal::radio::ieee80211::registers::MacInterruptEnableState::Unknown => 2,
+    };
+    Ok([
+        status,
+        control,
+        enable,
+        u32::from(access.wifi_mac_hal().channel_active_state())
+            | mask << 8
+            | u32::from(dma.walker_enabled) << 16
+            | u32::from(dma.reload_pending) << 17,
+        mac_irq.mac_interrupt_raw().bits(),
+    ])
 }
 
 /// Parts (a) and (b), each until [`PER_AIR`] stops of both kinds of air.
@@ -358,10 +399,22 @@ pub(super) async fn series(
             if let Some(count) = counts.get_mut(air as usize) {
                 *count = count.saturating_add(1);
             }
-            let mut row: Row = [0; 12];
+            let mut row: Row = [0; 17];
             row[0] = (part as u32) << 28 | (air as u32) << 24 | (index & 0x00ff_ffff);
             wait_micros(u64::from(spread.next(SPREAD_US))).await;
             let before_stop = access.wifi_mac_hal().experiment_receive_filter_words();
+            // `tasks/231`: the causes latched since the start (`open_epoch`
+            // acknowledges every one), counted by bit.
+            let raw = mac_irq.mac_interrupt_raw().bits();
+            if let Some(counts) = rows
+                .raw_counts
+                .get_mut(part as usize - 3)
+                .and_then(|kinds| kinds.get_mut(air as usize))
+            {
+                for (bit, count) in counts.iter_mut().enumerate() {
+                    *count = count.saturating_add(raw >> bit & 1);
+                }
+            }
             let addresses = addresses(storage).map_err(|code| (phase::RING, 0x5e10 | code))?;
             let frozen = ring
                 .freeze_cursor(access.rx_dma())
@@ -583,12 +636,36 @@ pub(super) async fn series(
                 }
                 rows.differing_used += 1;
             }
+            if part.resets() {
+                let words = diagnostics(slot, &mut access, mac_irq)?;
+                for (cell, word) in row.iter_mut().skip(12).zip(words) {
+                    *cell = word;
+                }
+            }
             let counted = statistics(&access);
             let (checked, bad, units) =
                 check_window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
             row[8] = advance(counted, statistics(&access), 0, 1);
             row[6] = checked & 0xffff | bad << 16;
             row[7] = units & 0xffff | checked << 16;
+            // `tasks/231`: a silent start read once more after its window.
+            if part.resets() && row[7] >> 16 != 0 && row[8] & 0xffff == 0 {
+                let words = diagnostics(slot, &mut access, mac_irq)?;
+                let dma = access.receive_dma_snapshot();
+                if let Some(cell) = rows.silent.get_mut(rows.silent_used) {
+                    *cell = [
+                        row[0],
+                        words[0],
+                        words[1],
+                        words[2],
+                        words[3],
+                        words[4],
+                        dma.next_descriptor_low,
+                        dma.last_descriptor_low,
+                    ];
+                }
+                rows.silent_used = rows.silent_used.saturating_add(1);
+            }
             rows.push(row);
             index = index.saturating_add(1);
         }

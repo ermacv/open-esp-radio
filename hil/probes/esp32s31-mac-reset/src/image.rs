@@ -466,7 +466,7 @@ async fn report(
             None => return,
         }
     };
-    let mut line = heapless::String::<256>::new();
+    let mut line = heapless::String::<768>::new();
     for row in journal.rows.iter().take(journal.used) {
         line.clear();
         let _ = line.push_str("R");
@@ -493,6 +493,27 @@ async fn report(
                 let _ = write!(line, " {value:x}");
             }
             let _ = line.push('\n');
+            usb::text(&mut console, line.as_bytes()).await;
+        }
+        for (part, kinds) in rows.raw_counts.iter().enumerate() {
+            for (air, counts) in kinds.iter().enumerate() {
+                if counts.iter().all(|count| *count == 0) {
+                    continue;
+                }
+                line.clear();
+                let _ = write!(line, "RAW part={} air={air}", part + 3);
+                for (bit, count) in counts.iter().enumerate() {
+                    if *count != 0 {
+                        let _ = write!(line, " b{bit}={count}");
+                    }
+                }
+                let _ = line.push('\n');
+                usb::text(&mut console, line.as_bytes()).await;
+            }
+        }
+        for words in rows.silent.iter().take(rows.silent_used) {
+            line.clear();
+            let _ = writeln!(line, "SILENT {words:x?}");
             usb::text(&mut console, line.as_bytes()).await;
         }
         line.clear();

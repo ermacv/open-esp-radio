@@ -1051,6 +1051,39 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     /// The pulse is `modem_clock_module_mac_reset(PERIPH_WIFI_MODULE)`'s,
     /// through `modem_syscon_ll_reset_wifimac`; the write-back is
     /// [`SharedRadioRegisters::write_back_wifi_mac_foreign_words`].
+    /// TEMPORARY experiment (`tasks/231`, probe branch only): the
+    /// baseband watchdog's status and its two control words
+    /// (`phy_bb_wdt_get_status` reads the first), each field placed by its
+    /// generated mask.
+    pub fn experiment_baseband_watchdog_words(&mut self) -> [u32; 3] {
+        use oer_chips_esp32s31_pac::wifi_bb::{
+            baseband_watchdog_control as c, baseband_watchdog_enable as e,
+        };
+        let bb = &self
+            .registers_mut()
+            .radio_phy_mut()
+            .peripherals
+            .phy_baseband_config_oracle
+            .wifi_bb;
+        let status = bb.read_baseband_watchdog_status().status();
+        let control = bb.read_baseband_watchdog_control();
+        let enable = bb.read_baseband_watchdog_enable();
+        [
+            status,
+            u32::from(control.bits_0_15_opaque()) << c::BITS_0_15_OPAQUE_MASK.trailing_zeros()
+                | control.bits_16_29_opaque().get() << c::BITS_16_29_OPAQUE_MASK.trailing_zeros()
+                | u32::from(control.bit_30_opaque()) << c::BIT_30_OPAQUE_MASK.trailing_zeros()
+                | u32::from(control.bit_31_opaque()) << c::BIT_31_OPAQUE_MASK.trailing_zeros(),
+            enable.bits_0_28_opaque().get() << e::BITS_0_28_OPAQUE_MASK.trailing_zeros()
+                | u32::from(enable.watchdog_timeout_clear_request())
+                    << e::WATCHDOG_TIMEOUT_CLEAR_REQUEST_MASK.trailing_zeros()
+                | u32::from(enable.watchdog_interrupt_enable())
+                    << e::WATCHDOG_INTERRUPT_ENABLE_MASK.trailing_zeros()
+                | u32::from(enable.watchdog_reset_enable())
+                    << e::WATCHDOG_RESET_ENABLE_MASK.trailing_zeros(),
+        ]
+    }
+
     pub fn reset_wifi_mac_block(
         &mut self,
         _clocks: &crate::radio::ieee80211::client::WifiClocksOn,
