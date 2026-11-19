@@ -39,11 +39,23 @@ macro_rules! tx_place {
 type RxStatic<T> = HostStatic<T, RX_BASE>;
 type TxStatic<T> = HostStatic<T, TX_BASE>;
 
+macro_rules! floor_place {
+    (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
+        static $name: HostStatic<$ty, FLOOR_BASE> = HostStatic(ZeroedStatic::new());
+    };
+}
+
+type FloorStatic<T> = HostStatic<T, FLOOR_BASE>;
+const FLOOR_BASE: u32 = 0x4000_3000;
+
 /// The tests' brands. In this crate the macro's own expansion is linted;
 /// in another crate it is not (`tests/ui/arena_under_forbid.rs`).
 #[allow(unsafe_code, reason = "this crate's own expansion of `arena!`")]
 mod brands {
-    use super::{HostStatic, RX_BASE, RxStatic, TX_BASE, TxStatic, Window, ZeroedStatic};
+    use super::{
+        FLOOR_BASE, FloorStatic, HostStatic, RX_BASE, RxStatic, TX_BASE, TxStatic, Window,
+        ZeroedStatic,
+    };
 
     crate::arena! {
         pub(super) Rx: window Window, count 40, size 64, floor 8,
@@ -54,8 +66,13 @@ mod brands {
         pub(super) Tx: window Window, count 3, size 16, floor 0,
             placed by tx_place as TxStatic in ".dma.bss.test_tx";
     }
+
+    crate::arena! {
+        pub(super) Fl: window Window, count 3, size 32, floor 16,
+            placed by floor_place as FloorStatic in ".dma.bss.test_floor";
+    }
 }
-use brands::{Rx, Tx};
+use brands::{Fl, Rx, Tx};
 
 const RX_BASE: u32 = 0x4000_1000;
 const TX_BASE: u32 = 0x4000_2000;
@@ -340,4 +357,35 @@ fn a_span_only_narrows_in_a_holders_hands() {
         std::format!("{:?}", Span::<OneWord>::fixed::<4, 8>()),
         "Span(4, 12)"
     );
+}
+
+// The floor brand's own place.
+#[test]
+fn a_held_buffer_s_floor_copies_out_exactly_its_bytes_below_the_floor() {
+    let (arena, fresh) = Arena::<Fl, { 3 * 32 }>::claim().expect("the first claim");
+    let mut handles: Vec<_> = fresh.collect();
+    // The hardware's header in each buffer: buffer `b`'s byte `k` is
+    // `b * 64 + k`, below the floor and above it.
+    let place = arena.place.bytes.get().cast::<u8>();
+    for offset in 0..3 * 32 {
+        #[allow(unsafe_code, reason = "the test is the hardware")]
+        // SAFETY: inside the place; no slice of these bytes is live.
+        unsafe {
+            place
+                .add(offset)
+                .write((offset / 32 * 64 + offset % 32) as u8);
+        }
+    }
+    let middle = handles.remove(1);
+    let copy: [u8; 16] = arena.floor(&middle).copy();
+    assert_eq!(
+        copy,
+        core::array::from_fn(|k| (64 + k) as u8),
+        "from byte 0, all 16"
+    );
+    // The handle's own bytes still begin at the floor.
+    assert_eq!(arena.bytes(&middle).first(), Some(&(64 + 16)));
+    let last = handles.pop().expect("the third");
+    let copy: [u8; 16] = arena.floor(&last).copy();
+    assert_eq!(copy, core::array::from_fn(|k| (128 + k) as u8));
 }

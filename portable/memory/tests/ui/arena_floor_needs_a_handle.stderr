@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_floor_needs_a_handle.rs:42:17
+   |
+42 |     arena.floor(lent).copy() // ui-error: E0308
+   |           ----- ^^^^ expected `&Handle<Rx>`, found `&Lent<Rx>`
+   |           |
+   |           arguments to this method are incorrect
+   |
+   = note: expected reference `&oer_portable_memory::arena::Handle<Rx>`
+              found reference `&oer_portable_memory::arena::Lent<Rx>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn floor<'h>(&self, handle: &'h Handle<B>) -> Floor<'h, B, BYTES> {
+   |            ^^^^^

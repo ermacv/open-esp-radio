@@ -223,11 +223,16 @@ layouts; both the cell and the layouts derive `Zeroable`. `DmaWindow`,
 `oer-portable-memory`. Their two unsafe constructors preserve the placed-storage
 and retention contracts.
 
-`oer-portable-memory::arena` is the custody of DMA buffers. It has five kinds of
+`oer-portable-memory::arena` is the custody of DMA buffers. It has six kinds of
 `unsafe`:
 
 - the slice over a held buffer's CPU bytes (shared and unique, one site each),
   reached only through the buffer's one `Handle`;
+- the copy of a held buffer's floor (`Arena::floor`, `Floor::copy`), the bytes
+  the hardware shares below its slices, read out by volatile reads into an
+  array with no reference to them (one site); a lent buffer has no `Handle`,
+  so the floor of memory the hardware owns cannot be asked for. The HAL reads
+  the header's fields from the copy through the PAC's generated layouts;
 - `Sync` of the place;
 - `Released::assume`, the release proof's one constructor. Each kind of release
   is a HAL atom that calls it, citing its stand record;
