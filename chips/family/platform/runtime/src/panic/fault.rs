@@ -61,9 +61,8 @@ pub enum FaultReason {
     /// the waking hart and zero.
     WakerCrossedHarts = 40,
     /// A binding found its entry's storage claimed. Observations
-    /// (`BindFault::diagnostic`): the context (the source in bits 0..16,
-    /// `0xffff` for a level task's entry, which has none; the line in
-    /// 16..24; the hart from 24), then three zero words.
+    /// (`BindFault::diagnostic`): the binding (the line in bits 0..8, the
+    /// hart in 8..16), then three zero words.
     BindingStorageClaimed = 257,
     /// A binding found its entry's handler cell occupied. Observations as
     /// [`Self::BindingStorageClaimed`].

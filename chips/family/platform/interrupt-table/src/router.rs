@@ -545,24 +545,17 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             if E::HART != H {
                 panic!("the entry belongs to the router's hart")
             }
-            if C::SOURCES.len() > crate::NO_SOURCE as usize {
-                panic!("a fault record's source field holds every source and its none")
-            }
         };
         let sources = <E::Part as InterruptSources>::SOURCES;
-        // The fault names the entry's first source; a level task's part has
-        // none (checked at compile time).
-        let source = sources.first().copied();
         let proof = E::PROOF;
-        let fault = |source, kind| BindFault {
-            source,
+        let fault = |kind| BindFault {
             line: E::LINE,
             hart: H,
             kind,
         };
         let Some(storage) = E::storage().try_uninit() else {
             return Err(Quarantined::owned(
-                fault(source, BindFaultKind::StorageClaimed),
+                fault(BindFaultKind::StorageClaimed),
                 token,
                 part,
             ));
@@ -570,7 +563,7 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         let place = storage.write(part);
         if let Err(place) = proof.cell().install(place) {
             return Err(Quarantined::placed(
-                fault(source, BindFaultKind::HandlerOccupied),
+                fault(BindFaultKind::HandlerOccupied),
                 token,
                 place,
             ));

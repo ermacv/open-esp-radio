@@ -310,7 +310,7 @@ that cannot fail. Storage and handler installation failures return a named
 private `ManuallyDrop` fields have no recovery API. Placed parts retain their
 claimed static allocation. No failed binding issues `Bound` or enables a driver.
 The image keeps its router and all interrupted owners while the staged
-runtime's binding reporter records the complete source/line/hart and
+runtime's binding reporter records the binding's line and hart (which name its one entry) and the
 operation through `fatal::reset_recording`. The existing panic slot holds
 four diagnostic words; no retained allocation is added. Successful binding
 installs the part, writes the line, then routes the part's sources in the

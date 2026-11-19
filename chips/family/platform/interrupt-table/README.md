@@ -162,12 +162,10 @@ entry binds is routed on no bank:
   (`LineExpectation::Task`, its control byte made at compile time from the
   table), and every other line is disabled.
 
-A faulted binding records four words (`BindFault::diagnostic`): the context
-(the source in bits 0..16, `0xffff` (`NO_SOURCE`) for a level task's entry,
-which has none and whose number no source has; the line in 16..24, the hart
-from 24), then three zero words; the reason names the fault. The next boot's
-report prints the four words as they are recorded, so a field of `ffff`
-there reads as no source. A wrong line `verify` finds is
+A faulted binding records four words (`BindFault::diagnostic`): the binding
+(the line in bits 0..8, the hart in 8..16; a line on a hart has one entry,
+so they name it, a level task's as any other), then three zero words; the
+reason names the fault. A wrong line `verify` finds is
 reported with the line's register word as the chip read it
 (`LineObservation`) and what the table expected of it
 (`LineExpectation::record`: 0 disabled, bit 8 and the control byte bound,

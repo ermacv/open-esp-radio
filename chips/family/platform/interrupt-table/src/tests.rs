@@ -118,6 +118,24 @@ fn a_level_task_is_laid_out_in_its_own_table_and_never_in_the_source_table() {
 }
 
 #[test]
+fn a_binding_fault_records_its_line_and_hart_in_its_first_word() {
+    for (line, hart) in [(34, 0), (17, 1), (47, 1)] {
+        let fault = crate::BindFault {
+            line,
+            hart,
+            kind: crate::BindFaultKind::HandlerOccupied,
+        };
+        assert_eq!(
+            fault.diagnostic(),
+            (
+                crate::BindFaultCode::HandlerOccupied,
+                [u32::from(line) | u32::from(hart) << 8, 0, 0, 0]
+            )
+        );
+    }
+}
+
+#[test]
 fn a_task_line_s_record_names_its_kind_apart_from_a_routed_line() {
     let control = Control::level::<3, 3>();
     assert_eq!(LineExpectation::Disabled.record(), 0);

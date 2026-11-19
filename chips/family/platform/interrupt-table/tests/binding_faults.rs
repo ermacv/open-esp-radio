@@ -114,10 +114,10 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let _claimed = StorageToken::storage().try_uninit().unwrap();
     let storage_drops = drops();
     let error = fault(router.bind(tokens.storage, Owned(Arc::clone(&storage_drops))));
-    assert_eq!(error.fault.source, Some(0), "the entry's first source");
+    assert_eq!((error.fault.line, error.fault.hart), (20, 0));
     assert_eq!(
         error.fault.diagnostic(),
-        (BindFaultCode::StorageClaimed, [20 << 16, 0, 0, 0])
+        (BindFaultCode::StorageClaimed, [20, 0, 0, 0])
     );
     drop(error);
     assert_eq!(storage_drops.load(Ordering::Relaxed), 0);
@@ -128,10 +128,10 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let _installed = HandlerToken::cell().install(previous).ok().unwrap();
     let handler_drops = drops();
     let error = fault(router.bind(tokens.handler, Owned(Arc::clone(&handler_drops))));
-    assert_eq!(error.fault.source, Some(1), "the entry's first source");
+    assert_eq!((error.fault.line, error.fault.hart), (21, 0));
     assert_eq!(
         error.fault.diagnostic(),
-        (BindFaultCode::HandlerOccupied, [(21 << 16) | 1, 0, 0, 0])
+        (BindFaultCode::HandlerOccupied, [21, 0, 0, 0])
     );
     drop(error);
     assert_eq!(handler_drops.load(Ordering::Relaxed), 0);
@@ -140,25 +140,15 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     assert_eq!(observed.lock().unwrap().routed(1), None);
     assert!(observed.lock().unwrap().writes.is_empty());
 
-    // A level task's entry has no source: its fault names none, and its
-    // record's source field is the number no source has.
+    // A level task's entry is named as any entry: by its line and hart.
     let _claimed = TaskToken::storage().try_uninit().unwrap();
     let task_drops = drops();
     let error = fault(router.bind(tokens.task, OwnedTask(Arc::clone(&task_drops))));
-    assert_eq!(error.fault.source, None);
+    assert_eq!((error.fault.line, error.fault.hart), (22, 0));
     assert_eq!(
         error.fault.diagnostic(),
-        (
-            BindFaultCode::StorageClaimed,
-            [
-                u32::from(oer_chips_family_platform_interrupt_table::NO_SOURCE) | (22 << 16),
-                0,
-                0,
-                0
-            ]
-        )
+        (BindFaultCode::StorageClaimed, [22, 0, 0, 0])
     );
-    assert_eq!(oer_chips_family_platform_interrupt_table::NO_SOURCE, 0xffff);
     drop(error);
     assert_eq!(task_drops.load(Ordering::Relaxed), 0);
     assert!(observed.lock().unwrap().writes.is_empty());
