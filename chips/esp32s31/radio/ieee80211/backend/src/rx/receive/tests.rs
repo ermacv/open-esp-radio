@@ -2,7 +2,7 @@
 //!
 //! The interrupt line runs through a leaked [`HandlerCell`] and the same
 //! line function the image's handler calls, over the host's part of both
-//! bank models. [`Host::p3`] plays the radio interrupt level: while a bank
+//! bank models. [`Host::radio_level`] plays the radio interrupt level: while a bank
 //! asserts the line, it runs the handler. The doorbell runs the handler
 //! synchronously, as the software interrupt preempts the radio executor,
 //! and then lets the level serve whatever the handler unmasked. Frames are completed by writing the
@@ -178,7 +178,7 @@ impl<X: SignalExecutor> Host<X> {
 
     /// The radio interrupt level: while a bank asserts the line, run the
     /// handler; each entry serves the MAC bank first.
-    fn p3(&self) {
+    fn radio_level(&self) {
         for _ in 0..8 {
             let (mac, power) = self.part(|part| {
                 let (mac, power) = part.epoch().banks();
@@ -287,7 +287,7 @@ struct HostDoorbell<
 
 impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
     const HANDLER: oer_chips_family_platform_interrupt_table::Context =
-        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+        oer_chips_family_platform_interrupt_table::Context { level: 4, hart: 0 };
     const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
         oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {
@@ -300,7 +300,7 @@ impl<X: SignalExecutor> RadioDoorbell for HostDoorbell<X> {
         self.host.record(Event::Acknowledge);
         self.host.enter();
         // The level then serves whatever the handler unmasked.
-        self.host.p3();
+        self.host.radio_level();
     }
 }
 
@@ -309,7 +309,7 @@ struct Silent;
 
 impl RadioDoorbell for Silent {
     const HANDLER: oer_chips_family_platform_interrupt_table::Context =
-        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+        oer_chips_family_platform_interrupt_table::Context { level: 4, hart: 0 };
     const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
         oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {}
@@ -488,7 +488,7 @@ impl<X: SignalExecutor> Harness<X> {
     /// each deadline the runner waits for.
     fn settle(&mut self) {
         for _ in 0..64 {
-            self.host.p3();
+            self.host.radio_level();
             let mut context = Context::from_waker(Waker::noop());
             assert!(self.runner.as_mut().poll(&mut context).is_pending());
             self.clock.advance_to_next_deadline();
@@ -705,7 +705,7 @@ fn rx_latched_while_masked_fires_after_unmask() {
     harness.frame(100);
     // The MAC handler masks RX; a second frame completes before the runner
     // drains and latches behind the mask.
-    harness.host.p3();
+    harness.host.radio_level();
     assert!(!harness.host.mac().rx_delivery_enabled());
     harness.frame(120);
     assert!(!harness.host.mac().line_asserted());
@@ -784,7 +784,7 @@ fn probe_pending_keeps_rx_masked() {
         .borrow_mut()
         .set_cursor(harness.base, COUNT - 1, None);
     harness.rx_event();
-    harness.host.p3();
+    harness.host.radio_level();
 
     // Four immediate self-wakes, then one timer wait.
     for poll in 1..=IMMEDIATE_CONTINUATIONS {
@@ -2114,7 +2114,7 @@ fn probe_continuations_count_their_reason_and_the_longest_streak() {
         .borrow_mut()
         .set_cursor(harness.base, COUNT - 1, None);
     harness.rx_event();
-    harness.host.p3();
+    harness.host.radio_level();
     for _ in 0..=IMMEDIATE_CONTINUATIONS {
         harness.poll_once();
     }

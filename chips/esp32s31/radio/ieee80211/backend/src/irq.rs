@@ -1,4 +1,4 @@
-//! The Wi-Fi interrupt line at the radio interrupt level (P3).
+//! The Wi-Fi interrupt line at the radio interrupt level (`radio`, P4).
 //!
 //! One entry of the image's interrupt table binds [`WifiIrqPart`] once, at
 //! start: both interrupt banks of the MAC (`MODEM_WIFI_MAC` and
@@ -212,7 +212,7 @@ impl sealed::Sealed for HostActivation {}
 #[cfg(any(test, feature = "test-support"))]
 impl WifiIrqActivation for HostActivation {
     const CONTEXT: oer_chips_family_platform_interrupt_table::Context =
-        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+        oer_chips_family_platform_interrupt_table::Context { level: 4, hart: 0 };
 }
 
 impl<A> InterruptSources for WifiIrqPart<A> {

@@ -108,6 +108,7 @@ impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
         None
     }
     fn bind(&mut self, _line: u16, _control: oer_portable_riscv::clic::Control) {}
+    fn bind_task(&mut self, _line: u16, _control: oer_portable_riscv::clic::Control) {}
     fn disable(&mut self, _line: u16) {}
     /// Every line reads disabled: a binding is never observed.
     fn check(
@@ -117,7 +118,8 @@ impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
     ) -> Result<(), oer_chips_family_platform_interrupt_table::LineObservation> {
         match expected {
             oer_chips_family_platform_interrupt_table::LineExpectation::Disabled => Ok(()),
-            oer_chips_family_platform_interrupt_table::LineExpectation::Bound(_) => {
+            oer_chips_family_platform_interrupt_table::LineExpectation::Bound(_)
+            | oer_chips_family_platform_interrupt_table::LineExpectation::Task(_) => {
                 Err(oer_chips_family_platform_interrupt_table::LineObservation::of_word(0))
             }
         }

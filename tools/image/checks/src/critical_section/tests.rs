@@ -128,10 +128,12 @@ fn every_handler_and_exception_is_a_root_including_the_shorter_handler() {
         partial: 128,
     }];
     let table = [DEEPEST, SHORT].map(|handler| TableEntry {
-        source: handler,
+        kind: oer_tools_image_stack::Kind::Routed {
+            source: handler,
+            class: Class::Hardware,
+        },
         line: handler,
         level: 1,
-        class: Class::Hardware,
         core: OTHER,
         handler: Some(handler),
     });

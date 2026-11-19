@@ -183,6 +183,19 @@ pub fn derive<'m>(
         },
         c,
     )?;
+    let mut table = table;
+    table.extend(level_task_table(
+        image,
+        &irq.task_table_symbol,
+        &TaskLayout {
+            entry: irq.task_entry_bytes,
+            line: field(irq.task_line.into()),
+            level: field(irq.task_level.into()),
+            core: field(irq.task_core.into()),
+            handler: irq.task_handler,
+        },
+        c,
+    )?);
     let harts = interrupt_stacks(
         analysis,
         &Stacks {

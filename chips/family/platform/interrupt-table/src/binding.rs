@@ -21,21 +21,23 @@ pub enum BindFaultKind {
 /// An admitted binding failed without releasing its token or register owners.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BindFault {
-    pub source: u16,
+    /// The entry's line: with the hart, it names the binding, since a line
+    /// on a hart has one entry.
     pub line: u8,
     pub hart: u8,
     pub kind: BindFaultKind,
 }
 
 impl BindFault {
-    /// The record's four words: source/line/hart, then three zero words.
-    /// The operation is named by the reason.
+    /// The record's four words: the binding (the line in bits 0..8, the
+    /// hart in 8..16), then three zero words. The operation is named by the
+    /// reason.
     pub fn diagnostic(self) -> (BindFaultCode, [u32; 4]) {
         let name = match self.kind {
             BindFaultKind::StorageClaimed => BindFaultCode::StorageClaimed,
             BindFaultKind::HandlerOccupied => BindFaultCode::HandlerOccupied,
         };
-        (name, [context(self.source, self.line, self.hart), 0, 0, 0])
+        (name, [binding(self.line, self.hart), 0, 0, 0])
     }
 }
 
@@ -76,6 +78,6 @@ impl<E: Entry> Quarantined<E> {
     }
 }
 
-fn context(source: u16, line: u8, hart: u8) -> u32 {
-    u32::from(source) | (u32::from(line) << 16) | (u32::from(hart) << 24)
+fn binding(line: u8, hart: u8) -> u32 {
+    u32::from(line) | (u32::from(hart) << 8)
 }

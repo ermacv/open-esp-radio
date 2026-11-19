@@ -156,15 +156,15 @@ impl Stacks<'_> {
                 .find(|vector| vector.hart == core && vector.line == binding.line)
                 .ok_or_else(|| {
                     invalid(format!(
-                        "hart {core} has no vector for line {} of source {}",
-                        binding.line, binding.source
+                        "hart {core} has no vector for line {} of {binding}",
+                        binding.line
                     ))
                 })?;
             if vector.entry.handler != handler {
                 return Err(invalid(format!(
                     "the vector of line {} on hart {core} calls {:#010x}, the table binds \
-                     source {} to {handler:#010x}",
-                    binding.line, vector.entry.handler, binding.source
+                     {binding} to {handler:#010x}",
+                    binding.line, vector.entry.handler
                 )));
             }
             entries.push(vector.entry);

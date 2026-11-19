@@ -1,5 +1,7 @@
 //! An image's interrupt table: for each binding its source, CPU line,
-//! level, handler class, hart and handler, read from the link's facts. The table is the slice an exported
+//! level, handler class, hart and handler, read from the link's facts; and
+//! its level tasks, a table of their own: for each its line, level, hart and
+//! handler, with no source and no class. Each table is the slice an exported
 //! symbol holds (its pointer word relocated to the entries, then its length);
 //! every non-zero handler word carries the relocation that names it, and a
 //! zero word is an entry the build left out.
@@ -28,8 +30,23 @@ pub struct TableLayout {
     pub handler: u32,
 }
 
-/// What an entry's handler may do, as the image declares it
-/// (`oer_chips_family_platform_interrupt_table::Class`, whose discriminants these are).
+/// The layout of a chip's level task: the platform's contract, which its
+/// own build asserts beside the task's type.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TaskLayout {
+    /// Bytes per task.
+    pub entry: u32,
+    pub line: Field,
+    pub level: Field,
+    pub core: Field,
+    /// Offset of the handler's address word.
+    pub handler: u32,
+}
+
+/// What an entry's handler may do, as the image declares it: the first
+/// three by the interrupt table's class byte
+/// (`oer_chips_family_platform_interrupt_table::Class`, whose discriminants
+/// these are), a level task by its own table.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum Class {
     /// Strict code throughout: no task poll, no waker call, never on the
@@ -39,6 +56,10 @@ pub enum Class {
     Executor,
     /// A hardware handler that breaks the one named rule.
     Exempt(Violation),
+    /// A level's one task: strict code as [`Class::Hardware`], alone on its
+    /// level of its core. No class byte names it: the task table is its
+    /// class.
+    LevelTask,
 }
 
 /// The one hardware rule an exempt entry breaks.
@@ -49,6 +70,10 @@ pub enum Violation {
     /// It calls a waker.
     WakerCall,
 }
+
+/// The byte of `oer_chips_family_platform_interrupt_table::Class::LevelTask`,
+/// which the image exports in its task table and never in the source table.
+const LEVEL_TASK_BYTE: u32 = 4;
 
 impl Class {
     fn of(value: u32) -> Option<Self> {
@@ -69,21 +94,51 @@ impl std::fmt::Display for Class {
             Self::Executor => "executor",
             Self::Exempt(Violation::ExecutorLevel) => "exempt (shares its core's executor level)",
             Self::Exempt(Violation::WakerCall) => "exempt (calls a waker)",
+            Self::LevelTask => "level task",
         })
     }
 }
 
-/// One entry of the table.
+/// What an entry binds: a source routed to its line, with the class its
+/// handler declares, or a level's task, whose line has no source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Kind {
+    Routed { source: u32, class: Class },
+    Task,
+}
+
+/// One entry of the tables: an interrupt table's binding or a level task.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TableEntry {
-    pub source: u32,
-    /// The CPU line the source is routed to, whose vector calls `handler`.
+    pub kind: Kind,
+    /// The CPU line whose vector calls `handler`: a routed source's, or the
+    /// task's own.
     pub line: u32,
     pub level: u32,
-    pub class: Class,
     pub core: u32,
     /// The handler's address; `None` for an entry the build left out.
     pub handler: Option<u32>,
+}
+
+impl TableEntry {
+    /// The entry's class: its handler's declared one, or a level task's.
+    pub fn class(&self) -> Class {
+        match self.kind {
+            Kind::Routed { class, .. } => class,
+            Kind::Task => Class::LevelTask,
+        }
+    }
+}
+
+impl std::fmt::Display for TableEntry {
+    /// The entry as a report names it: by its source, or as the level task
+    /// of its line.
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            Kind::Routed { source, .. } => write!(out, "source {source}"),
+            Kind::Task => write!(out, "the level task of line {}", self.line),
+        }
+    }
 }
 
 /// The entries of the table `symbol` holds in `image`.
@@ -92,6 +147,76 @@ pub fn interrupt_table(
     symbol: &str,
     layout: &TableLayout,
     control: &mut dyn RunControl,
+) -> Result<Vec<TableEntry>> {
+    let invalid = |message: String| Error::new(ErrorCode::Integrity, message);
+    slice(
+        image,
+        symbol,
+        layout.entry,
+        layout.handler,
+        control,
+        |entry, field, handler| {
+            let class = field(entry, layout.class)?;
+            // A level task has no source: its class's byte is no element of
+            // the source table, whose elements are each a routed source.
+            if class == LEVEL_TASK_BYTE {
+                return Err(invalid(format!(
+                    "the source table's entry at {entry:#010x} carries the level task's class"
+                )));
+            }
+            Ok(TableEntry {
+                kind: Kind::Routed {
+                    source: field(entry, layout.source)?,
+                    class: Class::of(class).ok_or_else(|| {
+                        invalid(format!(
+                            "the entry at {entry:#010x} has no handler class {class}"
+                        ))
+                    })?,
+                },
+                line: field(entry, layout.line)?,
+                level: field(entry, layout.level)?,
+                core: field(entry, layout.core)?,
+                handler,
+            })
+        },
+    )
+}
+
+/// The level tasks the table `symbol` holds in `image`.
+pub fn level_task_table(
+    image: &ImageFacts<'_>,
+    symbol: &str,
+    layout: &TaskLayout,
+    control: &mut dyn RunControl,
+) -> Result<Vec<TableEntry>> {
+    slice(
+        image,
+        symbol,
+        layout.entry,
+        layout.handler,
+        control,
+        |entry, field, handler| {
+            Ok(TableEntry {
+                kind: Kind::Task,
+                line: field(entry, layout.line)?,
+                level: field(entry, layout.level)?,
+                core: field(entry, layout.core)?,
+                handler,
+            })
+        },
+    )
+}
+
+/// The elements of the slice `symbol` holds in `image`, `entry_bytes`
+/// apart, each with its handler word at `handler_offset`, made by `make`
+/// from the element's address, a reader of its fields and its handler.
+fn slice(
+    image: &ImageFacts<'_>,
+    symbol: &str,
+    entry_bytes: u32,
+    handler_offset: u32,
+    control: &mut dyn RunControl,
+    make: impl Fn(u32, &dyn Fn(u32, Field) -> Result<u32>, Option<u32>) -> Result<TableEntry>,
 ) -> Result<Vec<TableEntry>> {
     let invalid = |message: String| Error::new(ErrorCode::Integrity, message);
     let slice = image
@@ -134,29 +259,17 @@ pub fn interrupt_table(
     // first word outside the table, never on the budget or an allocation.
     let mut entries = Vec::new();
     for index in 0..length {
-        // Each entry reads its handler and five fields.
+        // Each entry reads its handler and at most five fields.
         control.checkpoint(6)?;
-        let entry = first + index * layout.entry;
-        let address = entry + layout.handler;
+        let entry = first + index * entry_bytes;
+        let address = entry + handler_offset;
         let handler = word(address)?;
         if handler != 0 && image.word(address) != Some(handler) {
             return Err(invalid(format!(
                 "the handler word at {address:#010x} has no relocation"
             )));
         }
-        let class = field(entry, layout.class)?;
-        entries.push(TableEntry {
-            source: field(entry, layout.source)?,
-            line: field(entry, layout.line)?,
-            level: field(entry, layout.level)?,
-            class: Class::of(class).ok_or_else(|| {
-                invalid(format!(
-                    "the entry at {entry:#010x} has no handler class {class}"
-                ))
-            })?,
-            core: field(entry, layout.core)?,
-            handler: (handler != 0).then_some(handler & !1),
-        });
+        entries.push(make(entry, &field, (handler != 0).then_some(handler & !1))?);
     }
     Ok(entries)
 }

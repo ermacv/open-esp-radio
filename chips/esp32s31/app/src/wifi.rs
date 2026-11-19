@@ -68,7 +68,7 @@ oer_chips_family_platform_runtime::placed_static! {
 /// The Wi-Fi MAC's interrupt part.
 pub type WifiPart = <wifi::Interrupts as InterruptTypes>::Part;
 
-/// The radio interrupt handler (P3): the doorbell's requests, the MAC bank,
+/// The radio interrupt handler (`radio`, P4): the doorbell's requests, the MAC bank,
 /// then the WDEVPWR bank. A fatal MAC assertion records its raw word and
 /// resets.
 pub(crate) fn on_wifi(part: &mut WifiPart) {

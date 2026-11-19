@@ -5,10 +5,9 @@ use std::collections::BTreeMap;
 
 fn entry(source: u32, level: u32, class: Class, core: u32) -> TableEntry {
     TableEntry {
-        source,
+        kind: oer_tools_image_stack::Kind::Routed { source, class },
         line: 16 + source,
         level,
-        class,
         core,
         handler: Some(0x4080_0000 + source * 0x10),
     }
@@ -51,6 +50,80 @@ fn an_executor_s_level_on_its_core_takes_no_hardware_handler() {
     ];
     assert!(misplaced(&waker)[0].contains("shares level 2"));
     assert!(misplaced(&waker[1..]).is_empty());
+}
+
+fn task(line: u32, level: u32, core: u32) -> TableEntry {
+    TableEntry {
+        kind: oer_tools_image_stack::Kind::Task,
+        line,
+        level,
+        core,
+        handler: Some(0x4081_0000 + line * 0x10),
+    }
+}
+
+#[test]
+fn a_level_task_s_level_on_its_core_holds_the_task_alone() {
+    let alone = [task(34, 3, 0), entry(1, 2, Class::Executor, 0)];
+    assert_eq!(context_class(&alone, 0, 3), Class::LevelTask);
+    assert_eq!(context_class(&alone, 0, 2), Class::Executor);
+    assert_eq!(context_class(&alone, 1, 3), Class::Hardware);
+    assert!(misplaced(&alone).is_empty());
+    // No entry with a source on the task's level of its core: a hardware
+    // handler, an exempt one or an executor.
+    for class in [
+        Class::Hardware,
+        Class::Exempt(Violation::WakerCall),
+        Class::Executor,
+    ] {
+        let shared = [task(34, 3, 0), entry(2, 3, class, 0)];
+        assert_eq!(context_class(&shared, 0, 3), Class::LevelTask);
+        assert_eq!(
+            misplaced(&shared),
+            ["source 2 shares level 3 with core 0's level task"],
+            "{class}"
+        );
+    }
+    let two = [task(34, 3, 0), task(35, 3, 0)];
+    assert_eq!(
+        misplaced(&two),
+        [
+            "the level task of line 34 is one of 2 level tasks of level 3 on core 0",
+            "the level task of line 35 is one of 2 level tasks of level 3 on core 0"
+        ]
+    );
+    // Another core, another level, a task the build leaves out: no
+    // conflict.
+    let apart = [
+        task(34, 3, 0),
+        task(34, 3, 1),
+        entry(2, 3, Class::Hardware, 1),
+    ];
+    assert_eq!(misplaced(&apart).len(), 1, "core 1's task and handler");
+    let apart = [
+        task(34, 3, 0),
+        task(34, 3, 1),
+        entry(2, 4, Class::Hardware, 0),
+    ];
+    assert!(misplaced(&apart).is_empty());
+    let mut absent = two;
+    absent[1].handler = None;
+    assert!(misplaced(&absent).is_empty());
+}
+
+#[test]
+fn a_level_task_s_code_is_strict_throughout_as_a_hardware_handler_s() {
+    assert!(strict_throughout(Some(Class::Hardware)));
+    assert!(strict_throughout(Some(Class::LevelTask)));
+    assert!(!strict_throughout(Some(Class::Executor)));
+    assert!(!strict_throughout(None));
+    let (stacks, _, _) = fixture(Location::Sram, Location::Sram, 3, Class::LevelTask);
+    let context = &stacks.code_placement.contexts[0];
+    assert_eq!(context.class, Some(Class::LevelTask));
+    assert_eq!(context.to_string(), "hart 0 P3 (level task)");
+    // Not an executor's level: none of its code is task code.
+    assert!(context.tasks.is_empty());
+    assert!(!context.strict.is_empty());
 }
 
 #[test]

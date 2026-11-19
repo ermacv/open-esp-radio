@@ -399,7 +399,7 @@ gap = ['the placement of a task group is a feature, not a stated placement']
 name = 'MAC_SIGNAL'
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'static MAC_SIGNAL: IrqSignal'
-raised_by = 'radio-side P3 handler'
+raised_by = 'radio-side handler (radio level)'
 waited_by = 'datapath task'
 raisers = 'FromHandler<WifiToken>'
 cfg = 'feature = "wifi"'
@@ -410,7 +410,7 @@ gap = ['checked one signal at a time; no list of edges', 'a declared raiser show
 name = 'MAC_RX_SIGNAL'
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'static MAC_RX_SIGNAL: IrqSignal'
-raised_by = 'P3 handler, own executor task'
+raised_by = 'radio-level handler, own executor task'
 waited_by = 'datapath task'
 raisers = 'FromHandler<WifiToken>, FromOwnTask'
 cfg = 'feature = "wifi"'
@@ -421,7 +421,7 @@ gap = ['checked one signal at a time; no list of edges', 'a declared raiser show
 name = 'POWER_SIGNAL'
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'static POWER_SIGNAL: IrqSignal'
-raised_by = 'P3 handler'
+raised_by = 'radio-level handler'
 waited_by = 'datapath task'
 raisers = 'FromHandler<WifiToken>'
 cfg = 'feature = "wifi"'
@@ -681,7 +681,7 @@ anchor = "impl<K: Client, O: sealed::Reply<K>> Future for Pending<K, O> {"
 id = "sar-sample"
 cfg = "feature = \"wifi\""
 waiter = "radio actor, SAR sample"
-served_by = "TIMG0 handler on P2, same hart and level"
+served_by = "TIMG0 handler on the radio executor's level, same hart"
 condition = "the actor yields its poll, the programmed alarm enters its handler and the reply bundle is published"
 held = "the request bundle carries the PHY transaction to the handler and back"
 bound = "Client::sample has no timeout around the reply wait; progress requires the alarm and executor"
@@ -731,7 +731,7 @@ anchor = "self.consumer.register(cx);"
 id = "mac-facts"
 cfg = "feature = \"wifi\""
 waiter = "datapath actor on the application executor, MAC/RX/power facts"
-served_by = "Wi-Fi P3 handler publishes MAC_SIGNAL, MAC_RX_SIGNAL and POWER_SIGNAL; receive returns may also signal from the actor context"
+served_by = "Wi-Fi radio-level handler publishes MAC_SIGNAL, MAC_RX_SIGNAL and POWER_SIGNAL; receive returns may also signal from the actor context"
 condition = "an active port polls device events and RX work; signal polling registers the owning task then takes durable facts; service requires the routed, enabled source and executor polling"
 held = "the actor/port retain installed radio, RX/TX custody and queued work while idle"
 bound = "an idle fact wait has no timeout; outstanding port, TX arena, receive and stop work supply deadlines through the port's deadline, so missing hardware facts do not imply every active operation waits forever"

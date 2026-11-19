@@ -29,7 +29,7 @@
 //!   radio executor (P2). Signal declarations and request bindings check
 //!   their direction against the entries' levels and harts when the image compiles.
 //! - `Doorbell<B, SWI, HandlerEntry, Executor, ExecutorEntry>` is a software interrupt at the radio interrupts' level
-//!   (P3, `FROM_CPU` line 3) that an executor below them rings to have a request
+//!   (the `radio` level, `FROM_CPU` line 3) that an executor below them rings to have a request
 //!   applied there; its handler starts with `DoorbellAcknowledger::acknowledge`. Its line
 //!   is a source of the radio handler's part: the ringing half takes the
 //!   router's `Bound` proof of that part (`Doorbell::new`).

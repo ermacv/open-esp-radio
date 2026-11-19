@@ -141,6 +141,9 @@ macro_rules! link_fn {
     (table $slot:ty => $($definition:tt)*) => {
         $crate::link_fn! { @static $slot, "__OER_INTERRUPT_TABLE" => $($definition)* }
     };
+    (task_table $slot:ty => $($definition:tt)*) => {
+        $crate::link_fn! { @static $slot, "__OER_LEVEL_TASK_TABLE" => $($definition)* }
+    };
     (exemption $slot:ty, hart $hart:literal, line $line:literal => $($definition:tt)*) => {
         $crate::link_fn! { @static $slot, concat!("__OER_INTERRUPT_EXEMPT___oer_interrupt_h", $hart, "_l", $line) => $($definition)* }
     };

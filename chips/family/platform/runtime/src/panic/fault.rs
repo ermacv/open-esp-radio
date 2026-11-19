@@ -60,7 +60,12 @@ pub enum FaultReason {
     /// Observations: the executor's software interrupt, the executor's hart,
     /// the waking hart and zero.
     WakerCrossedHarts = 40,
+    /// A binding found its entry's storage claimed. Observations
+    /// (`BindFault::diagnostic`): the binding (the line in bits 0..8, the
+    /// hart in 8..16), then three zero words.
     BindingStorageClaimed = 257,
+    /// A binding found its entry's handler cell occupied. Observations as
+    /// [`Self::BindingStorageClaimed`].
     BindingHandlerOccupied = 258,
 }
 

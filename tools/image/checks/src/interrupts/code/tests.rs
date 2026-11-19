@@ -54,10 +54,12 @@ pub(crate) fn same_level_handler_placement(handlers: [Function; 2]) -> CodePlace
         .iter()
         .enumerate()
         .map(|(index, handler)| TableEntry {
-            source: index as u32,
+            kind: oer_tools_image_stack::Kind::Routed {
+                source: index as u32,
+                class: Class::Hardware,
+            },
             line: 16 + index as u32,
             level: 1,
-            class: Class::Hardware,
             core: 0,
             handler: Some(handler.address),
         })
@@ -150,10 +152,12 @@ pub(in crate::interrupts) fn fixture(
         .map(|function| function.function.clone())
         .collect();
     stacks.table = vec![TableEntry {
-        source: 7,
+        kind: match class {
+            Class::LevelTask => oer_tools_image_stack::Kind::Task,
+            class => oer_tools_image_stack::Kind::Routed { source: 7, class },
+        },
         line: 16,
         level: priority,
-        class,
         core: 0,
         handler: Some(root),
     }];
@@ -379,10 +383,12 @@ impl MultipleHandlers {
     fn bind(&mut self, hart: u32, level: u32, class: Class, handler: u32) {
         let index = self.stacks.table.len() as u32;
         self.stacks.table.push(TableEntry {
-            source: index,
+            kind: oer_tools_image_stack::Kind::Routed {
+                source: index,
+                class: class,
+            },
             line: 16 + index,
             level,
-            class,
             core: hart,
             handler: Some(handler),
         });

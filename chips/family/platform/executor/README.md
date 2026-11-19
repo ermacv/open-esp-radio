@@ -66,15 +66,16 @@ image links one.
 ## Radio interrupt levels
 
 [`executor`](src/lib.rs) (`oer-chips-family-platform-executor`) places
-the image's contexts on one core: the radio interrupts at P3 (the MAC and
-PWR sources and the radio doorbell), the radio executor (`InterruptExecutor`
-on `FROM_CPU` line 2) at P2, the application below it. The table declares
+the image's contexts on one core: the radio interrupts at the `radio` level
+(P4 in the application's grid: the MAC and PWR sources and the radio
+doorbell), the radio executor (`InterruptExecutor` on `FROM_CPU` line 2) at
+P2, the application below it. The table declares
 named levels once. Signal declarations check each handler above its receiving
 executor, or each raising task below it. Request bindings check the receiving
 handler above the requesting executor, on the same hart.
 Equal CLIC levels on one hart cannot preempt each other.
 
-The radio executor never writes the registers a P3 handler owns. It records
+The radio executor never writes the registers a radio-level handler owns. It records
 a request in memory both sides see and rings the `Doorbell`, a software
 interrupt (`FROM_CPU` line 3) that is one source of the radio handler's part:
 `ring` fences and raises the line. `DoorbellLine::split` consumes the software

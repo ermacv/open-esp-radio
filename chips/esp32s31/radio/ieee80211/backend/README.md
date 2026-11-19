@@ -1,7 +1,7 @@
 # oer-chips-esp32s31-radio-ieee80211-backend
 
 The ESP32-S31 Wi-Fi hardware code: the MAC's sequences, its DMA rings and
-queues, keys, the receive session and the path from the P3 interrupt to the
+queues, keys, the receive session and the path from the radio-level interrupt to the
 task that owns the line. System context: [architecture](../../../../../docs/architecture.md).
 
 The backend has no port: nothing here implements the port contract, and no
@@ -42,7 +42,8 @@ on the station: the MAC's queues").
   MPDU is numbered at its first launch; DMA
   is reached only through its owner type, never alongside a quiescence proof.
 - **MAC ownership.** The driver coordinates MAC stop, RX draining and the
-  radio client's channel retune through owned HAL transactions. P3 latches
+  radio client's channel retune through owned HAL transactions. The radio
+  level latches
   power events. Caller-supplied coexistence intent selects the publication PTI.
 - **MAC preparation and start.** The driver takes its block once: `join`,
   `track`, the tracked member's `reset_mac` request, then its own cold
@@ -128,7 +129,7 @@ adjustment.
 One entry of the image's interrupt table binds `WifiIrqPart` once, at start:
 its sources are the MAC bank (`MODEM_WIFI_MAC`), the WDEVPWR bank
 (`MODEM_WIFI_PWR`) and the radio doorbell (`FROM_CPU_INTR3`), all routed to
-the entry's one P3 line. Its handler holds the part, with both banks in
+the entry's one line at the `radio` level. Its handler holds the part, with both banks in
 their interrupt epoch (`mac::irq::epoch::InterruptEpoch`), for
 the image's life; no task writes a bank and the CPU route never changes.
 The handler calls `service_wifi_line` and serves one cause per entry, read
@@ -207,7 +208,7 @@ allocation out of the ring.
 
 One received frame and the owner of its DMA buffer at each step:
 
-1. **P3.** The radio handler masks RX delivery, acknowledges and raises
+1. **The `radio` level.** The radio handler masks RX delivery, acknowledges and raises
    the RX fact in the image's static receive `IrqSignal` of the station's
    executor (`oer_chips_family_platform_interrupt_table::signal`), which pends it and
    touches no waker; the buffer is the DMA engine's.

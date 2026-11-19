@@ -350,8 +350,8 @@ which no source states), and `l2_bypassed`. With
 image's boot hart (the radio's) every period over the window and records
 a `profile`: ticks, stride and effective period, the samples by
 interrupted raw CLIC level
-(0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, as
-the CPU report's executor levels), the 40
+(0 task code; with three level bits P1 `0x1f`, P2 `0x3f`, P3 `0x5f`, P4
+`0x7f` and P5 `0x9f`; the executors' levels as the CPU report's), the 40
 functions and the 40 innermost inlined functions with the most samples, and
 every raw sample as `[tick, pc, level, ra]`: `ra` is the interrupted return
 address register the image's interrupt entry recorded (null when it

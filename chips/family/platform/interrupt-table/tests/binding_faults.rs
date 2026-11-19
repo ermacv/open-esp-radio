@@ -23,12 +23,24 @@ impl<const SOURCE: u16> oer_chips_family_platform_interrupt_table::InterruptSour
     const SOURCE: u16 = SOURCE;
 }
 fn on_owned<const SOURCE: u16>(_: &mut Owned<SOURCE>) {}
+/// A level task's part: no source.
+pub struct OwnedTask(Arc<AtomicUsize>);
+impl Drop for OwnedTask {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::Relaxed);
+    }
+}
+impl oer_chips_family_platform_interrupt_table::InterruptSources for OwnedTask {
+    const SOURCES: &'static [u16] = &[];
+}
+fn on_task(_: &mut OwnedTask) {}
 oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: FAKE_LINES,
     handler_attributes: [];
-    contexts { hardware: 1; }
+    contexts { hardware: 1; keeper: 3; }
     storage: StorageToken = Owned<0> => on_owned::<0>, line 20, context hardware, hart 0, Hardware;
     handler: HandlerToken = Owned<1> => on_owned::<1>, line 21, context hardware, hart 0, Hardware;
+    task: TaskToken = OwnedTask => on_task, line 22, context keeper, hart 0, LevelTask;
 }
 
 /// The fake controller, shared with the test that reads its writes.
@@ -58,6 +70,9 @@ impl Controller for Injected {
     }
     fn bind(&mut self, line: u8, control: Control) {
         self.inner.lock().unwrap().bind(line, control)
+    }
+    fn bind_task(&mut self, line: u8, control: Control) {
+        self.inner.lock().unwrap().bind_task(line, control)
     }
     fn disable(&mut self, line: u8) {
         self.inner.lock().unwrap().disable(line)
@@ -99,9 +114,10 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let _claimed = StorageToken::storage().try_uninit().unwrap();
     let storage_drops = drops();
     let error = fault(router.bind(tokens.storage, Owned(Arc::clone(&storage_drops))));
+    assert_eq!((error.fault.line, error.fault.hart), (20, 0));
     assert_eq!(
         error.fault.diagnostic(),
-        (BindFaultCode::StorageClaimed, [20 << 16, 0, 0, 0])
+        (BindFaultCode::StorageClaimed, [20, 0, 0, 0])
     );
     drop(error);
     assert_eq!(storage_drops.load(Ordering::Relaxed), 0);
@@ -112,14 +128,28 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let _installed = HandlerToken::cell().install(previous).ok().unwrap();
     let handler_drops = drops();
     let error = fault(router.bind(tokens.handler, Owned(Arc::clone(&handler_drops))));
+    assert_eq!((error.fault.line, error.fault.hart), (21, 0));
     assert_eq!(
         error.fault.diagnostic(),
-        (BindFaultCode::HandlerOccupied, [(21 << 16) | 1, 0, 0, 0])
+        (BindFaultCode::HandlerOccupied, [21, 0, 0, 0])
     );
     drop(error);
     assert_eq!(handler_drops.load(Ordering::Relaxed), 0);
     assert_eq!(previous_drops.load(Ordering::Relaxed), 0);
     assert!(HandlerToken::cell().with(|_| ()).is_some());
     assert_eq!(observed.lock().unwrap().routed(1), None);
+    assert!(observed.lock().unwrap().writes.is_empty());
+
+    // A level task's entry is named as any entry: by its line and hart.
+    let _claimed = TaskToken::storage().try_uninit().unwrap();
+    let task_drops = drops();
+    let error = fault(router.bind(tokens.task, OwnedTask(Arc::clone(&task_drops))));
+    assert_eq!((error.fault.line, error.fault.hart), (22, 0));
+    assert_eq!(
+        error.fault.diagnostic(),
+        (BindFaultCode::StorageClaimed, [22, 0, 0, 0])
+    );
+    drop(error);
+    assert_eq!(task_drops.load(Ordering::Relaxed), 0);
     assert!(observed.lock().unwrap().writes.is_empty());
 }

@@ -10,8 +10,9 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use oer_tools_image_stack::{
-    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, Vector, Violation,
-    interrupt_entry, interrupt_table, parse_summaries, trap_entry, vector_table,
+    Analysis, Class, Dwarf, Field, HartStack, Stacks, TableEntry, TableLayout, TaskLayout, Vector,
+    Violation, interrupt_entry, interrupt_table, level_task_table, parse_summaries, trap_entry,
+    vector_table,
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -402,12 +403,11 @@ impl InterruptStacks {
             };
             let _ = write!(
                 out,
-                "  {} (source {}): core {} level {}, {}",
+                "  {} ({entry}): core {} level {}, {}",
                 self.name(handler),
-                entry.source,
                 entry.core,
                 entry.level,
-                entry.class
+                entry.class()
             );
             match self.exemptions.iter().find(|(slot, _)| *slot == handler) {
                 Some((_, reason)) => {
@@ -704,9 +704,9 @@ fn reject_unstacked_cores(
         .find(|entry| entry.handler.is_some() && !harts.contains(&entry.core))
     {
         Some(entry) => Err(format!(
-            "the interrupt table routes source {} (level {}) to core {}, whose interrupt \
+            "the interrupt table binds {entry} (level {}) on core {}, whose interrupt \
              stack the image declares unused or the chip does not have",
-            entry.source, entry.level, entry.core
+            entry.level, entry.core
         )
         .into()),
         None => Ok(()),
@@ -771,7 +771,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     let _retained = memory.reserve(image.retained_bytes, control.position())?;
     let mut keep = Ledger::new(&memory, &mut control)?;
     let facts = ImageFacts::new(elf, &[], &memory, &mut control)?;
-    let table = interrupt_table(
+    let mut table = interrupt_table(
         &facts,
         &interrupts.table_symbol,
         &TableLayout {
@@ -785,6 +785,20 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         },
         &mut control,
     )?;
+    // The level tasks, a table of their own: each a member of its level,
+    // strict as a hardware handler and alone there.
+    table.extend(level_task_table(
+        &facts,
+        &interrupts.task_table_symbol,
+        &TaskLayout {
+            entry: interrupts.task_entry_bytes,
+            line: field(interrupts.task_line.into()),
+            level: field(interrupts.task_level.into()),
+            core: field(interrupts.task_core.into()),
+            handler: interrupts.task_handler,
+        },
+        &mut control,
+    )?);
     reject_unstacked_cores(&table, &interrupts.harts)?;
     // Each hart's table holds `vector_table_hart_slots` words; each entry
     // must also return through the checked exit.
@@ -892,7 +906,8 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
             continue;
         }
         strict_data.push(strict_data_of(context.to_string(), &context.strict)?);
-        if context.class != Some(Class::Hardware) {
+        // A level task's code is strict as a hardware handler's.
+        if !classes::strict_throughout(context.class) {
             continue;
         }
         let resolutions = inputs.resolutions_for(analysis, context.hart, context.level);
@@ -921,7 +936,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
         {
             if let Some(handler) = entry.handler {
                 entries.push((
-                    entry.class,
+                    entry.class(),
                     analysis.reached_cut(
                         handler,
                         &resolutions,
@@ -938,7 +953,7 @@ pub fn interrupt_stacks_of(image: &Image) -> Result<InterruptStacks> {
     }
     let exemptions = exemption_reasons(&parsed, &table, &interrupts.table_exemption_prefix)?;
     for entry in table.iter().filter(|entry| {
-        entry.class == Class::Exempt(Violation::ExecutorLevel) && entry.handler.is_some()
+        entry.class() == Class::Exempt(Violation::ExecutorLevel) && entry.handler.is_some()
     }) {
         let Some(handler) = entry.handler else {
             continue;
@@ -1027,7 +1042,7 @@ fn exemption_reasons(
     let mut reasons = Vec::new();
     for entry in table
         .iter()
-        .filter(|entry| matches!(entry.class, Class::Exempt(_)))
+        .filter(|entry| matches!(entry.class(), Class::Exempt(_)))
     {
         let Some(handler) = entry.handler else {
             continue;
@@ -1037,10 +1052,7 @@ fn exemption_reasons(
             .filter(|symbol| symbol.defined && symbol.address == u64::from(handler))
             .find_map(|slot| elf.symbol(&format!("{prefix}{}", slot.name)))
             .ok_or_else(|| {
-                format!(
-                    "the exempt entry of source {} names no reason (`{prefix}<handler>`)",
-                    entry.source
-                )
+                format!("the exempt entry of {entry} names no reason (`{prefix}<handler>`)")
             })?;
         let bytes = usize::try_from(reason.size)
             .ok()
@@ -1219,10 +1231,12 @@ pub(crate) mod tests {
     #[test]
     fn a_table_entry_for_a_core_without_an_interrupt_stack_is_refused() {
         let entry = |core| TableEntry {
-            source: 7,
+            kind: oer_tools_image_stack::Kind::Routed {
+                source: 7,
+                class: Class::Executor,
+            },
             line: 16,
             level: 2,
-            class: Class::Executor,
             core,
             handler: Some(0x4000_0000),
         };
@@ -1232,15 +1246,27 @@ pub(crate) mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            error.contains("source 7") && error.contains("to core 1"),
+            error.contains("source 7") && error.contains("on core 1"),
             "{error}"
         );
         let left_out = TableEntry {
-            source: 0,
             handler: None,
             ..entry(1)
         };
         reject_unstacked_cores(&[entry(0), left_out], &[0]).unwrap();
+        // A level task runs on its core's interrupt stack too.
+        let task = TableEntry {
+            kind: oer_tools_image_stack::Kind::Task,
+            line: 34,
+            ..entry(1)
+        };
+        let error = reject_unstacked_cores(&[entry(0), task], &[0])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("the level task of line 34") && error.contains("on core 1"),
+            "{error}"
+        );
     }
 
     use super::*;

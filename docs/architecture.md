@@ -397,11 +397,16 @@ the image's parts for it through the image's SRAM mailbox
 run its own executor.
 
 P*n* names level *n* of the 8 the CLIC offers. Each context's level, and each
-entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
+entry's line and hart, come from `[interrupt-layout]` in the chip's facts;
+the application's grid is `app_wake` P1, `radio_executor` P2, `keeper` P3,
+`radio` P4 and `profile` P5 (the PC samplers, above every other level). A
+probe image declares its own contexts.
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P5 (`profile`) | the PC sampler of each hart, while a session runs | above every other level, so that it sees what it interrupts |
+| P4 (`radio`), boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the radio executor's SYSTIMER alarm; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
+| P3 (`keeper`), boot hart | a level task, in an image whose table declares one: the level's one task, on a software line of its own | runs to its end on each entry; strict code as a hardware handler; no entry with a source on its level and hart |
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
 | P1 / thread, boot hart | role bodies, network stack, application | tasks of one executor never preempt each other and share no lock: they talk only in single-producer queues of that executor |
@@ -418,6 +423,31 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   or waker. Each executor mode and software line has its own typed list.
 - An interrupt handler never shares a lock with a task and reaches tasks
   through static typed signals, never through an executor's waker.
+- A software wake from the same hart is the CLIC's pend of the woken line
+  (a level's task); a wake from another hart is a `FROM_CPU` source, the one
+  mechanism shown to cross harts. Software lines, levels and timers are
+  counted against every radio and both harts. On a chip without a CLIC
+  there is one hart and `FROM_CPU` plays both parts; which mechanism backs
+  a level's software entry is behind the chip's controller. The executors'
+  wakes are `FROM_CPU` sources on either hart.
+- A level between the handlers and the application runs one task: an entry
+  of the image's table (`oer-chips-family-platform-interrupt-table`) of
+  class `LevelTask` whose part lists no source, with the token, cell and
+  binding every entry has and a handler `fn(&mut Part)` that runs the task
+  to its end on each entry. Its line is a software line of its own that its
+  raisers pend; `Router::bind` places the part, binds the line
+  hardware-vectored and positive-edge (the trigger follows from the class: a
+  routed line is level-triggered), its pending bit cleared before its
+  enable, routes nothing and returns its `Bound` proof. The image exports
+  the task in a table of its own, `__OER_LEVEL_TASK_TABLE` (line, level,
+  hart, handler), with no source and no class, and never in the source
+  table. At compile time: a task's part lists no source and every other
+  entry's lists one; one task a level and hart, never on an executor's
+  level, and no entry with a source on its level of its hart. Hardware
+  reaches a level's task only through a handler above it, which pends it.
+  The image checks read both tables: a task's code is strict as a hardware
+  handler's, and its level is one level of its hart's interrupt stack
+  bound.
 - Each hart has its own local interrupt controller (the S31 CLIC is
   context-relative) and one router. The root pairs each hart's CLIC parts,
   which the PAC claims once per hart, with that hart's route bank in one
@@ -1138,7 +1168,7 @@ lifecycle operations the actor invokes; the Bluetooth driver implements it.
   then waits on its doorbell versus the PHY tracking deadline. A timer win
   calls `track_concurrent_phy`, which evaluates demand and runs due work.
   The default period is 1 s, with eligibility at `previous + period + 1 µs`.
-  SYSTIMER Alarm0 at P3 acknowledges and pends P2; the P2 executor dispatches
+  SYSTIMER Alarm0 at P4 (`radio`) acknowledges and pends P2; the P2 executor dispatches
   timers and polls the actor. A failed tick, or a tracking deadline the
   clock cannot hold, ends the actor's run with a `TrackingFault`: the actor
   keeps every owner, and the image records the fault's class and variant

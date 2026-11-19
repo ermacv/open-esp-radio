@@ -508,6 +508,10 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         self.write_line(line, LineWrite::Bind(control));
     }
 
+    fn bind_task(&mut self, line: Line, control: Control) {
+        self.write_line(line, LineWrite::Task(control));
+    }
+
     fn disable(&mut self, line: Line) {
         self.write_line(line, LineWrite::Disable);
     }
@@ -518,12 +522,9 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         let holds = match expected {
             LineExpectation::Disabled => !enabled,
             LineExpectation::Bound(control) => {
-                let attributes = self.clic.read_attr(index);
-                enabled
-                    && attributes.shv()
-                    && attributes.trig_variant() == clic::attr::Trig::PositiveLevel
-                    && self.clic.read_ctl(index).ctl() == control.bits()
+                self.holds(index, ROUTED_TRIGGER, control) && enabled
             }
+            LineExpectation::Task(control) => self.holds(index, TASK_TRIGGER, control) && enabled,
         };
         if holds {
             Ok(())
@@ -533,12 +534,31 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     }
 }
 
-/// What a line write leaves: the line disabled, or bound at a control byte.
+/// What a line write leaves: the line disabled, bound for its routed source
+/// at a control byte, or a level task's at a control byte.
 #[derive(Clone, Copy, Debug)]
 enum LineWrite {
     Disable,
     Bind(Control),
+    Task(Control),
 }
+
+/// The trigger of a bound line whose source is routed to it: level, its
+/// pending bit following the source.
+///
+/// SOURCE: `ESP_HAL_1F646C5_CLIC_LEVEL_LINES` in the register model.
+const ROUTED_TRIGGER: clic::attr::Trig = clic::attr::Trig::PositiveLevel;
+
+/// The trigger of a level task's line: positive edge, the one trigger whose
+/// pending bit is software's, so that its raisers pend it and the vectored
+/// entry clears it.
+///
+/// SOURCE: `HW1_S31_CLIC_20261026` (a software-set positive-edge pending bit
+/// vectored once and read clear after the entry);
+/// `HW_S31_CLIC_LEVELS_SOFTWARE_PEND_20261118` and
+/// `HW_S31_CLIC_LINE_BYTES_20261119` (line 34 bound positive-edge, its
+/// pending bit cleared before its enable, entered once a pend).
+const TASK_TRIGGER: clic::attr::Trig = clic::attr::Trig::PositiveEdge;
 
 /// A line's four byte registers as they read, for a record
 /// ([`LineObservation::of_bytes`]).
@@ -588,51 +608,88 @@ line_bytes!(ClicObserver);
 enum LineStep {
     /// The enable byte off.
     EnableOff,
-    /// The attribute byte (vectored or not, the level trigger) and the
-    /// level byte.
-    AttributesAndLevel { vectored: bool, control: Control },
+    /// The attribute byte (vectored or not, the trigger) and the level
+    /// byte.
+    AttributesAndLevel {
+        vectored: bool,
+        trigger: clic::attr::Trig,
+        control: Control,
+    },
+    /// The pending byte cleared: only of a level task's line, whose trigger
+    /// is already an edge.
+    PendingClear,
     /// The enable byte on.
     EnableOn,
 }
 
 /// A line's bind and take-down, one byte a step, in order. The bind: the
-/// enable off if it was on, the attributes (vectored, the level trigger)
-/// and the level, then the enable on last, so the line is never enabled
-/// with another level or trigger than its binding's. The take-down: the
-/// enable off first, then the attributes and the level of a disabled line
-/// (not vectored, level byte 0).
+/// enable off if it was on, the attributes (vectored, the trigger) and the
+/// level, then the enable on last, so the line is never enabled with
+/// another level or trigger than its binding's. The take-down: the enable
+/// off first, then the attributes and the level of a disabled line (not
+/// vectored, level byte 0).
 ///
-/// A bound line is hardware-vectored and level-triggered, the chip's one
-/// trigger of a bound line; its pending byte follows its source and is not
-/// the router's: neither the bind nor the take-down reads or writes it.
+/// A bound line is hardware-vectored. A routed line is level-triggered
+/// ([`ROUTED_TRIGGER`]): its pending byte follows its source and is not the
+/// router's, so neither its bind nor the take-down reads or writes it. A
+/// level task's line is edge-triggered ([`TASK_TRIGGER`]): its pending byte
+/// is software's, and its bind clears it after the trigger is an edge and
+/// before the enable, so the line enters for its raisers' pends alone.
 ///
 /// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
 /// `:113-160` (the four byte registers); `HW_S31_CLIC_LINE_BYTES_20261119`
-/// (a store of one byte changes it and no other); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES`
-/// in the register model (the bound lines are level-triggered).
-fn line_steps(write: LineWrite, enabled: bool) -> [Option<LineStep>; 3] {
+/// (a store of one byte changes it and no other).
+fn line_steps(write: LineWrite, enabled: bool) -> [Option<LineStep>; 4] {
     let off = enabled.then_some(LineStep::EnableOff);
     match write {
         LineWrite::Bind(control) => [
             off,
             Some(LineStep::AttributesAndLevel {
                 vectored: true,
+                trigger: ROUTED_TRIGGER,
                 control,
             }),
+            Some(LineStep::EnableOn),
+            None,
+        ],
+        LineWrite::Task(control) => [
+            off,
+            Some(LineStep::AttributesAndLevel {
+                vectored: true,
+                trigger: TASK_TRIGGER,
+                control,
+            }),
+            Some(LineStep::PendingClear),
             Some(LineStep::EnableOn),
         ],
         LineWrite::Disable => [
             off,
             Some(LineStep::AttributesAndLevel {
                 vectored: false,
+                trigger: ROUTED_TRIGGER,
                 control: Control::from_bits(0),
             }),
+            None,
             None,
         ],
     }
 }
 
 impl<B: RouteBank, C: Placement> InterruptController<B, C> {
+    /// Whether the line's attributes are vectored with `trigger` and its
+    /// level byte is `control`'s.
+    fn holds(
+        &self,
+        index: Index<{ clic::ip::COUNT }>,
+        trigger: clic::attr::Trig,
+        control: Control,
+    ) -> bool {
+        let attributes = self.clic.read_attr(index);
+        attributes.shv()
+            && attributes.trig_variant() == trigger
+            && self.clic.read_ctl(index).ctl() == control.bits()
+    }
+
     /// The line's bind or take-down ([`line_steps`]), each step one byte.
     fn write_line(&mut self, line: Line, write: LineWrite) {
         let index = line.ctrl;
@@ -642,15 +699,21 @@ impl<B: RouteBank, C: Placement> InterruptController<B, C> {
                 LineStep::EnableOff => self.clic.modify_ie(index, |byte| {
                     byte.set_ie(false);
                 }),
-                LineStep::AttributesAndLevel { vectored, control } => {
+                LineStep::AttributesAndLevel {
+                    vectored,
+                    trigger,
+                    control,
+                } => {
                     self.clic.modify_attr(index, |byte| {
-                        byte.set_shv(vectored)
-                            .set_trig(clic::attr::Trig::PositiveLevel);
+                        byte.set_shv(vectored).set_trig(trigger);
                     });
                     self.clic.modify_ctl(index, |byte| {
                         byte.set_ctl(control.bits());
                     });
                 }
+                LineStep::PendingClear => self.clic.modify_ip(index, |byte| {
+                    byte.set_ip(false);
+                }),
                 LineStep::EnableOn => self.clic.modify_ie(index, |byte| {
                     byte.set_ie(true);
                 }),
