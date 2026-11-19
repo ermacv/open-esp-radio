@@ -200,6 +200,64 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
     }
 
+    /// TEMPORARY experiment (`tasks/223`, branch `probe/rx-rebind-4` only,
+    /// never merged): the receive filter's four policy words, each as its
+    /// twenty named fields in their bit order (bit 17 `AUTO_ACK_DISABLE`),
+    /// then the station's and the access point's interface address words:
+    /// the low four bytes, and the high two bytes with `RX_POLICY_ENABLE`
+    /// at bit 16. Read without effect; it decides nothing.
+    pub fn experiment_receive_filter_words(&self) -> [u32; 8] {
+        let filter = &self.mac.wifi_mac_rx_filter;
+        let word = |index: Index<4>| {
+            let p = filter.read_policy(index);
+            [
+                p.dump_unicast_check_da(),
+                p.dump_unicast_check_bssid(),
+                p.dump_broadcast_check_bssid(),
+                p.abort_group(),
+                p.pass_beacon(),
+                p.bit_5_opaque(),
+                p.dump_management_not_check_bssid(),
+                p.receive_broadcast_check_bssid(),
+                p.receive_unicast_check_bssid(),
+                p.receive_unicast_check_da(),
+                p.receive_management_not_check_bssid(),
+                p.to_ds(),
+                p.from_ds(),
+                p.check_bssid(),
+                p.check_da(),
+                p.check_broadcast_bssid(),
+                p.not_group(),
+                p.auto_ack_disable(),
+                p.security_error_disable(),
+                p.security_tkip_error_force_on(),
+            ]
+            .iter()
+            .enumerate()
+            .fold(0_u32, |w, (bit, set)| w | u32::from(*set) << bit)
+        };
+        let address = |interface: MacInterface| {
+            let low = self.interface.read_address_low(interface.index());
+            let high = self.interface.read_address_high(interface.index());
+            [
+                low.bytes_0_3(),
+                u32::from(high.bytes_4_5()) | u32::from(high.rx_policy_enable()) << 16,
+            ]
+        };
+        let [sta_low, sta_high] = address(MacInterface::Station);
+        let [ap_low, ap_high] = address(MacInterface::AccessPoint);
+        [
+            word(Index::<4>::constant::<0>()),
+            word(Index::<4>::constant::<1>()),
+            word(Index::<4>::constant::<2>()),
+            word(Index::<4>::constant::<3>()),
+            sta_low,
+            sta_high,
+            ap_low,
+            ap_high,
+        ]
+    }
+
     /// Snapshot every register frontier that can suppress associated-STA
     /// beacons while still admitting directed management traffic.
     pub fn sta_receive_policy_snapshot(&self) -> MacStaReceivePolicySnapshot {

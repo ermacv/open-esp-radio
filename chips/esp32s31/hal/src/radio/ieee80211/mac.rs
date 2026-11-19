@@ -271,6 +271,12 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().request_mac_channel_stop_without_power_save();
     }
 
+    /// TEMPORARY experiment (`tasks/223`, probe branch only): the receive
+    /// filter's policy words and the interface address words, read.
+    pub fn experiment_receive_filter_words(&self) -> [u32; 8] {
+        self.pac().experiment_receive_filter_words()
+    }
+
     /// Sample the hardware activity field used by the bounded HAL poll.
     pub fn channel_active_state(&self) -> u8 {
         self.pac().mac_channel_active_state()

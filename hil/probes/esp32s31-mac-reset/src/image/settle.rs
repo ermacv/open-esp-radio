@@ -114,13 +114,27 @@ enum Air {
 ///   nodes whose prefix changed after it;
 /// - `6`: frames of the sender checked after the restart | bad << 16;
 /// - `7`: units received after the restart | the sender's frames among
-///   them << 16.
-type Row = [u32; 8];
+///   them << 16;
+/// - `8`: over the window after the start, the MAC's MPDU counter's advance
+///   << 16 | its data-success counter's (`tasks/223`: what the receiver
+///   acknowledged; run 200 saw it still while no ACK went);
+/// - `9` (`tasks/223`): the receive filter's words
+///   (`experiment_receive_filter_words`) against the first start's: which
+///   of the eight differ before the stop | after the start << 8, and
+///   `AUTO_ACK_DISABLE` of the four policies before << 16 | after << 20.
+type Row = [u32; 10];
+
+/// The first start's filter words and the first sets that differ from
+/// them after a start.
+const DIFFERING: usize = 16;
 
 #[derive(bytemuck::Zeroable)]
 pub(super) struct Rows {
     rows: [Row; ROWS_MAX],
     used: usize,
+    pub(super) reference: [u32; 8],
+    pub(super) differing: [(u32, [u32; 8]); DIFFERING],
+    pub(super) differing_used: usize,
 }
 
 pub(super) static ROWS: oer_portable_memory::zeroed::ZeroedStatic<Rows> =
@@ -216,6 +230,7 @@ pub(super) async fn series(
     };
     let mut before = Record::new();
     let mut record = Record::new();
+    rows.reference = access.wifi_mac_hal().experiment_receive_filter_words();
     for part in [Part::A2, Part::Reset] {
         mark(110 + part as u32);
         let end = EmbassyClock
@@ -230,9 +245,10 @@ pub(super) async fn series(
             if let Some(count) = counts.get_mut(air as usize) {
                 *count = count.saturating_add(1);
             }
-            let mut row: Row = [0; 8];
+            let mut row: Row = [0; 10];
             row[0] = (part as u32) << 28 | (air as u32) << 24 | (index & 0x00ff_ffff);
             wait_micros(u64::from(spread.next(SPREAD_US))).await;
+            let before_stop = access.wifi_mac_hal().experiment_receive_filter_words();
             let addresses = addresses(storage).map_err(|code| (phase::RING, 0x5e10 | code))?;
             let frozen = ring
                 .freeze_cursor(access.rx_dma())
@@ -349,8 +365,18 @@ pub(super) async fn series(
                 }
             };
             // A start as the first: its frames by their counters.
+            let after_start = access.wifi_mac_hal().experiment_receive_filter_words();
+            row[9] = filter_row(&rows.reference, &before_stop, &after_start);
+            if after_start != rows.reference && rows.differing_used < DIFFERING {
+                if let Some(slot) = rows.differing.get_mut(rows.differing_used) {
+                    *slot = (row[0], after_start);
+                }
+                rows.differing_used += 1;
+            }
+            let counted = statistics(&access);
             let (checked, bad, units) =
                 check_window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
+            row[8] = advance(counted, statistics(&access), 0, 1);
             row[6] = checked & 0xffff | bad << 16;
             row[7] = units & 0xffff | checked << 16;
             rows.push(row);
@@ -387,6 +413,25 @@ fn restart_after_stop(
         .map_err(|_| (phase::RESTART, 0x5e21))?;
     access.wifi_mac_hal().start_mac_runtime(&ring);
     Ok(ring)
+}
+
+/// The filter words of one stop against the first start's (`Row`'s `9`).
+fn filter_row(reference: &[u32; 8], before: &[u32; 8], after: &[u32; 8]) -> u32 {
+    let mask = |words: &[u32; 8]| {
+        words
+            .iter()
+            .zip(reference)
+            .enumerate()
+            .fold(0_u32, |m, (i, (w, r))| m | u32::from(w != r) << i)
+    };
+    let ack = |words: &[u32; 8]| {
+        words
+            .iter()
+            .take(4)
+            .enumerate()
+            .fold(0_u32, |m, (i, w)| m | (w >> 17 & 1) << i)
+    };
+    mask(before) | mask(after) << 8 | ack(before) << 16 | ack(after) << 20
 }
 
 /// Wait until `delay` microseconds after the cycle `start`: by the cycle

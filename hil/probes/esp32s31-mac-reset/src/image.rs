@@ -478,6 +478,14 @@ async fn report(
     }
     #[cfg(feature = "settle")]
     if let Ok(rows) = settle::ROWS_DONE.take() {
+        line.clear();
+        let _ = writeln!(line, "FILTER reference {:x?}", rows.reference);
+        usb::text(&mut console, line.as_bytes()).await;
+        for (at, words) in rows.differing.iter().take(rows.differing_used) {
+            line.clear();
+            let _ = writeln!(line, "FILTER differs {at:x} {words:x?}");
+            usb::text(&mut console, line.as_bytes()).await;
+        }
         for row in rows.rows() {
             line.clear();
             let _ = line.push_str("S");
@@ -494,20 +502,38 @@ async fn report(
             let mut stops = 0_u32;
             let mut changed = 0_u32;
             let mut bad = 0_u32;
+            let mut checked = 0_u32;
+            let mut silent = 0_u32;
+            let mut first_silent = u32::MAX;
+            let mut filter_differs = 0_u32;
+            let mut silent_with_filter = 0_u32;
             for row in rows.rows().iter().filter(|row| row[0] >> 28 == part) {
+                let differs = row[9] >> 8 & 0xff != 0;
+                filter_differs += u32::from(differs);
                 stops += 1;
                 changed += u32::from(row[4] & 0o5555 != 0);
                 bad += row[6] >> 16;
+                checked += row[6] & 0xffff;
+                // `tasks/223`: a start after which the sender's frames came
+                // and the MAC counted no data success.
+                if row[7] >> 16 != 0 && row[8] & 0xffff == 0 {
+                    silent += 1;
+                    silent_with_filter += u32::from(differs);
+                    first_silent = first_silent.min(row[0] & 0x00ff_ffff);
+                }
             }
             line.clear();
-            let verdict = if stops > 0 && changed == 0 && bad == 0 {
+            let verdict = if stops > 0 && changed == 0 && bad == 0 && silent == 0 {
                 "pass"
             } else {
                 "fail"
             };
             let _ = writeln!(
                 line,
-                "SETTLE {name} stops={stops} changed={changed} bad_after_start={bad} verdict={verdict}"
+                "SETTLE {name} stops={stops} changed={changed} checked_after_start={checked} \
+                 bad_after_start={bad} silent_starts={silent} first_silent={first_silent} \
+                 filter_differs_after_start={filter_differs} silent_with_filter_differing={silent_with_filter} \
+                 verdict={verdict}"
             );
             usb::text(&mut console, line.as_bytes()).await;
         }
