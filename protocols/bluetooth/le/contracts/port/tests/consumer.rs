@@ -522,9 +522,15 @@ fn a_connection_runs_from_the_install_to_the_release() {
                 };
                 homes.push(home);
             }
+            assert_eq!(
+                (homes.len(), held.len()),
+                (2, 2),
+                "both ends and their receptions"
+            );
             let (end, tx) = round.transmitted().unwrap();
             assert_eq!(end, TxEnd::Transmitted);
             assert_eq!(round.close(), Rest::Quiet);
+            assert!(port.receptions.is_empty(), "both nodes are held");
 
             // A later round reads the held PDUs and releases them.
             let mut round = port.round();
@@ -535,6 +541,7 @@ fn a_connection_runs_from_the_install_to_the_release() {
             let Rest::Quiet = round.close() else {
                 panic!("nothing more");
             };
+            assert_eq!(port.receptions.len(), 2, "both nodes went back");
 
             port.withdraw(RoleRef::Connection(&role));
             let [first, second]: [ConnEvent<'_>; 2] = homes.try_into().ok().unwrap();

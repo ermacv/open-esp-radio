@@ -172,20 +172,6 @@ impl<K: LeCapabilities> Clone for ChannelSpacing<K> {
 
 impl<K: LeCapabilities> Copy for ChannelSpacing<K> {}
 
-impl<K: LeCapabilities> PartialEq for ChannelSpacing<K> {
-    fn eq(&self, other: &Self) -> bool {
-        self.spacing == other.spacing
-    }
-}
-
-impl<K: LeCapabilities> Eq for ChannelSpacing<K> {}
-
-impl<K: LeCapabilities> core::fmt::Debug for ChannelSpacing<K> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.spacing.fmt(f)
-    }
-}
-
 impl<K: LeCapabilities> ChannelSpacing<K> {
     /// `spacing`, when it is longer than `K`'s preparation lead.
     pub const fn new(spacing: RadioDuration<LeRadio>) -> Option<Self> {
@@ -299,28 +285,6 @@ impl<K: LeCapabilities> Clone for AdvertisingEvent<K> {
 }
 
 impl<K: LeCapabilities> Copy for AdvertisingEvent<K> {}
-
-impl<K: LeCapabilities> PartialEq for AdvertisingEvent<K> {
-    fn eq(&self, other: &Self) -> bool {
-        self.anchor == other.anchor
-            && self.channels == other.channels
-            && self.channel_spacing == other.channel_spacing
-            && self.coexistence == other.coexistence
-    }
-}
-
-impl<K: LeCapabilities> Eq for AdvertisingEvent<K> {}
-
-impl<K: LeCapabilities> core::fmt::Debug for AdvertisingEvent<K> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("AdvertisingEvent")
-            .field("anchor", &self.anchor)
-            .field("channels", &self.channels)
-            .field("channel_spacing", &self.channel_spacing)
-            .field("coexistence", &self.coexistence)
-            .finish()
-    }
-}
 
 impl<K: LeCapabilities> AdvertisingEvent<K> {
     /// The channel and its anchor at `position` in channel order. An absent
@@ -669,6 +633,7 @@ mod tests {
             ConnectionPriority::new(0).map(ConnectionPriority::get),
             Some(0)
         );
+        assert_eq!(ConnectionPriority::MAX.get(), 15);
     }
 
     #[test]

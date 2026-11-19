@@ -6,8 +6,8 @@ error[E0080]: evaluation panicked: more advertising sets than the capabilities h
   |
  ::: src/geometry.rs
   |
-  |             panic!("more advertising sets than the capabilities hold");
-  |             ---------------------------------------------------------- in this macro invocation
+  |         Some(Misfit::AdvertisingSets) => panic!("more advertising sets than the capabilities hold"),
+  |                                          ---------------------------------------------------------- in this macro invocation
 
 note: erroneous constant encountered
  --> src/rights.rs

@@ -258,8 +258,8 @@ fn an_advertising_event_reserves_each_channel_from_the_shared_reservation() {
     assert!(placed(advertise(1_000), now).is_ok());
     // The last channel's reservation counts: 2 * spacing past the anchor.
     assert_eq!(
-        placed(advertise(1_000_000 - 2_000), now),
-        Err(Unplaced::BeyondHorizon)
+        placed(advertise(1_000_000 - 2_000), now).err(),
+        Some(Unplaced::BeyondHorizon)
     );
     // A spacing no longer than the preparation lead is not built.
     assert!(ChannelSpacing::<Peripheral>::new(RadioDuration::from_micros(500)).is_none());

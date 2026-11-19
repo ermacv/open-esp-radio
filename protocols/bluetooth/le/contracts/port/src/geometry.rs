@@ -3,7 +3,100 @@
 
 use core::marker::PhantomData;
 
-use crate::{LeCapabilities, rights::MAX_INDEX};
+use crate::{LeCapabilities, LeRadioCapabilities, rights::MAX_INDEX};
+
+/// The counts of an installation's geometry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Counts {
+    pub(crate) advertising: usize,
+    pub(crate) scanners: usize,
+    pub(crate) connections: usize,
+    pub(crate) events: usize,
+    pub(crate) transmit: usize,
+    pub(crate) receive: usize,
+    pub(crate) tests: usize,
+}
+
+/// Which relation of the geometry does not hold: the build's failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Misfit {
+    EventsBelowTwo,
+    IndexBeyondAnOctet,
+    NodeBeyondTwoOctets,
+    Scanners,
+    Tests,
+    AdvertisingSets,
+    Connections,
+    ConnectionEvents,
+    TransmitPlaces,
+    ReceiveNodes,
+    NoAdvertising,
+    NoScanning,
+    NoConnections,
+    NoTest,
+}
+
+/// The first relation of `counts` that `caps` does not hold, in this
+/// order.
+pub(crate) const fn misfit(caps: &LeRadioCapabilities, counts: Counts) -> Option<Misfit> {
+    let limits = caps.limits;
+    let Counts {
+        advertising,
+        scanners,
+        connections,
+        events,
+        transmit,
+        receive,
+        tests,
+    } = counts;
+    if events < 2 {
+        return Some(Misfit::EventsBelowTwo);
+    }
+    if advertising > MAX_INDEX
+        || connections > MAX_INDEX
+        || events > MAX_INDEX
+        || transmit > MAX_INDEX
+    {
+        return Some(Misfit::IndexBeyondAnOctet);
+    }
+    if receive > u16::MAX as usize {
+        return Some(Misfit::NodeBeyondTwoOctets);
+    }
+    if scanners > 1 {
+        return Some(Misfit::Scanners);
+    }
+    if tests > 1 {
+        return Some(Misfit::Tests);
+    }
+    if advertising > limits.advertising_sets {
+        return Some(Misfit::AdvertisingSets);
+    }
+    if connections > limits.connections {
+        return Some(Misfit::Connections);
+    }
+    if connections > 0 && events > limits.connection_events {
+        return Some(Misfit::ConnectionEvents);
+    }
+    if connections > 0 && transmit > limits.transmit_places {
+        return Some(Misfit::TransmitPlaces);
+    }
+    if receive > limits.receive_nodes {
+        return Some(Misfit::ReceiveNodes);
+    }
+    if advertising > 0 && !caps.legacy_advertising.any() {
+        return Some(Misfit::NoAdvertising);
+    }
+    if scanners > 0 && !caps.scanning() {
+        return Some(Misfit::NoScanning);
+    }
+    if connections > 0 && caps.peripheral_connection.is_none() {
+        return Some(Misfit::NoConnections);
+    }
+    if tests > 0 && !caps.direct_test_mode {
+        return Some(Misfit::NoTest);
+    }
+    None
+}
 
 /// The geometry `ADV`, `SCAN`, `CONN`, `EVENTS`, `TX`, `RX`, `TEST` of an
 /// installation of the capabilities `K`.
@@ -30,51 +123,46 @@ impl<
 > Geometry<K, ADV, SCAN, CONN, EVENTS, TX, RX, TEST>
 {
     /// Fails the build when the geometry does not fit `K`. Named only in
-    /// inline constants: the mint's and a round's.
-    pub(crate) const CHECKED: () = {
-        let caps = K::CAPS;
-        let limits = caps.limits;
-        if EVENTS < 2 {
-            panic!("a connection has at least two event places: the event out and the next");
+    /// inline constants and constant items: the mint's and a round's.
+    pub(crate) const CHECKED: () = match misfit(
+        &K::CAPS,
+        Counts {
+            advertising: ADV,
+            scanners: SCAN,
+            connections: CONN,
+            events: EVENTS,
+            transmit: TX,
+            receive: RX,
+            tests: TEST,
+        },
+    ) {
+        None => (),
+        Some(Misfit::EventsBelowTwo) => {
+            panic!("a connection has at least two event places: the event out and the next")
         }
-        if ADV > MAX_INDEX || CONN > MAX_INDEX || EVENTS > MAX_INDEX || TX > MAX_INDEX {
-            panic!("an instance or a slot is named by one octet");
+        Some(Misfit::IndexBeyondAnOctet) => panic!("an instance or a slot is named by one octet"),
+        Some(Misfit::NodeBeyondTwoOctets) => panic!("a receive node is named by two octets"),
+        Some(Misfit::Scanners) => panic!("an installation has one scanner at most"),
+        Some(Misfit::Tests) => panic!("an installation has one test session at most"),
+        Some(Misfit::AdvertisingSets) => panic!("more advertising sets than the capabilities hold"),
+        Some(Misfit::Connections) => panic!("more connections than the capabilities hold"),
+        Some(Misfit::ConnectionEvents) => {
+            panic!("more event places a connection than the capabilities hold")
         }
-        if RX > u16::MAX as usize {
-            panic!("a receive node is named by two octets");
+        Some(Misfit::TransmitPlaces) => {
+            panic!("more transmit places a connection than the capabilities hold")
         }
-        if SCAN > 1 {
-            panic!("an installation has one scanner at most");
+        Some(Misfit::ReceiveNodes) => panic!("more receive nodes than the capabilities hold"),
+        Some(Misfit::NoAdvertising) => {
+            panic!("advertising sets with capabilities that serve no advertising")
         }
-        if TEST > 1 {
-            panic!("an installation has one test session at most");
-        }
-        if ADV > limits.advertising_sets {
-            panic!("more advertising sets than the capabilities hold");
-        }
-        if CONN > limits.connections {
-            panic!("more connections than the capabilities hold");
-        }
-        if CONN > 0 && EVENTS > limits.connection_events {
-            panic!("more event places a connection than the capabilities hold");
-        }
-        if CONN > 0 && TX > limits.transmit_places {
-            panic!("more transmit places a connection than the capabilities hold");
-        }
-        if RX > limits.receive_nodes {
-            panic!("more receive nodes than the capabilities hold");
-        }
-        if ADV > 0 && !caps.legacy_advertising.any() {
-            panic!("advertising sets with capabilities that serve no advertising");
-        }
-        if SCAN > 0 && !caps.scanning() {
-            panic!("a scanner with capabilities that serve no scanning");
-        }
-        if CONN > 0 && caps.peripheral_connection.is_none() {
-            panic!("connections with capabilities that serve none");
-        }
-        if TEST > 0 && !caps.direct_test_mode {
-            panic!("a test session with capabilities that serve no Direct Test Mode");
+        Some(Misfit::NoScanning) => panic!("a scanner with capabilities that serve no scanning"),
+        Some(Misfit::NoConnections) => panic!("connections with capabilities that serve none"),
+        Some(Misfit::NoTest) => {
+            panic!("a test session with capabilities that serve no Direct Test Mode")
         }
     };
 }
+
+#[cfg(test)]
+mod tests;

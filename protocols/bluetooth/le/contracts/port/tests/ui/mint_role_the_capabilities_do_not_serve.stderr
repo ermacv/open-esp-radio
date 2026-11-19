@@ -6,7 +6,7 @@ error[E0080]: evaluation panicked: a test session with capabilities that serve n
   |
  ::: src/geometry.rs
   |
-  |             panic!("a test session with capabilities that serve no Direct Test Mode");
+  |             panic!("a test session with capabilities that serve no Direct Test Mode")
   |             ------------------------------------------------------------------------- in this macro invocation
 
 note: erroneous constant encountered

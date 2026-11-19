@@ -218,12 +218,6 @@ impl<K: LeCapabilities> PduLen<K> {
     }
 }
 
-impl<K: LeCapabilities> core::fmt::Debug for PduLen<K> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.octets.fmt(f)
-    }
-}
-
 /// The seal of a round's parts: only a [`Round`] has one, so a round's
 /// reads and releases are written only inside a round's borrow.
 #[derive(Debug)]
