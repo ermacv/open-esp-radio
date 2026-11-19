@@ -236,10 +236,23 @@ and retention contracts.
 - `Sync` of the place;
 - `Released::assume`, the release proof's one constructor. Each kind of release
   is a HAL atom that calls it, citing its stand record;
+- `Quiet::assume`, the borrowed release's one constructor (`unsafe fn`): the
+  claim that the hardware does not touch one lent buffer while the borrow
+  lives, read through the safe `Arena::inspect`, which lends `f` the buffer's
+  `Handle` by shared reference for the call (bytes and floor read; nothing
+  written or moved; the `Lent` stays). The HAL atom that makes one is the
+  receive ring's chain copy, citing `HW_RX_CHAIN_LAPS_20261117`;
 - `unsafe trait Brand`. Its one `unsafe impl` is the one that `arena!` writes:
   the brand names its own place and returned set; that expansion is counted as
   `portable/memory`'s and builds in a crate that forbids `unsafe`, where a
   hand-written `unsafe impl Brand` does not (`tests/ui/arena_under_forbid.rs`);
+The HAL's receive ring (`radio::ieee80211::dma::receive`) makes two release
+proofs: `Released::assume` when a completed single unit is exchanged for a
+spare (`HW_RX_REBIND_BEFORE_LAST_20261118`, `HW_RX_REBIND_AT_LAST_20261118`),
+and `Quiet::assume` while a completed chain is copied in place, before its
+buffers are re-armed (`HW_RX_CHAIN_LAPS_20261117`). Both lie at or before the
+`LAST` the walker reported at the service's start.
+
 - `unsafe trait PlacedStatic`. The HAL's placed static (`DmaStatic`, made
   only by `dma_static!`) implements it in its own home, the placement
   constructor (`system/memory/dma_static.rs`): the claim takes the static's

@@ -240,6 +240,18 @@ impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
         }
     }
 
+    /// `f` gets the `Handle` of a lent buffer the hardware does not touch
+    /// while `quiet` lives, by shared reference, for the call: its bytes and
+    /// its floor can be read, nothing can be written or moved. The `Lent`
+    /// stays where it is; nothing changes owner.
+    pub fn inspect<R>(&self, quiet: &Quiet<'_, B>, f: impl FnOnce(&Handle<B>) -> R) -> R {
+        let handle = Handle {
+            index: quiet.lent.index,
+            span: quiet.span,
+        };
+        f(&handle)
+    }
+
     fn cpu_start(&self, index: u16, span: Span<B>) -> *mut u8 {
         let offset = buffer_offset::<B>(index) as usize + usize::from(span.start);
         self.place.bytes.get().cast::<u8>().wrapping_add(offset)
@@ -453,6 +465,29 @@ impl<B: Brand> Released<B> {
             index: lent.index,
             span,
         }
+    }
+}
+
+/// A borrowed release: the claim that the hardware does not read or write
+/// one lent buffer while this lives, with the span of what it wrote there.
+/// Read through [`Arena::inspect`]; the buffer stays lent.
+pub struct Quiet<'q, B: Brand> {
+    lent: &'q Lent<B>,
+    span: Span<B>,
+}
+
+impl<'q, B: Brand> Quiet<'q, B> {
+    /// The borrowed release of `lent`, for as long as the borrow lives.
+    ///
+    /// # Safety
+    ///
+    /// The hardware neither reads nor writes `lent`'s buffer from the call
+    /// until the returned value is dropped, and `span` lies inside what it
+    /// wrote. The HAL atom that observed this calls it, citing its stand
+    /// record, as for [`Released::assume`].
+    #[allow(unsafe_code, reason = "the borrowed release proof's one constructor")]
+    pub const unsafe fn assume(lent: &'q Lent<B>, span: Span<B>) -> Self {
+        Self { lent, span }
     }
 }
 

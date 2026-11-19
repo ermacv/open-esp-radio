@@ -1,0 +1,25 @@
+error[E0308]: mismatched types
+  --> tests/ui/arena_inspect_lends_a_shared_handle.rs:42:51
+   |
+42 |     arena.inspect(quiet, |handle| arena.bytes_mut(handle).fill(0)); // ui-error: E0308
+   |                                         --------- ^^^^^^ types differ in mutability
+   |                                         |
+   |                                         arguments to this method are incorrect
+   |
+   = note: expected mutable reference `&mut oer_portable_memory::arena::Handle<Rx>`
+                      found reference `&oer_portable_memory::arena::Handle<Rx>`
+note: method defined here
+  --> src/arena.rs
+   |
+   |     pub fn bytes_mut<'h>(&self, handle: &'h mut Handle<B>) -> &'h mut [u8] {
+   |            ^^^^^^^^^
+
+error[E0521]: borrowed data escapes outside of closure
+  --> tests/ui/arena_inspect_lends_a_shared_handle.rs:48:35
+   |
+47 | pub fn keep<'a>(arena: &RxArena, quiet: &Quiet<'_, Rx>, kept: &mut Option<&'a Handle<Rx>>) {
+   |                                                         ---- `kept` declared here, outside of the closure body
+48 |     arena.inspect(quiet, |handle| *kept = Some(handle)); // ui-error: E0521
+   |                           ------  ^^^^^^^^^^^^^^^^^^^^ `handle` escapes the closure body here
+   |                           |
+   |                           `handle` is a reference that is only valid in the closure body

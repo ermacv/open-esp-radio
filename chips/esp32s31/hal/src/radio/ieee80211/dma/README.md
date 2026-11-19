@@ -53,6 +53,24 @@ unit (`RxDmaStorage::land_unit`) and the MAC's reading of a published chain
 ring halts or rebuilds only on a proof naming its own arena, and a proof for
 another arena poisons the arena until radio reset.
 
+## The receive ring over the arena
+
+`receive::RxRing` is the receive ring over 5.1's arena (`oer_portable_memory::arena`):
+`N` descriptors and R after them, every one always holding a buffer lent
+to the walker, and the walker's registers. `publish_cold` arms and links
+the ring, R and BASE = R, in its place; `enable_walker` starts the walker.
+`serve(settle, f)` lends `f` the completed units up to the `LAST` it read,
+in the ring's order: a single unit is exchanged for a spare (`lend`), a
+chain or a single is copied out through its `Frame` reader and re-armed in
+place (`copy_in_place`), or a unit is dropped and stays, ending the view.
+Each re-armed descriptor is linked behind the tail as it is armed; after
+`f` the ring rings the doorbell once if anything was re-armed, and again
+when NEXT stayed zero short of the tail. A unit's header is read from the
+floor of the `Handle` its holder has (`Arena::floor`), by the PAC's
+layouts; bytes 48 to 52 of the prefix, which the MAC writes late, hold no
+field of `WifiRxControlPrefix`. The old machines below give way to it with
+the ownership of the walker's registers.
+
 ## RX publication
 
 The RX arena publishes a descriptor table: the ring and, right after it, a

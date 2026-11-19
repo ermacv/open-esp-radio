@@ -48,13 +48,22 @@ macro_rules! floor_place {
 type FloorStatic<T> = HostStatic<T, FLOOR_BASE>;
 const FLOOR_BASE: u32 = 0x4000_3000;
 
+macro_rules! inspect_place {
+    (static $name:ident: $ty:ty = zeroed in $section:literal;) => {
+        static $name: HostStatic<$ty, INSPECT_BASE> = HostStatic(ZeroedStatic::new());
+    };
+}
+
+type InspectStatic<T> = HostStatic<T, INSPECT_BASE>;
+const INSPECT_BASE: u32 = 0x4000_4000;
+
 /// The tests' brands. In this crate the macro's own expansion is linted;
 /// in another crate it is not (`tests/ui/arena_under_forbid.rs`).
 #[allow(unsafe_code, reason = "this crate's own expansion of `arena!`")]
 mod brands {
     use super::{
-        FLOOR_BASE, FloorStatic, HostStatic, RX_BASE, RxStatic, TX_BASE, TxStatic, Window,
-        ZeroedStatic,
+        FLOOR_BASE, FloorStatic, HostStatic, INSPECT_BASE, InspectStatic, RX_BASE, RxStatic,
+        TX_BASE, TxStatic, Window, ZeroedStatic,
     };
 
     crate::arena! {
@@ -71,8 +80,13 @@ mod brands {
         pub(super) Fl: window Window, count 3, size 32, floor 16,
             placed by floor_place as FloorStatic in ".dma.bss.test_floor";
     }
+
+    crate::arena! {
+        pub(super) In: window Window, count 3, size 16, floor 0,
+            placed by inspect_place as InspectStatic in ".dma.bss.test_inspect";
+    }
 }
-use brands::{Fl, Rx, Tx};
+use brands::{Fl, In, Rx, Tx};
 
 const RX_BASE: u32 = 0x4000_1000;
 const TX_BASE: u32 = 0x4000_2000;
@@ -388,4 +402,36 @@ fn a_held_buffer_s_floor_copies_out_exactly_its_bytes_below_the_floor() {
     let last = handles.pop().expect("the third");
     let copy: [u8; 16] = arena.floor(&last).copy();
     assert_eq!(copy, core::array::from_fn(|k| (128 + k) as u8));
+}
+
+// The `In` brand's place: a borrowed release over a buffer the test lends
+// and, as the hardware, writes.
+#[test]
+fn a_borrowed_release_reads_the_lent_buffer_s_bytes_in_place() {
+    let (arena, fresh) = Arena::<In, { 3 * 16 }>::claim().expect("the first claim");
+    let mut handles: Vec<_> = fresh.collect();
+    let second = handles.remove(1);
+    let (lent, _) = arena.lend(second);
+    let place = arena.place.bytes.get().cast::<u8>();
+    for offset in 0..16 {
+        #[allow(unsafe_code, reason = "the test is the hardware")]
+        // SAFETY: the buffer is lent, inside the place; the test is the
+        // hardware.
+        unsafe {
+            place.add(16 + offset).write(offset as u8 + 1);
+        }
+    }
+    #[allow(unsafe_code, reason = "the test is the hardware, which is done")]
+    // SAFETY: no hardware touches the model's buffers.
+    let quiet = unsafe { Quiet::assume(&lent, Span::new(4, 8).expect("within the buffer")) };
+    let bytes = arena.inspect(&quiet, |handle| arena.bytes(handle).to_vec());
+    assert_eq!(
+        bytes,
+        (5..13).collect::<Vec<u8>>(),
+        "the lent buffer's own bytes, its span"
+    );
+    drop(quiet);
+    // The buffer is still lent: its release gives it back.
+    let handle = arena.reclaim(release(lent, 0, 16));
+    assert_eq!(arena.bytes(&handle), &(1..17).collect::<Vec<u8>>()[..]);
 }
