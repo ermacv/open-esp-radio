@@ -289561,7 +289561,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs "wifi assert" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
             pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
@@ -289698,7 +289698,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs "wifi assert" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
             pub const fn fatal_assertion(&self) -> bool {
                 (self.0 & 0x00200000) != 0
@@ -289955,7 +289955,7 @@ pub mod wifi_mac {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
+            /// Unmasked carrier of the vendor fatal assertion path; physical producer unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs "wifi assert" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank).
             #[inline]
             pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
@@ -290224,7 +290224,7 @@ pub mod wifi_mac {
                 (self.0 & 0x00100000) != 0
             }
 
-            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
+            /// Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs "wifi assert" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026.
             #[inline]
             pub const fn fatal_assertion(self) -> bool {
                 (self.0 & 0x00200000) != 0
