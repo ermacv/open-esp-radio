@@ -990,8 +990,14 @@ What a write does with the lanes it does not set:
   naming one `interrupt` implements `InterruptSource` with that source; a
   part naming several implements only `InterruptSources` with them, so it
   never stands where one source is expected. A
-  part that reaches an 8- or 16-bit word is refused: owners reach 32-bit
-  words only.
+  byte register (`width = 8`, a register of its own inside a word, such as
+  a CLIC line's pending, enable, attribute and control bytes) is reached
+  by its own byte access (`oer_portable_mmio`'s `read_byte`,
+  `write_byte`): its owner lists it in `BYTES` (`OWNED_BYTES`,
+  `OBSERVED_BYTES`) apart from its words, no byte lies in a word a block
+  lists, and the claims' check counts the word that holds it. A byte's
+  record word is the byte, zero-extended. A part that reaches a 16-bit
+  register, or splits a byte by field, is refused: nothing uses one.
 - **Hart-local claims.** A part or division on a `hart-local` instance is
   claimed once per hart: its partition member is
   `[Owner; super::HARTS]`, element `h` hart `h`'s own copy, accessed only

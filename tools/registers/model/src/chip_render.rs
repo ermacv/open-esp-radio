@@ -28,9 +28,10 @@
 //! - the memory layouts of the root, by the layouts renderer.
 //!
 //! A field the policy reads as an address has no setter until the type
-//! states its pointer facts. A narrow (8- or 16-bit) register has its
-//! register module but no owner accessor: a part that reaches one is
-//! refused. Analog-I2C types have no owners: their bytes are reached through
+//! states its pointer facts. A byte register (8 bits) is reached by its
+//! own byte accesses; a 16-bit register has its register module but no
+//! owner accessor: a part that reaches one is refused. Analog-I2C types
+//! have no owners: their bytes are reached through
 //! the HAL's analog host.
 
 use std::{collections::BTreeMap, fmt::Write as _};

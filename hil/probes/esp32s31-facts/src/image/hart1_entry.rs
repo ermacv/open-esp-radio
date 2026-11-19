@@ -38,7 +38,7 @@ const CONFIG: usize = 71;
 const THRESHOLD: usize = 72;
 const LINES: usize = 73;
 const TRAP: usize = 124;
-const _: () = if LINES + pac::clic::ctrl::COUNT > TRAP {
+const _: () = if LINES + pac::clic::ip::COUNT > TRAP {
     panic!("CLIC lines overlap the trap words");
 };
 /// Release wait and stall-status polls, both far above the expected path.
@@ -91,17 +91,17 @@ extern "C" fn facts_hart1_main() -> ! {
             THRESHOLD,
             u32::from(observer.read_int_thresh().cpu_int_thresh()),
         );
-        for n in 0..pac::clic::ctrl::COUNT {
+        for n in 0..pac::clic::ip::COUNT {
             let Ok(i) = Index::new(n) else { continue };
-            let w = clic.read_ctrl(i);
+            let attributes = clic.read_attr(i);
             store(
                 LINES + n,
-                u32::from(w.ctl())
-                    | (w.attr_mode().get() << 8)
-                    | (u32::from(w.ip()) << 16)
-                    | (u32::from(w.ie()) << 17)
-                    | (u32::from(w.attr_shv()) << 18)
-                    | (w.attr_trig().get() << 19),
+                u32::from(clic.read_ctl(i).ctl())
+                    | (attributes.mode().get() << 8)
+                    | (u32::from(clic.read_ip(i).ip()) << 16)
+                    | (u32::from(clic.read_ie(i).ie()) << 17)
+                    | (u32::from(attributes.shv()) << 18)
+                    | (attributes.trig().get() << 19),
             );
         }
     }

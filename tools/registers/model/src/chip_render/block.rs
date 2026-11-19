@@ -1360,13 +1360,24 @@ pub(super) enum Call {
         stride: u64,
         count: u64,
     },
+    /// One byte register, by its own byte access.
+    FixedByte(u64),
+    /// Every element of an array of byte registers.
+    IndexedByte {
+        offset: u64,
+        stride: u64,
+        count: u64,
+    },
 }
 
 impl Call {
     fn parameter(self) -> String {
         match self {
             Self::Fixed(_) => String::new(),
-            Self::Indexed { count, .. } => format!(", index: oer_portable_mmio::Index<{count}>"),
+            Self::Indexed { count, .. } | Self::IndexedByte { count, .. } => {
+                format!(", index: oer_portable_mmio::Index<{count}>")
+            }
+            Self::FixedByte(_) => String::new(),
         }
     }
 
@@ -1378,6 +1389,12 @@ impl Call {
                 stride,
                 count,
             } => format!("read_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index)"),
+            Self::FixedByte(offset) => format!("read_byte::<0x{offset:x}>()"),
+            Self::IndexedByte {
+                offset,
+                stride,
+                count,
+            } => format!("read_byte_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index)"),
         }
     }
 
@@ -1389,6 +1406,34 @@ impl Call {
                 stride,
                 count,
             } => format!("write_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index, {value})"),
+            Self::FixedByte(offset) => format!("write_byte::<0x{offset:x}>({value})"),
+            Self::IndexedByte {
+                offset,
+                stride,
+                count,
+            } => {
+                format!("write_byte_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index, {value})")
+            }
+        }
+    }
+
+    /// The same word as a byte register's access, for a narrow template.
+    pub(super) fn of(self, template: &Template<'_>) -> Self {
+        match (self, template.narrow()) {
+            (Self::Fixed(offset), true) => Self::FixedByte(offset),
+            (
+                Self::Indexed {
+                    offset,
+                    stride,
+                    count,
+                },
+                true,
+            ) => Self::IndexedByte {
+                offset,
+                stride,
+                count,
+            },
+            (call, _) => call,
         }
     }
 }
@@ -1414,6 +1459,7 @@ pub(super) fn render_methods(
     call: Call,
     mode: Mode,
 ) -> Result<(), Error> {
+    let call = call.of(template);
     let module = template.module();
     let index = call.parameter();
     let name = &template.key;
@@ -1769,6 +1815,12 @@ fn render_shared(
     call: Call,
 ) -> Result<(), Error> {
     let offsets = match call {
+        Call::FixedByte(_) | Call::IndexedByte { .. } => {
+            return Err(Error::new(
+                &template.key,
+                "a shared part reaches no byte register yet",
+            ));
+        }
         Call::Fixed(offset) => vec![(stem.to_owned(), offset)],
         Call::Indexed {
             offset,

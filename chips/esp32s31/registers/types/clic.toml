@@ -3,7 +3,7 @@ schema = 3
 
 [type]
 name = "CLIC"
-description = "The core-local interrupt controller (CLIC) of the hart that accesses it.\n\nWords 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, as 32-bit words: each line's word holds its pending, enable, attribute and control bytes. Production-router invariant: its bound vectored lines are level-triggered, so a write of the word that changes its enable or control writes back the pending bit read without losing or inventing an interrupt (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; this does not make concurrent whole-word edge updates safe. SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold. SOURCE: HW23_S31_P2_ARBITRATION_20261027 observes line17 before16 when both have IP1/IE1/CTL0x3f and MNLBITS3, with TIMG0 T0 and FROM_CPU2 assigned both ways on hart0. This supports highest-ID arbitration for that P2 pair; other lines, levels and harts remain unmeasured."
+description = "The core-local interrupt controller (CLIC) of the hart that accesses it.\n\nWords 0x0-0x1000: The core-local interrupt controller of the hart that accesses it, each line's word as four byte registers, its pending, enable, attribute and control bytes, each reached by its own byte access (SOURCE: ESP_IDF_4D59230D_S31_CLIC lines 113-160; HW_S31_CLIC_LINE_BYTES_20261119), so no write of one byte reads or writes another. The production router's bound vectored lines are level-triggered (SOURCE: ESP_HAL_1F646C5_CLIC_LEVEL_LINES). INT_CONFIG holds the number of level bits of each line's control byte. SOURCE: HW1_S31_CLIC_20261026 confirms one software-pending positive-edge vector on external line 16; SOURCE: HW1_S31_THRESHOLD_20261026 observes no handler entry after raising CSR mintthresh to 0x3f for CTL 0x1f in a 600-trial propagation-boundary sweep, including zero post-write NOPs and no readback; this is distinct from the legacy MMIO threshold. SOURCE: HW23_S31_P2_ARBITRATION_20261027 observes line17 before16 when both have IP1/IE1/CTL0x3f and MNLBITS3, with TIMG0 T0 and FROM_CPU2 assigned both ways on hart0. This supports highest-ID arbitration for that P2 pair; other lines, levels and harts remain unmeasured."
 sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW1_S31_CLIC_20261026", "HW1_S31_THRESHOLD_20261026", "HW23_S31_P2_ARBITRATION_20261027"]
 
 [review]
@@ -74,11 +74,12 @@ class = "plain"
 description = "Legacy machine interrupt threshold."
 
 [[registers]]
-name = "CTRL%s"
+name = "IP%s"
 offset = 0x1000
+width = 8
 dim = { count = 48, stride = 0x4 }
-description = "Line %s: pending, enable, attribute and level control. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 70-116: CTL resets to 0x1f, ATTR_MODE to 0b11, other described fields to zero; unassigned bits have no claimed reset. SOURCE: HW1_S31_CLIC_20261026 reads zero for the described fields in some core-local slots and ROM-modified external line state; this header image is not a universal post-ROM boot state."
-reset = { value = 0x1fc00000, mask = 0xffc70101 }
+description = "Line %s's pending byte, a byte register of its own. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 113-121 (BYTE_CLIC_INT_IP_REG(i) at the line's word, \"each of following registers are 8bits\"); HW_S31_CLIC_LINE_BYTES_20261119: a store of the byte entered an edge-triggered line once and left the other three bytes unchanged. Bits 7:1 are unassigned: the header names only bit 0 and the run read only bit 0."
+reset = { value = 0x0, mask = 0x01 }
 
 [[registers.fields]]
 name = "IP"
@@ -86,33 +87,57 @@ bits = "0"
 class = "plain"
 description = "The line's pending bit; for a level-triggered line it follows the source. SOURCE: HW1_S31_CLIC_20261026: a software-set positive-edge IP on line 16 vectored once and read clear after entry in the isolated experiment."
 
+[[registers]]
+name = "IE%s"
+offset = 0x1001
+width = 8
+dim = { count = 48, stride = 0x4 }
+description = "Line %s's enable byte. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 123-129 (BYTE_CLIC_INT_IE_REG(i) at the line's word + 1); HW_S31_CLIC_LINE_BYTES_20261119: a store of the byte changed it and no other byte of the line."
+reset = { value = 0x0, mask = 0x01 }
+
 [[registers.fields]]
 name = "IE"
-bits = "8"
+bits = "0"
 class = "plain"
 description = "Enables the line."
 
+[[registers]]
+name = "ATTR%s"
+offset = 0x1002
+width = 8
+dim = { count = 48, stride = 0x4 }
+description = "Line %s's attribute byte: vectoring, trigger and privilege mode. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 131-152 (BYTE_CLIC_INT_ATTR_REG(i) at the line's word + 2); HW_S31_CLIC_LINE_BYTES_20261119: a store of the byte changed it and no other byte of the line. MODE resets to 0b11 (the word's header lines 79-84; external inputs read 3, SOURCE: HW1_S31_CLIC_20261026)."
+reset = { value = 0xc0, mask = 0xc7 }
+
 [[registers.fields]]
-name = "ATTR_SHV"
-bits = "16"
+name = "SHV"
+bits = "0"
 class = "plain"
 description = "Selects hardware vectoring for the line."
 
 [[registers.fields]]
-name = "ATTR_TRIG"
+name = "TRIG"
 values = [{ name = "POSITIVE_LEVEL", value = 0 }, { name = "POSITIVE_EDGE", value = 1 }, { name = "NEGATIVE_LEVEL", value = 2 }, { name = "NEGATIVE_EDGE", value = 3 }]
-bits = "18:17"
+bits = "2:1"
 class = "plain"
 description = "Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity."
 
 [[registers.fields]]
-name = "ATTR_MODE"
-bits = "23:22"
+name = "MODE"
+bits = "7:6"
 class = "read-only"
-description = "Header machine privilege code 0b11; external inputs read 3 and some core-local slots read 0 (SOURCE: HW1_S31_CLIC_20261026). Ignored writes were not tested. Header access class SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 79-84."
+description = "Header machine privilege code 0b11; external inputs read 3 and some core-local slots read 0 (SOURCE: HW1_S31_CLIC_20261026). Ignored writes were not tested. Header access class SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 147-152."
+
+[[registers]]
+name = "CTL%s"
+offset = 0x1003
+width = 8
+dim = { count = 48, stride = 0x4 }
+description = "Line %s's level and priority byte. SOURCE: ESP_IDF_4D59230D_S31_CLIC, lines 154-160 (BYTE_CLIC_INT_CTL_REG(i) at the line's word + 3); the word's header lines 70-116 give its reset 0x1f; HW_S31_CLIC_LINE_BYTES_20261119: a store of the byte changed it and no other byte of the line."
+reset = { value = 0x1f, mask = 0xff }
 
 [[registers.fields]]
 name = "CTL"
-bits = "31:24"
+bits = "7:0"
 class = "plain"
 description = "Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) << 5."

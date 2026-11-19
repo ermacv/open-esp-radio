@@ -347,7 +347,7 @@ description = "The interrupt matrix route and pending words and the CLIC configu
 [[partitions.parts]]
 name = "Clic"
 instance = "CLIC"
-registers = ["CTRL%s", "INT_INFO"]
+registers = ["IP%s", "IE%s", "ATTR%s", "CTL%s", "INT_INFO"]
 observes = ["INT_CONFIG"]
 description = "Each hart's element is that hart's own CLIC: the router owns its line writes and reads its implemented geometry and the configuration whose sole writer is that hart's ClicObserver."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
@@ -356,7 +356,7 @@ sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 name = "ClicObserver"
 instance = "CLIC"
 registers = ["INT_CONFIG", "INT_THRESH"]
-observes = ["CTRL%s"]
+observes = ["IP%s", "IE%s", "ATTR%s", "CTL%s"]
 description = "Each hart's element is that hart's own CLIC: its level bits, set by that hart when its controller is built, and its lines as that hart's fatal path reads them; it writes no line."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
@@ -8382,8 +8382,23 @@ reason = "The facts probe's TX control records keep queue zero's control word."
 sources = ["BLOB_LIBPP_HAL_MAC_TX"]
 
 [[record-words]]
-register = "CLIC.CTRL%s"
-reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: the word as the hardware has it."
+register = "CLIC.IP%s"
+reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: each of its four bytes as the hardware has it."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+
+[[record-words]]
+register = "CLIC.IE%s"
+reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: each of its four bytes as the hardware has it."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+
+[[record-words]]
+register = "CLIC.ATTR%s"
+reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: each of its four bytes as the hardware has it."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+
+[[record-words]]
+register = "CLIC.CTL%s"
+reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: each of its four bytes as the hardware has it."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[fixed-register-images]]

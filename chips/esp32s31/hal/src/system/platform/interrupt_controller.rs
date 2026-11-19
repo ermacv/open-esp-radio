@@ -13,9 +13,13 @@
 //! that hart (`!Send`). The staged runtime calls it in each hart's handoff,
 //! so each hart has one controller and one router.
 //!
-//! Each method of [`Controller`] reads or read-modify-writes one word: a
-//! route keeps its source's `PASS_LEVEL` field and the reserved bits
-//! of its word, a line keeps its pending bit and its privilege mode. A source
+//! Each method of [`Controller`] reads or read-modify-writes one register: a
+//! route keeps its source's `PASS_LEVEL` field and the reserved bits of its
+//! word; a line is four byte registers (pending, enable, attribute and
+//! control: SOURCE `ESP_IDF_4D59230D_S31_CLIC` lines 113-160 and
+//! `HW_S31_CLIC_LINE_BYTES_20261119`), each changed by its own byte access,
+//! so a change of one never writes another, and the attribute byte keeps
+//! its privilege mode. A source
 //! and a line are the controller's own values ([`Source`], [`Line`]), made
 //! for each of the bank's sources and the CLIC's lines in a constant, so no
 //! write converts a number or refuses one.
@@ -42,11 +46,11 @@ use oer_chips_family_platform_interrupt_table::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Source(Index<{ interrupt_core::route::COUNT }>);
 
-/// A line of the hart's CLIC: its control word's index, and its number as a
-/// route's `MAP` value.
+/// A line of the hart's CLIC: the index of its four byte registers, and its
+/// number as a route's `MAP` value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Line {
-    ctrl: Index<{ clic::ctrl::COUNT }>,
+    ctrl: Index<{ clic::ip::COUNT }>,
     map: Bits<6>,
 }
 
@@ -67,11 +71,11 @@ const SOURCES: [Source; interrupt_core::route::COUNT] = {
 };
 
 /// Every line, line `n` at `n`; a route's `MAP` holds each line's number.
-const LINES: [Line; clic::ctrl::COUNT] = {
+const LINES: [Line; clic::ip::COUNT] = {
     let mut lines = [Line {
         ctrl: Index::constant::<0>(),
         map: Bits::constant::<0>(),
-    }; clic::ctrl::COUNT];
+    }; clic::ip::COUNT];
     let mut rest: &mut [Line] = &mut lines;
     let (mut number, mut map) = (0, 0);
     while let [line, tail @ ..] = rest {
@@ -254,7 +258,7 @@ impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
     /// for a line past the CLIC's.
     pub fn line(&self, line: u8) -> Option<u32> {
         let index = Index::new(usize::from(line)).ok()?;
-        Some(self.observer.lines.read_ctrl(index).record_word())
+        Some(line_record(&self.observer.lines, index).record())
     }
 
     /// The level bits the CLIC holds.
@@ -453,7 +457,7 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {
-        const { assert!(clic::ctrl::COUNT == facts::LINES.count as usize) };
+        const { assert!(clic::ip::COUNT == facts::LINES.count as usize) };
         let info = self.clic.read_int_info();
         // These fields fit their destination types (four, thirteen and four bits).
         let control_bits = info.ctlbits().get() as u8;
@@ -509,20 +513,22 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     }
 
     fn check(&self, line: Line, expected: LineExpectation) -> Result<(), LineObservation> {
-        let word = self.clic.read_ctrl(line.ctrl);
+        let index = line.ctrl;
+        let enabled = self.clic.read_ie(index).ie();
         let holds = match expected {
-            LineExpectation::Disabled => !word.ie(),
+            LineExpectation::Disabled => !enabled,
             LineExpectation::Bound(control) => {
-                word.ie()
-                    && word.attr_shv()
-                    && word.attr_trig_variant() == clic::ctrl::AttrTrig::PositiveLevel
-                    && word.ctl() == control.bits()
+                let attributes = self.clic.read_attr(index);
+                enabled
+                    && attributes.shv()
+                    && attributes.trig_variant() == clic::attr::Trig::PositiveLevel
+                    && self.clic.read_ctl(index).ctl() == control.bits()
             }
         };
         if holds {
             Ok(())
         } else {
-            Err(LineObservation::of_word(word.record_word()))
+            Err(line_record(&self.clic, index))
         }
     }
 }
@@ -534,43 +540,108 @@ enum LineWrite {
     Bind(Control),
 }
 
+/// A line's four byte registers as they read, for a record
+/// ([`LineObservation::of_bytes`]).
+fn line_record<W: LineBytes>(clic: &W, index: Index<{ clic::ip::COUNT }>) -> LineObservation {
+    let byte = |record: u32| record.to_le_bytes()[0];
+    LineObservation::of_bytes([
+        byte(clic.pending(index)),
+        byte(clic.enable(index)),
+        byte(clic.attributes(index)),
+        byte(clic.control(index)),
+    ])
+}
+
+/// The record words of a line's four byte registers, as the router's part
+/// and the fatal path's observer both read them.
+trait LineBytes {
+    fn pending(&self, index: Index<{ clic::ip::COUNT }>) -> u32;
+    fn enable(&self, index: Index<{ clic::ip::COUNT }>) -> u32;
+    fn attributes(&self, index: Index<{ clic::ip::COUNT }>) -> u32;
+    fn control(&self, index: Index<{ clic::ip::COUNT }>) -> u32;
+}
+
+macro_rules! line_bytes {
+    ($part:ident) => {
+        impl<P: Placement> LineBytes for $part<P> {
+            fn pending(&self, index: Index<{ clic::ip::COUNT }>) -> u32 {
+                self.read_ip(index).record_word()
+            }
+            fn enable(&self, index: Index<{ clic::ip::COUNT }>) -> u32 {
+                self.read_ie(index).record_word()
+            }
+            fn attributes(&self, index: Index<{ clic::ip::COUNT }>) -> u32 {
+                self.read_attr(index).record_word()
+            }
+            fn control(&self, index: Index<{ clic::ip::COUNT }>) -> u32 {
+                self.read_ctl(index).record_word()
+            }
+        }
+    };
+}
+
+line_bytes!(Clic);
+line_bytes!(ClicObserver);
+
 impl<B: RouteBank, C: Placement> InterruptController<B, C> {
-    /// Three writes of the line's word, each changing one kind of byte: the
-    /// enable off, then the attributes and control, then the enable on for a
-    /// bound line. The word holds `clicintie` (bit 8), `clicintattr` (bits 16
-    /// to 23) and `clicintctl` (bits 24 to 31), and a word write takes effect
-    /// in no specified byte order, so one write could enable the line before
-    /// its new level and trigger hold.
+    /// A line's bind and take-down through its byte registers, one byte a
+    /// step. The bind: the enable off if it was on, the attributes (vectored,
+    /// the trigger) and the level, the pending byte cleared, then the enable
+    /// on last, so the line is never enabled with another level or trigger
+    /// than its binding's. The take-down in reverse: the enable off first,
+    /// the pending byte cleared, then the attributes and the level of a
+    /// disabled line (not vectored, level byte 0).
     ///
     /// A bound line is hardware-vectored and level-triggered, the chip's one
-    /// trigger of a bound line; a disabled one is neither, at level byte 0.
+    /// trigger of a bound line; for it the pending byte follows its source,
+    /// and clearing it only drops a level no longer asserted.
     ///
-    /// SOURCE: RISC-V CLIC specification 3f8ee744 `clic.adoc:377` (a word
-    /// write's byte updates take effect in no specified order); ESP-IDF
-    /// 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
-    /// `:77,:98,:104` (`CLIC_INT_CTL_S` 24, `CLIC_INT_ATTR_SHV_S` 16,
-    /// `CLIC_INT_IE_S` 8); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES` in the register
-    /// model (the bound lines are level-triggered).
+    /// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
+    /// `:113-160` (the four byte registers); `HW_S31_CLIC_LINE_BYTES_20261119`
+    /// (a store of one byte changes it and no other); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES`
+    /// in the register model (the bound lines are level-triggered).
     fn write_line(&mut self, line: Line, write: LineWrite) {
         let index = line.ctrl;
-        if self.clic.read_ctrl(index).ie() {
-            self.clic.modify_ctrl(index, |word| {
-                word.set_ie(false);
+        if self.clic.read_ie(index).ie() {
+            self.clic.modify_ie(index, |byte| {
+                byte.set_ie(false);
             });
         }
-        let (vectored, control) = match write {
-            LineWrite::Disable => (false, Control::from_bits(0)),
-            LineWrite::Bind(control) => (true, control),
-        };
-        self.clic.modify_ctrl(index, |word| {
-            word.set_attr_shv(vectored)
-                .set_attr_trig(clic::ctrl::AttrTrig::PositiveLevel)
-                .set_ctl(control.bits());
+        match write {
+            LineWrite::Bind(control) => {
+                self.attributes_and_level(index, true, control);
+                self.clear_pending(index);
+                self.clic.modify_ie(index, |byte| {
+                    byte.set_ie(true);
+                });
+            }
+            LineWrite::Disable => {
+                self.clear_pending(index);
+                self.attributes_and_level(index, false, Control::from_bits(0));
+            }
+        }
+    }
+
+    /// The attribute byte (vectoring, the level trigger) and the level byte.
+    fn attributes_and_level(
+        &mut self,
+        index: Index<{ clic::ip::COUNT }>,
+        vectored: bool,
+        control: Control,
+    ) {
+        self.clic.modify_attr(index, |byte| {
+            byte.set_shv(vectored)
+                .set_trig(clic::attr::Trig::PositiveLevel);
         });
-        if let LineWrite::Bind(_) = write {
-            self.clic.modify_ctrl(index, |word| {
-                word.set_ie(true);
-            });
-        }
+        self.clic.modify_ctl(index, |byte| {
+            byte.set_ctl(control.bits());
+        });
+    }
+
+    /// The pending byte cleared.
+    fn clear_pending(&mut self, index: Index<{ clic::ip::COUNT }>) {
+        self.clic.modify_ip(index, |byte| {
+            byte.set_ip(false);
+        });
     }
 }

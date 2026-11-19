@@ -194,8 +194,29 @@ fn source(number: u16) -> Index<{ interrupt_core::route::COUNT }> {
     Index::new(usize::from(number)).expect("a source of the bank")
 }
 
-fn line(number: u8) -> Index<{ clic::ctrl::COUNT }> {
+fn line(number: u8) -> Index<{ clic::ip::COUNT }> {
     Index::new(usize::from(number)).expect("a line of the CLIC")
+}
+
+/// Write each of a line's four byte registers through the PAC's own
+/// accessors, as another writer would leave them.
+fn set_line(
+    clic: &mut clic::Clic<oer_portable_mmio::Host<'_>>,
+    number: u8,
+    (pending, enabled, vectored, trigger, control): (bool, bool, bool, clic::attr::Trig, u8),
+) {
+    clic.modify_ip(line(number), |byte| {
+        byte.set_ip(pending);
+    });
+    clic.modify_attr(line(number), |byte| {
+        byte.set_shv(vectored).set_trig(trigger);
+    });
+    clic.modify_ctl(line(number), |byte| {
+        byte.set_ctl(control);
+    });
+    clic.modify_ie(line(number), |byte| {
+        byte.set_ie(enabled);
+    });
 }
 
 /// The controller's own source `number`.
@@ -226,13 +247,17 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
     controller.route(bank_source(12), clic_line(20));
     drop(controller);
     // An edge-triggered line no binding writes, pending.
-    memory.clic().modify_ctrl(line(20), |word| {
-        word.set_ip(true)
-            .set_ie(true)
-            .set_attr_shv(true)
-            .set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge)
-            .set_ctl(Control::level::<3, LEVEL_BITS>().bits());
-    });
+    set_line(
+        &mut memory.clic(),
+        20,
+        (
+            true,
+            true,
+            true,
+            clic::attr::Trig::PositiveEdge,
+            Control::level::<3, LEVEL_BITS>().bits(),
+        ),
+    );
     let matrix_before = memory.matrix.clone();
     let clic_before = memory.clic.clone();
     {
@@ -243,9 +268,9 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
         assert_eq!(view.routed(12), Some(20));
         assert_eq!(view.routed(11), None, "a silent source");
         assert_eq!(view.routed(u16::MAX), None, "no source of the bank");
-        // The line's word as the hardware has it: level byte 0x5f (bits
-        // 24..32), positive edge (bit 17), vectored (16), enabled (8),
-        // pending (0).
+        // The line's four bytes in their order: pending 1, enabled 1,
+        // attributes 0x03 (vectored, positive edge; the mode as the zeroed
+        // memory holds it), level byte 0x5f.
         assert_eq!(view.line(20), Some(0x5f03_0101));
         assert_eq!(view.line(21), Some(0));
         assert_eq!(view.line(u8::MAX), None, "no line of the CLIC");
@@ -312,7 +337,7 @@ fn a_silenced_source_is_routed_nowhere_and_writes_its_word_alone() {
 }
 
 #[test]
-fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_mode() {
+fn a_bound_and_a_disabled_line_check_as_written_clear_their_pending_byte_and_keep_their_mode() {
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
     controller.bind(clic_line(30), Control::level::<3, LEVEL_BITS>());
@@ -327,15 +352,17 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_m
             .is_err()
     );
     drop(controller);
-    let word = memory.clic().read_ctrl(line(30));
-    assert!(word.ie() && word.attr_shv());
-    assert_eq!(
-        word.attr_trig_variant(),
-        clic::ctrl::AttrTrig::PositiveLevel
+    let clic = memory.clic();
+    let attributes = clic.read_attr(line(30));
+    assert!(clic.read_ie(line(30)).ie() && attributes.shv());
+    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveLevel);
+    assert_eq!(clic.read_ctl(line(30)).ctl(), level.bits());
+    assert!(
+        !clic.read_ip(line(30)).ip(),
+        "the bind cleared the pending byte"
     );
-    assert_eq!(word.ctl(), level.bits());
-    assert!(word.ip(), "the pending bit stays");
-    assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
+    assert_eq!(attributes.mode().get(), 3, "the privilege mode stays");
+    drop(clic);
     let mut controller = memory.controller();
     controller.disable(clic_line(30));
     assert_eq!(
@@ -343,17 +370,29 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_m
         Ok(())
     );
     drop(controller);
-    let word = memory.clic().read_ctrl(line(30));
-    assert!(!word.ie() && !word.attr_shv() && word.ctl() == 0);
-    assert!(word.ip(), "the pending bit stays");
-    assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
+    let clic = memory.clic();
+    assert!(
+        !clic.read_ie(line(30)).ie()
+            && !clic.read_attr(line(30)).shv()
+            && clic.read_ctl(line(30)).ctl() == 0
+    );
+    assert!(
+        !clic.read_ip(line(30)).ip(),
+        "the take-down cleared the pending byte"
+    );
+    assert_eq!(
+        clic.read_attr(line(30)).mode().get(),
+        3,
+        "the privilege mode stays"
+    );
+    drop(clic);
     assert!(
         memory
             .clic
             .iter()
             .enumerate()
             .skip(1)
-            .all(|(index, &word)| index == clic::ctrl::OFFSET / 4 + 30 || word == u32::MAX),
+            .all(|(index, &word)| index == clic::ip::OFFSET / 4 + 30 || word == u32::MAX),
         "no other line's word changed"
     );
 }
@@ -361,12 +400,17 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_m
 #[test]
 fn a_line_another_writer_left_edge_triggered_is_no_binding() {
     let mut memory = Memory::filled(0);
-    memory.clic().modify_ctrl(line(20), |word| {
-        word.set_ie(true)
-            .set_attr_shv(true)
-            .set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge)
-            .set_ctl(Control::level::<3, 3>().bits());
-    });
+    set_line(
+        &mut memory.clic(),
+        20,
+        (
+            false,
+            true,
+            true,
+            clic::attr::Trig::PositiveEdge,
+            Control::level::<3, 3>().bits(),
+        ),
+    );
     let controller = memory.controller();
     let expected = LineExpectation::Bound(Control::level::<3, LEVEL_BITS>());
     assert_eq!(
@@ -432,13 +476,14 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
         assert_eq!(controller.check(line, expected), Ok(()), "line {number}");
     }
     drop(controller);
-    let word = memory.clic().read_ctrl(line(20));
-    assert!(word.attr_shv());
+    let clic = memory.clic();
+    let attributes = clic.read_attr(line(20));
+    assert!(attributes.shv());
+    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveLevel);
     assert_eq!(
-        word.attr_trig_variant(),
-        clic::ctrl::AttrTrig::PositiveLevel
+        clic.read_ctl(line(20)).ctl(),
+        Control::level::<3, 3>().bits()
     );
-    assert_eq!(word.ctl(), Control::level::<3, 3>().bits());
 }
 
 #[test]
@@ -515,34 +560,43 @@ fn each_banks_controller_names_its_own_hart() {
 fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
     let level = Control::level::<3, LEVEL_BITS>();
     let expected = LineExpectation::Bound(level);
-    // Each fact of the binding undone alone, with the word it leaves: level
-    // byte 0x5f (bits 24..32), vectored (16), enabled (8) as bound.
-    let cases: [(&str, fn(&mut clic::ctrl::W), u32); 4] = [
+    // Each fact of the binding undone alone, with the bytes it leaves in
+    // their order: level byte 0x5f, attributes 0x01 (vectored), enable 1.
+    type Undo = fn(&mut clic::Clic<oer_portable_mmio::Host<'_>>);
+    let cases: [(&str, Undo, u32); 4] = [
         (
             "enable",
-            |word| {
-                word.set_ie(false);
+            |clic| {
+                clic.modify_ie(line(20), |byte| {
+                    byte.set_ie(false);
+                });
             },
             0x5f01_0000,
         ),
         (
             "vectoring",
-            |word| {
-                word.set_attr_shv(false);
+            |clic| {
+                clic.modify_attr(line(20), |byte| {
+                    byte.set_shv(false);
+                });
             },
             0x5f00_0100,
         ),
         (
             "trigger",
-            |word| {
-                word.set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge);
+            |clic| {
+                clic.modify_attr(line(20), |byte| {
+                    byte.set_trig(clic::attr::Trig::PositiveEdge);
+                });
             },
             0x5f03_0100,
         ),
         (
             "level",
-            |word| {
-                word.set_ctl(Control::level::<1, LEVEL_BITS>().bits());
+            |clic| {
+                clic.modify_ctl(line(20), |byte| {
+                    byte.set_ctl(Control::level::<1, LEVEL_BITS>().bits());
+                });
             },
             0x1f01_0100,
         ),
@@ -553,7 +607,7 @@ fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
         controller.bind(clic_line(20), level);
         assert_eq!(controller.check(clic_line(20), expected), Ok(()), "{fact}");
         drop(controller);
-        memory.clic().modify_ctrl(line(20), |w| undo(w));
+        undo(&mut memory.clic());
         let controller = memory.controller();
         assert_eq!(
             controller.check(clic_line(20), expected),

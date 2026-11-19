@@ -27,6 +27,47 @@ fn a_block_reads_and_writes_only_the_word_at_its_offset() {
     assert_eq!(memory, [0x1111_1111, 0xa5a5_a5a5, 0x3333_3333, 0x4444_4444]);
 }
 
+/// A word laid out as four byte registers, then a word.
+struct Bytes;
+impl Registers for Bytes {
+    type Sharing = super::sharing::Owned;
+    const WORDS: &'static [usize] = &[4];
+    const BYTES: &'static [usize] = &[0, 1, 2, 3];
+}
+
+#[test]
+fn a_byte_access_reads_and_writes_only_its_byte() {
+    let mut memory = [0x4433_2211_u32, 0x5555_5555];
+    let mut block = Block::<Host<'_>, Bytes>::host(&mut memory).expect("two words");
+    assert_eq!(block.read_byte::<0>(), 0x11);
+    assert_eq!(block.read_byte::<3>(), 0x44);
+    // Only the value's low byte is stored, and only in its own byte.
+    block.write_byte::<2>(0xffff_ffa5);
+    assert_eq!(block.read_byte::<2>(), 0xa5);
+    block.write_byte_indexed::<0, 1, 4>(Index::constant::<1>(), 0x5a);
+    assert_eq!(
+        block.read_byte_indexed::<0, 1, 4>(Index::constant::<1>()),
+        0x5a
+    );
+    drop(block);
+    assert_eq!(memory, [0x44a5_5a11, 0x5555_5555]);
+}
+
+#[test]
+fn host_memory_of_a_block_ending_in_a_byte_holds_its_whole_word() {
+    /// Byte registers past its last word.
+    struct Tail;
+    impl Registers for Tail {
+        type Sharing = super::sharing::Owned;
+        const WORDS: &'static [usize] = &[0];
+        const BYTES: &'static [usize] = &[4, 7];
+    }
+    let mut memory = [0_u32; 1];
+    assert!(Block::<Host<'_>, Tail>::host(&mut memory).is_err());
+    let mut memory = [0_u32; 2];
+    assert!(Block::<Host<'_>, Tail>::host(&mut memory).is_ok());
+}
+
 #[test]
 fn host_memory_smaller_than_the_block_is_refused() {
     let mut memory = [0_u32; 3];
