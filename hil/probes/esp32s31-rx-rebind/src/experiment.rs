@@ -119,6 +119,53 @@ enum Exhaust {
     Restored = 3,
 }
 
+/// `tasks/234` addition: what the MAC's two interrupt banks raise while the
+/// ring runs low or out behind a stalled taker, against the scans without a
+/// stall. Bank 0 (`RAW`) is acknowledged after each read, so a bit counts
+/// where it rose; bank 1 (`INTERRUPT_1_RAW`) has no acknowledgement here and
+/// counts where it stood.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+pub(super) struct RawCauses {
+    /// Scans without a stall, and per bit (bank 0 then bank 1) those it was
+    /// set in.
+    windows: u32,
+    in_windows: [u32; 64],
+    /// Stalls, and per bit the stalls it rose in, and the fewest armed
+    /// descriptors left (plus one; zero never) when it first stood.
+    stalls: u32,
+    in_stalls: [u32; 64],
+    first_left_plus_one: [u32; 64],
+    /// The current stall's bits.
+    seen: [u32; 2],
+    /// The first stalls: the raw words at the stall's start, the bits seen
+    /// by 20 ms, the armed descriptors left at 20 ms, the MAC's buffer-full
+    /// counter at the start and at 20 ms, the bits after the exit.
+    first: [[u32; 8]; RAW_STALLS],
+    /// Scans after an exit, and the bits set in them.
+    after_exit: u32,
+    after_exit_bits: [u32; 2],
+}
+
+const RAW_STALLS: usize = 16;
+
+impl RawCauses {
+    /// The current stall's bits into the counts.
+    fn close(&mut self) {
+        for bank in 0..2 {
+            let seen = self.seen.get(bank).copied().unwrap_or(0);
+            for bit in 0..32 {
+                if seen >> bit & 1 != 0
+                    && let Some(cell) = self.in_stalls.get_mut(bank * 32 + bit)
+                {
+                    *cell = cell.saturating_add(1);
+                }
+            }
+        }
+        self.seen = [0; 2];
+    }
+}
+
 /// One exhaust segment's record.
 #[derive(Clone, Copy, Zeroable)]
 #[repr(C)]
@@ -295,6 +342,12 @@ pub(super) struct State {
     /// 20 ms record of this stall was taken.
     stall_from_plus_one: u32,
     stall_traced: bool,
+    /// This stall's 20 ms reading was taken.
+    stall_recorded: bool,
+    /// Scans after an exit still to be read as "after the exit".
+    after_exit_scans: u32,
+    /// `tasks/234` addition: the raw causes of both interrupt banks.
+    raw: RawCauses,
     /// Microseconds since the segments' clock start, set every pass.
     now_us: u32,
     /// The run's first data sequence number from the sender and its time,
@@ -929,6 +982,59 @@ fn scan(
     }
     let status = irq.mac_interrupt_status();
     irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::all()));
+    // `tasks/234` addition: both banks' raw words, by what the ring holds.
+    {
+        let raw0 = irq.mac_interrupt_raw();
+        let words = [
+            raw0.bits(),
+            access.wifi_mac_hal().experiment_interrupt_1_raw(),
+        ];
+        irq.acknowledge_mac_interrupt_raw(raw0);
+        let stalled = arm.exit() && state.hole_plus_one != 0 && state.stall_from_plus_one != 0;
+        let raw = &mut state.raw;
+        if stalled {
+            let left = {
+                let snapshot = access.receive_dma_snapshot();
+                let tail = ring.topology_snapshot().tail_index;
+                cursor_ring_index(snapshot.next_descriptor_low, ring.descriptor_base(), COUNT)
+                    .map_or(0, |next| (tail + COUNT - next) % COUNT + 1)
+            };
+            for (bank, word) in words.iter().enumerate() {
+                let fresh = word & !raw.seen.get(bank).copied().unwrap_or(0);
+                for bit in 0..32 {
+                    if fresh >> bit & 1 != 0
+                        && let Some(cell) = raw.first_left_plus_one.get_mut(bank * 32 + bit)
+                    {
+                        let at = left as u32 + 1;
+                        *cell = if *cell == 0 { at } else { (*cell).min(at) };
+                    }
+                }
+                if let Some(seen) = raw.seen.get_mut(bank) {
+                    *seen |= word;
+                }
+            }
+        } else {
+            raw.windows = raw.windows.saturating_add(1);
+            for (bank, word) in words.iter().enumerate() {
+                for bit in 0..32 {
+                    if word >> bit & 1 != 0
+                        && let Some(cell) = raw.in_windows.get_mut(bank * 32 + bit)
+                    {
+                        *cell = cell.saturating_add(1);
+                    }
+                }
+            }
+            if state.after_exit_scans != 0 {
+                state.after_exit_scans -= 1;
+                raw.after_exit = raw.after_exit.saturating_add(1);
+                for (bank, word) in words.iter().enumerate() {
+                    if let Some(bits) = raw.after_exit_bits.get_mut(bank) {
+                        *bits |= word;
+                    }
+                }
+            }
+        }
+    }
     storage
         .observe_reserved(ring, access.rx_dma())
         .map_err(|_| name!("reserved"; 32))?;
@@ -1037,14 +1143,46 @@ fn scan(
                 // of it.
                 if state.stall_from_plus_one == 0 {
                     state.stall_from_plus_one = state.now_us.saturating_add(1);
-                } else if !state.stall_traced
-                    && state.now_us.saturating_sub(state.stall_from_plus_one) >= STALL_TRACE_US
+                    state.stall_recorded = false;
+                    let raw0 = irq.mac_interrupt_raw().bits();
+                    let raw1 = access.wifi_mac_hal().experiment_interrupt_1_raw();
+                    let full = State::hardware_now(access)[2];
+                    let raw = &mut state.raw;
+                    raw.close();
+                    if let Some(row) = raw.first.get_mut(raw.stalls as usize) {
+                        row[0] = raw0;
+                        row[1] = raw1;
+                        row[5] = u32::from(full);
+                    }
+                    raw.stalls = raw.stalls.saturating_add(1);
+                } else if state.now_us.saturating_sub(state.stall_from_plus_one) >= STALL_TRACE_US
+                    && !state.stall_recorded
                 {
-                    state.stall_traced = true;
-                    ring.experiment_trace(8, access.rx_dma());
+                    state.stall_recorded = true;
+                    if !state.stall_traced {
+                        state.stall_traced = true;
+                        ring.experiment_trace(8, access.rx_dma());
+                    }
+                    let left = next.map_or(0, |next| {
+                        (ring.topology_snapshot().tail_index + COUNT - next) % COUNT + 1
+                    });
+                    let full = State::hardware_now(access)[2];
+                    let raw = &mut state.raw;
+                    let at = raw.stalls.saturating_sub(1) as usize;
+                    let seen = raw.seen;
+                    if let Some(row) = raw.first.get_mut(at) {
+                        row[2] = seen[0];
+                        row[3] = seen[1];
+                        row[4] = left as u32;
+                        row[6] = u32::from(full);
+                    }
                 }
                 break;
             };
+            if state.stall_from_plus_one != 0 {
+                state.raw.close();
+                state.after_exit_scans = 4;
+            }
             state.stall_from_plus_one = 0;
             // c2: what the ring holds the first time the walker stood.
             let tail = ring.topology_snapshot().tail_index;
@@ -1732,6 +1870,59 @@ pub(super) fn observations(state: &State) -> Observations {
 
 pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<(), Name<32>> {
     let mut line = heapless::String::<768>::new();
+    // `tasks/234` addition: the raw causes by stall and by window.
+    {
+        let raw = &state.raw;
+        let mut stalls = raw.stalls;
+        let mut in_stalls = raw.in_stalls;
+        // A stall still open at the end counts its bits too.
+        for bank in 0..2 {
+            let seen = raw.seen.get(bank).copied().unwrap_or(0);
+            for bit in 0..32 {
+                if seen >> bit & 1 != 0
+                    && let Some(cell) = in_stalls.get_mut(bank * 32 + bit)
+                {
+                    *cell = cell.saturating_add(1);
+                }
+            }
+        }
+        stalls = stalls.max(u32::from(raw.seen != [0; 2]));
+        line.clear();
+        write!(
+            &mut line,
+            "RAWC windows={} stalls={} after_exit={} after_exit_bits={:x?}",
+            raw.windows, stalls, raw.after_exit, raw.after_exit_bits
+        )
+        .map_err(|_| name!("format"; 32))?;
+        for bit in 0..64 {
+            let w = raw.in_windows.get(bit).copied().unwrap_or(0);
+            let st = in_stalls.get(bit).copied().unwrap_or(0);
+            if w != 0 || st != 0 {
+                let left = raw.first_left_plus_one.get(bit).copied().unwrap_or(0);
+                write!(
+                    &mut line,
+                    " b{}.{}=w{}/s{}/l{}",
+                    bit / 32,
+                    bit % 32,
+                    w,
+                    st,
+                    left.wrapping_sub(1) as i32
+                )
+                .map_err(|_| name!("format"; 32))?;
+            }
+        }
+        writeln!(&mut line).map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+        for row in raw.first.iter().take((raw.stalls as usize).min(RAW_STALLS)) {
+            line.clear();
+            writeln!(&mut line, "RAWS {row:x?}").map_err(|_| name!("format"; 32))?;
+            usb::text(console, line.as_bytes())
+                .await
+                .map_err(|_| name!("console-write"; 32))?;
+        }
+    }
     // `tasks/229`: the trace around the tails' links.
     for index in 0..oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::trace_used() {
         let Some(words) =

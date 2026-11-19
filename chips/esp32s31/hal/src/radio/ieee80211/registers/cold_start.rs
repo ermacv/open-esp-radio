@@ -59,4 +59,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn experiment_hal_deinit_request(&mut self) {
         self.request_mac_cold_start();
     }
+
+    /// TEMPORARY experiment (`tasks/234`, probe branch only): the second
+    /// interrupt bank's raw word (`INTERRUPT_1_RAW`, `WDEV_INT1_RAW`), read.
+    pub fn experiment_interrupt_1_raw(&self) -> u32 {
+        self.mac
+            .wifi_mac_he_init_prefix
+            .read_interrupt_1_raw()
+            .events()
+    }
 }

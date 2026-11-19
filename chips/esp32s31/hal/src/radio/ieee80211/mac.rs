@@ -285,6 +285,11 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().experiment_hal_deinit_request();
     }
 
+    /// TEMPORARY experiment (`tasks/234`): the second bank's raw word.
+    pub fn experiment_interrupt_1_raw(&self) -> u32 {
+        self.pac().experiment_interrupt_1_raw()
+    }
+
     /// TEMPORARY experiment (`tasks/227` S2): the handshake's bit 0.
     pub fn experiment_handshake_ready(&self) -> bool {
         self.pac().sample_mac_cold_start_ready()
