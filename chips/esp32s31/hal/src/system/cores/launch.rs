@@ -72,6 +72,12 @@ impl LaunchPermit {
             buses: cache_bus_observer,
         }
     }
+
+    /// Hart 1's pend lines, over the pending bytes its grant holds: the
+    /// image hands them to hart 1 with its parts.
+    pub const fn pend_lines(&self) -> crate::system::platform::PendLines<'static, 1> {
+        self.interrupts.pend_lines()
+    }
 }
 
 /// A released secondary hart: its interrupt grant until the staged runtime

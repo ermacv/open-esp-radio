@@ -466,22 +466,22 @@ impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> InterruptGrant
 }
 
 impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
-    /// The hart's pending bytes in their static place, which its level
-    /// tasks' raisers store through a line's handle ([`LinePend`]).
-    pub const fn pending_bytes(&self) -> &'static ClicPending<H> {
-        self.pending
+    /// The hart's pend lines, over the pending bytes the grant holds for
+    /// its controller.
+    pub(crate) const fn pend_lines(&self) -> PendLines<'static, H> {
+        PendLines::new(self.pending)
     }
 }
 
-/// The handle of one line's pending byte on hart `H`, the line fixed at
-/// build: a level task's raisers pend its line through it, and it reaches
-/// no other line
-/// ([`PendLine`](oer_chips_family_platform_interrupt_table::PendLine)).
+/// Hart `H`'s pend lines: the one thing it does is give the pend handle of
+/// a line fixed at build ([`LinePend`]). It holds the hart's pending bytes
+/// and gives no clear, no index made at run time and no access to them: a
+/// clear is the controller's, at a task line's bind.
 ///
 /// ```
-/// use oer_chips_esp32s31_hal::system::platform::LinePend;
-/// fn keeper(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 34> {
-///     LinePend::new(bytes)
+/// use oer_chips_esp32s31_hal::system::platform::{LinePend, PendLines};
+/// fn keeper(lines: &PendLines<'static, 0>) -> LinePend<'static, 0, 34> {
+///     lines.line()
 /// }
 /// # let _: fn(_) -> _ = keeper;
 /// ```
@@ -489,13 +489,36 @@ impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
 /// A line the CLIC has not does not build:
 ///
 /// ```compile_fail,E0080
-/// use oer_chips_esp32s31_hal::system::platform::LinePend;
-/// fn past(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 48> {
-///     LinePend::new(bytes)
+/// use oer_chips_esp32s31_hal::system::platform::{LinePend, PendLines};
+/// fn past(lines: &PendLines<'static, 0>) -> LinePend<'static, 0, 48> {
+///     lines.line()
 /// }
 /// # let past: fn(_) -> _ = past;
 /// # core::hint::black_box(past);
 /// ```
+pub struct PendLines<'b, const H: u8, P: Placement = Fixed<{ instances::clic::BASE }>> {
+    bytes: &'b ClicPending<H, P>,
+}
+
+impl<'b, const H: u8, P: Placement> PendLines<'b, H, P> {
+    /// The pend lines over hart `H`'s pending bytes (on the chip, in their
+    /// static place).
+    pub(crate) const fn new(bytes: &'b ClicPending<H, P>) -> Self {
+        Self { bytes }
+    }
+
+    /// The pend handle of line `LINE` on hart `H`.
+    pub const fn line<const LINE: u8>(&self) -> LinePend<'b, H, LINE, P> {
+        LinePend::new(self.bytes)
+    }
+}
+
+/// The handle of one line's pending byte on hart `H`, the line fixed at
+/// build: a level task's raisers pend its line through it, and it reaches
+/// no other line
+/// ([`PendLine`](oer_chips_family_platform_interrupt_table::PendLine)).
+/// The hart's [`PendLines`] give it; outside the HAL a line is pended
+/// through the task's `Pend`.
 pub struct LinePend<
     'b,
     const H: u8,
@@ -513,14 +536,14 @@ impl<'b, const H: u8, const LINE: u8, P: Placement> LinePend<'b, H, LINE, P> {
     };
 
     /// The handle of line `LINE` in hart `H`'s pending bytes.
-    pub const fn new(bytes: &'b ClicPending<H, P>) -> Self {
+    pub(crate) const fn new(bytes: &'b ClicPending<H, P>) -> Self {
         let _index = Self::INDEX;
         Self { bytes }
     }
 
     /// Store line `LINE`'s pending byte as pended, on hart `H`'s copy.
     #[inline(always)]
-    pub fn pend(&self, hart: &OnHart<H>) {
+    pub(crate) fn pend(&self, hart: &OnHart<H>) {
         self.bytes.pend_line(Self::INDEX, hart);
     }
 }

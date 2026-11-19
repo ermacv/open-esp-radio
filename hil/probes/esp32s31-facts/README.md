@@ -2,8 +2,8 @@
 
 This PAC-only image owns the chip once and executes short, bounded register
 experiments on hart 0. Hart 1 is held in global reset with its CPU clock gated
-before a nonzero boot address is written; only selections 232/233 release it
-for one bounded entry observation and park it again. There is no HAL dependency and no
+before a nonzero boot address is written; only selections 232/233 and 323
+release it for one bounded entry observation and park it again. There is no HAL dependency and no
 production probe API. `src/image.rs::PROBES` is the single registration point.
 
 Selection 230 observes one natural BTLC period without PHY or timer-value
@@ -1219,3 +1219,40 @@ cycles with MIE set. Records `tag | 0xff` give `(repeat, events, entries)`;
 | 316 | 100 samples: level 3's handler pends level 1 and returns; cycles from the pend's write to level 1's first cycle read (`0x3800` every third sample, `0x38ff`: `(min, max, valid)`) |
 
 These are isolated observations, not a latency bound.
+
+Selection 322 (tasks/253, 2a) is the stored clear of a pended edge line, a
+hundred trials of each variant: line 34 at level 3 and line 32 at level 4,
+both edge-triggered and enabled. The thread pends line 32. Line 32's handler
+stores line 34's pending byte as `0x01`, then in variant 0 as `0x00`, in one
+access with MIE cleared; variant 1, the control, only pends. The record is
+`(0x3900 + v, trials, held, last)`. A trial holds when line 32 is entered
+once and line 34 `v` times, with its pending bit read clear after the
+window. `last` is the last trial's `entries of 34 | entries of 32 << 8 |
+IP of 34 << 16`.
+
+## A hart's pending store stays its own
+
+Selection 323 (tasks/253, 254) releases hart 1 as 232 does. MIE is
+cleared on both harts, and each hart sets up its own line 34 disabled and
+positive-edge: a level line's pending bit follows its source, so it would
+not hold a store. In a hundred trials each way:
+
+- hart 0 stores its own byte of line 34 pended and reads it set, hart 1
+  reads its own clear, and hart 0 clears its own and reads it clear;
+- hart 1 stores its own pended through hart 1's copy of the shared part
+  (with `OnHart<1>::check`) and reads it set, hart 0 reads its own clear,
+  and hart 1 clears its own and reads it clear.
+
+The two harts step in lockstep (`PHASE` from hart 0, `ACK` from hart 1).
+Each phase is bounded at 1,000,000 cycles, and hart 1's ready word at the
+release's own bound.
+
+| Tag | Words |
+| --- | --- |
+| `0x3a00` | trials, hart 0's own byte read set, hart 1's own byte read clear while hart 0's was set |
+| `0x3a01` | hart 0's own byte read clear after its clear, hart 1's own byte read set, hart 0's own byte read clear while hart 1's was set |
+| `0x3a02` | hart 1's own byte read clear after its clear; line 34's state on hart 0 (bits 0–15) and on hart 1 (bits 16–31), each its enable (bit 0) and trigger (bits 1–2) before the setup, and the same after it at bit 8; hart 1's stage (`0xfac71003` done, `0xfac7100e` not hart 1) |
+| `0x3a03` | the release: routes found connected on hart 1's bank, the first, stall polls |
+
+Only line 34 and these two harts are observed. Hart 1 takes no entry
+here: its vector table and handler come with its own lease.

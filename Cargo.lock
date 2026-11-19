@@ -2067,6 +2067,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-probes-esp32s31-level-wake"
+version = "0.1.0"
+dependencies = [
+ "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-platform-board",
+ "oer-chips-esp32s31-platform-layout",
+ "oer-chips-esp32s31-platform-runtime",
+ "oer-chips-family-platform-executor",
+ "oer-chips-family-platform-interrupt-table",
+ "oer-chips-family-platform-port",
+ "oer-chips-family-platform-runtime",
+ "oer-portable-diagnostics",
+ "oer-portable-embassy-time",
+ "oer-portable-riscv",
+ "oer-portable-time",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-hil-probes-esp32s31-light-sleep"
 version = "0.1.0"
 dependencies = [

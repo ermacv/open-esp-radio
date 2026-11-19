@@ -56,6 +56,14 @@ const NEIGHBOUR_PENDING: u32 = PRIMARY + 17;
 const TARGET: u32 = PRIMARY + 18;
 const NEIGHBOUR_SOURCE: u32 = PRIMARY + 19;
 
+/// 322's task line and the line above it: the application grid's task at
+/// level 3 on line 34, its raiser at level 4.
+const TASK: u32 = 34;
+const ABOVE: u32 = HIGH;
+const _: () = if TASK == ABOVE || TASK < PRIMARY {
+    panic!("322's lines are two lines of the probe's range");
+};
+
 const REPEATS: u32 = 10;
 const SAMPLES: u32 = 100;
 /// A bounded observation window after MIE is set, in cycles.
@@ -80,6 +88,8 @@ enum Mode {
     Neighbours = 5,
     TwiceFromHigher = 6,
     Latency = 7,
+    ClearFromHigher = 8,
+    PendFromHigher = 9,
 }
 
 static ACTIVE: AtomicU32 = AtomicU32::new(Mode::Idle as u32);
@@ -102,6 +112,8 @@ fn mode() -> Mode {
         5 => Mode::Neighbours,
         6 => Mode::TwiceFromHigher,
         7 => Mode::Latency,
+        8 => Mode::ClearFromHigher,
+        9 => Mode::PendFromHigher,
         _ => Mode::Idle,
     }
 }
@@ -240,6 +252,20 @@ pub(super) fn interrupt(cycle: u32) -> bool {
                 }
             }
             NEIGHBOUR_PENDING => count(2),
+            _ => {}
+        },
+        Mode::ClearFromHigher | Mode::PendFromHigher => match line {
+            ABOVE => {
+                count(1);
+                let clear = mode == Mode::ClearFromHigher;
+                let _ = masked(|matrix| {
+                    pend_in(matrix, TASK);
+                    if clear {
+                        clear_in(matrix, TASK);
+                    }
+                });
+            }
+            TASK => count(0),
             _ => {}
         },
         Mode::Latency if line == HIGH => {
@@ -574,4 +600,40 @@ pub(super) fn latency(s: &mut Session<'_>) {
         }
     }
     emit(0x38ff, min, max, valid);
+}
+
+/// 322 (tasks/253, 2a): a pended edge line cleared by a stored `0x00`
+/// enters nothing. TASK (line 34, level 3) and ABOVE (level 4), both edge
+/// and enabled; the thread pends ABOVE; ABOVE's handler stores TASK's
+/// pending byte as `0x01` and then, in variant 0, as `0x00`, in one access
+/// with MIE cleared; variant 1, the control, only pends. A hundred trials
+/// of each. After the window: TASK's entries, ABOVE's entries and TASK's
+/// pending bit. Records per variant `(0x3900 | variant, trials, held,
+/// last)`, where a trial holds with ABOVE entered once and TASK entered
+/// `variant` times with its pending bit clear, and `last` is the last
+/// trial's `task entries | above entries << 8 | pending << 16`.
+pub(super) fn clear_from_higher(s: &mut Session<'_>) {
+    for (variant, mode) in [(0u32, Mode::ClearFromHigher), (1, Mode::PendFromHigher)] {
+        let mut held = 0u32;
+        let mut last = 0u32;
+        for _ in 0..SAMPLES {
+            feed(s);
+            setup(s);
+            configure(s, TASK, 3, true, true);
+            configure(s, ABOVE, 4, true, true);
+            begin(s, mode);
+            oer_portable_riscv::enable_interrupts();
+            let _ = masked(|matrix| pend_in(matrix, ABOVE));
+            window();
+            end();
+            let task = LINE_ENTRIES[0].load(Ordering::Relaxed);
+            let above = LINE_ENTRIES[1].load(Ordering::Relaxed);
+            let ip = pending(s, TASK);
+            if above == 1 && task == variant && ip == 0 {
+                held += 1;
+            }
+            last = task & 0xff | (above & 0xff) << 8 | ip << 16;
+        }
+        emit(0x3900 | variant, SAMPLES, held, last);
+    }
 }

@@ -221,6 +221,16 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "hil/probes/esp32s31-peer-overdue/src/entry.rs:crate::answer_beats:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-peer-overdue", classes = ["software-invariant"] }
 "hil/probes/esp32s31-peer-overdue/src/entry.rs:crate::supervise_hart1:terminal-reference:reset_fault:1" = { owner = "hil/probes/esp32s31-peer-overdue", classes = ["cancellation", "software-invariant"] }
 "hil/probes/esp32s31-peer-overdue/src/entry.rs:crate:retained-slot:retained_static:1" = { owner = "hil/probes/esp32s31-peer-overdue", classes = ["cancellation"] }
+# hil/probes/esp32s31-level-wake/src/entry.rs
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["rust-panic"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:reset-method:reset:3" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::main:terminal-reference:reset_binding:2" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
+"hil/probes/esp32s31-level-wake/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-level-wake", classes = ["configuration-boot"] }
 # hil/probes/esp32s31-light-sleep/src/entry.rs
 "hil/probes/esp32s31-light-sleep/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-light-sleep", classes = ["configuration-boot"] }
 "hil/probes/esp32s31-light-sleep/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-light-sleep", classes = ["rust-panic"] }
