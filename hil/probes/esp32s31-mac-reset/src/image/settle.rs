@@ -52,6 +52,14 @@ const RESET_BUDGET_S: u32 = 25 * 60;
 const A2_BUDGET_S: u32 = 30;
 #[cfg(feature = "short")]
 const RESET_BUDGET_S: u32 = 30;
+/// (a3)'s budget (`tasks/226`): five minutes, a short pass of 30 s.
+#[cfg(not(feature = "short"))]
+const A3_BUDGET_S: u32 = 5 * 60;
+#[cfg(feature = "short")]
+const A3_BUDGET_S: u32 = 30;
+/// (a3)'s quick copy: NEXT's node and the one after it, which fit in about
+/// 20 us (a node's digest about 12.6 us in run 2's first record).
+const QUICK: usize = 2;
 /// The longest wait for the sender's first frame before a part's budget
 /// starts.
 const SENDER_WAIT_S: u32 = 240;
@@ -79,6 +87,9 @@ enum Part {
     A2 = 3,
     /// The block's reset, then the walker's edge.
     Reset = 4,
+    /// (a2) with a quick copy of the buffers the unit in flight can touch,
+    /// taken at once after the activity's clear (`tasks/226`).
+    A3 = 5,
 }
 
 impl Part {
@@ -86,6 +97,7 @@ impl Part {
         match self {
             Self::A2 => A2_BUDGET_S,
             Self::Reset => RESET_BUDGET_S,
+            Self::A3 => A3_BUDGET_S,
         }
     }
 }
@@ -125,7 +137,11 @@ enum Air {
 ///   (`experiment_receive_filter_words`) against the first start's: which
 ///   of the eight differ before the stop | after the start << 8, and
 ///   `AUTO_ACK_DISABLE` of the four policies before << 16 | after << 20.
-type Row = [u32; 10];
+///   `10` (a3): cycles from the activity's clear to the quick copy's end
+///   | its nodes << 24; `11` (a3): for the quick copy's node j (NEXT + j),
+///   3 bits (frame, prefix, descriptor) changed between it and the first
+///   record, at 3 j.
+type Row = [u32; 12];
 
 /// The first start's filter words and the first sets that differ from
 /// them after a start.
@@ -239,7 +255,9 @@ pub(super) async fn series(
     let parts = [Part::A2];
     #[cfg(feature = "only-reset")]
     let parts = [Part::Reset];
-    #[cfg(not(any(feature = "only-a2", feature = "only-reset")))]
+    #[cfg(feature = "only-a3")]
+    let parts = [Part::A3];
+    #[cfg(not(any(feature = "only-a2", feature = "only-reset", feature = "only-a3")))]
     let parts = [Part::A2, Part::Reset];
     for part in parts {
         mark(110 + part as u32);
@@ -269,7 +287,7 @@ pub(super) async fn series(
             if let Some(count) = counts.get_mut(air as usize) {
                 *count = count.saturating_add(1);
             }
-            let mut row: Row = [0; 10];
+            let mut row: Row = [0; 12];
             row[0] = (part as u32) << 28 | (air as u32) << 24 | (index & 0x00ff_ffff);
             wait_micros(u64::from(spread.next(SPREAD_US))).await;
             let before_stop = access.wifi_mac_hal().experiment_receive_filter_words();
@@ -281,10 +299,11 @@ pub(super) async fn series(
             let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
             let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
             let next_before = next.map(|node| digest_frame(&addresses, node));
+            let mut quick = [(0_u64, 0_u64, [0_u32; 3]); QUICK];
             // The edge or the reset; `start` is the cycle the records count
             // from.
             let (start, readback) = match part {
-                Part::A2 => {
+                Part::A2 | Part::A3 => {
                     let request = oer_portable_riscv::cycle32();
                     access.wifi_mac_hal().request_channel_stop();
                     let bound = ACTIVITY_BOUND_US.saturating_mul(CYCLES_PER_US);
@@ -295,6 +314,26 @@ pub(super) async fn series(
                     let clear = oer_portable_riscv::cycle32();
                     row[2] = clear.wrapping_sub(request) | u32::from(!cleared) << 31;
                     access.rx_dma().experiment_walker_edge();
+                    if part == Part::A3
+                        && let Some(at) = next
+                    {
+                        for j in 0..QUICK {
+                            let node = (at + j) % COUNT;
+                            if let (Some(slot), Some(address)) =
+                                (quick.get_mut(j), addresses.get(node))
+                            {
+                                *slot = (
+                                    digest(*address, 0, PREFIX_WORDS),
+                                    digest(*address, PREFIX_WORDS, WORDS),
+                                    node_of(storage, node).map_or([0; 3], |d| {
+                                        [d.word0().bits(), d.buffer_address(), d.next_address()]
+                                    }),
+                                );
+                            }
+                        }
+                        let copied = oer_portable_riscv::cycle32();
+                        row[10] = copied.wrapping_sub(clear) & 0x00ff_ffff | (QUICK as u32) << 24;
+                    }
                     (clear, access.receive_dma_snapshot().walker_enabled)
                 }
                 Part::Reset => {
@@ -334,6 +373,17 @@ pub(super) async fn series(
                     }
                     flags |= u32::from(readback) << 2;
                     flags |= u32::from(next.is_none()) << 3;
+                    if part == Part::A3
+                        && let Some(at) = next
+                    {
+                        for (j, (prefix, frame, words)) in quick.iter().enumerate() {
+                            let node = (at + j) % COUNT;
+                            let bits = u32::from(record.frame.get(node) != Some(frame))
+                                | u32::from(record.prefix.get(node) != Some(prefix)) << 1
+                                | u32::from(record.words.get(node) != Some(words)) << 2;
+                            row[11] |= bits << (3 * j);
+                        }
+                    }
                     row[1] = next.map_or(0xff, |n| n as u32) & 0xff
                         | (last.map_or(0xff, |n| n as u32) & 0xff) << 8
                         | flags << 16;
@@ -357,7 +407,9 @@ pub(super) async fn series(
             };
             ring = match part {
                 // The MAC resumed by the start (`start_mac_runtime`).
-                Part::A2 => restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?,
+                Part::A2 | Part::A3 => {
+                    restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?
+                }
                 Part::Reset => {
                     let cold = {
                         let mut clocked = WifiClocked::from_running(access, clocks_on);

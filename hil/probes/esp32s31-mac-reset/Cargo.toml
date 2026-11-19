@@ -93,6 +93,8 @@ short = ["settle"]
 # `tasks/224`: one part a boot.
 only-a2 = ["settle"]
 only-reset = ["settle"]
+# `tasks/226`: (a3) alone.
+only-a3 = ["settle"]
 
 [lints]
 workspace = true

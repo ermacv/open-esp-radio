@@ -498,7 +498,7 @@ async fn report(
         // One verdict a part: `pass` only with no frame region and no
         // descriptor word changed after the first record in any stop, and
         // no bad frame after a start.
-        for (part, name) in [(3_u32, "a2"), (4, "reset")] {
+        for (part, name) in [(3_u32, "a2"), (4, "reset"), (5, "a3")] {
             let mut stops = 0_u32;
             let mut changed = 0_u32;
             let mut bad = 0_u32;
@@ -523,6 +523,25 @@ async fn report(
                 }
             }
             line.clear();
+            // (a3): writes after the activity's clear, by the quick copy.
+            let after_clear = rows
+                .rows()
+                .iter()
+                .filter(|row| row[0] >> 28 == part && row[11] != 0)
+                .count() as u32;
+            let quick_max = rows
+                .rows()
+                .iter()
+                .filter(|row| row[0] >> 28 == part)
+                .map(|row| row[10] & 0x00ff_ffff)
+                .max()
+                .unwrap_or(0);
+            let in_flight = rows
+                .rows()
+                .iter()
+                .filter(|row| row[0] >> 28 == part && row[1] >> 16 & 1 != 0)
+                .count() as u32;
+            let changed = changed + after_clear;
             let verdict = if stops > 0 && changed == 0 && bad == 0 && silent == 0 {
                 "pass"
             } else {
@@ -533,6 +552,7 @@ async fn report(
                 "SETTLE {name} stops={stops} changed={changed} checked_after_start={checked} \
                  bad_after_start={bad} silent_starts={silent} first_silent={first_silent} \
                  filter_differs_after_start={filter_differs} silent_with_filter_differing={silent_with_filter} \
+                 written_after_clear={after_clear} quick_copy_cycles_max={quick_max} in_flight={in_flight} \
                  verdict={verdict}"
             );
             usb::text(&mut console, line.as_bytes()).await;
