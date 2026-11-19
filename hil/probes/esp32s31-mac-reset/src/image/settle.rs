@@ -44,7 +44,7 @@ const PER_AIR: u32 = 1_000;
 const ROWS_MAX: usize = 4 * PER_AIR as usize + 512;
 /// Each part's budget (`tasks/222`: the two under fifty minutes).
 #[cfg(not(feature = "short"))]
-const A2_BUDGET_S: u32 = 14 * 60;
+const A2_BUDGET_S: u32 = 11 * 60;
 #[cfg(not(feature = "short"))]
 const RESET_BUDGET_S: u32 = 34 * 60;
 /// The short pass of a lease (`tasks/222`): about a minute in all.

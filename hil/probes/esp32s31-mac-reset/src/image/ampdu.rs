@@ -377,7 +377,7 @@ const B6_FULL: usize = 1_490;
 const STREAM_RUN_MS: u32 = 45_000;
 /// `tasks/219`: one kind of air's turn of the settle run.
 #[cfg(all(feature = "stream-ampdu", feature = "long-run"))]
-const STREAM_RUN_MS: u32 = 600_000;
+const STREAM_RUN_MS: u32 = 150_000;
 #[cfg(any(feature = "b6", feature = "stream-ampdu"))]
 const B6_SHORT: usize = 100;
 /// Aggregates of each rate, length and size.
