@@ -58429,7 +58429,7 @@ pub mod clic {
 
     /// The stored byte image (`CLIC.IP%s`).
     ///
-    /// SOURCE: ESP_IDF_4D59230D_S31_CLIC, HW_S31_CLIC_LINE_BYTES_20261119.
+    /// SOURCE: HW_S31_LEVEL_TASK_WAKE_20261119, HW_S31_CLIC_PENDING_PER_HART_20261119, ESP_IDF_4D59230D_S31_CLIC, HW_S31_CLIC_LINE_BYTES_20261119.
     pub const CLEAR_LINE_IMAGE: u32 = 0x00;
 
     impl<const H: u8, P: oer_portable_mmio::Placement> ClicPending<H, P> {
@@ -58448,7 +58448,7 @@ pub mod clic {
 
         /// Store the whole byte `0x00`, undeclared bits included, in element `index`, on hart `H`'s copy (`CLIC.IP%s`).
         ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_CLIC, HW_S31_CLIC_LINE_BYTES_20261119.
+        /// SOURCE: HW_S31_LEVEL_TASK_WAKE_20261119, HW_S31_CLIC_PENDING_PER_HART_20261119, ESP_IDF_4D59230D_S31_CLIC, HW_S31_CLIC_LINE_BYTES_20261119.
         #[inline(always)]
         pub fn clear_line(
             &self,

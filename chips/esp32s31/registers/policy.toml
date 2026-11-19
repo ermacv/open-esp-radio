@@ -3062,15 +3062,17 @@ whole-word = true
 sources = ["HW_S31_CLIC_LINE_BYTES_20261119", "ESP_IDF_4D59230D_S31_CLIC"]
 
 # The same byte stored whole as 0x00, the line's pending bit cleared. Bits
-# 7:1 are written zero as by the pend; the header names only bit 0. No run
-# stored this image alone: run 241's line was cleared before its enable as
-# the facts image's bind cleared it.
+# 7:1 are written zero as by the pend; the header names only bit 0. The
+# 2026-11-19 runs stored this image after a pend of an enabled edge line in
+# a handler above it (no entry, the bit read clear, a hundred trials), before
+# a task line's bind (no entry after its enable) and on each hart's own copy
+# (the other hart's unchanged).
 [[fixed-register-images]]
 name = "clear_line"
 register = "CLIC.IP%s"
 value = 0x00
 whole-word = true
-sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW_S31_CLIC_LINE_BYTES_20261119"]
+sources = ["HW_S31_LEVEL_TASK_WAKE_20261119", "HW_S31_CLIC_PENDING_PER_HART_20261119", "ESP_IDF_4D59230D_S31_CLIC", "HW_S31_CLIC_LINE_BYTES_20261119"]
 
 [[fixed-register-images]]
 name = "configure_timg0_timer0_stopped"
