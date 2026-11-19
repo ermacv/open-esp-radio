@@ -233,9 +233,13 @@ and retention contracts.
   is a HAL atom that calls it, citing its stand record;
 - `unsafe trait Brand`. Its one `unsafe impl` is the one that `arena!` writes:
   the brand names its own place and returned set;
-- `unsafe trait PlacedStatic`. The HAL's placed static implements it in its own
-  home: the claim of the static's own value, once, with the proof of its
-  address.
+- `unsafe trait PlacedStatic`. The HAL's placed static (`DmaStatic`, made
+  only by `dma_static!`) implements it in its own home, the placement
+  constructor (`system/memory/dma_static.rs`): the claim takes the static's
+  own value once and makes its address through `dma_address::placed_link`,
+  two sites; a second claim is refused. Its proof of the address is the
+  section `dma_static!` names and the runtime linker script's assertions
+  over the DMA window.
 
 An arena is made only by `Arena::claim`, from its brand's place; a second
 static of the place's type is inert, and the arena makes no address from a
