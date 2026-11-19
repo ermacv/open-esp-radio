@@ -6,8 +6,8 @@ use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use oer_portable_mmio::{Bits, Index};
 
 const LIMIT: u32 = 200_000;
-const LOW: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
-const HIGH: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<{ LINE + 1 }>();
+const LOW: Index<{ pac::clic::ip::COUNT }> = Index::constant::<LINE>();
+const HIGH: Index<{ pac::clic::ip::COUNT }> = Index::constant::<{ LINE + 1 }>();
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static COUNT: AtomicU32 = AtomicU32::new(0);
 static CAUSES: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
@@ -33,7 +33,7 @@ pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
     };
     // The generic handler lends its existing CLIC borrow. Each entry disables
     // only its own line; both peripheral causes remain pending for observation.
-    clic.modify_ctrl(selected, |w| {
+    clic.modify_ie(selected, |w| {
         w.set_ie(false);
     });
     oer_portable_riscv::fence();
@@ -182,7 +182,7 @@ fn finish(s: &mut Session<'_>) {
     clear(s);
     s.source.store_hp_cpu_int_from_cpu_2(false);
     for i in [LOW, HIGH] {
-        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ie(i, |w| {
             w.set_ie(false);
         });
     }
@@ -376,11 +376,16 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
     route(s, pac::Interrupt::TIMERGRP0_T0, timer.get());
     route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, software.get());
     for i in [LOW, HIGH] {
-        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
-            w.set_attr_shv(true)
-                .set_attr_trig(pac::clic::ctrl::AttrTrig::PositiveLevel)
-                .set_ctl(CONTROLS[1])
-                .set_ie(true);
+        let clic = &mut s.interrupt_matrix.clic[0];
+        clic.modify_attr(i, |w| {
+            w.set_shv(true)
+                .set_trig(pac::clic::attr::Trig::PositiveLevel);
+        });
+        clic.modify_ctl(i, |w| {
+            w.set_ctl(CONTROLS[1]);
+        });
+        clic.modify_ie(i, |w| {
+            w.set_ie(true);
         });
     }
     let [before, _] = arm(s, 10);
@@ -411,12 +416,12 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
         ),
     );
     for i in [LOW, HIGH] {
-        let c = s.interrupt_matrix.clic[0].read_ctrl(i);
+        let clic = &s.interrupt_matrix.clic[0];
         emit(
             0x1964,
             i.get() as u32,
-            u32::from(c.ip()) | (u32::from(c.ie()) << 1),
-            u32::from(c.ctl()),
+            u32::from(clic.read_ip(i).ip()) | (u32::from(clic.read_ie(i).ie()) << 1),
+            u32::from(clic.read_ctl(i).ctl()),
         );
     }
     COUNT.store(0, Ordering::Relaxed);

@@ -89,6 +89,8 @@ mod sealed {
         type Parts<P: super::Placement, R: super::Registers>;
         /// Each part's owned, observed and trigger words.
         const WORDS: &'static [super::PartWords];
+        /// Each part's owned and observed byte registers.
+        const BYTES: &'static [super::PartBytes];
         /// Make the parts over `place`.
         fn parts<P: super::Placement, R: super::Registers>(place: P) -> Self::Parts<P, R>;
     }
@@ -132,6 +134,61 @@ impl DeviceWord {
         // device accesses are outside Rust memory. Host writers are confined
         // to one thread and retain their exclusive, extent-checked borrow.
         unsafe { self.0.write_volatile(value) }
+    }
+}
+
+/// One byte register: a narrow (8-bit) register the model lays inside a
+/// 32-bit word, reached by a byte access of its own, so no other byte of
+/// the word is read or written.
+struct DeviceByte(*mut u8);
+
+impl DeviceByte {
+    /// The byte at byte `offset` of `place`: its word's address, and the
+    /// byte's place in it (the chip and the host are little-endian).
+    #[inline(always)]
+    fn at<P: Placement>(place: &P, offset: usize) -> Self {
+        Self(
+            place
+                .word(offset & !3)
+                .cast::<u8>()
+                .wrapping_add(offset & 3),
+        )
+    }
+
+    /// The same for a read-only placement.
+    #[inline(always)]
+    fn reading<P: sealed::Reading>(place: &P, offset: usize) -> Self {
+        Self(
+            place
+                .word(offset & !3)
+                .cast::<u8>()
+                .cast_mut()
+                .wrapping_add(offset & 3),
+        )
+    }
+}
+
+#[allow(
+    unsafe_code,
+    reason = "the two volatile operations on checked register bytes"
+)]
+impl DeviceByte {
+    #[inline(always)]
+    fn load(self) -> u32 {
+        // SAFETY: the private callers check this byte register belongs to
+        // their Block, Part or Reader, as for a word (`DeviceWord::load`);
+        // a byte has no alignment to keep. Fixed bytes satisfy
+        // assume_owned's device-register promise; host bytes lie inside the
+        // live borrow of the host words.
+        u32::from(unsafe { self.0.read_volatile() })
+    }
+
+    #[inline(always)]
+    fn store(self, value: u32) {
+        // SAFETY: only Block and Part writers call this, for byte registers
+        // they own, as for a word (`DeviceWord::store`). The value's low
+        // byte is the register's whole value.
+        unsafe { self.0.write_volatile(value.to_le_bytes()[0]) }
     }
 }
 
@@ -234,6 +291,10 @@ pub trait Registers {
     type Sharing: Sharing;
     /// The block's words.
     const WORDS: &'static [usize];
+    /// The block's byte registers, as byte offsets, strictly ascending: each
+    /// a narrow (8-bit) register inside a word no entry of `WORDS` names, so
+    /// no byte is reached both as itself and through its word.
+    const BYTES: &'static [usize] = &[];
 }
 
 /// The sealed sharing policy of a register block.
@@ -307,10 +368,16 @@ pub trait Claim: sealed::Claimed {}
 impl<const BASE: usize, R: Registers> sealed::Claimed for Block<Fixed<BASE>, R> {
     fn claimed(_promise: &sealed::Promise) -> Self {
         const {
-            if !(BASE.is_multiple_of(4) && !R::WORDS.is_empty() && ascending(R::WORDS)) {
+            if !(BASE.is_multiple_of(4)
+                && !(R::WORDS.is_empty() && R::BYTES.is_empty())
+                && ascending(R::WORDS))
+            {
                 panic!("a claimed block lists word-aligned words, strictly ascending");
             };
-            if !(match end(R::WORDS) {
+            if !(bytes_apart(R::BYTES, R::WORDS)) {
+                panic!("a block's bytes ascend and lie in no word it lists");
+            };
+            if !(match block_end(R::WORDS, R::BYTES) {
                 Some(end) => BASE.checked_add(end).is_some(),
                 None => false,
             }) {
@@ -406,7 +473,10 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
             if !(ascending(R::WORDS)) {
                 panic!("a block lists word-aligned words, strictly ascending");
             };
-            match end(R::WORDS) {
+            if !(bytes_apart(R::BYTES, R::WORDS)) {
+                panic!("a block's bytes ascend and lie in no word it lists");
+            };
+            match block_end(R::WORDS, R::BYTES) {
                 Some(end) => end,
                 None => panic!("a block's words lie inside the address space"),
             }
@@ -447,13 +517,40 @@ const fn ascending(mut list: &[usize]) -> bool {
     true
 }
 
-/// The byte just past the last word of an ascending `list`.
+/// Whether `bytes` ascend strictly and none lies in a word of `words`.
+const fn bytes_apart(mut bytes: &[usize], words: &[usize]) -> bool {
+    let mut previous: Option<usize> = None;
+    while let [byte, rest @ ..] = bytes {
+        if let Some(previous) = previous
+            && *byte <= previous
+        {
+            return false;
+        }
+        if listed(words, *byte & !3) {
+            return false;
+        }
+        previous = Some(*byte);
+        bytes = rest;
+    }
+    true
+}
+
+/// The byte just past a block's last word or byte register.
+const fn block_end(words: &[usize], bytes: &[usize]) -> Option<usize> {
+    match (end(words), end(bytes)) {
+        (Some(words), Some(bytes)) => Some(if words > bytes { words } else { bytes }),
+        _ => None,
+    }
+}
+
+/// The byte just past the word that holds the last entry of an ascending
+/// `list`: a word's offset, or a byte register's inside its word.
 ///
 /// It is evaluated only at compile time: a list whose last word ends past
 /// the address space fails the evaluation instead of wrapping.
 const fn end(list: &[usize]) -> Option<usize> {
     match list.last() {
-        Some(last) => last.checked_add(4),
+        Some(last) => (*last & !3).checked_add(4),
         None => Some(0),
     }
 }
@@ -519,6 +616,68 @@ impl<P: Placement, R: Registers> Block<P, R> {
             }
         };
         DeviceWord(self.place.word(OFFSET)).store(value)
+    }
+
+    /// One volatile read of the byte register at byte `OFFSET`, zero-extended.
+    #[inline(always)]
+    pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
+        const {
+            if !(listed(R::BYTES, OFFSET)) {
+                panic!("the block lists the byte");
+            }
+        };
+        DeviceByte::at(&self.place, OFFSET).load()
+    }
+
+    /// One volatile write of the byte register at byte `OFFSET`: `value`'s
+    /// low byte.
+    #[inline(always)]
+    pub fn write_byte<const OFFSET: usize>(&mut self, value: u32) {
+        const {
+            if !(listed(R::BYTES, OFFSET)) {
+                panic!("the block lists the byte");
+            }
+        };
+        DeviceByte::at(&self.place, OFFSET).store(value)
+    }
+
+    /// One volatile read of element `index` of the byte-register array at
+    /// `OFFSET`, zero-extended.
+    #[inline(always)]
+    pub fn read_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &self,
+        index: Index<COUNT>,
+    ) -> u32 {
+        const {
+            if !(array_listed(R::BYTES, OFFSET, STRIDE, COUNT)) {
+                panic!("the block lists every element");
+            };
+        };
+        DeviceByte::at(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .load()
+    }
+
+    /// One volatile write of element `index` of the byte-register array at
+    /// `OFFSET`: `value`'s low byte.
+    #[inline(always)]
+    pub fn write_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &mut self,
+        index: Index<COUNT>,
+        value: u32,
+    ) {
+        const {
+            if !(array_listed(R::BYTES, OFFSET, STRIDE, COUNT)) {
+                panic!("the block lists every element");
+            };
+        };
+        DeviceByte::at(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .store(value)
     }
 
     /// One volatile read of element `index` of the word array at `OFFSET`.
@@ -587,6 +746,12 @@ impl<P: Placement, R: Registers> Block<P, R> {
                     "a shared trigger word is owned by no part and its parts' bits are disjoint"
                 );
             };
+            if !(bytes_listed(R::BYTES, D::BYTES)) {
+                panic!("the block lists every byte register of its parts");
+            };
+            if !(owned_bytes_disjoint(D::BYTES)) {
+                panic!("the parts of a block own disjoint byte registers");
+            };
         };
         D::parts(self.place)
     }
@@ -597,6 +762,9 @@ impl<P: Placement, R: Registers> Block<P, R> {
         const {
             if !(all_listed(W::OWNED, R::WORDS) && all_listed(W::OBSERVED, R::WORDS)) {
                 panic!("the block lists every word of its reader");
+            };
+            if !(all_listed(W::OWNED_BYTES, R::BYTES) && all_listed(W::OBSERVED_BYTES, R::BYTES)) {
+                panic!("the block lists every byte register of its reader");
             };
         };
         Reader {
@@ -610,6 +778,10 @@ impl<P: Placement, R: Registers> Block<P, R> {
 /// shared write-trigger words with the part's bits.
 pub type PartWords = (&'static [usize], &'static [usize], &'static [(usize, u32)]);
 
+/// One part's byte-register lists, as a division checks them: owned and
+/// observed byte registers.
+pub type PartBytes = (&'static [usize], &'static [usize]);
+
 /// The parts one [`Block::divide`] makes: a tuple of two to four [`Words`].
 pub trait Division: sealed::Divides {}
 
@@ -619,6 +791,8 @@ macro_rules! divisions {
             type Parts<P: Placement, R: Registers> = ($(Part<P, R, $part>,)+);
             const WORDS: &'static [PartWords] =
                 &[$(($part::OWNED, $part::OBSERVED, $part::TRIGGERS)),+];
+            const BYTES: &'static [PartBytes] =
+                &[$(($part::OWNED_BYTES, $part::OBSERVED_BYTES)),+];
 
             #[allow(non_snake_case, reason = "one binding per part type")]
             fn parts<P: Placement, R: Registers>(place: P) -> Self::Parts<P, R> {
@@ -653,6 +827,32 @@ const fn parts_listed(block: &[usize], mut parts: &[PartWords]) -> bool {
                 return false;
             }
             list = others;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// Whether `block` lists every owned and observed byte register of `parts`.
+const fn bytes_listed(block: &[usize], mut parts: &[PartBytes]) -> bool {
+    while let [(owned, observed), rest @ ..] = parts {
+        if !all_listed(owned, block) || !all_listed(observed, block) {
+            return false;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// Whether no two of `parts` own the same byte register.
+const fn owned_bytes_disjoint(mut parts: &[PartBytes]) -> bool {
+    while let [(owned, _), rest @ ..] = parts {
+        let mut others = rest;
+        while let [(other, _), more @ ..] = others {
+            if !disjoint(owned, other) {
+                return false;
+            }
+            others = more;
         }
         parts = rest;
     }
@@ -831,6 +1031,11 @@ pub trait Words {
     /// word whose written one starts an action and whose written zero does
     /// nothing, so each part stores its own bits with zero in every other.
     const TRIGGERS: &'static [(usize, u32)] = &[];
+    /// The byte registers the part reads and writes; no other part owns
+    /// them.
+    const OWNED_BYTES: &'static [usize] = &[];
+    /// The byte registers the part only reads.
+    const OBSERVED_BYTES: &'static [usize] = &[];
 }
 
 const fn contains(mut list: &[usize], word: usize) -> bool {
@@ -934,6 +1139,71 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
         .store(value)
     }
 
+    /// One volatile read of a byte register the part owns or observes,
+    /// zero-extended.
+    #[inline(always)]
+    pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
+        const {
+            if !(contains(W::OWNED_BYTES, OFFSET) || contains(W::OBSERVED_BYTES, OFFSET)) {
+                panic!("a part reads only the bytes it owns or observes");
+            };
+        };
+        DeviceByte::at(&self.place, OFFSET).load()
+    }
+
+    /// One volatile write of a byte register the part owns: `value`'s low
+    /// byte.
+    #[inline(always)]
+    pub fn write_byte<const OFFSET: usize>(&mut self, value: u32) {
+        const {
+            if !(contains(W::OWNED_BYTES, OFFSET)) {
+                panic!("a part writes only the bytes it owns");
+            };
+        };
+        DeviceByte::at(&self.place, OFFSET).store(value)
+    }
+
+    /// One volatile read of an element of a byte-register array the part
+    /// owns or observes, zero-extended.
+    #[inline(always)]
+    pub fn read_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &self,
+        index: Index<COUNT>,
+    ) -> u32 {
+        const {
+            if !(array_listed(W::OWNED_BYTES, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT))
+            {
+                panic!("a part reads only the arrays it owns or observes");
+            };
+        };
+        DeviceByte::at(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .load()
+    }
+
+    /// One volatile write of an element of a byte-register array the part
+    /// owns: `value`'s low byte.
+    #[inline(always)]
+    pub fn write_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &mut self,
+        index: Index<COUNT>,
+        value: u32,
+    ) {
+        const {
+            if !(array_listed(W::OWNED_BYTES, OFFSET, STRIDE, COUNT)) {
+                panic!("a part writes only the arrays it owns");
+            };
+        };
+        DeviceByte::at(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .store(value)
+    }
+
     /// One volatile store of the part's bits of the shared write-trigger
     /// word at `OFFSET`: `value` in them, zero in every other bit, which
     /// the other parts own and a written zero leaves alone.
@@ -1005,6 +1275,39 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
             };
         };
         DeviceWord(sealed::Reading::word(&self.place, OFFSET).cast_mut()).load()
+    }
+
+    /// One volatile read of a byte register the reader lists,
+    /// zero-extended.
+    #[inline(always)]
+    pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
+        const {
+            if !(contains(W::OWNED_BYTES, OFFSET) || contains(W::OBSERVED_BYTES, OFFSET)) {
+                panic!("a reader reads only the bytes it lists");
+            };
+        };
+        DeviceByte::reading(&self.place, OFFSET).load()
+    }
+
+    /// One volatile read of an element of a byte-register array the reader
+    /// lists, zero-extended.
+    #[inline(always)]
+    pub fn read_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
+        &self,
+        index: Index<COUNT>,
+    ) -> u32 {
+        const {
+            if !(array_listed(W::OWNED_BYTES, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT))
+            {
+                panic!("a reader reads only the arrays it lists");
+            };
+        };
+        DeviceByte::reading(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .load()
     }
 
     /// One volatile read of an array element the reader lists.

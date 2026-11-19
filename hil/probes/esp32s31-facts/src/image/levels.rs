@@ -37,7 +37,7 @@ const fn control(level: u32) -> u8 {
     ((level << (8 - LEVEL_BITS)) - 1) as u8
 }
 const _: () = const {
-    if LEVEL_BITS != 3 || LINE + 32 > pac::clic::ctrl::COUNT {
+    if LEVEL_BITS != 3 || LINE + 32 > pac::clic::ip::COUNT {
         panic!("levels probe: three level bits and 32 lines from LINE");
     }
 };
@@ -104,7 +104,7 @@ fn mode() -> Mode {
     }
 }
 
-fn index(line: u32) -> Option<Index<{ pac::clic::ctrl::COUNT }>> {
+fn index(line: u32) -> Option<Index<{ pac::clic::ip::COUNT }>> {
     Index::new(line as usize).ok()
 }
 
@@ -141,7 +141,7 @@ fn masked<R>(f: impl FnOnce(&mut pac::clic::Clic) -> R) -> Option<R> {
 /// The pend: the line's own word, read, `IP` set, written.
 fn pend_in(clic: &mut pac::clic::Clic, line: u32) {
     if let Some(i) = index(line) {
-        clic.modify_ctrl(i, |w| {
+        clic.modify_ip(i, |w| {
             w.set_ip(true);
         });
     }
@@ -183,7 +183,7 @@ pub(super) fn interrupt(cycle: u32) -> bool {
         log(STRAY, line);
         let _ = masked(|clic| {
             if let Some(i) = index(line) {
-                clic.modify_ctrl(i, |w| {
+                clic.modify_ie(i, |w| {
                     w.set_ie(false);
                 });
             }
@@ -253,21 +253,24 @@ fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: b
         return;
     };
     let clic = &mut s.interrupt_matrix.clic[0];
-    clic.modify_ctrl(i, |w| {
+    clic.modify_ie(i, |w| {
         w.set_ie(false);
     });
-    clic.modify_ctrl(i, |w| {
-        w.set_ip(false)
-            .set_attr_shv(true)
-            .set_attr_trig(if edge {
-                pac::clic::ctrl::AttrTrig::PositiveEdge
-            } else {
-                pac::clic::ctrl::AttrTrig::PositiveLevel
-            })
-            .set_ctl(control);
+    clic.modify_ip(i, |w| {
+        w.set_ip(false);
+    });
+    clic.modify_attr(i, |w| {
+        w.set_shv(true).set_trig(if edge {
+            pac::clic::attr::Trig::PositiveEdge
+        } else {
+            pac::clic::attr::Trig::PositiveLevel
+        });
+    });
+    clic.modify_ctl(i, |w| {
+        w.set_ctl(control);
     });
     if enable {
-        clic.modify_ctrl(i, |w| {
+        clic.modify_ie(i, |w| {
             w.set_ie(true);
         });
     }
@@ -332,7 +335,7 @@ fn emit_events(tag: u32, repeat: u32) {
 
 fn pending(s: &Session<'_>, line: u32) -> u32 {
     index(line).map_or(0xff, |i| {
-        u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ip())
+        u32::from(s.interrupt_matrix.clic[0].read_ip(i).ip())
     })
 }
 
@@ -340,13 +343,14 @@ fn pending(s: &Session<'_>, line: u32) -> u32 {
 /// `IE` 8, `ATTR_SHV` 16, `ATTR_TRIG` 17-18, `ATTR_MODE` 22-23, `CTL` 24-31.
 fn word(s: &Session<'_>, line: u32) -> u32 {
     index(line).map_or(0, |i| {
-        let w = s.interrupt_matrix.clic[0].read_ctrl(i);
-        u32::from(w.ip())
-            | u32::from(w.ie()) << 8
-            | u32::from(w.attr_shv()) << 16
-            | w.attr_trig().get() << 17
-            | w.attr_mode().get() << 22
-            | u32::from(w.ctl()) << 24
+        let clic = &s.interrupt_matrix.clic[0];
+        let attributes = clic.read_attr(i);
+        u32::from(clic.read_ip(i).ip())
+            | u32::from(clic.read_ie(i).ie()) << 8
+            | u32::from(attributes.shv()) << 16
+            | attributes.trig().get() << 17
+            | attributes.mode().get() << 22
+            | u32::from(clic.read_ctl(i).ctl()) << 24
     })
 }
 
@@ -447,7 +451,7 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
             configure(s, TARGET, 2, true, true);
             configure(s, NEIGHBOUR_SOURCE, 2, variant >= 3, true);
             if let Some(i) = index(NEIGHBOUR_PENDING) {
-                s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
                     w.set_ip(true);
                 });
             }
@@ -461,7 +465,7 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
                 raise_source();
             }
             if let Some(i) = index(TARGET) {
-                s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
                     if timing == 1 {
                         raise_source();
                     }
@@ -519,7 +523,7 @@ pub(super) fn twice(s: &mut Session<'_>) {
         // Both pends before any entry: MIE stays cleared across them.
         if let Some(i) = index(MIDDLE) {
             for _ in 0..2 {
-                s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
                     w.set_ip(true);
                 });
             }

@@ -35,7 +35,7 @@ pub(super) fn interrupt() -> bool {
     // The loan ends after MIE is cleared, before the thread reuses the owner.
     let clic = unsafe { &mut *clic };
     if !super::timg_arbitration::interrupt(clic) {
-        clic.modify_ctrl(CPU_LINE, |w| {
+        clic.modify_ie(CPU_LINE, |w| {
             w.set_ie(false);
         });
     }
@@ -118,17 +118,17 @@ fn matrix_state(s: &Session<'_>, tag: u32) {
             .read_int_status_reg_1()
             .int_status_1(),
         pack([
-            s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip(),
-            s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ie(),
+            s.interrupt_matrix.clic[0].read_ip(CPU_LINE).ip(),
+            s.interrupt_matrix.clic[0].read_ie(CPU_LINE).ie(),
             s.interrupt_matrix.clic[0]
-                .read_ctrl(Index::constant::<0>())
+                .read_ip(Index::constant::<0>())
                 .ip(),
         ]),
     );
 }
 fn admit(s: &mut Session<'_>, tag: u32) {
     IRQ_COUNT.store(0, Ordering::Relaxed);
-    s.interrupt_matrix.clic[0].modify_ctrl(CPU_LINE, |w| {
+    s.interrupt_matrix.clic[0].modify_ie(CPU_LINE, |w| {
         w.set_ie(true);
     });
     oer_portable_riscv::restore_interrupt_threshold(0);
@@ -136,8 +136,8 @@ fn admit(s: &mut Session<'_>, tag: u32) {
     emit(
         tag,
         IRQ_COUNT.load(Ordering::Relaxed),
-        u32::from(s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ie()),
-        u32::from(s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip()),
+        u32::from(s.interrupt_matrix.clic[0].read_ie(CPU_LINE).ie()),
+        u32::from(s.interrupt_matrix.clic[0].read_ip(CPU_LINE).ip()),
     );
 }
 fn begin(s: &mut Session<'_>, source: pac::Interrupt) {
@@ -177,7 +177,7 @@ pub(super) fn matrix(s: &mut Session<'_>) {
     matrix_state(s, 0x4020);
     admit(s, 0x4021);
     route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, true);
-    s.interrupt_matrix.clic[0].modify_ctrl(CPU_LINE, |w| {
+    s.interrupt_matrix.clic[0].modify_ie(CPU_LINE, |w| {
         w.set_ie(false);
     });
     wait_window();

@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 use super::{Bits, CONTROLS, Index, LINE, SOFTWARE_SOURCE, Session, emit, pac};
 
-pub(super) const INPUTS: [Index<{ pac::clic::ctrl::COUNT }>; 2] =
+pub(super) const INPUTS: [Index<{ pac::clic::ip::COUNT }>; 2] =
     [Index::constant::<LINE>(), Index::constant::<{ LINE + 1 }>()];
 
 pub(super) fn route(s: &mut Session<'_>, source: pac::Interrupt, map: u32) {
@@ -27,7 +27,7 @@ pub(super) fn inherited(s: &Session<'_>) {
 }
 pub(super) fn clear(s: &mut Session<'_>) {
     for i in INPUTS {
-        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+        s.interrupt_matrix.clic[0].modify_ip(i, |w| {
             w.set_ip(false);
         });
     }
@@ -35,7 +35,7 @@ pub(super) fn clear(s: &mut Session<'_>) {
 }
 pub(super) fn pending(s: &Session<'_>) -> u32 {
     INPUTS.into_iter().enumerate().fold(0, |v, (n, i)| {
-        v | (u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ip()) << n)
+        v | (u32::from(s.interrupt_matrix.clic[0].read_ip(i).ip()) << n)
     })
 }
 pub(super) fn control(s: &mut Session<'_>) -> bool {
@@ -53,28 +53,38 @@ pub(super) fn control(s: &mut Session<'_>) -> bool {
     for (n, i) in INPUTS.into_iter().enumerate() {
         s.source.store_hp_cpu_int_from_cpu_2(false);
         route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, (LINE + n) as u32);
-        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
-            w.set_ie(false)
-                .set_attr_shv(true)
-                .set_attr_trig(pac::clic::ctrl::AttrTrig::PositiveEdge)
-                .set_ctl(CONTROLS[1])
-                .set_ip(false);
+        let clic = &mut s.interrupt_matrix.clic[0];
+        clic.modify_ie(i, |w| {
+            w.set_ie(false);
+        });
+        clic.modify_attr(i, |w| {
+            w.set_shv(true)
+                .set_trig(pac::clic::attr::Trig::PositiveEdge);
+        });
+        clic.modify_ctl(i, |w| {
+            w.set_ctl(CONTROLS[1]);
+        });
+        clic.modify_ip(i, |w| {
+            w.set_ip(false);
         });
         super::wait_window();
-        let before = s.interrupt_matrix.clic[0].read_ctrl(i).ip();
+        let before = s.interrupt_matrix.clic[0].read_ip(i).ip();
         s.source.store_hp_cpu_int_from_cpu_2(true);
         super::wait_window();
-        let after = s.interrupt_matrix.clic[0].read_ctrl(i);
+        let after = (
+            s.interrupt_matrix.clic[0].read_ip(i).ip(),
+            s.interrupt_matrix.clic[0].read_ie(i).ie(),
+        );
         emit(
             0x3001,
             n as u32,
-            u32::from(before) | (u32::from(after.ip()) << 1) | (u32::from(after.ie()) << 2),
+            u32::from(before) | (u32::from(after.0) << 1) | (u32::from(after.1) << 2),
             s.interrupt_matrix
                 .interrupt_core0_status
                 .read_int_status_reg_2()
                 .int_status_2(),
         );
-        valid &= !before && after.ip() && !after.ie();
+        valid &= !before && after.0 && !after.1;
         s.source.store_hp_cpu_int_from_cpu_2(false);
         super::wait_window();
         clear(s);

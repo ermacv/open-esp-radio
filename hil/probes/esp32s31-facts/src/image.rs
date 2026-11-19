@@ -36,7 +36,7 @@ mod time_csr;
 mod timg_arbitration;
 
 include!(concat!(env!("OUT_DIR"), "/geometry.rs"));
-const CPU_LINE: Index<{ pac::clic::ctrl::COUNT }> = Index::constant::<LINE>();
+const CPU_LINE: Index<{ pac::clic::ip::COUNT }> = Index::constant::<LINE>();
 const SOFTWARE_SOURCE: Index<{ pac::interrupt_core::route::COUNT }> =
     Index::constant::<{ pac::Interrupt::CPU_INTR_FROM_CPU_2 as usize }>();
 
@@ -1009,17 +1009,17 @@ fn geometry(s: &mut Session<'_>) {
         info.ctlbits().get(),
         u32::from(info.version()),
     );
-    for n in 0..pac::clic::ctrl::COUNT {
+    for n in 0..pac::clic::ip::COUNT {
         let Ok(i) = Index::new(n) else { continue };
-        let w = clic.read_ctrl(i);
+        let attributes = clic.read_attr(i);
         emit(
             0x200 + n as u32,
-            w.ctl().into(),
-            w.attr_mode().get(),
-            u32::from(w.ip())
-                | (u32::from(w.ie()) << 1)
-                | (u32::from(w.attr_shv()) << 2)
-                | (w.attr_trig().get() << 3),
+            clic.read_ctl(i).ctl().into(),
+            attributes.mode().get(),
+            u32::from(clic.read_ip(i).ip())
+                | (u32::from(clic.read_ie(i).ie()) << 1)
+                | (u32::from(attributes.shv()) << 2)
+                | (attributes.trig().get() << 3),
         );
     }
 }
@@ -1104,9 +1104,9 @@ fn setup(s: &mut Session<'_>) {
             });
         }
     }
-    for n in 0..pac::clic::ctrl::COUNT {
+    for n in 0..pac::clic::ip::COUNT {
         if let Ok(i) = Index::new(n) {
-            matrix.clic[0].modify_ctrl(i, |w| {
+            matrix.clic[0].modify_ie(i, |w| {
                 w.set_ie(false);
             });
         }
@@ -1129,19 +1129,20 @@ fn setup(s: &mut Session<'_>) {
 }
 fn line(s: &mut Session<'_>, control: u8, edge: bool) {
     let i = CPU_LINE;
-    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ie(i, |w| {
         w.set_ie(false);
     });
-    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
-        w.set_attr_shv(true)
-            .set_attr_trig(if edge {
-                pac::clic::ctrl::AttrTrig::PositiveEdge
-            } else {
-                pac::clic::ctrl::AttrTrig::PositiveLevel
-            })
-            .set_ctl(control);
+    s.interrupt_matrix.clic[0].modify_attr(i, |w| {
+        w.set_shv(true).set_trig(if edge {
+            pac::clic::attr::Trig::PositiveEdge
+        } else {
+            pac::clic::attr::Trig::PositiveLevel
+        });
     });
-    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ctl(i, |w| {
+        w.set_ctl(control);
+    });
+    s.interrupt_matrix.clic[0].modify_ie(i, |w| {
         w.set_ie(true);
     });
 }
@@ -1154,10 +1155,10 @@ fn edge(s: &mut Session<'_>) {
     setup(s);
     line(s, CONTROLS[1], true);
     let i = CPU_LINE;
-    s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ip(i, |w| {
         w.set_ip(true);
     });
-    let pending = s.interrupt_matrix.clic[0].read_ctrl(i).ip();
+    let pending = s.interrupt_matrix.clic[0].read_ip(i).ip();
     oer_portable_riscv::enable_interrupts();
     wait_window();
     oer_portable_riscv::disable_interrupts();
@@ -1165,7 +1166,7 @@ fn edge(s: &mut Session<'_>) {
         0x10,
         u32::from(pending),
         IRQ_COUNT.load(Ordering::Relaxed),
-        u32::from(s.interrupt_matrix.clic[0].read_ctrl(i).ip()),
+        u32::from(s.interrupt_matrix.clic[0].read_ip(i).ip()),
     );
     wait_window();
 }
@@ -1254,7 +1255,7 @@ fn threshold_raising(s: &mut Session<'_>) {
             IRQ_COUNT.store(0, Ordering::Relaxed);
             IRQ_CYCLE.store(0, Ordering::Relaxed);
             IRQ_PC.store(0, Ordering::Relaxed);
-            let pending = s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip();
+            let pending = s.interrupt_matrix.clic[0].read_ip(CPU_LINE).ip();
             let mut marks = [0; 6];
             // SAFETY: setup installed the exclusive IRQ stack; MIE is masked,
             // source is main's live shared PAC owner, marks is exclusive. The
@@ -1273,7 +1274,7 @@ fn threshold_raising(s: &mut Session<'_>) {
             // Let the source propagate with MIE off and the ceiling still high.
             // This pending sample is outside the timed instruction window.
             wait_window();
-            let still_pending = s.interrupt_matrix.clic[0].read_ctrl(CPU_LINE).ip();
+            let still_pending = s.interrupt_matrix.clic[0].read_ip(CPU_LINE).ip();
             oer_portable_riscv::restore_interrupt_threshold(0);
             oer_portable_riscv::enable_interrupts();
             wait_window();

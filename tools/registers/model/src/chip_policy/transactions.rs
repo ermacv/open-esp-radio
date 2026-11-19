@@ -1040,10 +1040,13 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             let target = self.register(entity, &record.register)?;
             self.reads_freely(entity, target)?;
             let word = self.word(entity, target)?;
-            if word.register.width != 32 {
+            // A byte register's record is its byte, zero-extended.
+            if !matches!(word.register.width, 8 | 32) {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Transaction("a record word is one 32-bit word".to_owned()),
+                    ErrorKind::Transaction(
+                        "a record word is one 32-bit word or one byte register".to_owned(),
+                    ),
                 ));
             }
             for field in word.fields() {

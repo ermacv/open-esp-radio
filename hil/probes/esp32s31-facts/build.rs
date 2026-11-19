@@ -25,8 +25,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_array()
         .ok_or("CLIC words")?
         .iter()
-        .find(|v| v.get("name").and_then(toml::Value::as_str) == Some("CTRL%s"))
-        .ok_or("CTRL")?;
+        .find(|v| v.get("name").and_then(toml::Value::as_str) == Some("IP%s"))
+        .ok_or("IP%s")?;
     let count = number(fact(lines, &["dim", "count"])?)? as usize;
     let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("OUT_DIR")?);
     let bits = number(fact(&family, &["interrupts", "control-bits"])?)? as u32;

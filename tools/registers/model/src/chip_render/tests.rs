@@ -468,6 +468,46 @@ fn a_part_reaching_a_narrow_word_is_refused() {
     assert!(error.reason.contains("16-bit word"), "{error}");
 }
 
+/// A part that owns an array of byte registers reaches each by its own byte
+/// access, lists them apart from its words, and the claims' check counts
+/// the word that holds them.
+#[test]
+fn a_part_owning_byte_registers_reaches_them_by_bytes() {
+    let output = rendered_with(&[
+        (
+            "types/radio.toml",
+            "width = 16\ndim = { count = 2, stride = 2 }",
+            "width = 8\ndim = { count = 2, stride = 1 }",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"V\"\nbits = \"15:0\"",
+            "name = \"V\"\nbits = \"7:0\"",
+        ),
+        (
+            "policy.toml",
+            "\"RAD_STATE\", \"RAD_CH%s.CONF\"",
+            "\"RAD_STATE\", \"RAD_HALF%s\", \"RAD_CH%s.CONF\"",
+        ),
+        (
+            "policy.toml",
+            "registers = [\"RAD_HALF%s\", \"RAD_CH0.CNT\"]",
+            "registers = [\"RAD_CH0.CNT\"]",
+        ),
+    ]);
+    assert!(
+        output.contains("read_byte_indexed::<0x70, 0x1, 2>(index)"),
+        "{output}"
+    );
+    assert!(output.contains("write_byte_indexed::<0x70, 0x1, 2>(index,"));
+    assert!(output.contains("const OWNED_BYTES: &'static [usize] = &[0x70, 0x71];"));
+    assert!(output.contains("const BYTES: &'static [usize] = &[0x70, 0x71];"));
+    assert!(
+        output.contains("&[0x70])"),
+        "the claims' check lists the bytes' word"
+    );
+}
+
 #[test]
 fn a_division_of_more_than_four_parts_is_refused() {
     // Four watchers, each holding a word of its own and observing the
