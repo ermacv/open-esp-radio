@@ -430,21 +430,24 @@ probe image declares its own contexts.
   there is one hart and `FROM_CPU` plays both parts; which mechanism backs
   a level's software entry is behind the chip's controller. The executors'
   wakes are `FROM_CPU` sources on either hart.
-- A level between the handlers and the application runs one task, declared
-  in `level_tasks { ... }` of the image's table
-  (`oer-chips-family-platform-interrupt-table`): a software line of its
-  own, which no source is routed to and its raisers pend; its handler runs
-  the task to its end on each entry. The task has its own table in the
-  image, `__OER_LEVEL_TASK_TABLE` (line, level, hart, handler), with no
-  source and no class: the table is its class. The router binds a task's
-  line when it installs, hardware-vectored and positive-edge (the trigger
-  follows from the kind: a routed line is level-triggered), its pending bit
-  cleared before its enable. At most one task a level and hart, never on an
-  executor's level, and no entry with a source on its level of its hart,
-  at compile time; hardware reaches a level's task only through a handler
-  above it, which pends it. The image checks read both tables: a task's
-  code is strict as a hardware handler's, and its level is one level of its
-  hart's interrupt stack bound.
+- A level between the handlers and the application runs one task: an entry
+  of the image's table (`oer-chips-family-platform-interrupt-table`) of
+  class `LevelTask` whose part lists no source, with the token, cell and
+  binding every entry has and a handler `fn(&mut Part)` that runs the task
+  to its end on each entry. Its line is a software line of its own that its
+  raisers pend; `Router::bind` places the part, binds the line
+  hardware-vectored and positive-edge (the trigger follows from the class: a
+  routed line is level-triggered), its pending bit cleared before its
+  enable, routes nothing and returns its `Bound` proof. The image exports
+  the task in a table of its own, `__OER_LEVEL_TASK_TABLE` (line, level,
+  hart, handler), with no source and no class, and never in the source
+  table. At compile time: a task's part lists no source and every other
+  entry's lists one; one task a level and hart, never on an executor's
+  level, and no entry with a source on its level of its hart. Hardware
+  reaches a level's task only through a handler above it, which pends it.
+  The image checks read both tables: a task's code is strict as a hardware
+  handler's, and its level is one level of its hart's interrupt stack
+  bound.
 - Each hart has its own local interrupt controller (the S31 CLIC is
   context-relative) and one router. The root pairs each hart's CLIC parts,
   which the PAC claims once per hart, with that hart's route bank in one

@@ -1577,10 +1577,21 @@ fn the_level_task_table_reads_each_task_with_no_source_and_its_relocated_handler
 
 #[test]
 fn an_unknown_handler_class_fails_the_table() {
-    let elf = table_image(&[(25, 16, 1, 4, 0, Some(TEXT))], true);
+    let elf = table_image(&[(25, 16, 1, 5, 0, Some(TEXT))], true);
     let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).unwrap_err();
     assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
-    assert!(error.to_string().contains("no handler class 4"), "{error}");
+    assert!(error.to_string().contains("no handler class 5"), "{error}");
+}
+
+#[test]
+fn a_source_table_element_of_the_level_task_class_fails_the_table() {
+    let elf = table_image(&[(25, 34, 3, 4, 0, Some(TEXT))], true);
+    let error = interrupt_table(&elf, "__OER_INTERRUPT_TABLE", &TABLE).unwrap_err();
+    assert_eq!(error.code, ErrorCode::Integrity, "{error:?}");
+    assert!(
+        error.to_string().contains("carries the level task's class"),
+        "{error}"
+    );
 }
 
 #[test]

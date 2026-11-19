@@ -16,11 +16,6 @@
 #   boot-deadline       a named boot wait under a typed failure
 #   hart-metadata       `tools/image/build` resolves the image's harts
 #   core-start-gate     the image gate on `[core-start]`
-#   task-rules          `interrupt_table!`'s level task rules at compile time
-#   image-task-table    `tools/image/checks` reads the linked level task table
-#
-# A level task (`level_tasks { ... }` of the table) has a `[[level-task]]`
-# row: its name (its layout entry's), site, anchor and cfg.
 schema = 1
 
 [[interrupt]]

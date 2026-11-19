@@ -30,10 +30,8 @@ pub const LINES: oer_chips_family_platform_interrupt_table::Lines = crate::vecto
 /// facts' tie-break rule and defines the line's handler symbol, which the line's vector calls, the
 /// token type, and `Interrupts::take` that hands out each token once.
 ///
-/// Level tasks come first, in `level_tasks { Task => handler, line LINE,
-/// context NAME, hart HART; ... }` before `contexts`: each the one task of
-/// its level on a software line of its own, which the hart's router binds
-/// when it installs (`oer_chips_family_platform_interrupt_table::LevelTask`).
+/// A level's task is an entry of class `LevelTask` whose part lists no
+/// source: the one task of its level, on a software line of its own.
 #[macro_export]
 macro_rules! interrupt_table {
     ($($entries:tt)*) => {

@@ -212,68 +212,30 @@ fn every_declaration_of_the_code_has_a_row() {
     assert!(missing.is_empty(), "no row:\n{}", missing.join("\n"));
 }
 
-/// The entries and the level tasks of the application's table template,
-/// each with its name and cfg: an entry by its field, a task by its layout
-/// entry, in the order the template lists them.
-fn template_rows(table: &str) -> (Vec<(String, String)>, Vec<(String, String)>) {
-    let mut cfg = String::new();
-    let (mut entries, mut tasks) = (Vec::new(), Vec::new());
-    let mut in_tasks = false;
-    for line in table.lines().map(str::trim) {
-        if line == "level_tasks {" {
-            in_tasks = true;
-        } else if in_tasks && line == "}" {
-            in_tasks = false;
-        } else if let Some(attribute) = line
-            .strip_prefix("#[cfg(")
-            .and_then(|line| line.strip_suffix(")]"))
-        {
-            cfg = attribute.to_owned();
-        } else if in_tasks {
-            if let Some(name) = line
-                .split_once("@layout(")
-                .and_then(|(_, rest)| rest.split_once(')'))
-                .map(|(name, _)| name)
-            {
-                tasks.push((name.to_owned(), std::mem::take(&mut cfg)));
-            }
-        } else if let Some((name, rest)) = line.split_once(": ") {
-            if rest.contains("Token = ") {
-                entries.push((name.to_owned(), std::mem::take(&mut cfg)));
-            }
-        }
-    }
-    (entries, tasks)
-}
-
 #[test]
 fn every_table_row_has_a_row_with_its_cfg() {
     let inventory = inventory();
     let path = "chips/esp32s31/app/src/interrupt_table.in";
-    let (entries, tasks) = template_rows(&std::fs::read_to_string(root().join(path)).unwrap());
-    let listed = |table| -> Vec<(String, String)> {
-        rows(&inventory, table)
-            .iter()
-            .map(|row| (text(row, "name"), text(row, "cfg")))
-            .collect()
-    };
-    assert_eq!(entries, listed("interrupt"));
-    assert_eq!(tasks, listed("level-task"));
-}
-
-#[test]
-fn a_template_s_level_task_is_read_apart_from_its_entries() {
-    let (entries, tasks) = template_rows(
-        "level_tasks {\n    #[cfg(feature = \"wifi\")]\n    /// The keeper.\n    KeeperTask => keeper::run, @layout(wifi_keeper);\n}\n@contexts\n#[cfg(feature = \"wifi\")]\nwifi: WifiToken = WifiPart => on_wifi, @layout(wifi), Hardware;\n",
-    );
-    assert_eq!(
-        entries,
-        [("wifi".to_owned(), "feature = \"wifi\"".to_owned())]
-    );
-    assert_eq!(
-        tasks,
-        [("wifi_keeper".to_owned(), "feature = \"wifi\"".to_owned())]
-    );
+    let table = std::fs::read_to_string(root().join(path)).unwrap();
+    let mut cfg = String::new();
+    let mut found = Vec::new();
+    for line in table.lines().map(str::trim) {
+        if let Some(attribute) = line
+            .strip_prefix("#[cfg(")
+            .and_then(|line| line.strip_suffix(")]"))
+        {
+            cfg = attribute.to_owned();
+        } else if let Some((name, rest)) = line.split_once(": ") {
+            if rest.contains("Token = ") {
+                found.push((name.to_owned(), std::mem::take(&mut cfg)));
+            }
+        }
+    }
+    let listed: Vec<(String, String)> = rows(&inventory, "interrupt")
+        .iter()
+        .map(|row| (text(row, "name"), text(row, "cfg")))
+        .collect();
+    assert_eq!(found, listed);
 }
 
 #[test]
@@ -289,7 +251,6 @@ fn every_table_row_has_its_layout_entry() {
         .collect();
     let listed: BTreeSet<String> = rows(&inventory, "interrupt")
         .iter()
-        .chain(rows(&inventory, "level-task"))
         .map(|row| text(row, "name"))
         .collect();
     assert_eq!(layout, listed);

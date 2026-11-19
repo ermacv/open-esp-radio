@@ -249,8 +249,10 @@ const fn table_inside(table: &[Declared], sources: usize, lines: usize, levels: 
     while let [entry, tail @ ..] = rest {
         rest = tail;
         let binding = &entry.binding;
+        // A level task's part has no source (checked by the table).
+        let task = matches!(binding.class, crate::Class::LevelTask);
         if entry.present
-            && (!inside_matrix(entry.sources, sources)
+            && ((!task && !inside_matrix(entry.sources, sources))
                 || binding.line as usize >= lines
                 || binding.level == 0
                 || binding.level as u16 > levels)
@@ -354,9 +356,8 @@ fn present(table: &[Binding], hart: u8) -> impl Iterator<Item = &Binding> {
 
 impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     /// The control byte of each line a level task of the hart holds, line
-    /// `n` at `n`: made at compile time from the table, so neither
-    /// [`install`](Self::install) nor [`verify`](Self::verify) looks a task
-    /// up or refuses one.
+    /// `n` at `n`: made at compile time from the table, so
+    /// [`verify`](Self::verify) neither looks a task up nor refuses one.
     const TASKS: [Option<Control>; 64] =
         match task_controls(T::TASKS, H, C::LINES.len(), C::LEVEL_BITS) {
             Ok(controls) => controls,
@@ -364,28 +365,25 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         };
 
     /// Take `controller`'s hart for `table`, the image's `InterruptTable`:
-    /// silence every source and disable every line of the hart, bind the
-    /// line of each level task of the hart ([`Controller::bind_task`]), then
+    /// silence every source and disable every line of the hart, then
     /// [`verify`](Self::verify). Interrupts must stay disabled on the hart
-    /// until it returns. A task's line holds no source and nothing pends it
-    /// before its raisers exist, so it is bound here, for good, with nothing
-    /// to place first.
+    /// until it returns.
     ///
-    /// A table whose entry or level task names a source, a line or a level
-    /// the controller has not fails to compile, on the task's hart:
+    /// A table whose entry names a source, a line or a level the controller
+    /// has not fails to compile, on any hart; a level task's, on its hart:
     ///
     /// ```compile_fail,E0080
     /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
     /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
-    /// # pub fn on_far() {}
+    /// # pub fn on_keeper(_: &mut KeeperPart) {}
     /// // The table's lines reach past the controller's 48.
     /// const WIDE: oer_chips_family_platform_interrupt_table::Lines =
     ///     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
     /// oer_chips_family_platform_interrupt_table::interrupt_table! {
     ///     lines: WIDE,
     ///     handler_attributes: [];
-    ///     level_tasks { FarTask => on_far, line 60, context keeper, hart 0; }
     ///     contexts { keeper: 3; }
+    ///     keeper: KeeperToken = KeeperPart => on_keeper, line 60, context keeper, hart 0, LevelTask;
     /// }
     /// let _ = oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(FakeController::new(0), InterruptTable);
     /// ```
@@ -470,11 +468,6 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         for &line in C::LINES {
             controller.disable(line);
         }
-        for (&line, task) in C::LINES.iter().zip(&Self::TASKS) {
-            if let Some(control) = *task {
-                controller.bind_task(line, control);
-            }
-        }
         let router = Self { controller, table };
         router.verify()?;
         Ok(router)
@@ -482,7 +475,10 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
 
     /// Bind `token`'s entry: move `part` where only the entry's handler
     /// reaches it, configure and enable the entry's line, then route each
-    /// of the part's sources ([`InterruptSources`]) to it.
+    /// of the part's sources ([`InterruptSources`]) to it. A
+    /// [`Class::LevelTask`](crate::Class::LevelTask) entry's line is bound as
+    /// a task's ([`Controller::bind_task`]) and its part, which has no
+    /// source, routes nothing.
     ///
     /// The entry is the router's table's by type, at the line, level, class
     /// and handler its one declaration gives both; an entry of another table
@@ -537,7 +533,10 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         part: E::Part,
     ) -> Result<Bound<E>, Quarantined<E>> {
         const {
-            if !inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES.len()) {
+            // A level task's part lists no source (the table's rule).
+            if !matches!(E::CLASS, crate::Class::LevelTask)
+                && !inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES.len())
+            {
                 panic!("the entry's source is no source of the controller")
             }
             if E::LEVEL < 1 || E::LEVEL as u16 > C::LEVEL_BITS.levels() {
@@ -548,7 +547,8 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             }
         };
         let sources = <E::Part as InterruptSources>::SOURCES;
-        // A part has a source (checked at compile time).
+        // A part has a source (checked at compile time), but a level
+        // task's, which has none.
         let source = match sources {
             [first, ..] => *first,
             [] => 0,
@@ -581,15 +581,18 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
                 None => panic!("the entry's line is no line of the controller"),
             }
         };
-        self.controller.bind(
-            line,
-            const {
-                match C::LEVEL_BITS.control(E::LEVEL as u16) {
-                    Ok(control) => control,
-                    Err(_) => panic!("the entry's level is no level of the controller"),
-                }
-            },
-        );
+        let control = const {
+            match C::LEVEL_BITS.control(E::LEVEL as u16) {
+                Ok(control) => control,
+                Err(_) => panic!("the entry's level is no level of the controller"),
+            }
+        };
+        // A level task's line has no source: it is bound as a task's, and
+        // nothing is routed to it.
+        match E::CLASS {
+            crate::Class::LevelTask => self.controller.bind_task(line, control),
+            _ => self.controller.bind(line, control),
+        }
         for (source, _) in sources_of::<C>(sources) {
             self.controller.route(source, line);
         }
@@ -678,7 +681,18 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
                 .find(|binding| binding.line == line)
                 .filter(|_| routed_lines >> line & 1 == 1);
             let expected = match (task, routed) {
-                (Some(control), _) => LineExpectation::Task(control),
+                // A task's line holds its task's binding once its entry is
+                // bound, and is disabled before.
+                (Some(control), _) => {
+                    if self
+                        .controller
+                        .check(typed, LineExpectation::Disabled)
+                        .is_ok()
+                    {
+                        continue;
+                    }
+                    LineExpectation::Task(control)
+                }
                 (None, Some(binding)) => LineExpectation::Bound(
                     C::LEVEL_BITS
                         .control(u16::from(binding.level))

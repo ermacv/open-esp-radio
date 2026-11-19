@@ -5,59 +5,49 @@ crate::__fake_table!();
 
 #[test]
 fn install_silences_every_source_and_disables_every_line_before_it_checks() {
-    let router = Router::<_, 1, _>::install(FakeController::new(1), InterruptTable).unwrap();
-    let controller = &router.controller;
-    assert!(controller.routes.iter().all(Option::is_none));
-    assert!(
-        controller
-            .lines
+    for hart in [0, 1] {
+        let controller = match hart {
+            0 => {
+                Router::<_, 0, _>::install(FakeController::new(0), InterruptTable)
+                    .unwrap()
+                    .controller
+            }
+            _ => {
+                Router::<_, 1, _>::install(FakeController::new(1), InterruptTable)
+                    .unwrap()
+                    .controller
+            }
+        };
+        assert!(controller.routes.iter().all(Option::is_none));
+        assert!(
+            controller
+                .lines
+                .iter()
+                .all(|line| *line == FakeLine::Disabled)
+        );
+        // Every source silent first: no line is touched while a source
+        // still holds it.
+        let first_line = controller
+            .writes
             .iter()
-            .all(|line| *line == FakeLine::Disabled)
-    );
-    // Every source silent first: no line is touched while a source still
-    // holds it.
-    let first_line = controller
-        .writes
-        .iter()
-        .position(|write| matches!(write, Write::Disable { .. }))
-        .unwrap();
-    assert_eq!(first_line, 8);
-    // Hart 1 has no level task: nothing but the silences and disables.
-    assert_eq!(controller.writes.len(), 8 + 48);
+            .position(|write| matches!(write, Write::Disable { .. }))
+            .unwrap();
+        assert_eq!(first_line, 8);
+        // Nothing but the silences and the disables: a level task's line
+        // too waits for its entry's binding.
+        assert_eq!(controller.writes.len(), 8 + 48, "hart {hart}");
+    }
 }
 
 #[test]
-fn install_binds_its_harts_level_task_lines_after_every_line_is_disabled() {
-    let router = Router::<_, 0, _>::install(FakeController::new(0), InterruptTable).unwrap();
-    let controller = &router.controller;
-    // The keeper's line, once, last: every source silent and every line
-    // disabled before it; the task the build leaves out binds nothing.
-    assert_eq!(controller.writes.len(), 8 + 48 + 1);
-    assert_eq!(
-        controller.writes[8 + 48],
-        Write::BindTask {
-            line: 34,
-            control: Control::level::<3, 3>()
-        }
-    );
-    assert!(
-        controller.writes[..8 + 48]
-            .iter()
-            .all(|write| matches!(write, Write::Silence { .. } | Write::Disable { .. }))
-    );
-    assert_eq!(
-        controller.lines[34],
-        FakeLine::Task(Control::level::<3, 3>())
-    );
-    assert!(controller.lines[35] == FakeLine::Disabled);
-    assert!(controller.routes.iter().all(Option::is_none));
-}
-
-#[test]
-fn verify_expects_a_level_task_line_bound_as_a_task_at_its_level() {
+fn verify_expects_a_level_task_line_disabled_or_bound_as_a_task_at_its_level() {
     let task = LineExpectation::Task(Control::level::<3, 3>());
+    // Disabled before its binding, its task's binding after it.
+    let mut router = fake_router::<0>();
+    assert_eq!(router.verify(), Ok(()));
+    router.controller.lines[34] = FakeLine::Task(Control::level::<3, 3>());
+    assert_eq!(router.verify(), Ok(()));
     for (held, observed) in [
-        (FakeLine::Disabled, 0),
         (
             FakeLine::Bound(Control::level::<3, 3>()),
             0x100 | u32::from(Control::level::<3, 3>().bits()),
@@ -66,6 +56,7 @@ fn verify_expects_a_level_task_line_bound_as_a_task_at_its_level() {
             FakeLine::Task(Control::level::<2, 3>()),
             0x200 | u32::from(Control::level::<2, 3>().bits()),
         ),
+        (FakeLine::Foreign(0x5f03_0100), 0x5f03_0100),
     ] {
         let mut router = fake_router::<0>();
         router.controller.lines[34] = held;
@@ -102,38 +93,27 @@ fn verify_expects_a_level_task_line_bound_as_a_task_at_its_level() {
 }
 
 #[test]
-fn a_level_task_is_its_table_s_on_its_line_level_and_hart_and_its_vector_runs_it() {
-    use crate::LevelTask;
-    fn of_table<E: LevelTask<Table = InterruptTable>>() -> crate::Context {
-        E::CONTEXT
-    }
+fn a_level_task_is_laid_out_in_its_own_table_and_never_in_the_source_table() {
+    assert_eq!(<KeeperToken as Entry>::CLASS, crate::Class::LevelTask);
     assert_eq!(
-        (
-            KeeperTask::LINE,
-            KeeperTask::LEVEL,
-            KeeperTask::HART,
-            of_table::<KeeperTask>()
-        ),
-        (34, 3, 0, crate::Context { level: 3, hart: 0 })
+        <KeeperToken as Entry>::CONTEXT,
+        crate::Context { level: 3, hart: 0 }
     );
-    // The exported table: the keeper's task, then the one the build
+    // The exported task table: the keeper's task, then the one the build
     // leaves out, with no handler.
     let [keeper, absent] = LEVEL_TASK_TABLE else {
         panic!("two level tasks");
     };
     assert_eq!((keeper.line, keeper.level, keeper.hart), (34, 3, 0));
+    assert!(keeper.handler.is_some());
     assert_eq!((absent.line, absent.level, absent.hart), (35, 3, 0));
     assert!(absent.handler.is_none());
     assert_eq!(<InterruptTable as crate::Table>::TASKS.len(), 2);
-    let Some(vector) = keeper.handler else {
-        panic!("the keeper's task has its handler");
-    };
-    let before = KEEPER_RUNS.load(core::sync::atomic::Ordering::Relaxed);
-    vector();
-    vector();
-    assert_eq!(
-        KEEPER_RUNS.load(core::sync::atomic::Ordering::Relaxed),
-        before + 2
+    // No element of the source table is a task's.
+    assert!(
+        INTERRUPT_TABLE
+            .iter()
+            .all(|binding| binding.class != crate::Class::LevelTask && binding.line < 34)
     );
 }
 
@@ -313,6 +293,32 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(zero.controller.writes.len(), before);
     timer_handler();
     assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
+
+    // The keeper's level task: its part placed, its line bound as a task's
+    // and nothing routed; before its binding its handler runs nothing.
+    let keeper_handler = LEVEL_TASK_TABLE[0].handler.unwrap();
+    keeper_handler();
+    assert!(<KeeperToken as Entry>::cell().with(|_| ()).is_none());
+    let before = zero.controller.writes.len();
+    let routes = zero.controller.routes;
+    let _bound: crate::Bound<KeeperToken> =
+        zero.bind(tokens.keeper, KeeperPart::default()).unwrap();
+    assert_eq!(crate::Bound::<KeeperToken>::LEVEL, 3);
+    assert_eq!(
+        zero.controller.writes[before..],
+        [Write::BindTask {
+            line: 34,
+            control: Control::level::<3, 3>()
+        }]
+    );
+    assert_eq!(zero.controller.routes, routes);
+    zero.verify().unwrap();
+    keeper_handler();
+    keeper_handler();
+    assert_eq!(
+        <KeeperToken as Entry>::cell().with(|part| part.handled),
+        Some(2)
+    );
 
     let mut one = fake_router::<1>();
     let _bound = one.bind(token, radio_part).unwrap();

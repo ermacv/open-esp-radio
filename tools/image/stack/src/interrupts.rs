@@ -71,6 +71,10 @@ pub enum Violation {
     WakerCall,
 }
 
+/// The byte of `oer_chips_family_platform_interrupt_table::Class::LevelTask`,
+/// which the image exports in its task table and never in the source table.
+const LEVEL_TASK_BYTE: u32 = 4;
+
 impl Class {
     fn of(value: u32) -> Option<Self> {
         match value {
@@ -153,6 +157,13 @@ pub fn interrupt_table(
         control,
         |entry, field, handler| {
             let class = field(entry, layout.class)?;
+            // A level task has no source: its class's byte is no element of
+            // the source table, whose elements are each a routed source.
+            if class == LEVEL_TASK_BYTE {
+                return Err(invalid(format!(
+                    "the source table's entry at {entry:#010x} carries the level task's class"
+                )));
+            }
             Ok(TableEntry {
                 kind: Kind::Routed {
                     source: field(entry, layout.source)?,
