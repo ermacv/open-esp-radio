@@ -5,10 +5,8 @@ below the Link Layer: Controller HAL and time, the BLE PHY, interrupts,
 the modem low-power timer and the hardware scheduler with its event executor,
 list-zero hardware execution and finished lists. Role value builders select
 the physical profiles through typed HAL operations and report the
-backend's connection-event timing allowances. `port::runner` lowers the
-portable DTM values onto this executor.
-The generic port queue adapter and physical runner have separate ownership;
-there is no connected hardware HCI transport.
+backend's connection-event timing allowances. The crate implements no
+Bluetooth LE port, and there is no connected hardware HCI transport.
 
 Portable HCI codecs and LE Link Layer codecs live in
 [`protocols/bluetooth`](../../../../../protocols/bluetooth/).
@@ -21,7 +19,6 @@ RF delivery or interoperability; BR/EDR remains source inventory.
 | `controller_hal` | Controller HAL component initialization on the HAL's clocked Bluetooth client of the shared radio |
 | `controller_time` | Event-driven Controller-time latch and scheduler-epoch projection |
 | `ble_phy` | BLE PHY engine initialization from a settled Bluetooth membership and activation into runtime owners |
-| `port` | One-credit affine LE command/terminal queues, lifecycle supervision and the P2 physical DTM runner |
 | `radio` | Controller lifecycle parked in the shared radio backend; matching-installation runtime handover and retirement |
 | `interrupt` | Chip interrupt state and hardware handling |
 | `modem_timer` | Controller modem low-power timer task over snapshots and unarmed plans |
@@ -38,11 +35,9 @@ The driver enables the HAL's `bluetooth-engine` feature. Its
 advertising channels and execution windows into detached hardware values
 through closed HAL operations. A builder never borrows a controller layout;
 HAL checks binding anchors before committing a value.
-The port runner currently executes DTM only. The driver does not parse air
-PDUs or infer an address or role from their bytes. PDU codecs belong to
-`le/wire`; LL decisions and role policy belong above the backend port.
-Addresses needed by the backend cross the port as `LeDeviceAddress` values,
-separately from encoded packets.
+The driver does not parse air PDUs or infer an address or role from their
+bytes. PDU codecs belong to `le/wire`; LL decisions and role policy belong
+above the backend.
 Affine pool and epoch scopes prevent foreign and stale leases, and release
 consumes its lease. Hardware heads resolve to logical identities inside HAL.
 
@@ -256,28 +251,7 @@ the shared actor and Wi-Fi membership remain in their original storage. A starte
 shared domain; a local Controller reset cannot clear it. A late retirement
 returns its complete old graph and never satisfies a newer installation's leave.
 
-## DTM port adapter
-
-`port::Backend` implements the shared port contract over a P2 `Device`.
-P1 receives only command/event endpoints and an independent controller-clock
-client. One credit reserves both command and terminal storage until terminal
-dequeue. Cancelled FIFO waiters release their seat; rejected terminals and
-indeterminate physical outcomes retain their actual affine owners. An
-abandonment supplies no synchronous DMA/IRQ exclusion proof.
-
-`port::runner::Runner` owns the branded powered Controller runtime and one
-actual DTM lease. It uses the shared LL window planner, fresh generation-keyed
-Controller-time latches, fenced P3 admission/completion and exact stopped-graph
-return. RX grants no TX-power authority. Unknown hardware completion status
-faults the runner. The independent clock-request hook is served during IRQ
-waits as well as between operations. Pool and epoch brands stay in the P2
-owner; they do not cross static queues.
-
-`port::mailbox` binds the supervisor to the retained physical worker. P1 alone
-owns clock bookkeeping, including activation before enable and retirement
-after drain. Retirement waits for an abandoned clock answer before returning
-the poster. P2 constructs an epoch-keyed endpoint without entering that cell
-and serves correlated clock requests through the mailbox.
+## Interrupt admission and release
 
 The production interrupt set is bank0 baseline15 and dynamic21/27/28, bank1
 baseline1/8/9/12 and dynamic3, and task14's pre-RUN/terminal lifecycle.
@@ -306,8 +280,8 @@ and has no CTE interrupt consumer (SOURCE: `BLOB_LIBBLE_PHY_INIT_REGISTERS`,
 
 ## Legacy advertising and scanning
 
-The physical port runner executes DTM only. Detached advertising, scanning
-and connection builders do not provide a composed physical role service.
+Detached DTM, advertising, scanning and connection builders do not provide
+a composed physical role service.
 
 ## Capability advertisement
 

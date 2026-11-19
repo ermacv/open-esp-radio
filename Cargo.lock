@@ -1531,21 +1531,16 @@ name = "oer-chips-esp32s31-radio-bluetooth-backend"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "critical-section",
- "embassy-futures",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-radio-client",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-bluetooth-ports",
  "oer-portable-memory",
- "oer-portable-sync",
  "oer-portable-time",
  "oer-portable-time-virtual",
- "oer-portable-waker",
  "oer-protocols-bluetooth-le-port",
  "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
  "oer-tools-test-ui-cases",
  "tempfile",
 ]
@@ -2556,11 +2551,6 @@ name = "oer-protocols-bluetooth-le-controller"
 version = "0.1.0"
 dependencies = [
  "oer-protocols-bluetooth-hci",
- "oer-protocols-bluetooth-le-model",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
 ]
 
 [[package]]
@@ -2573,40 +2563,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-protocols-bluetooth-le-model"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
 name = "oer-protocols-bluetooth-le-port"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
  "oer-protocols-bluetooth-le-wire",
  "oer-protocols-radio-coex",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-runtime"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-protocols-bluetooth-hci",
- "oer-protocols-bluetooth-le-controller",
- "oer-protocols-bluetooth-le-model",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-radio-port",
  "oer-protocols-radio-regulatory",
 ]
 

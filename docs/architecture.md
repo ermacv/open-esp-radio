@@ -1293,7 +1293,7 @@ its model and conformance case.
   publishes no frontend or ordinary join. No missing resource is replaced with
   an empty or newly minted owner.
 - Reference models are backends and use the port's conformance cases.
-  Wi-Fi, Bluetooth LE and IEEE 802.15.4 models live in their protocol's
+  Wi-Fi and IEEE 802.15.4 models live in their protocol's
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
@@ -1323,13 +1323,10 @@ its model and conformance case.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.
-- A slot installation (Bluetooth LE) is abandoned through a static typed
-  signal, executed only in the driver's context, which silences routes; a
-  stop the driver does not confirm in its bound leaves the installation
-  quarantined. The Wi-Fi port's stop always ends; the data's stop removes
+- The Wi-Fi port's stop always ends; the data's stop removes
   its keys and agreements by their own commands before a retirement.
 - No radio-system token crosses a port; PHY membership stays inside the
-  backend. The Bluetooth LE port takes the form of the Wi-Fi lower-MAC port.
+  backend.
 
 ## Protocols
 
@@ -1346,29 +1343,24 @@ its model and conformance case.
   (`core/datapath`) fills and publishes the arenas, settles their ends and
   charges what an attempt cost on the air.
 - **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`).
-  Wire formats carry no protocol state or clock domain. The port owns radio
-  vocabulary and the shared DTM window calculation; backends autonomously
-  progress the admitted test with the Core Part F interval grid and 5 ms RX
-  windows. Public backend identity crosses as an explicit wire value with
-  named canonical/air byte order; the driver depends on neither LL nor HCI.
+  Wire formats carry no protocol state or clock domain. `le/port` holds the
+  vocabulary of the radio's boundary (the clock domain, the request values of
+  every role, the capabilities, the outcomes and the Core Part F DTM window
+  arithmetic) and no boundary: no backend implements a Bluetooth LE port.
+  Public backend identity is an explicit wire value with named
+  canonical/air byte order; the driver depends on neither LL nor HCI.
   The backend does not parse air PDUs: wire codecs, LL decisions and role
-  policy stay above the port. An address needed by the backend crosses the
-  port as a `LeDeviceAddress`, separately from encoded packet bytes. Role
-  images contain only hardware scheduler values, SRAM layout, channels and
-  execution timing.
+  policy are above it. Role images contain only hardware scheduler values,
+  SRAM layout, channels and execution timing.
   The family `oer-chips-family-radio-bluetooth-ports` declares separate task/interrupt
   register ports, controller-time ports, modify/stop progress and non-repeating
   installation identities. HAL implements them with its existing owners and
   retains affine receipts, arena brands, memory projection and DMA custody.
   Execution-lock/modify/stop orchestration, diagnostic settling, interrupt
   exchange, terminal-release policy and hardware workers still reside in HAL.
-  HCI is the world boundary. The controller's DTM service owns correlation,
-  command credit, pending commands, session leases and retained faulty terminals
-  without IO. The LE runtime awaits capacity and terminals and runs the HCI
-  service loop over composition-owned transport and port traits. The H4
-  packet-indicator codec is one module of HCI; firmware owns the transport
-  (the serial port, the gap that ends an unfinished command), HAL entropy,
-  installation/shutdown and task spawning. The LL
+  HCI is the world boundary. `le/controller` holds the reset-scoped Host
+  configuration of the HCI bootstrap; nothing serves HCI commands over a
+  radio. The H4 packet-indicator codec is one module of HCI. The LL
   exposes per-connection progression; arbitration between conflicting
   connections and Host receive backpressure are not implemented. Controller
   memory is generated layouts with a HAL handover engine; no controller

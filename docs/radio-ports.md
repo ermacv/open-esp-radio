@@ -26,7 +26,7 @@ assessment per transmission and the cipher run below the port from tables and
 parameters the core sets through it; the CSMA-CA backoff between assessments
 and frame retries stay above.
 For Bluetooth LE the backend reports its event timing allowances, and the
-link layer above the port decides how long each event may last.
+link layer decides how long each event may last.
 
 ## Five parts of every port
 
