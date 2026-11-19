@@ -1031,7 +1031,9 @@ fn scan(
             }
             reload(ring, access)?;
             state.hole_plus_one = 0;
-            // The oldest unit is taken below as the next hole.
+            // `tasks/221`: the cursor and the bound read anew; the oldest
+            // unit is the next pass's take, the next hole.
+            continue;
         } else if next == Some(head) || behind.is_none_or(|behind| behind < arm.hold) {
             bump(&mut state.counts(segment)?.held_back);
             break;

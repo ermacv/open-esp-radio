@@ -1,6 +1,6 @@
-//! `tasks/219` (a) and (b), `tasks/220` (probe-only, branch
-//! `probe/rx-rebind-4`, never merged): what the receive walker writes after
-//! its stop edge, and after `RST_WIFIMAC`, under traffic.
+//! `tasks/219`, `221` and `222` (probe-only, branch `probe/rx-rebind-4`,
+//! never merged): what the receive walker writes after the MAC's own stop,
+//! and after `RST_WIFIMAC` in the vendor's order, under traffic.
 //!
 //! The receiver of s31-b's two kinds of air (`stream`: 500-octet frames back
 //! to back; `stream-ampdu`: aggregates of 16 QoS subframes under a receive
@@ -9,24 +9,32 @@
 //! 1. a receive window, its air named by the last unit of the sender;
 //! 2. a delay spread over a frame's time, the cursor frozen, the buffer
 //!    `NEXT` names digested;
-//! 3. **(a)** the walker's edge alone (`experiment_walker_edge`, the ROM's
-//!    `hal_mac_rx_disable`), its readback logged and deciding nothing;
-//!    **(b)** the block's reset through the domain's
-//!    `reset_wifi_mac_block`, `WALKER_ENABLE` after it logged and not
-//!    written;
+//! 3. **(a2)** the MAC's stop as the channel switch has it
+//!    (`request_channel_stop`, `hal_mac_deinit`), the activity field read
+//!    until clear (a status the MAC sets), then the walker's edge
+//!    (`experiment_walker_edge`, the ROM's `hal_mac_rx_disable`); the
+//!    records count from the activity's clear. **The reset** in the
+//!    vendor's order (`libnet80211[wifi_reset_mac]`): the block's reset
+//!    through the domain's `reset_wifi_mac_block`, then the walker's edge;
+//!    the records count from the reset's proof. `WALKER_ENABLE` read after
+//!    it is logged and decides nothing;
 //! 4. records of every descriptor's three words and every buffer's prefix
-//!    (the RX-control prefix and tail, 64 bytes) and frame region apart,
-//!    from the edge's write (a) or the reset's proof in hand (b), at
-//!    [`DELAYS_US`]; each record is compared with the one before;
-//! 5. the MAC's channel stopped, the walker's stop proof, the ring
-//!    rebuilt; (b) the cold preparation and the channel again; a start as
-//!    the first, its frames checked by their counters.
+//!    (the RX-control prefix and tail, 64 bytes) and frame region apart, at
+//!    [`DELAYS_US`] from that moment; each record is compared with the one
+//!    before;
+//! 5. the walker's stop proof, the ring rebuilt, the MAC resumed (a2) or
+//!    the cold preparation and the channel again (the reset); a start as
+//!    the first, the sender's frames checked by their payload.
+//!
+//! Each part has its own budget ([`A2_BUDGET_S`], [`RESET_BUDGET_S`]) and
+//! ends when it made [`PER_AIR`] stops of each kind of air or its budget
+//! ran out; `short` makes every budget a short pass's.
 //!
 //! The claim: from the first record on, no frame region and no descriptor
 //! word changes. A prefix's change is reported apart. No stop ends the run
 //! early: every one is a row.
 use super::*;
-use crate::case_c::{Case, byte};
+use crate::case_c::Case;
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::descriptor::cursor_ring_index;
 
 /// Stops of each kind of air, for each part.
@@ -34,8 +42,18 @@ const PER_AIR: u32 = 1_000;
 /// The parts' rows: two parts, two kinds of air, and a margin for stops on
 /// an air of neither kind.
 const ROWS_MAX: usize = 4 * PER_AIR as usize + 512;
-/// The run's longest time: the stand's lease.
-const LIMIT_S: u64 = 3_000;
+/// Each part's budget (`tasks/222`: the two under fifty minutes).
+#[cfg(not(feature = "short"))]
+const A2_BUDGET_S: u32 = 14 * 60;
+#[cfg(not(feature = "short"))]
+const RESET_BUDGET_S: u32 = 34 * 60;
+/// The short pass of a lease (`tasks/222`): about a minute in all.
+#[cfg(feature = "short")]
+const A2_BUDGET_S: u32 = 30;
+#[cfg(feature = "short")]
+const RESET_BUDGET_S: u32 = 30;
+/// The longest wait for the MAC's activity to clear after its stop.
+const ACTIVITY_BOUND_US: u32 = 10_000;
 /// The records' delays from the edge or the reset's proof.
 const DELAYS_US: [u32; 5] = [20, 100, 1_000, 20_000, 200_000];
 /// `mcycle` at 320 MHz.
@@ -49,15 +67,24 @@ const SPREAD_US: u32 = 1_500;
 const WINDOW_MS: u32 = 20;
 /// The frame's length of the steady air (`stream`).
 const STEADY: usize = 500;
-/// The RX-control prefix and tail in front of an MPDU in a buffer.
-const HEADER: usize = 64;
 
 /// A part of the run.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 enum Part {
-    Edge = 1,
-    Reset = 2,
+    /// The MAC's stop, the activity's clear, the walker's edge.
+    A2 = 3,
+    /// The block's reset, then the walker's edge.
+    Reset = 4,
+}
+
+impl Part {
+    const fn budget_s(self) -> u32 {
+        match self {
+            Self::A2 => A2_BUDGET_S,
+            Self::Reset => RESET_BUDGET_S,
+        }
+    }
 }
 
 /// The air a stop fell in, by the last unit of the sender before it.
@@ -76,8 +103,9 @@ enum Air {
 ///   changed between the freeze and the first record, bit 1 NEXT's
 ///   descriptor completed at the first record, bit 2 the walker read
 ///   enabled after the edge or the reset, bit 3 NEXT outside the ring);
-/// - `2`: cycles from the edge's write to its readback (a), the pulse's
-///   cycles (b);
+/// - `2`: (a2) cycles from the stop's request to the activity's clear, bit
+///   31 set when it did not clear within [`ACTIVITY_BOUND_US`]; (reset) the
+///   pulse's cycles;
 /// - `3`: the first record's start and end, microseconds from the edge,
 ///   start << 16 | end;
 /// - `4`: for each record from the second on, 3 bits (frame, prefix,
@@ -85,7 +113,8 @@ enum Air {
 /// - `5`: nodes whose frame region changed after the first record << 16 |
 ///   nodes whose prefix changed after it;
 /// - `6`: frames of the sender checked after the restart | bad << 16;
-/// - `7`: units received after the restart.
+/// - `7`: units received after the restart | the sender's frames among
+///   them << 16.
 type Row = [u32; 8];
 
 #[derive(bytemuck::Zeroable)]
@@ -185,14 +214,14 @@ pub(super) async fn series(
         agreement_peer: None,
         agreement: false,
     };
-    let end = EmbassyClock
-        .now()
-        .checked_add(Duration::from_secs(LIMIT_S as u32))
-        .ok_or((phase::RING, 0x5e01))?;
     let mut before = Record::new();
     let mut record = Record::new();
-    for part in [Part::Edge, Part::Reset] {
+    for part in [Part::A2, Part::Reset] {
         mark(110 + part as u32);
+        let end = EmbassyClock
+            .now()
+            .checked_add(Duration::from_secs(part.budget_s()))
+            .ok_or((phase::RING, 0x5e01))?;
         let mut counts = [0_u32; 3];
         let mut index = 0_u32;
         while (counts[0] < PER_AIR || counts[1] < PER_AIR) && EmbassyClock.now() < end {
@@ -215,13 +244,18 @@ pub(super) async fn series(
             // The edge or the reset; `start` is the cycle the records count
             // from.
             let (start, readback) = match part {
-                Part::Edge => {
-                    let edge = oer_portable_riscv::cycle32();
+                Part::A2 => {
+                    let request = oer_portable_riscv::cycle32();
+                    access.wifi_mac_hal().request_channel_stop();
+                    let bound = ACTIVITY_BOUND_US.saturating_mul(CYCLES_PER_US);
+                    let mut cleared = access.wifi_mac_hal().channel_active_state() == 0;
+                    while !cleared && oer_portable_riscv::cycle32().wrapping_sub(request) < bound {
+                        cleared = access.wifi_mac_hal().channel_active_state() == 0;
+                    }
+                    let clear = oer_portable_riscv::cycle32();
+                    row[2] = clear.wrapping_sub(request) | u32::from(!cleared) << 31;
                     access.rx_dma().experiment_walker_edge();
-                    let enabled = access.receive_dma_snapshot().walker_enabled;
-                    let read = oer_portable_riscv::cycle32();
-                    row[2] = read.wrapping_sub(edge);
-                    (edge, enabled)
+                    (clear, access.receive_dma_snapshot().walker_enabled)
                 }
                 Part::Reset => {
                     let pulse = oer_portable_riscv::cycle32();
@@ -235,6 +269,8 @@ pub(super) async fn series(
                     clocks_on = pulsed_clocks;
                     let proof = oer_portable_riscv::cycle32();
                     row[2] = proof.wrapping_sub(pulse);
+                    // The vendor's order: the walker's edge after the reset.
+                    access.rx_dma().experiment_walker_edge();
                     (proof, access.receive_dma_snapshot().walker_enabled)
                 }
             };
@@ -274,14 +310,14 @@ pub(super) async fn series(
             }
             row[4] = mask;
             row[5] = frame_nodes << 16 | prefix_nodes;
-            // The stop proper and the rebuild, after the records.
-            access.wifi_mac_hal().request_channel_stop();
+            // The walker's stop proof and the rebuild, after the records.
             let halted = match ring.try_stop(access.rx_dma()) {
                 Ok(halted) => halted,
                 Err((_live, _)) => return Err((phase::WALKER_STOP, 0x5e00_0000 | index)),
             };
             ring = match part {
-                Part::Edge => restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?,
+                // The MAC resumed by the start (`start_mac_runtime`).
+                Part::A2 => restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?,
                 Part::Reset => {
                     let cold = {
                         let mut clocked = WifiClocked::from_running(access, clocks_on);
@@ -316,7 +352,7 @@ pub(super) async fn series(
             let (checked, bad, units) =
                 check_window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
             row[6] = checked & 0xffff | bad << 16;
-            row[7] = units;
+            row[7] = units & 0xffff | checked << 16;
             rows.push(row);
             index = index.saturating_add(1);
         }
@@ -434,8 +470,7 @@ fn take_record(addresses: &[usize; NODES], storage: &Storage, record: &mut Recor
 
 /// The air of one unit of the sender, and the peer it names; the
 /// agreement programmed once its peer is seen.
-fn note(series: &mut Series, access: &mut RadioAccess, bytes: &[u8]) -> Option<Air> {
-    let mpdu = bytes.get(HEADER..)?;
+fn note(series: &mut Series, access: &mut RadioAccess, mpdu: &[u8]) -> Option<Air> {
     let kind = *mpdu.first()?;
     let to = mpdu.get(4..10)?;
     let from = <[u8; 6]>::try_from(mpdu.get(10..16)?).ok()?;
@@ -475,30 +510,48 @@ fn note(series: &mut Series, access: &mut RadioAccess, bytes: &[u8]) -> Option<A
     }
 }
 
-/// Whether a steady frame of the sender holds the sender's bytes, its
-/// counter in every 64 octets one frame's.
-fn content_ok(series: &Series, bytes: &[u8]) -> Option<bool> {
-    let sender = series.sender?;
-    let mpdu = bytes.get(HEADER..)?;
-    if mpdu.first() != Some(&0x08) || mpdu.get(10..16) != Some(&sender[..]) {
-        return None;
-    }
-    let at = Case::Provenance700.counter_at();
-    let counter = mpdu
-        .get(at..at + 4)
-        .and_then(|b| <[u8; 4]>::try_from(b).ok())
-        .map(u32::from_le_bytes)?;
-    let length = STEADY.min(mpdu.len());
-    Some((0..length).all(|offset| {
-        mpdu.get(offset).copied()
-            == Some(byte(
-                Case::Provenance700,
-                sender,
-                series.station,
-                counter,
-                offset,
-            ))
-    }))
+/// Whether a steady frame of the sender holds the sender's payload, its
+/// counter in every 64 octets one frame's (`case_c::payload_ok`: the header
+/// is the MAC's in part and not compared).
+fn content_ok(series: &Series, mpdu: &[u8]) -> Option<bool> {
+    crate::case_c::payload_ok(
+        Case::Provenance700,
+        mpdu,
+        series.sender?,
+        series.station,
+        STEADY,
+    )
+}
+
+/// The MPDU of a unit's first step: where the RX-control prefix and its
+/// optional blocks end (`first_segment_layout`, the backend's reading of the
+/// prefix), for the frame's length.
+fn mpdu_of<'a>(
+    step: &oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_storage::RxUnitStep<'a>,
+) -> Option<&'a [u8]> {
+    use oer_chips_esp32s31_radio_ieee80211_backend::mac::rx::{
+        RxIngressConfig, first_segment_layout,
+    };
+    let bytes = step.bytes();
+    let view = oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxSegment {
+        descriptor_address: 0,
+        descriptor_word0: step.descriptor_word0(),
+        buffer: bytes,
+        next_descriptor_address: 0,
+    };
+    let layout = first_segment_layout(
+        &view,
+        RxIngressConfig {
+            ring_entry_limit: COUNT,
+            csi_config: 0,
+            flags: 0,
+        },
+    )
+    .ok()?;
+    let end = layout
+        .frame_offset
+        .checked_add(layout.expected_frame_length)?;
+    bytes.get(layout.frame_offset..end.min(bytes.len()))
 }
 
 /// Receive for `millis`, taking and recycling every unit; the units and
@@ -577,8 +630,10 @@ async fn drain(
             continue;
         };
         units = units.saturating_add(1);
-        if let Ok(step) = unit.step(0) {
-            seen(access, step.bytes());
+        if let Ok(step) = unit.step(0)
+            && let Some(mpdu) = mpdu_of(&step)
+        {
+            seen(access, mpdu);
         }
         let credit = unit.retain_discard().ok_or((phase::RECEIVE, 0x5e45))?;
         let _appended = credit

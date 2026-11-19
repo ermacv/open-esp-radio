@@ -490,7 +490,7 @@ async fn report(
         // One verdict a part: `pass` only with no frame region and no
         // descriptor word changed after the first record in any stop, and
         // no bad frame after a start.
-        for (part, name) in [(1_u32, "edge"), (2, "reset")] {
+        for (part, name) in [(3_u32, "a2"), (4, "reset")] {
             let mut stops = 0_u32;
             let mut changed = 0_u32;
             let mut bad = 0_u32;

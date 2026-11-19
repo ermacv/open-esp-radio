@@ -233,6 +233,40 @@ pub fn byte(case: Case, sender: [u8; 6], receiver: [u8; 6], counter: u32, offset
     }
 }
 
+/// Whether `mpdu`, a non-QoS provenance frame of `case` from `sender` to
+/// `receiver` (the first `length` octets of it), carries the sender's
+/// payload: from the LLC/SNAP on, every octet as [`byte`] makes it, the
+/// counter read at its first place (`tasks/221`). The header is not
+/// compared: Duration, Sequence Control and the Retry flag are the MAC's.
+/// `None` when `mpdu` is not such a frame of `sender` to `receiver`.
+pub fn payload_ok(
+    case: Case,
+    mpdu: &[u8],
+    sender: [u8; 6],
+    receiver: [u8; 6],
+    length: usize,
+) -> Option<bool> {
+    if case.qos()
+        || mpdu.first() != Some(&0x08)
+        || mpdu.get(4..10) != Some(&receiver[..])
+        || mpdu.get(10..16) != Some(&sender[..])
+    {
+        return None;
+    }
+    let at = case.counter_at();
+    let counter = mpdu
+        .get(at..at + 4)
+        .and_then(|b| <[u8; 4]>::try_from(b).ok())
+        .map(u32::from_le_bytes)?;
+    if Case::from_counter(counter) != Some(case) {
+        return Some(false);
+    }
+    let end = length.min(mpdu.len());
+    Some((24..end).all(|offset| {
+        mpdu.get(offset).copied() == Some(byte(case, sender, receiver, counter, offset))
+    }))
+}
+
 /// Cell E of `tasks/161`: the same QoS cases protected under CCMP. The
 /// sender seals them in software (`CcmpAssociation`, SPP not negotiated, as
 /// the access point of 2026-11-01); the receiver's MAC decrypts them under
@@ -340,6 +374,52 @@ pub fn protected_expected(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `tasks/221`: the payload is checked, the MAC's header fields are not.
+    #[test]
+    fn a_provenance_payload_is_checked_and_the_macs_header_is_not() {
+        let sender = [2, 0, 0, 0, 0, 1];
+        let receiver = [2, 0, 0, 0, 0, 2];
+        let counter = Case::Provenance700.counter(77);
+        let mut frame: Vec<u8> = (0..500)
+            .map(|offset| byte(Case::Provenance700, sender, receiver, counter, offset))
+            .collect();
+        assert_eq!(
+            payload_ok(Case::Provenance700, &frame, sender, receiver, 500),
+            Some(true)
+        );
+        // Retry, Duration and Sequence Control are the MAC's.
+        frame[1] |= 0x08;
+        frame[2] = 0x3c;
+        frame[22] = 0x50;
+        assert_eq!(
+            payload_ok(Case::Provenance700, &frame, sender, receiver, 500),
+            Some(true)
+        );
+        // One octet of the payload changed, and the counter of another case.
+        let mut flipped = frame.clone();
+        flipped[300] ^= 1;
+        assert_eq!(
+            payload_ok(Case::Provenance700, &flipped, sender, receiver, 500),
+            Some(false)
+        );
+        let mut other = frame.clone();
+        other[32..36].copy_from_slice(&Case::Provenance1500.counter(77).to_le_bytes());
+        assert_eq!(
+            payload_ok(Case::Provenance700, &other, sender, receiver, 500),
+            Some(false)
+        );
+        // Another sender's frame, or not Data, is none of its.
+        assert_eq!(
+            payload_ok(Case::Provenance700, &frame, receiver, sender, 500),
+            None
+        );
+        frame[0] = 0x88;
+        assert_eq!(
+            payload_ok(Case::Provenance700, &frame, sender, receiver, 500),
+            None
+        );
+    }
 
     const SENDER: [u8; 6] = [1, 2, 3, 4, 5, 6];
     const RECEIVER: [u8; 6] = [9, 8, 7, 6, 5, 4];
