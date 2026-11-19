@@ -46,6 +46,8 @@ exhaust = []
 exit = []
 # `tasks/234`: segments of 20 s, for c1's full run.
 long-segments = []
+# `tasks/236`: every exit from a stall under load of 5 to 20 ms.
+stall-load = ["exit"]
 
 [dev-dependencies]
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }

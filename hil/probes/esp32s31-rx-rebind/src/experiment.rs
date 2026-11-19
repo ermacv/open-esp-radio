@@ -358,6 +358,13 @@ pub(super) struct State {
     stall_hw: [u16; 4],
     /// `tasks/235`: the first exits, and the exits by when the walker moved.
     exits: ExitLog,
+    /// `tasks/236`: the stall under load: when the walker was found standing
+    /// (microseconds plus one, zero while none), how long it is kept so, the
+    /// MAC's counters then, and the exits from such stalls.
+    load_from_plus_one: u32,
+    load_wait_us: u32,
+    load_hw: [u16; 4],
+    loads: LoadLog,
     /// Scans after an exit still to be read as "after the exit".
     after_exit_scans: u32,
     /// `tasks/234` addition: the raw causes of both interrupt banks.
@@ -915,6 +922,18 @@ impl State {
         Ok(())
     }
 
+    /// `tasks/236`: MPDU, data success, BUFFER_FULL, LAST_UNMATCHED_ERROR.
+    #[cfg(feature = "stall-load")]
+    fn load_counters(access: &RadioAccess) -> [u16; 4] {
+        let stats = access.receive_statistics_snapshot().primary;
+        [
+            stats.mpdu_count,
+            stats.data_success,
+            stats.buffer_full,
+            stats.last_unmatched_error,
+        ]
+    }
+
     fn hardware_now(access: &RadioAccess) -> [u16; 4] {
         let stats = access.receive_statistics_snapshot().primary;
         [
@@ -982,6 +1001,26 @@ pub(super) struct ExitLog {
 
 const EXIT_ROWS: usize = 64;
 
+/// `tasks/236`: a stall under load lasts 5 to 20 ms from the stand.
+const LOAD_MIN_US: u32 = 5_000;
+const LOAD_SPAN_US: u32 = 15_000;
+const LOAD_ROWS: usize = 1_500;
+
+/// `tasks/236`: the exits from a stall under load.
+#[derive(Clone, Copy, Zeroable)]
+#[repr(C)]
+pub(super) struct LoadLog {
+    /// Each: the stall's length in microseconds; over it the MAC's MPDU,
+    /// data-success, BUFFER_FULL and LAST_UNMATCHED_ERROR counts' advances
+    /// (16 bits each, two to a word); the cursor's NEXT at the stall's end
+    /// and after the exit; both banks' bits seen over the stall.
+    rows: [[u32; 7]; LOAD_ROWS],
+    used: usize,
+    exits: u32,
+    next_moved_after: u32,
+    bit11: u32,
+}
+
 /// `tasks/234`: a stall of this long behind the hole is recorded once.
 const STALL_TRACE_US: u32 = 20_000;
 
@@ -1026,7 +1065,9 @@ fn scan(
             access.wifi_mac_hal().experiment_interrupt_1_raw(),
         ];
         irq.acknowledge_mac_interrupt_raw(raw0);
-        let stalled = arm.exit() && state.hole_plus_one != 0 && state.stall_from_plus_one != 0;
+        let stalled = arm.exit()
+            && state.hole_plus_one != 0
+            && (state.stall_from_plus_one != 0 || state.load_from_plus_one != 0);
         let raw = &mut state.raw;
         let next_zero = access.receive_dma_snapshot().next_descriptor_low == 0;
         if stalled {
@@ -1233,7 +1274,32 @@ fn scan(
                 }
                 break;
             };
-            if state.stall_from_plus_one != 0 {
+            // `tasks/236`: on the tail, keep standing 5 to 20 ms with the air
+            // on before the exit.
+            #[cfg(feature = "stall-load")]
+            if kind == 3 {
+                if state.load_from_plus_one == 0 {
+                    state.load_from_plus_one = state.now_us.saturating_add(1);
+                    state.load_wait_us =
+                        LOAD_MIN_US + oer_portable_riscv::cycle32() % (LOAD_SPAN_US + 1);
+                    state.load_hw = State::load_counters(access);
+                    state.raw.seen = [0; 2];
+                    break;
+                }
+                if state.now_us.saturating_sub(state.load_from_plus_one) < state.load_wait_us {
+                    break;
+                }
+            }
+            #[cfg(feature = "stall-load")]
+            let load_end = (state.load_from_plus_one != 0).then(|| {
+                (
+                    state.now_us.saturating_sub(state.load_from_plus_one),
+                    State::load_counters(access),
+                    frozen.next_descriptor_low(),
+                    state.raw.seen,
+                )
+            });
+            if state.stall_from_plus_one != 0 || state.load_from_plus_one != 0 {
                 state.raw.close();
                 state.after_exit_scans = 4;
             }
@@ -1290,6 +1356,37 @@ fn scan(
             }
             reload(ring, access)?;
             ring.experiment_trace(5, access.rx_dma());
+            #[cfg(feature = "stall-load")]
+            if let Some((waited, hw, next_end, seen)) = load_end {
+                state.load_from_plus_one = 0;
+                let after = access.receive_dma_snapshot().next_descriptor_low;
+                let d = |k: usize| {
+                    u32::from(
+                        hw.get(k)
+                            .copied()
+                            .unwrap_or(0)
+                            .wrapping_sub(state.load_hw.get(k).copied().unwrap_or(0)),
+                    )
+                };
+                let loads = &mut state.loads;
+                loads.exits = loads.exits.saturating_add(1);
+                loads.next_moved_after = loads
+                    .next_moved_after
+                    .saturating_add(u32::from(after != next_end));
+                loads.bit11 = loads.bit11.saturating_add(seen[0] >> 11 & 1);
+                if let Some(row) = loads.rows.get_mut(loads.used) {
+                    *row = [
+                        waited,
+                        d(0) | d(1) << 16,
+                        d(2) | d(3) << 16,
+                        next_end,
+                        after,
+                        seen[0],
+                        seen[1],
+                    ];
+                    loads.used += 1;
+                }
+            }
             let moved = before_bell != old_tail_low;
             let log = &mut state.exits;
             if kind == 3 {
@@ -2017,6 +2114,24 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         usb::text(console, line.as_bytes())
             .await
             .map_err(|_| name!("console-write"; 32))?;
+        let loads = &state.loads;
+        line.clear();
+        writeln!(
+            &mut line,
+            "LOADS exits={} next_moved_after={} bit11={} rows={}",
+            loads.exits, loads.next_moved_after, loads.bit11, loads.used
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+        for row in loads.rows.iter().take(loads.used) {
+            line.clear();
+            writeln!(&mut line, "LOAD {row:x?}").map_err(|_| name!("format"; 32))?;
+            usb::text(console, line.as_bytes())
+                .await
+                .map_err(|_| name!("console-write"; 32))?;
+        }
         let log = &state.exits;
         line.clear();
         writeln!(
