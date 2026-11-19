@@ -1,0 +1,10 @@
+error[E0499]: cannot borrow `*port` as mutable more than once at a time
+ --> tests/ui/a_round_is_held_across_no_call.rs:6:5
+  |
+4 |     let round = port.round();
+  |                 ---- first mutable borrow occurs here
+5 |     #[cfg(all())]
+6 |     port.alarm(None); // ui-error: E0499
+  |     ^^^^ second mutable borrow occurs here
+7 |     round.close()
+  |     ----- first borrow later used here

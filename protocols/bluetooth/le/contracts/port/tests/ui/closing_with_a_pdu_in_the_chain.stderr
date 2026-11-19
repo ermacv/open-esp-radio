@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `tx`
+  --> tests/ui/closing_with_a_pdu_in_the_chain.rs:11:42
+   |
+ 7 |     [tx]: [TxPlace<'id>; 1],
+   |      -- move occurs because `tx` has type `TxPlace<'_>`, which does not implement the `Copy` trait
+...
+10 |     port.submit(tx);
+   |                 -- value moved here
+11 |     port.close_connection(role, events, [tx]) // ui-error: E0382
+   |                                          ^^ value used here after move

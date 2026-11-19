@@ -365,9 +365,10 @@ mod tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
-            core::num::NonZeroU64::MIN,
-        ),
+        boundary_guard:
+            oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
+                core::num::NonZeroU64::MIN,
+            ),
         first_event_guard: RadioDuration::from_micros(16),
         event_length: RadioDuration::from_micros(5_047),
         first_event_length: RadioDuration::from_micros(5_155),
@@ -436,9 +437,10 @@ mod boundary_tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
-            core::num::NonZeroU64::MIN,
-        ),
+        boundary_guard:
+            oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
+                core::num::NonZeroU64::MIN,
+            ),
         first_event_guard: RadioDuration::from_micros(16),
         event_length: RadioDuration::from_micros(5_047),
         first_event_length: RadioDuration::from_micros(5_155),

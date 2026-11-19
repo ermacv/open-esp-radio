@@ -4,26 +4,23 @@
 use core::marker::PhantomData;
 
 use crate::{
-    AcceptListChange, AdvertisingConfiguration, AdvertisingEvent, AdvertisingReception,
-    ConnectionConfiguration, ConnectionEvent, ConnectionEventTiming, LeCapabilities, LeInstant,
-    LeRadioCapabilities, LeWindow, OutsideEpoch, RadioDuration, RadioTiming, ScanFilterPolicy,
-    ScanType, ScanWindow, ScannerConfiguration, TestReceive, TestTransmit, TxPower,
+    AdvertisingData, AdvertisingEvent, AdvertisingFilterPolicy, AdvertisingReception,
+    AdvertisingSet, ConnectionEvent, ConnectionEventTiming, ConnectionSetup, LeCapabilities,
+    LeConnectionCapabilities, LeInstant, LeWindow, OutsideEpoch, RadioDuration, RadioTiming,
+    ScanFilterPolicy, ScanType, ScanWindow, ScannerSetup, TestWindow, TxPower, dtm::DtmTest,
 };
-use oer_protocols_bluetooth_le_wire::{
-    DataPdu,
-    advertising_header::{AdvertisingPduType, LegacyAdvertisingPduPrefix},
+use oer_protocols_bluetooth_le_wire::advertising_header::{
+    AdvertisingPduType, LegacyAdvertisingPduPrefix,
 };
-
-/// The highest connection event scheduling priority.
-const MAX_PRIORITY: u8 = 15;
-/// The longest LE Test packet payload.
-pub(crate) const TEST_PAYLOAD_MAX: usize = 255;
 
 /// Values checked against a backend's capabilities when they are built.
 ///
 /// A Controller builds every value it submits as a [`Supported`] of its
 /// capabilities marker `K`: the check runs once, against `K::CAPS`, and
-/// the backend refuses nothing the capabilities exclude. A timed value is
+/// the backend refuses nothing the capabilities exclude. What the
+/// capabilities decide alone (a role they do not serve) is a constant
+/// check of the value's kind: a value of a role `K` does not serve does not
+/// build. A timed value is
 /// also placed: each of its reservations comes from the one reservation
 /// function both the Controller and the backend use
 /// ([`RadioTiming::reservation`]) and ends within the capabilities'
@@ -94,7 +91,7 @@ impl<K: LeCapabilities, T: PartialEq> PartialEq for Supported<K, T> {
 
 impl<K: LeCapabilities, T: Eq> Eq for Supported<K, T> {}
 
-impl<K: LeCapabilities, T: Untimed> Supported<K, T> {
+impl<K: LeCapabilities, T: Untimed<K>> Supported<K, T> {
     /// `value`, when `K::CAPS` serve it. A value that occupies the air is
     /// built only placed ([`Self::placed`]).
     ///
@@ -102,7 +99,7 @@ impl<K: LeCapabilities, T: Untimed> Supported<K, T> {
     ///
     /// [`Unplaced::Unsupported`]: the capabilities exclude the value.
     pub fn new(value: T) -> Result<Self, Unplaced> {
-        if !value.supported(&K::CAPS) {
+        if !value.supported() {
             return Err(Unplaced::Unsupported);
         }
         Ok(Self {
@@ -112,7 +109,7 @@ impl<K: LeCapabilities, T: Untimed> Supported<K, T> {
     }
 }
 
-impl<K: LeCapabilities, T: Timed> Supported<K, T> {
+impl<K: LeCapabilities, T: Timed<K>> Supported<K, T> {
     /// `value` placed at `now`: the capabilities serve it, and each of its
     /// reservations lies in the radio epoch and ends within
     /// `K::CAPS.max_ahead` of `now`.
@@ -121,7 +118,7 @@ impl<K: LeCapabilities, T: Timed> Supported<K, T> {
     ///
     /// Which of those does not hold.
     pub fn placed(value: T, now: LeInstant) -> Result<Self, Unplaced> {
-        if !value.supported(&K::CAPS) {
+        if !value.supported() {
             return Err(Unplaced::Unsupported);
         }
         for air in value.air_windows(&K::CAPS.timing)?.into_iter().flatten() {
@@ -166,18 +163,18 @@ impl From<OutsideEpoch> for Unplaced {
     }
 }
 
-/// A value a backend's capabilities serve or exclude.
-pub trait Capability {
-    /// Whether `caps` serve this value.
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool;
+/// A value the capabilities `K` serve or exclude.
+pub trait Capability<K: LeCapabilities> {
+    /// Whether `K` serve this value.
+    fn supported(&self) -> bool;
 }
 
 /// A value that occupies no air, built with [`Supported::new`].
-pub trait Untimed: Capability {}
+pub trait Untimed<K: LeCapabilities>: Capability<K> {}
 
 /// A value that occupies the air, built only placed with
 /// [`Supported::placed`]: what it reserves.
-pub trait Timed: Capability {
+pub trait Timed<K: LeCapabilities>: Capability<K> {
     /// Its air windows, each of which the backend reserves from
     /// [`RadioTiming::reservation`]; at most three, for an advertising
     /// event's channels.
@@ -188,18 +185,35 @@ pub trait Timed: Capability {
     fn air_windows(&self, timing: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced>;
 }
 
-impl Untimed for TxPower {}
+/// The connections of the capabilities `K`.
+struct Connections<K>(PhantomData<fn() -> K>);
 
-impl Capability for TxPower {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        self.dbm() >= caps.min_tx_power_dbm
+impl<K: LeCapabilities> Connections<K> {
+    /// `K`'s connections, or a failed build where `K` serves none.
+    const SERVED: LeConnectionCapabilities = match K::CAPS.peripheral_connection {
+        Some(connection) => connection,
+        None => panic!("a connection's value needs capabilities that serve connections"),
+    };
+}
+
+impl<K: LeCapabilities> Untimed<K> for TxPower {}
+
+impl<K: LeCapabilities> Capability<K> for TxPower {
+    fn supported(&self) -> bool {
+        self.dbm() >= K::CAPS.min_tx_power_dbm
     }
 }
 
-impl Untimed for AdvertisingConfiguration<'_> {}
+impl<K: LeCapabilities> Untimed<K> for AdvertisingData<'_> {}
 
-impl Capability for AdvertisingConfiguration<'_> {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
+impl<K: LeCapabilities> Capability<K> for AdvertisingData<'_> {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.legacy_advertising.any() {
+                panic!("advertising needs capabilities that serve it");
+            }
+        };
+        let caps = K::CAPS;
         let Ok(advertisement) = LegacyAdvertisingPduPrefix::decode(self.pdu.bytes()) else {
             return false;
         };
@@ -217,23 +231,42 @@ impl Capability for AdvertisingConfiguration<'_> {
             }
             _ => false,
         };
-        kind && !header.reserved() && caps.phys.contains(self.phy) && self.tx_power.supported(caps)
+        kind && !header.reserved()
     }
 }
 
-impl Capability for AdvertisingEvent {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.legacy_advertising.any() && self.channel_spacing > caps.timing.preparation_lead
+impl<K: LeCapabilities> Untimed<K> for AdvertisingSet<'_> {}
+
+impl<K: LeCapabilities> Capability<K> for AdvertisingSet<'_> {
+    fn supported(&self) -> bool {
+        let filter = match self.filter_policy {
+            AdvertisingFilterPolicy::AcceptAll => true,
+            AdvertisingFilterPolicy::ScanAcceptList
+            | AdvertisingFilterPolicy::ConnectAcceptList
+            | AdvertisingFilterPolicy::BothAcceptList => K::CAPS.filter_accept_list,
+        };
+        Capability::<K>::supported(&self.data)
+            && filter
+            && K::CAPS.phys.contains(self.phy)
+            && Capability::<K>::supported(&self.tx_power)
     }
 }
 
-impl Timed for AdvertisingEvent {
-    fn air_windows(&self, timing: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
+impl<K: LeCapabilities> Capability<K> for AdvertisingEvent<K> {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.legacy_advertising.any() {
+                panic!("advertising needs capabilities that serve it");
+            }
+        };
+        true
+    }
+}
+
+impl<K: LeCapabilities> Timed<K> for AdvertisingEvent<K> {
+    fn air_windows(&self, _: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
         let mut windows = [None; 3];
-        let span = self
-            .channel_spacing
-            .checked_sub(timing.preparation_lead)
-            .ok_or(Unplaced::Unsupported)?;
+        let span = self.channel_spacing.listening().get();
         for (position, window) in windows.iter_mut().enumerate() {
             let Some((_, anchor)) = self.channel_anchor(position)? else {
                 break;
@@ -244,10 +277,16 @@ impl Timed for AdvertisingEvent {
     }
 }
 
-impl Untimed for ScannerConfiguration {}
+impl<K: LeCapabilities> Untimed<K> for ScannerSetup {}
 
-impl Capability for ScannerConfiguration {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
+impl<K: LeCapabilities> Capability<K> for ScannerSetup {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.scanning() {
+                panic!("a scanner needs capabilities that serve scanning");
+            }
+        };
+        let caps = K::CAPS;
         let scan_type = match self.scan_type {
             ScanType::Passive => caps.passive_scanning,
             ScanType::Active => caps.active_scanning,
@@ -256,37 +295,42 @@ impl Capability for ScannerConfiguration {
             ScanFilterPolicy::AcceptAll => true,
             ScanFilterPolicy::AcceptListOnly => caps.filter_accept_list,
         };
-        scan_type && filter && caps.phys.contains(self.phy) && self.tx_power.supported(caps)
+        scan_type
+            && filter
+            && caps.phys.contains(self.phy)
+            && Capability::<K>::supported(&self.tx_power)
     }
 }
 
-impl Capability for ScanWindow {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.scanning()
+impl<K: LeCapabilities> Capability<K> for ScanWindow {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.scanning() {
+                panic!("a scan window needs capabilities that serve scanning");
+            }
+        };
+        true
     }
 }
 
-impl Timed for ScanWindow {
+impl<K: LeCapabilities> Timed<K> for ScanWindow {
     fn air_windows(&self, _: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
         Ok([Some(self.window), None, None])
     }
 }
 
-impl Untimed for ConnectionConfiguration {}
+impl<K: LeCapabilities> Untimed<K> for ConnectionSetup {}
 
-impl Capability for ConnectionConfiguration {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.peripheral_connection.is_some()
-            && caps.phys.contains(self.phy)
-            && self.tx_power.supported(caps)
+impl<K: LeCapabilities> Capability<K> for ConnectionSetup {
+    fn supported(&self) -> bool {
+        const { Connections::<K>::SERVED };
+        K::CAPS.phys.contains(self.phy) && Capability::<K>::supported(&self.tx_power)
     }
 }
 
-impl Capability for ConnectionEvent {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        let Some(connection) = caps.peripheral_connection else {
-            return false;
-        };
+impl<K: LeCapabilities> Capability<K> for ConnectionEvent {
+    fn supported(&self) -> bool {
+        let connection = const { Connections::<K>::SERVED };
         let wait = match self.timing {
             ConnectionEventTiming::First {
                 transmit_window,
@@ -312,61 +356,50 @@ impl Capability for ConnectionEvent {
             && self
                 .interval
                 .checked_add(widening)
-                .is_some_and(|span| span <= caps.max_ahead);
-        wait && span && self.priority <= MAX_PRIORITY
+                .is_some_and(|span| span <= K::CAPS.max_ahead);
+        wait && span
     }
 }
 
-impl Timed for ConnectionEvent {
+impl<K: LeCapabilities> Timed<K> for ConnectionEvent {
     fn air_windows(&self, _: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
         Ok([Some(self.window), None, None])
     }
 }
 
-impl Untimed for DataPdu<'_> {}
+impl<K: LeCapabilities> Untimed<K> for DtmTest {}
 
-impl Capability for DataPdu<'_> {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.peripheral_connection.is_some_and(|connection| {
-            self.payload().len() <= usize::from(connection.max_data_payload)
-        })
+impl<K: LeCapabilities> Capability<K> for DtmTest {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.direct_test_mode {
+                panic!("a test needs capabilities that serve Direct Test Mode");
+            }
+        };
+        let caps = K::CAPS;
+        match *self {
+            DtmTest::Transmit { phy, power, .. } => {
+                caps.test_phys.contains(phy.phy()) && Capability::<K>::supported(&power)
+            }
+            DtmTest::Receive { phy, .. } => caps.test_phys.contains(phy.phy()),
+        }
     }
 }
 
-impl Capability for TestTransmit<'_> {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        self.payload.len() <= TEST_PAYLOAD_MAX
-            && caps.direct_test_mode
-            && caps.test_phys.contains(self.phy.phy())
-            && self.tx_power.supported(caps)
+impl<K: LeCapabilities> Capability<K> for TestWindow {
+    fn supported(&self) -> bool {
+        const {
+            if !K::CAPS.direct_test_mode {
+                panic!("a test window needs capabilities that serve Direct Test Mode");
+            }
+        };
+        true
     }
 }
 
-impl Timed for TestTransmit<'_> {
+impl<K: LeCapabilities> Timed<K> for TestWindow {
     fn air_windows(&self, _: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
         Ok([Some(self.window), None, None])
-    }
-}
-
-impl Capability for TestReceive {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.direct_test_mode
-            && caps.test_phys.contains(self.phy.phy())
-            && self.tx_power.supported(caps)
-    }
-}
-
-impl Timed for TestReceive {
-    fn air_windows(&self, _: &RadioTiming) -> Result<[Option<LeWindow>; 3], Unplaced> {
-        Ok([Some(self.window), None, None])
-    }
-}
-
-impl Untimed for AcceptListChange {}
-
-impl Capability for AcceptListChange {
-    fn supported(&self, caps: &LeRadioCapabilities) -> bool {
-        caps.filter_accept_list
     }
 }
 

@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `first`
+  --> tests/ui/closing_with_an_event_out.rs:16:34
+   |
+ 8 |     [first, second]: [ConnEvent<'id>; 2],
+   |      ----- move occurs because `first` has type `ConnEvent<'_>`, which does not implement the `Copy` trait
+...
+13 |     let _ = port.publish_connection(first, event);
+   |                                     ----- value moved here
+...
+16 |     port.close_connection(role, [first, second], tx) // ui-error: E0382
+   |                                  ^^^^^ value used here after move

@@ -5,7 +5,7 @@
 
 use crate::{
     LeInstant, LeRadio, LeWindow, NonZeroRadioDuration, OutsideEpoch, RadioDuration, RadioTiming,
-    TestPhy,
+    TestPhy, TxPower,
 };
 use core::num::NonZeroU64;
 use oer_protocols_bluetooth_le_wire::{TestChannel, dtm::DtmPayloadPattern};
@@ -24,7 +24,8 @@ pub const DTM_PLANNING_SLACK: RadioDuration<LeRadio> = RadioDuration::from_micro
 /// which would cost a retry and a further interval.
 pub const DTM_RECURRING_TRANSMIT_SLACK: RadioDuration<LeRadio> = RadioDuration::from_micros(100);
 
-/// One test.
+/// One test: the setup of a test session
+/// ([`open_test`](crate::LePort::open_test)).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DtmTest {
     /// Transmit test packets.
@@ -37,6 +38,8 @@ pub enum DtmTest {
         pattern: DtmPayloadPattern,
         /// Payload length in bytes.
         length: u8,
+        /// Transmit power.
+        power: TxPower,
     },
     /// Receive and count test packets.
     Receive {

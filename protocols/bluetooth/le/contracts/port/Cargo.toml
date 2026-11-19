@@ -5,16 +5,28 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The Bluetooth LE radio's vocabulary: clock domain, request values, capabilities, outcomes and DTM windows"
+description = "The Bluetooth LE port's contract: rights, geometry, calls, rounds and the boundary's vocabulary"
+readme = "README.md"
+
+[features]
+# Rights made without a mint, for the tests of the cores that hold them.
+test-support = []
 
 [dependencies]
 oer-protocols-bluetooth-le-wire = { path = "../../wire" }
 oer-protocols-radio-coex = { path = "../../../../radio/coex" }
+oer-protocols-radio-port = { path = "../../../../radio/port" }
 oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory" }
 oer-portable-time = { path = "../../../../../portable/time" }
 
 [dev-dependencies]
+# The crate's own tests take the forge.
+oer-protocols-bluetooth-le-contracts-port = { path = ".", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory", features = ["test-support"] }
+oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
 
 [lints]
 workspace = true
+
+[package.metadata.open-radio]
+test-feature-sets = ["test-support"]

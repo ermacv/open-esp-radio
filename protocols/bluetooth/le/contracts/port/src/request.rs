@@ -4,45 +4,13 @@ use core::num::NonZeroU64;
 
 use oer_protocols_radio_coex::{AirClass, Operation as CoexOperation, RadioClient};
 
-use crate::{LeInstant, LePhy, LeRadio, LeWindow, NonZeroRadioDuration, RadioDuration};
+use crate::{
+    LeCapabilities, LeInstant, LePhy, LeRadio, LeWindow, NonZeroRadioDuration, RadioDuration,
+};
 use oer_protocols_bluetooth_le_wire::{
     AccessAddress, AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, CrcInit, DataChannel,
-    TestChannel, TestPayloadType,
+    LeDeviceAddress,
 };
-
-macro_rules! role_id {
-    ($(#[$doc:meta])* $name:ident) => {
-        $(#[$doc])*
-        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-        #[repr(transparent)]
-        pub struct $name(u8);
-
-        impl $name {
-            /// Preserve one caller-chosen index.
-            pub const fn new(index: u8) -> Self {
-                Self(index)
-            }
-
-            /// The caller-chosen index.
-            pub const fn index(self) -> u8 {
-                self.0
-            }
-        }
-    };
-}
-
-role_id!(
-    /// One configured advertising set.
-    AdvertisingSetId
-);
-role_id!(
-    /// One configured scanner.
-    ScannerId
-);
-role_id!(
-    /// One open connection.
-    ConnectionId
-);
 
 /// The whole 2.4 GHz band the Bluetooth LE channels hop over, as one regulatory
 /// span: a domain permits the radio on all of it or not at all. Its width
@@ -144,19 +112,106 @@ pub enum AdvertisingReception<'pdu> {
     Report,
 }
 
-/// Configuration of one legacy advertising set.
+/// What an advertising set sends and answers: the part of the set that may
+/// change between its events ([`rewrite_advertising`](crate::LePort::rewrite_advertising)).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AdvertisingConfiguration<'pdu> {
-    /// The set.
-    pub set: AdvertisingSetId,
+pub struct AdvertisingData<'pdu> {
     /// The advertising PDU.
     pub pdu: AdvertisingPdu<'pdu>,
     /// What the set listens for.
     pub reception: AdvertisingReception<'pdu>,
+}
+
+/// Which requests an advertising set takes (Core Vol 6 Part B 4.3.2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdvertisingFilterPolicy {
+    /// Scan and connection requests from every device.
+    AcceptAll,
+    /// Scan requests only from the devices of the filter accept list.
+    ScanAcceptList,
+    /// Connection requests only from the devices of the filter accept list.
+    ConnectAcceptList,
+    /// Both only from the devices of the filter accept list.
+    BothAcceptList,
+}
+
+/// One legacy advertising set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AdvertisingSet<'pdu> {
+    /// What it sends and answers.
+    pub data: AdvertisingData<'pdu>,
+    /// The set's own address, which the hardware compares in requests.
+    pub own: LeDeviceAddress,
+    /// The device a directed advertising PDU is for; absent for undirected
+    /// advertising.
+    pub peer: Option<LeDeviceAddress>,
+    /// Which requests it takes.
+    pub filter_policy: AdvertisingFilterPolicy,
     /// Transmit power.
     pub tx_power: TxPower,
     /// PHY of the advertising PDUs and their responses.
     pub phy: LePhy,
+}
+
+/// The time between the anchors of an advertising event's consecutive
+/// channels, longer than the preparation lead of the capabilities `K`.
+///
+/// A constant of the controller: it is built in a const item, by the
+/// constructor that refuses a spacing the backend cannot serve.
+pub struct ChannelSpacing<K: LeCapabilities> {
+    spacing: RadioDuration<LeRadio>,
+    listening: NonZeroRadioDuration<LeRadio>,
+    caps: core::marker::PhantomData<fn() -> K>,
+}
+
+impl<K: LeCapabilities> Clone for ChannelSpacing<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K: LeCapabilities> Copy for ChannelSpacing<K> {}
+
+impl<K: LeCapabilities> PartialEq for ChannelSpacing<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.spacing == other.spacing
+    }
+}
+
+impl<K: LeCapabilities> Eq for ChannelSpacing<K> {}
+
+impl<K: LeCapabilities> core::fmt::Debug for ChannelSpacing<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.spacing.fmt(f)
+    }
+}
+
+impl<K: LeCapabilities> ChannelSpacing<K> {
+    /// `spacing`, when it is longer than `K`'s preparation lead.
+    pub const fn new(spacing: RadioDuration<LeRadio>) -> Option<Self> {
+        let Some(rest) = spacing.checked_sub(K::CAPS.timing.preparation_lead) else {
+            return None;
+        };
+        match NonZeroRadioDuration::new(rest) {
+            Some(listening) => Some(Self {
+                spacing,
+                listening,
+                caps: core::marker::PhantomData,
+            }),
+            None => None,
+        }
+    }
+
+    /// The spacing.
+    pub const fn get(self) -> RadioDuration<LeRadio> {
+        self.spacing
+    }
+
+    /// What a channel keeps of the spacing past its preparation lead: the
+    /// packet and any response.
+    pub const fn listening(self) -> NonZeroRadioDuration<LeRadio> {
+        self.listening
+    }
 }
 
 /// Why one advertising event asks the shared antenna as it does.
@@ -226,21 +281,48 @@ impl CoexOperation for Operation {
 /// channel_spacing`. The backend reserves each channel for one spacing,
 /// starting its preparation lead before the channel's anchor, so a spacing
 /// covers the lead, the packet and any response.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AdvertisingEvent {
-    /// The set.
-    pub set: AdvertisingSetId,
+pub struct AdvertisingEvent<K: LeCapabilities> {
     /// Air anchor of the first channel.
     pub anchor: LeInstant,
     /// Channels used in index order.
     pub channels: AdvertisingChannels,
     /// Time between the anchors of consecutive channels.
-    pub channel_spacing: RadioDuration<LeRadio>,
+    pub channel_spacing: ChannelSpacing<K>,
     /// Why the event asks the air as it does.
     pub coexistence: AdvertisingEventKind,
 }
 
-impl AdvertisingEvent {
+impl<K: LeCapabilities> Clone for AdvertisingEvent<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K: LeCapabilities> Copy for AdvertisingEvent<K> {}
+
+impl<K: LeCapabilities> PartialEq for AdvertisingEvent<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.anchor == other.anchor
+            && self.channels == other.channels
+            && self.channel_spacing == other.channel_spacing
+            && self.coexistence == other.coexistence
+    }
+}
+
+impl<K: LeCapabilities> Eq for AdvertisingEvent<K> {}
+
+impl<K: LeCapabilities> core::fmt::Debug for AdvertisingEvent<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("AdvertisingEvent")
+            .field("anchor", &self.anchor)
+            .field("channels", &self.channels)
+            .field("channel_spacing", &self.channel_spacing)
+            .field("coexistence", &self.coexistence)
+            .finish()
+    }
+}
+
+impl<K: LeCapabilities> AdvertisingEvent<K> {
     /// The channel and its anchor at `position` in channel order. An absent
     /// position is `Ok(None)`.
     ///
@@ -258,6 +340,7 @@ impl AdvertisingEvent {
         // an offset past `u64::MAX` cannot lie in the epoch either.
         let anchor = self
             .channel_spacing
+            .get()
             .checked_mul(position as u64)
             .and_then(|offset| self.anchor.checked_add(offset))
             .ok_or(OutsideEpoch)?;
@@ -265,16 +348,16 @@ impl AdvertisingEvent {
     }
 }
 
-/// Configuration of one passive scanner.
+/// One scanner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ScannerConfiguration {
-    /// The scanner.
-    pub scanner: ScannerId,
+pub struct ScannerSetup {
     /// Whether the scanner requests scan responses.
     pub scan_type: ScanType,
     /// Which advertisers the scanner receives from.
     pub filter_policy: ScanFilterPolicy,
-    /// Transmit power retained by the scanner profile.
+    /// The scanner's own address, which its scan requests carry.
+    pub own: LeDeviceAddress,
+    /// Transmit power of its scan requests.
     pub tx_power: TxPower,
     /// PHY listened on.
     pub phy: LePhy,
@@ -290,27 +373,6 @@ pub enum ScanFilterPolicy {
     AcceptListOnly,
 }
 
-/// One device of the filter accept list.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AcceptListDevice {
-    /// The address is random rather than public.
-    pub random: bool,
-    /// The address, least significant octet first.
-    pub address: [u8; 6],
-}
-
-/// One change of the filter accept list. The Controller changes the list only
-/// while no role filters against it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AcceptListChange {
-    /// Add a device; a device already listed stays listed.
-    Add(AcceptListDevice),
-    /// Remove a listed device.
-    Remove(AcceptListDevice),
-    /// Remove every device.
-    Clear,
-}
-
 /// How a scanner treats scannable advertising.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanType {
@@ -323,19 +385,15 @@ pub enum ScanType {
 /// One scan window.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanWindow {
-    /// The scanner.
-    pub scanner: ScannerId,
     /// Channel listened on.
     pub channel: AdvertisingChannel,
     /// Air window of the listening.
     pub window: LeWindow,
 }
 
-/// Configuration of one peripheral connection.
+/// One peripheral connection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ConnectionConfiguration {
-    /// The connection.
-    pub connection: ConnectionId,
+pub struct ConnectionSetup {
     /// Access Address.
     pub access_address: AccessAddress,
     /// CRC initialization.
@@ -373,8 +431,6 @@ pub enum ConnectionEventTiming {
 /// One connection event.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConnectionEvent {
-    /// The connection.
-    pub connection: ConnectionId,
     /// Data channel of the event.
     pub channel: DataChannel,
     /// Air window: its start is the earliest anchor, its duration the air
@@ -385,42 +441,46 @@ pub struct ConnectionEvent {
     pub interval: RadioDuration<LeRadio>,
     /// Receive wait of the event.
     pub timing: ConnectionEventTiming,
-    /// Scheduling priority, 0 to 15.
-    pub priority: u8,
+    /// Scheduling priority.
+    pub priority: ConnectionPriority,
     /// Why the event asks the air as it does.
     pub coexistence: ConnectionEventKind,
 }
 
-/// One Direct Test Mode transmitter event.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TestTransmit<'payload> {
-    /// RF channel.
-    pub channel: TestChannel,
-    /// PHY.
-    pub phy: TestPhy,
-    /// Air window of the packet.
-    pub window: LeWindow,
-    /// Transmit power.
-    pub tx_power: TxPower,
-    /// LE Test packet payload type.
-    pub payload_type: TestPayloadType,
-    /// Payload.
-    pub payload: &'payload [u8],
+/// A connection event's scheduling priority, 0 to 15.
+///
+/// A constant of the controller's policy: it is built in a const item, by
+/// the constructor that refuses a value above 15.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ConnectionPriority(u8);
+
+impl ConnectionPriority {
+    /// The highest priority.
+    pub const MAX: Self = Self(15);
+
+    /// `priority`, when it is at most 15.
+    pub const fn new(priority: u8) -> Option<Self> {
+        if priority > Self::MAX.0 {
+            None
+        } else {
+            Some(Self(priority))
+        }
+    }
+
+    /// The priority.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
 }
 
-/// One Direct Test Mode receiver event.
+/// One Direct Test Mode event: its window on the air. The channel, the PHY,
+/// the pattern and the power are the test's setup
+/// ([`DtmTest`](crate::dtm::DtmTest)); a transmitter's bytes are the port's,
+/// made from the pattern.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TestReceive {
-    /// RF channel.
-    pub channel: TestChannel,
-    /// PHY.
-    pub phy: TestPhy,
-    /// Air window of the listening.
+pub struct TestWindow {
+    /// Air window of the event.
     pub window: LeWindow,
-    /// Whether the receiver ran before in the same test.
-    pub recurring: bool,
-    /// Transmit power retained by the test profile.
-    pub tx_power: TxPower,
 }
 
 /// PHY of a Direct Test Mode event.
@@ -530,9 +590,10 @@ impl RadioTiming {
 #[allow(clippy::disallowed_macros)]
 mod tests {
     use super::{
-        AdvertisingEvent, AdvertisingEventKind, AdvertisingSetId, ConnectionAllowances,
-        ConnectionEventKind, Operation, RadioTiming,
+        AdvertisingEvent, AdvertisingEventKind, ChannelSpacing, ConnectionAllowances,
+        ConnectionEventKind, ConnectionPriority, Operation, RadioTiming,
     };
+    use crate::NoCapabilities;
     use crate::{LeInstant, LeWindow, NonZeroRadioDuration, RadioDuration};
     use core::num::NonZeroU64;
     use oer_protocols_bluetooth_le_wire::{AdvertisingChannel, AdvertisingChannels};
@@ -563,11 +624,12 @@ mod tests {
 
     #[test]
     fn advertising_channels_follow_one_spacing_apart() {
+        const SPACING: ChannelSpacing<NoCapabilities> =
+            ChannelSpacing::new(RadioDuration::from_micros(400)).unwrap();
         let event = AdvertisingEvent {
-            set: AdvertisingSetId::new(0),
             anchor: LeInstant::from_micros(1_000),
             channels: AdvertisingChannels::new(false, true, true).unwrap(),
-            channel_spacing: RadioDuration::from_micros(400),
+            channel_spacing: SPACING,
             coexistence: AdvertisingEventKind::Ordinary,
         };
         assert_eq!(
@@ -578,6 +640,35 @@ mod tests {
             )))
         );
         assert_eq!(event.channel_anchor(2), Ok(None));
+    }
+
+    #[test]
+    fn a_channel_spacing_is_longer_than_the_preparation_lead() {
+        enum Lead {}
+        impl crate::LeCapabilities for Lead {
+            const CAPS: crate::LeRadioCapabilities = crate::LeRadioCapabilities {
+                timing: RadioTiming {
+                    preparation_lead: RadioDuration::from_micros(300),
+                    ..RadioTiming::MINIMAL
+                },
+                ..crate::LeRadioCapabilities::NONE
+            };
+        }
+        assert!(ChannelSpacing::<Lead>::new(RadioDuration::from_micros(300)).is_none());
+        assert!(ChannelSpacing::<Lead>::new(RadioDuration::from_micros(200)).is_none());
+        let spacing = ChannelSpacing::<Lead>::new(RadioDuration::from_micros(301)).unwrap();
+        assert_eq!(spacing.get(), RadioDuration::from_micros(301));
+        assert_eq!(spacing.listening().get(), RadioDuration::from_micros(1));
+    }
+
+    #[test]
+    fn a_priority_is_at_most_fifteen() {
+        assert_eq!(ConnectionPriority::new(15), Some(ConnectionPriority::MAX));
+        assert_eq!(ConnectionPriority::new(16), None);
+        assert_eq!(
+            ConnectionPriority::new(0).map(ConnectionPriority::get),
+            Some(0)
+        );
     }
 
     #[test]

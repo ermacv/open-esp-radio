@@ -1,0 +1,11 @@
+error[E0382]: borrow of moved value: `role`
+  --> tests/ui/a_closed_role_is_not_open.rs:13:39
+   |
+ 7 |     role: Connection<'id>,
+   |     ---- move occurs because `role` has type `oer_protocols_bluetooth_le_contracts_port::Connection<'_>`, which does not implement the `Copy` trait
+...
+11 |     let place = port.close_connection(role, events, tx);
+   |                                       ---- value moved here
+12 |     #[cfg(all())]
+13 |     port.withdraw(RoleRef::Connection(&role)); // ui-error: E0382
+   |                                       ^^^^^ value borrowed here after move

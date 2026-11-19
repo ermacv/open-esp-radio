@@ -2789,7 +2789,11 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
                 "{path} -> {dependency}"
             );
         }
-        for path in ["portable/embassy/other", "chips/esp32s31/hal"] {
+        for path in [
+            "portable/embassy/other",
+            "protocols/ieee80211/runtime",
+            "chips/esp32s31/hal",
+        ] {
             assert!(
                 !external_crate_allowed(path, role(path).unwrap(), dependency),
                 "{path} -> {dependency}"
@@ -2804,6 +2808,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("chips/family/facts", false),
         ("chips/esp32s31/pac", false),
         ("chips/esp32s31/hal", false),
+        ("protocols/ieee80211/runtime", true),
         ("protocols/bluetooth/le/contracts/port", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
@@ -4236,7 +4241,16 @@ fn enables_feature_where(
 /// reads the manifests it names.
 #[test]
 fn a_right_is_forged_only_by_tests() {
-    const CONTRACT: &str = "oer-protocols-ieee80211-contracts-port";
+    for contract in [
+        "oer-protocols-ieee80211-contracts-port",
+        "oer-protocols-bluetooth-le-contracts-port",
+    ] {
+        a_right_of_the_contract_is_forged_only_by_tests(contract);
+    }
+}
+
+/// No product enables `contract`'s forging feature; a test does.
+fn a_right_of_the_contract_is_forged_only_by_tests(contract: &str) {
     const FEATURE: &str = "test-support";
     let root = root();
     let workspace = read_toml(&root.join("Cargo.toml"));
@@ -4245,14 +4259,14 @@ fn a_right_is_forged_only_by_tests() {
     let mut tests = 0;
     for (path, manifest) in packages(&root) {
         for table in ["dependencies", "build-dependencies"] {
-            if enables_feature(&manifest, workspace, table, CONTRACT, FEATURE) {
+            if enables_feature(&manifest, workspace, table, contract, FEATURE) {
                 found.push(format!("{path} [{table}]"));
             }
         }
-        if enables_feature(&manifest, workspace, "dev-dependencies", CONTRACT, FEATURE) {
+        if enables_feature(&manifest, workspace, "dev-dependencies", contract, FEATURE) {
             tests += 1;
         }
-        if manifest["package"]["name"].as_str() == Some(CONTRACT) {
+        if manifest["package"]["name"].as_str() == Some(contract) {
             let defaults = manifest
                 .get("features")
                 .and_then(|features| features.get("default"))
@@ -4260,12 +4274,18 @@ fn a_right_is_forged_only_by_tests() {
             assert!(
                 !defaults
                     .is_some_and(|defaults| defaults.iter().any(|f| f.as_str() == Some(FEATURE))),
-                "the contract turns its forging feature on by default"
+                "{contract} turns its forging feature on by default"
             );
         }
     }
-    assert!(tests > 0, "no test turns the forging feature on");
-    assert!(found.is_empty(), "a product reaches `forge`: {found:?}");
+    assert!(
+        tests > 0,
+        "no test turns the forging feature of {contract} on"
+    );
+    assert!(
+        found.is_empty(),
+        "a product reaches `forge` of {contract}: {found:?}"
+    );
 }
 
 /// The package a manifest's dependency `alias` names, in any of its tables.
@@ -7347,11 +7367,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "protocols/bluetooth/le/contracts/port/src/request.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "protocols/bluetooth/le/wire/src/connection.rs",
         14,
         BY_RADIO_SYSTEM,
@@ -8380,7 +8395,12 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("protocols/bluetooth/le/cipher", 0, 6, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/controller", 1, 1, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/ll", 2, 5, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/contracts/port", 2, 0, BY_RADIO_SYSTEM),
+    (
+        "protocols/bluetooth/le/contracts/port",
+        2,
+        0,
+        BY_RADIO_SYSTEM,
+    ),
     ("protocols/bluetooth/le/wire", 0, 3, BY_RADIO_SYSTEM),
     ("protocols/hil/agent", 1, 0, BY_HIL),
     ("protocols/hil/protocol", 2, 0, BY_HIL),

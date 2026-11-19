@@ -1,15 +1,15 @@
 use crate::{
-    AcceptListChange, AdvertisingConfiguration, AdvertisingEvent, AdvertisingEventKind,
-    AdvertisingReception, AdvertisingSetId, ConnectionEvent, ConnectionEventKind,
-    ConnectionEventTiming, ConnectionId, LeCapabilities, LeConnectionCapabilities, LeInstant,
-    LePhy, LePhys, LeRadioCapabilities, LeWindow, LegacyAdvertisingTypes, LinkAcknowledgement,
-    NoCapabilities, RadioDuration, RadioTiming, ScanFilterPolicy, ScanType, ScanWindow,
-    ScannerConfiguration, ScannerId, Supported, TestPhy, TestReceive, TestTransmit, TxPower,
-    Unplaced,
+    AdvertisingData, AdvertisingEvent, AdvertisingEventKind, AdvertisingFilterPolicy,
+    AdvertisingReception, AdvertisingSet, ChannelSpacing, ConnectionEvent, ConnectionEventKind,
+    ConnectionEventTiming, ConnectionPriority, ConnectionSetup, LeCapabilities,
+    LeConnectionCapabilities, LeInstant, LeLimits, LePhy, LePhys, LeRadioCapabilities, LeWindow,
+    LegacyAdvertisingTypes, LinkAcknowledgement, PduLen, PduTooLong, RadioDuration, RadioTiming,
+    ScanFilterPolicy, ScanType, ScanWindow, ScannerSetup, Supported, TestPhy, TestWindow, TxPower,
+    Unplaced, dtm::DtmTest,
 };
 use oer_protocols_bluetooth_le_wire::{
-    AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, DataChannel, DataPdu, DataPduKind,
-    TestChannel, TestPayloadType,
+    AccessAddress, AdvertisingChannel, AdvertisingChannels, AdvertisingPdu, CrcInit, DataChannel,
+    LeDeviceAddress, LeDeviceAddressKind, TestChannel, dtm::DtmPayloadPattern,
 };
 
 /// LE 1M, a nonconnectable advertiser, a passive scanner and a peripheral
@@ -41,6 +41,7 @@ impl LeCapabilities for Peripheral {
             preparation_lead: RadioDuration::from_micros(500),
             ..RadioTiming::MINIMAL
         },
+        limits: LeLimits::NONE,
     };
 }
 
@@ -62,26 +63,33 @@ const ADV_IND: [u8; 8] = [0x00, 6, 1, 2, 3, 4, 5, 6];
 /// `ADV_NONCONN_IND` with the RFU header bit set.
 const ADV_NONCONN_IND_RFU: [u8; 8] = [0x12, 6, 1, 2, 3, 4, 5, 6];
 
+const OWN: LeDeviceAddress =
+    LeDeviceAddress::from_wire_bytes([1, 2, 3, 4, 5, 6], LeDeviceAddressKind::Random);
+
 fn advertising(
     pdu: &'static [u8],
     reception: AdvertisingReception<'static>,
     phy: LePhy,
     dbm: i8,
-) -> AdvertisingConfiguration<'static> {
-    AdvertisingConfiguration {
-        set: AdvertisingSetId::new(0),
-        pdu: AdvertisingPdu::new(pdu).unwrap(),
-        reception,
+) -> AdvertisingSet<'static> {
+    AdvertisingSet {
+        data: AdvertisingData {
+            pdu: AdvertisingPdu::new(pdu).unwrap(),
+            reception,
+        },
+        own: OWN,
+        peer: None,
+        filter_policy: AdvertisingFilterPolicy::AcceptAll,
         tx_power: power(dbm),
         phy,
     }
 }
 
-fn scanner(scan_type: ScanType, filter_policy: ScanFilterPolicy) -> ScannerConfiguration {
-    ScannerConfiguration {
-        scanner: ScannerId::new(0),
+fn scanner(scan_type: ScanType, filter_policy: ScanFilterPolicy) -> ScannerSetup {
+    ScannerSetup {
         scan_type,
         filter_policy,
+        own: OWN,
         tx_power: power(0),
         phy: LePhy::Le1M,
     }
@@ -97,18 +105,20 @@ fn window(start: u64, duration: u64) -> LeWindow {
 
 fn scan(start: u64, duration: u64) -> ScanWindow {
     ScanWindow {
-        scanner: ScannerId::new(0),
         channel: AdvertisingChannel::Channel37,
         window: window(start, duration),
     }
 }
 
-fn advertise(anchor: u64, spacing: u64) -> AdvertisingEvent {
+/// The advertising channels 1.5 ms apart.
+const SPACING: ChannelSpacing<Peripheral> =
+    ChannelSpacing::new(RadioDuration::from_micros(1_500)).unwrap();
+
+fn advertise(anchor: u64) -> AdvertisingEvent<Peripheral> {
     AdvertisingEvent {
-        set: AdvertisingSetId::new(0),
         anchor: LeInstant::from_micros(anchor),
         channels: AdvertisingChannels::ALL,
-        channel_spacing: RadioDuration::from_micros(spacing),
+        channel_spacing: SPACING,
         coexistence: AdvertisingEventKind::Ordinary,
     }
 }
@@ -191,7 +201,34 @@ fn a_scanner_needs_its_type_and_filter() {
     assert!(new(scanner(ScanType::Passive, ScanFilterPolicy::AcceptAll)).is_ok());
     assert!(new(scanner(ScanType::Active, ScanFilterPolicy::AcceptAll)).is_err());
     assert!(new(scanner(ScanType::Passive, ScanFilterPolicy::AcceptListOnly)).is_err());
-    assert!(Supported::<Peripheral, _>::new(AcceptListChange::Clear).is_err());
+}
+
+#[test]
+fn an_advertiser_filters_by_the_accept_list_only_where_the_capabilities_have_one() {
+    let new = Supported::<Peripheral, _>::new;
+    let with = |filter_policy| AdvertisingSet {
+        filter_policy,
+        ..advertising(&ADV_NONCONN_IND, AdvertisingReception::None, LePhy::Le1M, 0)
+    };
+    assert!(new(with(AdvertisingFilterPolicy::AcceptAll)).is_ok());
+    for policy in [
+        AdvertisingFilterPolicy::ScanAcceptList,
+        AdvertisingFilterPolicy::ConnectAcceptList,
+        AdvertisingFilterPolicy::BothAcceptList,
+    ] {
+        assert_eq!(new(with(policy)), Err(Unplaced::Unsupported));
+        assert!(Supported::<Listed, _>::new(with(policy)).is_ok());
+    }
+}
+
+/// [`Peripheral`] with a filter accept list.
+enum Listed {}
+
+impl LeCapabilities for Listed {
+    const CAPS: LeRadioCapabilities = LeRadioCapabilities {
+        filter_accept_list: true,
+        ..Peripheral::CAPS
+    };
 }
 
 #[test]
@@ -218,42 +255,75 @@ fn a_timed_value_is_placed_within_the_horizon_of_its_instant() {
 fn an_advertising_event_reserves_each_channel_from_the_shared_reservation() {
     let now = LeInstant::from_micros(0);
     let placed = Supported::<Peripheral, _>::placed;
-    assert!(placed(advertise(1_000, 1_500), now).is_ok());
-    // A spacing no longer than the preparation lead leaves no air.
-    assert_eq!(
-        placed(advertise(1_000, 500), now),
-        Err(Unplaced::Unsupported)
-    );
+    assert!(placed(advertise(1_000), now).is_ok());
     // The last channel's reservation counts: 2 * spacing past the anchor.
     assert_eq!(
-        placed(advertise(1_000_000 - 2_000, 1_500), now),
+        placed(advertise(1_000_000 - 2_000), now),
+        Err(Unplaced::BeyondHorizon)
+    );
+    // A spacing no longer than the preparation lead is not built.
+    assert!(ChannelSpacing::<Peripheral>::new(RadioDuration::from_micros(500)).is_none());
+}
+
+#[test]
+fn a_pdu_and_a_test_are_bounded_by_the_connection_and_test_capabilities() {
+    assert_eq!(PduLen::<Peripheral>::new(27).map(|len| len.get()), Ok(27));
+    assert_eq!(
+        PduLen::<Peripheral>::new(28).map(|len| len.get()),
+        Err(PduTooLong {
+            octets: 28,
+            max: 27
+        })
+    );
+    let receive = |phy| DtmTest::Receive {
+        channel: TestChannel::new(0).unwrap(),
+        phy,
+    };
+    assert!(Supported::<Peripheral, _>::new(receive(TestPhy::Le2M)).is_ok());
+    assert_eq!(
+        Supported::<Peripheral, _>::new(receive(TestPhy::LeCodedS8)),
+        Err(Unplaced::Unsupported)
+    );
+    let transmit = |dbm| DtmTest::Transmit {
+        channel: TestChannel::new(0).unwrap(),
+        phy: TestPhy::Le1M,
+        pattern: DtmPayloadPattern::Prbs9,
+        length: 37,
+        power: power(dbm),
+    };
+    assert!(Supported::<Peripheral, _>::new(transmit(0)).is_ok());
+    assert_eq!(
+        Supported::<Peripheral, _>::new(transmit(-25)),
+        Err(Unplaced::Unsupported)
+    );
+    let now = LeInstant::from_micros(0);
+    let test = |start| TestWindow {
+        window: window(start, 100),
+    };
+    assert!(Supported::<Peripheral, _>::placed(test(2_000), now).is_ok());
+    assert_eq!(
+        Supported::<Peripheral, _>::placed(test(1_000_000), now),
         Err(Unplaced::BeyondHorizon)
     );
 }
 
 #[test]
-fn data_and_tests_are_bounded_by_the_connection_and_test_capabilities() {
-    let pdu = |length| DataPdu::new(DataPduKind::Start, &[0; 255][..length]).unwrap();
-    assert!(Supported::<Peripheral, _>::new(pdu(27)).is_ok());
-    assert!(Supported::<Peripheral, _>::new(pdu(28)).is_err());
-    let test = |phy| TestReceive {
-        channel: TestChannel::new(0).unwrap(),
+fn a_connection_needs_a_served_phy_and_power() {
+    let setup = |phy, dbm| ConnectionSetup {
+        access_address: AccessAddress([1, 2, 3, 4]),
+        crc_init: CrcInit([1, 2, 3]),
+        created_at: LeInstant::from_micros(0),
+        tx_power: power(dbm),
         phy,
-        window: window(2_000, 100),
-        recurring: false,
-        tx_power: power(0),
     };
-    let now = LeInstant::from_micros(0);
-    assert!(Supported::<Peripheral, _>::placed(test(TestPhy::Le2M), now).is_ok());
-    assert!(Supported::<Peripheral, _>::placed(test(TestPhy::LeCodedS8), now).is_err());
-}
-
-#[test]
-fn nothing_is_supported_without_a_radio() {
-    assert!(Supported::<NoCapabilities, _>::new(power(0)).is_err());
-    assert!(
-        Supported::<NoCapabilities, _>::new(DataPdu::new(DataPduKind::Start, &[]).unwrap())
-            .is_err()
+    assert!(Supported::<Peripheral, _>::new(setup(LePhy::Le1M, 0)).is_ok());
+    assert_eq!(
+        Supported::<Peripheral, _>::new(setup(LePhy::Le2M, 0)),
+        Err(Unplaced::Unsupported)
+    );
+    assert_eq!(
+        Supported::<Peripheral, _>::new(setup(LePhy::Le1M, -25)),
+        Err(Unplaced::Unsupported)
     );
 }
 
@@ -315,20 +385,21 @@ fn each_responsive_type_listens_as_its_pdu_type_says() {
     );
 }
 
-fn connection_event(timing: ConnectionEventTiming, priority: u8) -> ConnectionEvent {
+const PRIORITY: ConnectionPriority = ConnectionPriority::new(8).unwrap();
+
+fn connection_event(timing: ConnectionEventTiming) -> ConnectionEvent {
     ConnectionEvent {
-        connection: ConnectionId::new(0),
         channel: DataChannel::new(0).unwrap(),
         window: window(2_000, 1_000),
         interval: RadioDuration::from_micros(30_000),
         timing,
-        priority,
+        priority: PRIORITY,
         coexistence: ConnectionEventKind::Ordinary,
     }
 }
 
 #[test]
-fn a_connection_event_waits_within_the_backend_and_keeps_its_priority() {
+fn a_connection_event_waits_within_the_backend() {
     let micros = RadioDuration::from_micros;
     let placed = |event| Supported::<Peripheral, _>::placed(event, LeInstant::from_micros(0));
     let first = |transmit_window, timing_guard| ConnectionEventTiming::First {
@@ -336,45 +407,27 @@ fn a_connection_event_waits_within_the_backend_and_keeps_its_priority() {
         timing_guard: micros(timing_guard),
     };
     // 65,473 us: the window and a guard on each side.
-    assert!(placed(connection_event(first(65_273, 100), 15)).is_ok());
+    assert!(placed(connection_event(first(65_273, 100))).is_ok());
     assert_eq!(
-        placed(connection_event(first(65_274, 100), 15)),
+        placed(connection_event(first(65_274, 100))),
         Err(Unplaced::Unsupported)
     );
     // A first event needs a transmit window.
-    assert!(placed(connection_event(first(0, 100), 8)).is_err());
+    assert!(placed(connection_event(first(0, 100))).is_err());
     let recurring = |receive_wait| ConnectionEventTiming::Recurring {
         receive_wait: micros(receive_wait),
         widening: micros(16),
     };
-    assert!(placed(connection_event(recurring(131_070), 8)).is_ok());
-    assert!(placed(connection_event(recurring(131_071), 8)).is_err());
-    // The scheduler priority is at most 15.
-    assert!(placed(connection_event(recurring(1_000), 16)).is_err());
+    assert!(placed(connection_event(recurring(131_070))).is_ok());
+    assert!(placed(connection_event(recurring(131_071))).is_err());
     // An interval lasts, and with its widening stays within the horizon.
     let with_interval = |interval| ConnectionEvent {
         interval: micros(interval),
-        ..connection_event(recurring(1_000), 8)
+        ..connection_event(recurring(1_000))
     };
     assert!(placed(with_interval(0)).is_err());
     assert!(placed(with_interval(1_000_000 - 16)).is_ok());
     assert!(placed(with_interval(1_000_000 - 15)).is_err());
-}
-
-#[test]
-fn a_test_payload_is_at_most_255_octets() {
-    let payload = [0; 256];
-    let test = |length: usize| TestTransmit {
-        channel: TestChannel::new(0).unwrap(),
-        phy: TestPhy::Le1M,
-        window: window(2_000, 100),
-        tx_power: power(0),
-        payload_type: TestPayloadType::new(0).unwrap(),
-        payload: &payload[..length],
-    };
-    let now = LeInstant::from_micros(0);
-    assert!(Supported::<Peripheral, _>::placed(test(255), now).is_ok());
-    assert!(Supported::<Peripheral, _>::placed(test(256), now).is_err());
 }
 
 #[test]
@@ -409,12 +462,9 @@ fn advertising_capability_policy_preserves_every_header_and_reception_decision()
             AdvertisingReception::Report,
             AdvertisingReception::ScanResponse(response),
         ] {
-            let configuration = AdvertisingConfiguration {
-                set: AdvertisingSetId::new(0),
+            let data = AdvertisingData {
                 pdu: AdvertisingPdu::new(&bytes).unwrap(),
                 reception,
-                tx_power: power(0),
-                phy: LePhy::Le1M,
             };
             let rfu_clear = (octet / 16) % 2 == 0;
             let code = octet % 16;
@@ -427,13 +477,21 @@ fn advertising_capability_policy_preserves_every_header_and_reception_decision()
                 ) | (1, AdvertisingReception::Report)
             );
             assert_eq!(
-                configuration.supported(&Peripheral::CAPS),
+                Capability::<Peripheral>::supported(&data),
                 rfu_clear && nonconnectable
             );
             assert_eq!(
-                configuration.supported(&Responsive::CAPS),
+                Capability::<Responsive>::supported(&data),
                 rfu_clear && responsive
             );
         }
     }
+}
+
+#[test]
+fn no_power_is_supported_without_a_radio() {
+    assert_eq!(
+        Supported::<crate::NoCapabilities, _>::new(power(0)),
+        Err(Unplaced::Unsupported)
+    );
 }

@@ -1,0 +1,22 @@
+error[E0080]: evaluation panicked: a test session with capabilities that serve no Direct Test Mode
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_bluetooth_le_contracts_port::geometry::Geometry::<oer_protocols_bluetooth_le_contracts_port::NoCapabilities, 0, 0, 0, 2, 0, 0, 1>::CHECKED` failed here
+  |
+ ::: src/geometry.rs
+  |
+  |             panic!("a test session with capabilities that serve no Direct Test Mode");
+  |             ------------------------------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/rights.rs
+  |
+  |         crate::geometry::Geometry::<K, ADV, SCAN, CONN, EVENTS, TX, RX, TEST>::CHECKED;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note: erroneous constant encountered
+ --> tests/ui/mint_role_the_capabilities_do_not_serve.rs:8:25
+  |
+8 | pub const REFUSED: () = PortPools::<NoCapabilities, 0, 0, 0, 2, 0, 0, 1>::GEOMETRY; // ui-error@outside: E0080: evaluation panicked: ...
+  |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
