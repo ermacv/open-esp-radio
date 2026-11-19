@@ -2249,7 +2249,6 @@ fn every_protocol_package_but_runtimes_ports_models_and_tests_must_not_wait() {
     for other in [
         "protocols/ieee80211/runtime",
         "protocols/network/port",
-        "protocols/bluetooth/le/model",
         "protocols/hil/agent",
         "protocols/ieee80211/testing/conformance",
         "protocols/network/testing/model",
@@ -2790,11 +2789,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
                 "{path} -> {dependency}"
             );
         }
-        for path in [
-            "portable/embassy/other",
-            "protocols/bluetooth/le/runtime",
-            "chips/esp32s31/hal",
-        ] {
+        for path in ["portable/embassy/other", "chips/esp32s31/hal"] {
             assert!(
                 !external_crate_allowed(path, role(path).unwrap(), dependency),
                 "{path} -> {dependency}"
@@ -2809,9 +2804,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("chips/family/facts", false),
         ("chips/esp32s31/pac", false),
         ("chips/esp32s31/hal", false),
-        ("protocols/bluetooth/le/runtime", true),
         ("protocols/bluetooth/le/port", true),
-        ("protocols/bluetooth/le/model", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
         ("chips/esp32s31/radio/bluetooth/backend", true),
@@ -5140,7 +5133,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ),
     ("Count::on", "predicate: the switchable diagnostics are on"),
     ("CounterLatch::valid", SAMPLED_BIT),
-    ("Device::is_running", P2),
     (
         "Diagnostics::on",
         "predicate: the switchable diagnostics are on",
@@ -6512,11 +6504,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         BY_NONE,
     ),
     (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs",
         3,
         BY_P3,
@@ -6640,26 +6627,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 3, BY_PHY),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port.rs",
-        4,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
-        13,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/mailbox.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/owned.rs",
-        6,
-        BY_RADIO_SYSTEM,
-    ),
     (
         "chips/esp32s31/radio/bluetooth/backend/src/roles.rs",
         2,
@@ -6863,22 +6830,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ("portable/memory/src/request_slot.rs", 4, BY_NONE),
     ("portable/time/src/connected_tasks.rs", 3, BY_NONE),
     ("portable/waker/src/lib.rs", 4, BY_NONE),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs",
-        9,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/port/src/conformance.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    ("protocols/bluetooth/le/port/src/lib.rs", 1, BY_RADIO_SYSTEM),
-    (
-        "protocols/bluetooth/le/runtime/src/host.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("protocols/ieee80211/contracts/port/src/lib.rs", 1, BY_P3),
     ("protocols/ieee802154/port/src/config.rs", 1, BY_NONE),
     ("protocols/ieee802154/port/src/lib.rs", 1, BY_NONE),
@@ -8429,7 +8380,6 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("protocols/bluetooth/le/cipher", 0, 6, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/controller", 1, 1, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/ll", 2, 5, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/model", 0, 3, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/port", 2, 0, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/wire", 0, 3, BY_RADIO_SYSTEM),
     ("protocols/hil/agent", 1, 0, BY_HIL),
@@ -9161,30 +9111,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.requested_random_address",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.admitted",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.config",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.lease",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.pending",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.response",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.retained",
         BY_RADIO_SYSTEM,
     ),
     (
