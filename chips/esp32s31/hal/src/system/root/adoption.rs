@@ -27,6 +27,7 @@ pub struct RuntimeResources {
     pub(super) cache_counters: CacheCounters,
     pub(super) software_interrupts: SoftwareInterrupts,
     pub(super) interrupt_matrix: crate::system::platform::interrupt_controller::MatrixParts,
+    pub(super) pend_lines: crate::system::platform::PendLines<'static, 0>,
     pub(super) efuse: EfuseRegisters,
     pub(super) entropy: EntropyRegisters,
     pub(super) sleep: crate::power::sleep::SleepRegisters,
@@ -63,6 +64,9 @@ pub struct Hardware {
     /// uses them.
     pub cache_counters: CacheCounters,
     pub software_interrupts: SoftwareInterrupts,
+    /// Hart 0's pend lines: the pend handle of a level task's line, fixed
+    /// at build. Hart 1's come with its launch permit.
+    pub pend_lines: crate::system::platform::PendLines<'static, 0>,
     pub efuse: EfuseRegisters,
     pub entropy: EntropyRegisters,
     /// The PMU's light-sleep request and the LP timer that wakes it.
@@ -124,6 +128,7 @@ impl Port for RuntimePort {
             cache_counters,
             software_interrupts,
             interrupt_matrix,
+            pend_lines,
             efuse,
             entropy,
             sleep,
@@ -143,6 +148,7 @@ impl Port for RuntimePort {
                 timg1_timer1,
                 cache_counters,
                 software_interrupts,
+                pend_lines,
                 efuse,
                 entropy,
                 sleep,

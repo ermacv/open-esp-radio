@@ -30,8 +30,33 @@ use core::{
 static FACTS_HART1: [AtomicU32; 128] = [const { AtomicU32::new(0) }; 128];
 static CLIC: AtomicPtr<pac::clic::Clic> = AtomicPtr::new(ptr::null_mut());
 static OBSERVER: AtomicPtr<pac::clic::ClicObserver> = AtomicPtr::new(ptr::null_mut());
+static PENDING: AtomicPtr<pac::clic::ClicPending<1>> = AtomicPtr::new(ptr::null_mut());
+/// What hart 1 runs once released: `SNAPSHOT` (232, 233) or `CROSS` (323).
+static HART1_MODE: AtomicU32 = AtomicU32::new(SNAPSHOT);
+/// 323's lockstep: hart 0 names the phase, hart 1 acknowledges it.
+static PHASE: AtomicU32 = AtomicU32::new(0);
+static ACK: AtomicU32 = AtomicU32::new(0);
 
 const CLIC_DONE: u32 = 0xfac7_1002;
+/// 323's end on hart 1, and its refusal of a hart that is not hart 1.
+const CROSS_READY: u32 = 0xfac7_1004;
+const CROSS_DONE: u32 = 0xfac7_1003;
+const CROSS_NOT_HART1: u32 = 0xfac7_100e;
+const SNAPSHOT: u32 = 0;
+const CROSS: u32 = 1;
+/// 323's line: the application grid's task line, disabled on both harts.
+const CROSS_LINE: usize = 34;
+/// 323's trials each way.
+const CROSS_TRIALS: u32 = 100;
+/// 323's words in `FACTS_HART1`, written by hart 1: its reads of its own
+/// byte while hart 0's is pended (clear), after its own store (set) and
+/// after its own clear (clear), and its line's enable.
+const CROSS_FOREIGN_CLEAR: usize = 1;
+const CROSS_OWN_SET: usize = 2;
+const CROSS_OWN_CLEARED: usize = 3;
+const CROSS_ENABLE: usize = 4;
+/// A phase's bound, in cycles: far above one handshake.
+const PHASE_CYCLES: u32 = 1_000_000;
 const TRAPPED: u32 = 0xfac7_100f;
 const INFO: usize = 70;
 const CONFIG: usize = 71;
@@ -71,10 +96,76 @@ unsafe extern "C" {
 extern "C" fn facts_hart1_main() -> ! {
     let clic = CLIC.load(Ordering::Acquire);
     let observer = OBSERVER.load(Ordering::Acquire);
-    if !clic.is_null() && !observer.is_null() {
+    let pending = PENDING.load(Ordering::Acquire);
+    if !clic.is_null() && !observer.is_null() && !pending.is_null() {
         // SAFETY: hart 0 lent these owners for this window and only polls
-        // FACTS_HART1 until hart 1 is parked; every access below is a read.
-        let (clic, observer) = unsafe { (&*clic, &*observer) };
+        // FACTS_HART1 (and, in 323, the phase words) until hart 1 is parked;
+        // every access below is a read, but for 323's stores of hart 1's
+        // own pending byte through the shared part (`&self`, hart 1's proof),
+        // which hart 0 never stores.
+        let (clic, observer, pending) = unsafe { (&*clic, &*observer, &*pending) };
+        if HART1_MODE.load(Ordering::Acquire) == CROSS {
+            cross(clic, pending);
+        } else {
+            snapshot(clic, observer);
+        }
+    }
+    loop {
+        oer_portable_riscv::wait_for_interrupt();
+    }
+}
+
+/// 323 on hart 1: answer each of hart 0's phases on hart 1's own byte of
+/// `CROSS_LINE`. Phase `3k + 1`: hart 0 stored its own byte pended; hart 1
+/// reads its own. `3k + 2`: hart 1 stores its own pended and reads it.
+/// `3k + 3`: hart 1 stores its own cleared and reads it.
+fn cross(clic: &pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
+    let (Ok(hart), Ok(i)) = (
+        oer_portable_riscv::OnHart::<1>::check(),
+        Index::new(CROSS_LINE),
+    ) else {
+        store(0, CROSS_NOT_HART1);
+        return;
+    };
+    store(CROSS_ENABLE, u32::from(clic.read_ie(i).ie()));
+    if let Some(word) = FACTS_HART1.first() {
+        word.store(CROSS_READY, Ordering::Release);
+    }
+    let mut seen = 0u32;
+    while seen < 3 * CROSS_TRIALS {
+        let start = oer_portable_riscv::cycle32();
+        let mut phase = seen;
+        while phase == seen && oer_portable_riscv::cycle32().wrapping_sub(start) < PHASE_CYCLES {
+            phase = PHASE.load(Ordering::Acquire);
+        }
+        if phase == seen {
+            break;
+        }
+        let (slot, held) = match phase % 3 {
+            1 => (CROSS_FOREIGN_CLEAR, !clic.read_ip(i).ip()),
+            2 => {
+                pending.pend_line(i, &hart);
+                (CROSS_OWN_SET, clic.read_ip(i).ip())
+            }
+            _ => {
+                pending.clear_line(i, &hart);
+                (CROSS_OWN_CLEARED, !clic.read_ip(i).ip())
+            }
+        };
+        if held {
+            store(slot, load(slot).wrapping_add(1));
+        }
+        ACK.store(phase, Ordering::Release);
+        seen = phase;
+    }
+    if let Some(word) = FACTS_HART1.first() {
+        word.store(CROSS_DONE, Ordering::Release);
+    }
+}
+
+/// 232 and 233 on hart 1: hart 1's CLIC as it addresses it.
+fn snapshot(clic: &pac::clic::Clic, observer: &pac::clic::ClicObserver) {
+    {
         let info = clic.read_int_info();
         store(
             INFO,
@@ -107,9 +198,6 @@ extern "C" fn facts_hart1_main() -> ! {
     }
     if let Some(word) = FACTS_HART1.first() {
         word.store(CLIC_DONE, Ordering::Release);
-    }
-    loop {
-        oer_portable_riscv::wait_for_interrupt();
     }
 }
 
@@ -247,9 +335,47 @@ fn run(s: &mut Session<'_>, direct: bool) {
     park(s);
     boot_inputs(s, tag);
     let (routed, first) = park_routes(s);
+    lend(s, SNAPSHOT);
+    let (entry, polls, start) = release(s, direct);
+    let mut stage = 0;
+    let mut elapsed = 0;
+    while elapsed < WAIT_CYCLES {
+        stage = FACTS_HART1
+            .first()
+            .map_or(0, |word| word.load(Ordering::Acquire));
+        let trapped = FACTS_HART1
+            .get(TRAP)
+            .is_some_and(|word| word.load(Ordering::Acquire) == TRAPPED);
+        elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
+        if stage == CLIC_DONE || trapped {
+            break;
+        }
+    }
+    park(s);
+    revoke();
+    emit(tag + 3, routed, first, polls);
+    emit(tag + 4, stage, elapsed, entry);
+    // Hart 1's words in triples: tag + 0x100 + first index.
+    for first in (1..FACTS_HART1.len()).step_by(3) {
+        emit(
+            tag + 0x100 + first as u32,
+            load(first),
+            load(first + 1),
+            load(first + 2),
+        );
+    }
+    boot_inputs(s, tag + 5);
+    feed(s);
+}
+
+/// Clear hart 1's record and lend it hart 1's CLIC parts for `mode`.
+fn lend(s: &mut Session<'_>, mode: u32) {
     for word in &FACTS_HART1 {
         word.store(0, Ordering::Relaxed);
     }
+    PHASE.store(0, Ordering::Relaxed);
+    ACK.store(0, Ordering::Relaxed);
+    HART1_MODE.store(mode, Ordering::Relaxed);
     CLIC.store(
         ptr::from_ref(&s.interrupt_matrix.clic[1]).cast_mut(),
         Ordering::Relaxed,
@@ -258,7 +384,23 @@ fn run(s: &mut Session<'_>, direct: bool) {
         ptr::from_ref(&s.interrupt_matrix.clic_observer[1]).cast_mut(),
         Ordering::Relaxed,
     );
+    PENDING.store(
+        ptr::from_ref(&s.interrupt_matrix.clic_pending.1).cast_mut(),
+        Ordering::Relaxed,
+    );
     oer_portable_riscv::fence();
+}
+
+/// Take hart 1's loan back, once it is parked.
+fn revoke() {
+    CLIC.store(ptr::null_mut(), Ordering::Relaxed);
+    OBSERVER.store(ptr::null_mut(), Ordering::Relaxed);
+    PENDING.store(ptr::null_mut(), Ordering::Relaxed);
+}
+
+/// Release hart 1 into the probe's entry in ESP-IDF's order: the entry's
+/// address, the stall polls and the cycle of the release.
+fn release(s: &mut Session<'_>, direct: bool) -> (u32, u32, u32) {
     let entry = ptr::addr_of!(facts_hart1_entry) as u32;
     if direct {
         set_boot_address(s, entry | 0x8000_0000);
@@ -291,34 +433,110 @@ fn run(s: &mut Session<'_>, direct: bool) {
     if !direct {
         set_boot_address(s, entry);
     }
+    (entry, polls, start)
+}
+
+/// Wait for hart 1's acknowledgement of `phase`, within `PHASE_CYCLES`.
+fn acknowledged(phase: u32) -> bool {
+    let start = oer_portable_riscv::cycle32();
+    while oer_portable_riscv::cycle32().wrapping_sub(start) < PHASE_CYCLES {
+        if ACK.load(Ordering::Acquire) == phase {
+            return true;
+        }
+    }
+    false
+}
+
+/// 323 (tasks/253, 254): a hart's store of a pending byte stays its own.
+/// Line `CROSS_LINE` disabled on both harts and MIE cleared on both. A
+/// hundred trials each way: hart 0 stores its own byte pended (and reads
+/// it set), hart 1 then reads its own clear, and hart 0 clears its own
+/// (and reads it clear); hart 1 stores its own pended (and reads it set),
+/// hart 0 then reads its own clear, and hart 1 clears its own (and reads it
+/// clear). Records `(0x3a00, trials, hart 0 own set, hart 1 foreign
+/// clear)`, `(0x3a01, hart 0 own cleared, hart 1 own set, hart 0 foreign
+/// clear)`, `(0x3a02, hart 1 own cleared, enables (hart 0 | hart 1 << 8),
+/// hart 1's stage)`, then 232's release words `(0x3a03, routed, first,
+/// polls)`.
+pub(super) fn stores_stay_their_harts(s: &mut Session<'_>) {
+    feed(s);
+    park(s);
+    oer_portable_riscv::disable_interrupts();
+    let (routed, first) = park_routes(s);
+    let (Ok(i), Ok(hart)) = (
+        Index::new(CROSS_LINE),
+        oer_portable_riscv::OnHart::<0>::check(),
+    ) else {
+        emit(0x3aff, 0, 0, 0);
+        return;
+    };
+    s.interrupt_matrix.clic[0].modify_ie(i, |w| {
+        w.set_ie(false);
+    });
+    let enable0 = u32::from(s.interrupt_matrix.clic[0].read_ie(i).ie());
+    lend(s, CROSS);
+    let (_entry, polls, released) = release(s, false);
+    // Hart 1's entry runs the ROM's path first: wait for its ready word
+    // within the release's own bound.
+    let mut ready = 0;
+    while ready != CROSS_READY
+        && ready != CROSS_NOT_HART1
+        && oer_portable_riscv::cycle32().wrapping_sub(released) < WAIT_CYCLES
+    {
+        ready = FACTS_HART1
+            .first()
+            .map_or(0, |word| word.load(Ordering::Acquire));
+    }
+    let own = |s: &Session<'_>| s.interrupt_matrix.clic[0].read_ip(i).ip();
+    let mut trials = 0u32;
+    let mut own_set = 0u32;
+    let mut own_cleared = 0u32;
+    let mut foreign_clear = 0u32;
+    for k in 0..if ready == CROSS_READY {
+        CROSS_TRIALS
+    } else {
+        0
+    } {
+        let base = 3 * k;
+        s.interrupt_matrix.clic_pending.0.pend_line(i, &hart);
+        own_set += u32::from(own(s));
+        PHASE.store(base + 1, Ordering::Release);
+        if !acknowledged(base + 1) {
+            break;
+        }
+        s.interrupt_matrix.clic_pending.0.clear_line(i, &hart);
+        own_cleared += u32::from(!own(s));
+        PHASE.store(base + 2, Ordering::Release);
+        if !acknowledged(base + 2) {
+            break;
+        }
+        foreign_clear += u32::from(!own(s));
+        PHASE.store(base + 3, Ordering::Release);
+        if !acknowledged(base + 3) {
+            break;
+        }
+        trials += 1;
+    }
+    let start = oer_portable_riscv::cycle32();
     let mut stage = 0;
-    let mut elapsed = 0;
-    while elapsed < WAIT_CYCLES {
+    while stage != CROSS_DONE
+        && stage != CROSS_NOT_HART1
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < PHASE_CYCLES
+    {
         stage = FACTS_HART1
             .first()
             .map_or(0, |word| word.load(Ordering::Acquire));
-        let trapped = FACTS_HART1
-            .get(TRAP)
-            .is_some_and(|word| word.load(Ordering::Acquire) == TRAPPED);
-        elapsed = oer_portable_riscv::cycle32().wrapping_sub(start);
-        if stage == CLIC_DONE || trapped {
-            break;
-        }
     }
     park(s);
-    CLIC.store(ptr::null_mut(), Ordering::Relaxed);
-    OBSERVER.store(ptr::null_mut(), Ordering::Relaxed);
-    emit(tag + 3, routed, first, polls);
-    emit(tag + 4, stage, elapsed, entry);
-    // Hart 1's words in triples: tag + 0x100 + first index.
-    for first in (1..FACTS_HART1.len()).step_by(3) {
-        emit(
-            tag + 0x100 + first as u32,
-            load(first),
-            load(first + 1),
-            load(first + 2),
-        );
-    }
-    boot_inputs(s, tag + 5);
+    revoke();
+    emit(0x3a00, trials, own_set, load(CROSS_FOREIGN_CLEAR));
+    emit(0x3a01, own_cleared, load(CROSS_OWN_SET), foreign_clear);
+    emit(
+        0x3a02,
+        load(CROSS_OWN_CLEARED),
+        enable0 | load(CROSS_ENABLE) << 8,
+        stage,
+    );
+    emit(0x3a03, routed, first, polls);
     feed(s);
 }

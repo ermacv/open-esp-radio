@@ -761,9 +761,10 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
     assert_eq!(clic.read_ctl(line(34)).ctl(), level.bits());
 }
 
-/// A line's handle stores `0x01`, the pended image, in that line's pending
-/// byte and nothing else: not its neighbours' bytes and not the other three
-/// bytes of its own word, which another part holds.
+/// A line's handle, which the hart's pend lines give for a line fixed at
+/// build, stores `0x01`, the pended image, in that line's pending byte and
+/// nothing else: not its neighbours' bytes and not the other three bytes
+/// of its own word, which another part holds.
 #[test]
 fn a_line_s_handle_pends_its_own_line_s_byte_and_no_other() {
     // Every byte 0xa4: bit 0 clear, the other bits set.
@@ -771,7 +772,8 @@ fn a_line_s_handle_pends_its_own_line_s_byte_and_no_other() {
     let before = memory.clone();
     {
         let pending = ClicPending::<0, _>::host(&mut memory).expect("the pending bytes");
-        let line = super::LinePend::<0, 34, _>::new(&pending);
+        let lines = super::PendLines::new(&pending);
+        let line = lines.line::<34>();
         line.pend(&OnHart::host());
     }
     let changed = memory

@@ -262,6 +262,14 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(levels::latency),
     },
     Probe {
+        id: 322,
+        run: Action::Thread(levels::clear_from_higher),
+    },
+    Probe {
+        id: 323,
+        run: Action::Thread(hart1_entry::stores_stay_their_harts),
+    },
+    Probe {
         id: 232,
         run: Action::Thread(hart1_entry::main_path),
     },

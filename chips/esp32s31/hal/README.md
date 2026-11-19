@@ -21,7 +21,12 @@ nothing until `into_controller` runs on its own hart (a `ForeignHart`
 refusal otherwise); the controller (`InterruptController`, hart 1's
 `Hart1Controller`) is `!Send`. The staged runtime calls it in each hart's
 handoff. Hart 0's level bits are set when the root splits the partition on
-the boot hart, hart 1's when hart 1 makes its controller. `fatal_view`
+the boot hart, hart 1's when hart 1 makes its controller. Each hart's
+pending bytes lie in one static place that its grant holds for its
+controller; the image reaches them only as the hart's `PendLines` (hart
+0's in `Hardware`, hart 1's from its `LaunchPermit`), which gives the pend
+handle of a line fixed at build (`LinePend`) and nothing else: no clear,
+no index made at run time, no access to the part. `fatal_view`
 observes hart 0's routes and lines in hart 0's fatal path only: hart 1's
 routes have no claimed observer and its lines are reachable only from it. Ordinary blocks are `peripherals::<block>`:
 `aes`, `cache_counters`, `efuse`, `entropy`, `reset_cause`, `software_interrupt`,

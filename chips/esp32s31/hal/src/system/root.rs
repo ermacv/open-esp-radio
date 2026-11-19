@@ -234,8 +234,8 @@ impl Root {
             interrupt_core1_status,
         } = interrupt_matrix;
         // Each hart's pending bytes in their static place, which every
-        // context of that hart reaches: hart 0's to its grant, hart 1's to
-        // the launch permit.
+        // context of that hart reaches: hart 0's to its grant and to its
+        // pend lines, hart 1's to the launch permit (both, for hart 1).
         let (pending0, pending1) = &*self.pending.write(clic_pending);
         let interrupt_matrix = crate::system::platform::interrupt_controller::MatrixParts {
             clic: clic0,
@@ -280,6 +280,7 @@ impl Root {
                     software_interrupt_3,
                 ),
                 interrupt_matrix,
+                pend_lines: crate::system::platform::PendLines::new(pending0),
                 efuse: EfuseRegisters::new(efuse),
                 entropy: EntropyRegisters::new(entropy, soc.lp_periclkrst_rng_init),
                 sleep: crate::power::sleep::SleepRegisters::new(sleep),
