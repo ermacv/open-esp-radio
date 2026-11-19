@@ -542,8 +542,9 @@ async fn report(
             (9, "r3"),
             (10, "r4"),
             (11, "r5"),
+            (12, "t257"),
         ] {
-            let resets = (7..=11).contains(&part);
+            let resets = (7..=12).contains(&part);
             let sums = part == 5 || part == 6;
             let mut stops = 0_u32;
             let mut changed = 0_u32;

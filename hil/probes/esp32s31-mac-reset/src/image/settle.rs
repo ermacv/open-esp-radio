@@ -67,6 +67,18 @@ const R45_BUDGET_S: u32 = 10 * 60;
 const R45_BUDGET_S: u32 = 30;
 /// R5's wait after the stop atom, on the timer (`tasks/232`).
 const RELEASE_WAIT_US: u64 = 1_000;
+/// `tasks/257`'s turns: the two kinds alternate, at least two hundred each.
+const T257_TURNS: u32 = 440;
+#[cfg(not(feature = "short"))]
+const T257_BUDGET_S: u32 = 8 * 60;
+#[cfg(feature = "short")]
+const T257_BUDGET_S: u32 = 30;
+/// `tasks/257`'s settle after the stop request (`tasks/256`: the request,
+/// 20 us, one read).
+const T257_SETTLE_US: u32 = 20;
+/// The longest wait for the first data success after a start, in cycles
+/// (200 ms).
+const FIRST_SUCCESS_BOUND: u32 = 200_000 * CYCLES_PER_US;
 /// Every cycle's short row (`tasks/233`).
 const SHORT_MAX: usize = 30_000;
 /// The vendor's settle after the stop request, before the activity's poll
@@ -131,6 +143,11 @@ enum Part {
     /// walker's edge, the stop atom with its 20 us and 5 us, a wait of
     /// 1 ms), then the reset.
     R5 = 11,
+    /// `tasks/257`: even turns stop with the reset (the walker's edge, the
+    /// stop request, 20 us, the reset) and start cold; odd turns stop with
+    /// the wait (the walker's edge, the stop request, 20 us, one read of
+    /// the activity, 1 ms on the timer) and start warm. Every step stamped.
+    T257 = 12,
 }
 
 impl Part {
@@ -141,6 +158,7 @@ impl Part {
             Self::A3 | Self::Vendor => A3_BUDGET_S,
             Self::R1 | Self::R2 | Self::R3 => R_BUDGET_S,
             Self::R4 | Self::R5 => R45_BUDGET_S,
+            Self::T257 => T257_BUDGET_S,
         }
     }
 
@@ -219,7 +237,36 @@ enum Air {
 /// `ENABLE` as the HAL names it << 8 (0 disabled, 1 the station's, 2 other)
 /// | the walker's enable << 16 | the reload's pending bit << 17; the
 /// interrupt `RAW` word.
-type Row = [u32; 17];
+///
+/// `tasks/257`'s rows (`T257`), cycles from the walker's edge, zero for a
+/// step the turn has not: `2` the stop request, `3` the settle's end, `4`
+/// the read of the activity (wait), `5` the wait's end (wait), `10` the
+/// walker's stop proof, `11` the reset's request (cold), `12` its proof
+/// (cold), `13` the cold preparation's end (cold), `14` the channel's end
+/// (cold), `15` the ring published, `16` the receive policy and the
+/// interrupt mask set, `17` the walker enabled, `18` the MAC's receive
+/// released ("ready"); `19`: bit 0 the wait's turn (else the reset's), bit 1
+/// the activity read set, bit 2 no data success within 200 ms; `20` the
+/// first data success after the start.
+type Row = [u32; 21];
+
+/// `tasks/257`'s stamps, by step.
+const T_EDGE: usize = 0;
+const T_REQUEST: usize = 1;
+const T_SETTLED: usize = 2;
+const T_READ: usize = 3;
+const T_WAITED: usize = 4;
+const T_PROOF: usize = 5;
+const T_PULSE: usize = 6;
+const T_RESET: usize = 7;
+const T_COLD: usize = 8;
+const T_CHANNEL: usize = 9;
+const T_RING: usize = 10;
+const T_POLICY: usize = 11;
+const T_ENABLE: usize = 12;
+const T_READY: usize = 13;
+const T_FIRST: usize = 14;
+const T257_STAMPS: usize = 15;
 
 /// The first start's filter words and the first sets that differ from
 /// them after a start.
@@ -391,6 +438,8 @@ pub(super) async fn series(
     let parts = [Part::R4];
     #[cfg(feature = "only-r5")]
     let parts = [Part::R5];
+    #[cfg(feature = "only-t257")]
+    let parts = [Part::T257];
     #[cfg(not(any(
         feature = "only-a2",
         feature = "only-reset",
@@ -400,7 +449,8 @@ pub(super) async fn series(
         feature = "only-r2",
         feature = "only-r3",
         feature = "only-r4",
-        feature = "only-r5"
+        feature = "only-r5",
+        feature = "only-t257"
     )))]
     let parts = [Part::A2, Part::Reset];
     for part in parts {
@@ -425,15 +475,19 @@ pub(super) async fn series(
             .ok_or((phase::RING, 0x5e01))?;
         let mut counts = [0_u32; 3];
         let mut index = 0_u32;
-        while (part.resets() || counts[0] < PER_AIR || counts[1] < PER_AIR)
+        while (part.resets() || part == Part::T257 || counts[0] < PER_AIR || counts[1] < PER_AIR)
+            && !(part == Part::T257 && index >= T257_TURNS)
             && EmbassyClock.now() < end
         {
+            // `tasks/257`'s stamps, cycles: see `Row`.
+            let mut stamps = [0_u32; T257_STAMPS];
+            let cold_turn = index % 2 == 0;
             let (_units, air) =
                 window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
             if let Some(count) = counts.get_mut(air as usize) {
                 *count = count.saturating_add(1);
             }
-            let mut row: Row = [0; 17];
+            let mut row: Row = [0; 21];
             row[0] = (part as u32) << 28 | (air as u32) << 24 | (index & 0x00ff_ffff);
             wait_micros(u64::from(spread.next(SPREAD_US))).await;
             let before_stop = access.wifi_mac_hal().experiment_receive_filter_words();
@@ -469,6 +523,24 @@ pub(super) async fn series(
             // The edge or the reset; `start` is the cycle the records count
             // from.
             let (start, readback) = match part {
+                Part::T257 => {
+                    let edge = oer_portable_riscv::cycle32();
+                    access.rx_dma().experiment_walker_edge();
+                    stamps[T_REQUEST] = oer_portable_riscv::cycle32();
+                    access.wifi_mac_hal().request_channel_stop();
+                    let bound = T257_SETTLE_US.saturating_mul(CYCLES_PER_US);
+                    while oer_portable_riscv::cycle32().wrapping_sub(stamps[T_REQUEST]) < bound {}
+                    stamps[T_SETTLED] = oer_portable_riscv::cycle32();
+                    if !cold_turn {
+                        let active = access.wifi_mac_hal().channel_active_state() != 0;
+                        stamps[T_READ] = oer_portable_riscv::cycle32();
+                        row[19] |= u32::from(active) << 1;
+                        wait_micros(RELEASE_WAIT_US).await;
+                        stamps[T_WAITED] = oer_portable_riscv::cycle32();
+                    }
+                    stamps[T_EDGE] = edge;
+                    (edge, access.receive_dma_snapshot().walker_enabled)
+                }
                 Part::R4 => {
                     // The last resort's shape: no settle, no poll; the reset
                     // follows in the cold preparation below.
@@ -542,7 +614,11 @@ pub(super) async fn series(
             let mut frame_nodes = 0_u32;
             let mut prefix_nodes = 0_u32;
             // S2 takes no records: its question is the start after the reset.
-            let delays: &[u32] = if part.resets() { &[] } else { &DELAYS_US };
+            let delays: &[u32] = if part.resets() || part == Part::T257 {
+                &[]
+            } else {
+                &DELAYS_US
+            };
             row[1] = next.map_or(0xff, |n| n as u32) & 0xff
                 | (last.map_or(0xff, |n| n as u32) & 0xff) << 8
                 | u32::from(readback) << 18;
@@ -589,7 +665,61 @@ pub(super) async fn series(
                 Ok(halted) => halted,
                 Err((_live, _)) => return Err((phase::WALKER_STOP, 0x5e00_0000 | index)),
             };
+            stamps[T_PROOF] = oer_portable_riscv::cycle32();
             ring = match part {
+                Part::T257 if cold_turn => {
+                    let cold = {
+                        let mut clocked = WifiClocked::from_running(access, clocks_on);
+                        let result = {
+                            stamps[T_PULSE] = oer_portable_riscv::cycle32();
+                            let reset =
+                                held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                            stamps[T_RESET] = oer_portable_riscv::cycle32();
+                            let mut hal = clocked.cold_mac_hal();
+                            let prepared =
+                                initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await;
+                            stamps[T_COLD] = oer_portable_riscv::cycle32();
+                            prepared
+                        };
+                        let (running, on) = clocked.into_running();
+                        access = running;
+                        clocks_on = on;
+                        result
+                    };
+                    cold.map_err(|_| (phase::SECOND_COLD, 0x5e00_0000 | index))?;
+                    let retuned = {
+                        let mut clocked = WifiClocked::from_running(access, clocks_on);
+                        let mut platform = ();
+                        let result =
+                            apart!(tune(slot, &mut clocked, timer, &mut platform, channel));
+                        let (running, on) = clocked.into_running();
+                        access = running;
+                        clocks_on = on;
+                        result
+                    };
+                    retuned.map_err(|(phase, code)| (phase, code | 0x5e00_0000))?;
+                    stamps[T_CHANNEL] = oer_portable_riscv::cycle32();
+                    series.agreement = false;
+                    // `restart_after_cold`, step by step: the ring published
+                    // into the gated core, the gates opened, published again.
+                    let gated = storage
+                        .prepare_halted(halted, access.rx_dma())
+                        .map_err(|_| (phase::SECOND_RING, 0x0800_0003))?;
+                    access.wifi_mac_hal().reopen_mac_core(&gated);
+                    let stopped = storage
+                        .prepare_halted(gated.into_halted(), access.rx_dma())
+                        .map_err(|_| (phase::SECOND_RING, 0x0800_0000))?;
+                    stamps[T_RING] = oer_portable_riscv::cycle32();
+                    start_stamped(&mut stamps, stopped, &mut access, mac_irq, power_irq)?
+                }
+                Part::T257 => {
+                    // The warm start: `restart_after_stop`, step by step.
+                    let stopped = storage
+                        .prepare_halted(halted, access.rx_dma())
+                        .map_err(|_| (phase::RESTART, 0x5e20))?;
+                    stamps[T_RING] = oer_portable_riscv::cycle32();
+                    start_stamped(&mut stamps, stopped, &mut access, mac_irq, power_irq)?
+                }
                 // The MAC resumed by the start (`start_mac_runtime`).
                 Part::A2 | Part::A3 | Part::Vendor => {
                     restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?
@@ -680,6 +810,32 @@ pub(super) async fn series(
                     restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?
                 }
             };
+            if part == Part::T257 {
+                // The first data success after the start, the sender on air.
+                let before = statistics(&access)[1];
+                let begun = oer_portable_riscv::cycle32();
+                let mut seen = false;
+                while !seen
+                    && oer_portable_riscv::cycle32().wrapping_sub(begun) < FIRST_SUCCESS_BOUND
+                {
+                    seen = statistics(&access)[1] != before;
+                }
+                stamps[T_FIRST] = oer_portable_riscv::cycle32();
+                row[19] |= u32::from(!cold_turn) | u32::from(!seen) << 2;
+                let edge = stamps[T_EDGE];
+                for (cell, stamp) in [2_usize, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20]
+                    .into_iter()
+                    .zip(&stamps[1..])
+                {
+                    if let Some(cell) = row.get_mut(cell) {
+                        *cell = if *stamp == 0 {
+                            0
+                        } else {
+                            stamp.wrapping_sub(edge)
+                        };
+                    }
+                }
+            }
             // A start as the first: its frames by their counters.
             let after_start = access.wifi_mac_hal().experiment_receive_filter_words();
             row[9] = filter_row(&rows.reference, &before_stop, &after_start);
@@ -808,6 +964,30 @@ fn restart_after_stop(
         .try_start(access.rx_dma())
         .map_err(|_| (phase::RESTART, 0x5e21))?;
     access.wifi_mac_hal().start_mac_runtime(&ring);
+    Ok(ring)
+}
+
+/// The warm or cold start's last steps, stamped (`tasks/257`): the MAC's
+/// core reopened, the receive policy and the interrupt mask, the walker
+/// enabled, the MAC's receive released.
+fn start_stamped(
+    stamps: &mut [u32; T257_STAMPS],
+    stopped: oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingStopped<'static, COUNT>,
+    access: &mut RadioAccess,
+    mac_irq: &mut MacInterruptRegisters,
+    power_irq: &mut MacPowerInterruptRegisters,
+) -> Result<Ring, Failure> {
+    access.wifi_mac_hal().reopen_mac_core(&stopped);
+    access.wifi_mac_hal().configure_open_promiscuous_receive();
+    station_policy(access);
+    open_epoch(mac_irq, power_irq);
+    stamps[T_POLICY] = oer_portable_riscv::cycle32();
+    let ring = stopped
+        .try_start(access.rx_dma())
+        .map_err(|_| (phase::RESTART, 0x5e21))?;
+    stamps[T_ENABLE] = oer_portable_riscv::cycle32();
+    access.wifi_mac_hal().start_mac_runtime(&ring);
+    stamps[T_READY] = oer_portable_riscv::cycle32();
     Ok(ring)
 }
 
