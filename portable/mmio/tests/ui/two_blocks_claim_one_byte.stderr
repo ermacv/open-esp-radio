@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: no two claimed blocks list the same place
+  --> $DIR/two_blocks_claim_one_byte.rs:13:5
+   |
+13 |     panic!("no two claimed blocks list the same place")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `_` failed here
