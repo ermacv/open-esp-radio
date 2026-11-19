@@ -65,6 +65,28 @@ twice fails to compile. For each entry the macro defines:
 The table holds one element per source of each entry, each with the
 entry's line, level, hart, class and handler.
 
+A level between the handlers and the application runs one task. An image
+declares its level tasks before its contexts:
+
+```text
+level_tasks { KeeperTask => keeper::run, line 34, context keeper, hart 0; }
+contexts { radio_executor: 2; keeper: 3; radio: 4; }
+```
+
+A task (`LevelTask`) is a type with no value, its handler a `fn()`, its line
+a software line no source is routed to: it has no source, no token and no
+class, since its own table is its class. For each task the macro defines
+the line's symbol `__oer_interrupt_h<HART>_l<LINE>`, which runs the handler,
+and lays it out in `LEVEL_TASK_TABLE`, exported as `__OER_LEVEL_TASK_TABLE`:
+line at 0, level at 1, hart at 2 (`u8` each), the handler's word at 4, 8
+bytes on the chip (`TaskBinding`). The table fails to compile when a task's
+line or hart is outside the chip's `Lines`, two tasks or a task and an entry
+share a line and hart, two tasks share a level and hart, or an entry (an
+`Executor` or one with a source) sits on the level of its hart's task.
+Hardware reaches a level's task only through a handler above it, which
+pends it: a timer a task one day needs is a `Hardware` entry that pends it,
+which is why a task's line never has a source.
+
 The table fails to compile when an entry's line, level or hart is outside
 the chip's `Lines`, when two entries share a line and hart, when two entries
 or one part list a source twice, when
@@ -110,7 +132,14 @@ entry binds is routed on no bank:
   (`Error::WrongHart`) before any write, checks the controller's
   implemented geometry and level bits against its chip facts
   (`Controller::verify_configuration`), silences every source and disables
-  every line of the hart, then verifies;
+  every line of the hart, binds the line of each of the hart's level tasks
+  (`Controller::bind_task`: enabled, hardware-vectored and positive-edge,
+  the trigger following from the kind, its pending bit cleared before its
+  enable), then verifies. A task's line holds no source and nothing pends
+  it before its raisers exist, so it is bound there, for good, with nothing
+  to place first; the control byte of each task's line is made at compile
+  time from the table, and a task outside the controller's lines or levels
+  fails to compile;
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, binds the entry's line at its level
   (`Controller::bind` with its control byte, `oer_portable_riscv::clic::Control`:
@@ -134,15 +163,17 @@ entry binds is routed on no bank:
   enabled with another level or trigger than its binding's;
 - `Router::verify` checks the controller's configuration again, then that
   every routed source is an entry of the hart
-  on its line, every routed line holds its entry's level, and every other
-  line is disabled.
+  on its line, every routed line holds its entry's level, every level task's
+  line of the hart holds its task's binding (`LineExpectation::Task`), and
+  every other line is disabled.
 
 A faulted binding records four words (`BindFault::diagnostic`): the context
 (the source in bits 0..16, the line in 16..24, the hart from 24), then three
 zero words; the reason names the fault. A wrong line `verify` finds is
 reported with the line's register word as the chip read it
 (`LineObservation`) and what the table expected of it
-(`LineExpectation::record`: 0 disabled, bit 8 and the control byte bound).
+(`LineExpectation::record`: 0 disabled, bit 8 and the control byte bound,
+bit 9 and the control byte a level task's).
 
 An interrupt handler reaches its task only through a static signal
 (`signal`), never through the router or a lock. A signal binds its executor's

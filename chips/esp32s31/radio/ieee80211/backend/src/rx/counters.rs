@@ -1,6 +1,6 @@
 //! Production counters of one Wi-Fi receive epoch, for the W1 log.
 //!
-//! The interrupt line (P3), the driver's task and the application's
+//! The interrupt line (the `radio` level), the driver's task and the application's
 //! frame receiver (the body, the prefix counts) each update their own counters
 //! with single Relaxed atomic operations; a reader takes a [`WifiRxReport`]
 //! at any time. Counts wrap. The reload evidence is the ring's own

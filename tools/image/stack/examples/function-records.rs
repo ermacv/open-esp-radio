@@ -16,7 +16,9 @@ use clap::Parser;
 use oer_tools_analysis_riscv_analysis::writes::function_writes;
 use oer_tools_analysis_riscv_model::*;
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
-use oer_tools_image_stack::{Field, TableLayout, interrupt_table, read_debug};
+use oer_tools_image_stack::{
+    Field, TableLayout, TaskLayout, interrupt_table, level_task_table, read_debug,
+};
 use serde::Deserialize;
 use std::rc::Rc;
 use sweep::TransferKind;
@@ -92,6 +94,19 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 + index as u64 * u64::from(layout.entry)
                 + u64::from(layout.handler);
             println!("irq-entry\t{index}\t{word:#010x}\t{entry:?}");
+        }
+        let tasks = TaskLayout {
+            entry: irq.task_entry_bytes,
+            line: field(irq.task_line),
+            level: field(irq.task_level),
+            core: field(irq.task_core),
+            handler: irq.task_handler,
+        };
+        for (index, task) in level_task_table(&image, &irq.task_table_symbol, &tasks, &mut control)?
+            .iter()
+            .enumerate()
+        {
+            println!("irq-task\t{index}\t{task:?}");
         }
     }
     if image_facts {
@@ -371,4 +386,10 @@ struct InterruptContract {
     table_class: [u32; 2],
     table_core: [u32; 2],
     table_handler: u32,
+    task_table_symbol: String,
+    task_entry_bytes: u32,
+    task_line: [u32; 2],
+    task_level: [u32; 2],
+    task_core: [u32; 2],
+    task_handler: u32,
 }

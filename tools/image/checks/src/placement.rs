@@ -222,7 +222,18 @@ pub fn audit(contract: &Contract<'_>, elf: &Path, binary: Option<&Path>) -> Resu
                 regions.push(region(name)?);
             }
         }
-        let handlers = interrupt_handlers(&elf, symbol(&interrupts.table_symbol)?, interrupts)?;
+        let mut handlers = interrupt_handlers(
+            &elf,
+            symbol(&interrupts.table_symbol)?,
+            (interrupts.table_entry_bytes, interrupts.table_handler),
+            "interrupt table entry",
+        )?;
+        handlers.extend(interrupt_handlers(
+            &elf,
+            symbol(&interrupts.task_table_symbol)?,
+            (interrupts.task_entry_bytes, interrupts.task_handler),
+            "level task",
+        )?);
         violations.extend(handler_violations(
             &handlers,
             &regions,
@@ -268,7 +279,7 @@ fn section_violations<'a>(
 /// The interrupt table `handlers` (entry index, address) outside every one
 /// of `regions`, which `names` name.
 fn handler_violations(
-    handlers: &[(u32, u64)],
+    handlers: &[(String, u64)],
     regions: &[Region],
     names: &[String],
 ) -> Vec<String> {
@@ -279,9 +290,9 @@ fn handler_violations(
                 .iter()
                 .any(|region| region.contains_range(*handler, handler + 4))
         })
-        .map(|(index, handler)| {
+        .map(|(entry, handler)| {
             format!(
-                "interrupt table entry {index}'s handler {handler:#010x} is not in {}",
+                "{entry}'s handler {handler:#010x} is not in {}",
                 names.join(" or ")
             )
         })
@@ -296,13 +307,15 @@ fn by_demangled_name(elf: &oer_tools_analysis_elf::Elf<'_>, name: &str) -> Optio
         .map(|symbol| symbol.address)
 }
 
-/// The handlers of the interrupt table at `table` (its entries' pointer and
-/// count) by entry index; an empty entry has none.
+/// The handlers of the table at `table` (its entries' pointer and count),
+/// each entry `bytes` long with its handler word at `handler`, named as
+/// `kind` and its index; an empty entry has none.
 fn interrupt_handlers(
     elf: &oer_tools_analysis_elf::Elf<'_>,
     table: u64,
-    interrupts: &InterruptContract,
-) -> Result<Vec<(u32, u64)>> {
+    (bytes, handler): (u32, u32),
+    kind: &str,
+) -> Result<Vec<(String, u64)>> {
     let word = |address: u64| -> Result<u32> {
         elf.sections()
             .filter(|section| section.allocated && !section.nobits)
@@ -313,12 +326,10 @@ fn interrupt_handlers(
     let count = word(table + 4)?;
     let mut handlers = Vec::new();
     for index in 0..count {
-        let at = entries
-            + u64::from(index) * u64::from(interrupts.table_entry_bytes)
-            + u64::from(interrupts.table_handler);
+        let at = entries + u64::from(index) * u64::from(bytes) + u64::from(handler);
         match word(at)? {
             0 => {}
-            handler => handlers.push((index, u64::from(handler))),
+            address => handlers.push((format!("{kind} {index}"), u64::from(address))),
         }
     }
     Ok(handlers)

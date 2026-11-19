@@ -1462,39 +1462,117 @@ fn the_interrupt_table_reads_each_binding_and_its_relocated_handler() {
         entries,
         [
             TableEntry {
-                source: 25,
+                kind: Kind::Routed {
+                    source: 25,
+                    class: Class::Hardware
+                },
                 line: 16,
                 level: 1,
-                class: Class::Hardware,
                 core: 0,
                 handler: Some(TEXT)
             },
             TableEntry {
-                source: 67,
+                kind: Kind::Routed {
+                    source: 67,
+                    class: Class::Executor
+                },
                 line: 20,
                 level: 8,
-                class: Class::Executor,
                 core: 1,
                 handler: None
             },
             TableEntry {
-                source: 68,
+                kind: Kind::Routed {
+                    source: 68,
+                    class: Class::Exempt(Violation::ExecutorLevel)
+                },
                 line: 21,
                 level: 8,
-                class: Class::Exempt(Violation::ExecutorLevel),
                 core: 1,
                 handler: None
             },
             TableEntry {
-                source: 69,
+                kind: Kind::Routed {
+                    source: 69,
+                    class: Class::Exempt(Violation::WakerCall)
+                },
                 line: 47,
                 level: 8,
-                class: Class::Exempt(Violation::WakerCall),
                 core: 1,
                 handler: None
             },
         ]
     );
+}
+
+/// An image whose `__OER_LEVEL_TASK_TABLE` lists `tasks` (line, level,
+/// hart, handler symbol index or none) in the level task's layout.
+fn task_image(tasks: &[(u8, u8, u8, Option<u32>)]) -> Vec<u8> {
+    let handler = Symbol {
+        name: "handler",
+        words: vec![SP_DOWN_16, SP_UP_16, RET],
+        frame: Some(16),
+    };
+    let mut words = vec![RODATA + 8, tasks.len() as u32];
+    let mut relocated = vec![0];
+    for &(line, level, hart, target) in tasks {
+        words.push(u32::from(line) | u32::from(level) << 8 | u32::from(hart) << 16);
+        if target.is_some() {
+            relocated.push(words.len());
+        }
+        words.push(target.unwrap_or(0));
+    }
+    built(
+        TEXT,
+        &[handler],
+        &Rodata {
+            words: &words,
+            relocated: &relocated,
+            objects: &[
+                ("__OER_LEVEL_TASK_TABLE", 0, 8),
+                ("tasks", 8, 8 * tasks.len() as u32),
+            ],
+        },
+    )
+}
+
+/// `oer_chips_family_platform_interrupt_table::TaskBinding`, as the chips' contracts give it.
+const TASKS: TaskLayout = TaskLayout {
+    entry: 8,
+    line: Field { offset: 0, size: 1 },
+    level: Field { offset: 1, size: 1 },
+    core: Field { offset: 2, size: 1 },
+    handler: 4,
+};
+
+#[test]
+fn the_level_task_table_reads_each_task_with_no_source_and_its_relocated_handler() {
+    let elf = task_image(&[(34, 3, 0, Some(TEXT)), (35, 3, 1, None)]);
+    let tasks = with_facts(&elf, |facts| {
+        crate::level_task_table(facts, "__OER_LEVEL_TASK_TABLE", &TASKS, &mut Units(1000))
+    })
+    .unwrap();
+    assert_eq!(
+        tasks,
+        [
+            TableEntry {
+                kind: Kind::Task,
+                line: 34,
+                level: 3,
+                core: 0,
+                handler: Some(TEXT)
+            },
+            TableEntry {
+                kind: Kind::Task,
+                line: 35,
+                level: 3,
+                core: 1,
+                handler: None
+            },
+        ]
+    );
+    assert_eq!(tasks[0].class(), Class::LevelTask);
+    assert_eq!(tasks[0].to_string(), "the level task of line 34");
 }
 
 #[test]
@@ -2396,10 +2474,12 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     let analysis = analyze(&elf, &[], &[]).unwrap();
     let (small, large) = (TEXT, TEXT + 12);
     let entry = |line, level, core, handler| TableEntry {
-        source: 0,
+        kind: Kind::Routed {
+            source: 0,
+            class: Class::Hardware,
+        },
         line,
         level,
-        class: Class::Hardware,
         core,
         handler: Some(handler),
     };
@@ -2478,6 +2558,35 @@ fn a_hart_stacks_one_interrupt_per_level_and_an_exception() {
     );
     let error = stacks(&table, &vectors[..2], 1).unwrap_err();
     assert!(error.message.contains("no vector for line 16"), "{error:?}");
+
+    // A level task's handler is its level's one member: its level adds to
+    // its hart's sum as a routed entry's does, and its line's vector must
+    // call it.
+    let task = TableEntry {
+        kind: Kind::Task,
+        line: 34,
+        level: 3,
+        core: 0,
+        handler: Some(large),
+    };
+    let mut with_task = table.to_vec();
+    with_task.push(task);
+    let mut task_vectors = vectors.to_vec();
+    task_vectors.push(vector(0, 34, large));
+    let harts = stacks(&with_task, &task_vectors, 1).unwrap();
+    assert_eq!(
+        levels(&harts[0]),
+        [(1, Some(112)), (3, Some(128)), (8, Some(128))]
+    );
+    assert_eq!(harts[0].bytes, Some(112 + 128 + 128 + 112));
+    assert_eq!(levels(&harts[1]), [(1, Some(112))]);
+    let error = stacks(&with_task, &vectors, 1).unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("no vector for line 34 of the level task of line 34"),
+        "{error:?}"
+    );
 }
 
 const HOOK_PROGRAM: &str = r#"

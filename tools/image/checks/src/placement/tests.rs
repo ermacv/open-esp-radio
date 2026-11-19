@@ -72,10 +72,18 @@ const ROM: Region = match Region::new(0x2f80_0000, 0x1000) {
 #[test]
 fn an_interrupt_handler_in_sram_or_rom_holds_and_one_in_psram_is_named() {
     let names = ["sram".to_owned(), "rom".to_owned()];
-    let handlers = [(0, 0x2f00_0010), (3, 0x2f80_0100), (7, 0x5001_0000)];
+    let handlers = [
+        ("interrupt table entry 0".to_owned(), 0x2f00_0010),
+        ("interrupt table entry 3".to_owned(), 0x2f80_0100),
+        ("interrupt table entry 7".to_owned(), 0x5001_0000),
+        ("level task 0".to_owned(), 0x5001_0040),
+    ];
     assert_eq!(
         handler_violations(&handlers, &[SRAM, ROM], &names),
-        ["interrupt table entry 7's handler 0x50010000 is not in sram or rom"]
+        [
+            "interrupt table entry 7's handler 0x50010000 is not in sram or rom",
+            "level task 0's handler 0x50010040 is not in sram or rom"
+        ]
     );
     // The ROM is a permitted region only where the contract names it.
     assert_eq!(

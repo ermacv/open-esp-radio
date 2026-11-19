@@ -17,7 +17,7 @@ oer_chips_family_platform_runtime::interrupt_table! {
     /// The radio executor (P2), polled in its handler.
     radio: RadioToken = oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu2Irq => oer_chips_family_platform_executor::Round<wifi::RadioTasks>, @layout(radio), Executor;
     #[cfg(feature = "wifi")]
-    /// The radio handler (P3): both Wi-Fi MAC banks and the doorbell.
+    /// The radio handler (`radio`, P4): both Wi-Fi MAC banks and the doorbell.
     wifi: WifiToken = wifi::WifiPart => wifi::on_wifi, @layout(wifi), Hardware;
     #[cfg(feature = "console")]
     /// The USB Serial/JTAG console: it raises the console endpoint's signal.

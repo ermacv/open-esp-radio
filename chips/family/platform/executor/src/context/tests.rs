@@ -1,7 +1,7 @@
 use super::{NO_EXECUTOR, Running};
 
 /// Levels of the image's contexts on one core, as the interrupt controller
-/// runs them: thread mode, the radio executor (P2), the radio interrupts (P3).
+/// runs them: thread mode, the radio executor (P2), the radio interrupts (the `radio` level).
 const THREAD: u8 = 0;
 const RADIO_EXECUTOR: u8 = 2;
 const RADIO_INTERRUPT: u8 = 3;

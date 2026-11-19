@@ -61,7 +61,10 @@ pub use dwarf::locations::LocationQueries;
 pub use dwarf::{Dwarf, Marked, Returned, read as read_debug, read_locations};
 use image::ReadOnlyTables;
 pub use image::{Function, stack_sizes};
-pub use interrupts::{Class, Field, TableEntry, TableLayout, Violation, interrupt_table};
+pub use interrupts::{
+    Class, Field, Kind, TableEntry, TableLayout, TaskLayout, Violation, interrupt_table,
+    level_task_table,
+};
 pub use oer_tools_analysis_riscv_analysis::TrapSemantics;
 use oer_tools_analysis_riscv_analysis::{
     JumpTableSource, KnownJump, ProvenTables, RecognizedTables,

@@ -181,19 +181,23 @@ fn irq_context_resolutions_and_bootstrap_use_the_same_three_way_report() {
     let image = graph(false, true);
     let entries = [
         TableEntry {
+            kind: oer_tools_image_stack::Kind::Routed {
+                source: 7,
+                class: oer_tools_image_stack::Class::Executor,
+            },
             core: 0,
             line: 16,
             level: 2,
-            class: oer_tools_image_stack::Class::Executor,
-            source: 7,
             handler: Some(FORMATTER),
         },
         TableEntry {
+            kind: oer_tools_image_stack::Kind::Routed {
+                source: 8,
+                class: oer_tools_image_stack::Class::Executor,
+            },
             core: 1,
             line: 16,
             level: 2,
-            class: oer_tools_image_stack::Class::Executor,
-            source: 8,
             handler: Some(TEXT + 28),
         },
     ];

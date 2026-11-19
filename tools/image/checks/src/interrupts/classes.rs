@@ -1,7 +1,8 @@
 //! Interrupt classes: where each entry's class may sit, and what code of the
-//! `Hardware` class does that the class forbids. The class is the image's
-//! declaration in its table (`oer_chips_family_platform_interrupt_table::Class`), never a level
-//! number or a handler's name.
+//! `Hardware` class, and of a level task, does that the class forbids. The
+//! class is the image's declaration in its tables
+//! (`oer_chips_family_platform_interrupt_table::Class`, and the level task
+//! table for a task), never a level number or a handler's name.
 
 use oer_tools_image_stack::{
     Analysis, Class, Fact, Resolutions, TableEntry, Violation, task_poll_sites,
@@ -9,51 +10,73 @@ use oer_tools_image_stack::{
 use std::collections::BTreeSet;
 use std::fmt;
 
-/// The class of one hart's level: its core's executor there makes it the
-/// executor's level; otherwise its entries are hardware handlers.
+/// The class of one hart's level: its core's level task there makes it the
+/// task's level, its core's executor the executor's; otherwise its entries
+/// are hardware handlers.
 pub(super) fn context_class(table: &[TableEntry], core: u32, level: u32) -> Class {
-    if executors(table, core, level) == 0 {
-        Class::Hardware
-    } else {
+    if count(table, core, level, Class::LevelTask) != 0 {
+        Class::LevelTask
+    } else if count(table, core, level, Class::Executor) != 0 {
         Class::Executor
+    } else {
+        Class::Hardware
     }
 }
 
-fn executors(table: &[TableEntry], core: u32, level: u32) -> usize {
+/// Whether a level of `class` runs strict code throughout, checked for the
+/// hardware class's breaches: a hardware handlers' level and a level task's.
+/// An executor's level is strict only up to its polls, and the exception
+/// (no class) is checked as its own path.
+pub(super) fn strict_throughout(class: Option<Class>) -> bool {
+    matches!(class, Some(Class::Hardware | Class::LevelTask))
+}
+
+/// The entries of `class` the build holds on `level` of `core`.
+fn count(table: &[TableEntry], core: u32, level: u32, class: Class) -> usize {
     table
         .iter()
         .filter(|entry| {
             entry.handler.is_some()
                 && entry.core == core
                 && entry.level == level
-                && entry.class == Class::Executor
+                && entry.class() == class
         })
         .count()
 }
 
 /// The entries of the image's build that break where their class may sit:
 /// two executors on one level and core, a hardware handler on its core's
-/// executor level, an exempt entry with no executor beside it. The table's
-/// macro refuses each at compile time; the image is checked again here.
+/// executor level, an exempt entry with no executor beside it; two level
+/// tasks on one level and core, and any entry with a source on its core's
+/// task level. The table's macro refuses each at compile time; the image is
+/// checked again here.
 pub(super) fn misplaced(table: &[TableEntry]) -> Vec<String> {
     table
         .iter()
         .filter(|entry| entry.handler.is_some())
         .filter_map(|entry| {
-            let (source, level, core) = (entry.source, entry.level, entry.core);
-            match (entry.class, executors(table, core, level)) {
-                (Class::Executor, count) if count > 1 => Some(format!(
-                    "source {source} is one of {count} executors of level {level} on core {core}"
+            let (level, core) = (entry.level, entry.core);
+            let executors = count(table, core, level, Class::Executor);
+            let tasks = count(table, core, level, Class::LevelTask);
+            match entry.class() {
+                Class::LevelTask if tasks > 1 => Some(format!(
+                    "{entry} is one of {tasks} level tasks of level {level} on core {core}"
                 )),
-                (Class::Hardware | Class::Exempt(Violation::WakerCall), count) if count > 0 => {
+                Class::LevelTask => None,
+                _ if tasks > 0 => Some(format!(
+                    "{entry} shares level {level} with core {core}'s level task"
+                )),
+                Class::Executor if executors > 1 => Some(format!(
+                    "{entry} is one of {executors} executors of level {level} on core {core}"
+                )),
+                Class::Hardware | Class::Exempt(Violation::WakerCall) if executors > 0 => {
                     Some(format!(
-                        "the hardware handler of source {source} shares level {level} with core \
+                        "the hardware handler of {entry} shares level {level} with core \
                          {core}'s executor"
                     ))
                 }
-                (Class::Exempt(Violation::ExecutorLevel), 0) => Some(format!(
-                    "source {source} is exempt, but no executor of core {core} shares its level \
-                     {level}"
+                Class::Exempt(Violation::ExecutorLevel) if executors == 0 => Some(format!(
+                    "{entry} is exempt, but no executor of core {core} shares its level {level}"
                 )),
                 _ => None,
             }

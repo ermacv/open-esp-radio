@@ -95,11 +95,12 @@ impl LineExpectation {
     /// bit 8 and the control byte bound, bit 9 and the control byte a level
     /// task's.
     pub const fn record(self) -> u32 {
-        match self {
-            Self::Disabled => 0,
-            Self::Bound(control) => 0x100 | control.bits() as u32,
-            Self::Task(control) => 0x200 | control.bits() as u32,
-        }
+        let (kind, control) = match self {
+            Self::Disabled => return 0,
+            Self::Bound(control) => (0x100, control),
+            Self::Task(control) => (0x200, control),
+        };
+        kind | control.bits() as u32
     }
 }
 
@@ -469,8 +470,8 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         for &line in C::LINES {
             controller.disable(line);
         }
-        for (&line, task) in C::LINES.iter().zip(Self::TASKS) {
-            if let Some(control) = task {
+        for (&line, task) in C::LINES.iter().zip(&Self::TASKS) {
+            if let Some(control) = *task {
                 controller.bind_task(line, control);
             }
         }
@@ -672,7 +673,7 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             }
             routed_lines |= 1u64.checked_shl(u32::from(line)).unwrap_or(0);
         }
-        for ((typed, line), task) in C::LINES.iter().copied().zip(0u8..).zip(Self::TASKS) {
+        for ((typed, line), &task) in C::LINES.iter().copied().zip(0u8..).zip(&Self::TASKS) {
             let routed = present(self.table.bindings(), hart)
                 .find(|binding| binding.line == line)
                 .filter(|_| routed_lines >> line & 1 == 1);

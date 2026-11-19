@@ -1,4 +1,4 @@
-//! The Wi-Fi interrupt line at the radio interrupt level (P3).
+//! The Wi-Fi interrupt line at the radio interrupt level (`radio`, P4).
 //!
 //! One entry of the image's interrupt table binds [`WifiIrqPart`] once, at
 //! start: both interrupt banks of the MAC (`MODEM_WIFI_MAC` and

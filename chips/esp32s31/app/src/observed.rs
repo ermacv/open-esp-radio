@@ -799,7 +799,7 @@ impl Hart1 {
     }
 }
 
-/// Hart 1's PC sampler, on TIMG1 T1 at P4 above every other level of
+/// Hart 1's PC sampler, on TIMG1 T1 at P5 above every other level of
 /// hart 1.
 #[cfg(feature = "group")]
 pub type Hart1Sampler = Sampler<Timer<super::Sampler1Token, sampler::Timer1>>;
@@ -848,7 +848,7 @@ pub struct Session {
     pub stray: u32,
 }
 
-/// A PC sampler, by default hart 0's on TIMG1 T0, at P4 above every other
+/// A PC sampler, by default hart 0's on TIMG1 T0, at P5 above every other
 /// level of its hart: one sample of the interrupted PC and `ra` every
 /// period while a session runs, into its one buffer of [`SAMPLES`].
 pub struct Sampler<A: 'static = Timer<SamplerToken>> {

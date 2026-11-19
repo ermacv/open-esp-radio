@@ -1,11 +1,11 @@
 //! The radio doorbell: a software interrupt at the radio interrupts' level.
 //!
-//! An executor below the radio interrupts (P3), such as the one that polls a
+//! An executor below the radio interrupts (the `radio` level), such as the one that polls a
 //! radio driver, cannot write the registers they own without sharing them
 //! with a handler that preempts it. It records
 //! a request in memory both sides see and rings the doorbell; the doorbell's
 //! line is one source of the radio interrupt's part, so the handler that
-//! holds the radio registers runs at P3 and applies the request.
+//! holds the radio registers runs at that level and applies the request.
 //!
 //! [`DoorbellLine::split`] takes the line from the reset root and hands out the
 //! lowering half ([`DoorbellAcknowledger`]) for the handler's part and the
