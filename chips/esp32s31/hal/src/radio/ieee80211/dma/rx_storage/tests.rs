@@ -4105,3 +4105,166 @@ fn a_spare_binds_once_and_a_rebind_needs_a_detach() {
     assert!(!storage.rebind_spare_unbound(4));
     assert!(storage.rebind_spare_unbound(5));
 }
+
+/// `tasks/228`: the rx-rebind probe's exits out of a ring that keeps one hole
+/// (`--features exit`), run on the walker's model. The probe's own rules,
+/// step for step: with no hole, take the frontier's head, detach it, bind its
+/// next re-arm to a spare and keep it deferred (the hole); with a hole, take
+/// nothing until the walker stands (NEXT zero, NEXT on the hole, or NEXT on a
+/// descriptor not armed that is not the tail), then claim the hole's deferred
+/// recycle and append it. After every step the walker's cursor is checked
+/// against the ring's own account: at rest NEXT never names a completed
+/// descriptor the CPU has not taken, and LAST lies inside the accepted list.
+#[test]
+fn the_probes_hole_against_the_walkers_model() {
+    for burst in 1..=4 {
+        probes_hole(burst);
+    }
+}
+
+fn probes_hole(burst: usize) {
+    use crate::radio::ieee80211::dma::descriptor::cursor_ring_index;
+    use crate::radio::ieee80211::dma::rx_dma::model::{RxWalkerLanding, RxWalkerModel};
+    const COUNT: usize = 8;
+    const ADDRESS_LOW_MASK: u32 = crate::radio::ieee80211::registers::WifiDescriptorAddressLow::MAX;
+    let (placed, _bank) = RxDmaStorage::<COUNT, 16, 16, HostDma>::place_with_spares(
+        Placed::host(Box::leak(Box::new(RxDmaStorage::new()))),
+        Placed::host(Box::leak(Box::new(
+            <crate::radio::ieee80211::dma::rx_rebind::RxSpareBank<4> as bytemuck::Zeroable>::zeroed(
+            ),
+        ))),
+        |spare, _word| u32::from_le_bytes([spare as u8 + 1; 4]),
+    )
+    .expect("the experiment arena places");
+    let storage = placed.storage();
+    let base = placed.descriptor_base();
+    let mut model = RxWalkerModel::new();
+    model.next_descriptor_low = base & ADDRESS_LOW_MASK;
+    let mut ring = placed
+        .prepare_ring(&mut model)
+        .and_then(|ring| ring.core_ready_for_test().publish(&mut model))
+        .expect("prepared owner")
+        .try_start(&mut model)
+        .map_err(|(_, error)| error)
+        .expect("live epoch");
+    let walker = core::cell::RefCell::new(model);
+    let table = || storage.walker_table().expect("the model's table");
+    let mut hole: Option<usize> = None;
+    let mut spare = COUNT;
+    let mut exits = 0;
+    let mut takes = 0;
+    let mut problems: std::vec::Vec<std::string::String> = std::vec::Vec::new();
+    for step in 0..160 {
+        // The air: `burst` frames a step, landed where NEXT points.
+        let mut landing = RxWalkerLanding::Exhausted;
+        for _ in 0..burst {
+            landing = walker.borrow_mut().land(table(), 4, true);
+        }
+        // The probe's service of the ring.
+        storage
+            .observe_reserved(&mut ring, &mut *walker.borrow_mut())
+            .expect("reserved");
+        ring.complete_pending_reload(&mut *walker.borrow_mut(), frozen_settle())
+            .expect("reload");
+        let frozen = ring.freeze_cursor(&mut *walker.borrow_mut()).unwrap();
+        let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
+        let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
+        let tail = ring.topology_snapshot().tail_index;
+        // At rest (the walker did not land), NEXT names no completed
+        // descriptor the CPU has not taken.
+        if !matches!(landing, RxWalkerLanding::Landed(_))
+            && let Some(at) = next
+        {
+            let word = storage.descriptors()[at].word0();
+            if word.owner() && word.rx_done() && hole != Some(at) {
+                problems.push(std::format!(
+                    "step {step}: NEXT {at} on a completed descriptor not taken (LAST {last:?}, tail {tail}, hole {hole:?})"
+                ));
+            }
+        }
+        let frontier = storage
+            .first_completed_unit_frontier_through_cursor(&ring, frozen)
+            .expect("frontier");
+        if frontier.unit_count == 0 {
+            continue;
+        }
+        let head = storage
+            .completion_frontier_head(&ring)
+            .expect("head")
+            .expect("a head");
+        // LAST lies inside the accepted list: between the frontier's head
+        // and the accepted tail, in ring order.
+        if let Some(l) = last
+            && (l + COUNT - head) % COUNT > (tail + COUNT - head) % COUNT
+        {
+            problems.push(std::format!(
+                "step {step}: LAST {l} past the accepted tail {tail} (head {head})"
+            ));
+        }
+        if let Some(at) = hole {
+            let stands = match next {
+                None => true,
+                Some(n) if n == at => true,
+                Some(n) if n == head => false,
+                Some(n) => {
+                    let word = storage.descriptors()[n].word0();
+                    let armed = word.owner() && !word.rx_done();
+                    !armed && tail != n
+                }
+            };
+            if !stands {
+                continue;
+            }
+            match storage.claim_deferred_recycle(&mut ring, frozen) {
+                Ok(Some(credit)) => {
+                    let _ = credit.append(&mut *walker.borrow_mut());
+                }
+                other => {
+                    problems.push(std::format!(
+                        "step {step}: the hole {at} had no deferred claim ({:?})",
+                        other.err()
+                    ));
+                    break;
+                }
+            }
+            ring.complete_pending_reload(&mut *walker.borrow_mut(), frozen_settle())
+                .expect("reload");
+            hole = None;
+            exits += 1;
+            continue;
+        }
+        if next == Some(head) {
+            continue;
+        }
+        let mut unit = match storage.take_completed_unit(&mut ring, frozen) {
+            Ok(Some(unit)) => unit,
+            other => {
+                problems.push(std::format!("step {step}: no take ({:?})", other.err()));
+                break;
+            }
+        };
+        let index = unit.head_index();
+        if unit
+            .detach_before_last(&mut *walker.borrow_mut(), frozen)
+            .is_err()
+        {
+            problems.push(std::format!("step {step}: the detach of {index} refused"));
+            unit.retain_for_deferred_recycle();
+            break;
+        }
+        unit.rebind_next(spare).expect("an unbound spare");
+        spare += 1;
+        unit.retain_for_deferred_recycle();
+        hole = Some(index);
+        takes += 1;
+    }
+    std::println!(
+        "burst {burst}: exits {exits} takes {takes} problems {}",
+        problems.len()
+    );
+    for problem in problems.iter().take(8) {
+        std::println!("{problem}");
+    }
+    assert!(problems.is_empty(), "{} problems", problems.len());
+    assert!(exits > 50, "the hole exits: {exits}");
+}
