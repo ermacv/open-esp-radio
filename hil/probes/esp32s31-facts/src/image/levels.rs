@@ -621,13 +621,26 @@ fn pend_byte(line: u32) {
 /// 317 (`tasks/219` c4): a hundred pends of LOW (level 1, edge) by one
 /// byte store each, from the thread with MIE set. Each is to give one entry;
 /// after it the line's `IE`, attributes and `CTL` read as configured and
-/// `IP` clear. Emits `(0x3800, entries, fields changed, IP left set)` and
-/// the baseline word.
+/// `IP` clear. Emits `(0x38f0, the word before anything, after its pending
+/// bit was cleared, after the enable)`, `(0x3800, entries, fields changed,
+/// IP left set)` and the baseline word.
 pub(super) fn byte_pend(s: &mut Session<'_>) {
     feed(s);
     setup(s);
+    // `tasks/230`: the line's word before anything, then its pending bit
+    // cleared with the line disabled, before it is enabled: a bit already
+    // set is seen, not guessed.
+    let first = word(s, LOW);
+    configure(s, LOW, 1, true, false);
+    if let Some(i) = index(LOW) {
+        s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+            w.set_ip(false);
+        });
+    }
+    let cleared = word(s, LOW);
     configure(s, LOW, 1, true, true);
     let baseline = word(s, LOW);
+    emit(0x38f0, first, cleared, baseline);
     begin(s, Mode::BytePend);
     oer_portable_riscv::enable_interrupts();
     let mut changed = 0_u32;

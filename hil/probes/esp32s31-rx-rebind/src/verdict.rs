@@ -149,6 +149,9 @@ pub struct Counts {
     pub hw_data_success: u32,
     /// Takes left for later: the unit was within the hold of LAST.
     pub held_back: u32,
+    /// `tasks/230`: a "stands" refused because the cursor moved between
+    /// its two reads.
+    pub cursor_moved: u32,
     /// Frames whose counters, every 64 octets, named more than one frame
     /// or whose bytes differed from the sender's.
     pub content_bad: u32,

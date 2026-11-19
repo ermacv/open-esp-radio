@@ -495,13 +495,13 @@ async fn report(
             let _ = line.push('\n');
             usb::text(&mut console, line.as_bytes()).await;
         }
-        for (part, kinds) in rows.raw_counts.iter().enumerate() {
-            for (air, counts) in kinds.iter().enumerate() {
-                if counts.iter().all(|count| *count == 0) {
+        for (part, (kinds, windows)) in rows.raw_counts.iter().zip(&rows.raw_windows).enumerate() {
+            for (air, (counts, windows)) in kinds.iter().zip(windows).enumerate() {
+                if *windows == 0 {
                     continue;
                 }
                 line.clear();
-                let _ = write!(line, "RAW part={} air={air}", part + 3);
+                let _ = write!(line, "RAW part={} air={air} windows={windows}", part + 3);
                 for (bit, count) in counts.iter().enumerate() {
                     if *count != 0 {
                         let _ = write!(line, " b{bit}={count}");
@@ -510,6 +510,11 @@ async fn report(
                 let _ = line.push('\n');
                 usb::text(&mut console, line.as_bytes()).await;
             }
+        }
+        for cell in rows.short.iter().take(rows.short_used) {
+            line.clear();
+            let _ = writeln!(line, "Q {:x} {:x}", cell[0], cell[1]);
+            usb::text(&mut console, line.as_bytes()).await;
         }
         for words in rows.silent.iter().take(rows.silent_used) {
             line.clear();
@@ -535,8 +540,10 @@ async fn report(
             (7, "r1"),
             (8, "r2"),
             (9, "r3"),
+            (10, "r4"),
+            (11, "r5"),
         ] {
-            let resets = part >= 7;
+            let resets = (7..=11).contains(&part);
             let sums = part == 5 || part == 6;
             let mut stops = 0_u32;
             let mut changed = 0_u32;

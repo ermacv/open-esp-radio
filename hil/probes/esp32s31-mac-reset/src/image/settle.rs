@@ -60,6 +60,15 @@ const A3_BUDGET_S: u32 = 12 * 60;
 const R_BUDGET_S: u32 = 11 * 60;
 #[cfg(feature = "short")]
 const R_BUDGET_S: u32 = 30;
+/// R4's and R5's budgets (`tasks/233`): ten minutes each.
+#[cfg(not(feature = "short"))]
+const R45_BUDGET_S: u32 = 10 * 60;
+#[cfg(feature = "short")]
+const R45_BUDGET_S: u32 = 30;
+/// R5's wait after the stop atom, on the timer (`tasks/232`).
+const RELEASE_WAIT_US: u64 = 1_000;
+/// Every cycle's short row (`tasks/233`).
+const SHORT_MAX: usize = 30_000;
 /// The vendor's settle after the stop request, before the activity's poll
 /// (SOURCE: `libpp.a[hal_mac.o]::hal_mac_deinit`, `tasks/227`).
 const VENDOR_REQUEST_SETTLE_US: u32 = 20;
@@ -115,6 +124,13 @@ enum Part {
     /// S2: the vendor's whole stop (its order, then `hal_deinit`'s edges),
     /// then the reset.
     R3 = 9,
+    /// `tasks/233`, the last resort's shape: the walker's edge and the stop
+    /// request, then the reset at once, with no settle and no poll.
+    R4 = 10,
+    /// `tasks/233`: the whole stop in the order the port carries (the
+    /// walker's edge, the stop atom with its 20 us and 5 us, a wait of
+    /// 1 ms), then the reset.
+    R5 = 11,
 }
 
 impl Part {
@@ -124,17 +140,23 @@ impl Part {
             Self::Reset => RESET_BUDGET_S,
             Self::A3 | Self::Vendor => A3_BUDGET_S,
             Self::R1 | Self::R2 | Self::R3 => R_BUDGET_S,
+            Self::R4 | Self::R5 => R45_BUDGET_S,
         }
     }
 
     /// S2's parts run their whole budget, through the sender's turns.
     const fn resets(self) -> bool {
-        matches!(self, Self::R1 | Self::R2 | Self::R3)
+        matches!(self, Self::R1 | Self::R2 | Self::R3 | Self::R4 | Self::R5)
     }
 
-    /// The vendor's stop order: the walker first, the settles.
+    /// The walker's edge before the stop request.
+    const fn walker_first(self) -> bool {
+        matches!(self, Self::Vendor | Self::R3 | Self::R4 | Self::R5)
+    }
+
+    /// The stop atom's settles of 20 us and 5 us.
     const fn vendor(self) -> bool {
-        matches!(self, Self::Vendor | Self::R3)
+        matches!(self, Self::Vendor | Self::R3 | Self::R5)
     }
 
     /// S1's sums.
@@ -215,7 +237,13 @@ pub(super) struct Rows {
     pub(super) silent_used: usize,
     /// `tasks/231`: for each part (3 to 9) and air, the windows before a
     /// stop in which each `RAW` bit was set.
-    pub(super) raw_counts: [[[u32; 32]; 3]; 7],
+    pub(super) raw_counts: [[[u32; 32]; 3]; 9],
+    /// The windows each count of `raw_counts` is out of.
+    pub(super) raw_windows: [[u32; 3]; 9],
+    /// `tasks/233`: every cycle's short row: the row's word `0`; units
+    /// after the start | the data successes << 16 (15 bits) | silent << 31.
+    pub(super) short: [[u32; 2]; SHORT_MAX],
+    pub(super) short_used: usize,
     /// Stops past [`ROWS_MAX`], counted and not kept.
     pub(super) dropped: u32,
     pub(super) reference: [u32; 8],
@@ -359,6 +387,10 @@ pub(super) async fn series(
     let parts = [Part::R2];
     #[cfg(feature = "only-r3")]
     let parts = [Part::R3];
+    #[cfg(feature = "only-r4")]
+    let parts = [Part::R4];
+    #[cfg(feature = "only-r5")]
+    let parts = [Part::R5];
     #[cfg(not(any(
         feature = "only-a2",
         feature = "only-reset",
@@ -366,7 +398,9 @@ pub(super) async fn series(
         feature = "only-vendor",
         feature = "only-r1",
         feature = "only-r2",
-        feature = "only-r3"
+        feature = "only-r3",
+        feature = "only-r4",
+        feature = "only-r5"
     )))]
     let parts = [Part::A2, Part::Reset];
     for part in parts {
@@ -406,6 +440,13 @@ pub(super) async fn series(
             // `tasks/231`: the causes latched since the start (`open_epoch`
             // acknowledges every one), counted by bit.
             let raw = mac_irq.mac_interrupt_raw().bits();
+            if let Some(windows) = rows
+                .raw_windows
+                .get_mut(part as usize - 3)
+                .and_then(|kinds| kinds.get_mut(air as usize))
+            {
+                *windows = windows.saturating_add(1);
+            }
             if let Some(counts) = rows
                 .raw_counts
                 .get_mut(part as usize - 3)
@@ -428,8 +469,17 @@ pub(super) async fn series(
             // The edge or the reset; `start` is the cycle the records count
             // from.
             let (start, readback) = match part {
-                Part::A2 | Part::A3 | Part::Vendor | Part::R1 | Part::R2 | Part::R3 => {
-                    if part.vendor() {
+                Part::R4 => {
+                    // The last resort's shape: no settle, no poll; the reset
+                    // follows in the cold preparation below.
+                    access.rx_dma().experiment_walker_edge();
+                    let request = oer_portable_riscv::cycle32();
+                    access.wifi_mac_hal().request_channel_stop();
+                    row[2] = u32::from(access.wifi_mac_hal().channel_active_state() != 0) << 30;
+                    (request, access.receive_dma_snapshot().walker_enabled)
+                }
+                Part::A2 | Part::A3 | Part::Vendor | Part::R1 | Part::R2 | Part::R3 | Part::R5 => {
+                    if part.walker_first() {
                         access.rx_dma().experiment_walker_edge();
                     }
                     let request = oer_portable_riscv::cycle32();
@@ -444,7 +494,7 @@ pub(super) async fn series(
                     }
                     let clear = oer_portable_riscv::cycle32();
                     row[2] = clear.wrapping_sub(request) | u32::from(!cleared) << 31;
-                    if !part.vendor() {
+                    if !part.walker_first() {
                         access.rx_dma().experiment_walker_edge();
                     }
                     if part.sums()
@@ -465,6 +515,9 @@ pub(super) async fn series(
                             sum_bits(&first, &second) | micros(began) << 12 | micros(ended) << 22;
                     } else if part.vendor() {
                         at_delay(clear, VENDOR_CLEAR_SETTLE_US).await;
+                    }
+                    if part == Part::R5 {
+                        wait_micros(RELEASE_WAIT_US).await;
                     }
                     (clear, access.receive_dma_snapshot().walker_enabled)
                 }
@@ -541,7 +594,7 @@ pub(super) async fn series(
                 Part::A2 | Part::A3 | Part::Vendor => {
                     restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?
                 }
-                Part::R1 | Part::R2 | Part::R3 => {
+                Part::R1 | Part::R2 | Part::R3 | Part::R4 | Part::R5 => {
                     if matches!(part, Part::R2 | Part::R3) {
                         // `hal_deinit`'s edges, in its order.
                         access.wifi_mac_hal().experiment_hal_deinit_words();
@@ -665,6 +718,14 @@ pub(super) async fn series(
                     ];
                 }
                 rows.silent_used = rows.silent_used.saturating_add(1);
+            }
+            let silent = row[7] >> 16 != 0 && row[8] & 0xffff == 0;
+            if let Some(cell) = rows.short.get_mut(rows.short_used) {
+                *cell = [
+                    row[0],
+                    row[7] & 0xffff | (row[8] & 0x7fff) << 16 | u32::from(silent) << 31,
+                ];
+                rows.short_used = rows.short_used.saturating_add(1);
             }
             rows.push(row);
             index = index.saturating_add(1);

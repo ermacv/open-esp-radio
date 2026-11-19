@@ -998,11 +998,20 @@ fn scan(
                 Some(at) if at == head => None,
                 Some(_) => {
                     // NEXT on another descriptor: stands only if nothing
-                    // armed lies ahead of it.
+                    // armed lies ahead of it. `tasks/230`: the cursor, the
+                    // descriptor's words, the cursor again; a frame that
+                    // landed between the two reads moved the cursor, and the
+                    // walker did not stand.
                     let tail = ring.topology_snapshot().tail_index;
                     let named = words_of(storage, next.unwrap_or(0));
+                    let again = access.receive_dma_snapshot();
+                    let still = again.next_descriptor_low == frozen.next_descriptor_low()
+                        && again.last_descriptor_low == frozen.last_descriptor_low();
                     let armed = named[0] & (1 << 31) != 0 && named[0] & (1 << 30) == 0;
-                    (!armed && tail != next.unwrap_or(usize::MAX)).then_some(2)
+                    if !still {
+                        bump(&mut state.counts(segment)?.cursor_moved);
+                    }
+                    (still && !armed && tail != next.unwrap_or(usize::MAX)).then_some(2)
                 }
             };
             let Some(kind) = stands else {
@@ -1717,7 +1726,7 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             "SEG {segment} arm={} hold={} services={} units={} descriptors={} chained={} frames={} \
              prefix_ok={} prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} content_ok={} \
              content_bad={} frames_on_rebound={} detached={} window_checks={} rebinds={} \
-             rebinds_at_last={} exhausted={} covered_rebinds={} returned={} spares_exhausted={} held_back={} retired_checks={} \
+             rebinds_at_last={} exhausted={} covered_rebinds={} returned={} spares_exhausted={} held_back={} cursor_moved={} retired_checks={} \
              spare_checks={} reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} \
              hw_buffer_full={} hw_data_success={} sender_first={} sender_last={} \
              sender_lost={} reserve_min={} reserve={:?}",
@@ -1750,6 +1759,7 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.returned,
             counts.spares_exhausted,
             counts.held_back,
+            counts.cursor_moved,
             counts.retired_checks,
             counts.spare_checks,
             counts.reload_deferred,

@@ -100,6 +100,9 @@ only-vendor = ["settle"]
 only-r1 = ["settle"]
 only-r2 = ["settle"]
 only-r3 = ["settle"]
+# `tasks/233`: the last resort's shape, and the whole stop in the port's order.
+only-r4 = ["settle"]
+only-r5 = ["settle"]
 
 [lints]
 workspace = true
