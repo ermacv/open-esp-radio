@@ -10131,7 +10131,7 @@ description = "Interrupt-enable bit whose event identity remains unknown."
 name = "FATAL_ASSERTION"
 bits = "21"
 class = "plain"
-description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs \"wifi assert\" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BIT_22_OPAQUE"
@@ -10190,7 +10190,7 @@ description = "Raw event observations; identities are not independently decoded 
 name = "FATAL_ASSERTION"
 bits = "21"
 class = "read-observed"
-description = "Unmasked carrier of the vendor fatal assertion path; physical producer unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank)."
+description = "Unmasked carrier of the vendor fatal assertion path; physical producer unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs \"wifi assert\" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026 (STATUS21 fatal consumer), BLOB_LIBPP_ISR_REGISTER_DUMP (matching raw event bank)."
 
 [[registers.fields]]
 name = "BITS_22_31_OPAQUE"
@@ -10291,7 +10291,7 @@ description = "Masked event bit whose identity remains unknown."
 name = "FATAL_ASSERTION"
 bits = "21"
 class = "read-only"
-description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
+description = "Vendor fatal Wi-Fi assertion diagnostic; physical trigger unknown. The vendor's routine posts event 14 for it (pp_post(14, 1)); the lower-MAC task's case 14 logs \"wifi assert\" and loops for good: nothing is reset or recovered. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026."
 
 [[registers.fields]]
 name = "BIT_22_OPAQUE"
