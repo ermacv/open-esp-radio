@@ -95,6 +95,11 @@ only-a2 = ["settle"]
 only-reset = ["settle"]
 # `tasks/226`: (a3) alone.
 only-a3 = ["settle"]
+# `tasks/227` and `228`: S1 in the vendor's order, S2's three variants.
+only-vendor = ["settle"]
+only-r1 = ["settle"]
+only-r2 = ["settle"]
+only-r3 = ["settle"]
 
 [lints]
 workspace = true

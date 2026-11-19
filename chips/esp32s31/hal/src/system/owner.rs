@@ -643,6 +643,17 @@ impl MacInterruptRegisters {
         self.inner.mask_all_mac_interrupts();
     }
 
+    /// TEMPORARY experiment (`tasks/227` S2, probe branch only):
+    /// `hal_deinit`'s interrupt edges, `ENABLE` zero and `CLEAR` all ones.
+    /// The vendor's masked store of `ENABLE` just before the zero
+    /// (`+0x4c..0x50`) is not repeated: the zero follows it two instructions
+    /// later.
+    ///
+    /// SOURCE: pinned `libpp.a[hal_mac.o]::hal_deinit+0x52..0x5c`.
+    pub fn experiment_hal_deinit_interrupts(&mut self) {
+        self.inner.experiment_hal_deinit_interrupts();
+    }
+
     /// Publish one reviewed MAC interrupt mask.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         self.inner.publish_mac_interrupt_mask(event_mask);

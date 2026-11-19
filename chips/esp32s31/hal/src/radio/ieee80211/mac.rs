@@ -271,6 +271,25 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().request_mac_channel_stop_without_power_save();
     }
 
+    /// TEMPORARY experiment (`tasks/227` S2, probe branch only):
+    /// `hal_deinit`'s coexistence and `AUX_ENABLE` edges
+    /// ([`WifiRadioRegisters::experiment_hal_deinit_words`]).
+    pub fn experiment_hal_deinit_words(&mut self) {
+        self.pac_mut().experiment_hal_deinit_words();
+    }
+
+    /// TEMPORARY experiment (`tasks/227` S2): `hal_deinit`'s handshake
+    /// request; the caller reads [`Self::experiment_handshake_ready`] until
+    /// it is clear, under its own bound.
+    pub fn experiment_hal_deinit_request(&mut self) {
+        self.pac_mut().experiment_hal_deinit_request();
+    }
+
+    /// TEMPORARY experiment (`tasks/227` S2): the handshake's bit 0.
+    pub fn experiment_handshake_ready(&self) -> bool {
+        self.pac().sample_mac_cold_start_ready()
+    }
+
     /// TEMPORARY experiment (`tasks/223`, probe branch only): the receive
     /// filter's policy words and the interface address words, read.
     pub fn experiment_receive_filter_words(&self) -> [u32; 8] {

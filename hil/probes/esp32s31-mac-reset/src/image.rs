@@ -495,10 +495,28 @@ async fn report(
             let _ = line.push('\n');
             usb::text(&mut console, line.as_bytes()).await;
         }
+        line.clear();
+        let _ = writeln!(
+            line,
+            "ROWS kept={} dropped={}",
+            rows.rows().len(),
+            rows.dropped
+        );
+        usb::text(&mut console, line.as_bytes()).await;
         // One verdict a part: `pass` only with no frame region and no
-        // descriptor word changed after the first record in any stop, and
-        // no bad frame after a start.
-        for (part, name) in [(3_u32, "a2"), (4, "reset"), (5, "a3")] {
+        // descriptor word changed after the first record in any stop, no
+        // write seen by S1's sums, no bad frame and no silent start.
+        for (part, name) in [
+            (3_u32, "a2"),
+            (4, "reset"),
+            (5, "a3"),
+            (6, "vendor"),
+            (7, "r1"),
+            (8, "r2"),
+            (9, "r3"),
+        ] {
+            let resets = part >= 7;
+            let sums = part == 5 || part == 6;
             let mut stops = 0_u32;
             let mut changed = 0_u32;
             let mut bad = 0_u32;
@@ -507,13 +525,25 @@ async fn report(
             let mut first_silent = u32::MAX;
             let mut filter_differs = 0_u32;
             let mut silent_with_filter = 0_u32;
+            let mut in_settle = 0_u32;
+            let mut after_settle = 0_u32;
+            let mut first_sum_max = 0_u32;
+            let mut second_end_max = 0_u32;
+            let mut in_flight = 0_u32;
+            let mut handshake_timeouts = 0_u32;
+            let mut handshake_max = 0_u32;
+            let mut reset_last_zero = 0_u32;
+            let mut reset_next_zero = 0_u32;
+            let mut cold_last_zero = 0_u32;
+            let mut started_last_zero = 0_u32;
             for row in rows.rows().iter().filter(|row| row[0] >> 28 == part) {
                 let differs = row[9] >> 8 & 0xff != 0;
                 filter_differs += u32::from(differs);
                 stops += 1;
-                changed += u32::from(row[4] & 0o5555 != 0);
+                changed += u32::from(row[4] & 0o5555 != 0 && !resets);
                 bad += row[6] >> 16;
                 checked += row[6] & 0xffff;
+                in_flight += u32::from(!resets && row[1] >> 16 & 1 != 0);
                 // `tasks/223`: a start after which the sender's frames came
                 // and the MAC counted no data success.
                 if row[7] >> 16 != 0 && row[8] & 0xffff == 0 {
@@ -521,39 +551,42 @@ async fn report(
                     silent_with_filter += u32::from(differs);
                     first_silent = first_silent.min(row[0] & 0x00ff_ffff);
                 }
+                if sums {
+                    in_settle += u32::from(row[11] & 0o77 != 0);
+                    after_settle += u32::from(row[11] >> 6 & 0o77 != 0);
+                    first_sum_max = first_sum_max.max(row[10] & 0x00ff_ffff);
+                    second_end_max = second_end_max.max(row[11] >> 22 & 0x3ff);
+                }
+                if resets {
+                    handshake_timeouts += row[10] >> 31;
+                    handshake_max = handshake_max.max(row[10] & 0x00ff_ffff);
+                    reset_next_zero += u32::from(row[3] == 0);
+                    reset_last_zero += u32::from(row[4] == 0);
+                    cold_last_zero += u32::from(row[11] == 0);
+                    started_last_zero += row[10] >> 30 & 1;
+                }
+            }
+            if stops == 0 {
+                continue;
             }
             line.clear();
-            // (a3): writes after the activity's clear, by the quick copy.
-            let after_clear = rows
-                .rows()
-                .iter()
-                .filter(|row| row[0] >> 28 == part && row[11] != 0)
-                .count() as u32;
-            let quick_max = rows
-                .rows()
-                .iter()
-                .filter(|row| row[0] >> 28 == part)
-                .map(|row| row[10] & 0x00ff_ffff)
-                .max()
-                .unwrap_or(0);
-            let in_flight = rows
-                .rows()
-                .iter()
-                .filter(|row| row[0] >> 28 == part && row[1] >> 16 & 1 != 0)
-                .count() as u32;
-            let changed = changed + after_clear;
-            let verdict = if stops > 0 && changed == 0 && bad == 0 && silent == 0 {
-                "pass"
-            } else {
-                "fail"
-            };
+            let verdict =
+                if changed == 0 && in_settle == 0 && after_settle == 0 && bad == 0 && silent == 0 {
+                    "pass"
+                } else {
+                    "fail"
+                };
             let _ = writeln!(
                 line,
                 "SETTLE {name} stops={stops} changed={changed} checked_after_start={checked} \
                  bad_after_start={bad} silent_starts={silent} first_silent={first_silent} \
                  filter_differs_after_start={filter_differs} silent_with_filter_differing={silent_with_filter} \
-                 written_after_clear={after_clear} quick_copy_cycles_max={quick_max} in_flight={in_flight} \
-                 verdict={verdict}"
+                 written_in_settle={in_settle} written_after_settle={after_settle} \
+                 first_sum_cycles_max={first_sum_max} second_sum_end_us_max={second_end_max} \
+                 in_flight={in_flight} handshake_timeouts={handshake_timeouts} \
+                 handshake_cycles_max={handshake_max} reset_next_zero={reset_next_zero} \
+                 reset_last_zero={reset_last_zero} cold_last_zero={cold_last_zero} \
+                 started_last_zero={started_last_zero} verdict={verdict}"
             );
             usb::text(&mut console, line.as_bytes()).await;
         }

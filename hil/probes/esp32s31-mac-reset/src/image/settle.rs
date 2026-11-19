@@ -52,9 +52,23 @@ const RESET_BUDGET_S: u32 = 25 * 60;
 const A2_BUDGET_S: u32 = 30;
 #[cfg(feature = "short")]
 const RESET_BUDGET_S: u32 = 30;
-/// (a3)'s budget (`tasks/226`): five minutes, a short pass of 30 s.
+/// S1's budget, each order (`tasks/227`, `228`): (a3) ours and the vendor's.
 #[cfg(not(feature = "short"))]
-const A3_BUDGET_S: u32 = 5 * 60;
+const A3_BUDGET_S: u32 = 12 * 60;
+/// S2's budget, each variant: two of the sender's turn pairs of 150 s.
+#[cfg(not(feature = "short"))]
+const R_BUDGET_S: u32 = 11 * 60;
+#[cfg(feature = "short")]
+const R_BUDGET_S: u32 = 30;
+/// The vendor's settle after the stop request, before the activity's poll
+/// (SOURCE: `libpp.a[hal_mac.o]::hal_mac_deinit`, `tasks/227`).
+const VENDOR_REQUEST_SETTLE_US: u32 = 20;
+/// The vendor's settle after the activity's clear (same source).
+const VENDOR_CLEAR_SETTLE_US: u32 = 5;
+/// S1's second sum, from the activity's clear (`tasks/228`).
+const SECOND_SUM_US: u32 = 20;
+/// The bound of `hal_deinit`'s handshake wait (the vendor has none).
+const HANDSHAKE_BOUND_US: u32 = 10_000;
 #[cfg(feature = "short")]
 const A3_BUDGET_S: u32 = 30;
 /// (a3)'s quick copy: NEXT's node and the one after it, which fit in about
@@ -87,9 +101,20 @@ enum Part {
     A2 = 3,
     /// The block's reset, then the walker's edge.
     Reset = 4,
-    /// (a2) with a quick copy of the buffers the unit in flight can touch,
-    /// taken at once after the activity's clear (`tasks/226`).
+    /// S1, our order (`tasks/228`): (a2) with the sums of the buffers the
+    /// unit in flight can touch, at the activity's clear and 20 us after it.
     A3 = 5,
+    /// S1, the vendor's order: the walker's edge, the stop request, 20 us,
+    /// the poll, 5 us; the same sums.
+    Vendor = 6,
+    /// S2: our stop (as (a2)), the walker's stop proof, then the reset and
+    /// the cold preparation; no records.
+    R1 = 7,
+    /// S2: R1 with `hal_deinit`'s edges before the reset.
+    R2 = 8,
+    /// S2: the vendor's whole stop (its order, then `hal_deinit`'s edges),
+    /// then the reset.
+    R3 = 9,
 }
 
 impl Part {
@@ -97,8 +122,24 @@ impl Part {
         match self {
             Self::A2 => A2_BUDGET_S,
             Self::Reset => RESET_BUDGET_S,
-            Self::A3 => A3_BUDGET_S,
+            Self::A3 | Self::Vendor => A3_BUDGET_S,
+            Self::R1 | Self::R2 | Self::R3 => R_BUDGET_S,
         }
+    }
+
+    /// S2's parts run their whole budget, through the sender's turns.
+    const fn resets(self) -> bool {
+        matches!(self, Self::R1 | Self::R2 | Self::R3)
+    }
+
+    /// The vendor's stop order: the walker first, the settles.
+    const fn vendor(self) -> bool {
+        matches!(self, Self::Vendor | Self::R3)
+    }
+
+    /// S1's sums.
+    const fn sums(self) -> bool {
+        matches!(self, Self::A3 | Self::Vendor)
     }
 }
 
@@ -137,10 +178,18 @@ enum Air {
 ///   (`experiment_receive_filter_words`) against the first start's: which
 ///   of the eight differ before the stop | after the start << 8, and
 ///   `AUTO_ACK_DISABLE` of the four policies before << 16 | after << 20.
-///   `10` (a3): cycles from the activity's clear to the quick copy's end
-///   | its nodes << 24; `11` (a3): for the quick copy's node j (NEXT + j),
-///   3 bits (frame, prefix, descriptor) changed between it and the first
-///   record, at 3 j.
+///   `10` (S1): cycles from the activity's clear to the first sum's end
+///   | its nodes << 24; `11` (S1): for the sums' node j (NEXT + j), 3 bits
+///   (frame, prefix, descriptor) changed between the first sum and the
+///   second at 3 j, and between the second and the first record at 6 + 3 j;
+///   the second sum's start << 12 and end << 22, microseconds from the
+///   clear (10 bits each).
+///
+/// S2's rows (`R1` to `R3`) take no records: `3`, `4` NEXT and LAST read
+/// between the reset and the cold preparation; `5`, `11` NEXT and LAST
+/// after the cold preparation and the channel, before the walker's start;
+/// `10` the cycles of `hal_deinit`'s handshake wait | bit 31 when it did not
+/// clear | bit 30 LAST zero and bit 29 NEXT zero just after the start.
 type Row = [u32; 12];
 
 /// The first start's filter words and the first sets that differ from
@@ -151,6 +200,8 @@ const DIFFERING: usize = 16;
 pub(super) struct Rows {
     rows: [Row; ROWS_MAX],
     used: usize,
+    /// Stops past [`ROWS_MAX`], counted and not kept.
+    pub(super) dropped: u32,
     pub(super) reference: [u32; 8],
     pub(super) differing: [(u32, [u32; 8]); DIFFERING],
     pub(super) differing_used: usize,
@@ -166,6 +217,8 @@ impl Rows {
         if let Some(cell) = self.rows.get_mut(self.used) {
             *cell = row;
             self.used = self.used.saturating_add(1);
+        } else {
+            self.dropped = self.dropped.saturating_add(1);
         }
     }
 
@@ -257,7 +310,23 @@ pub(super) async fn series(
     let parts = [Part::Reset];
     #[cfg(feature = "only-a3")]
     let parts = [Part::A3];
-    #[cfg(not(any(feature = "only-a2", feature = "only-reset", feature = "only-a3")))]
+    #[cfg(feature = "only-vendor")]
+    let parts = [Part::Vendor];
+    #[cfg(feature = "only-r1")]
+    let parts = [Part::R1];
+    #[cfg(feature = "only-r2")]
+    let parts = [Part::R2];
+    #[cfg(feature = "only-r3")]
+    let parts = [Part::R3];
+    #[cfg(not(any(
+        feature = "only-a2",
+        feature = "only-reset",
+        feature = "only-a3",
+        feature = "only-vendor",
+        feature = "only-r1",
+        feature = "only-r2",
+        feature = "only-r3"
+    )))]
     let parts = [Part::A2, Part::Reset];
     for part in parts {
         mark(110 + part as u32);
@@ -281,7 +350,9 @@ pub(super) async fn series(
             .ok_or((phase::RING, 0x5e01))?;
         let mut counts = [0_u32; 3];
         let mut index = 0_u32;
-        while (counts[0] < PER_AIR || counts[1] < PER_AIR) && EmbassyClock.now() < end {
+        while (part.resets() || counts[0] < PER_AIR || counts[1] < PER_AIR)
+            && EmbassyClock.now() < end
+        {
             let (_units, air) =
                 window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
             if let Some(count) = counts.get_mut(air as usize) {
@@ -299,13 +370,20 @@ pub(super) async fn series(
             let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
             let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
             let next_before = next.map(|node| digest_frame(&addresses, node));
-            let mut quick = [(0_u64, 0_u64, [0_u32; 3]); QUICK];
+            let mut first = [(0_u64, 0_u64, [0_u32; 3]); QUICK];
+            let mut second = first;
             // The edge or the reset; `start` is the cycle the records count
             // from.
             let (start, readback) = match part {
-                Part::A2 | Part::A3 => {
+                Part::A2 | Part::A3 | Part::Vendor | Part::R1 | Part::R2 | Part::R3 => {
+                    if part.vendor() {
+                        access.rx_dma().experiment_walker_edge();
+                    }
                     let request = oer_portable_riscv::cycle32();
                     access.wifi_mac_hal().request_channel_stop();
+                    if part.vendor() {
+                        at_delay(request, VENDOR_REQUEST_SETTLE_US).await;
+                    }
                     let bound = ACTIVITY_BOUND_US.saturating_mul(CYCLES_PER_US);
                     let mut cleared = access.wifi_mac_hal().channel_active_state() == 0;
                     while !cleared && oer_portable_riscv::cycle32().wrapping_sub(request) < bound {
@@ -313,26 +391,27 @@ pub(super) async fn series(
                     }
                     let clear = oer_portable_riscv::cycle32();
                     row[2] = clear.wrapping_sub(request) | u32::from(!cleared) << 31;
-                    access.rx_dma().experiment_walker_edge();
-                    if part == Part::A3
+                    if !part.vendor() {
+                        access.rx_dma().experiment_walker_edge();
+                    }
+                    if part.sums()
                         && let Some(at) = next
                     {
-                        for j in 0..QUICK {
-                            let node = (at + j) % COUNT;
-                            if let (Some(slot), Some(address)) =
-                                (quick.get_mut(j), addresses.get(node))
-                            {
-                                *slot = (
-                                    digest(*address, 0, PREFIX_WORDS),
-                                    digest(*address, PREFIX_WORDS, WORDS),
-                                    node_of(storage, node).map_or([0; 3], |d| {
-                                        [d.word0().bits(), d.buffer_address(), d.next_address()]
-                                    }),
-                                );
-                            }
-                        }
-                        let copied = oer_portable_riscv::cycle32();
-                        row[10] = copied.wrapping_sub(clear) & 0x00ff_ffff | (QUICK as u32) << 24;
+                        // The vendor's 5 us pass inside the first sum, which
+                        // only reads.
+                        sums(&addresses, storage, at, &mut first);
+                        let summed = oer_portable_riscv::cycle32();
+                        row[10] = summed.wrapping_sub(clear) & 0x00ff_ffff | (QUICK as u32) << 24;
+                        at_delay(clear, SECOND_SUM_US).await;
+                        let began = oer_portable_riscv::cycle32();
+                        sums(&addresses, storage, at, &mut second);
+                        let ended = oer_portable_riscv::cycle32();
+                        let micros =
+                            |cycle: u32| (cycle.wrapping_sub(clear) / CYCLES_PER_US).min(0x3ff);
+                        row[11] =
+                            sum_bits(&first, &second) | micros(began) << 12 | micros(ended) << 22;
+                    } else if part.vendor() {
+                        at_delay(clear, VENDOR_CLEAR_SETTLE_US).await;
                     }
                     (clear, access.receive_dma_snapshot().walker_enabled)
                 }
@@ -356,7 +435,12 @@ pub(super) async fn series(
             let mut mask = 0_u32;
             let mut frame_nodes = 0_u32;
             let mut prefix_nodes = 0_u32;
-            for (k, delay) in DELAYS_US.iter().enumerate() {
+            // S2 takes no records: its question is the start after the reset.
+            let delays: &[u32] = if part.resets() { &[] } else { &DELAYS_US };
+            row[1] = next.map_or(0xff, |n| n as u32) & 0xff
+                | (last.map_or(0xff, |n| n as u32) & 0xff) << 8
+                | u32::from(readback) << 18;
+            for (k, delay) in delays.iter().enumerate() {
                 at_delay(start, *delay).await;
                 let began = oer_portable_riscv::cycle32();
                 take_record(&addresses, storage, &mut record);
@@ -373,16 +457,10 @@ pub(super) async fn series(
                     }
                     flags |= u32::from(readback) << 2;
                     flags |= u32::from(next.is_none()) << 3;
-                    if part == Part::A3
+                    if part.sums()
                         && let Some(at) = next
                     {
-                        for (j, (prefix, frame, words)) in quick.iter().enumerate() {
-                            let node = (at + j) % COUNT;
-                            let bits = u32::from(record.frame.get(node) != Some(frame))
-                                | u32::from(record.prefix.get(node) != Some(prefix)) << 1
-                                | u32::from(record.words.get(node) != Some(words)) << 2;
-                            row[11] |= bits << (3 * j);
-                        }
+                        row[11] |= record_bits(&record, at, &second) << 6;
                     }
                     row[1] = next.map_or(0xff, |n| n as u32) & 0xff
                         | (last.map_or(0xff, |n| n as u32) & 0xff) << 8
@@ -407,8 +485,64 @@ pub(super) async fn series(
             };
             ring = match part {
                 // The MAC resumed by the start (`start_mac_runtime`).
-                Part::A2 | Part::A3 => {
+                Part::A2 | Part::A3 | Part::Vendor => {
                     restart_after_stop(storage, halted, &mut access, mac_irq, power_irq)?
+                }
+                Part::R1 | Part::R2 | Part::R3 => {
+                    if matches!(part, Part::R2 | Part::R3) {
+                        // `hal_deinit`'s edges, in its order.
+                        access.wifi_mac_hal().experiment_hal_deinit_words();
+                        mac_irq.experiment_hal_deinit_interrupts();
+                        access.wifi_mac_hal().experiment_hal_deinit_request();
+                        let asked = oer_portable_riscv::cycle32();
+                        let bound = HANDSHAKE_BOUND_US.saturating_mul(CYCLES_PER_US);
+                        let mut ready = access.wifi_mac_hal().experiment_handshake_ready();
+                        while ready && oer_portable_riscv::cycle32().wrapping_sub(asked) < bound {
+                            ready = access.wifi_mac_hal().experiment_handshake_ready();
+                        }
+                        row[10] = oer_portable_riscv::cycle32().wrapping_sub(asked) & 0x00ff_ffff
+                            | u32::from(ready) << 31;
+                    }
+                    let cold = {
+                        let mut clocked = WifiClocked::from_running(access, clocks_on);
+                        let result = {
+                            let reset =
+                                held(slot)?.reset_wifi_mac_block(clocked.clocks_on(), probe_cbw());
+                            // S3: the walker's registers after the reset.
+                            let after_reset = clocked.experiment_rx_dma_snapshot();
+                            row[3] = after_reset.next_descriptor_low;
+                            row[4] = after_reset.last_descriptor_low;
+                            let mut hal = clocked.cold_mac_hal();
+                            initialize_wifi_mac(reset, sources, &mut hal, timer, mac).await
+                        };
+                        let (running, on) = clocked.into_running();
+                        access = running;
+                        clocks_on = on;
+                        result
+                    };
+                    cold.map_err(|_| (phase::SECOND_COLD, 0x5e00_0000 | index))?;
+                    let retuned = {
+                        let mut clocked = WifiClocked::from_running(access, clocks_on);
+                        let mut platform = ();
+                        let result =
+                            apart!(tune(slot, &mut clocked, timer, &mut platform, channel));
+                        let (running, on) = clocked.into_running();
+                        access = running;
+                        clocks_on = on;
+                        result
+                    };
+                    retuned.map_err(|(phase, code)| (phase, code | 0x5e00_0000))?;
+                    series.agreement = false;
+                    // S3: after the cold preparation, before the walker.
+                    let before_start = access.receive_dma_snapshot();
+                    row[5] = before_start.next_descriptor_low;
+                    row[11] = before_start.last_descriptor_low;
+                    let started =
+                        restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?;
+                    let after_start = access.receive_dma_snapshot();
+                    row[10] |= u32::from(after_start.last_descriptor_low == 0) << 30
+                        | u32::from(after_start.next_descriptor_low == 0) << 29;
+                    started
                 }
                 Part::Reset => {
                     let cold = {
@@ -465,6 +599,54 @@ pub(super) async fn series(
     }
     let _ = ROWS_DONE.install(rows);
     Ok(())
+}
+
+/// The sums of S1 (`tasks/228`): NEXT's node and the one after it, each
+/// buffer's prefix and frame region by a word-wise sum and xor ([`digest`])
+/// and the descriptor's three words.
+fn sums(
+    addresses: &[usize; NODES],
+    storage: &Storage,
+    at: usize,
+    out: &mut [(u64, u64, [u32; 3]); QUICK],
+) {
+    for (j, slot) in out.iter_mut().enumerate() {
+        let node = (at + j) % COUNT;
+        if let Some(address) = addresses.get(node) {
+            *slot = (
+                digest(*address, 0, PREFIX_WORDS),
+                digest(*address, PREFIX_WORDS, WORDS),
+                node_of(storage, node).map_or([0; 3], |d| {
+                    [d.word0().bits(), d.buffer_address(), d.next_address()]
+                }),
+            );
+        }
+    }
+}
+
+/// For each node of two sums, 3 bits (frame, prefix, descriptor) changed.
+fn sum_bits(before: &[(u64, u64, [u32; 3]); QUICK], after: &[(u64, u64, [u32; 3]); QUICK]) -> u32 {
+    before
+        .iter()
+        .zip(after)
+        .enumerate()
+        .fold(0, |bits, (j, ((p0, f0, w0), (p1, f1, w1)))| {
+            bits | (u32::from(f0 != f1) | u32::from(p0 != p1) << 1 | u32::from(w0 != w1) << 2)
+                << (3 * j)
+        })
+}
+
+/// For each node of a sum, 3 bits changed between it and `record`.
+fn record_bits(record: &Record, at: usize, sum: &[(u64, u64, [u32; 3]); QUICK]) -> u32 {
+    sum.iter()
+        .enumerate()
+        .fold(0, |bits, (j, (prefix, frame, words))| {
+            let node = (at + j) % COUNT;
+            bits | (u32::from(record.frame.get(node) != Some(frame))
+                | u32::from(record.prefix.get(node) != Some(prefix)) << 1
+                | u32::from(record.words.get(node) != Some(words)) << 2)
+                << (3 * j)
+        })
 }
 
 /// An ordinary start after a stop: the ring rebuilt, the MAC's core

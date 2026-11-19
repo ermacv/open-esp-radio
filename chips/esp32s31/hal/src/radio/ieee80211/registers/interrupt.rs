@@ -548,6 +548,13 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
         oer_portable_riscv::fence();
     }
 
+    /// TEMPORARY experiment (`tasks/227` S2, probe branch only):
+    /// `hal_deinit`'s `ENABLE` zero and `CLEAR` all ones.
+    pub fn experiment_hal_deinit_interrupts(&mut self) {
+        self.mac.mac_interrupt_clear();
+        oer_portable_riscv::fence();
+    }
+
     /// Publish one reviewed MAC interrupt mask, then order the write.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         publish_mac_interrupt_mask(&mut self.mac, event_mask);

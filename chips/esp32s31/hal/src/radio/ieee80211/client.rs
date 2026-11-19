@@ -279,6 +279,15 @@ impl WifiClocked {
         WifiMacColdHal::from_partition(mac, rx_dma)
     }
 
+    /// TEMPORARY experiment (`tasks/227` S3, probe branch only): the
+    /// walker's registers read between the MAC's reset and its cold
+    /// preparation.
+    pub fn experiment_rx_dma_snapshot(
+        &self,
+    ) -> crate::radio::ieee80211::registers::MacRxDmaSnapshot {
+        self.registers.rx_dma.mac_rx_dma_snapshot()
+    }
+
     /// Borrow the runtime MAC HAL over the MAC alone.
     pub fn wifi_mac_hal(&mut self) -> WifiMacHal<'_> {
         WifiMacHal::from_mac(&mut self.registers.mac)
