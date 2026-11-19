@@ -1,0 +1,22 @@
+error[E0080]: evaluation panicked: a block's bytes ascend and lie in no word it lists
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_portable_mmio::Block::<oer_portable_mmio::Host<'_>, Unordered>::host::{constant#0}` failed here
+  |
+ ::: src/lib.rs
+  |
+  |                 panic!("a block's bytes ascend and lie in no word it lists");
+  |                 ------------------------------------------------------------ in this macro invocation
+
+note: erroneous constant encountered
+ --> src/lib.rs
+  |
+  |           let required = const {
+  |  ________________________^
+  | |             if !(ascending(R::WORDS)) {
+  | |                 panic!("a block lists word-aligned words, strictly ascending");
+  | |             };
+... |
+  | |         };
+  | |_________^

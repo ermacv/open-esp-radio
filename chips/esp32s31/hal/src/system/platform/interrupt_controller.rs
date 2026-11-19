@@ -534,7 +534,7 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
 }
 
 /// What a line write leaves: the line disabled, or bound at a control byte.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum LineWrite {
     Disable,
     Bind(Control),
@@ -583,65 +583,78 @@ macro_rules! line_bytes {
 line_bytes!(Clic);
 line_bytes!(ClicObserver);
 
+/// One write of a line's bind or take-down, each to one byte register.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LineStep {
+    /// The enable byte off.
+    EnableOff,
+    /// The attribute byte (vectored or not, the level trigger) and the
+    /// level byte.
+    AttributesAndLevel { vectored: bool, control: Control },
+    /// The enable byte on.
+    EnableOn,
+}
+
+/// A line's bind and take-down, one byte a step, in order. The bind: the
+/// enable off if it was on, the attributes (vectored, the level trigger)
+/// and the level, then the enable on last, so the line is never enabled
+/// with another level or trigger than its binding's. The take-down: the
+/// enable off first, then the attributes and the level of a disabled line
+/// (not vectored, level byte 0).
+///
+/// A bound line is hardware-vectored and level-triggered, the chip's one
+/// trigger of a bound line; its pending byte follows its source and is not
+/// the router's: neither the bind nor the take-down reads or writes it.
+///
+/// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
+/// `:113-160` (the four byte registers); `HW_S31_CLIC_LINE_BYTES_20261119`
+/// (a store of one byte changes it and no other); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES`
+/// in the register model (the bound lines are level-triggered).
+fn line_steps(write: LineWrite, enabled: bool) -> [Option<LineStep>; 3] {
+    let off = enabled.then_some(LineStep::EnableOff);
+    match write {
+        LineWrite::Bind(control) => [
+            off,
+            Some(LineStep::AttributesAndLevel {
+                vectored: true,
+                control,
+            }),
+            Some(LineStep::EnableOn),
+        ],
+        LineWrite::Disable => [
+            off,
+            Some(LineStep::AttributesAndLevel {
+                vectored: false,
+                control: Control::from_bits(0),
+            }),
+            None,
+        ],
+    }
+}
+
 impl<B: RouteBank, C: Placement> InterruptController<B, C> {
-    /// A line's bind and take-down through its byte registers, one byte a
-    /// step. The bind: the enable off if it was on, the attributes (vectored,
-    /// the trigger) and the level, the pending byte cleared, then the enable
-    /// on last, so the line is never enabled with another level or trigger
-    /// than its binding's. The take-down in reverse: the enable off first,
-    /// the pending byte cleared, then the attributes and the level of a
-    /// disabled line (not vectored, level byte 0).
-    ///
-    /// A bound line is hardware-vectored and level-triggered, the chip's one
-    /// trigger of a bound line; for it the pending byte follows its source,
-    /// and clearing it only drops a level no longer asserted.
-    ///
-    /// SOURCE: ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
-    /// `:113-160` (the four byte registers); `HW_S31_CLIC_LINE_BYTES_20261119`
-    /// (a store of one byte changes it and no other); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES`
-    /// in the register model (the bound lines are level-triggered).
+    /// The line's bind or take-down ([`line_steps`]), each step one byte.
     fn write_line(&mut self, line: Line, write: LineWrite) {
         let index = line.ctrl;
-        if self.clic.read_ie(index).ie() {
-            self.clic.modify_ie(index, |byte| {
-                byte.set_ie(false);
-            });
-        }
-        match write {
-            LineWrite::Bind(control) => {
-                self.attributes_and_level(index, true, control);
-                self.clear_pending(index);
-                self.clic.modify_ie(index, |byte| {
+        let enabled = self.clic.read_ie(index).ie();
+        for step in line_steps(write, enabled).into_iter().flatten() {
+            match step {
+                LineStep::EnableOff => self.clic.modify_ie(index, |byte| {
+                    byte.set_ie(false);
+                }),
+                LineStep::AttributesAndLevel { vectored, control } => {
+                    self.clic.modify_attr(index, |byte| {
+                        byte.set_shv(vectored)
+                            .set_trig(clic::attr::Trig::PositiveLevel);
+                    });
+                    self.clic.modify_ctl(index, |byte| {
+                        byte.set_ctl(control.bits());
+                    });
+                }
+                LineStep::EnableOn => self.clic.modify_ie(index, |byte| {
                     byte.set_ie(true);
-                });
-            }
-            LineWrite::Disable => {
-                self.clear_pending(index);
-                self.attributes_and_level(index, false, Control::from_bits(0));
+                }),
             }
         }
-    }
-
-    /// The attribute byte (vectoring, the level trigger) and the level byte.
-    fn attributes_and_level(
-        &mut self,
-        index: Index<{ clic::ip::COUNT }>,
-        vectored: bool,
-        control: Control,
-    ) {
-        self.clic.modify_attr(index, |byte| {
-            byte.set_shv(vectored)
-                .set_trig(clic::attr::Trig::PositiveLevel);
-        });
-        self.clic.modify_ctl(index, |byte| {
-            byte.set_ctl(control.bits());
-        });
-    }
-
-    /// The pending byte cleared.
-    fn clear_pending(&mut self, index: Index<{ clic::ip::COUNT }>) {
-        self.clic.modify_ip(index, |byte| {
-            byte.set_ip(false);
-        });
     }
 }

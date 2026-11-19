@@ -337,7 +337,7 @@ fn a_silenced_source_is_routed_nowhere_and_writes_its_word_alone() {
 }
 
 #[test]
-fn a_bound_and_a_disabled_line_check_as_written_clear_their_pending_byte_and_keep_their_mode() {
+fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_byte_and_mode() {
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
     controller.bind(clic_line(30), Control::level::<3, LEVEL_BITS>());
@@ -358,8 +358,8 @@ fn a_bound_and_a_disabled_line_check_as_written_clear_their_pending_byte_and_kee
     assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveLevel);
     assert_eq!(clic.read_ctl(line(30)).ctl(), level.bits());
     assert!(
-        !clic.read_ip(line(30)).ip(),
-        "the bind cleared the pending byte"
+        clic.read_ip(line(30)).ip(),
+        "the pending byte set before the bind stays"
     );
     assert_eq!(attributes.mode().get(), 3, "the privilege mode stays");
     drop(clic);
@@ -376,10 +376,7 @@ fn a_bound_and_a_disabled_line_check_as_written_clear_their_pending_byte_and_kee
             && !clic.read_attr(line(30)).shv()
             && clic.read_ctl(line(30)).ctl() == 0
     );
-    assert!(
-        !clic.read_ip(line(30)).ip(),
-        "the take-down cleared the pending byte"
-    );
+    assert!(clic.read_ip(line(30)).ip(), "the pending byte stays");
     assert_eq!(
         clic.read_attr(line(30)).mode().get(),
         3,
@@ -615,4 +612,41 @@ fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
             "{fact}"
         );
     }
+}
+
+/// The bind writes the enable last, after the attributes and the level; the
+/// take-down writes it first: the line is never enabled with another level
+/// or trigger than its binding's. No step is of the pending byte.
+#[test]
+fn a_bind_enables_last_and_a_take_down_disables_first() {
+    use super::{LineStep, LineWrite, line_steps};
+    let level = Control::level::<3, LEVEL_BITS>();
+    let bound = LineStep::AttributesAndLevel {
+        vectored: true,
+        control: level,
+    };
+    let disabled = LineStep::AttributesAndLevel {
+        vectored: false,
+        control: Control::from_bits(0),
+    };
+    assert_eq!(
+        line_steps(LineWrite::Bind(level), true),
+        [
+            Some(LineStep::EnableOff),
+            Some(bound),
+            Some(LineStep::EnableOn)
+        ]
+    );
+    assert_eq!(
+        line_steps(LineWrite::Bind(level), false),
+        [None, Some(bound), Some(LineStep::EnableOn)]
+    );
+    assert_eq!(
+        line_steps(LineWrite::Disable, true),
+        [Some(LineStep::EnableOff), Some(disabled), None]
+    );
+    assert_eq!(
+        line_steps(LineWrite::Disable, false),
+        [None, Some(disabled), None]
+    );
 }

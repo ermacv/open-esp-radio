@@ -103,9 +103,7 @@ impl LineObservation {
     }
 
     /// The observation of a line laid out as four byte registers, as they
-    /// read, in their order in the line's word: byte `n` of the record is
-    /// the line's byte register `n` (the S31's pending, enable, attribute
-    /// and control bytes).
+    /// read: byte `n` of the record is the line's byte register `n`.
     pub const fn of_bytes(bytes: [u8; 4]) -> Self {
         Self(u32::from_le_bytes(bytes))
     }
