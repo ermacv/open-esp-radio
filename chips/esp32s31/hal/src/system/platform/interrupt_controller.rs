@@ -480,7 +480,7 @@ impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
 ///
 /// ```
 /// use oer_chips_esp32s31_hal::system::platform::LinePend;
-/// fn keeper(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<0, 34> {
+/// fn keeper(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 34> {
 ///     LinePend::new(bytes)
 /// }
 /// # let _: fn(_) -> _ = keeper;
@@ -490,21 +490,22 @@ impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
 ///
 /// ```compile_fail,E0080
 /// use oer_chips_esp32s31_hal::system::platform::LinePend;
-/// fn past(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<0, 48> {
+/// fn past(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 48> {
 ///     LinePend::new(bytes)
 /// }
 /// # let past: fn(_) -> _ = past;
 /// # core::hint::black_box(past);
 /// ```
 pub struct LinePend<
+    'b,
     const H: u8,
     const LINE: u8,
-    P: Placement + 'static = Fixed<{ instances::clic::BASE }>,
+    P: Placement = Fixed<{ instances::clic::BASE }>,
 > {
-    bytes: &'static ClicPending<H, P>,
+    bytes: &'b ClicPending<H, P>,
 }
 
-impl<const H: u8, const LINE: u8, P: Placement + 'static> LinePend<H, LINE, P> {
+impl<'b, const H: u8, const LINE: u8, P: Placement> LinePend<'b, H, LINE, P> {
     /// Line `LINE`'s element of the pending bytes, made at build.
     const INDEX: Index<{ clic::ip::COUNT }> = match Index::new(LINE as usize) {
         Ok(index) => index,
@@ -512,14 +513,20 @@ impl<const H: u8, const LINE: u8, P: Placement + 'static> LinePend<H, LINE, P> {
     };
 
     /// The handle of line `LINE` in hart `H`'s pending bytes.
-    pub const fn new(bytes: &'static ClicPending<H, P>) -> Self {
+    pub const fn new(bytes: &'b ClicPending<H, P>) -> Self {
         let _index = Self::INDEX;
         Self { bytes }
     }
+
+    /// Store line `LINE`'s pending byte as pended, on hart `H`'s copy.
+    #[inline(always)]
+    pub fn pend(&self, hart: &OnHart<H>) {
+        self.bytes.pend_line(Self::INDEX, hart);
+    }
 }
 
-impl<const H: u8, const LINE: u8, P: Placement + 'static>
-    oer_chips_family_platform_interrupt_table::PendLine<H> for LinePend<H, LINE, P>
+impl<const H: u8, const LINE: u8, P: Placement>
+    oer_chips_family_platform_interrupt_table::PendLine<H> for LinePend<'_, H, LINE, P>
 where
     ClicPending<H, P>: Sync,
 {
@@ -527,7 +534,7 @@ where
 
     #[inline(always)]
     fn pend(&self, hart: &OnHart<H>) {
-        self.bytes.pend_line(Self::INDEX, hart);
+        Self::pend(self, hart);
     }
 }
 

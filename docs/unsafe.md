@@ -155,8 +155,7 @@ the asked hart. Its `// SAFETY:` names three facts: only the entry's vector
 calls `vector` (the lint policy), that vector is exported as
 `__oer_interrupt_h<HART>_l<LINE>`, which only that hart's vector table names
 (generated from the facts), and the router binds the entry only on its hart.
-The crate's unsafe sites: 6 before the witness, 7 with it (the one call;
-`TableSlot<B>` replaced `InterruptTableSlot` with no new site).
+The crate has 7 unsafe sites, the promise's one call among them.
 
 ## Generated access and trusted handwritten code
 
@@ -255,8 +254,8 @@ code that runs on its hart by construction, which only the interrupt
 table's entry witness calls; a host test makes one with the test-only
 `host-hart` feature (`OnHart::host`), never on the target. The proof
 guards stores that would reach another hart's copy of a hart-local block
-(the CLIC's pending bytes); a read needs none. The crate's unsafe sites:
-33 before the proof, 34 with it (the promise's declaration). Installing trap vectors and `mscratch` is unsafe because the
+(the CLIC's pending bytes); a read needs none. The crate has 34 unsafe
+sites, the promise's declaration among them. Installing trap vectors and `mscratch` is unsafe because the
 entries, table and exclusive interrupt stack must implement a live trap ABI.
 Entering stage two is unsafe: `jump_to_entry` requires the checked entry of a
 published image that installs its own stack. Its inlined assembly disables

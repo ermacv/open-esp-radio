@@ -760,3 +760,29 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
     assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveEdge);
     assert_eq!(clic.read_ctl(line(34)).ctl(), level.bits());
 }
+
+/// A line's handle stores `0x01`, the pended image, in that line's pending
+/// byte and nothing else: not its neighbours' bytes and not the other three
+/// bytes of its own word, which another part holds.
+#[test]
+fn a_line_s_handle_pends_its_own_line_s_byte_and_no_other() {
+    // Every byte 0xa4: bit 0 clear, the other bits set.
+    let mut memory = vec![0xa4a4_a4a4_u32; instances::clic::SIZE / 4];
+    let before = memory.clone();
+    {
+        let pending = ClicPending::<0, _>::host(&mut memory).expect("the pending bytes");
+        let line = super::LinePend::<0, 34, _>::new(&pending);
+        line.pend(&OnHart::host());
+    }
+    let changed = memory
+        .iter()
+        .zip(&before)
+        .flat_map(|(after, before)| after.to_le_bytes().into_iter().zip(before.to_le_bytes()))
+        .filter(|(after, before)| after != before)
+        .map(|(after, _)| after)
+        .collect::<Vec<_>>();
+    assert_eq!(changed, [0x01], "one byte changed, to the pended image");
+    let lines = clic::clic_host(&mut memory).expect("the CLIC").0;
+    assert!(lines.read_ip(line(34)).ip(), "the line's own byte");
+    assert!(!lines.read_ip(line(33)).ip() && !lines.read_ip(line(35)).ip());
+}

@@ -4,11 +4,12 @@
 //!
 //! Lines are external lines `LINE..`, edge-triggered and hardware-vectored,
 //! with no routed source unless a case names one (FROM_CPU2). A pend is the
-//! typed word read-modify-write of the line's own `CTRL` word setting `IP`,
-//! with MIE cleared across the access: the CLIC word belongs to this hart
-//! alone and no handler runs between its read and its write. Every handler
-//! reaches the CLIC through the thread's loan, one access at a time under the
-//! same mask, so no two borrows of it are ever live together.
+//! store of the line's pending byte as `0x01` (`ClicPending::pend_line`, with
+//! hart 0's proof), a clear its store as `0x00`, with MIE cleared across the
+//! access: the CLIC's bytes belong to this hart alone. Every handler reaches
+//! the interrupt matrix's parts through the thread's loan, one access at a
+//! time under the same mask, so no two borrows of them are ever live
+//! together.
 //!
 //! The handler records events (enter, exit, mark) with the line from mcause
 //! and the level from mintstatus; the host decodes their order. Nothing here
@@ -433,8 +434,10 @@ pub(super) fn own_handler(s: &mut Session<'_>) {
 /// 314 (Q2.4): NEIGHBOUR_PENDING (edge, pended, disabled), TARGET (edge,
 /// enabled) and NEIGHBOUR_SOURCE (FROM_CPU2 routed, enabled; level in
 /// variants 0-2, edge in 3-5), all level 2. With MIE cleared the source
-/// rises before the target's pend (0, 3), between its read and its write
-/// (1, 4) or after it (2, 5); then MIE is set. Record per trial:
+/// rises before the target's pend (0, 3), just before its store (1, 4) or
+/// after it (2, 5); then MIE is set. Run 187's middle variant, on the
+/// earlier read-modify-write pend, raised it between the read and the
+/// write. Record per trial:
 /// `(0x3500 | variant, repeat, target | source << 8 | pending-line << 16
 /// entries, words)`, then the three words after the pend.
 pub(super) fn neighbours(s: &mut Session<'_>) {
