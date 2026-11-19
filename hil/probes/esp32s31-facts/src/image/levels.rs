@@ -79,6 +79,8 @@ enum Mode {
     Neighbours = 5,
     TwiceFromHigher = 6,
     Latency = 7,
+    /// 317 (`tasks/219` c4): the pend as one byte store.
+    BytePend = 8,
 }
 
 static ACTIVE: AtomicU32 = AtomicU32::new(Mode::Idle as u32);
@@ -234,6 +236,7 @@ pub(super) fn interrupt(cycle: u32) -> bool {
             NEIGHBOUR_PENDING => count(2),
             _ => {}
         },
+        Mode::BytePend if line == LOW => count(0),
         Mode::Latency if line == HIGH => {
             let _ = masked(|clic| {
                 pend_in(clic, LOW);
@@ -575,4 +578,77 @@ pub(super) fn latency(s: &mut Session<'_>) {
         }
     }
     emit(0x38ff, min, max, valid);
+}
+
+/// The CLIC's base on every hart (`chips/esp32s31/registers/chip.toml`,
+/// instance `CLIC`) and its line words' offset (`types/clic.toml`, `CTRL%s`
+/// at 0x1000, one word a line).
+const CLIC_BASE: usize = 0x1080_0000;
+const CTRL_OFFSET: usize = 0x1000;
+/// The pends of 317.
+const BYTE_PENDS: u32 = 100;
+
+/// The line's word as `word` reads it, through the loan with MIE cleared.
+fn word_masked(line: u32) -> u32 {
+    masked(|clic| {
+        index(line).map_or(0, |i| {
+            let w = clic.read_ctrl(i);
+            u32::from(w.ip())
+                | u32::from(w.ie()) << 8
+                | u32::from(w.attr_shv()) << 16
+                | w.attr_trig().get() << 17
+                | w.attr_mode().get() << 22
+                | u32::from(w.ctl()) << 24
+        })
+    })
+    .unwrap_or(0)
+}
+
+/// One store of a byte to the line's `IP` byte, MIE left set: no read of
+/// the word, so no other field is written (`tasks/219` c4). SOURCE:
+/// ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h:113-121`
+/// (`BYTE_CLIC_INT_IP_REG(i)`, "each of following registers are 8bits").
+#[allow(unsafe_code, reason = "probe-only byte store to a CLIC line's IP byte")]
+fn pend_byte(line: u32) {
+    let address = CLIC_BASE + CTRL_OFFSET + 4 * line as usize;
+    // SAFETY: the hart's own CLIC line word, an MMIO byte register the
+    // header names; this thread owns the CLIC for the session and no
+    // handler writes this line's word during the trial.
+    unsafe { (address as *mut u8).write_volatile(1) };
+    log(MARK, line);
+}
+
+/// 317 (`tasks/219` c4): a hundred pends of LOW (level 1, edge) by one
+/// byte store each, from the thread with MIE set. Each is to give one entry;
+/// after it the line's `IE`, attributes and `CTL` read as configured and
+/// `IP` clear. Emits `(0x3800, entries, fields changed, IP left set)` and
+/// the baseline word.
+pub(super) fn byte_pend(s: &mut Session<'_>) {
+    feed(s);
+    setup(s);
+    configure(s, LOW, 1, true, true);
+    let baseline = word(s, LOW);
+    begin(s, Mode::BytePend);
+    oer_portable_riscv::enable_interrupts();
+    let mut changed = 0_u32;
+    let mut left = 0_u32;
+    for _ in 0..BYTE_PENDS {
+        let before = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        pend_byte(LOW);
+        let start = oer_portable_riscv::cycle32();
+        while LINE_ENTRIES[0].load(Ordering::Relaxed) == before
+            && oer_portable_riscv::cycle32().wrapping_sub(start) < WINDOW
+        {}
+        let now = word_masked(LOW);
+        changed += u32::from(now & !1 != baseline & !1);
+        left += now & 1;
+    }
+    end();
+    emit(
+        0x3800,
+        LINE_ENTRIES[0].load(Ordering::Relaxed),
+        changed,
+        left,
+    );
+    emit(0x38ff, baseline, ENTRIES.load(Ordering::Relaxed), 0);
 }
