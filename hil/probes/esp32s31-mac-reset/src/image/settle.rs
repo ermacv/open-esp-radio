@@ -52,6 +52,9 @@ const RESET_BUDGET_S: u32 = 30 * 60;
 const A2_BUDGET_S: u32 = 30;
 #[cfg(feature = "short")]
 const RESET_BUDGET_S: u32 = 30;
+/// The longest wait for the sender's first frame before a part's budget
+/// starts.
+const SENDER_WAIT_S: u32 = 240;
 /// The longest wait for the MAC's activity to clear after its stop.
 const ACTIVITY_BOUND_US: u32 = 10_000;
 /// The records' delays from the edge or the reset's proof.
@@ -240,6 +243,20 @@ pub(super) async fn series(
     let parts = [Part::A2, Part::Reset];
     for part in parts {
         mark(110 + part as u32);
+        // `tasks/224`, lease 1's short pass: the sender's first frame comes
+        // about 80 s after the receiver's start, so a part's budget runs
+        // from it, not from the boot.
+        let wait_end = EmbassyClock
+            .now()
+            .checked_add(Duration::from_secs(SENDER_WAIT_S))
+            .ok_or((phase::RING, 0x5e03))?;
+        loop {
+            let (_units, air) =
+                window(storage, &mut ring, &mut access, &mut series, WINDOW_MS).await?;
+            if air != Air::Other || EmbassyClock.now() >= wait_end {
+                break;
+            }
+        }
         let end = EmbassyClock
             .now()
             .checked_add(Duration::from_secs(part.budget_s()))
