@@ -430,6 +430,20 @@ probe image declares its own contexts.
   there is one hart and `FROM_CPU` plays both parts; which mechanism backs
   a level's software entry is behind the chip's controller. The executors'
   wakes are `FROM_CPU` sources on either hart.
+- The pend of a level task's line is a store of the line's pending byte
+  through its hart's pending bytes (on the S31 the CLIC's `IP` bytes, a
+  shared part each hart reaches as its own), which takes the proof that the
+  code runs on that hart, `oer_portable_riscv::OnHart<H>`: zero-sized,
+  neither `Send` nor `Sync`, made only where the hart is known by
+  construction. A hart's start takes it once, by reading `mhartid`
+  (`OnHart::check`, through the runtime's `Hart<H>::on_hart`), and an
+  entry's vector gives it to its handler through the witness of the call
+  (`Here<'_, E>`, the build checking the entry's hart), the one `unsafe`
+  promise (`OnHart::assume`). A level task's pend (`Pend`) names its two
+  raisers, a handler above it whose raise its witness proves and a task of
+  an executor below it, on its hart, checked at build, and fixes its line;
+  a read of a pending byte (an observer's, the fatal path's) takes no
+  proof.
 - A level between the handlers and the application runs one task: an entry
   of the image's table (`oer-chips-family-platform-interrupt-table`) of
   class `LevelTask` whose part lists no source, with the token, cell and

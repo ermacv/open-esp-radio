@@ -144,6 +144,19 @@ identity are the table's by type; its source, line, level and hart are
 checked at compile time. Claimed storage retains owners in quarantine. Memory cells enforce
 exclusive access independently of entry metadata. The memory core owns the
 symbol-export attributes. Chip crates and firmware consume the bindings directly.
+An entry's vector reaches its part and the witness of the call (`Here<'_, E>`,
+neither `Send` nor `Sync`, bounded by the call) through one hidden entry
+point, `__private::vector`, which root and every local Clippy policy forbid
+outside the table macro's vector (`disallowed-methods`), as they forbid a
+direct `EntryProof::new`; an entry's handler cell is the crate's own. The
+crate's one call of the hart's promise, `OnHart::assume` in
+`Here::on_hart`, gives the proof of the entry's hart, checked at build to be
+the asked hart. Its `// SAFETY:` names three facts: only the entry's vector
+calls `vector` (the lint policy), that vector is exported as
+`__oer_interrupt_h<HART>_l<LINE>`, which only that hart's vector table names
+(generated from the facts), and the router binds the entry only on its hart.
+The crate's unsafe sites: 6 before the witness, 7 with it (the one call;
+`TableSlot<B>` replaced `InterruptTableSlot` with no new site).
 
 ## Generated access and trusted handwritten code
 
@@ -233,7 +246,17 @@ place.
 operations: CSR access, hart and cycle reads, interrupt masking, CLIC threshold,
 debug triggers, waits and barriers, and `illegal_instruction`, the
 illegal-instruction trap a HIL test image raises on request to check its
-exception path. Its safe functions have no memory precondition. Installing trap vectors and `mscratch` is unsafe because the
+exception path. Its safe functions have no memory precondition. It owns the
+proof that code runs on a hart, `OnHart<H>` (zero-sized, neither `Send` nor
+`Sync`): `OnHart::check` makes it safely where a proof is taken once, as a
+hart starts (the platform runtime's `Hart<H>::on_hart`, with no `unsafe` of
+its own), by reading `mhartid`; `OnHart::assume` is the `unsafe` promise of
+code that runs on its hart by construction, which only the interrupt
+table's entry witness calls; a host test makes one with the test-only
+`host-hart` feature (`OnHart::host`), never on the target. The proof
+guards stores that would reach another hart's copy of a hart-local block
+(the CLIC's pending bytes); a read needs none. The crate's unsafe sites:
+33 before the proof, 34 with it (the promise's declaration). Installing trap vectors and `mscratch` is unsafe because the
 entries, table and exclusive interrupt stack must implement a live trap ABI.
 Entering stage two is unsafe: `jump_to_entry` requires the checked entry of a
 published image that installs its own stack. Its inlined assembly disables
