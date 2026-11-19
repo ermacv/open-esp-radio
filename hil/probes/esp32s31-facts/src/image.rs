@@ -1155,9 +1155,9 @@ fn edge(s: &mut Session<'_>) {
     setup(s);
     line(s, CONTROLS[1], true);
     let i = CPU_LINE;
-    s.interrupt_matrix.clic[0].modify_ip(i, |w| {
-        w.set_ip(true);
-    });
+    if let Ok(hart) = oer_portable_riscv::OnHart::<0>::check() {
+        s.interrupt_matrix.clic_pending.0.pend_line(i, &hart);
+    }
     let pending = s.interrupt_matrix.clic[0].read_ip(i).ip();
     oer_portable_riscv::enable_interrupts();
     wait_window();

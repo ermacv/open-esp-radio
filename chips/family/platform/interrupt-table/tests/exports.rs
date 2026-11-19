@@ -141,12 +141,27 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
         "{diagnostics}"
     );
 
-    fs::write(&case, format!("{source}\npub fn proof() {{ let _ = oer_chips_family_platform_interrupt_table::__private::EntryProof::<TimerToken>::new(TimerToken::PROOF.handler(), <TimerToken as oer_chips_family_platform_interrupt_table::Entry>::cell()); }}\nuse oer_chips_family_platform_interrupt_table::Entry;" )).unwrap();
+    fs::write(&case, format!("{source}\npub fn proof() {{ static CELL: oer_portable_memory::HandlerCell<TimerIrq> = oer_portable_memory::HandlerCell::new(); let _ = oer_chips_family_platform_interrupt_table::__private::EntryProof::<TimerToken>::new(TimerToken::PROOF.handler(), &CELL); }}\nuse oer_chips_family_platform_interrupt_table::Entry;" )).unwrap();
     let reject = run("direct-proof", &["clippy"]);
     assert_eq!(reject.status.code(), Some(101));
     assert!(
         String::from_utf8_lossy(&reject.stderr)
             .contains("implementations and handler/cell proofs come from")
+    );
+
+    // Only the entry's vector lends its part and the witness of the call.
+    fs::write(
+        &case,
+        format!("{source}\npub fn forge() {{ oer_chips_family_platform_interrupt_table::__private::vector::<TimerToken>(|_part, _here| {{}}); }}\n"),
+    )
+    .unwrap();
+    let reject = run("direct-vector", &["clippy"]);
+    assert_eq!(reject.status.code(), Some(101));
+    assert!(
+        String::from_utf8_lossy(&reject.stderr)
+            .contains("an entry's part and its witness are lent by its vector alone"),
+        "{}",
+        String::from_utf8_lossy(&reject.stderr)
     );
 
     for (name, body, expected) in [
@@ -186,9 +201,6 @@ impl oer_chips_family_platform_interrupt_table::Entry for Forged {
     const CLASS: oer_chips_family_platform_interrupt_table::Class = oer_chips_family_platform_interrupt_table::Class::Hardware;
     fn storage() -> &'static oer_chips_family_platform_interrupt_table::__private::StaticCell<TimerIrq> {
         <TimerToken as oer_chips_family_platform_interrupt_table::Entry>::storage()
-    }
-    fn cell() -> &'static oer_portable_memory::HandlerCell<TimerIrq> {
-        <TimerToken as oer_chips_family_platform_interrupt_table::Entry>::cell()
     }
 }"#,
             "not all trait items implemented",

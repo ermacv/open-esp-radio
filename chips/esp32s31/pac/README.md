@@ -33,8 +33,13 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   interrupt names its source (`oer_portable_mmio::InterruptSource`). `take()` is the
   one place the claimed words are assumed exclusive; the generated
   `disjoint_blocks` checks prove no two claimed blocks of one hart's context
-  list one word. The CLIC is hart-local: its `Clic` and `ClicObserver`
-  members are arrays whose element `h` is hart `h`'s own controller.
+  list one place: a word, a byte, or a word and a byte inside it. The CLIC
+  is hart-local: its `Clic` and `ClicObserver` members are arrays whose
+  element `h` is hart `h`'s own controller, and its `ClicPending` member is
+  each hart's pending bytes, `(ClicPending<0>, ClicPending<1>)`, a shared
+  part whose two stores (`pend_line`, `clear_line`) take that hart's proof
+  (`oer_portable_riscv::OnHart<H>`) and which reads nothing; `Clic` and
+  `ClicObserver` read the pending bytes as observers.
 
 Radio words have separate parts for modem clocks/resets, PHY Wi-Fi baseband,
 modem power mapping, Bluetooth LP timer clocks, coexistence LP clocks, RTC

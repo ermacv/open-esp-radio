@@ -347,10 +347,19 @@ description = "The interrupt matrix route and pending words and the CLIC configu
 [[partitions.parts]]
 name = "Clic"
 instance = "CLIC"
-registers = ["IP%s", "IE%s", "ATTR%s", "CTL%s", "INT_INFO"]
-observes = ["INT_CONFIG"]
-description = "Each hart's element is that hart's own CLIC: the router owns its line writes and reads its implemented geometry and the configuration whose sole writer is that hart's ClicObserver."
+registers = ["IE%s", "ATTR%s", "CTL%s", "INT_INFO"]
+observes = ["INT_CONFIG", "IP%s"]
+description = "Each hart's element is that hart's own CLIC: the router owns its line writes and reads its implemented geometry, the configuration whose sole writer is that hart's ClicObserver, and the pending bytes that hart's ClicPending stores."
 sources = ["ESP_IDF_4D59230D_S31_CLIC"]
+
+[[partitions.parts]]
+name = "ClicPending"
+instance = "CLIC"
+registers = ["IP%s"]
+shared = true
+hart-proof = "oer_portable_riscv::OnHart"
+description = "Each hart's copy is that hart's own CLIC pending bytes, one a line: every context of that hart stores a line's whole byte, pended or cleared, through `&self` with that hart's proof, and reads none. A level task's raisers pend its line and the router clears it at its bind; the router and the fatal path read the bytes as observers."
+sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW_S31_CLIC_LINE_BYTES_20261119"]
 
 [[partitions.parts]]
 name = "ClicObserver"
@@ -3039,6 +3048,29 @@ sources = ["BLOB_LIBPP_HAL_CRYPTO_INIT"]
 name = "clear_mac_he_mpdu_length_link"
 register = "WIFI_MAC.HE_SCRATCH%s"
 sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX"]
+
+# A line's pending byte stored whole as 0x01: run 241 stored exactly this
+# byte (one volatile byte write, no read of the word), which entered the
+# edge-triggered line once and left the line's other three bytes unchanged.
+# Bits 7:1, unassigned in the header, are written zero; the run read only
+# bit 0 and did not observe them.
+[[fixed-register-images]]
+name = "pend_line"
+register = "CLIC.IP%s"
+value = 0x01
+whole-word = true
+sources = ["HW_S31_CLIC_LINE_BYTES_20261119", "ESP_IDF_4D59230D_S31_CLIC"]
+
+# The same byte stored whole as 0x00, the line's pending bit cleared. Bits
+# 7:1 are written zero as by the pend; the header names only bit 0. No run
+# stored this image alone: run 241's line was cleared before its enable as
+# the facts image's bind cleared it.
+[[fixed-register-images]]
+name = "clear_line"
+register = "CLIC.IP%s"
+value = 0x00
+whole-word = true
+sources = ["ESP_IDF_4D59230D_S31_CLIC", "HW_S31_CLIC_LINE_BYTES_20261119"]
 
 [[fixed-register-images]]
 name = "configure_timg0_timer0_stopped"

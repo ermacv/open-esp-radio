@@ -221,14 +221,34 @@ fn transaction_checks_accept_only_declared_partitions() {
 
 #[test]
 fn interleaved_blocks_are_disjoint_unless_they_share_a_word() {
-    use super::check::disjoint_blocks;
+    use super::check::{Claimed, disjoint_blocks};
     // A block spanning another's range, with no word inside it.
-    let outer: (usize, &[usize]) = (0x1000, &[0, 0x40]);
-    let inner: (usize, &[usize]) = (0x1010, &[0, 4]);
+    let outer: Claimed = (0x1000, &[0, 0x40], &[]);
+    let inner: Claimed = (0x1010, &[0, 4], &[]);
     assert!(disjoint_blocks(&[outer, inner]));
-    let touching: (usize, &[usize]) = (0x1038, &[8]);
+    let touching: Claimed = (0x1038, &[8], &[]);
     assert!(!disjoint_blocks(&[outer, inner, touching]));
     assert!(disjoint_blocks(&[]));
+}
+
+#[test]
+fn two_blocks_share_a_word_only_as_disjoint_bytes_of_it() {
+    use super::check::{Claimed, disjoint_blocks};
+    // A line's word as four byte registers, held by two blocks: the
+    // pending byte by one, the other three by another.
+    let pending: Claimed = (0x1000, &[], &[0x10, 0x14]);
+    let rest: Claimed = (0x1000, &[0x20], &[0x11, 0x12, 0x13, 0x15, 0x16, 0x17]);
+    assert!(disjoint_blocks(&[pending, rest]));
+    // Two blocks claim one byte, from different bases too.
+    let twice: Claimed = (0x1004, &[], &[0x10]);
+    assert!(!disjoint_blocks(&[pending, twice]));
+    // One claims a word, another a byte inside it, either way round.
+    let word: Claimed = (0x1000, &[0x14], &[]);
+    assert!(!disjoint_blocks(&[pending, word]));
+    assert!(!disjoint_blocks(&[word, pending]));
+    let byte_of_word: Claimed = (0x1000, &[], &[0x22]);
+    assert!(!disjoint_blocks(&[rest, byte_of_word]));
+    assert!(!disjoint_blocks(&[byte_of_word, rest]));
 }
 
 #[test]
@@ -373,8 +393,35 @@ fn a_shared_block_at_a_fixed_address_is_sync() {
 fn overflowing_geometry_is_refused_without_wrapping_register_authority() {
     assert_eq!(crate::end(&[usize::MAX]), None);
     assert!(!crate::check::disjoint_blocks(&[
-        (usize::MAX, &[4]),
-        (0, &[0])
+        (usize::MAX, &[4], &[]),
+        (0, &[0], &[])
+    ]));
+    assert!(!crate::check::disjoint_blocks(&[
+        (usize::MAX, &[], &[5]),
+        (0, &[], &[0])
     ]));
     assert!(!crate::array_listed(&[0], usize::MAX, 4, 2));
+}
+
+#[test]
+fn a_host_block_covers_the_shared_bytes_its_parts_observe() {
+    struct Observing;
+    impl Registers for Observing {
+        type Sharing = crate::sharing::Owned;
+        const WORDS: &'static [usize] = &[0];
+        const BYTES: &'static [usize] = &[5];
+        const OBSERVED_SHARED_BYTES: &'static [usize] = &[4, 8];
+    }
+    // The shared byte at 8 lies in the third word: two words are too few.
+    let mut short = [0_u32; 2];
+    assert_eq!(
+        Block::<Host<'_>, Observing>::host(&mut short).err(),
+        Some(crate::HostTooSmall {
+            required: 12,
+            available: 8
+        })
+    );
+    let mut memory = [0_u32, 0, 0x7f];
+    let block = Block::<Host<'_>, Observing>::host(&mut memory).unwrap();
+    assert_eq!(block.read_byte::<8>(), 0x7f);
 }

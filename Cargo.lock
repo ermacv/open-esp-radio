@@ -1453,6 +1453,7 @@ dependencies = [
  "oer-tools-test-ui-cases",
  "pin-project",
  "serde_json",
+ "static_cell",
  "tempfile",
 ]
 
@@ -1468,6 +1469,7 @@ dependencies = [
  "oer-chips-family-drivers-regi2c",
  "oer-portable-memory",
  "oer-portable-mmio",
+ "oer-portable-riscv",
 ]
 
 [[package]]

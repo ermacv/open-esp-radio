@@ -362,6 +362,8 @@ fn check_flags(context: Context<'_>, entity: &str, part: &super::Part) -> Result
         Some("a shared part is no read-only owner")
     } else if part.shared && !(part.observes.is_empty() && part.triggers.is_empty()) {
         Some("a shared part holds whole words and observes nothing")
+    } else if part.hart_proof.is_some() && !part.shared {
+        Some("only a shared part takes a hart's proof")
     } else if part.copy && !part.read_only {
         Some("only a read-only part is Copy")
     } else if part.read_only && !part.triggers.is_empty() {

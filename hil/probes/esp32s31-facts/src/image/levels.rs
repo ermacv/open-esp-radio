@@ -4,11 +4,12 @@
 //!
 //! Lines are external lines `LINE..`, edge-triggered and hardware-vectored,
 //! with no routed source unless a case names one (FROM_CPU2). A pend is the
-//! typed word read-modify-write of the line's own `CTRL` word setting `IP`,
-//! with MIE cleared across the access: the CLIC word belongs to this hart
-//! alone and no handler runs between its read and its write. Every handler
-//! reaches the CLIC through the thread's loan, one access at a time under the
-//! same mask, so no two borrows of it are ever live together.
+//! store of the line's pending byte as `0x01` (`ClicPending::pend_line`, with
+//! hart 0's proof), a clear its store as `0x00`, with MIE cleared across the
+//! access: the CLIC's bytes belong to this hart alone. Every handler reaches
+//! the interrupt matrix's parts through the thread's loan, one access at a
+//! time under the same mask, so no two borrows of them are ever live
+//! together.
 //!
 //! The handler records events (enter, exit, mark) with the line from mcause
 //! and the level from mintstatus; the host decodes their order. Nothing here
@@ -82,7 +83,8 @@ enum Mode {
 }
 
 static ACTIVE: AtomicU32 = AtomicU32::new(Mode::Idle as u32);
-static CLIC: AtomicPtr<pac::clic::Clic> = AtomicPtr::new(ptr::null_mut());
+static CLIC: AtomicPtr<pac::ownership::InterruptMatrixPeripherals> =
+    AtomicPtr::new(ptr::null_mut());
 static EVENTS: [AtomicU32; EVENT_CAPACITY] = [const { AtomicU32::new(0) }; EVENT_CAPACITY];
 static EVENT_COUNT: AtomicU32 = AtomicU32::new(0);
 static ENTRIES: AtomicU32 = AtomicU32::new(0);
@@ -122,7 +124,7 @@ fn log(kind: u32, line: u32) {
 
 /// One access to the lent CLIC with MIE cleared; MIE is set again after it.
 /// Called only while MIE is set (the window, or a handler).
-fn masked<R>(f: impl FnOnce(&mut pac::clic::Clic) -> R) -> Option<R> {
+fn masked<R>(f: impl FnOnce(&mut pac::ownership::InterruptMatrixPeripherals) -> R) -> Option<R> {
     oer_portable_riscv::disable_interrupts();
     let clic = CLIC.load(Ordering::Acquire);
     let out = if clic.is_null() {
@@ -138,17 +140,23 @@ fn masked<R>(f: impl FnOnce(&mut pac::clic::Clic) -> R) -> Option<R> {
     out
 }
 
-/// The pend: the line's own word, read, `IP` set, written.
-fn pend_in(clic: &mut pac::clic::Clic, line: u32) {
-    if let Some(i) = index(line) {
-        clic.modify_ip(i, |w| {
-            w.set_ip(true);
-        });
+/// The pend: the line's pending byte stored whole as 0x01, on hart 0's
+/// copy, with hart 0's proof.
+fn pend_in(matrix: &pac::ownership::InterruptMatrixPeripherals, line: u32) {
+    if let (Some(i), Ok(hart)) = (index(line), oer_portable_riscv::OnHart::<0>::check()) {
+        matrix.clic_pending.0.pend_line(i, &hart);
+    }
+}
+
+/// The line's pending byte stored whole as 0x00, on hart 0's copy.
+fn clear_in(matrix: &pac::ownership::InterruptMatrixPeripherals, line: u32) {
+    if let (Some(i), Ok(hart)) = (index(line), oer_portable_riscv::OnHart::<0>::check()) {
+        matrix.clic_pending.0.clear_line(i, &hart);
     }
 }
 
 fn pend(line: u32) {
-    let _ = masked(|clic| pend_in(clic, line));
+    let _ = masked(|matrix| pend_in(matrix, line));
     log(MARK, line);
 }
 
@@ -181,9 +189,9 @@ pub(super) fn interrupt(cycle: u32) -> bool {
     let line = (oer_portable_riscv::read_mcause() as u32) & 0xfff;
     if ENTRIES.fetch_add(1, Ordering::Relaxed) >= ENTRY_LIMIT {
         log(STRAY, line);
-        let _ = masked(|clic| {
+        let _ = masked(|matrix| {
             if let Some(i) = index(line) {
-                clic.modify_ie(i, |w| {
+                matrix.clic[0].modify_ie(i, |w| {
                     w.set_ie(false);
                 });
             }
@@ -235,8 +243,8 @@ pub(super) fn interrupt(cycle: u32) -> bool {
             _ => {}
         },
         Mode::Latency if line == HIGH => {
-            let _ = masked(|clic| {
-                pend_in(clic, LOW);
+            let _ = masked(|matrix| {
+                pend_in(matrix, LOW);
                 PEND_CYCLE.store(oer_portable_riscv::cycle32(), Ordering::Relaxed);
             });
         }
@@ -252,13 +260,11 @@ fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: b
     let (Some(i), Some(&control)) = (index(line), LEVEL_CONTROL.get(level.wrapping_sub(1))) else {
         return;
     };
-    let clic = &mut s.interrupt_matrix.clic[0];
-    clic.modify_ie(i, |w| {
+    s.interrupt_matrix.clic[0].modify_ie(i, |w| {
         w.set_ie(false);
     });
-    clic.modify_ip(i, |w| {
-        w.set_ip(false);
-    });
+    clear_in(&s.interrupt_matrix, line);
+    let clic = &mut s.interrupt_matrix.clic[0];
     clic.modify_attr(i, |w| {
         w.set_shv(true).set_trig(if edge {
             pac::clic::attr::Trig::PositiveEdge
@@ -283,10 +289,7 @@ fn begin(s: &mut Session<'_>, mode: Mode) {
     for c in &LINE_ENTRIES {
         c.store(0, Ordering::Relaxed);
     }
-    CLIC.store(
-        ptr::from_mut(&mut s.interrupt_matrix.clic[0]),
-        Ordering::Release,
-    );
+    CLIC.store(ptr::from_mut(&mut s.interrupt_matrix), Ordering::Release);
     ACTIVE.store(mode as u32, Ordering::Release);
 }
 
@@ -431,8 +434,10 @@ pub(super) fn own_handler(s: &mut Session<'_>) {
 /// 314 (Q2.4): NEIGHBOUR_PENDING (edge, pended, disabled), TARGET (edge,
 /// enabled) and NEIGHBOUR_SOURCE (FROM_CPU2 routed, enabled; level in
 /// variants 0-2, edge in 3-5), all level 2. With MIE cleared the source
-/// rises before the target's pend (0, 3), between its read and its write
-/// (1, 4) or after it (2, 5); then MIE is set. Record per trial:
+/// rises before the target's pend (0, 3), just before its store (1, 4) or
+/// after it (2, 5); then MIE is set. Run 187's middle variant, on the
+/// earlier read-modify-write pend, raised it between the read and the
+/// write. Record per trial:
 /// `(0x3500 | variant, repeat, target | source << 8 | pending-line << 16
 /// entries, words)`, then the three words after the pend.
 pub(super) fn neighbours(s: &mut Session<'_>) {
@@ -450,11 +455,7 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
             configure(s, NEIGHBOUR_PENDING, 2, true, false);
             configure(s, TARGET, 2, true, true);
             configure(s, NEIGHBOUR_SOURCE, 2, variant >= 3, true);
-            if let Some(i) = index(NEIGHBOUR_PENDING) {
-                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
-                    w.set_ip(true);
-                });
-            }
+            pend_in(&s.interrupt_matrix, NEIGHBOUR_PENDING);
             let before = [
                 word(s, NEIGHBOUR_PENDING),
                 word(s, TARGET),
@@ -464,14 +465,12 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
             if timing == 0 {
                 raise_source();
             }
-            if let Some(i) = index(TARGET) {
-                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
-                    if timing == 1 {
-                        raise_source();
-                    }
-                    w.set_ip(true);
-                });
+            // The pend is one store of the pending byte, with no read
+            // before it: the source is raised just before the store.
+            if timing == 1 {
+                raise_source();
             }
+            pend_in(&s.interrupt_matrix, TARGET);
             if timing == 2 {
                 raise_source();
             }
@@ -521,12 +520,8 @@ pub(super) fn twice(s: &mut Session<'_>) {
         setup(s);
         configure(s, MIDDLE, 2, true, true);
         // Both pends before any entry: MIE stays cleared across them.
-        if let Some(i) = index(MIDDLE) {
-            for _ in 0..2 {
-                s.interrupt_matrix.clic[0].modify_ip(i, |w| {
-                    w.set_ip(true);
-                });
-            }
+        for _ in 0..2 {
+            pend_in(&s.interrupt_matrix, MIDDLE);
         }
         let ip = pending(s, MIDDLE);
         begin(s, Mode::OwnHandler);
@@ -562,7 +557,7 @@ pub(super) fn latency(s: &mut Session<'_>) {
         ENTRY_CYCLE.store(0, Ordering::Relaxed);
         begin(s, Mode::Latency);
         oer_portable_riscv::enable_interrupts();
-        let _ = masked(|clic| pend_in(clic, HIGH));
+        let _ = masked(|matrix| pend_in(matrix, HIGH));
         window();
         end();
         let delta = ENTRY_CYCLE

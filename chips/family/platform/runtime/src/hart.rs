@@ -25,6 +25,19 @@ impl<const H: u8> Hart<H> {
     pub const fn id(&self) -> u8 {
         H
     }
+
+    /// The proof that the code runs on hart `H`, for the tasks the hart
+    /// starts: taken once, as the hart starts, by reading `mhartid`
+    /// ([`OnHart::check`](oer_portable_riscv::OnHart::check)).
+    ///
+    /// # Errors
+    ///
+    /// [`OtherHart`](oer_portable_riscv::OtherHart) with the identity read,
+    /// when the code runs on another hart: the caller's typed boot failure.
+    #[cfg(target_arch = "riscv32")]
+    pub fn on_hart(&self) -> Result<oer_portable_riscv::OnHart<H>, oer_portable_riscv::OtherHart> {
+        oer_portable_riscv::OnHart::check()
+    }
 }
 
 /// The hart's unique authority to install its inactive interrupt stack.

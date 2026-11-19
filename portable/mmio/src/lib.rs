@@ -175,19 +175,26 @@ impl DeviceByte {
 impl DeviceByte {
     #[inline(always)]
     fn load(self) -> u32 {
-        // SAFETY: the private callers check this byte register belongs to
-        // their Block, Part or Reader, as for a word (`DeviceWord::load`);
-        // a byte has no alignment to keep. Fixed bytes satisfy
-        // assume_owned's device-register promise; host bytes lie inside the
-        // live borrow of the host words.
+        // SAFETY: the private callers check this byte register is one their
+        // Block, Part or Reader lists: a byte it holds or observes (`BYTES`,
+        // `OWNED_BYTES`, `OBSERVED_BYTES`), or a byte another claimed block
+        // holds that it only reads (`OBSERVED_SHARED_BYTES`: a shared block's
+        // byte that reads without a side effect), as for a word
+        // (`DeviceWord::load`); a byte has no alignment to keep. Fixed bytes
+        // satisfy assume_owned's device-register promise, which a read of a
+        // shared block's byte keeps: the shared block's stores are whole-byte
+        // device writes outside Rust memory. Host bytes lie inside the live
+        // borrow of the host words, whose extent covers all three lists.
         u32::from(unsafe { self.0.read_volatile() })
     }
 
     #[inline(always)]
     fn store(self, value: u32) {
         // SAFETY: only Block and Part writers call this, for byte registers
-        // they own, as for a word (`DeviceWord::store`). The value's low
-        // byte is the register's whole value.
+        // they own, as for a word (`DeviceWord::store`): a shared block's
+        // store through `&self` writes a whole byte it lists, as a shared
+        // word store does. The value's low byte is the register's whole
+        // value.
         unsafe { self.0.write_volatile(value.to_le_bytes()[0]) }
     }
 }
@@ -295,6 +302,11 @@ pub trait Registers {
     /// a narrow (8-bit) register inside a word no entry of `WORDS` names, so
     /// no byte is reached both as itself and through its word.
     const BYTES: &'static [usize] = &[];
+    /// Byte registers of a shared block at the same base that the block's
+    /// parts only read, strictly ascending: no claim of this block (the
+    /// shared block claims them), in no word `WORDS` names and none of
+    /// `BYTES`. A placement's extent covers them.
+    const OBSERVED_SHARED_BYTES: &'static [usize] = &[];
 }
 
 /// The sealed sharing policy of a register block.
@@ -377,7 +389,10 @@ impl<const BASE: usize, R: Registers> sealed::Claimed for Block<Fixed<BASE>, R> 
             if !(bytes_apart(R::BYTES, R::WORDS)) {
                 panic!("a block's bytes ascend and lie in no word it lists");
             };
-            if !(match block_end(R::WORDS, R::BYTES) {
+            if !(shared_bytes_apart::<R>()) {
+                panic!("a block's observed shared bytes ascend and are none of its words or bytes");
+            };
+            if !(match block_end::<R>() {
                 Some(end) => BASE.checked_add(end).is_some(),
                 None => false,
             }) {
@@ -476,7 +491,10 @@ impl<'a, R: Registers> Block<Host<'a>, R> {
             if !(bytes_apart(R::BYTES, R::WORDS)) {
                 panic!("a block's bytes ascend and lie in no word it lists");
             };
-            match block_end(R::WORDS, R::BYTES) {
+            if !(shared_bytes_apart::<R>()) {
+                panic!("a block's observed shared bytes ascend and are none of its words or bytes");
+            };
+            match block_end::<R>() {
                 Some(end) => end,
                 None => panic!("a block's words lie inside the address space"),
             }
@@ -535,10 +553,20 @@ const fn bytes_apart(mut bytes: &[usize], words: &[usize]) -> bool {
     true
 }
 
-/// The byte just past a block's last word or byte register.
-const fn block_end(words: &[usize], bytes: &[usize]) -> Option<usize> {
-    match (end(words), end(bytes)) {
-        (Some(words), Some(bytes)) => Some(if words > bytes { words } else { bytes }),
+/// Whether `R`'s observed shared bytes ascend strictly, lie in no word it
+/// lists and are none of its own bytes.
+const fn shared_bytes_apart<R: Registers>() -> bool {
+    bytes_apart(R::OBSERVED_SHARED_BYTES, R::WORDS) && disjoint(R::OBSERVED_SHARED_BYTES, R::BYTES)
+}
+
+/// The byte just past `R`'s last word, byte register or observed shared
+/// byte: the extent a placement of the block covers.
+const fn block_end<R: Registers>() -> Option<usize> {
+    match (end(R::WORDS), end(R::BYTES), end(R::OBSERVED_SHARED_BYTES)) {
+        (Some(words), Some(bytes), Some(shared)) => {
+            let own = if words > bytes { words } else { bytes };
+            Some(if own > shared { own } else { shared })
+        }
         _ => None,
     }
 }
@@ -618,11 +646,12 @@ impl<P: Placement, R: Registers> Block<P, R> {
         DeviceWord(self.place.word(OFFSET)).store(value)
     }
 
-    /// One volatile read of the byte register at byte `OFFSET`, zero-extended.
+    /// One volatile read of the byte register at byte `OFFSET`, zero-extended:
+    /// a byte the block holds, or one of a shared block it observes.
     #[inline(always)]
     pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
         const {
-            if !(listed(R::BYTES, OFFSET)) {
+            if !(listed(R::BYTES, OFFSET) || listed(R::OBSERVED_SHARED_BYTES, OFFSET)) {
                 panic!("the block lists the byte");
             }
         };
@@ -642,14 +671,17 @@ impl<P: Placement, R: Registers> Block<P, R> {
     }
 
     /// One volatile read of element `index` of the byte-register array at
-    /// `OFFSET`, zero-extended.
+    /// `OFFSET`, zero-extended: bytes the block holds, or of a shared block
+    /// it observes.
     #[inline(always)]
     pub fn read_byte_indexed<const OFFSET: usize, const STRIDE: usize, const COUNT: usize>(
         &self,
         index: Index<COUNT>,
     ) -> u32 {
         const {
-            if !(array_listed(R::BYTES, OFFSET, STRIDE, COUNT)) {
+            if !(array_listed(R::BYTES, OFFSET, STRIDE, COUNT)
+                || array_listed(R::OBSERVED_SHARED_BYTES, OFFSET, STRIDE, COUNT))
+            {
                 panic!("the block lists every element");
             };
         };
@@ -752,6 +784,9 @@ impl<P: Placement, R: Registers> Block<P, R> {
             if !(owned_bytes_disjoint(D::BYTES)) {
                 panic!("the parts of a block own disjoint byte registers");
             };
+            if !(shared_bytes_listed(R::OBSERVED_SHARED_BYTES, D::BYTES)) {
+                panic!("the block lists every observed shared byte of its parts");
+            };
         };
         D::parts(self.place)
     }
@@ -766,6 +801,9 @@ impl<P: Placement, R: Registers> Block<P, R> {
             if !(all_listed(W::OWNED_BYTES, R::BYTES) && all_listed(W::OBSERVED_BYTES, R::BYTES)) {
                 panic!("the block lists every byte register of its reader");
             };
+            if !(all_listed(W::OBSERVED_SHARED_BYTES, R::OBSERVED_SHARED_BYTES)) {
+                panic!("the block lists every observed shared byte of its reader");
+            };
         };
         Reader {
             place: self.place.reading(),
@@ -779,8 +817,8 @@ impl<P: Placement, R: Registers> Block<P, R> {
 pub type PartWords = (&'static [usize], &'static [usize], &'static [(usize, u32)]);
 
 /// One part's byte-register lists, as a division checks them: owned and
-/// observed byte registers.
-pub type PartBytes = (&'static [usize], &'static [usize]);
+/// observed byte registers, and observed bytes of a shared block.
+pub type PartBytes = (&'static [usize], &'static [usize], &'static [usize]);
 
 /// The parts one [`Block::divide`] makes: a tuple of two to four [`Words`].
 pub trait Division: sealed::Divides {}
@@ -792,7 +830,7 @@ macro_rules! divisions {
             const WORDS: &'static [PartWords] =
                 &[$(($part::OWNED, $part::OBSERVED, $part::TRIGGERS)),+];
             const BYTES: &'static [PartBytes] =
-                &[$(($part::OWNED_BYTES, $part::OBSERVED_BYTES)),+];
+                &[$(($part::OWNED_BYTES, $part::OBSERVED_BYTES, $part::OBSERVED_SHARED_BYTES)),+];
 
             #[allow(non_snake_case, reason = "one binding per part type")]
             fn parts<P: Placement, R: Registers>(place: P) -> Self::Parts<P, R> {
@@ -835,7 +873,7 @@ const fn parts_listed(block: &[usize], mut parts: &[PartWords]) -> bool {
 
 /// Whether `block` lists every owned and observed byte register of `parts`.
 const fn bytes_listed(block: &[usize], mut parts: &[PartBytes]) -> bool {
-    while let [(owned, observed), rest @ ..] = parts {
+    while let [(owned, observed, _), rest @ ..] = parts {
         if !all_listed(owned, block) || !all_listed(observed, block) {
             return false;
         }
@@ -846,13 +884,24 @@ const fn bytes_listed(block: &[usize], mut parts: &[PartBytes]) -> bool {
 
 /// Whether no two of `parts` own the same byte register.
 const fn owned_bytes_disjoint(mut parts: &[PartBytes]) -> bool {
-    while let [(owned, _), rest @ ..] = parts {
+    while let [(owned, ..), rest @ ..] = parts {
         let mut others = rest;
-        while let [(other, _), more @ ..] = others {
+        while let [(other, ..), more @ ..] = others {
             if !disjoint(owned, other) {
                 return false;
             }
             others = more;
+        }
+        parts = rest;
+    }
+    true
+}
+
+/// Whether `block` lists every observed shared byte of `parts`.
+const fn shared_bytes_listed(block: &[usize], mut parts: &[PartBytes]) -> bool {
+    while let [(_, _, shared), rest @ ..] = parts {
+        if !all_listed(shared, block) {
+            return false;
         }
         parts = rest;
     }
@@ -937,6 +986,31 @@ impl<P: Placement, R: SharedRegisters> Block<P, R> {
             }
         };
         DeviceWord(self.place.word(OFFSET)).store(value)
+    }
+
+    /// One volatile store of element `index` of the byte-register array at
+    /// `OFFSET`, through a shared borrow: `value`'s low byte, the whole
+    /// byte, reading nothing back.
+    #[inline(always)]
+    pub fn write_byte_shared_indexed<
+        const OFFSET: usize,
+        const STRIDE: usize,
+        const COUNT: usize,
+    >(
+        &self,
+        index: Index<COUNT>,
+        value: u32,
+    ) {
+        const {
+            if !(array_listed(R::BYTES, OFFSET, STRIDE, COUNT)) {
+                panic!("the block lists every element");
+            };
+        };
+        DeviceByte::at(
+            &self.place,
+            OFFSET.wrapping_add(STRIDE.wrapping_mul(index.get())),
+        )
+        .store(value)
     }
 }
 
@@ -1036,6 +1110,76 @@ pub trait Words {
     const OWNED_BYTES: &'static [usize] = &[];
     /// The byte registers the part only reads.
     const OBSERVED_BYTES: &'static [usize] = &[];
+    /// Byte registers a shared block at the same base holds, which the
+    /// part only reads (each reads without a side effect); its block lists
+    /// them in [`Registers::OBSERVED_SHARED_BYTES`]. The part never writes
+    /// one:
+    ///
+    /// ```
+    /// use oer_portable_mmio::{Block, Host, Index, Part, Registers, Words};
+    /// // A line's other bytes; a shared block holds its pending bytes.
+    /// struct Lines;
+    /// impl Registers for Lines {
+    ///     type Sharing = oer_portable_mmio::sharing::Owned;
+    ///     const WORDS: &'static [usize] = &[];
+    ///     const BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// struct Router;
+    /// impl Words for Router {
+    ///     const OWNED: &'static [usize] = &[];
+    ///     const OBSERVED: &'static [usize] = &[];
+    ///     const OWNED_BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// struct Observer;
+    /// impl Words for Observer {
+    ///     const OWNED: &'static [usize] = &[];
+    ///     const OBSERVED: &'static [usize] = &[];
+    ///     const OBSERVED_BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// let mut memory = [0_u32; 2];
+    /// let block = Block::<Host<'_>, Lines>::host(&mut memory).unwrap();
+    /// let (mut router, observer) = block.split::<Router, Observer>();
+    /// // It reads a pending byte it observes and writes a byte it owns.
+    /// let pending = router.read_byte_indexed::<0, 4, 2>(Index::constant::<1>());
+    /// router.write_byte_indexed::<1, 4, 2>(Index::constant::<1>(), 1);
+    /// assert_eq!(pending | observer.read_byte::<4>(), 0);
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_portable_mmio::{Block, Host, Index, Part, Registers, Words};
+    /// // A line's other bytes; a shared block holds its pending bytes.
+    /// struct Lines;
+    /// impl Registers for Lines {
+    ///     type Sharing = oer_portable_mmio::sharing::Owned;
+    ///     const WORDS: &'static [usize] = &[];
+    ///     const BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// struct Router;
+    /// impl Words for Router {
+    ///     const OWNED: &'static [usize] = &[];
+    ///     const OBSERVED: &'static [usize] = &[];
+    ///     const OWNED_BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// struct Observer;
+    /// impl Words for Observer {
+    ///     const OWNED: &'static [usize] = &[];
+    ///     const OBSERVED: &'static [usize] = &[];
+    ///     const OBSERVED_BYTES: &'static [usize] = &[1, 5];
+    ///     const OBSERVED_SHARED_BYTES: &'static [usize] = &[0, 4];
+    /// }
+    /// let mut memory = [0_u32; 2];
+    /// let block = Block::<Host<'_>, Lines>::host(&mut memory).unwrap();
+    /// let (mut router, observer) = block.split::<Router, Observer>();
+    /// // A pending byte is the shared block's: the part only reads it.
+    /// router.write_byte_indexed::<0, 4, 2>(Index::constant::<1>(), 1);
+    /// # let _ = observer;
+    /// ```
+    const OBSERVED_SHARED_BYTES: &'static [usize] = &[];
 }
 
 const fn contains(mut list: &[usize], word: usize) -> bool {
@@ -1144,7 +1288,10 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     #[inline(always)]
     pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
         const {
-            if !(contains(W::OWNED_BYTES, OFFSET) || contains(W::OBSERVED_BYTES, OFFSET)) {
+            if !(contains(W::OWNED_BYTES, OFFSET)
+                || contains(W::OBSERVED_BYTES, OFFSET)
+                || contains(W::OBSERVED_SHARED_BYTES, OFFSET))
+            {
                 panic!("a part reads only the bytes it owns or observes");
             };
         };
@@ -1172,7 +1319,8 @@ impl<P: Placement, R: Registers, W: Words> Part<P, R, W> {
     ) -> u32 {
         const {
             if !(array_listed(W::OWNED_BYTES, OFFSET, STRIDE, COUNT)
-                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT))
+                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED_SHARED_BYTES, OFFSET, STRIDE, COUNT))
             {
                 panic!("a part reads only the arrays it owns or observes");
             };
@@ -1282,7 +1430,10 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
     #[inline(always)]
     pub fn read_byte<const OFFSET: usize>(&self) -> u32 {
         const {
-            if !(contains(W::OWNED_BYTES, OFFSET) || contains(W::OBSERVED_BYTES, OFFSET)) {
+            if !(contains(W::OWNED_BYTES, OFFSET)
+                || contains(W::OBSERVED_BYTES, OFFSET)
+                || contains(W::OBSERVED_SHARED_BYTES, OFFSET))
+            {
                 panic!("a reader reads only the bytes it lists");
             };
         };
@@ -1298,7 +1449,8 @@ impl<P: Placement, R: Registers, W: Words> Reader<P, R, W> {
     ) -> u32 {
         const {
             if !(array_listed(W::OWNED_BYTES, OFFSET, STRIDE, COUNT)
-                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT))
+                || array_listed(W::OBSERVED_BYTES, OFFSET, STRIDE, COUNT)
+                || array_listed(W::OBSERVED_SHARED_BYTES, OFFSET, STRIDE, COUNT))
             {
                 panic!("a reader reads only the arrays it lists");
             };
@@ -1369,14 +1521,22 @@ pub mod check {
         true
     }
 
-    /// Whether no two of `blocks` (each a base address and its ascending
-    /// word offsets) list the same absolute word.
-    pub const fn disjoint_blocks(blocks: &[(usize, &[usize])]) -> bool {
+    /// One claimed block, as the claims' check reads it: its base address,
+    /// its ascending word offsets and its ascending byte-register offsets.
+    pub type Claimed = (usize, &'static [usize], &'static [usize]);
+
+    /// Whether no two of `blocks` claim one absolute place: no word both
+    /// list, no byte register both list, and no word one lists that holds a
+    /// byte register the other lists. Two blocks share a word only as
+    /// disjoint byte registers of it. A byte a block only observes of a
+    /// shared block ([`Registers::OBSERVED_SHARED_BYTES`](super::Registers))
+    /// is no claim: its shared block lists it.
+    pub const fn disjoint_blocks(blocks: &[Claimed]) -> bool {
         let mut rest = blocks;
         while let [first, others @ ..] = rest {
             let mut tail = others;
             while let [second, more @ ..] = tail {
-                if !disjoint_words(*first, *second) {
+                if !disjoint_claims(*first, *second) {
                     return false;
                 }
                 tail = more;
@@ -1386,16 +1546,65 @@ pub mod check {
         true
     }
 
-    /// Whether two blocks' ascending word lists share no absolute word.
-    const fn disjoint_words(
-        (first_base, first): (usize, &[usize]),
-        (second_base, second): (usize, &[usize]),
+    /// Whether two claimed blocks claim no common place.
+    const fn disjoint_claims(
+        (first_base, first_words, first_bytes): Claimed,
+        (second_base, second_words, second_bytes): Claimed,
     ) -> bool {
-        let (mut left, mut right) = (first, second);
+        disjoint_places(
+            first_base,
+            first_words,
+            second_base,
+            second_words,
+            Place::Same,
+        ) && disjoint_places(
+            first_base,
+            first_bytes,
+            second_base,
+            second_bytes,
+            Place::Same,
+        ) && disjoint_places(
+            first_base,
+            first_words,
+            second_base,
+            second_bytes,
+            Place::Word,
+        ) && disjoint_places(
+            second_base,
+            second_words,
+            first_base,
+            first_bytes,
+            Place::Word,
+        )
+    }
+
+    /// How two places compare in [`disjoint_places`].
+    #[derive(Clone, Copy)]
+    enum Place {
+        /// Two words, or two bytes: the same absolute offset.
+        Same,
+        /// A word and a byte: the byte lies inside the word.
+        Word,
+    }
+
+    /// Whether no place of the ascending `left` (at `left_base`) meets one
+    /// of the ascending `right` (at `right_base`), as `place` compares them:
+    /// with [`Place::Word`], `right`'s bytes are compared by their words.
+    const fn disjoint_places(
+        left_base: usize,
+        left: &[usize],
+        right_base: usize,
+        right: &[usize],
+        place: Place,
+    ) -> bool {
+        let (mut left, mut right) = (left, right);
         while let ([a, left_rest @ ..], [b, right_rest @ ..]) = (left, right) {
-            let (Some(a), Some(b)) = (first_base.checked_add(*a), second_base.checked_add(*b))
-            else {
+            let (Some(a), Some(b)) = (left_base.checked_add(*a), right_base.checked_add(*b)) else {
                 return false;
+            };
+            let b = match place {
+                Place::Same => b,
+                Place::Word => b & !3,
             };
             if a == b {
                 return false;

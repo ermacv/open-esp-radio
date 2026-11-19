@@ -90,6 +90,9 @@ pub mod machine {
 /// Core-Local Interrupt Controller CSRs and typed line encodings.
 pub mod clic;
 
+mod hart;
+pub use hart::{OnHart, OtherHart};
+
 /// The debug-trigger module's CSRs and the `mcontrol` trigger encoding.
 pub mod trigger {
     /// `tselect`: selects the trigger the other trigger CSRs address.

@@ -10,8 +10,25 @@ error[E0624]: associated function `new` is private
    | |         peripherals: SecondaryLaunchPeripherals,
    | |         clic: Clic,
    | |         clic_observer: ClicObserver,
+   | |         clic_pending: &'static ClicPending<1>,
    | |     ) -> Self {
    | |_____________- private associated function defined here
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+  --> tests/ui/secondary_start_consumes_the_root_permit.rs:19:5
+   |
+19 |     LaunchPermit::new(peripherals, clic, observer) // ui-error: E0624
+   |     ^^^^^^^^^^^^^^^^^----------------------------- argument #4 of type `&'static ClicPending<1>` is missing
+   |
+note: associated function defined here
+  --> src/system/cores/launch.rs
+   |
+   |     pub(crate) fn new(
+   |                   ^^^
+help: provide the argument
+   |
+19 |     LaunchPermit::new(peripherals, clic, observer, /* &'static ClicPending<1> */) // ui-error: E0624
+   |                                                  +++++++++++++++++++++++++++++++
 
 error[E0599]: no method named `release` found for mutable reference `&mut CoreControlRegisters<oer_portable_mmio::Fixed<544227328>, oer_portable_mmio::Fixed<542662656>, oer_portable_mmio::Fixed<542666752>, oer_portable_mmio::Fixed<544215040>, oer_portable_mmio::Fixed<544210944>>` in the current scope
   --> tests/ui/secondary_start_consumes_the_root_permit.rs:24:15
@@ -29,7 +46,7 @@ error[E0382]: use of moved value: `permit`
   --> tests/ui/secondary_start_consumes_the_root_permit.rs:10:35
    |
  7 | pub fn start(cores: &mut Cores, permit: LaunchPermit, causes: ResetCauses, entry: SecondaryEntry) {
-   |                                 ------ move occurs because `permit` has type `LaunchPermit<oer_portable_mmio::Fixed<542660608>, oer_portable_mmio::Fixed<544210944>, oer_portable_mmio::Fixed<738197504>, oer_portable_mmio::Fixed<276824064>>`, which does not implement the `Copy` trait
+   |                                 ------ move occurs because `permit` has type `LaunchPermit<oer_portable_mmio::Fixed<542660608>, oer_portable_mmio::Fixed<544210944>, oer_portable_mmio::Fixed<738197504>, oer_portable_mmio::Fixed<276824064>, &ClicPending<1>>`, which does not implement the `Copy` trait
  8 |     let _ = cores.start_secondary(permit, causes, entry);
    |                                   ------ value moved here
  9 |     #[cfg(all())]

@@ -4,25 +4,31 @@ use std::vec;
 use std::vec::Vec;
 
 use oer_chips_esp32s31_pac::{
-    clic::{self, Clic, ClicObserver},
+    clic::{self, Clic, ClicObserver, ClicPending},
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
 use oer_chips_family_platform_interrupt_table::{Controller, Error, NoBindings, Router};
 use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
 
+use oer_portable_riscv::OnHart;
+
 use super::{
-    ForeignHart, InterruptController, InterruptGrant, InterruptView, Observer,
+    InterruptController, InterruptGrant, InterruptView, Observer,
     facts::{self, LEVEL_BITS, LINES},
 };
 
 /// Hart 0's controller over host memory.
-type Ours<'a> = InterruptController<InterruptCore0<Host<'a>>, Host<'a>>;
+type Ours<'a> =
+    InterruptController<InterruptCore0<Host<'a>>, 0, Host<'a>, ClicPending<0, Host<'a>>>;
 
-/// Host memory of hart 0's bank and of the CLIC.
+/// Host memory of hart 0's bank, of the CLIC and of the controller's
+/// pending bytes: a host block borrows its memory alone, so the pending
+/// bytes the controller stores lie apart from the CLIC the router reads.
 struct Memory {
     matrix: Vec<u32>,
     clic: Vec<u32>,
+    pending: Vec<u32>,
 }
 
 impl Memory {
@@ -31,6 +37,7 @@ impl Memory {
         Self {
             matrix: vec![word; instances::interrupt_core0::SIZE / 4],
             clic: vec![word; instances::clic::SIZE / 4],
+            pending: vec![word; instances::clic::SIZE / 4],
         }
     }
 
@@ -43,9 +50,34 @@ impl Memory {
                 .expect("the memory holds the CLIC")
                 .0,
             None,
+            ClicPending::host(&mut self.pending).expect("the memory holds the pending bytes"),
         )
-        .into_controller_on(0)
-        .expect("hart 0 builds its own controller")
+        .into_controller_with(OnHart::host())
+    }
+
+    /// Whether line `number`'s pending byte the controller stores reads
+    /// set.
+    fn stored_pending(&mut self, number: u8) -> bool {
+        clic::clic_host(&mut self.pending)
+            .expect("the memory holds the pending bytes")
+            .0
+            .read_ip(line(number))
+            .ip()
+    }
+
+    /// Set or clear line `number`'s pending byte as the hardware or another
+    /// context leaves it, in the CLIC the router reads and in the pending
+    /// bytes the controller stores.
+    fn set_pending(&mut self, number: u8, pending: bool) {
+        for words in [&mut self.clic, &mut self.pending] {
+            let bytes =
+                ClicPending::<0, _>::host(words).expect("the memory holds the pending bytes");
+            if pending {
+                bytes.pend_line(line(number), &OnHart::host());
+            } else {
+                bytes.clear_line(line(number), &OnHart::host());
+            }
+        }
     }
 
     fn matrix(&mut self) -> InterruptCore0<Host<'_>> {
@@ -172,9 +204,13 @@ fn verification_rechecks_mnlbits_after_installation() {
         .expect("matrix")
         .0;
     let (clic, mut config) = clic::clic_host(&mut memory.clic).expect("CLIC");
-    let controller = InterruptGrant::new(matrix, clic, None)
-        .into_controller_on(0)
-        .expect("hart 0 builds its own controller");
+    let controller = InterruptGrant::new(
+        matrix,
+        clic,
+        None,
+        ClicPending::<0, _>::host(&mut memory.pending).expect("pending bytes"),
+    )
+    .into_controller_with(OnHart::host());
     let router =
         Router::<_, 0, _>::install(controller, NoBindings).expect("matching geometry installs");
     assert_eq!(router.verify(), Ok(()));
@@ -201,13 +237,12 @@ fn line(number: u8) -> Index<{ clic::ip::COUNT }> {
 /// Write each of a line's four byte registers through the PAC's own
 /// accessors, as another writer would leave them.
 fn set_line(
-    clic: &mut clic::Clic<oer_portable_mmio::Host<'_>>,
+    memory: &mut Memory,
     number: u8,
     (pending, enabled, vectored, trigger, control): (bool, bool, bool, clic::attr::Trig, u8),
 ) {
-    clic.modify_ip(line(number), |byte| {
-        byte.set_ip(pending);
-    });
+    memory.set_pending(number, pending);
+    let mut clic = memory.clic();
     clic.modify_attr(line(number), |byte| {
         byte.set_shv(vectored).set_trig(trigger);
     });
@@ -248,7 +283,7 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
     drop(controller);
     // An edge-triggered line no binding writes, pending.
     set_line(
-        &mut memory.clic(),
+        &mut memory,
         20,
         (
             true,
@@ -392,13 +427,18 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_byte_and_
             .all(|(index, &word)| index == clic::ip::OFFSET / 4 + 30 || word == u32::MAX),
         "no other line's word changed"
     );
+    // Neither the bind nor the take-down stored a pending byte.
+    assert!(
+        memory.pending.iter().all(|&word| word == u32::MAX),
+        "no pending byte stored"
+    );
 }
 
 #[test]
 fn a_line_another_writer_left_edge_triggered_is_no_binding() {
     let mut memory = Memory::filled(0);
     set_line(
-        &mut memory.clic(),
+        &mut memory,
         20,
         (
             false,
@@ -516,40 +556,22 @@ fn pending_reads_select_only_the_named_harts_bank() {
 }
 
 #[test]
-fn a_grant_builds_its_controller_only_on_its_own_hart() {
-    let mut bank = vec![0; instances::interrupt_core0::SIZE / 4];
-    let mut clic_words = vec![0; instances::clic::SIZE / 4];
-    let grant = InterruptGrant::new(
-        interrupt_core::interrupt_core0_host(&mut bank)
-            .expect("hart 0's bank")
-            .0,
-        clic::clic_host(&mut clic_words).expect("CLIC").0,
-        None,
-    );
-    assert_eq!(grant.hart(), 0);
-    assert_eq!(
-        grant.into_controller_on(1).err(),
-        Some(ForeignHart {
-            actual: 1,
-            expected: 0
-        })
-    );
-}
-
-#[test]
 fn each_banks_controller_names_its_own_hart() {
     let mut memory = Memory::filled(0);
     assert_eq!(memory.controller().hart(), 0);
     let mut bank = vec![0; instances::interrupt_core1::SIZE / 4];
     let mut clic_words = vec![0; instances::clic::SIZE / 4];
+    let mut pending_words = vec![0; instances::clic::SIZE / 4];
     let (lines, config) = clic::clic_host(&mut clic_words).expect("CLIC");
+    // Only hart 1's proof builds hart 1's controller: another hart's does
+    // not type-check (`tests/ui/interrupt_grant_is_one_per_hart.rs`).
     let controller = InterruptGrant::new(
         interrupt_core::InterruptCore1::host(&mut bank).expect("hart 1's bank"),
         lines,
         Some(config),
+        ClicPending::<1, _>::host(&mut pending_words).expect("pending bytes"),
     )
-    .into_controller_on(1)
-    .expect("hart 1 builds its own controller");
+    .into_controller_with(OnHart::<1>::host());
     assert_eq!(controller.hart(), 1);
 }
 
@@ -693,7 +715,7 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
     // As a boot might leave it: enabled, pending, level-triggered, another
     // level.
     set_line(
-        &mut memory.clic(),
+        &mut memory,
         34,
         (
             true,
@@ -710,9 +732,11 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
         Ok(())
     );
     // A task's line is no routed line's binding, and the other way round.
+    // The record reads the CLIC's pending byte as the boot left it: in the
+    // host model the controller's pending bytes lie in their own memory.
     assert_eq!(
         controller.check(clic_line(34), LineExpectation::Bound(level)),
-        Err(LineObservation::of_bytes([0, 1, 0x03, level.bits()]))
+        Err(LineObservation::of_bytes([1, 1, 0x03, level.bits()]))
     );
     controller.bind(clic_line(35), level);
     assert!(
@@ -721,11 +745,44 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
             .is_err()
     );
     drop(controller);
+    assert!(
+        !memory.stored_pending(34),
+        "the controller cleared the pending byte"
+    );
+    assert!(
+        memory.stored_pending(33) == memory.stored_pending(35) && !memory.stored_pending(35),
+        "and no other line's"
+    );
     let clic = memory.clic();
-    assert!(!clic.read_ip(line(34)).ip(), "the pending byte is cleared");
     assert!(clic.read_ie(line(34)).ie());
     let attributes = clic.read_attr(line(34));
     assert!(attributes.shv());
     assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveEdge);
     assert_eq!(clic.read_ctl(line(34)).ctl(), level.bits());
+}
+
+/// A line's handle stores `0x01`, the pended image, in that line's pending
+/// byte and nothing else: not its neighbours' bytes and not the other three
+/// bytes of its own word, which another part holds.
+#[test]
+fn a_line_s_handle_pends_its_own_line_s_byte_and_no_other() {
+    // Every byte 0xa4: bit 0 clear, the other bits set.
+    let mut memory = vec![0xa4a4_a4a4_u32; instances::clic::SIZE / 4];
+    let before = memory.clone();
+    {
+        let pending = ClicPending::<0, _>::host(&mut memory).expect("the pending bytes");
+        let line = super::LinePend::<0, 34, _>::new(&pending);
+        line.pend(&OnHart::host());
+    }
+    let changed = memory
+        .iter()
+        .zip(&before)
+        .flat_map(|(after, before)| after.to_le_bytes().into_iter().zip(before.to_le_bytes()))
+        .filter(|(after, before)| after != before)
+        .map(|(after, _)| after)
+        .collect::<Vec<_>>();
+    assert_eq!(changed, [0x01], "one byte changed, to the pended image");
+    let lines = clic::clic_host(&mut memory).expect("the CLIC").0;
+    assert!(lines.read_ip(line(34)).ip(), "the line's own byte");
+    assert!(!lines.read_ip(line(33)).ip() && !lines.read_ip(line(35)).ip());
 }

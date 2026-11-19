@@ -1,6 +1,7 @@
 disallowed-methods = [
     { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
     { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "oer_chips_family_platform_interrupt_table::__private::vector", reason = "an entry's part and its witness are lent by its vector alone, which interrupt_table! generates" },
     # Complete canonical sans-IO catalogue (tools/test/layers/sans-io-lints.toml).
     "slice::split_at",
     "slice::split_at_mut",

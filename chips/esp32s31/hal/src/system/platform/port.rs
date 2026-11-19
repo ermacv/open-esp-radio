@@ -140,7 +140,11 @@ impl port::SecondaryStart for Port {
     /// The host has no hart identity: no controller is made off the chip.
     #[cfg(not(target_arch = "riscv32"))]
     fn controller(interrupts: Self::Interrupts) -> Result<Self::Controller, port::ForeignHart> {
-        interrupts.into_controller_on(usize::MAX)
+        let _unmade = interrupts;
+        Err(port::ForeignHart {
+            actual: usize::MAX,
+            expected: 1,
+        })
     }
 }
 

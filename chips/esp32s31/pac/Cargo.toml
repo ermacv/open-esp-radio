@@ -12,6 +12,7 @@ oer-chips-family-drivers-regi2c = { path = "../../family/drivers/regi2c" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-mmio = { path = "../../../portable/mmio" }
+oer-portable-riscv = { path = "../../../portable/riscv" }
 
 
 [lints]

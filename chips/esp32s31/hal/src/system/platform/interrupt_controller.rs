@@ -34,13 +34,14 @@
 use core::marker::PhantomData;
 
 use oer_chips_esp32s31_pac::{
-    clic::{self, Clic, ClicObserver},
+    clic::{self, Clic, ClicObserver, ClicPending},
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
 };
 use oer_chips_family_platform_interrupt_table::{
     Controller, Error, LineExpectation, LineObservation,
 };
+use oer_portable_riscv::OnHart;
 
 /// A source of the interrupt matrix: its route word's index.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -108,7 +109,7 @@ pub mod facts {
 #[must_use = "dropping the interrupt grant permanently loses the routes and lines"]
 pub struct InterruptBlocks {
     /// The grant of hart 0, the hart stage two runs on.
-    pub grant: InterruptGrant<InterruptCore0>,
+    pub grant: Hart0Grant,
 }
 
 /// The interrupt matrix's parts as the root splits them: hart 0's route
@@ -117,6 +118,8 @@ pub struct InterruptBlocks {
 pub(crate) struct MatrixParts {
     pub(crate) clic: Clic,
     pub(crate) clic_observer: ClicObserver,
+    /// Hart 0's pending bytes, in their static place.
+    pub(crate) clic_pending: &'static ClicPending<0>,
     pub(crate) interrupt_core0: InterruptCore0,
     pub(crate) interrupt_core0_observer: InterruptCore0Observer,
     pub(crate) interrupt_core0_status: oer_chips_esp32s31_pac::interrupt_core::InterruptCore0Status,
@@ -185,6 +188,7 @@ impl InterruptBlocks {
         let MatrixParts {
             clic,
             mut clic_observer,
+            clic_pending,
             interrupt_core0,
             interrupt_core0_observer,
             ..
@@ -200,7 +204,7 @@ impl InterruptBlocks {
             lines: clic_observer,
         });
         Self {
-            grant: InterruptGrant::new(interrupt_core0, clic, None),
+            grant: InterruptGrant::new(interrupt_core0, clic, None, clic_pending),
         }
     }
 }
@@ -337,34 +341,81 @@ macro_rules! route_bank {
 route_bank!(InterruptCore0, 0);
 route_bank!(InterruptCore1, 1);
 
-/// One hart's interrupt grant: its route bank and its own CLIC's parts,
-/// which the root pairs once per hart. Inert: it reads and writes nothing
-/// until [`into_controller`](Self::into_controller) runs on its hart.
+/// A hart's pending bytes, as its controller stores them: the hart's
+/// [`ClicPending`] in its static place, or a host test's owned over its
+/// memory. Sealed: only a hart's pending bytes are.
+pub trait PendingBytes<const H: u8>: pending::Sealed {
+    #[doc(hidden)]
+    fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>);
+}
+
+mod pending {
+    pub trait Sealed {}
+    impl<const H: u8, P: oer_portable_mmio::Placement> Sealed for &super::ClicPending<H, P> {}
+    impl<const H: u8, P: oer_portable_mmio::Placement> Sealed for super::ClicPending<H, P> {}
+}
+
+impl<const H: u8, P: Placement> PendingBytes<H> for &ClicPending<H, P> {
+    #[inline(always)]
+    fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>) {
+        self.clear_line(index, hart);
+    }
+}
+
+impl<const H: u8, P: Placement> PendingBytes<H> for ClicPending<H, P> {
+    #[inline(always)]
+    fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>) {
+        self.clear_line(index, hart);
+    }
+}
+
+/// One hart's interrupt grant: its route bank, its own CLIC's parts and
+/// its pending bytes, which the root pairs once per hart. Inert: it reads
+/// and writes nothing until [`into_controller`](Self::into_controller)
+/// runs on its hart.
 #[must_use = "dropping the grant permanently loses the hart's routes and lines"]
-pub struct InterruptGrant<B: RouteBank, C: Placement = Fixed<{ instances::clic::BASE }>> {
+pub struct InterruptGrant<
+    B: RouteBank,
+    const H: u8,
+    C: Placement = Fixed<{ instances::clic::BASE }>,
+    P: PendingBytes<H> = &'static ClicPending<H>,
+> {
     bank: B,
     lines: Clic<C>,
     /// The hart's level-bits writer, when its controller sets them: hart
     /// 1's. Hart 0's are set when the root splits the partition, where its
     /// observer is published for hart 0's fatal path.
     config: Option<ClicObserver<C>>,
+    pending: P,
 }
 
 pub use oer_chips_family_platform_port::ForeignHart;
 
-impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
-    /// The root's pairing of a hart's bank with that hart's CLIC parts.
-    pub(crate) const fn new(bank: B, lines: Clic<C>, config: Option<ClicObserver<C>>) -> Self {
+impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> InterruptGrant<B, H, C, P> {
+    /// The root's pairing of a hart's bank with that hart's CLIC parts and
+    /// pending bytes.
+    pub(crate) const fn new(
+        bank: B,
+        lines: Clic<C>,
+        config: Option<ClicObserver<C>>,
+        pending: P,
+    ) -> Self {
+        const {
+            if B::HART != H {
+                panic!("a grant pairs a hart's bank with that hart's lines")
+            }
+        };
         Self {
             bank,
             lines,
             config,
+            pending,
         }
     }
 
     /// The grant's hart.
     pub const fn hart(&self) -> u8 {
-        B::HART
+        H
     }
 
     /// The grant's bank, before its hart's controller exists: the launch
@@ -373,53 +424,124 @@ impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
         &mut self.bank
     }
 
-    /// Make the hart's controller on the hart itself: give its CLIC
-    /// [`facts::LEVEL_BITS`] level bits when the grant holds its writer, and
-    /// own the bank and the CLIC's lines. Every route and line stays as it
-    /// is until the router installs the controller.
+    /// Make the hart's controller on the hart itself, as it starts: the
+    /// proof of the hart is taken here, once ([`OnHart::check`]), and kept
+    /// for the pending bytes' stores.
     ///
     /// # Errors
     ///
     /// [`ForeignHart`] on another hart than the grant's: nothing is written
     /// and the grant is lost (each hart has one).
     #[cfg(target_arch = "riscv32")]
-    pub fn into_controller(self) -> Result<InterruptController<B, C>, ForeignHart> {
-        self.into_controller_on(oer_portable_riscv::hart_id())
+    pub fn into_controller(self) -> Result<InterruptController<B, H, C, P>, ForeignHart> {
+        let hart = OnHart::<H>::check().map_err(|other| ForeignHart {
+            actual: other.raw,
+            expected: usize::from(H),
+        })?;
+        Ok(self.into_controller_with(hart))
     }
 
-    /// [`into_controller`](Self::into_controller) on hart `current`.
-    pub(crate) fn into_controller_on(
-        self,
-        current: usize,
-    ) -> Result<InterruptController<B, C>, ForeignHart> {
-        let expected = usize::from(B::HART);
-        if current != expected {
-            return Err(ForeignHart {
-                actual: current,
-                expected,
-            });
-        }
+    /// Make the hart's controller with the proof that this code runs on
+    /// it: give its CLIC [`facts::LEVEL_BITS`] level bits when the grant
+    /// holds its writer, and own the bank and the CLIC's lines. Every route
+    /// and line stays as it is until the router installs the controller.
+    pub fn into_controller_with(self, hart: OnHart<H>) -> InterruptController<B, H, C, P> {
         let Self {
             bank,
             lines,
             mut config,
+            pending,
         } = self;
         if let Some(config) = config.as_mut() {
             set_level_bits(config);
         }
-        Ok(InterruptController {
+        InterruptController {
             matrix: bank,
             clic: lines,
             _config: config,
-            _local: PhantomData,
-        })
+            pending,
+            hart,
+        }
+    }
+}
+
+impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
+    /// The hart's pending bytes in their static place, which its level
+    /// tasks' raisers store through a line's handle ([`LinePend`]).
+    pub const fn pending_bytes(&self) -> &'static ClicPending<H> {
+        self.pending
+    }
+}
+
+/// The handle of one line's pending byte on hart `H`, the line fixed at
+/// build: a level task's raisers pend its line through it, and it reaches
+/// no other line
+/// ([`PendLine`](oer_chips_family_platform_interrupt_table::PendLine)).
+///
+/// ```
+/// use oer_chips_esp32s31_hal::system::platform::LinePend;
+/// fn keeper(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 34> {
+///     LinePend::new(bytes)
+/// }
+/// # let _: fn(_) -> _ = keeper;
+/// ```
+///
+/// A line the CLIC has not does not build:
+///
+/// ```compile_fail,E0080
+/// use oer_chips_esp32s31_hal::system::platform::LinePend;
+/// fn past(bytes: &'static oer_chips_esp32s31_pac::clic::ClicPending<0>) -> LinePend<'static, 0, 48> {
+///     LinePend::new(bytes)
+/// }
+/// # let past: fn(_) -> _ = past;
+/// # core::hint::black_box(past);
+/// ```
+pub struct LinePend<
+    'b,
+    const H: u8,
+    const LINE: u8,
+    P: Placement = Fixed<{ instances::clic::BASE }>,
+> {
+    bytes: &'b ClicPending<H, P>,
+}
+
+impl<'b, const H: u8, const LINE: u8, P: Placement> LinePend<'b, H, LINE, P> {
+    /// Line `LINE`'s element of the pending bytes, made at build.
+    const INDEX: Index<{ clic::ip::COUNT }> = match Index::new(LINE as usize) {
+        Ok(index) => index,
+        Err(_) => panic!("a line's pending byte lies in the CLIC"),
+    };
+
+    /// The handle of line `LINE` in hart `H`'s pending bytes.
+    pub const fn new(bytes: &'b ClicPending<H, P>) -> Self {
+        let _index = Self::INDEX;
+        Self { bytes }
+    }
+
+    /// Store line `LINE`'s pending byte as pended, on hart `H`'s copy.
+    #[inline(always)]
+    pub fn pend(&self, hart: &OnHart<H>) {
+        self.bytes.pend_line(Self::INDEX, hart);
+    }
+}
+
+impl<const H: u8, const LINE: u8, P: Placement>
+    oer_chips_family_platform_interrupt_table::PendLine<H> for LinePend<'_, H, LINE, P>
+where
+    ClicPending<H, P>: Sync,
+{
+    const LINE: u8 = LINE;
+
+    #[inline(always)]
+    fn pend(&self, hart: &OnHart<H>) {
+        Self::pend(self, hart);
     }
 }
 
 /// One hart's interrupt-matrix bank and that hart's own CLIC, the router's
 /// [`Controller`]: hart 0's by default ([`InterruptCore0`]), hart 1's over
-/// [`InterruptCore1`] ([`Hart1Controller`]). It stays on its hart
-/// (`!Send`).
+/// [`InterruptCore1`] ([`Hart1Controller`]). It holds the proof of its hart
+/// and stays on it (`!Send`).
 ///
 /// ```compile_fail
 /// fn send<T: Send>() {}
@@ -428,24 +550,32 @@ impl<B: RouteBank, C: Placement> InterruptGrant<B, C> {
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptController<
     B: RouteBank = InterruptCore0,
+    const H: u8 = 0,
     C: Placement = Fixed<{ instances::clic::BASE }>,
+    P: PendingBytes<H> = &'static ClicPending<H>,
 > {
     matrix: B,
     clic: Clic<C>,
     /// Hart 1's level-bits writer, retained once it set them.
     _config: Option<ClicObserver<C>>,
-    /// The CLIC words reach the running hart's own controller.
-    _local: PhantomData<*mut ()>,
+    /// The hart's pending bytes, which the controller clears at a level
+    /// task's bind.
+    pending: P,
+    /// The proof that the controller runs on hart `H`: the CLIC words
+    /// reach the running hart's own controller.
+    hart: OnHart<H>,
 }
 
 /// Hart 1's controller.
-pub type Hart1Controller = InterruptController<InterruptCore1>;
+pub type Hart1Controller = InterruptController<InterruptCore1, 1>;
 /// Hart 0's grant.
-pub type Hart0Grant = InterruptGrant<InterruptCore0>;
+pub type Hart0Grant = InterruptGrant<InterruptCore0, 0>;
 /// Hart 1's grant.
-pub type Hart1Grant = InterruptGrant<InterruptCore1>;
+pub type Hart1Grant = InterruptGrant<InterruptCore1, 1>;
 
-impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
+impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> Controller
+    for InterruptController<B, H, C, P>
+{
     type Source = Source;
     type Line = Line;
     const SOURCES: &'static [Source] = &SOURCES;
@@ -453,7 +583,7 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     const LEVEL_BITS: LevelBits = LevelBits::constant::<{ facts::LEVEL_BITS }>();
 
     fn hart(&self) -> u8 {
-        B::HART
+        H
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {
@@ -675,7 +805,7 @@ fn line_steps(write: LineWrite, enabled: bool) -> [Option<LineStep>; 4] {
     }
 }
 
-impl<B: RouteBank, C: Placement> InterruptController<B, C> {
+impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> InterruptController<B, H, C, P> {
     /// Whether the line's attributes are vectored with `trigger` and its
     /// level byte is `control`'s.
     fn holds(
@@ -711,9 +841,7 @@ impl<B: RouteBank, C: Placement> InterruptController<B, C> {
                         byte.set_ctl(control.bits());
                     });
                 }
-                LineStep::PendingClear => self.clic.modify_ip(index, |byte| {
-                    byte.set_ip(false);
-                }),
+                LineStep::PendingClear => self.pending.clear(index, &self.hart),
                 LineStep::EnableOn => self.clic.modify_ie(index, |byte| {
                     byte.set_ie(true);
                 }),

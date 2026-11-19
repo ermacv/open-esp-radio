@@ -112,6 +112,11 @@ pub struct Part {
     /// Reached by every execution context at once through `&self`.
     #[serde(default)]
     pub shared: bool,
+    /// The proof of a hart a `shared` part on a hart-local instance takes
+    /// for each store (a type path generic over the hart, `Proof<H>`): such
+    /// a part only stores its fixed images, each taking the proof.
+    #[serde(default)]
+    pub hart_proof: Option<String>,
     /// Only reads its words: the owner gave up their writes.
     #[serde(default)]
     pub read_only: bool,

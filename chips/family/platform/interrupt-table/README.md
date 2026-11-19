@@ -42,8 +42,14 @@ with `interrupt_sources![Member, ...]`, at compile time; a source listed
 twice fails to compile. For each entry the macro defines:
 
 - `__oer_interrupt_h<HART>_l<LINE>`, the strong symbol the line's vector
-  calls: it lends the bound part to the handler and runs nothing before the
-  part is bound, never panicking;
+  calls: through its one hidden entry point, `__private::vector`, it lends
+  the bound part and the witness of the call (`Here<'_, Token>`) to the
+  handler and runs nothing before the part is bound, never panicking. An
+  entry that asks for the witness names it after its handler
+  (`=> on_wifi, with here, line ...`), whose handler is then a
+  `fn(&mut Part, Here<'_, Token>)`; root and every local Clippy policy
+  forbid every other call of the entry point (`disallowed-methods`), and an
+  entry's handler cell is the crate's own;
 - a token type, neither `Copy` nor `Clone`, which `Interrupts::take` hands out
   once per image; `Entry` and the private token constructor are safe. The
   mandatory `EntryProof<Self>` binds its vector handler to the cell that
@@ -85,6 +91,22 @@ source) sits on the level of its hart's task. Hardware reaches a level's
 task only through a handler above it, which pends it: a timer a task one
 day needs is a `Hardware` entry that pends it, which is why a task's part
 never has a source.
+
+A wake from the same hart is the CLIC's pend of the woken line.
+`Here<'_, E>`, zero-sized, neither `Send` nor `Sync` and bounded by the
+call, witnesses that the code runs as entry `E`'s handler on `E`'s hart:
+`Here::on_hart::<H>()` gives the proof of the hart
+(`oer_portable_riscv::OnHart<H>`), the build checking `E::HART == H`. A
+level task `T`'s pend, `Pend<T, R, X, L, H>`, names its two raisers in its
+type: the handler of entry `R`, whose raise its witness proves
+(`Pend::from_handler(&Here<'_, R>)`), and a task of the executor whose
+entry is `X`, which raises with its hart's proof
+(`Pend::from_task(&OnHart<H>)`, from the runtime's `Hart<H>::on_hart`).
+`Pend::new` takes `T`'s `Bound` proof and the chip's handle of `T`'s line
+(`PendLine<H>`, its line fixed at build), and the build checks that `T` is
+a level task of hart `H` on that line, `R` strictly above it and `X`
+strictly below it, all on hart `H`. A raiser holds the pend, never the
+pending bytes with an index: nothing in a raiser can pend another line.
 
 The table fails to compile when an entry's line, level or hart is outside
 the chip's `Lines`, when two entries share a line and hart, when two entries

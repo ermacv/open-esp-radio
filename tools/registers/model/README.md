@@ -994,10 +994,26 @@ What a write does with the lanes it does not set:
   a CLIC line's pending, enable, attribute and control bytes) is reached
   by its own byte access (`oer_portable_mmio`'s `read_byte`,
   `write_byte`): its owner lists it in `BYTES` (`OWNED_BYTES`,
-  `OBSERVED_BYTES`) apart from its words, no byte lies in a word a block
-  lists, and the claims' check counts the word that holds it. A byte's
-  record word is the byte, zero-extended. A part that reaches a 16-bit
-  register, or splits a byte by field, is refused: nothing uses one.
+  `OBSERVED_BYTES`) apart from its words, and no byte lies in a word a
+  block lists. A byte's record word is the byte, zero-extended. A part
+  that reaches a 16-bit register, or splits a byte by field, is refused:
+  nothing uses one.
+- **Observing a shared part's bytes.** A `shared` part's register is
+  reached from every context, so a part of the same instance that only
+  reads it needs no division with it: it lists such a byte in
+  `OBSERVED_SHARED_BYTES` (its block too, which claims it not), reads it
+  without a side effect and never writes it. The policy admits an
+  observation only of a register that reads freely (`observes`), of the
+  part's own instance; only a shared part's byte registers are observed
+  so, and an observation of its 32-bit word is refused. On a hart-local
+  instance an observation reads the accessing hart's register, as an
+  observer of any word does, while a store through the shared part takes
+  the hart's proof (below).
+- **Claims by bytes.** The claims' check takes each claimed block's base,
+  words and bytes, and refuses one place claimed twice: a word two blocks
+  list, a byte two blocks list, or a word one lists that holds a byte
+  another lists. Two blocks share one word only as disjoint bytes of it.
+  An observed shared byte is no claim: its shared part's block lists it.
 - **Hart-local claims.** A part or division on a `hart-local` instance is
   claimed once per hart: its partition member is
   `[Owner; super::HARTS]`, element `h` hart `h`'s own copy, accessed only
@@ -1005,7 +1021,16 @@ What a write does with the lanes it does not set:
   ownership module then has one `disjoint_blocks` check per hart context,
   over every other block and that hart's hart-local blocks, so two harts'
   copies at one address are never compared. A `shared` part on a
-  hart-local instance is refused.
+  hart-local instance names the proof of a hart its stores take
+  (`hart-proof`, a type path generic over the hart, such as
+  `oer_portable_riscv::OnHart`), and is refused without one; a proof on any
+  other part is refused. Its owner is one type a hart (`Owner<H>`), its
+  partition member a tuple of each hart's copy, `(Owner<0>, Owner<1>,)`.
+  It reads nothing and has no generic store: its only stores are its
+  `whole-word` fixed images of a byte array it holds whole, one method an
+  image, `name(&self, index, &Proof<H>)`, each storing the whole byte
+  through `&self` (the CLIC's pending bytes, `pend_line` and
+  `clear_line`).
 - **Policy items.** Only the items field accessors cannot express render:
   `whole-word` fixed images, each `whole-word` step of a fixed sequence
   (one method per image, `<sequence>_<element>`; the HAL orders the

@@ -28,6 +28,10 @@ pub(super) struct PartWords {
     /// registers of their own inside a word): listed apart, reached by
     /// byte accesses.
     pub(super) bytes: BTreeSet<u64>,
+    /// Byte registers of a shared part of the same instance the part only
+    /// reads: no division joins them, and the shared part's block claims
+    /// them.
+    pub(super) observed_shared: BTreeSet<u64>,
 }
 
 impl PartWords {
@@ -134,6 +138,15 @@ impl Division {
         bytes
     }
 
+    /// The bytes of a shared part the divided block's parts observe.
+    fn observed_shared(&self, owners: &[Owner<'_>]) -> BTreeSet<u64> {
+        let mut bytes = BTreeSet::new();
+        for owner in self.members.iter().filter_map(|member| owners.get(*member)) {
+            bytes.extend(&owner.words.observed_shared);
+        }
+        bytes
+    }
+
     fn camel(&self) -> String {
         format!("{}Division", names::camel(&self.instance))
     }
@@ -187,11 +200,20 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                 )
             })?;
             let hart_local = instance.hart_local.is_some();
-            if hart_local && part.shared {
-                return Err(Error::new(
-                    &entity,
-                    "a shared part is reached from every hart; a hart-local instance's words are each hart's own",
-                ));
+            match (hart_local && part.shared, part.hart_proof.is_some()) {
+                (true, false) => {
+                    return Err(Error::new(
+                        &entity,
+                        "a shared part is reached from every context of every hart; on a hart-local instance, whose words are each hart's own, it names the hart's proof each store takes (`hart-proof`)",
+                    ));
+                }
+                (false, true) => {
+                    return Err(Error::new(
+                        &entity,
+                        "a hart's proof belongs to a shared part on a hart-local instance",
+                    ));
+                }
+                _ => {}
             }
             // The policy names each part's interrupts; its loader checked
             // each source is bound to the part's instance.
@@ -218,6 +240,7 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     observed: BTreeSet::new(),
                     triggers: BTreeMap::new(),
                     bytes: BTreeSet::new(),
+                    observed_shared: BTreeSet::new(),
                 },
                 division: None,
                 sources,
@@ -276,6 +299,10 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                 .map(move |offset| ((owner.part.instance.clone(), *offset), position))
         })
         .collect::<BTreeMap<_, _>>();
+    let shared = owners
+        .iter()
+        .map(|owner| owner.part.shared)
+        .collect::<Vec<_>>();
     let mut links = Vec::new();
     for (position, owner) in owners.iter_mut().enumerate() {
         let entity = format!("{}.{}", owner.partition, owner.part.name);
@@ -290,10 +317,6 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                     continue;
                 };
                 found = true;
-                owner.words.observed.insert(*offset);
-                if register.width == 8 {
-                    owner.words.bytes.insert(*offset);
-                }
                 let holder = holders
                     .get(&(owner.part.instance.clone(), *offset))
                     .ok_or_else(|| {
@@ -302,6 +325,27 @@ pub(super) fn plan<'p>(model: &ChipModel, policy: &'p ChipPolicy) -> Result<Owne
                             format!("observes {}, which no part holds", register.identity),
                         )
                     })?;
+                // A shared part's register is reached from every context:
+                // its observer reads it without a division (the policy
+                // admits only a side-effect-free read of the instance's
+                // own registers). Only its byte registers are observed so.
+                if shared.get(*holder).copied().unwrap_or(false) {
+                    if register.width != 8 {
+                        return Err(Error::new(
+                            &entity,
+                            format!(
+                                "observes {}, a shared part's {}-bit word; only a shared part's byte registers are observed apart",
+                                register.identity, register.width
+                            ),
+                        ));
+                    }
+                    owner.words.observed_shared.insert(*offset);
+                    continue;
+                }
+                owner.words.observed.insert(*offset);
+                if register.width == 8 {
+                    owner.words.bytes.insert(*offset);
+                }
                 links.push((position, *holder));
             }
             if !found {
@@ -443,13 +487,6 @@ fn list(words: impl IntoIterator<Item = u64>) -> String {
         .join(", ")
 }
 
-/// The words that hold a block's byte registers, for the claims' check that
-/// no two blocks list the same word: none for a block without bytes.
-fn byte_words(base: u64, bytes: &BTreeSet<u64>) -> Option<String> {
-    let words = bytes.iter().map(|byte| byte & !3).collect::<BTreeSet<_>>();
-    (!words.is_empty()).then(|| format!("(0x{base:x}, &[{}])", list(words)))
-}
-
 /// A byte-register list constant, or nothing for none.
 fn byte_list(name: &str, bytes: &BTreeSet<u64>) -> String {
     if bytes.is_empty() {
@@ -492,6 +529,7 @@ fn render_owner(
         .listed()
         .iter()
         .chain(&owner.words.observed)
+        .chain(&owner.words.observed_shared)
         .chain(owner.words.triggers.keys())
     {
         let Some((template, element)) = plan.element(*offset) else {
@@ -533,9 +571,16 @@ fn render_owner(
     } else {
         "#[must_use = \"dropping a register owner permanently loses its register authority\"]\n"
     };
+    // A shared part with a hart's proof is one type a hart: its stores take
+    // that hart's proof.
+    let (hart, hart_use) = if owner.part.hart_proof.is_some() {
+        ("const H: u8, ", "H, ")
+    } else {
+        ("", "")
+    };
     let _ = writeln!(
         output,
-        "{must_use}pub struct {name}<P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<0x{base:x}>>({inner});\n"
+        "{must_use}pub struct {name}<{hart}P: oer_portable_mmio::Placement = oer_portable_mmio::Fixed<0x{base:x}>>({inner});\n"
     );
     if copy {
         let _ = writeln!(
@@ -553,12 +598,13 @@ fn render_owner(
                 output,
                 "/// The words [`{name}`] holds, as byte offsets from its instance's base.\n\
                  pub struct {words};\n\n\
-                 impl oer_portable_mmio::Registers for {words} {{\ntype Sharing = oer_portable_mmio::sharing::{sharing};\nconst WORDS: &'static [usize] = &[{}];\n{bytes}}}\n\n\
-                 impl oer_portable_mmio::Words for {words} {{\nconst OWNED: &'static [usize] = &[{}];\nconst OBSERVED: &'static [usize] = &[];\n{owned_bytes}}}\n",
+                 impl oer_portable_mmio::Registers for {words} {{\ntype Sharing = oer_portable_mmio::sharing::{sharing};\nconst WORDS: &'static [usize] = &[{}];\n{bytes}{shared_bytes}}}\n\n\
+                 impl oer_portable_mmio::Words for {words} {{\nconst OWNED: &'static [usize] = &[{}];\nconst OBSERVED: &'static [usize] = &[];\n{owned_bytes}{shared_bytes}}}\n",
                 list(listed.difference(&owner.words.bytes).copied()),
                 list(listed.difference(&owner.words.bytes).copied()),
                 bytes = byte_list("BYTES", &owner.words.owned_bytes()),
                 owned_bytes = byte_list("OWNED_BYTES", &owner.words.owned_bytes()),
+                shared_bytes = byte_list("OBSERVED_SHARED_BYTES", &owner.words.observed_shared),
             );
             if owner.part.shared {
                 let _ = writeln!(
@@ -585,11 +631,16 @@ fn render_owner(
                     "oer_portable_mmio::Block::host(words).map(Self)",
                 )
             };
+            let (hart_impl, hart_for) = if owner.part.hart_proof.is_some() {
+                ("<const H: u8>", "<H>")
+            } else {
+                ("", "")
+            };
             let _ = writeln!(
                 output,
-                "impl {name} {{\n/// The owner of the part's device registers.\n\
+                "impl{hart_impl} {name}{hart_for} {{\n/// The owner of the part's device registers.\n\
                  #[inline]\npub fn new(block: {name}Claim) -> Self {{\n{wrap}\n}}\n}}\n\n\
-                 impl<'a> {name}<oer_portable_mmio::Host<'a>> {{\n\
+                 impl<'a, {hart}> {name}<{hart_use}oer_portable_mmio::Host<'a>> {{\n\
                  /// The part over host memory, for tests of its accessors.\n\
                  pub fn host(words: &'a mut [u32]) -> Result<Self, oer_portable_mmio::HostTooSmall> {{\n{wrap_host}\n}}\n}}\n"
             );
@@ -620,11 +671,12 @@ fn render_owner(
                  pub struct {words};\n\n\
                  impl oer_portable_mmio::Words for {words} {{\n\
                  const OWNED: &'static [usize] = &[{}];\n\
-                 const OBSERVED: &'static [usize] = &[{}];\n{triggers}{owned_bytes}{observed_bytes}}}\n",
+                 const OBSERVED: &'static [usize] = &[{}];\n{triggers}{owned_bytes}{observed_bytes}{shared_bytes}}}\n",
                 list(owner.words.owned_words().into_iter()),
                 list(owner.words.observed_words().into_iter()),
                 owned_bytes = byte_list("OWNED_BYTES", &owner.words.owned_bytes()),
                 observed_bytes = byte_list("OBSERVED_BYTES", &owner.words.observed_bytes()),
+                shared_bytes = byte_list("OBSERVED_SHARED_BYTES", &owner.words.observed_shared),
             );
         }
     }
@@ -663,7 +715,11 @@ fn render_owner(
             acknowledged.insert(address.wrapping_sub(owner.base));
         }
     }
-    for template in &plan.templates {
+    for template in plan
+        .templates
+        .iter()
+        .filter(|_| owner.part.hart_proof.is_none())
+    {
         let offsets = template
             .elements
             .iter()
@@ -672,6 +728,7 @@ fn render_owner(
         for (reached, mode) in [
             (&owner.words.owned, mode),
             (&owner.words.observed, Mode::Read),
+            (&owner.words.observed_shared, Mode::Read),
         ] {
             let held = offsets
                 .iter()
@@ -749,11 +806,13 @@ fn render_owner(
         }
     }
     irreducible::render(&mut body, output, plan, owner, model, policy)?;
-    controls::render(&mut body, plan, owner, mode, model, &acknowledged)?;
+    if owner.part.hart_proof.is_none() {
+        controls::render(&mut body, plan, owner, mode, model, &acknowledged)?;
+    }
     if !body.is_empty() {
         let _ = writeln!(
             output,
-            "impl<P: oer_portable_mmio::Placement> {name}<P> {{\n{body}}}\n"
+            "impl<{hart}P: oer_portable_mmio::Placement> {name}<{hart_use}P> {{\n{body}}}\n"
         );
     }
     Ok(())
@@ -761,7 +820,11 @@ fn render_owner(
 
 fn render_division(output: &mut String, division: &Division, owners: &[Owner<'_>]) {
     let division_bytes = division.bytes(owners);
-    let bytes = byte_list("BYTES", &division_bytes);
+    let bytes = format!(
+        "{}{}",
+        byte_list("BYTES", &division_bytes),
+        byte_list("OBSERVED_SHARED_BYTES", &division.observed_shared(owners))
+    );
     let name = division.camel();
     let snake = division.snake();
     let base = division.base;
@@ -899,7 +962,19 @@ pub(super) fn render_root(
                 ));
             }
             let path = format!("super::{}::{}", module(&owner.type_name), owner.name());
-            if owner.hart_local {
+            if owner.part.hart_proof.is_some() {
+                let copies = (0..ownership.harts)
+                    .map(|hart| format!("{path}<{hart}>"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let _ = writeln!(
+                    output,
+                    "/// The `{}` part of each hart: element `h` is hart `h`'s own copy\n\
+                     /// of its words, whose stores take hart `h`'s proof.\n\
+                     pub {field}: ({copies},),",
+                    owner.name(),
+                );
+            } else if owner.hart_local {
                 let _ = writeln!(
                     output,
                     "/// The `{}` part of each hart: element `h` is hart `h`'s own copy\n\
@@ -951,11 +1026,10 @@ pub(super) fn render_root(
             );
             bindings.push(binding);
         }
-        let mut blocks = vec![format!(
-            "(0x{:x}, <{path}Words as oer_portable_mmio::Registers>::WORDS)",
+        let blocks = vec![format!(
+            "(0x{:x}, <{path}Words as oer_portable_mmio::Registers>::WORDS, <{path}Words as oer_portable_mmio::Registers>::BYTES)",
             owner.base
         )];
-        blocks.extend(byte_words(owner.base, &owner.words.owned_bytes()));
         if owner.hart_local {
             local.extend(blocks);
         } else {
@@ -985,14 +1059,10 @@ pub(super) fn render_root(
             );
             bindings.push(binding);
         }
-        let mut blocks = vec![format!(
-            "(0x{:x}, <{path} as oer_portable_mmio::Registers>::WORDS)",
+        let blocks = vec![format!(
+            "(0x{:x}, <{path} as oer_portable_mmio::Registers>::WORDS, <{path} as oer_portable_mmio::Registers>::BYTES)",
             division.base
         )];
-        blocks.extend(byte_words(
-            division.base,
-            &division.bytes(&ownership.owners),
-        ));
         if division.hart_local {
             local.extend(blocks);
         } else {
@@ -1031,7 +1101,11 @@ pub(super) fn render_root(
                     .map(|suffix| format!("owner_{position}{suffix}"))
                     .collect::<Vec<_>>()
                     .join(", ");
-                let _ = writeln!(built, "{field}: [{elements}],");
+                if owner.part.hart_proof.is_some() {
+                    let _ = writeln!(built, "{field}: ({elements},),");
+                } else {
+                    let _ = writeln!(built, "{field}: [{elements}],");
+                }
             } else {
                 let _ = writeln!(built, "{field}: owner_{position},");
             }
@@ -1049,9 +1123,8 @@ pub(super) fn render_root(
     if local.is_empty() {
         let _ = writeln!(
             output,
-            "const _: () = assert!(\n\
-             oer_portable_mmio::check::disjoint_blocks(&[{}]),\n\
-             \"no two claimed blocks list the same word\"\n);",
+            "const _: () = if !oer_portable_mmio::check::disjoint_blocks(&[{}]) {{\n\
+             panic!(\"no two claimed blocks list the same word or byte\")\n}};",
             common.join(", ")
         );
     } else {
@@ -1062,9 +1135,8 @@ pub(super) fn render_root(
         for hart in 0..ownership.harts {
             let _ = writeln!(
                 output,
-                "const _: () = assert!(\n\
-                 oer_portable_mmio::check::disjoint_blocks(&[{}]),\n\
-                 \"no two claimed blocks of hart {hart}'s context list the same word\"\n);",
+                "const _: () = if !oer_portable_mmio::check::disjoint_blocks(&[{}]) {{\n\
+                 panic!(\"no two claimed blocks of hart {hart}'s context list the same word or byte\")\n}};",
                 common
                     .iter()
                     .chain(&local)

@@ -741,6 +741,44 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         Ok(())
     }
 
+    /// Record the one part a fixed image's `owners` name, as [`Self::take`]
+    /// does; a shared part with a hart's proof takes it too, when the image
+    /// is a stored image of whole words: the only stores such a part has.
+    fn take_image(
+        &mut self,
+        entity: &str,
+        owners: &[PartId],
+        image: &super::FixedRegisterImage,
+    ) -> Result<(), Error> {
+        let proven = owners.first().and_then(|owner| {
+            self.file
+                .partitions
+                .get(owner.partition)
+                .and_then(|partition| partition.parts.get(owner.part))
+                .filter(|part| part.shared && part.hart_proof.is_some())
+                .map(|_| *owner)
+        });
+        let Some(owner) = proven else {
+            return self.take(entity, owners, true);
+        };
+        if owners.iter().any(|other| *other != owner) {
+            return Err(self.error(
+                entity,
+                ErrorKind::SeveralOwners("its words are held by different parts".to_owned()),
+            ));
+        }
+        if !image.whole_word || image.masks.is_some() || image.consumed_event.is_some() {
+            return Err(self.error(
+                entity,
+                ErrorKind::Shared(
+                    "a shared part with a hart's proof stores only whole-word images".to_owned(),
+                ),
+            ));
+        }
+        self.owners.insert(entity.to_owned(), owner);
+        Ok(())
+    }
+
     /// A domain that exists and, when bound to a register, is used there.
     fn domain(&self, entity: &str, name: &str, target: Target) -> Result<Domain<'a>, Error> {
         let domain = self.domains.get(name).copied().ok_or_else(|| {
@@ -1588,7 +1626,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                     ));
                 }
             }
-            self.take(entity, &owners, true)?;
+            self.take_image(entity, &owners, image)?;
         }
         for sequence in &file.fixed_register_sequences {
             let entity = sequence.name.as_str();

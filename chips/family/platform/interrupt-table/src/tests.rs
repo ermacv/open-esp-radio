@@ -241,7 +241,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     let (token, radio_part) = (tokens.radio, RadioIrq);
 
     // Before its binding the timer's handler finds no part and runs nothing.
-    assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
+    assert!(<TimerToken as Entry>::PROOF.cell().with(|_| ()).is_none());
     timer_handler();
 
     let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
@@ -261,7 +261,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     );
     zero.verify().unwrap();
     assert_eq!(
-        <TimerToken as Entry>::cell().with(|part| part.handled),
+        <TimerToken as Entry>::PROOF
+            .cell()
+            .with(|part| part.handled),
         Some(0)
     );
     timer_handler();
@@ -269,7 +271,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     // Each call of the line's symbol ran the entry's handler on the bound
     // part once.
     assert_eq!(
-        <TimerToken as Entry>::cell().with(|part| part.handled),
+        <TimerToken as Entry>::PROOF
+            .cell()
+            .with(|part| part.handled),
         Some(2)
     );
 
@@ -298,7 +302,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     zero.verify().unwrap();
     pair_handler();
     assert_eq!(
-        <PairToken as Entry>::cell().with(|part| part.handled),
+        <PairToken as Entry>::PROOF.cell().with(|part| part.handled),
         Some(1)
     );
 
@@ -310,13 +314,13 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(fault.fault.kind, crate::BindFaultKind::StorageClaimed);
     assert_eq!(zero.controller.writes.len(), before);
     timer_handler();
-    assert_eq!(TimerToken::cell().with(|part| part.handled), Some(3));
+    assert_eq!(TimerToken::PROOF.cell().with(|part| part.handled), Some(3));
 
     // The keeper's level task: its part placed, its line bound as a task's
     // and nothing routed; before its binding its handler runs nothing.
     let keeper_handler = LEVEL_TASK_TABLE[0].handler.unwrap();
     keeper_handler();
-    assert!(<KeeperToken as Entry>::cell().with(|_| ()).is_none());
+    assert!(<KeeperToken as Entry>::PROOF.cell().with(|_| ()).is_none());
     let before = zero.controller.writes.len();
     let routes = zero.controller.routes;
     let _bound: crate::Bound<KeeperToken> =
@@ -334,7 +338,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     keeper_handler();
     keeper_handler();
     assert_eq!(
-        <KeeperToken as Entry>::cell().with(|part| part.handled),
+        <KeeperToken as Entry>::PROOF
+            .cell()
+            .with(|part| part.handled),
         Some(2)
     );
 
@@ -350,9 +356,10 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
 
 #[test]
 fn the_table_lays_out_each_entry_as_the_tools_read_it() {
-    let [timer, radio, pair_4, pair_7, absent] = INTERRUPT_TABLE else {
-        panic!("five bindings");
+    let [timer, radio, pair_4, pair_7, occupied, absent] = INTERRUPT_TABLE else {
+        panic!("six bindings");
     };
+    assert_eq!((occupied.source, occupied.line), (2, 19));
     assert_eq!(
         (
             timer.source,
@@ -403,5 +410,33 @@ fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
             source: 6,
             line: 30
         })
+    );
+}
+
+#[test]
+fn a_binding_whose_handler_cell_is_occupied_keeps_its_owners_and_writes_nothing() {
+    use crate::BindFaultCode;
+    let mut router = fake_router::<0>();
+    // A part another context installed in the entry's cell before it.
+    let previous = std::boxed::Box::leak(std::boxed::Box::new(OccupiedIrq::default()));
+    let _installed = OccupiedToken::PROOF.cell().install(previous).ok().unwrap();
+    #[allow(clippy::disallowed_methods, reason = "regression for an occupied cell")]
+    let token = OccupiedToken(crate::__private::Unique::new());
+    let before = router.controller.writes.len();
+    let error = router.bind(token, OccupiedIrq::default()).unwrap_err();
+    assert_eq!((error.fault.line, error.fault.hart), (19, 0));
+    assert_eq!(
+        error.fault.diagnostic(),
+        (BindFaultCode::HandlerOccupied, [19, 0, 0, 0])
+    );
+    drop(error);
+    // Nothing written and nothing routed; the installed part stays.
+    assert_eq!(router.controller.writes.len(), before);
+    assert_eq!(router.controller.routes[2], None);
+    let vector = INTERRUPT_TABLE[4].handler.unwrap();
+    vector();
+    assert_eq!(
+        OccupiedToken::PROOF.cell().with(|part| part.handled),
+        Some(1)
     );
 }
