@@ -12,6 +12,9 @@ pub enum Act {
     Fixed,
     Rebind,
     Exhaust,
+    /// `tasks/219` c1: the ring keeps one hole; when the walker stands the
+    /// hole is armed with its spare and the oldest unit taken as the next.
+    Exit,
 }
 
 /// One segment's arm: what it does, and the hold-back `hold`, the
@@ -26,7 +29,12 @@ pub struct Arm {
 impl Arm {
     /// Whether the segment rebinds.
     pub const fn rebind(self) -> bool {
-        matches!(self.act, Act::Rebind)
+        matches!(self.act, Act::Rebind | Act::Exit)
+    }
+
+    /// Whether the segment keeps one hole and exits the ring out of it.
+    pub const fn exit(self) -> bool {
+        matches!(self.act, Act::Exit)
     }
 
     /// Whether the segment exhausts the ring.
@@ -44,10 +52,11 @@ pub const SEGMENTS: usize = 15;
 const fn arm(act: Act, hold: usize) -> Arm {
     Arm { act, hold }
 }
-#[cfg(not(feature = "exhaust"))]
+#[cfg(not(any(feature = "exhaust", feature = "exit")))]
 const ODD: Act = Act::Rebind;
 #[cfg(feature = "exhaust")]
 const ODD: Act = Act::Exhaust;
+#[cfg(not(feature = "exit"))]
 pub const ARMS: [Arm; SEGMENTS] = [
     arm(Act::Fixed, 0),
     arm(ODD, 0),
@@ -63,6 +72,27 @@ pub const ARMS: [Arm; SEGMENTS] = [
     arm(ODD, 0),
     arm(Act::Fixed, 0),
     arm(ODD, 0),
+    arm(Act::Fixed, 0),
+];
+/// `tasks/219` c1 and c2 (`exit`): exits out of a ring with its hole in
+/// five segments; in two, the ring exhausted without a hole (run 200's
+/// hold), for what NEXT holds there.
+#[cfg(feature = "exit")]
+pub const ARMS: [Arm; SEGMENTS] = [
+    arm(Act::Fixed, 0),
+    arm(Act::Exit, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exit, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exhaust, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exit, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exit, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exhaust, 0),
+    arm(Act::Fixed, 0),
+    arm(Act::Exit, 0),
     arm(Act::Fixed, 0),
 ];
 /// The holds the verdict asks its rebinds of; the others are reported.

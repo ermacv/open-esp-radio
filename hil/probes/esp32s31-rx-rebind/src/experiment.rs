@@ -130,6 +130,18 @@ struct ExhaustEvent {
     last: u32,
     /// Whether the hold limit ended the hold rather than an empty ring.
     by_limit: u32,
+    /// `tasks/219` c2: the accepted tail's ring index and the words of it
+    /// and of the descriptor NEXT names, at the exhaustion (an exhaust
+    /// segment) or at the segment's first exit (an exit segment).
+    tail: u32,
+    tail_words: [u32; 3],
+    next_words: [u32; 3],
+    /// `tasks/219` c1: the exits of an exit segment, by what NEXT named
+    /// when the walker stood: nothing, the hole, another descriptor.
+    exits: u32,
+    exit_next_zero: u32,
+    exit_next_hole: u32,
+    exit_next_other: u32,
     /// The MAC's counters (MPDU, FCS error, buffer full, data success).
     hw_at_hold: [u16; 4],
     hw_at_out: [u16; 4],
@@ -268,6 +280,9 @@ pub(super) struct State {
     /// `tasks/200`: the exhaust phase and its records.
     exhaust: Exhaust,
     exhaust_events: [ExhaustEvent; SEGMENTS],
+    /// `tasks/219` c1: the hole's ring index plus one, zero while no hole
+    /// is kept.
+    hole_plus_one: u32,
     /// Microseconds since the segments' clock start, set every pass.
     now_us: u32,
     /// The run's first data sequence number from the sender and its time,
@@ -304,6 +319,7 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
     for event in &mut state.exhaust_events {
         event.next = u32::MAX;
         event.last = u32::MAX;
+        event.tail = u32::MAX;
     }
     Ok((state, frame))
 }
@@ -901,10 +917,13 @@ fn scan(
         // A unit whose append found the doorbell re-rung stays observed at
         // the recycle frontier; it is appended before any later take.
         if !holding
+            && !arm.exit()
             && let Some(credit) = storage
                 .claim_deferred_recycle(ring, frozen)
                 .map_err(|_| name!("deferred-claim"; 32))?
         {
+            // A hole an exit segment left is armed here.
+            state.hole_plus_one = 0;
             match credit.append(access.rx_dma()) {
                 Ok(_) | Err(RxRingError::ReloadPending) => {}
                 Err(_) => return Err(name!("deferred-append"; 32)),
@@ -932,11 +951,17 @@ fn scan(
                     );
                     let hw = State::hardware_now(access);
                     let now = state.now_us;
+                    let tail = ring.topology_snapshot().tail_index;
+                    let tail_words = words_of(storage, tail);
+                    let next_words = words_of(storage, next as usize);
                     if let Some(event) = state.exhaust_events.get_mut(segment) {
                         event.out_us = now;
                         event.next = next;
                         event.last = last;
                         event.hw_at_out = hw;
+                        event.tail = tail as u32;
+                        event.tail_words = tail_words;
+                        event.next_words = next_words;
                     }
                     state.exhaust = Exhaust::Out;
                 }
@@ -953,7 +978,61 @@ fn scan(
         let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
         let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
         let behind = last.map(|last| (last + COUNT - head) % COUNT);
-        if next == Some(head) || behind.is_none_or(|behind| behind < arm.hold) {
+        if arm.exit() && state.hole_plus_one != 0 {
+            // `tasks/219` c1: with the hole kept, units stay in the ring
+            // until the walker stands: NEXT names nothing or the hole.
+            let hole = state.hole_plus_one as usize - 1;
+            let stands = match next {
+                None => Some(0),
+                Some(at) if at == hole => Some(1),
+                Some(at) if at == head => None,
+                Some(_) => {
+                    // NEXT on another descriptor: stands only if nothing
+                    // armed lies ahead of it.
+                    let tail = ring.topology_snapshot().tail_index;
+                    let named = words_of(storage, next.unwrap_or(0));
+                    let armed = named[0] & (1 << 31) != 0 && named[0] & (1 << 30) == 0;
+                    (!armed && tail != next.unwrap_or(usize::MAX)).then_some(2)
+                }
+            };
+            let Some(kind) = stands else {
+                bump(&mut state.counts(segment)?.held_back);
+                break;
+            };
+            // c2: what the ring holds the first time the walker stood.
+            let tail = ring.topology_snapshot().tail_index;
+            let tail_words = words_of(storage, tail);
+            let next_words = next.map_or([0; 3], |at| words_of(storage, at));
+            if let Some(event) = state.exhaust_events.get_mut(segment) {
+                if event.exits == 0 {
+                    event.next = next.map_or(u32::MAX, |at| at as u32);
+                    event.last = last.map_or(u32::MAX, |at| at as u32);
+                    event.tail = tail as u32;
+                    event.tail_words = tail_words;
+                    event.next_words = next_words;
+                    event.out_us = state.now_us;
+                }
+                bump(&mut event.exits);
+                match kind {
+                    0 => bump(&mut event.exit_next_zero),
+                    1 => bump(&mut event.exit_next_hole),
+                    _ => bump(&mut event.exit_next_other),
+                }
+            }
+            // The exit: the hole, bound to its spare at its take, armed and
+            // linked behind the tail with the walker standing (reserve 0).
+            let credit = storage
+                .claim_deferred_recycle(ring, frozen)
+                .map_err(|_| name!("exit-claim"; 32))?
+                .ok_or(name!("exit-no-hole"; 32))?;
+            match credit.append(access.rx_dma()) {
+                Ok(_) | Err(RxRingError::ReloadPending) => {}
+                Err(_) => return Err(name!("exit-append"; 32)),
+            }
+            reload(ring, access)?;
+            state.hole_plus_one = 0;
+            // The oldest unit is taken below as the next hole.
+        } else if next == Some(head) || behind.is_none_or(|behind| behind < arm.hold) {
             bump(&mut state.counts(segment)?.held_back);
             break;
         }
@@ -1042,7 +1121,7 @@ fn scan(
         // checked against the buffer taken out, and the act is finished.
         let mut bound = None;
         if copied && (arm.rebind() || (*action && !arm.exhaust())) {
-            if reserve == 0 {
+            if reserve == 0 && !arm.exit() {
                 // No armed descriptor ahead of the walker: excluded.
                 bump(&mut state.counts(segment)?.exhausted);
             } else {
@@ -1124,6 +1203,13 @@ fn scan(
                 },
             );
             state.agreement = true;
+        }
+        if arm.exit() {
+            // `tasks/219` c1: the taken unit's descriptor, detached and
+            // bound to a spare, is the ring's one hole until the next exit.
+            state.hole_plus_one = head as u32 + 1;
+            unit.retain_for_deferred_recycle();
+            continue;
         }
         if holding {
             // Kept: the unit stays observed at the recycle frontier and is
@@ -1607,6 +1693,7 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
                 Act::Fixed => "fixed",
                 Act::Rebind => "rebind",
                 Act::Exhaust => "exhaust",
+                Act::Exit => "exit",
             },
             arm.hold,
             counts.services,
@@ -1678,6 +1765,29 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
         .await
         .map_err(|_| name!("console-write"; 32))?;
     for (segment, (event, arm)) in state.exhaust_events.iter().zip(ARMS).enumerate() {
+        if !arm.exhaust() && !arm.exit() {
+            continue;
+        }
+        line.clear();
+        writeln!(
+            &mut line,
+            "C2 {segment} arm={} next={} last={} tail={} tail_words={:x?} next_words={:x?} \
+             exits={} next_zero={} next_hole={} next_other={}",
+            if arm.exit() { "exit" } else { "exhaust" },
+            event.next,
+            event.last,
+            event.tail,
+            event.tail_words,
+            event.next_words,
+            event.exits,
+            event.exit_next_zero,
+            event.exit_next_hole,
+            event.exit_next_other,
+        )
+        .map_err(|_| name!("format"; 32))?;
+        usb::text(console, line.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
         if !arm.exhaust() {
             continue;
         }

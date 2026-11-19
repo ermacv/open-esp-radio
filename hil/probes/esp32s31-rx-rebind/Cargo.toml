@@ -41,6 +41,9 @@ oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" 
 [features]
 # `tasks/200`: the odd segments exhaust the ring instead of rebinding.
 exhaust = []
+# `tasks/219` c1 and c2: exits out of a ring with one hole; the hold of
+# `tasks/200` in two segments, for what NEXT holds without the hole.
+exit = []
 
 [dev-dependencies]
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
