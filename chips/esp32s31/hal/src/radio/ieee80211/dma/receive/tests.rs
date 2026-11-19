@@ -13,13 +13,13 @@ use std::collections::VecDeque;
 use std::vec;
 use std::vec::Vec;
 
+use core::cell::Cell;
 use oer_portable_memory::arena::{Arena, ArenaPlace, Brand, Handle, PlacedStatic};
 use oer_portable_memory::zeroed::ZeroedStatic;
-use oer_portable_time::Duration;
-use oer_portable_time::settle::{Settle, SettleLimit};
+use oer_portable_time::{Clock, Instant};
 use oer_portable_time_virtual::VirtualClock;
 
-use super::{RxDescriptors, RxRing, Unit, Walker};
+use super::{Reload, RingAnomaly, RxDescriptors, RxRing, Unit, Walker};
 use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor};
 use crate::radio::ieee80211::dma::descriptor::rx_landed_word;
 use crate::radio::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
@@ -35,6 +35,8 @@ pub(crate) struct ModelWalker {
     rings: usize,
     cursors: VecDeque<(u32, u32)>,
     cursor: (u32, u32),
+    /// The walker never accepts the doorbell.
+    stuck: bool,
 }
 
 impl Walker for ModelWalker {
@@ -56,8 +58,12 @@ impl Walker for ModelWalker {
     fn ring(&mut self) {
         self.rings += 1;
     }
-    fn reload(&mut self) -> super::Reload {
-        super::Reload::Accepted
+    fn reload(&mut self) -> Reload {
+        if self.stuck {
+            Reload::Pending
+        } else {
+            Reload::Accepted
+        }
     }
     fn fence(&mut self) {}
 }
@@ -151,9 +157,9 @@ fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>
 }
 
 impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
-    /// Descriptor `index`'s DMA address.
+    /// Descriptor `index`'s DMA address (R's at `RING`).
     fn descriptor_address(&self, index: usize) -> u32 {
-        self.ring.addresses.address(index).unwrap()
+        self.ring.base + 12 * index as u32
     }
 
     /// The walker completes descriptor `index` with `length` bytes.
@@ -189,8 +195,15 @@ impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
     }
 }
 
-fn within(clock: &VirtualClock) -> Settle<'_, VirtualClock> {
-    Settle::new(SettleLimit::new(Duration::from_micros(20)).unwrap(), clock)
+/// A clock that moves 5 µs at every read: a settle on it ends.
+struct Ticking(Cell<u64>);
+
+impl Clock for Ticking {
+    fn now(&self) -> Instant {
+        let now = self.0.get() + 5;
+        self.0.set(now);
+        Instant::from_micros(now)
+    }
 }
 
 brand!(cold);
@@ -244,10 +257,10 @@ fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once()
     bench.complete(0, 114, true);
     bench.cursor(Some(0), Some(1));
     let spare = bench.spares.pop().unwrap();
-    let clock = VirtualClock::new();
+    let clock: VirtualClock = VirtualClock::new();
     let lent = bench
         .ring
-        .serve(within(&clock), |view| match view.next_unit() {
+        .serve(&clock, |view| match view.next_unit() {
             Some(Unit::Single(unit)) => {
                 assert_eq!(unit.written(), 114);
                 Some(unit.lend(spare))
@@ -298,13 +311,11 @@ fn an_exhausted_ring_is_rung_after_one_exchange_and_again_when_next_stayed_zero(
     bench.cursor(Some(RING - 1), None);
     bench.cursor(Some(RING - 1), None);
     let spare = bench.spares.pop().unwrap();
-    let clock = VirtualClock::new();
-    let served = bench
-        .ring
-        .serve(within(&clock), |view| match view.next_unit() {
-            Some(Unit::Single(unit)) => Some(unit.lend(spare)),
-            _ => None,
-        });
+    let clock: VirtualClock = VirtualClock::new();
+    let served = bench.ring.serve(&clock, |view| match view.next_unit() {
+        Some(Unit::Single(unit)) => Some(unit.lend(spare)),
+        _ => None,
+    });
     assert!(served.ok().unwrap().is_some(), "the first unit, of four");
     assert_eq!(bench.ring.walker.rings, 2, "rung, and rung again");
 }
@@ -318,10 +329,10 @@ fn the_view_ends_at_last_and_after_a_dropped_unit() {
     // LAST at 0: descriptor 1 is complete but beyond it.
     bench.cursor(Some(0), Some(1));
     let spare = bench.spares.pop().unwrap();
-    let clock = VirtualClock::new();
+    let clock: VirtualClock = VirtualClock::new();
     let beyond = bench
         .ring
-        .serve(within(&clock), |view| {
+        .serve(&clock, |view| {
             let lent = match view.next_unit() {
                 Some(Unit::Single(unit)) => Some(unit.lend(spare)),
                 _ => None,
@@ -338,7 +349,7 @@ fn the_view_ends_at_last_and_after_a_dropped_unit() {
     let rung = bench.ring.walker.rings;
     let units = bench
         .ring
-        .serve(within(&clock), |view| {
+        .serve(&clock, |view| {
             let mut units = 0;
             while let Some(unit) = view.next_unit() {
                 units += 1;
@@ -376,10 +387,10 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
     bench.cursor(Some(2), Some(3));
     let expected: Vec<u8> = [first, second, third].concat();
     let table: &'static RxDescriptors<RING> = bench.ring.descriptors;
-    let clock = VirtualClock::new();
+    let clock: VirtualClock = VirtualClock::new();
     let copied = bench
         .ring
-        .serve(within(&clock), |view| match view.next_unit() {
+        .serve(&clock, |view| match view.next_unit() {
             Some(Unit::Chain(chain)) => Some(chain.copy_in_place(|frame| {
                 // A completed continuation's word reads as an armed one
                 // (its length is the capacity, `RX_DONE` clear): the
@@ -426,4 +437,82 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
         bench.descriptor_address(0)
     );
     assert_eq!(bench.ring.walker.rings, 1);
+}
+
+/// Serve one view in which the keeper lends the first single unit, or
+/// copies nothing: what it was handed.
+fn lend_first<B: Brand<Window = DmaWindow> + 'static>(
+    bench: &mut Bench<B>,
+    clock: &impl Clock,
+) -> Result<Option<Handle<B>>, (RingAnomaly, Option<Handle<B>>)> {
+    let spare = bench.spares.pop().unwrap();
+    bench.ring.serve(clock, |view| match view.next_unit() {
+        Some(Unit::Single(unit)) => Some(unit.lend(spare)),
+        _ => None,
+    })
+}
+
+brand!(long);
+#[test]
+fn a_length_past_the_buffer_or_below_the_floor_stops_the_view_as_an_anomaly() {
+    let mut bench = bench::<long::Rx>();
+    for (length, case) in [
+        (SIZE as u32 + 4, "past the buffer"),
+        (30, "below the floor"),
+    ] {
+        bench.complete(0, length, true);
+        bench.cursor(Some(0), Some(1));
+        let word = bench.ring.descriptors.ring[0].word0();
+        let clock: VirtualClock = VirtualClock::new();
+        let served = lend_first(&mut bench, &clock);
+        assert!(
+            matches!(served, Err((RingAnomaly::Length { word: seen }, None)) if seen == word),
+            "{case}: the anomaly, no unit"
+        );
+        assert_eq!(bench.ring.walker.rings, 0, "{case}: nothing re-armed");
+        assert_eq!(
+            bench.ring.descriptors.ring[0].word0(),
+            word,
+            "{case}: the descriptor as the walker left it"
+        );
+        assert_eq!(bench.ring.start.get(), 0, "{case}");
+    }
+}
+
+brand!(short_chain);
+#[test]
+fn a_chain_s_short_continuation_is_an_anomaly() {
+    let mut bench = bench::<short_chain::Rx>();
+    bench.complete(0, 100, false);
+    bench.complete(1, 40, true);
+    bench.cursor(Some(1), Some(2));
+    let word = bench.ring.descriptors.ring[0].word0();
+    let clock: VirtualClock = VirtualClock::new();
+    let served = bench.ring.serve(&clock, |view| match view.next_unit() {
+        Some(Unit::Chain(chain)) => Some(chain.copy_in_place(|frame| frame.len())),
+        _ => None,
+    });
+    assert!(matches!(served, Err((RingAnomaly::Length { word: seen }, None)) if seen == word));
+    assert_eq!(bench.ring.walker.rings, 0);
+}
+
+brand!(stuck);
+#[test]
+fn a_doorbell_the_walker_does_not_accept_is_an_anomaly_with_the_unit_lent() {
+    let mut bench = bench::<stuck::Rx>();
+    bench.complete(0, 80, true);
+    bench.cursor(Some(0), Some(1));
+    bench.ring.walker.stuck = true;
+    let clock = Ticking(Cell::new(0));
+    let served = lend_first(&mut bench, &clock);
+    assert!(
+        matches!(served, Err((RingAnomaly::DoorbellPending, Some(_)))),
+        "the anomaly, the unit with it"
+    );
+    assert_eq!(bench.ring.walker.rings, 1, "rung once, never accepted");
+    assert_eq!(
+        bench.ring.descriptors.ring[RING - 1].next_address(),
+        bench.descriptor_address(0),
+        "linked"
+    );
 }

@@ -27,13 +27,21 @@
 //! (`HW_RX_EXHAUSTED_TAIL_APPEND_EXIT_20261119`,
 //! `HW_RX_STALL_UNDER_LOAD_EXIT_20261119`). The caller never names a
 //! descriptor.
+//!
+//! A unit's slots and descriptors are looked up once, where the view finds
+//! it, and carried by reference: nothing after that looks anything up. A
+//! length the walker must not write (a single unit's outside the floor and
+//! the buffer, a chain's continuation not full, its last one empty or past
+//! the buffer) and a doorbell the walker does not accept are the
+//! hardware's anomalies ([`RingAnomaly`]): the view stops at the first, and
+//! `serve` returns it to the keeper, which raises the one indication.
 
 use core::mem::{MaybeUninit, replace};
 
 use oer_portable_memory::arena::{Arena, Brand, Handle, Lent, Quiet, Released, Span};
 use oer_portable_time::{
-    Clock,
-    settle::{Settle, Unsettled, settle},
+    Clock, Duration,
+    settle::{Settle, SettleLimit, Unsettled, settle},
 };
 
 use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor, WifiRxDmaDescriptorControl};
@@ -41,11 +49,22 @@ use crate::radio::ieee80211::dma::descriptor::{RxDescriptor, cursor_ring_index, 
 use crate::radio::ieee80211::dma::ring_index::RingIndex;
 use crate::radio::ieee80211::dma::space::DmaSpace;
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters};
-use crate::system::memory::dma_address::{PlacedTable, PlacementProjection};
+use crate::system::memory::dma_address::PlacementProjection;
 use crate::system::memory::dma_static::Placed;
 
 #[cfg(test)]
 mod tests;
+
+/// How long the doorbell may stay pending once rung, a named settle.
+///
+/// SOURCE: the W1 runs of 2026-10-19 saw the doorbell accepted at its first
+/// observation every time (`max_attempts` 1, the receive path's
+/// `RELOAD_SETTLE_LIMIT`); `HW_RX_STALL_UNDER_LOAD_EXIT_20261119`'s 15 817
+/// exits rang it under this limit, none unsettled.
+pub const RELOAD_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
+    Some(limit) => limit,
+    None => panic!("the doorbell's settle is a valid settle"),
+};
 
 /// The descriptors of a receive ring: the ring and, right after it, the
 /// reserved descriptor R. Placed by the image (`dma_static!`).
@@ -133,16 +152,25 @@ pub enum Reload {
     Accepted,
 }
 
-/// Why a cold publication was refused: the table's placement has no DMA
-/// address in the space. Nothing was written to the walker.
+/// What the walker did that it must not: the keeper raises the one
+/// indication, the stop takes the ring down; the observed word goes to the
+/// backend's diagnostic record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RingAnomaly {
+    /// A completed descriptor's `LENGTH` the walker must not write: a
+    /// single unit's outside `[FLOOR, SIZE]`, a chain's continuation not
+    /// `SIZE`, its last one zero or past `SIZE`. The unit is neither lent
+    /// nor copied; its control word.
+    Length { word: WifiRxDmaDescriptorControl },
+    /// The doorbell still pending past [`RELOAD_SETTLE`]: what was re-armed
+    /// is linked, the walker did not take it.
+    DoorbellPending,
+}
+
+/// Why a cold publication was refused: the table has no DMA address in the
+/// space. Nothing was written to the walker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Unplaced;
-
-/// The doorbell stayed pending past its settle: the walker did not accept
-/// the append. What was re-armed is linked; the ring's owner treats it as
-/// the hardware's anomaly.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct DoorbellUnsettled;
 
 /// A cold publication refused, with every owner it was given.
 pub struct PublishRefused<B: Brand, const N: usize, W> {
@@ -153,22 +181,30 @@ pub struct PublishRefused<B: Brand, const N: usize, W> {
     pub reserved: Handle<B>,
 }
 
-/// The receive ring: its descriptors, the buffers lent in them, the arena
-/// they come from and the walker's registers.
+/// The accepted tail: the descriptor whose link is zero.
+struct Tail<const N: usize> {
+    index: RingIndex<N>,
+    descriptor: &'static RxDescriptor,
+}
+
+/// The receive ring: its descriptors and their addresses, the buffers lent
+/// in them, the arena they come from and the walker's registers.
 pub struct RxRing<B, const BYTES: usize, const N: usize, W>
 where
     B: Brand<Window = DmaWindow>,
 {
     descriptors: &'static RxDescriptors<N>,
-    addresses: PlacedTable<WifiRxDmaDescriptor>,
+    /// Each ring descriptor's own address.
+    links: [DmaRef<WifiRxDmaDescriptor>; N],
+    /// The ring's first address, which the walker's cursor reads against.
+    base: u32,
     arena: Arena<B, BYTES>,
     slots: [Lent<B>; N],
     _reserved: Lent<B>,
     walker: W,
     /// The oldest descriptor not yet consumed, in the ring's order.
     start: RingIndex<N>,
-    /// The accepted tail: the descriptor whose link is zero.
-    tail: RingIndex<N>,
+    tail: Tail<N>,
 }
 
 impl<B, const BYTES: usize, const N: usize, W> RxRing<B, BYTES, N, W>
@@ -219,16 +255,25 @@ where
         reserved: Handle<B>,
     ) -> Result<&mut Self, PublishRefused<B, N, W>> {
         let () = Self::HEADER;
+        // Every descriptor's address and R's, each from the placement's own
+        // projection: an address it cannot give is the refusal, and the
+        // placement comes back whole.
         let projected = PlacementProjection::try_with::<S, _, _>(table, |table, projection| {
-            projection.table(
+            let addresses = projection.table(
                 table
                     .ring
                     .iter()
                     .chain(core::iter::once(&table.reserved))
                     .map(RxDescriptor::layout),
-            )
+            )?;
+            let mut links = [addresses.first(); N];
+            for (link, descriptor) in links.iter_mut().zip(&table.ring) {
+                *link = projection.link(descriptor.layout())?;
+            }
+            let r = projection.link(table.reserved.layout())?;
+            Ok((links, r, addresses.first(), addresses.base()))
         });
-        let (descriptors, addresses) = match projected {
+        let (descriptors, (links, r, head, base)) = match projected {
             Ok(projected) => projected,
             Err((_, table)) => {
                 return Err(PublishRefused {
@@ -241,39 +286,41 @@ where
             }
         };
         let descriptors: &'static RxDescriptors<N> = descriptors;
+        // The accepted tail is the ring's last descriptor (`N >= 2`).
+        let last = descriptors
+            .ring
+            .iter()
+            .fold(&descriptors.reserved, |_, descriptor| descriptor);
         walker.configure_window();
-        let mut index = 0;
+        let mut descriptor = descriptors.ring.iter();
+        let mut next = links.iter().skip(1);
         let slots = ring.map(|handle| {
             let (lent, buffer) = arena.lend(handle);
-            let next = if index + 1 < N {
-                addresses.element(index + 1)
-            } else {
-                None
-            };
-            if let Some(descriptor) = descriptors.ring.get(index) {
-                descriptor.publish_owned(Self::ARMED, buffer, next);
+            if let Some(descriptor) = descriptor.next() {
+                descriptor.publish_owned(Self::ARMED, buffer, next.next().copied());
             }
-            index += 1;
             lent
         });
         let (reserved, buffer) = arena.lend(reserved);
         descriptors
             .reserved
-            .publish_owned(Self::ARMED, buffer, addresses.element(0));
+            .publish_owned(Self::ARMED, buffer, Some(head));
         walker.fence();
-        if let Some(r) = addresses.element(N) {
-            walker.write_base(r);
-        }
+        walker.write_base(r);
         walker.fence();
         Ok(place.write(Self {
             descriptors,
-            addresses,
+            links,
+            base,
             arena,
             slots,
             _reserved: reserved,
             walker,
             start: Self::HEAD,
-            tail: Self::LAST,
+            tail: Tail {
+                index: Self::LAST,
+                descriptor: last,
+            },
         }))
     }
 
@@ -285,34 +332,39 @@ where
     /// Serve the completed units: `f` gets the view, in the ring's order up
     /// to `LAST` as read at the start; after it, the doorbell is rung if
     /// anything was re-armed, and once more when the walker settled with
-    /// NEXT zero and LAST short of the tail. `settle` bounds each wait for
-    /// the doorbell's acceptance, a named settle.
+    /// NEXT zero and LAST short of the tail, each wait bounded by
+    /// [`RELOAD_SETTLE`] on `clock`.
     ///
     /// # Errors
     ///
-    /// [`DoorbellUnsettled`] when the doorbell stayed pending past `settle`:
-    /// `f`'s result comes with it, and every re-armed descriptor is linked.
+    /// A [`RingAnomaly`] with `f`'s result: the doorbell not accepted, or the
+    /// length at which the view stopped. What was re-armed is linked and, but
+    /// for the first anomaly, rung.
     pub fn serve<C: Clock + ?Sized, R>(
         &mut self,
-        settle: Settle<'_, C>,
+        clock: &C,
         f: impl FnOnce(&mut Completed<'_, B, BYTES, N, W>) -> R,
-    ) -> Result<R, (DoorbellUnsettled, R)> {
+    ) -> Result<R, (RingAnomaly, R)> {
         let (last, next) = self.walker.cursor();
-        let completed =
-            self.completed(cursor_ring_index(last, self.addresses.base(), N), next == 0);
+        let remaining = self.completed(cursor_ring_index(last, self.base, N), next == 0);
         let mut view = Completed {
             ring: self,
-            remaining: completed,
+            remaining,
             yielded: 0,
             rearmed: 0,
+            anomaly: None,
         };
         let result = f(&mut view);
-        if view.rearmed == 0 {
-            return Ok(result);
-        }
-        match self.ring_doorbell(settle) {
-            Ok(()) => Ok(result),
-            Err(Unsettled) => Err((DoorbellUnsettled, result)),
+        let (rearmed, anomaly) = (view.rearmed, view.anomaly);
+        let rung = if rearmed == 0 {
+            Ok(())
+        } else {
+            self.ring_doorbell(Settle::new(RELOAD_SETTLE, clock))
+        };
+        match (rung, anomaly) {
+            (Err(Unsettled), _) => Err((RingAnomaly::DoorbellPending, result)),
+            (Ok(()), Some(anomaly)) => Err((anomaly, result)),
+            (Ok(()), None) => Ok(result),
         }
     }
 
@@ -334,8 +386,8 @@ where
     /// Ring the doorbell, wait for its acceptance, and ring once more when
     /// the walker settled with NEXT zero and LAST short of the tail.
     fn ring_doorbell<C: Clock + ?Sized>(&mut self, within: Settle<'_, C>) -> Result<(), Unsettled> {
-        let tail = self.tail.get();
-        let base = self.addresses.base();
+        let tail = self.tail.index.get();
+        let base = self.base;
         let walker = &mut self.walker;
         walker.fence();
         walker.ring();
@@ -354,25 +406,6 @@ where
         }
         Ok(())
     }
-
-    /// Link the re-armed run from `first` to `last` behind the accepted tail:
-    /// the old tail's link names `first`, and `last` is the tail.
-    fn link(&mut self, first: RingIndex<N>, last: RingIndex<N>) {
-        self.walker.fence();
-        if let (Some(tail), Some(first)) = (
-            self.descriptors.ring.get(self.tail.get()),
-            self.addresses.element(first.get()),
-        ) {
-            tail.publish_next(Some(first));
-        }
-        self.walker.fence();
-        self.tail = last;
-        self.start = last.advance(1);
-    }
-
-    fn descriptor(&self, index: RingIndex<N>) -> Option<&RxDescriptor> {
-        self.descriptors.ring.get(index.get())
-    }
 }
 
 /// The completed units of one service ([`RxRing::serve`]), in the ring's
@@ -388,17 +421,68 @@ where
     yielded: usize,
     /// Descriptors re-armed since the service began.
     rearmed: usize,
+    /// The anomaly the view stopped at.
+    anomaly: Option<RingAnomaly>,
 }
 
 /// One completed unit: one descriptor, or a chain of several, which is only
 /// copied.
-pub enum Unit<'v, 'r, B, const BYTES: usize, const N: usize, W>
+pub enum Unit<'v, B, const BYTES: usize, const N: usize, W>
 where
     B: Brand<Window = DmaWindow>,
 {
-    Single(Single<'v, 'r, B, BYTES, N, W>),
-    Chain(Chain<'v, 'r, B, BYTES, N, W>),
+    Single(Single<'v, B, BYTES, N, W>),
+    Chain(Chain<'v, B, BYTES, N, W>),
 }
+
+/// What re-arming links: the walker's fence, the tail, the ring's start and
+/// the service's count.
+struct Linker<'v, const N: usize, W> {
+    walker: &'v mut W,
+    start: &'v mut RingIndex<N>,
+    tail: &'v mut Tail<N>,
+    rearmed: &'v mut usize,
+}
+
+impl<const N: usize, W: Walker> Linker<'_, N, W> {
+    /// Link the re-armed run of `count` from `first` to `last` behind the
+    /// accepted tail: the old tail's link names `first`, and `last` is the
+    /// tail.
+    fn link(
+        self,
+        first: DmaRef<WifiRxDmaDescriptor>,
+        last: RingIndex<N>,
+        descriptor: &'static RxDescriptor,
+        count: usize,
+    ) {
+        self.walker.fence();
+        self.tail.descriptor.publish_next(Some(first));
+        self.walker.fence();
+        *self.tail = Tail {
+            index: last,
+            descriptor,
+        };
+        *self.start = last.advance(1);
+        *self.rearmed += count;
+    }
+}
+
+/// The bytes a chain's last buffer holds: below the floor only, or past it
+/// too.
+enum LastBytes<B: Brand> {
+    /// `n <= FLOOR` bytes, all below the floor; the empty span above it.
+    Floor(usize, Span<B>),
+    /// The floor's bytes and the span above it.
+    Beyond(Span<B>),
+}
+
+impl<B: Brand> Clone for LastBytes<B> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<B: Brand> Copy for LastBytes<B> {}
 
 impl<'r, B, const BYTES: usize, const N: usize, W> Completed<'r, B, BYTES, N, W>
 where
@@ -406,95 +490,177 @@ where
     W: Walker,
 {
     /// The next completed unit, or `None`: none is left up to `LAST`, the
-    /// next one is not complete at `LAST`, or a unit before it was dropped
-    /// and stays in the ring (what follows it waits for it).
-    pub fn next_unit(&mut self) -> Option<Unit<'_, 'r, B, BYTES, N, W>> {
-        if self.yielded != self.rearmed {
+    /// next one is not complete at `LAST`, a unit before it was dropped and
+    /// stays in the ring (what follows it waits for it), or the view stopped
+    /// at a [`RingAnomaly`].
+    pub fn next_unit(&mut self) -> Option<Unit<'_, B, BYTES, N, W>> {
+        let Completed {
+            ring,
+            remaining,
+            yielded,
+            rearmed,
+            anomaly,
+        } = self;
+        if anomaly.is_some() || *yielded != *rearmed {
             return None;
         }
-        let head = self.ring.start;
-        let count = (1..=self.remaining).find(|&count| {
-            self.ring
-                .descriptor(head.advance(count - 1))
-                .is_some_and(|descriptor| descriptor.word0().rx_done())
-        })?;
-        self.yielded += count;
-        self.remaining -= count;
-        Some(if count == 1 {
+        let RxRing {
+            descriptors,
+            links,
+            arena,
+            slots,
+            walker,
+            start,
+            tail,
+            ..
+        } = &mut **ring;
+        let head = *start;
+        let descriptors: &'static [RxDescriptor; N] = &descriptors.ring;
+        // The run from `head`, wrapping once: `a` from `head` to the ring's
+        // end, `b` from its start.
+        let (descriptors_b, descriptors_a) = descriptors.split_at_checked(head.get())?;
+        let count = descriptors_a
+            .iter()
+            .chain(descriptors_b)
+            .take(*remaining)
+            .position(|descriptor| descriptor.word0().rx_done())?
+            + 1;
+        let a = descriptors_a.len().min(count);
+        let (run_a, _) = descriptors_a.split_at_checked(a)?;
+        let (run_b, _) = descriptors_b.split_at_checked(count - a)?;
+        let (links_b, links_a) = links.split_at_checked(head.get())?;
+        let (slots_b, slots_a) = slots.split_at_mut_checked(head.get())?;
+        let (slots_a, _) = slots_a.split_at_mut_checked(a)?;
+        let (slots_b, _) = slots_b.split_at_mut_checked(count - a)?;
+        let last_descriptor = run_b.last().or(run_a.last())?;
+        let head_link = *links_a.first()?;
+        let last = head.advance(count - 1);
+        let mut stop = |word: WifiRxDmaDescriptorControl| {
+            *anomaly = Some(RingAnomaly::Length { word });
+            None
+        };
+        let word = last_descriptor.word0();
+        let length = usize::from(word.length());
+        let linker = Linker {
+            walker,
+            start,
+            tail,
+            rearmed,
+        };
+        let unit = if count == 1 {
+            let [slot] = slots_a else {
+                return None;
+            };
+            let Some(span) = length
+                .checked_sub(B::FLOOR)
+                .and_then(|bytes| Span::new(B::FLOOR, bytes))
+            else {
+                return stop(word);
+            };
             Unit::Single(Single {
-                view: self,
+                slot,
+                descriptor: last_descriptor,
+                link: head_link,
                 index: head,
+                span,
+                arena: *arena,
+                linker,
             })
         } else {
+            let full = run_a
+                .iter()
+                .chain(run_b)
+                .take(count - 1)
+                .find(|descriptor| usize::from(descriptor.word0().length()) != B::SIZE);
+            if let Some(short) = full {
+                return stop(short.word0());
+            }
+            let last_bytes = match (length, Span::new(B::FLOOR, 0)) {
+                (0, _) | (_, None) => return stop(word),
+                (length, Some(empty)) if length <= B::FLOOR => LastBytes::Floor(length, empty),
+                (length, Some(_)) => match Span::new(B::FLOOR, length - B::FLOOR) {
+                    Some(span) => LastBytes::Beyond(span),
+                    None => return stop(word),
+                },
+            };
             Unit::Chain(Chain {
-                view: self,
-                head,
+                slots: (slots_a, slots_b),
+                descriptors: (run_a, run_b),
+                head_link,
+                last,
+                last_descriptor,
                 count,
+                last_bytes,
+                arena: *arena,
+                linker,
             })
-        })
+        };
+        *yielded += count;
+        *remaining -= count;
+        Some(unit)
     }
 }
 
 /// A completed unit of one descriptor.
-pub struct Single<'v, 'r, B, const BYTES: usize, const N: usize, W>
+pub struct Single<'v, B, const BYTES: usize, const N: usize, W>
 where
     B: Brand<Window = DmaWindow>,
 {
-    view: &'v mut Completed<'r, B, BYTES, N, W>,
+    slot: &'v mut Lent<B>,
+    descriptor: &'static RxDescriptor,
+    link: DmaRef<WifiRxDmaDescriptor>,
     index: RingIndex<N>,
+    /// The frame: from the floor to the walker's `LENGTH`, checked.
+    span: Span<B>,
+    arena: Arena<B, BYTES>,
+    linker: Linker<'v, N, W>,
 }
 
-/// A completed unit of `count` descriptors from `head`, in the ring's order.
-pub struct Chain<'v, 'r, B, const BYTES: usize, const N: usize, W>
+/// A completed unit of `count` descriptors, in the ring's order.
+pub struct Chain<'v, B, const BYTES: usize, const N: usize, W>
 where
     B: Brand<Window = DmaWindow>,
 {
-    view: &'v mut Completed<'r, B, BYTES, N, W>,
-    head: RingIndex<N>,
+    slots: (&'v mut [Lent<B>], &'v mut [Lent<B>]),
+    descriptors: (&'static [RxDescriptor], &'static [RxDescriptor]),
+    head_link: DmaRef<WifiRxDmaDescriptor>,
+    last: RingIndex<N>,
+    last_descriptor: &'static RxDescriptor,
     count: usize,
+    last_bytes: LastBytes<B>,
+    arena: Arena<B, BYTES>,
+    linker: Linker<'v, N, W>,
 }
 
-/// The bytes the walker wrote in a descriptor's buffer (its `LENGTH`),
-/// within the buffer.
-fn written<B: Brand>(word0: WifiRxDmaDescriptorControl) -> usize {
-    usize::from(word0.length()).min(B::SIZE)
-}
-
-impl<B, const BYTES: usize, const N: usize, W> Single<'_, '_, B, BYTES, N, W>
+impl<B, const BYTES: usize, const N: usize, W> Single<'_, B, BYTES, N, W>
 where
     B: Brand<Window = DmaWindow>,
     W: Walker,
 {
     /// The bytes the walker wrote in the unit's buffer, its header included:
-    /// what the keeper decides by, read from the descriptor's own word.
+    /// what the keeper decides by.
     pub fn written(&self) -> usize {
-        self.view
-            .ring
-            .descriptor(self.index)
-            .map_or(0, |descriptor| written::<B>(descriptor.word0()))
+        B::FLOOR + self.span.len()
     }
 
     /// The unit's buffer out, `spare` armed in its descriptor and linked
     /// behind the tail: the exchange of the rebind records. The handle's span
-    /// is the frame, from the floor to the bytes the walker wrote; its holder
-    /// reads the header from the floor ([`Arena::floor`]).
+    /// is the frame; its holder reads the header from the floor
+    /// ([`Arena::floor`]).
     pub fn lend(self, spare: Handle<B>) -> Handle<B> {
-        let written = self.written();
-        let ring = &mut *self.view.ring;
-        let index = self.index;
-        let Some(slot) = ring.slots.get_mut(index.get()) else {
-            // A `RingIndex<N>` lies inside the `N` slots: never reached. The
-            // spare comes back to the caller, unlent; nothing was published.
-            return spare;
-        };
-        let (spare, buffer) = ring.arena.lend(spare);
+        let Single {
+            slot,
+            descriptor,
+            link,
+            index,
+            span,
+            arena,
+            linker,
+        } = self;
+        let (spare, buffer) = arena.lend(spare);
         let unit = replace(slot, spare);
-        if let Some(descriptor) = ring.descriptors.ring.get(index.get()) {
-            descriptor.publish_owned(RxRing::<B, BYTES, N, W>::ARMED, buffer, None);
-        }
-        ring.link(index, index);
-        self.view.rearmed += 1;
-        let span = Span::new(B::FLOOR, written.saturating_sub(B::FLOOR)).unwrap_or(Span::FULL);
+        descriptor.publish_owned(RxRing::<B, BYTES, N, W>::ARMED, buffer, None);
+        linker.link(link, index, descriptor, 1);
         #[allow(
             unsafe_code,
             reason = "the receive ring's release proof: a completed unit"
@@ -507,52 +673,70 @@ where
         // header's late bytes 48 to 52 lie under no span
         // (`HW_RX_HEADER_LATE_WRITE_20261118`).
         let released = unsafe { Released::assume(unit, span) };
-        ring.arena.reclaim(released)
+        arena.reclaim(released)
     }
 
     /// The unit's frame copied out by `f` through its reader; the same buffer
     /// re-armed and linked behind the tail after `f` returns.
-    pub fn copy_in_place<R>(self, f: impl FnOnce(&Frame<'_, B, BYTES, N>) -> R) -> R {
-        Chain {
-            view: self.view,
-            head: self.index,
+    pub fn copy_in_place<R>(self, f: impl FnOnce(&Frame<'_, B, BYTES>) -> R) -> R {
+        let Single {
+            slot,
+            descriptor,
+            link,
+            index,
+            span,
+            arena,
+            linker,
+        } = self;
+        let frame = Frame {
+            arena: &arena,
+            lents: (core::slice::from_ref(&*slot), &[]),
+            first: span,
+            last: None,
             count: 1,
-        }
-        .copy_in_place(f)
+        };
+        let result = f(&frame);
+        descriptor.publish_next(None);
+        descriptor.publish_word0(RxRing::<B, BYTES, N, W>::ARMED);
+        linker.link(link, index, descriptor, 1);
+        result
     }
 }
 
-impl<B, const BYTES: usize, const N: usize, W> Chain<'_, '_, B, BYTES, N, W>
+impl<B, const BYTES: usize, const N: usize, W> Chain<'_, B, BYTES, N, W>
 where
     B: Brand<Window = DmaWindow>,
     W: Walker,
 {
     /// The chain's frame copied out by `f` through its reader; its buffers
     /// re-armed in place, in order, and linked behind the tail after `f`
-    /// returns.
-    pub fn copy_in_place<R>(self, f: impl FnOnce(&Frame<'_, B, BYTES, N>) -> R) -> R {
-        let ring = &mut *self.view.ring;
+    /// returns. Its descriptors' links to each other are the walker's own
+    /// path and stay; the last one's becomes zero.
+    pub fn copy_in_place<R>(self, f: impl FnOnce(&Frame<'_, B, BYTES>) -> R) -> R {
+        let Chain {
+            slots,
+            descriptors,
+            head_link,
+            last,
+            last_descriptor,
+            count,
+            last_bytes,
+            arena,
+            linker,
+        } = self;
         let frame = Frame {
-            arena: &ring.arena,
-            slots: &ring.slots,
-            descriptors: &ring.descriptors.ring,
-            head: self.head,
-            count: self.count,
+            arena: &arena,
+            lents: (&*slots.0, &*slots.1),
+            first: Span::FULL,
+            last: Some(last_bytes),
+            count,
         };
         let result = f(&frame);
-        let last = self.head.advance(self.count - 1);
-        for offset in 0..self.count {
-            let index = self.head.advance(offset);
-            let next = (offset + 1 < self.count)
-                .then(|| index.advance(1))
-                .and_then(|next| ring.addresses.element(next.get()));
-            if let Some(descriptor) = ring.descriptor(index) {
-                descriptor.publish_next(next);
-                descriptor.publish_word0(RxRing::<B, BYTES, N, W>::ARMED);
-            }
+        last_descriptor.publish_next(None);
+        for descriptor in descriptors.0.iter().chain(descriptors.1) {
+            descriptor.publish_word0(RxRing::<B, BYTES, N, W>::ARMED);
         }
-        ring.link(self.head, last);
-        self.view.rearmed += self.count;
+        linker.link(head_link, last, last_descriptor, count);
         result
     }
 }
@@ -562,28 +746,34 @@ where
 /// the floor (below it lies the header); a continuation's begin at its
 /// first byte (`HW_RX_CHAIN_LAPS_20261117`: `(n - 1) × SIZE` plus the last
 /// descriptor's `LENGTH` are the unit's bytes).
-pub struct Frame<'f, B, const BYTES: usize, const N: usize>
+pub struct Frame<'f, B, const BYTES: usize>
 where
     B: Brand<Window = DmaWindow>,
 {
     arena: &'f Arena<B, BYTES>,
-    slots: &'f [Lent<B>; N],
-    descriptors: &'f [RxDescriptor; N],
-    head: RingIndex<N>,
+    lents: (&'f [Lent<B>], &'f [Lent<B>]),
+    /// The first buffer's span: the unit's frame for a single unit, the
+    /// whole buffer above the floor for a chain.
+    first: Span<B>,
+    /// A chain's last buffer; `None` for a single unit.
+    last: Option<LastBytes<B>>,
     count: usize,
 }
 
-impl<B, const BYTES: usize, const N: usize> Frame<'_, B, BYTES, N>
+impl<B, const BYTES: usize> Frame<'_, B, BYTES>
 where
     B: Brand<Window = DmaWindow>,
 {
     /// The frame's bytes: what the walker wrote, less the first buffer's
     /// header.
     pub fn len(&self) -> usize {
-        (0..self.count)
-            .map(|offset| self.written(offset))
-            .sum::<usize>()
-            .saturating_sub(B::FLOOR)
+        let middle = self.count.saturating_sub(2) * B::SIZE;
+        let last = match self.last {
+            None => 0,
+            Some(LastBytes::Floor(bytes, _)) => bytes,
+            Some(LastBytes::Beyond(span)) => B::FLOOR + span.len(),
+        };
+        self.first.len() + middle + last
     }
 
     /// Whether the frame has no byte.
@@ -595,52 +785,36 @@ where
     /// copied.
     pub fn copy_to(&self, out: &mut [u8]) -> usize {
         let mut copied = 0;
-        for offset in 0..self.count {
-            let written = self.written(offset);
-            let Some(lent) = self.slots.get(self.head.advance(offset).get()) else {
-                break;
+        for (offset, lent) in self.lents.0.iter().chain(self.lents.1).enumerate() {
+            let last = offset + 1 == self.count;
+            let (span, below) = match (offset, last, self.last) {
+                (0, _, _) => (self.first, 0),
+                (_, true, Some(LastBytes::Floor(bytes, empty))) => (empty, bytes),
+                (_, true, Some(LastBytes::Beyond(span))) => (span, B::FLOOR),
+                _ => (Span::FULL, B::FLOOR),
             };
-            let span = Span::new(B::FLOOR, written.saturating_sub(B::FLOOR)).unwrap_or(Span::FULL);
             #[allow(
                 unsafe_code,
-                reason = "the receive ring's borrowed release: a completed chain"
+                reason = "the receive ring's borrowed release: a completed unit"
             )]
             // SAFETY: the unit's descriptors lie at or before the `LAST` the
             // walker reported at this service's start, and none is re-armed
-            // before the copy ends (`Chain::copy_in_place` re-arms after `f`
+            // before the copy ends (`copy_in_place` re-arms after `f`
             // returns, and this reader lives only inside `f`): the walker
             // completed them and does not write their buffers meanwhile
             // (`HW_RX_CHAIN_LAPS_20261117`).
             let quiet = unsafe { Quiet::assume(lent, span) };
             copied = self.arena.inspect(&quiet, |handle| {
+                let floor: [u8; 64] = self.arena.floor(handle).copy();
+                let bytes = floor.iter().take(below).chain(self.arena.bytes(handle));
                 let mut copied = copied;
-                if offset != 0 {
-                    let floor: [u8; 64] = self.arena.floor(handle).copy();
-                    let head = floor.get(..written.min(B::FLOOR)).unwrap_or(&[]);
-                    copied += copy_into(head, out.get_mut(copied..).unwrap_or(&mut []));
+                for (to, from) in out.iter_mut().skip(copied).zip(bytes) {
+                    *to = *from;
+                    copied += 1;
                 }
-                copied += copy_into(
-                    self.arena.bytes(handle),
-                    out.get_mut(copied..).unwrap_or(&mut []),
-                );
                 copied
             });
         }
         copied
     }
-
-    fn written(&self, offset: usize) -> usize {
-        self.descriptors
-            .get(self.head.advance(offset).get())
-            .map_or(0, |descriptor| written::<B>(descriptor.word0()))
-    }
-}
-
-/// Copy as much of `from` as fits in `to`: the count.
-fn copy_into(from: &[u8], to: &mut [u8]) -> usize {
-    let count = from.len().min(to.len());
-    if let (Some(to), Some(from)) = (to.get_mut(..count), from.get(..count)) {
-        to.copy_from_slice(from);
-    }
-    count
 }
