@@ -423,6 +423,18 @@ impl WifiRxDmaEngine {
         self.registers
     }
 
+    /// TEMPORARY experiment (`tasks/219` (a), branch `probe/rx-rebind-4`
+    /// only, never merged): the walker's stop edge alone, as the vendor
+    /// makes it: `RX_CONTROL.WALKER_ENABLE` cleared by one read-modify-write
+    /// with no fence and no readback.
+    ///
+    /// SOURCE: `rom[]::hal_mac_rx_disable` (`ROM_REV0_HAL_MAC_RX_GATE`),
+    /// whose one caller in the pinned libraries is
+    /// `libnet80211[wifi_reset_mac]`.
+    pub fn experiment_walker_edge(&mut self) {
+        self.registers.clear_mac_rx_walker_enable();
+    }
+
     /// Read the bounded walker projection for diagnostics.
     pub fn snapshot(&self) -> MacRxDmaSnapshot {
         self.registers.mac_rx_dma_snapshot()

@@ -16,7 +16,7 @@
 //! it, the key table across it, and how long an ordinary stop takes, over
 //! the radio domain the probe holds itself (`tasks/084`). See the README.
 
-#[cfg(any(test, feature = "amsdu"))]
+#[cfg(any(test, feature = "amsdu", feature = "settle"))]
 #[cfg_attr(
     not(test),
     allow(dead_code, reason = "the receiver's half is esp32s31-rx-chain's")

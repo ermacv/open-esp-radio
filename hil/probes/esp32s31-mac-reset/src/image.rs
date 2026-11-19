@@ -476,6 +476,42 @@ async fn report(
         let _ = line.push('\n');
         usb::text(&mut console, line.as_bytes()).await;
     }
+    #[cfg(feature = "settle")]
+    if let Ok(rows) = settle::ROWS_DONE.take() {
+        for row in rows.rows() {
+            line.clear();
+            let _ = line.push_str("S");
+            for value in row {
+                let _ = write!(line, " {value:x}");
+            }
+            let _ = line.push('\n');
+            usb::text(&mut console, line.as_bytes()).await;
+        }
+        // One verdict a part: `pass` only with no frame region and no
+        // descriptor word changed after the first record in any stop, and
+        // no bad frame after a start.
+        for (part, name) in [(1_u32, "edge"), (2, "reset")] {
+            let mut stops = 0_u32;
+            let mut changed = 0_u32;
+            let mut bad = 0_u32;
+            for row in rows.rows().iter().filter(|row| row[0] >> 28 == part) {
+                stops += 1;
+                changed += u32::from(row[4] & 0o5555 != 0);
+                bad += row[6] >> 16;
+            }
+            line.clear();
+            let verdict = if stops > 0 && changed == 0 && bad == 0 {
+                "pass"
+            } else {
+                "fail"
+            };
+            let _ = writeln!(
+                line,
+                "SETTLE {name} stops={stops} changed={changed} bad_after_start={bad} verdict={verdict}"
+            );
+            usb::text(&mut console, line.as_bytes()).await;
+        }
+    }
     let failed = journal
         .rows
         .iter()
@@ -573,6 +609,8 @@ mod amsdu;
 mod ccmp;
 #[cfg(feature = "receiver")]
 mod receiver;
+#[cfg(feature = "settle")]
+mod settle;
 #[cfg(feature = "stream")]
 mod stream;
 #[cfg(feature = "transmit")]
@@ -1218,6 +1256,14 @@ async fn part_one(
         channel,
         seed,
     } = parts;
+    #[cfg(feature = "settle")]
+    {
+        let _ = client;
+        return apart!(settle::series(
+            storage, slot, mac_irq, power_irq, sources, timer, mac, channel, seed, access,
+            clocks_on, ring, journal,
+        ));
+    }
     // `tasks/097`: the recovery cases, from the healthy start on.
     let (cased_access, cased_clocks, cased_ring) = apart!(cases(
         CaseParts {

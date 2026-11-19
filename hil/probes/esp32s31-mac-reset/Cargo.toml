@@ -81,6 +81,11 @@ foreign = []
 stream = ["amsdu"]
 stream-isolated = ["stream"]
 stream-ampdu = ["ampdu"]
+# `tasks/219` (a) and (b), `tasks/220` (probe-only, branch `probe/rx-rebind-4`):
+# the receiver of `stream` and `stream-ampdu`, its walker stopped by the
+# ROM's edge alone and its block reset under that traffic, every descriptor
+# and buffer recorded at fixed delays after each.
+settle = ["dep:oer-chips-esp32s31-radio-ieee80211-backend"]
 
 [lints]
 workspace = true
