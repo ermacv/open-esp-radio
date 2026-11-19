@@ -899,6 +899,16 @@ fn scan(
 ) -> Result<(), Name<32>> {
     let arm = *ARMS.get(segment).ok_or(name!("segment"; 32))?;
     bump(&mut state.counts(segment)?.services);
+    // `tasks/229`: the ring at an exit segment's start.
+    if arm.exit() && state.counts(segment)?.services == 1 {
+        // The first exit segment's first exits, about ten of six records.
+        if segment == 1 {
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::trace_arm(
+                oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::TRACE_RECORDS as u32,
+            );
+        }
+        ring.experiment_trace(1, access.rx_dma());
+    }
     if irq.mac_interrupt_raw().fatal_assertion_raw().is_some() {
         return Err(name!("fatal-raw"; 32));
     }
@@ -1019,6 +1029,8 @@ fn scan(
                     _ => bump(&mut event.exit_next_other),
                 }
             }
+            // `tasks/229`: the ring where the walker stands.
+            ring.experiment_trace(4, access.rx_dma());
             // The exit: the hole, bound to its spare at its take, armed and
             // linked behind the tail with the walker standing (reserve 0).
             let credit = storage
@@ -1030,6 +1042,7 @@ fn scan(
                 Err(_) => return Err(name!("exit-append"; 32)),
             }
             reload(ring, access)?;
+            ring.experiment_trace(5, access.rx_dma());
             state.hole_plus_one = 0;
             // `tasks/221`: the cursor and the bound read anew; the oldest
             // unit is the next pass's take, the next hole.
@@ -1680,6 +1693,23 @@ pub(super) fn observations(state: &State) -> Observations {
 
 pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<(), Name<32>> {
     let mut line = heapless::String::<768>::new();
+    // `tasks/229`: the trace around the tails' links.
+    for index in 0..oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::trace_used() {
+        let Some(words) =
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_rebind::trace_read(index)
+        else {
+            continue;
+        };
+        let mut trace = heapless::String::<1280>::new();
+        write!(&mut trace, "TRACE {index}").map_err(|_| name!("format"; 32))?;
+        for word in words {
+            write!(&mut trace, " {word:x}").map_err(|_| name!("format"; 32))?;
+        }
+        writeln!(&mut trace).map_err(|_| name!("format"; 32))?;
+        usb::text(console, trace.as_bytes())
+            .await
+            .map_err(|_| name!("console-write"; 32))?;
+    }
     for (segment, (counts, arm)) in state.counts.iter().zip(ARMS).enumerate() {
         line.clear();
         writeln!(

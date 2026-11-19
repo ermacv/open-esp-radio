@@ -2336,6 +2336,8 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
                 return Err(error);
             }
         }
+        // TEMPORARY experiment (`tasks/229`): before the group's words.
+        self.ring.experiment_trace(2, mmio);
         for step in 0..group_size {
             let index = self.ring.recycle_start.advance(step);
             let descriptor = self
@@ -2379,10 +2381,15 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
             .descriptor_table
             .element(head_index.get())
             .ok_or(RxRingError::Overflow)?;
+        // TEMPORARY experiment (`tasks/229`): the group published, the new
+        // tail's link zero, the old tail's link not yet written.
+        self.ring.experiment_trace(3, mmio);
         accepted_tail.publish_next(Some(head));
         mmio.fence();
+        self.ring.experiment_trace(6, mmio);
         mmio.request_reload(&self.ring.binding);
         mmio.fence();
+        self.ring.experiment_trace(7, mmio);
 
         // A frozen cursor lives for one service and is only compared for
         // equality, so the count wraps.
@@ -2405,6 +2412,54 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
 }
 
 impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
+    /// TEMPORARY experiment (`tasks/229`, probe branch only): one trace
+    /// record of the ring and the walker's registers under `tag`
+    /// ([`crate::radio::ieee80211::dma::rx_rebind::trace_keep`]'s layout).
+    pub fn experiment_trace<M: RxDma>(&self, tag: u32, mmio: &mut M) {
+        // No register is read unless a record is kept.
+        if !crate::radio::ieee80211::dma::rx_rebind::trace_wanted() {
+            return;
+        }
+        let next = mmio.next_descriptor_low();
+        let last = mmio.last_descriptor_low();
+        let base = mmio.descriptor_base_register().unwrap_or(0);
+        let flags = u32::from(mmio.walker_enabled()) | u32::from(mmio.reload_pending()) << 1;
+        let account = [
+            self.recycle_start.get() as u32,
+            self.accepted_tail.get() as u32,
+            self.pending_tail_plus_one as u32,
+        ];
+        let node = |index: usize| {
+            if index < COUNT.min(32) {
+                self.descriptors.get(index)
+            } else if index == COUNT.min(32) {
+                Some(self.table.reserved())
+            } else {
+                None
+            }
+        };
+        static SEQUENCE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        let sequence = SEQUENCE.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        crate::radio::ieee80211::dma::rx_rebind::trace_keep(|word| match word {
+            0 => tag,
+            1 => sequence,
+            2 => next,
+            3 => last,
+            4 => base,
+            5 => flags,
+            6..9 => account[word - 6],
+            9 => 0,
+            _ => {
+                let at = word - 10;
+                node(at / 3).map_or(0, |d| match at % 3 {
+                    0 => d.word0().bits(),
+                    1 => d.buffer_address(),
+                    _ => d.next_address(),
+                })
+            }
+        });
+    }
+
     pub const fn observed_mask(&self) -> RxObservedMask {
         self.observed_mask.get()
     }

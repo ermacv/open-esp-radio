@@ -338,3 +338,65 @@ mod tests {
         assert!(!table.attached());
     }
 }
+
+/// TEMPORARY experiment (`tasks/229`, branch `probe/rx-rebind-4` only): a
+/// trace of the ring around every write of a tail's link. A record is 112
+/// words: the tag, its sequence number, NEXT, LAST, `RX_DESCRIPTOR_BASE`
+/// (zero when unread), the walker's enable and the doorbell's pending bit
+/// (bit 0, bit 1), the ring's account (the recycle start, the accepted tail,
+/// the pending tail plus one), then the three words of every descriptor of
+/// the ring and of R (at most 32 and R).
+pub const TRACE_WORDS: usize = 112;
+/// The records a run keeps.
+pub const TRACE_RECORDS: usize = 64;
+
+static TRACE: [[AtomicU32; TRACE_WORDS]; TRACE_RECORDS] =
+    [const { [const { AtomicU32::new(0) }; TRACE_WORDS] }; TRACE_RECORDS];
+static TRACE_USED: AtomicU32 = AtomicU32::new(0);
+/// Records the run still allows.
+static TRACE_BUDGET: AtomicU32 = AtomicU32::new(0);
+
+use core::sync::atomic::AtomicU32;
+
+/// Allow `records` more trace records.
+pub fn trace_arm(records: u32) {
+    TRACE_BUDGET.store(records, Ordering::Relaxed);
+}
+
+/// The records kept.
+pub fn trace_used() -> usize {
+    (TRACE_USED.load(Ordering::Relaxed) as usize).min(TRACE_RECORDS)
+}
+
+/// Record `index`'s words.
+pub fn trace_read(index: usize) -> Option<[u32; TRACE_WORDS]> {
+    let record = TRACE.get(index)?;
+    Some(core::array::from_fn(|word| {
+        record
+            .get(word)
+            .map_or(0, |cell| cell.load(Ordering::Relaxed))
+    }))
+}
+
+/// Whether a record would be kept now.
+pub(crate) fn trace_wanted() -> bool {
+    TRACE_BUDGET.load(Ordering::Relaxed) != 0
+}
+
+/// Keep one record, while the budget allows.
+pub(crate) fn trace_keep(words: impl Fn(usize) -> u32) {
+    if TRACE_BUDGET
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+            left.checked_sub(1)
+        })
+        .is_err()
+    {
+        return;
+    }
+    let at = TRACE_USED.fetch_add(1, Ordering::Relaxed) as usize;
+    if let Some(record) = TRACE.get(at) {
+        for (word, cell) in record.iter().enumerate() {
+            cell.store(words(word), Ordering::Relaxed);
+        }
+    }
+}
