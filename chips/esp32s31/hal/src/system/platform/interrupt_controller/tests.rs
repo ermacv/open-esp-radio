@@ -623,10 +623,12 @@ fn a_bind_enables_last_and_a_take_down_disables_first() {
     let level = Control::level::<3, LEVEL_BITS>();
     let bound = LineStep::AttributesAndLevel {
         vectored: true,
+        trigger: clic::attr::Trig::PositiveLevel,
         control: level,
     };
     let disabled = LineStep::AttributesAndLevel {
         vectored: false,
+        trigger: clic::attr::Trig::PositiveLevel,
         control: Control::from_bits(0),
     };
     assert_eq!(
@@ -634,19 +636,96 @@ fn a_bind_enables_last_and_a_take_down_disables_first() {
         [
             Some(LineStep::EnableOff),
             Some(bound),
-            Some(LineStep::EnableOn)
+            Some(LineStep::EnableOn),
+            None
         ]
     );
     assert_eq!(
         line_steps(LineWrite::Bind(level), false),
-        [None, Some(bound), Some(LineStep::EnableOn)]
+        [None, Some(bound), Some(LineStep::EnableOn), None]
     );
     assert_eq!(
         line_steps(LineWrite::Disable, true),
-        [Some(LineStep::EnableOff), Some(disabled), None]
+        [Some(LineStep::EnableOff), Some(disabled), None, None]
     );
     assert_eq!(
         line_steps(LineWrite::Disable, false),
-        [None, Some(disabled), None]
+        [None, Some(disabled), None, None]
     );
+}
+
+/// A level task's line is bound edge-triggered, and its pending byte is
+/// cleared once the trigger is an edge and before the enable: the line
+/// enters for its raisers' pends alone. Only a task's bind writes the
+/// pending byte.
+#[test]
+fn a_task_line_clears_its_pending_byte_between_its_edge_and_its_enable() {
+    use super::{LineStep, LineWrite, line_steps};
+    let level = Control::level::<3, LEVEL_BITS>();
+    let edge = LineStep::AttributesAndLevel {
+        vectored: true,
+        trigger: clic::attr::Trig::PositiveEdge,
+        control: level,
+    };
+    for (enabled, off) in [(true, Some(LineStep::EnableOff)), (false, None)] {
+        assert_eq!(
+            line_steps(LineWrite::Task(level), enabled),
+            [
+                off,
+                Some(edge),
+                Some(LineStep::PendingClear),
+                Some(LineStep::EnableOn)
+            ]
+        );
+        for write in [LineWrite::Bind(level), LineWrite::Disable] {
+            assert!(
+                !line_steps(write, enabled).contains(&Some(LineStep::PendingClear)),
+                "{write:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_clear() {
+    let level = Control::level::<3, LEVEL_BITS>();
+    let mut memory = Memory::filled(0);
+    // As a boot might leave it: enabled, pending, level-triggered, another
+    // level.
+    set_line(
+        &mut memory.clic(),
+        34,
+        (
+            true,
+            true,
+            false,
+            clic::attr::Trig::PositiveLevel,
+            Control::level::<1, LEVEL_BITS>().bits(),
+        ),
+    );
+    let mut controller = memory.controller();
+    controller.bind_task(clic_line(34), level);
+    assert_eq!(
+        controller.check(clic_line(34), LineExpectation::Task(level)),
+        Ok(())
+    );
+    // A task's line is no routed line's binding, and the other way round.
+    assert_eq!(
+        controller.check(clic_line(34), LineExpectation::Bound(level)),
+        Err(LineObservation::of_bytes([0, 1, 0x03, level.bits()]))
+    );
+    controller.bind(clic_line(35), level);
+    assert!(
+        controller
+            .check(clic_line(35), LineExpectation::Task(level))
+            .is_err()
+    );
+    drop(controller);
+    let clic = memory.clic();
+    assert!(!clic.read_ip(line(34)).ip(), "the pending byte is cleared");
+    assert!(clic.read_ie(line(34)).ie());
+    let attributes = clic.read_attr(line(34));
+    assert!(attributes.shv());
+    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveEdge);
+    assert_eq!(clic.read_ctl(line(34)).ctl(), level.bits());
 }

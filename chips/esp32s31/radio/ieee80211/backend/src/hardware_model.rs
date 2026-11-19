@@ -1005,7 +1005,7 @@ impl<X: SignalExecutor + 'static> ModelLine<X> {
 pub struct ModelDoorbell<X: SignalExecutor + 'static>(pub Rc<ModelLine<X>>);
 
 impl<X: SignalExecutor + 'static> RadioDoorbell for ModelDoorbell<X> {
-    const HANDLER: HandlerContext = HandlerContext { level: 3, hart: 0 };
+    const HANDLER: HandlerContext = HandlerContext { level: 4, hart: 0 };
     const EXECUTOR: HandlerContext = HandlerContext { level: 2, hart: 0 };
     fn ring(&self) {
         self.0.atoms.count(|counts| {

@@ -515,6 +515,15 @@ pub struct InterruptContract {
     /// An exempt entry's reason is the bytes of the symbol named by this
     /// prefix and the entry's handler symbol.
     pub table_exemption_prefix: String,
+    /// The image's level tasks (`oer_chips_family_platform_interrupt_table::TaskBinding`):
+    /// a table of their own, with no source and no class.
+    pub task_table_symbol: String,
+    pub task_entry_bytes: u32,
+    /// Fields of a level task as `[offset, bytes]`.
+    pub task_line: [u32; 2],
+    pub task_level: [u32; 2],
+    pub task_core: [u32; 2],
+    pub task_handler: u32,
     /// Every hart's hardware-vector table, one after another.
     pub vector_table_symbol: String,
     /// The words of one hart's table: the word of line `n` of hart `h` is

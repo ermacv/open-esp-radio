@@ -19,7 +19,9 @@
 
 use oer_portable_mmio::{InterruptSource, InterruptSources};
 
-use crate::{__private::Declared, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
+use crate::{
+    __private::Declared, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table, TaskBinding,
+};
 
 use oer_portable_riscv::clic::{Control, LevelBits};
 
@@ -59,6 +61,12 @@ pub trait Controller {
     /// with the trigger the chip's lines have, keeping its pending bit. The
     /// line is never enabled with another attribute or control.
     fn bind(&mut self, line: Self::Line, control: Control);
+    /// Bind `line` as a level task's at the level of `control`: enabled,
+    /// hardware-vectored and positive-edge, since software pends a line only
+    /// on an edge trigger; its pending bit cleared before the enable, with
+    /// the trigger already an edge. The line is never enabled with another
+    /// attribute or control.
+    fn bind_task(&mut self, line: Self::Line, control: Control);
     /// Disable `line`, keeping its pending bit.
     fn disable(&mut self, line: Self::Line);
     /// Check `line` against what the table left in it: a disabled line is
@@ -78,15 +86,19 @@ pub enum LineExpectation {
     Disabled,
     /// The line is bound at this control byte's level.
     Bound(Control),
+    /// The line is a level task's, bound at this control byte's level.
+    Task(Control),
 }
 
 impl LineExpectation {
     /// The expectation's word in a record, encoded here alone: 0 disabled,
-    /// bit 8 and the control byte bound.
+    /// bit 8 and the control byte bound, bit 9 and the control byte a level
+    /// task's.
     pub const fn record(self) -> u32 {
         match self {
             Self::Disabled => 0,
             Self::Bound(control) => 0x100 | control.bits() as u32,
+            Self::Task(control) => 0x200 | control.bits() as u32,
         }
     }
 }
@@ -250,6 +262,41 @@ const fn table_inside(table: &[Declared], sources: usize, lines: usize, levels: 
 
 /// Whether an entry `table` declares that the build holds binds one of
 /// `sources`, on any hart: the table at compile time.
+/// The control byte of each line of the controller that a present level task
+/// of hart `hart` holds, line `n` at `n`; the first task outside the
+/// controller's lines or levels refuses.
+const fn task_controls(
+    tasks: &[TaskBinding],
+    hart: u8,
+    lines: usize,
+    bits: LevelBits,
+) -> Result<[Option<Control>; 64], &'static str> {
+    let mut controls = [None; 64];
+    let mut rest = tasks;
+    while let [task, tail @ ..] = rest {
+        rest = tail;
+        if task.handler.is_none() || task.hart != hart {
+            continue;
+        }
+        if task.line as usize >= lines {
+            return Err("a level task's line is no line of the controller");
+        }
+        let Ok(control) = bits.control(task.level as u16) else {
+            return Err("a level task's level is no level of the controller's lines");
+        };
+        let mut slots: &mut [Option<Control>] = &mut controls;
+        let mut at = 0;
+        while let [slot, more @ ..] = slots {
+            if at == task.line as usize {
+                *slot = Some(control);
+            }
+            slots = more;
+            at += 1;
+        }
+    }
+    Ok(controls)
+}
+
 const fn table_binds(table: &[Declared], sources: &[u16]) -> bool {
     let mut rest = table;
     while let [entry, tail @ ..] = rest {
@@ -305,13 +352,42 @@ fn present(table: &[Binding], hart: u8) -> impl Iterator<Item = &Binding> {
 }
 
 impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
+    /// The control byte of each line a level task of the hart holds, line
+    /// `n` at `n`: made at compile time from the table, so neither
+    /// [`install`](Self::install) nor [`verify`](Self::verify) looks a task
+    /// up or refuses one.
+    const TASKS: [Option<Control>; 64] =
+        match task_controls(T::TASKS, H, C::LINES.len(), C::LEVEL_BITS) {
+            Ok(controls) => controls,
+            Err(why) => panic!("{}", why),
+        };
+
     /// Take `controller`'s hart for `table`, the image's `InterruptTable`:
-    /// silence every source and disable every line of the hart, then
+    /// silence every source and disable every line of the hart, bind the
+    /// line of each level task of the hart ([`Controller::bind_task`]), then
     /// [`verify`](Self::verify). Interrupts must stay disabled on the hart
-    /// until it returns.
+    /// until it returns. A task's line holds no source and nothing pends it
+    /// before its raisers exist, so it is bound here, for good, with nothing
+    /// to place first.
     ///
-    /// A table whose entry names a source, a line or a level the controller
-    /// has not fails to compile, on any hart:
+    /// A table whose entry or level task names a source, a line or a level
+    /// the controller has not fails to compile, on the task's hart:
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
+    /// # pub fn on_far() {}
+    /// // The table's lines reach past the controller's 48.
+    /// const WIDE: oer_chips_family_platform_interrupt_table::Lines =
+    ///     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
+    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
+    ///     lines: WIDE,
+    ///     handler_attributes: [];
+    ///     level_tasks { FarTask => on_far, line 60, context keeper, hart 0; }
+    ///     contexts { keeper: 3; }
+    /// }
+    /// let _ = oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(FakeController::new(0), InterruptTable);
+    /// ```
     ///
     /// ```compile_fail,E0080
     /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
@@ -392,6 +468,11 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         }
         for &line in C::LINES {
             controller.disable(line);
+        }
+        for (&line, task) in C::LINES.iter().zip(Self::TASKS) {
+            if let Some(control) = task {
+                controller.bind_task(line, control);
+            }
         }
         let router = Self { controller, table };
         router.verify()?;
@@ -591,19 +672,20 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             }
             routed_lines |= 1u64.checked_shl(u32::from(line)).unwrap_or(0);
         }
-        for (typed, line) in C::LINES.iter().copied().zip(0u8..) {
-            let expected = match present(self.table.bindings(), hart)
+        for ((typed, line), task) in C::LINES.iter().copied().zip(0u8..).zip(Self::TASKS) {
+            let routed = present(self.table.bindings(), hart)
                 .find(|binding| binding.line == line)
-                .filter(|_| routed_lines >> line & 1 == 1)
-            {
-                Some(binding) => LineExpectation::Bound(
+                .filter(|_| routed_lines >> line & 1 == 1);
+            let expected = match (task, routed) {
+                (Some(control), _) => LineExpectation::Task(control),
+                (None, Some(binding)) => LineExpectation::Bound(
                     C::LEVEL_BITS
                         .control(u16::from(binding.level))
                         .map_err(|_| Error::NoSuchLevel {
                             level: binding.level,
                         })?,
                 ),
-                None => LineExpectation::Disabled,
+                (None, None) => LineExpectation::Disabled,
             };
             self.controller
                 .check(typed, expected)

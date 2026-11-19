@@ -59,6 +59,9 @@ impl Controller for Injected {
     fn bind(&mut self, line: u8, control: Control) {
         self.inner.lock().unwrap().bind(line, control)
     }
+    fn bind_task(&mut self, line: u8, control: Control) {
+        self.inner.lock().unwrap().bind_task(line, control)
+    }
     fn disable(&mut self, line: u8) {
         self.inner.lock().unwrap().disable(line)
     }

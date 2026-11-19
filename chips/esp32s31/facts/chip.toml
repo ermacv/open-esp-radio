@@ -186,12 +186,15 @@ pma = [
 # and hart each entry of the application entry's table uses. The application
 # entry's build substitutes these into its table. All control bits are levels,
 # so equal-level lines arbitrate by the family's tie-break and never preempt.
+# The keeper's level lies between the radio's executor and its handler: it
+# runs one level task and nothing else (no entry with a source sits on it).
 [interrupt-layout.contexts]
 app_wake = 1
 hart1_app = 1
 radio_executor = 2
-radio = 3
-profile = 4
+keeper = 3
+radio = 4
+profile = 5
 
 [[interrupt-layout.entries]]
 name = "wake"

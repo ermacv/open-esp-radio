@@ -47,6 +47,16 @@ table-class = [4, 1]
 table-core = [5, 1]
 table-handler = 8
 table-exemption-prefix = "__OER_INTERRUPT_EXEMPT_"
+# The image's level tasks, a table of their own
+# (`oer_chips_family_platform_interrupt_table::TaskBinding`): line u8 at 0,
+# level u8 at 1, hart u8 at 2, handler word at 4. A task has no source and
+# no class: its table is its class.
+task-table-symbol = "__OER_LEVEL_TASK_TABLE"
+task-entry-bytes = 8
+task-line = [0, 1]
+task-level = [1, 1]
+task-core = [2, 1]
+task-handler = 4
 # Each hart's table of 64 words, the word of line n at 4n; each line's
 # entry calls the line's handler directly and returns through the checked
 # exit. The staged runtime's build generates the entries, the tables and the

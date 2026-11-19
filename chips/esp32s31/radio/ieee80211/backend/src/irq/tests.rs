@@ -145,7 +145,7 @@ struct Rings(Cell<usize>);
 
 impl RadioDoorbell for Rings {
     const HANDLER: oer_chips_family_platform_interrupt_table::Context =
-        oer_chips_family_platform_interrupt_table::Context { level: 3, hart: 0 };
+        oer_chips_family_platform_interrupt_table::Context { level: 4, hart: 0 };
     const EXECUTOR: oer_chips_family_platform_interrupt_table::Context =
         oer_chips_family_platform_interrupt_table::Context { level: 2, hart: 0 };
     fn ring(&self) {

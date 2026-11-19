@@ -148,6 +148,44 @@ const _: () = {
     }
 };
 
+/// One level task of an image's table, laid out for the tools that read it
+/// from the image: line at 0, level at 1, hart at 2, the handler's word at
+/// the next word (byte 4 on the chip), two words in all. A level task has
+/// no source: its element has no source field, and its line is a software
+/// line that only its raisers pend.
+#[derive(Debug)]
+#[repr(C)]
+pub struct TaskBinding {
+    /// The task's line, which no source is routed to; its vector calls
+    /// `handler`.
+    pub line: u8,
+    /// The task's level, 1 for the lowest.
+    pub level: u8,
+    pub hart: u8,
+    /// The function the line's vector calls; `None` (a zero word) for a
+    /// task a `cfg` leaves out of the image.
+    pub handler: Option<extern "C" fn()>,
+}
+
+const _: () = {
+    use core::mem::{offset_of, size_of};
+    if offset_of!(TaskBinding, line) != 0 {
+        panic!("a level task's line is at byte 0")
+    }
+    if offset_of!(TaskBinding, level) != 1 {
+        panic!("a level task's level is at byte 1")
+    }
+    if offset_of!(TaskBinding, hart) != 2 {
+        panic!("a level task's hart is at byte 2")
+    }
+    if offset_of!(TaskBinding, handler) != size_of::<usize>() {
+        panic!("a level task's handler is its second word")
+    }
+    if size_of::<TaskBinding>() != 2 * size_of::<usize>() {
+        panic!("a level task is two words")
+    }
+};
+
 /// An image's table, as a type: [`interrupt_table!`] declares it
 /// (`InterruptTable`) beside its entries, and [`NoBindings`] is the table of
 /// none. Sealed: only the macro and this crate implement it, so an entry's
@@ -156,6 +194,9 @@ pub trait Table: __private::SealedTable + Copy + 'static {
     /// Every entry of the table, as its declaration lists it.
     #[doc(hidden)]
     const DECLARED: &'static [__private::Declared];
+    /// Every level task of the table, as the image exports them: a task a
+    /// `cfg` leaves out has no handler.
+    const TASKS: &'static [TaskBinding];
     /// The table's bindings, as the image exports them.
     fn bindings(self) -> &'static [Binding];
 }
@@ -168,9 +209,34 @@ impl __private::SealedTable for NoBindings {}
 
 impl Table for NoBindings {
     const DECLARED: &'static [__private::Declared] = &[];
+    const TASKS: &'static [TaskBinding] = &[];
     fn bindings(self) -> &'static [Binding] {
         &[]
     }
+}
+
+/// A level's task, declared in an image's table (`level_tasks { ... }` of
+/// [`interrupt_table!`]): the one task that an interrupt level between the
+/// handlers and the application runs, on a software line of its own that no
+/// source is routed to. The type has no value; it names the task where its
+/// raisers name it. Sealed: only the macro implements it.
+///
+/// The router binds a task's line when it installs ([`Router::install`]):
+/// hardware-vectored and positive-edge (the trigger follows from the kind,
+/// [`Controller::bind_task`]), its pending bit cleared before the enable.
+/// Hardware reaches a level's task only through a handler above it, which
+/// pends it: a timer a task one day needs is a [`Class::Hardware`] entry
+/// that pends it, which is why a task's line never has a source.
+pub trait LevelTask: __private::SealedTask {
+    /// The table that declares the task.
+    type Table: Table;
+    const LINE: u8;
+    const LEVEL: u8;
+    const HART: u8;
+    const CONTEXT: Context = Context {
+        level: Self::LEVEL,
+        hart: Self::HART,
+    };
 }
 
 /// The token of one table entry: the only way to bind its part.
@@ -308,6 +374,15 @@ pub struct Lines {
 /// `__OER_INTERRUPT_EXEMPT_` followed by the handler's symbol for the image
 /// gate's report.
 ///
+/// An image with level tasks declares them first, in
+/// `level_tasks { Task => handler, line LINE, context NAME, hart HART; ... }`
+/// before `contexts`: each task's type ([`LevelTask`], with no value), its
+/// handler (a `fn()`), its software line, its level and its hart. The macro
+/// defines the task's line symbol `__oer_interrupt_h<HART>_l<LINE>`, which
+/// runs the handler, and lays the tasks out in `LEVEL_TASK_TABLE`, exported
+/// as `__OER_LEVEL_TASK_TABLE`. A task has no source, no token and no class:
+/// the class is its table.
+///
 /// The table fails to compile when a line lies outside
 /// `lines.first..lines.count`, a declared context level outside `1..=lines.levels` or a hart
 /// outside `0..lines.harts`; when two entries share a line and hart, or
@@ -315,7 +390,132 @@ pub struct Lines {
 /// or `Exempt(WakerCall, ..)` entry sits on the level of its hart's
 /// `Executor`, or an `Exempt(ExecutorLevel, ..)` entry does not. An entry's
 /// `#[cfg(...)]` attributes, before its doc comment, leave all of it out:
-/// token, handler symbol, reason and table entry.
+/// token, handler symbol, reason and table entry. The level tasks' rules: a
+/// task's line lies in `lines.first..lines.count` and its hart in
+/// `0..lines.harts`; no two tasks, and no task and entry, share a line and
+/// hart; one task a level and hart; and no entry, an `Executor` or one with
+/// a source, sits on the level of its hart's task. A task's `#[cfg(...)]`
+/// leaves it out as an entry's does.
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # pub fn on_other() {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // One task a level and hart.
+///     level_tasks {
+///         KeeperTask => on_keeper, line 34, context keeper, hart 0;
+///         OtherTask => on_other, line 35, context keeper, hart 0;
+///     }
+///     contexts { keeper: 3; }
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # pub fn on_other() {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // One line, one vector.
+///     level_tasks {
+///         KeeperTask => on_keeper, line 34, context keeper, hart 0;
+///         OtherTask => on_other, line 34, context other, hart 0;
+///     }
+///     contexts { keeper: 3; other: 4; }
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // A task's line is its own: no entry's vector shares it.
+///     level_tasks { KeeperTask => on_keeper, line 34, context keeper, hart 0; }
+///     contexts { keeper: 3; app_wake: 1; }
+///     timer: TimerToken = TimerIrq => on_timer, line 34, context app_wake, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // A task never sits on an executor's level.
+///     level_tasks { KeeperTask => on_keeper, line 34, context radio_executor, hart 0; }
+///     contexts { radio_executor: 2; }
+///     radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // A task's level runs the task and nothing else: no source there.
+///     level_tasks { KeeperTask => on_keeper, line 34, context keeper, hart 0; }
+///     contexts { keeper: 3; }
+///     timer: TimerToken = TimerIrq => on_timer, line 16, context keeper, hart 0, Hardware;
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // Lines below the first external one are the core's own.
+///     level_tasks { KeeperTask => on_keeper, line 3, context keeper, hart 0; }
+///     contexts { keeper: 3; }
+/// }
+/// ```
+///
+/// ```compile_fail,E0080
+/// # pub fn on_keeper() {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     // The fake has two harts.
+///     level_tasks { KeeperTask => on_keeper, line 34, context keeper, hart 2; }
+///     contexts { keeper: 3; }
+/// }
+/// ```
+///
+/// A task on each hart at one level, and entries of the task's hart on other
+/// levels, compile:
+///
+/// ```
+/// # pub fn on_keeper() {}
+/// # pub fn on_other() {}
+/// # pub fn on_timer(_: &mut TimerIrq) {}
+/// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+/// oer_chips_family_platform_interrupt_table::interrupt_table! {
+///     lines: FAKE_LINES,
+///     handler_attributes: [];
+///     level_tasks {
+///         KeeperTask => on_keeper, line 34, context keeper, hart 0;
+///         OtherTask => on_other, line 34, context keeper, hart 1;
+///     }
+///     contexts { radio_executor: 2; keeper: 3; radio: 4; }
+///     radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 0, Executor;
+///     timer: TimerToken = TimerIrq => on_timer, line 21, context radio, hart 0, Hardware;
+/// }
+/// fn named<T: oer_chips_family_platform_interrupt_table::LevelTask>() -> u8 { T::LEVEL }
+/// assert_eq!(named::<KeeperTask>(), named::<OtherTask>());
+/// ```
 ///
 /// ```compile_fail,E0080
 /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
@@ -509,6 +709,14 @@ macro_rules! interrupt_table {
     (
         lines: $lines:expr,
         handler_attributes: $handler_attributes:tt;
+        $(level_tasks {
+            $(
+                $(#[cfg($task_cfg:meta)])*
+                $(#[doc = $task_doc:literal])*
+                $task:ident => $task_handler:path,
+                    line $task_line:literal, context $task_context:ident, hart $task_hart:literal;
+            )*
+        })?
         contexts { $($context_name:ident: $context_level:literal;)* }
         $(
             $(#[cfg($cfg:meta)])*
@@ -523,6 +731,44 @@ macro_rules! interrupt_table {
         mod contexts {
             $(pub const $context_name: u8 = $context_level;)*
         }
+        $($(
+            $(#[cfg($task_cfg)])*
+            $(#[doc = $task_doc])*
+            pub enum $task {}
+
+            $(#[cfg($task_cfg)])*
+            impl $crate::__private::SealedTask for $task {}
+
+            $(#[cfg($task_cfg)])*
+            impl $crate::LevelTask for $task {
+                type Table = InterruptTable;
+                const LINE: u8 = $task_line;
+                const LEVEL: u8 = contexts::$task_context;
+                const HART: u8 = $task_hart;
+            }
+
+            $(#[cfg($task_cfg)])*
+            impl $task {
+                $crate::__task_handler!($handler_attributes, $task_handler, $task_hart, $task_line);
+            }
+        )*)?
+
+        /// Every level task of the table; one a `cfg` leaves out has no
+        /// handler.
+        const __OER_TASKS: &[$crate::TaskBinding] = &[
+            $($($crate::TaskBinding {
+                line: $task_line,
+                level: contexts::$task_context,
+                hart: $task_hart,
+                handler: {
+                    #[cfg(all($($task_cfg),*))]
+                    let handler = ::core::option::Option::Some($task::__handler as extern "C" fn());
+                    #[cfg(not(all($($task_cfg),*)))]
+                    let handler = ::core::option::Option::None;
+                    handler
+                },
+            },)*)?
+        ];
         $(
             $(#[cfg($cfg)])*
             $(#[doc = $doc])*
@@ -596,7 +842,7 @@ macro_rules! interrupt_table {
             },)*
         ];
 
-        const _: () = if let Err(why) = $crate::__private::check($lines, &[$(contexts::$context_name),*], __OER_DECLARED) {
+        const _: () = if let Err(why) = $crate::__private::check($lines, &[$(contexts::$context_name),*], __OER_DECLARED, __OER_TASKS) {
             panic!("{}", why)
         };
 
@@ -642,18 +888,27 @@ macro_rules! interrupt_table {
 
         impl $crate::Table for InterruptTable {
             const DECLARED: &'static [$crate::__private::Declared] = __OER_DECLARED;
+            const TASKS: &'static [$crate::TaskBinding] = __OER_TASKS;
             fn bindings(self) -> &'static [$crate::Binding] {
                 &__OER_BINDINGS
             }
         }
 
         $crate::__private::link_fn! {
-            table $crate::__private::InterruptTableSlot =>
+            table $crate::__private::TableSlot<$crate::Binding> =>
             /// The image's interrupt table. `#[used]` keeps the exported slice
             /// in the image: reads of an immutable static are folded into their
             /// uses, which would leave the tools no symbol to find it by.
             #[used]
             pub static INTERRUPT_TABLE: &[$crate::Binding] = &__OER_BINDINGS;
+        }
+
+        $crate::__private::link_fn! {
+            task_table $crate::__private::TableSlot<$crate::TaskBinding> =>
+            /// The image's level tasks, for the tools as the interrupt table
+            /// is; empty in an image without one.
+            #[used]
+            pub static LEVEL_TASK_TABLE: &[$crate::TaskBinding] = __OER_TASKS;
         }
     };
 }
@@ -721,6 +976,23 @@ macro_rules! __interrupt_handler {
             extern "C" fn __handler() {
                 let handler: fn(&mut <$token as $crate::Entry>::Part) = $handler;
                 let _ = <$token as $crate::Entry>::PROOF.cell().with(handler);
+            }
+        }
+    };
+}
+
+/// The strong symbol a level task's line calls: it runs the task's handler,
+/// a `fn()`, which holds no part of the table's.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __task_handler {
+    ([$(#[$attribute:meta])*], $handler:path, $hart:literal, $line:literal) => {
+        $crate::__private::link_fn! {
+            interrupt $crate::__private::InterruptHandlerSlot<$hart, $line>, hart $hart, line $line =>
+            $(#[$attribute])*
+            extern "C" fn __handler() {
+                let handler: fn() = $handler;
+                handler();
             }
         }
     };
@@ -808,19 +1080,45 @@ pub mod __private {
     /// implement it.
     pub trait SealedTable {}
 
-    pub enum InterruptTableSlot {}
+    /// The seal of [`crate::LevelTask`]: the table macro alone implements
+    /// it.
+    pub trait SealedTask {}
+
+    mod element {
+        /// The seal of [`super::TableElement`]: unreachable outside this
+        /// crate, so its two implementations below are all there are.
+        pub trait Sealed {}
+        impl Sealed for crate::Binding {}
+        impl Sealed for crate::TaskBinding {}
+    }
+
+    /// An element of a table the image exports, with the one symbol that
+    /// holds the slice of it: [`Binding`] in `__OER_INTERRUPT_TABLE`,
+    /// [`TaskBinding`](crate::TaskBinding) in `__OER_LEVEL_TASK_TABLE`.
+    /// Sealed: implemented here alone, once each.
+    pub trait TableElement: element::Sealed + Sync + 'static {
+        const SYMBOL: &'static str;
+    }
+    impl TableElement for Binding {
+        const SYMBOL: &'static str = "__OER_INTERRUPT_TABLE";
+    }
+    impl TableElement for crate::TaskBinding {
+        const SYMBOL: &'static str = "__OER_LEVEL_TASK_TABLE";
+    }
+
+    /// The slot of the table of `B`s an image exports.
+    pub struct TableSlot<B: TableElement>(core::marker::PhantomData<fn() -> B>);
     #[allow(
         unsafe_code,
-        reason = "the interrupt table owns its existing table ABI"
+        reason = "the interrupt table owns its existing table ABIs"
     )]
-    // SAFETY: the sole table symbol is an immutable slice of Binding with
-    // the repr(C) layout checked above; its export checks this exact type.
-    unsafe impl oer_portable_memory::LinkSlot for InterruptTableSlot {
-        type Value = &'static [Binding];
+    // SAFETY: each of the two sealed elements names its own symbol, and
+    // that symbol holds an immutable slice of that element, whose repr(C)
+    // layout is checked above; the export checks this exact type.
+    unsafe impl<B: TableElement> oer_portable_memory::LinkSlot for TableSlot<B> {
+        type Value = &'static [B];
         const NAME: oer_portable_memory::SlotName =
-            oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text(
-                "__OER_INTERRUPT_TABLE",
-            )]);
+            oer_portable_memory::SlotName(&[oer_portable_memory::NamePart::Text(B::SYMBOL)]);
         const KIND: oer_portable_memory::SlotKind = oer_portable_memory::SlotKind::Static;
     }
     pub enum InterruptHandlerSlot<const H: u8, const L: u8> {}
@@ -929,11 +1227,13 @@ pub mod __private {
     /// The rules of a table, or the first it breaks, at compile time: declared context levels and
     /// present entries' lines and harts in range, one entry per line and hart and per source,
     /// one `Executor` per level and hart, no `Hardware` or waker exemption
-    /// on its level, every level exemption on it.
+    /// on its level, every level exemption on it; and the level tasks'
+    /// rules ([`check_tasks`]).
     pub const fn check(
         lines: Lines,
         contexts: &[u8],
         entries: &[Declared],
+        tasks: &[crate::TaskBinding],
     ) -> Result<(), &'static str> {
         let mut levels = contexts;
         while let [level, tail @ ..] = levels {
@@ -941,6 +1241,9 @@ pub mod __private {
             if *level < 1 || *level > lines.levels {
                 return Err("a context's level is no level a line can hold");
             }
+        }
+        if let Err(why) = check_tasks(lines, entries, tasks) {
+            return Err(why);
         }
         let mut rest = entries;
         let mut position = 0;
@@ -1013,6 +1316,69 @@ pub mod __private {
                             "an Exempt(ExecutorLevel) entry is not on the level of its hart's Executor",
                         );
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The rules of the level tasks, or the first one breaks, at compile
+    /// time: a present task's line and hart in range; no two tasks, and no
+    /// task and entry, share a line and hart; one task a level and hart; and
+    /// the level of a task on its hart holds no entry: an executor never,
+    /// and no source either, since a level between the handlers and the
+    /// application runs its one task and nothing else.
+    pub const fn check_tasks(
+        lines: Lines,
+        entries: &[Declared],
+        tasks: &[crate::TaskBinding],
+    ) -> Result<(), &'static str> {
+        let mut rest = tasks;
+        let mut position = 0;
+        while let [task, tail @ ..] = rest {
+            rest = tail;
+            position += 1;
+            if task.handler.is_none() {
+                continue;
+            }
+            if task.line < lines.first || task.line >= lines.count {
+                return Err("a level task's line is no external line of the image");
+            }
+            if task.hart >= lines.harts {
+                return Err("a level task's hart is no hart of the image");
+            }
+            let mut others = tasks;
+            let mut other_position = 0;
+            while let [other, more @ ..] = others {
+                others = more;
+                other_position += 1;
+                if other_position == position || other.handler.is_none() || other.hart != task.hart
+                {
+                    continue;
+                }
+                if other.line == task.line {
+                    return Err("two level tasks share a line and hart");
+                }
+                if other.level == task.level {
+                    return Err("two level tasks share a level and hart");
+                }
+            }
+            let mut held = entries;
+            while let [entry, more @ ..] = held {
+                held = more;
+                if !entry.present || entry.binding.hart != task.hart {
+                    continue;
+                }
+                if entry.binding.line == task.line {
+                    return Err("a level task and an entry share a line and hart");
+                }
+                if entry.binding.level == task.level {
+                    return Err(match entry.binding.class {
+                        Class::Executor => {
+                            "an Executor entry shares the level of its hart's level task"
+                        }
+                        _ => "an entry with a source shares the level of its hart's level task",
+                    });
                 }
             }
         }
@@ -1175,6 +1541,10 @@ macro_rules! __fake_controller {
                 line: u8,
                 control: $crate::__private::clic::Control,
             },
+            BindTask {
+                line: u8,
+                control: $crate::__private::clic::Control,
+            },
             Disable {
                 line: u8,
             },
@@ -1186,6 +1556,8 @@ macro_rules! __fake_controller {
         pub enum FakeLine {
             Disabled,
             Bound($crate::__private::clic::Control),
+            /// A level task's line.
+            Task($crate::__private::clic::Control),
             /// Enabled, with an attribute or control no binding writes.
             Foreign(u32),
         }
@@ -1197,6 +1569,7 @@ macro_rules! __fake_controller {
                 match self {
                     Self::Disabled => 0,
                     Self::Bound(control) => $crate::LineExpectation::Bound(control).record(),
+                    Self::Task(control) => $crate::LineExpectation::Task(control).record(),
                     Self::Foreign(word) => word,
                 }
             }
@@ -1259,6 +1632,10 @@ macro_rules! __fake_controller {
                 self.lines[usize::from(line)] = FakeLine::Bound(control);
                 self.writes.push(Write::Bind { line, control });
             }
+            fn bind_task(&mut self, line: u8, control: $crate::__private::clic::Control) {
+                self.lines[usize::from(line)] = FakeLine::Task(control);
+                self.writes.push(Write::BindTask { line, control });
+            }
             fn disable(&mut self, line: u8) {
                 self.lines[usize::from(line)] = FakeLine::Disabled;
                 self.writes.push(Write::Disable { line });
@@ -1272,6 +1649,7 @@ macro_rules! __fake_controller {
                 let holds = match expected {
                     $crate::LineExpectation::Disabled => held == FakeLine::Disabled,
                     $crate::LineExpectation::Bound(control) => held == FakeLine::Bound(control),
+                    $crate::LineExpectation::Task(control) => held == FakeLine::Task(control),
                 };
                 if holds {
                     Ok(())
@@ -1303,11 +1681,26 @@ macro_rules! __fake_table {
         pub fn on_pair(part: &mut PairIrq) {
             part.handled += 1;
         }
+        /// The handler of the keeper's level task: one more run.
+        pub fn on_keeper() {
+            KEEPER_RUNS.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
+        }
+        /// The runs of the keeper's level task.
+        pub static KEEPER_RUNS: ::core::sync::atomic::AtomicU32 = ::core::sync::atomic::AtomicU32::new(0);
 
         $crate::interrupt_table! {
             lines: FAKE_LINES,
             handler_attributes: [];
-            contexts { app_wake: 1; radio_executor: 2; }
+            level_tasks {
+                /// A level task on hart 0, between the radio's executor and
+                /// the handlers above it.
+                KeeperTask => on_keeper, line 34, context keeper, hart 0;
+                #[cfg(any())]
+                /// Left out of every build; on its own it would break the
+                /// one-task-a-level rule.
+                AbsentTask => on_absent_task, line 35, context keeper, hart 0;
+            }
+            contexts { app_wake: 1; radio_executor: 2; keeper: 3; }
             timer: TimerToken = TimerIrq => on_timer, line 16, context app_wake, hart 0, Hardware;
             radio: RadioToken = RadioIrq => OnExecutor, line 17, context radio_executor, hart 1, Executor;
             pair: PairToken = PairIrq => on_pair, line 18, context app_wake, hart 0, Hardware;
