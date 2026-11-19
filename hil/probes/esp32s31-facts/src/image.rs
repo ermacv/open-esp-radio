@@ -266,6 +266,22 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(levels::byte_pend),
     },
     Probe {
+        id: 318,
+        run: Action::Thread(levels::byte_from_higher),
+    },
+    Probe {
+        id: 319,
+        run: Action::Thread(levels::byte_twice_and_own),
+    },
+    Probe {
+        id: 320,
+        run: Action::Thread(levels::byte_neighbours),
+    },
+    Probe {
+        id: 321,
+        run: Action::Thread(levels::byte_fields),
+    },
+    Probe {
         id: 232,
         run: Action::Thread(hart1_entry::main_path),
     },

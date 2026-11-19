@@ -79,8 +79,13 @@ enum Mode {
     Neighbours = 5,
     TwiceFromHigher = 6,
     Latency = 7,
-    /// 317 (`tasks/219` c4): the pend as one byte store.
+    /// 317, 319, 320 (`tasks/219` c4, `tasks/241`): the pend as one byte
+    /// store; the line counts its entries.
     BytePend = 8,
+    /// 318: HIGH's handler stores the line's `IP` byte.
+    ByteFromHigher = 9,
+    /// 319: the line's handler stores its own `IP` byte on its first entry.
+    ByteOwnHandler = 10,
 }
 
 static ACTIVE: AtomicU32 = AtomicU32::new(Mode::Idle as u32);
@@ -102,6 +107,11 @@ fn mode() -> Mode {
         5 => Mode::Neighbours,
         6 => Mode::TwiceFromHigher,
         7 => Mode::Latency,
+        // `tasks/241`: 317's mode, absent here in run 233 and 234, made
+        // every entry of the byte test the generic handler's.
+        8 => Mode::BytePend,
+        9 => Mode::ByteFromHigher,
+        10 => Mode::ByteOwnHandler,
         _ => Mode::Idle,
     }
 }
@@ -237,6 +247,14 @@ pub(super) fn interrupt(cycle: u32) -> bool {
             _ => {}
         },
         Mode::BytePend if line == BYTE_LINE => count(0),
+        Mode::ByteFromHigher if line == HIGH => store_byte(BYTE_LINE, Byte::Ip, 1),
+        Mode::ByteFromHigher if line == BYTE_LINE => count(0),
+        Mode::ByteOwnHandler if line == BYTE_LINE => {
+            count(0);
+            if LINE_ENTRIES[0].load(Ordering::Relaxed) == 1 {
+                store_byte(BYTE_LINE, Byte::Ip, 1);
+            }
+        }
         Mode::Latency if line == HIGH => {
             let _ = masked(|clic| {
                 pend_in(clic, LOW);
@@ -582,15 +600,37 @@ pub(super) fn latency(s: &mut Session<'_>) {
 
 /// The CLIC's base on every hart (`chips/esp32s31/registers/chip.toml`,
 /// instance `CLIC`) and its line words' offset (`types/clic.toml`, `CTRL%s`
-/// at 0x1000, one word a line).
+/// at 0x1000, one word a line). Each word is four byte registers: `IP` at
+/// +0, `IE` +1, `ATTR` +2, `CTL` +3. SOURCE: ESP-IDF 4d80c1b2
+/// `components/soc/esp32s31/include/soc/clic_reg.h:113-121`
+/// (`BYTE_CLIC_INT_*_REG(i)`, "each of following registers are 8bits").
 const CLIC_BASE: usize = 0x1080_0000;
 const CTRL_OFFSET: usize = 0x1000;
-/// 317's line (`tasks/234`): level 1's primary line, which 310 and
-/// `#1341`'s run pended from the thread and nested with no spurious entry;
-/// LOW (30) entered eight times before any pend in run 233.
-const BYTE_LINE: u32 = PRIMARY;
-/// The pends of 317.
-const BYTE_PENDS: u32 = 100;
+/// `tasks/241`: the byte tests' line, #1341's TARGET (34) between its
+/// neighbours 33 and 35, all level 2 and edge-triggered, as 314 bound them.
+const BYTE_LINE: u32 = TARGET;
+/// A byte register of a line's word.
+#[derive(Clone, Copy)]
+enum Byte {
+    Ip = 0,
+    Ie = 1,
+    Attr = 2,
+    Ctl = 3,
+}
+
+/// One store of `value` to `byte` of `line`'s word, MIE as it is: no read
+/// of the word, so no other byte is written (`tasks/219` c4, `tasks/241`).
+#[allow(
+    unsafe_code,
+    reason = "probe-only byte store to a CLIC line's byte register"
+)]
+fn store_byte(line: u32, byte: Byte, value: u8) {
+    let address = CLIC_BASE + CTRL_OFFSET + 4 * line as usize + byte as usize;
+    // SAFETY: the hart's own CLIC line word's byte register, an MMIO byte
+    // the vendor header names; this thread owns the CLIC for the session and
+    // a handler that stores to it does so only in the trial's mode.
+    unsafe { (address as *mut u8).write_volatile(value) };
+}
 
 /// The line's word as `word` reads it, through the loan with MIE cleared.
 fn word_masked(line: u32) -> u32 {
@@ -608,64 +648,229 @@ fn word_masked(line: u32) -> u32 {
     .unwrap_or(0)
 }
 
-/// One store of a byte to the line's `IP` byte, MIE left set: no read of
-/// the word, so no other field is written (`tasks/219` c4). SOURCE:
-/// ESP-IDF 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h:113-121`
-/// (`BYTE_CLIC_INT_IP_REG(i)`, "each of following registers are 8bits").
-#[allow(unsafe_code, reason = "probe-only byte store to a CLIC line's IP byte")]
-fn pend_byte(line: u32) {
-    let address = CLIC_BASE + CTRL_OFFSET + 4 * line as usize;
-    // SAFETY: the hart's own CLIC line word, an MMIO byte register the
-    // header names; this thread owns the CLIC for the session and no
-    // handler writes this line's word during the trial.
-    unsafe { (address as *mut u8).write_volatile(1) };
-    log(MARK, line);
+/// The word's bits other than `IP`.
+const NOT_IP: u32 = !1;
+/// The trials of each byte test.
+const BYTE_TRIALS: u32 = 100;
+
+/// Wait until the line's entries pass `before`, within the window.
+fn await_entry(before: u32) {
+    let start = oer_portable_riscv::cycle32();
+    while LINE_ENTRIES[0].load(Ordering::Relaxed) == before
+        && oer_portable_riscv::cycle32().wrapping_sub(start) < WINDOW
+    {}
 }
 
-/// 317 (`tasks/219` c4): a hundred pends of [`BYTE_LINE`] (level 1, edge) by one
-/// byte store each, from the thread with MIE set. Each is to give one entry;
-/// after it the line's `IE`, attributes and `CTL` read as configured and
-/// `IP` clear. Emits `(0x38f0, the word before anything, after its pending
-/// bit was cleared, after the enable)`, `(0x3800, entries, fields changed,
-/// IP left set)` and the baseline word.
-pub(super) fn byte_pend(s: &mut Session<'_>) {
+/// One trial's start: the line bound as 314 binds TARGET (level 2, edge,
+/// enabled), its pending bit cleared before the enable, and its word.
+fn bind_byte_line(s: &mut Session<'_>) -> u32 {
     feed(s);
     setup(s);
-    // `tasks/230`: the line's word before anything, then its pending bit
-    // cleared with the line disabled, before it is enabled: a bit already
-    // set is seen, not guessed.
-    let first = word(s, BYTE_LINE);
-    configure(s, BYTE_LINE, 1, true, false);
+    configure(s, BYTE_LINE, 2, true, false);
     if let Some(i) = index(BYTE_LINE) {
         s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
             w.set_ip(false);
         });
     }
-    let cleared = word(s, BYTE_LINE);
-    configure(s, BYTE_LINE, 1, true, true);
-    let baseline = word(s, BYTE_LINE);
-    emit(0x38f0, first, cleared, baseline);
-    begin(s, Mode::BytePend);
-    oer_portable_riscv::enable_interrupts();
-    let mut changed = 0_u32;
-    let mut left = 0_u32;
-    for _ in 0..BYTE_PENDS {
-        let before = LINE_ENTRIES[0].load(Ordering::Relaxed);
-        pend_byte(BYTE_LINE);
-        let start = oer_portable_riscv::cycle32();
-        while LINE_ENTRIES[0].load(Ordering::Relaxed) == before
-            && oer_portable_riscv::cycle32().wrapping_sub(start) < WINDOW
-        {}
-        let now = word_masked(BYTE_LINE);
-        changed += u32::from(now & !1 != baseline & !1);
-        left += now & 1;
+    configure(s, BYTE_LINE, 2, true, true);
+    word(s, BYTE_LINE)
+}
+
+/// One test's result: `(tag, trials that held, trials, the first that did
+/// not: trial << 16 | what it saw)`.
+fn result(tag: u32, held: u32, first_bad: u32) {
+    emit(tag, held, BYTE_TRIALS, first_bad);
+}
+
+/// 317 (`tasks/241` 2a): a store of 1 to the `IP` byte from the thread
+/// (level 0): the line is entered before the next step and once; the other
+/// three bytes read back unchanged. Emits `(0x3800, held, trials, first
+/// bad)`, then `(0x3801, entered before the next step, ...)`.
+pub(super) fn byte_pend(s: &mut Session<'_>) {
+    let (mut held, mut at_once, mut first_bad, mut first_late) = (0, 0, 0, 0);
+    for trial in 0..BYTE_TRIALS {
+        let before = bind_byte_line(s);
+        begin(s, Mode::BytePend);
+        oer_portable_riscv::enable_interrupts();
+        store_byte(BYTE_LINE, Byte::Ip, 1);
+        // The next step: the entry, if it came at the store.
+        let next = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        await_entry(0);
+        let entries = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        let after = word_masked(BYTE_LINE);
+        end();
+        let ok = entries == 1 && after & NOT_IP == before & NOT_IP && after & 1 == 0;
+        held += u32::from(ok);
+        if !ok && first_bad == 0 {
+            first_bad = trial << 16 | entries << 8 | u32::from(after & NOT_IP != before & NOT_IP);
+        }
+        at_once += u32::from(next == 1);
+        if next != 1 && first_late == 0 {
+            first_late = trial << 16 | next;
+        }
     }
-    end();
-    emit(
-        0x3800,
-        LINE_ENTRIES[0].load(Ordering::Relaxed),
-        changed,
-        left,
-    );
-    emit(0x38ff, baseline, ENTRIES.load(Ordering::Relaxed), 0);
+    result(0x3800, held, first_bad);
+    result(0x3801, at_once, first_late);
+}
+
+/// 318 (`tasks/241` 2b): HIGH (level 3) pended from the thread; its handler
+/// stores the `IP` byte of the line (level 2), which is entered once, after
+/// HIGH's return. Emits `(0x3900, held, trials, first bad)`.
+pub(super) fn byte_from_higher(s: &mut Session<'_>) {
+    let (mut held, mut first_bad) = (0, 0);
+    for trial in 0..BYTE_TRIALS {
+        bind_byte_line(s);
+        configure(s, HIGH, 3, true, true);
+        begin(s, Mode::ByteFromHigher);
+        oer_portable_riscv::enable_interrupts();
+        pend(HIGH);
+        window();
+        end();
+        let order = entered_after_exit(HIGH, BYTE_LINE);
+        let entries = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        let ok = entries == 1 && order;
+        held += u32::from(ok);
+        if !ok && first_bad == 0 {
+            first_bad = trial << 16 | entries << 8 | u32::from(order);
+        }
+    }
+    result(0x3900, held, first_bad);
+}
+
+/// Whether the log enters `line` once, after `before`'s exit.
+fn entered_after_exit(before: u32, line: u32) -> bool {
+    let n = (EVENT_COUNT.load(Ordering::Relaxed) as usize).min(EVENT_CAPACITY);
+    let event = |k: usize| EVENTS.get(k).map_or(0, |e| e.load(Ordering::Relaxed));
+    // `log`'s event: kind << 14 | line << 8 | level.
+    let is = |k: usize, kind: u32, at: u32| event(k) >> 8 == (kind << 6 | (at & 0x3f));
+    let exit = (0..n).position(|k| is(k, EXIT, before));
+    let enter = (0..n).position(|k| is(k, ENTER, line));
+    matches!((exit, enter), (Some(exit), Some(enter)) if enter > exit)
+}
+
+/// 319 (`tasks/241` 2c): two stores of the `IP` byte with MIE cleared
+/// before the entry give one entry (`0x3a00`); a store in the line's own
+/// handler, on its first entry, gives exactly one more (`0x3a01`).
+pub(super) fn byte_twice_and_own(s: &mut Session<'_>) {
+    let (mut held, mut first_bad) = (0, 0);
+    for trial in 0..BYTE_TRIALS {
+        bind_byte_line(s);
+        begin(s, Mode::BytePend);
+        store_byte(BYTE_LINE, Byte::Ip, 1);
+        store_byte(BYTE_LINE, Byte::Ip, 1);
+        oer_portable_riscv::enable_interrupts();
+        await_entry(0);
+        window();
+        end();
+        let entries = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        held += u32::from(entries == 1);
+        if entries != 1 && first_bad == 0 {
+            first_bad = trial << 16 | entries;
+        }
+    }
+    result(0x3a00, held, first_bad);
+    let (mut held, mut first_bad) = (0, 0);
+    for trial in 0..BYTE_TRIALS {
+        bind_byte_line(s);
+        begin(s, Mode::ByteOwnHandler);
+        oer_portable_riscv::enable_interrupts();
+        store_byte(BYTE_LINE, Byte::Ip, 1);
+        window();
+        end();
+        let entries = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        held += u32::from(entries == 2);
+        if entries != 2 && first_bad == 0 {
+            first_bad = trial << 16 | entries;
+        }
+    }
+    result(0x3a01, held, first_bad);
+}
+
+/// 320 (`tasks/241` 2d): the neighbours 33 and 35 edge-triggered at level
+/// 2, disabled and pending; a store of the line's `IP` byte enters the line
+/// once and leaves both neighbours' words as they were. Emits `(0x3b00,
+/// held, trials, first bad: trial << 16 | entries << 8 | 33 changed | 35
+/// changed << 1)`.
+pub(super) fn byte_neighbours(s: &mut Session<'_>) {
+    let (mut held, mut first_bad) = (0, 0);
+    for trial in 0..BYTE_TRIALS {
+        bind_byte_line(s);
+        for line in [NEIGHBOUR_PENDING, NEIGHBOUR_SOURCE] {
+            configure(s, line, 2, true, false);
+            if let Some(i) = index(line) {
+                s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+                    w.set_ip(true);
+                });
+            }
+        }
+        let before = [word(s, NEIGHBOUR_PENDING), word(s, NEIGHBOUR_SOURCE)];
+        begin(s, Mode::BytePend);
+        oer_portable_riscv::enable_interrupts();
+        store_byte(BYTE_LINE, Byte::Ip, 1);
+        await_entry(0);
+        let after = [
+            word_masked(NEIGHBOUR_PENDING),
+            word_masked(NEIGHBOUR_SOURCE),
+        ];
+        end();
+        let entries = LINE_ENTRIES[0].load(Ordering::Relaxed);
+        let changed = u32::from(after[0] != before[0]) | u32::from(after[1] != before[1]) << 1;
+        let ok = entries == 1 && changed == 0;
+        held += u32::from(ok);
+        if !ok && first_bad == 0 {
+            first_bad = trial << 16 | entries << 8 | changed;
+        }
+        // The neighbours' pending bits down again, the lines disabled.
+        for line in [NEIGHBOUR_PENDING, NEIGHBOUR_SOURCE] {
+            if let Some(i) = index(line) {
+                s.interrupt_matrix.clic[0].modify_ctrl(i, |w| {
+                    w.set_ip(false);
+                });
+            }
+        }
+    }
+    result(0x3b00, held, first_bad);
+}
+
+/// 321 (`tasks/241` 3): with MIE cleared and the line disabled, a store to
+/// each of `IE`, `ATTR` and `CTL` changes its own byte and no other: `CTL`
+/// to another level's byte, `ATTR` to level-triggered, `IE` to one, each
+/// read back and stored back. Emits `(0x3c00 | byte, held, trials, first
+/// bad: trial << 16 | which fields changed)`.
+pub(super) fn byte_fields(s: &mut Session<'_>) {
+    for (byte, tag) in [
+        (Byte::Ctl, 0x3c03),
+        (Byte::Attr, 0x3c02),
+        (Byte::Ie, 0x3c01),
+    ] {
+        let (mut held, mut first_bad) = (0, 0);
+        for trial in 0..BYTE_TRIALS {
+            feed(s);
+            setup(s);
+            configure(s, BYTE_LINE, 2, true, false);
+            let before = word(s, BYTE_LINE);
+            // What the store makes of its own byte, and the other bytes'
+            // bits that must not change.
+            let (value, own) = match byte {
+                Byte::Ctl => (LEVEL_CONTROL.get(3).copied().unwrap_or(0), 0xff00_0000),
+                // shv 1, edge cleared (positive level), mode 3.
+                Byte::Attr => (0b1100_0001, 0x00ff_0000),
+                Byte::Ie => (1, 0x0000_ff00),
+                Byte::Ip => (0, 0x0000_00ff),
+            };
+            store_byte(BYTE_LINE, byte, value);
+            let after = word(s, BYTE_LINE);
+            let others = after & !own == before & !own;
+            let own_changed = after & own != before & own;
+            let ok = others && own_changed;
+            held += u32::from(ok);
+            if !ok && first_bad == 0 {
+                first_bad = trial << 16 | u32::from(!others) | u32::from(!own_changed) << 1;
+            }
+            // Back to the bound line's byte.
+            let restore = (before & own) >> own.trailing_zeros();
+            store_byte(BYTE_LINE, byte, restore as u8);
+        }
+        result(tag, held, first_bad);
+    }
 }
