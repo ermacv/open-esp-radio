@@ -46,7 +46,7 @@ const ROWS_MAX: usize = 4 * PER_AIR as usize + 512;
 #[cfg(not(feature = "short"))]
 const A2_BUDGET_S: u32 = 11 * 60;
 #[cfg(not(feature = "short"))]
-const RESET_BUDGET_S: u32 = 30 * 60;
+const RESET_BUDGET_S: u32 = 25 * 60;
 /// The short pass of a lease (`tasks/222`): about a minute in all.
 #[cfg(feature = "short")]
 const A2_BUDGET_S: u32 = 30;
