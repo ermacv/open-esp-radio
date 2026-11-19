@@ -86,6 +86,8 @@ stream-ampdu = ["ampdu"]
 # ROM's edge alone and its block reset under that traffic, every descriptor
 # and buffer recorded at fixed delays after each.
 settle = ["dep:oer-chips-esp32s31-radio-ieee80211-backend"]
+# `tasks/219`: the sender's `stream` and `stream-ampdu` run 600 s a turn.
+long-run = []
 
 [lints]
 workspace = true

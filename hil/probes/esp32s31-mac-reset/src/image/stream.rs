@@ -17,7 +17,11 @@ const LENGTH: usize = 500;
 const QUIET_MS: u32 = 1_500;
 /// How long the stream runs: past the receiver's fifteen segments of
 /// 2.5 s from its first frame.
+#[cfg(not(feature = "long-run"))]
 const RUN_MS: u32 = 45_000;
+/// `tasks/219`: one kind of air's turn of the settle run.
+#[cfg(feature = "long-run")]
+const RUN_MS: u32 = 600_000;
 /// `stream-isolated`: the pause after each frame.
 #[cfg(feature = "stream-isolated")]
 const PAUSE_US: u64 = 3_000;

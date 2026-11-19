@@ -373,8 +373,11 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
 /// within its 1 500 octets.
 const B6_FULL: usize = 1_490;
 /// `tasks/193`: how long the aggregates run, past the receiver's segments.
-#[cfg(feature = "stream-ampdu")]
+#[cfg(all(feature = "stream-ampdu", not(feature = "long-run")))]
 const STREAM_RUN_MS: u32 = 45_000;
+/// `tasks/219`: one kind of air's turn of the settle run.
+#[cfg(all(feature = "stream-ampdu", feature = "long-run"))]
+const STREAM_RUN_MS: u32 = 600_000;
 #[cfg(any(feature = "b6", feature = "stream-ampdu"))]
 const B6_SHORT: usize = 100;
 /// Aggregates of each rate, length and size.
