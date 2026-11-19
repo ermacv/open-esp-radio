@@ -26,10 +26,10 @@ pub(super) fn inherited(s: &Session<'_>) {
     }
 }
 pub(super) fn clear(s: &mut Session<'_>) {
-    for i in INPUTS {
-        s.interrupt_matrix.clic[0].modify_ip(i, |w| {
-            w.set_ip(false);
-        });
+    if let Ok(hart) = oer_portable_riscv::OnHart::<0>::check() {
+        for i in INPUTS {
+            s.interrupt_matrix.clic_pending.0.clear_line(i, &hart);
+        }
     }
     oer_portable_riscv::fence();
 }
@@ -64,9 +64,9 @@ pub(super) fn control(s: &mut Session<'_>) -> bool {
         clic.modify_ctl(i, |w| {
             w.set_ctl(CONTROLS[1]);
         });
-        clic.modify_ip(i, |w| {
-            w.set_ip(false);
-        });
+        if let Ok(hart) = oer_portable_riscv::OnHart::<0>::check() {
+            s.interrupt_matrix.clic_pending.0.clear_line(i, &hart);
+        }
         super::wait_window();
         let before = s.interrupt_matrix.clic[0].read_ip(i).ip();
         s.source.store_hp_cpu_int_from_cpu_2(true);

@@ -10,6 +10,5 @@ const OTHER: (usize, &[usize], &[usize]) = (0x1000, &[], &[1, 5]);
 const OTHER: (usize, &[usize], &[usize]) = (0x1000, &[], &[1, 4]);
 
 const _: () = if !disjoint_blocks(&[PENDING, OTHER]) {
-    panic!("no two claimed blocks list the same place")
+    panic!("no two claimed blocks list the same place") // ui-error: E0080
 };
-// ui-error@outside: E0080: evaluation panicked: no two claimed blocks list the same place

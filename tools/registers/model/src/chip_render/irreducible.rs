@@ -116,6 +116,102 @@ fn doc(body: &mut String, summary: &str, register: &str, sources: &[String]) {
     );
 }
 
+/// The stores of a shared part with a hart's proof: its fixed images, the
+/// only stores it has, each of a whole byte of an array it holds, through
+/// `&self`, taking the proof of the hart whose copy of the words the owner
+/// is (`proof<H>`). The part has no read and no other store.
+fn render_proven_images(
+    body: &mut String,
+    output: &mut String,
+    plan: &TypePlan<'_>,
+    owner: &Owner<'_>,
+    policy: &ChipPolicy,
+    proof: &str,
+) -> Result<(), Error> {
+    let file = policy.file();
+    let entity = format!("{}.{}", owner.partition, owner.name());
+    let mut rendered = 0;
+    for image in file
+        .fixed_register_images
+        .iter()
+        .filter(|image| policy.owner(&image.name) == Some(owner.id))
+    {
+        let name = image.name.as_str();
+        let key = image
+            .register
+            .split_once('.')
+            .map_or(image.register.as_str(), |(_, key)| key);
+        let template = plan
+            .templates
+            .iter()
+            .find(|template| template.key == key)
+            .ok_or_else(|| {
+                Error::new(
+                    name,
+                    format!("{} is no register of the part's type", image.register),
+                )
+            })?;
+        let (Some((offset, stride, count)), 8) = (template.array, template.width) else {
+            return Err(Error::new(
+                name,
+                "a shared part with a hart's proof stores whole bytes of an array it holds",
+            ));
+        };
+        if !template
+            .elements
+            .iter()
+            .all(|element| owner.words.owned.contains(&element.offset))
+        {
+            return Err(Error::new(
+                name,
+                format!(
+                    "{} holds only some elements of {}",
+                    owner.name(),
+                    image.register
+                ),
+            ));
+        }
+        if image.value > 0xff {
+            return Err(Error::new(name, "a byte's image is a byte"));
+        }
+        let constant = format!("{}_IMAGE", names::snake(name).to_ascii_uppercase());
+        doc(
+            output,
+            "The stored byte image",
+            &image.register,
+            &image.sources,
+        );
+        let _ = writeln!(
+            output,
+            "pub const {constant}: u32 = 0x{:02x};\n",
+            image.value
+        );
+        doc(
+            body,
+            &format!(
+                "Store the whole byte `0x{:02x}`, undeclared bits included, in element `index`, on hart `H`'s copy",
+                image.value
+            ),
+            &image.register,
+            &image.sources,
+        );
+        let _ = writeln!(
+            body,
+            "#[inline(always)]\npub fn {}(&self, index: oer_portable_mmio::Index<{count}>, _hart: &{proof}<H>) {{\n\
+             self.0.write_byte_shared_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index, {constant});\n}}\n",
+            names::ident(name)
+        );
+        rendered += 1;
+    }
+    if rendered == 0 {
+        return Err(Error::new(
+            &entity,
+            "a shared part with a hart's proof stores through its fixed images and has none",
+        ));
+    }
+    Ok(())
+}
+
 /// One accessor named after `sequence` that writes `step`'s whole-word
 /// image to elements `first..first + count` of its template, in ascending
 /// order, through an indexed word array of exactly those elements.
@@ -204,6 +300,9 @@ pub(super) fn render(
 ) -> Result<(), Error> {
     let file = policy.file();
     let mine = |name: &str| policy.owner(name) == Some(owner.id);
+    if let Some(proof) = &owner.part.hart_proof {
+        return render_proven_images(body, output, plan, owner, policy, proof);
+    }
     for zero in file
         .zero_register_writes
         .iter()

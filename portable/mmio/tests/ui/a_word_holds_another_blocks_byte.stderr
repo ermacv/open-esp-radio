@@ -1,5 +1,5 @@
 error[E0080]: evaluation panicked: no two claimed blocks list the same place
-  --> $DIR/a_word_holds_another_blocks_byte.rs:13:5
+  --> tests/ui/a_word_holds_another_blocks_byte.rs:13:5
    |
-13 |     panic!("no two claimed blocks list the same place")
+13 |     panic!("no two claimed blocks list the same place") // ui-error: E0080
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `_` failed here

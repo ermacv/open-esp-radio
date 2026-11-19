@@ -92,10 +92,12 @@ fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::pr
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
              [dependencies]\noer-portable-mmio = {{ path = {:?} }}\n\
              oer-portable-memory = {{ path = {:?} }}\n\
+             oer-portable-riscv = {{ path = {:?}, features = [\"host-hart\"] }}\n\
              bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
              [workspace]\n",
             mmio.display().to_string(),
-            memory.display().to_string()
+            memory.display().to_string(),
+            mmio.with_file_name("riscv").display().to_string()
         ),
     )
     .expect("the program manifest is written");
@@ -503,8 +505,10 @@ fn a_part_owning_byte_registers_reaches_them_by_bytes() {
     assert!(output.contains("const OWNED_BYTES: &'static [usize] = &[0x70, 0x71];"));
     assert!(output.contains("const BYTES: &'static [usize] = &[0x70, 0x71];"));
     assert!(
-        output.contains("&[0x70])"),
-        "the claims' check lists the bytes' word"
+        output.contains("<super::radio::TaskWords as oer_portable_mmio::Registers>::BYTES)")
+            || output
+                .contains("<super::radio::Radio0Division as oer_portable_mmio::Registers>::BYTES)"),
+        "the claims' check lists the block's bytes: {output}"
     );
 }
 
@@ -1780,7 +1784,28 @@ fn instance_families_follow_one_and_three_harts_and_invalid_lists_are_refused() 
 
 /// The fixture with `harts` harts and the instances `local` hart-local,
 /// loaded and rendered.
-fn hart_local(harts: u32, local: &[&str]) -> Result<String, super::Error> {
+fn hart_local(harts: u32, local: &[&str]) -> Result<String, String> {
+    hart_local_with(harts, local, &[])
+}
+
+/// The fixture in `directory`, loaded and rendered, or the first refusal
+/// of the policy's loader or of the renderer.
+fn try_render(directory: &Path) -> Result<String, String> {
+    let evidence = RegisterEvidenceSet::load_all(&[directory.join("evidence.toml")])
+        .map_err(|error| error.to_string())?;
+    let model = ChipModel::load(&directory.join("chip.toml"), &evidence)
+        .map_err(|error| error.to_string())?;
+    let policy = ChipPolicy::load(&directory.join("policy.toml"), &model, &evidence)
+        .map_err(|error| error.to_string())?;
+    render(&model, &policy).map_err(|error| error.to_string())
+}
+
+/// [`hart_local`], with `extra` edits.
+fn hart_local_with(
+    harts: u32,
+    local: &[&str],
+    extra: &[(&str, &str, &str)],
+) -> Result<String, String> {
     let tags = local
         .iter()
         .map(|instance| {
@@ -1799,6 +1824,7 @@ fn hart_local(harts: u32, local: &[&str]) -> Result<String, super::Error> {
         tags.iter()
             .map(|(from, to)| ("chip.toml", from.as_str(), to.as_str())),
     );
+    edits.extend_from_slice(extra);
     let directory = edited(&edits);
     std::fs::write(
         directory.path().join("platform.toml"),
@@ -1808,8 +1834,7 @@ fn hart_local(harts: u32, local: &[&str]) -> Result<String, super::Error> {
         ),
     )
     .expect("the platform facts are written");
-    let (model, policy) = load(directory.path());
-    render(&model, &policy)
+    try_render(directory.path())
 }
 
 #[test]
@@ -1849,9 +1874,8 @@ fn a_hart_local_instance_is_claimed_once_per_hart() {
         }
         // One disjointness check per hart context, each over every block.
         let checks = rust
-            .split("const _: () = assert!(")
+            .split("const _: () = if !oer_portable_mmio::check::disjoint_blocks(")
             .skip(1)
-            .filter(|check| check.contains("disjoint_blocks"))
             .collect::<Vec<_>>();
         assert_eq!(checks.len(), harts as usize, "{rust}");
         for check in &checks {
@@ -1861,7 +1885,11 @@ fn a_hart_local_instance_is_claimed_once_per_hart() {
                 "<super::radio::Radio0Division as",
                 "<super::counter::CounterWords as",
             ] {
-                assert_eq!(check.matches(block).count(), 1, "{block} in {check}");
+                // Each block once, with its words and its bytes.
+                for list in ["WORDS", "BYTES"] {
+                    let listed = format!("{block} oer_portable_mmio::Registers>::{list}");
+                    assert_eq!(check.matches(&listed).count(), 1, "{listed} in {check}");
+                }
             }
         }
         // The program builds, so every per-hart check holds and the
@@ -1904,7 +1932,7 @@ fn an_instance_without_hart_local_keeps_one_claim_and_one_check() {
 #[test]
 fn a_shared_part_on_a_hart_local_instance_is_refused() {
     let error = hart_local(2, &["COUNTER"]).expect_err("a shared hart-local part is refused");
-    assert!(error.to_string().contains("hart-local"), "{error}");
+    assert!(error.contains("hart-local"), "{error}");
 }
 
 #[test]
@@ -1984,4 +2012,178 @@ fn main() {
 "#,
     );
     assert!(error.contains("no method named `write_events`"), "{error}");
+}
+
+/// Radio 0 hart-local, its two `RAD_HALF%s` bytes held by a shared part
+/// with a hart's proof (`Pending`, its stores `pend` and `unpend`), which
+/// radio 0's task observes; `more` edits on top.
+fn pending_bytes(more: &[(&str, &str, &str)]) -> Result<String, String> {
+    let mut edits = vec![
+        (
+            "types/radio.toml",
+            "width = 16\ndim = { count = 2, stride = 2 }",
+            "width = 8\ndim = { count = 2, stride = 1 }",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"V\"\nbits = \"15:0\"",
+            "name = \"V\"\nbits = \"7:0\"",
+        ),
+        (
+            "policy.toml",
+            "registers = [\"RAD_HALF%s\", \"RAD_CH0.CNT\"]",
+            "registers = [\"RAD_CH0.CNT\"]",
+        ),
+        (
+            "policy.toml",
+            "\"RAD_CH%s.CONF\", \"RAD_CH1.CNT\"]",
+            "\"RAD_CH%s.CONF\", \"RAD_CH1.CNT\"]\nobserves = [\"RAD_HALF%s\"]\ndescription = \"The task reads the pending bytes.\"\nsources = [\"SRC_DRIVER\"]",
+        ),
+        (
+            "policy.toml",
+            "[[partitions]]\nname = \"SecondPeripherals\"",
+            "[[partitions]]\nname = \"PendingPeripherals\"\nmember = \"pending\"\ndescription = \"Radio 0's pending bytes.\"\n\n\
+             [[partitions.parts]]\nname = \"Pending\"\ninstance = \"RADIO0\"\nregisters = [\"RAD_HALF%s\"]\nshared = true\n\
+             hart-proof = \"oer_portable_riscv::OnHart\"\ndescription = \"The pending bytes every context stores on its own hart.\"\nsources = [\"SRC_DRIVER\"]\n\n\
+             [[partitions]]\nname = \"SecondPeripherals\"",
+        ),
+        (
+            "policy.toml",
+            "chip = \"testchip\"\n",
+            "chip = \"testchip\"\n\n\
+             [[fixed-register-images]]\nname = \"pend\"\nregister = \"RADIO0.RAD_HALF%s\"\nvalue = 0x01\nwhole-word = true\nsources = [\"SRC_DRIVER\"]\n\n\
+             [[fixed-register-images]]\nname = \"unpend\"\nregister = \"RADIO0.RAD_HALF%s\"\nvalue = 0x00\nwhole-word = true\nsources = [\"SRC_DRIVER\"]\n",
+        ),
+    ];
+    edits.extend_from_slice(more);
+    hart_local_with(2, &["RADIO0"], &edits)
+}
+
+#[test]
+fn a_shared_part_on_a_hart_local_instance_stores_its_images_with_its_hart_s_proof() {
+    let rust =
+        pending_bytes(&[]).unwrap_or_else(|error| panic!("the pending fixture renders: {error}"));
+    // One type a hart; its stores take that hart's proof, through `&self`.
+    for item in [
+        "pub struct Pending<const H: u8, P: oer_portable_mmio::Placement",
+        "pub fn pend(&self, index: oer_portable_mmio::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
+        "pub fn unpend(&self, index: oer_portable_mmio::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
+        "write_byte_shared_indexed::<0x70, 0x1, 2>(index, PEND_IMAGE)",
+        "pub pending: (super::radio::Pending<0>, super::radio::Pending<1>,),",
+        "type Sharing = oer_portable_mmio::sharing::Shared;",
+    ] {
+        assert!(rust.contains(item), "{item}\n{rust}");
+    }
+    // The observer reads the bytes apart from its division, which claims
+    // them not; the claims' check lists them once, by their shared block.
+    assert!(rust.contains("const OBSERVED_SHARED_BYTES: &'static [usize] = &[0x70, 0x71];"));
+    let pending = rust
+        .split("pub struct Pending<")
+        .nth(1)
+        .and_then(|rest| rest.split("pub struct ").next())
+        .expect("the pending part");
+    assert!(!pending.contains("pub fn read_"), "no read: {pending}");
+    assert!(
+        !pending.contains("pub fn store_"),
+        "no generic store: {pending}"
+    );
+    run(
+        &rust,
+        r#"fn main() {
+        use oer_portable_mmio::Index;
+        use oer_portable_riscv::OnHart;
+        let mut memory = [0_u32; 0x40];
+        memory[0x70 / 4] = 0xffff_0000;
+        {
+            let pending = radio::Pending::<1, _>::host(&mut memory).unwrap();
+            pending.pend(Index::constant::<1>(), &OnHart::<1>::host());
+        }
+        // The whole byte, and no other byte of its word.
+        assert_eq!(memory[0x70 / 4], 0xffff_0100);
+        {
+            let (task, _irq) = radio::radio0_host(&mut memory).unwrap();
+            assert_eq!(task.read_half(Index::constant::<1>()).v(), 1);
+            assert_eq!(task.read_half(Index::constant::<0>()).v(), 0);
+        }
+        {
+            let pending = radio::Pending::<1, _>::host(&mut memory).unwrap();
+            pending.unpend(Index::constant::<1>(), &OnHart::<1>::host());
+        }
+        assert_eq!(memory[0x70 / 4], 0xffff_0000);
+    }"#,
+    );
+    // Another hart's proof, a read, a generic store and the observer's
+    // write do not build.
+    for (body, error) in [
+        (
+            "let pending = radio::Pending::<1, _>::host(&mut memory).unwrap();\npending.pend(Index::constant::<1>(), &OnHart::<0>::host());",
+            "expected `1`, found `0`",
+        ),
+        (
+            "let pending = radio::Pending::<1, _>::host(&mut memory).unwrap();\nlet _ = pending.read_half(Index::constant::<1>());",
+            "no method named `read_half`",
+        ),
+        (
+            "let (mut task, _irq) = radio::radio0_host(&mut memory).unwrap();\ntask.write_half(Index::constant::<1>(), |w| { w.set_v(1); });",
+            "no method named `write_half`",
+        ),
+    ] {
+        let refusal = refused(
+            &rust,
+            &format!(
+                "fn main() {{\nuse oer_portable_mmio::Index;\nuse oer_portable_riscv::OnHart;\nlet mut memory = [0_u32; 0x40];\n{body}\n}}"
+            ),
+        );
+        assert!(refusal.contains(error), "{error}: {refusal}");
+    }
+}
+
+#[test]
+fn a_hart_s_proof_belongs_to_a_shared_part_on_a_hart_local_instance() {
+    // On an instance every hart reaches as one.
+    let error = rejection(&[(
+        "policy.toml",
+        "registers = [\"COUNT\", \"UPDATE\", \"LATCH\"]\nshared = true",
+        "registers = [\"COUNT\", \"UPDATE\", \"LATCH\"]\nshared = true\nhart-proof = \"oer_portable_riscv::OnHart\"",
+    )]);
+    assert!(error.reason.contains("hart-local"), "{error}");
+    // On a part that is not shared.
+    let error = pending_bytes(&[(
+        "policy.toml",
+        "name = \"Mode\"\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]",
+        "name = \"Mode\"\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]\nhart-proof = \"oer_portable_riscv::OnHart\"\ndescription = \"Mode.\"\nsources = [\"SRC_DRIVER\"]",
+    )]);
+    let error = error.expect_err("a hart's proof on a part that is not shared is refused");
+    assert!(
+        error.contains("only a shared part takes a hart's proof"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_shared_part_with_a_hart_s_proof_stores_only_whole_byte_images() {
+    // An image that keeps the other bits is no stored image.
+    let error = pending_bytes(&[(
+        "policy.toml",
+        "value = 0x01\nwhole-word = true",
+        "value = 0x01",
+    )])
+    .expect_err("a partial image is refused");
+    assert!(error.contains("whole-word"), "{error}");
+}
+
+#[test]
+fn only_a_shared_part_s_byte_registers_are_observed_apart() {
+    // The counter's mode part reading the shared counter's 32-bit word.
+    let error = rejection(&[(
+        "policy.toml",
+        "name = \"Mode\"\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]",
+        "name = \"Mode\"\ninstance = \"COUNTER\"\nregisters = [\"MODE\"]\nobserves = [\"COUNT\"]\ndescription = \"Mode.\"\nsources = [\"SRC_DRIVER\"]",
+    )]);
+    assert!(
+        error
+            .reason
+            .contains("only a shared part's byte registers are observed apart"),
+        "{error}"
+    );
 }

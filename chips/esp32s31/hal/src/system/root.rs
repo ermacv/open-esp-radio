@@ -60,10 +60,21 @@ use crate::{
     },
 };
 
+/// Each hart's CLIC pending bytes, in the static place every context of
+/// that hart stores them from: claimed with the root, once.
+type PendingPlace = (
+    oer_chips_esp32s31_pac::clic::ClicPending<0>,
+    oer_chips_esp32s31_pac::clic::ClicPending<1>,
+);
+
+static PENDING: static_cell::StaticCell<PendingPlace> = static_cell::StaticCell::new();
+
 /// The chip's reset root: every claimed part, once.
 #[must_use = "dropping the root permanently loses every register authority"]
 pub struct Root {
     partitions: Partitions,
+    /// The place of the pending bytes, claimed with the root.
+    pending: &'static mut core::mem::MaybeUninit<PendingPlace>,
 }
 
 mod adoption;
@@ -71,8 +82,14 @@ pub use adoption::{Hardware, PlatformParts, RuntimePort, RuntimeResources};
 
 impl Root {
     /// The root, the first time it is called in an image; `None` after.
+    /// The pending bytes' static place is claimed with it: the root's one
+    /// take holds both, so neither is asked for again.
     pub fn take() -> Option<Self> {
-        oer_chips_esp32s31_pac::take().map(|partitions| Self { partitions })
+        let pending = PENDING.try_uninit()?;
+        oer_chips_esp32s31_pac::take().map(|partitions| Self {
+            partitions,
+            pending,
+        })
     }
 
     /// Split the reset claim into bootstrap owners without installing the
@@ -210,14 +227,20 @@ impl Root {
         let InterruptMatrixPeripherals {
             clic: [clic0, clic1],
             clic_observer: [clic_observer0, clic_observer1],
+            clic_pending,
             interrupt_core0,
             interrupt_core0_observer,
             interrupt_core0_status,
             interrupt_core1_status,
         } = interrupt_matrix;
+        // Each hart's pending bytes in their static place, which every
+        // context of that hart reaches: hart 0's to its grant, hart 1's to
+        // the launch permit.
+        let (pending0, pending1) = &*self.pending.write(clic_pending);
         let interrupt_matrix = crate::system::platform::interrupt_controller::MatrixParts {
             clic: clic0,
             clic_observer: clic_observer0,
+            clic_pending: pending0,
             interrupt_core0,
             interrupt_core0_observer,
             interrupt_core0_status,
@@ -265,6 +288,7 @@ impl Root {
                     secondary_launch,
                     clic1,
                     clic_observer1,
+                    pending1,
                 ),
                 wifi_interrupts: WifiInterruptBanks::new(wifi_interrupts),
                 radio: RadioHardware::new(RadioPartitions::compose(RadioParts {

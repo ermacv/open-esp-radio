@@ -430,6 +430,9 @@ mod launch {
         lp_sys: Vec<u32>,
         cache: Vec<u32>,
         clic: Vec<u32>,
+        /// Hart 1's pending bytes, apart: a host block borrows its memory
+        /// alone.
+        pending: Vec<u32>,
     }
 
     impl Permit {
@@ -440,6 +443,7 @@ mod launch {
                 lp_sys: vec![0; instances::lp_sys::SIZE / 4],
                 cache: vec![0; instances::cache::SIZE / 4],
                 clic: vec![0; instances::clic::SIZE / 4],
+                pending: vec![0; instances::clic::SIZE / 4],
             };
             let mut bank = InterruptCore1::host(&mut permit.routes).expect("host bank");
             for &source in connected {
@@ -450,12 +454,21 @@ mod launch {
             permit
         }
 
-        fn permit(&mut self) -> LaunchPermit<Host<'_>, Host<'_>, Host<'_>, Host<'_>> {
+        fn permit(
+            &mut self,
+        ) -> LaunchPermit<
+            Host<'_>,
+            Host<'_>,
+            Host<'_>,
+            Host<'_>,
+            oer_chips_esp32s31_pac::clic::ClicPending<1, Host<'_>>,
+        > {
             LaunchPermit::host(
                 &mut self.routes,
                 &mut self.lp_sys,
                 &mut self.cache,
                 &mut self.clic,
+                &mut self.pending,
             )
             .expect("host memory holds the permit")
         }
@@ -530,15 +543,10 @@ mod launch {
             released.take_interrupts().is_none(),
             "the grant moves out once"
         );
+        // Only hart 1's proof makes its controller: hart 0's would reach
+        // its own CLIC through hart 1's parts, and does not type-check
+        // (`tests/ui/interrupt_grant_is_one_per_hart.rs`).
         assert_eq!(grant.hart(), 1);
-        assert_eq!(
-            grant.into_controller_on(0).err(),
-            Some(crate::system::platform::ForeignHart {
-                actual: 0,
-                expected: 1
-            }),
-            "hart 0 would reach its own CLIC through hart 1's parts"
-        );
     }
 
     #[test]
@@ -552,8 +560,7 @@ mod launch {
         let controller = released
             .take_interrupts()
             .expect("the grant")
-            .into_controller_on(1)
-            .expect("hart 1 builds its own controller");
+            .into_controller_with(oer_portable_riscv::OnHart::host());
         assert_eq!(controller.hart(), 1);
         drop(controller);
         drop(released);

@@ -21,8 +21,21 @@ pub fn hand_over(released: &mut Released) {
 pub fn forge(
     bank: oer_chips_esp32s31_pac::interrupt_core::InterruptCore1,
     clic: oer_chips_esp32s31_pac::clic::Clic,
+    pending: &'static oer_chips_esp32s31_pac::clic::ClicPending<1>,
 ) -> Hart1Grant {
-    InterruptGrant::new(bank, clic, None) // ui-error: E0624
+    InterruptGrant::new(bank, clic, None, pending) // ui-error: E0624
+}
+
+/// Only hart 1's proof makes hart 1's controller.
+pub fn on_its_hart(grant: Hart1Grant, hart: oer_portable_riscv::OnHart<1>) -> Hart1Controller {
+    grant.into_controller_with(hart)
+}
+
+/// Another hart's proof does not: hart 0 would reach its own CLIC through
+/// hart 1's parts.
+#[cfg(ui_reject)]
+pub fn on_another_hart(grant: Hart1Grant, hart: oer_portable_riscv::OnHart<0>) -> Hart1Controller {
+    grant.into_controller_with(hart) // ui-error: E0308
 }
 
 /// A hart's controller, and the router over it, never leave the hart.

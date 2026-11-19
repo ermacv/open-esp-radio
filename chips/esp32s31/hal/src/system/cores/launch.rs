@@ -13,7 +13,7 @@
 
 use oer_chips_esp32s31_pac::{
     cache::CacheBusObserver,
-    clic::{Clic, ClicObserver},
+    clic::{Clic, ClicObserver, ClicPending},
     instances,
     interrupt_core::{self, InterruptCore1},
     lp_system_reg::LpWakeStub,
@@ -29,7 +29,7 @@ use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{
     peripherals::reset_cause::{ResetCause, ResetCauses},
-    system::platform::{InterruptGrant, core_control::CoreControlRegisters},
+    system::platform::{InterruptGrant, PendingBytes, core_control::CoreControlRegisters},
 };
 
 /// The runtime root's one-shot authority to start a secondary hart. Not
@@ -40,19 +40,21 @@ pub struct LaunchPermit<
     L: Placement = Fixed<{ instances::lp_sys::BASE }>,
     C: Placement = Fixed<{ instances::cache::BASE }>,
     K: Placement = Fixed<{ instances::clic::BASE }>,
+    G: PendingBytes<1> = &'static ClicPending<1>,
 > {
-    interrupts: InterruptGrant<InterruptCore1<M>, K>,
+    interrupts: InterruptGrant<InterruptCore1<M>, 1, K, G>,
     wake_stub: LpWakeStub<L>,
     buses: CacheBusObserver<C>,
 }
 
 impl LaunchPermit {
     /// The root's permit, from its one secondary-launch partition and hart
-    /// 1's CLIC parts.
+    /// 1's CLIC parts and pending bytes.
     pub(crate) fn new(
         peripherals: SecondaryLaunchPeripherals,
         clic: Clic,
         clic_observer: ClicObserver,
+        clic_pending: &'static ClicPending<1>,
     ) -> Self {
         let SecondaryLaunchPeripherals {
             interrupt_core1,
@@ -60,7 +62,12 @@ impl LaunchPermit {
             cache_bus_observer,
         } = peripherals;
         Self {
-            interrupts: InterruptGrant::new(interrupt_core1, clic, Some(clic_observer)),
+            interrupts: InterruptGrant::new(
+                interrupt_core1,
+                clic,
+                Some(clic_observer),
+                clic_pending,
+            ),
             wake_stub: lp_wake_stub,
             buses: cache_bus_observer,
         }
@@ -73,15 +80,16 @@ impl LaunchPermit {
 pub struct Released<
     M: Placement = Fixed<{ instances::interrupt_core1::BASE }>,
     K: Placement = Fixed<{ instances::clic::BASE }>,
+    G: PendingBytes<1> = &'static ClicPending<1>,
 > {
     hart: SecondaryHart,
     /// Unwritten since the release, until the hart's controller routes.
-    interrupts: Option<InterruptGrant<InterruptCore1<M>, K>>,
+    interrupts: Option<InterruptGrant<InterruptCore1<M>, 1, K, G>>,
     disconnected: u16,
     first: Option<u16>,
 }
 
-impl<M: Placement, K: Placement> Released<M, K> {
+impl<M: Placement, K: Placement, G: PendingBytes<1>> Released<M, K, G> {
     /// The released hart.
     pub const fn hart(&self) -> SecondaryHart {
         self.hart
@@ -96,7 +104,7 @@ impl<M: Placement, K: Placement> Released<M, K> {
     /// Move the hart's interrupt grant out, once: `None` after. Only the
     /// hart can make a controller from it
     /// ([`InterruptGrant::into_controller`]).
-    pub fn take_interrupts(&mut self) -> Option<InterruptGrant<InterruptCore1<M>, K>> {
+    pub fn take_interrupts(&mut self) -> Option<InterruptGrant<InterruptCore1<M>, 1, K, G>> {
         self.interrupts.take()
     }
 }
@@ -175,12 +183,13 @@ pub(super) fn start_with<
     L: Placement,
     C: Placement,
     K: Placement,
+    G: PendingBytes<1>,
 >(
     cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
-    permit: LaunchPermit<M, L, C, K>,
+    permit: LaunchPermit<M, L, C, K, G>,
     causes: ResetCauses,
     entry: SecondaryEntry,
-) -> Result<Released<M, K>, StartError> {
+) -> Result<Released<M, K, G>, StartError> {
     let hart = secondary(entry)?;
     let LaunchPermit {
         mut interrupts,
@@ -250,9 +259,10 @@ pub(super) fn retire_with<
     T: Placement,
     M: Placement,
     K: Placement,
+    G: PendingBytes<1>,
 >(
     cell: &ClaimCell<CoreControlRegisters<P, Q, R, S, T>>,
-    released: &mut Released<M, K>,
+    released: &mut Released<M, K, G>,
 ) -> Result<(), StartError> {
     operate(cell, |words| {
         driver::retire_boot_address(words, released.hart)
@@ -268,20 +278,28 @@ impl<'a>
         oer_portable_mmio::Host<'a>,
         oer_portable_mmio::Host<'a>,
         oer_portable_mmio::Host<'a>,
+        ClicPending<1, oer_portable_mmio::Host<'a>>,
     >
 {
-    /// The permit over host memory: hart 1's route bank, LP_SYS, the cache
-    /// and hart 1's CLIC.
+    /// The permit over host memory: hart 1's route bank, LP_SYS, the cache,
+    /// hart 1's CLIC and its pending bytes (their own memory: a host block
+    /// borrows its memory alone).
     pub(super) fn host(
         routes: &'a mut [u32],
         lp_sys: &'a mut [u32],
         cache: &'a mut [u32],
         clic: &'a mut [u32],
+        pending: &'a mut [u32],
     ) -> Result<Self, oer_portable_mmio::HostTooSmall> {
         let (buses, _cache_boot) = oer_chips_esp32s31_pac::cache::cache_host(cache)?;
         let (lines, config) = oer_chips_esp32s31_pac::clic::clic_host(clic)?;
         Ok(Self {
-            interrupts: InterruptGrant::new(InterruptCore1::host(routes)?, lines, Some(config)),
+            interrupts: InterruptGrant::new(
+                InterruptCore1::host(routes)?,
+                lines,
+                Some(config),
+                ClicPending::host(pending)?,
+            ),
             wake_stub: LpWakeStub::host(lp_sys)?,
             buses,
         })
