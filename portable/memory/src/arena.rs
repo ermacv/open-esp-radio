@@ -570,10 +570,11 @@ macro_rules! arena {
                     zeroed in $section;
             }
 
-            #[allow(unsafe_code, reason = "the macro's brand names its own place and set")]
             // SAFETY: the constants are those of `PLACE`'s type, and `PLACE`
             // and `RETURNED` are statics of this anonymous constant, which
-            // nothing outside it names.
+            // nothing outside it names. The impl is this macro's, audited
+            // here: it writes no `allow`, so it builds in a crate that
+            // forbids `unsafe` (`tests/ui/arena_under_forbid.rs`).
             unsafe impl $crate::arena::Brand for $name {
                 type Window = $window;
                 const COUNT: usize = $count;

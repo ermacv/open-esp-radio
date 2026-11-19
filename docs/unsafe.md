@@ -232,7 +232,9 @@ and retention contracts.
 - `Released::assume`, the release proof's one constructor. Each kind of release
   is a HAL atom that calls it, citing its stand record;
 - `unsafe trait Brand`. Its one `unsafe impl` is the one that `arena!` writes:
-  the brand names its own place and returned set;
+  the brand names its own place and returned set; that expansion is counted as
+  `portable/memory`'s and builds in a crate that forbids `unsafe`, where a
+  hand-written `unsafe impl Brand` does not (`tests/ui/arena_under_forbid.rs`);
 - `unsafe trait PlacedStatic`. The HAL's placed static (`DmaStatic`, made
   only by `dma_static!`) implements it in its own home, the placement
   constructor (`system/memory/dma_static.rs`): the claim takes the static's

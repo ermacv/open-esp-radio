@@ -39,15 +39,23 @@ macro_rules! tx_place {
 type RxStatic<T> = HostStatic<T, RX_BASE>;
 type TxStatic<T> = HostStatic<T, TX_BASE>;
 
-crate::arena! {
-    Rx: window Window, count 40, size 64, floor 8,
-        placed by rx_place as RxStatic in ".dma.bss.test_rx";
-}
+/// The tests' brands. In this crate the macro's own expansion is linted;
+/// in another crate it is not (`tests/ui/arena_under_forbid.rs`).
+#[allow(unsafe_code, reason = "this crate's own expansion of `arena!`")]
+mod brands {
+    use super::{HostStatic, RX_BASE, RxStatic, TX_BASE, TxStatic, Window, ZeroedStatic};
 
-crate::arena! {
-    Tx: window Window, count 3, size 16, floor 0,
-        placed by tx_place as TxStatic in ".dma.bss.test_tx";
+    crate::arena! {
+        pub(super) Rx: window Window, count 40, size 64, floor 8,
+            placed by rx_place as RxStatic in ".dma.bss.test_rx";
+    }
+
+    crate::arena! {
+        pub(super) Tx: window Window, count 3, size 16, floor 0,
+            placed by tx_place as TxStatic in ".dma.bss.test_tx";
+    }
 }
+use brands::{Rx, Tx};
 
 const RX_BASE: u32 = 0x4000_1000;
 const TX_BASE: u32 = 0x4000_2000;

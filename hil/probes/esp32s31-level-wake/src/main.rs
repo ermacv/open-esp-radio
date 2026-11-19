@@ -1,5 +1,5 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
-#![deny(unsafe_code)]
+#![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 
 //! A level task's wake on the boot hart through the product's own parts:
