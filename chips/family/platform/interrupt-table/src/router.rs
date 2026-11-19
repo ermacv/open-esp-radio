@@ -545,14 +545,14 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             if E::HART != H {
                 panic!("the entry belongs to the router's hart")
             }
+            if C::SOURCES.len() > crate::NO_SOURCE as usize {
+                panic!("a fault record's source field holds every source and its none")
+            }
         };
         let sources = <E::Part as InterruptSources>::SOURCES;
-        // A part has a source (checked at compile time), but a level
-        // task's, which has none.
-        let source = match sources {
-            [first, ..] => *first,
-            [] => 0,
-        };
+        // The fault names the entry's first source; a level task's part has
+        // none (checked at compile time).
+        let source = sources.first().copied();
         let proof = E::PROOF;
         let fault = |source, kind| BindFault {
             source,

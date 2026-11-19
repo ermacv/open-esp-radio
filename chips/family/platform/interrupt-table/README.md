@@ -163,8 +163,11 @@ entry binds is routed on no bank:
   table), and every other line is disabled.
 
 A faulted binding records four words (`BindFault::diagnostic`): the context
-(the source in bits 0..16, the line in 16..24, the hart from 24), then three
-zero words; the reason names the fault. A wrong line `verify` finds is
+(the source in bits 0..16, `0xffff` (`NO_SOURCE`) for a level task's entry,
+which has none and whose number no source has; the line in 16..24, the hart
+from 24), then three zero words; the reason names the fault. The next boot's
+report prints the four words as they are recorded, so a field of `ffff`
+there reads as no source. A wrong line `verify` finds is
 reported with the line's register word as the chip read it
 (`LineObservation`) and what the table expected of it
 (`LineExpectation::record`: 0 disabled, bit 8 and the control byte bound,

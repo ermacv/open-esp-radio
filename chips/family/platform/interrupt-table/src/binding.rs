@@ -21,15 +21,25 @@ pub enum BindFaultKind {
 /// An admitted binding failed without releasing its token or register owners.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BindFault {
-    pub source: u16,
+    /// The entry's first source; none for a level task's entry, whose part
+    /// has no source.
+    pub source: Option<u16>,
     pub line: u8,
     pub hart: u8,
     pub kind: BindFaultKind,
 }
 
+/// The record's source field for a binding with no source (a level task's
+/// entry): no source has this number, since a source lies inside its
+/// controller's matrix, which the router checks at build to hold fewer
+/// sources than it.
+pub const NO_SOURCE: u16 = 0xffff;
+
 impl BindFault {
-    /// The record's four words: source/line/hart, then three zero words.
-    /// The operation is named by the reason.
+    /// The record's four words: the context (the source in bits 0..16,
+    /// [`NO_SOURCE`] when the entry has none, the line in 16..24, the hart
+    /// from 24), then three zero words. The operation is named by the
+    /// reason.
     pub fn diagnostic(self) -> (BindFaultCode, [u32; 4]) {
         let name = match self.kind {
             BindFaultKind::StorageClaimed => BindFaultCode::StorageClaimed,
@@ -76,6 +86,6 @@ impl<E: Entry> Quarantined<E> {
     }
 }
 
-fn context(source: u16, line: u8, hart: u8) -> u32 {
-    u32::from(source) | (u32::from(line) << 16) | (u32::from(hart) << 24)
+fn context(source: Option<u16>, line: u8, hart: u8) -> u32 {
+    u32::from(source.unwrap_or(NO_SOURCE)) | (u32::from(line) << 16) | (u32::from(hart) << 24)
 }
