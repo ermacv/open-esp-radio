@@ -1232,8 +1232,10 @@ IP of 34 << 16`.
 
 ## A hart's pending store stays its own
 
-Selection 323 (tasks/253, 254) releases hart 1 as 232 does, with line 34
-disabled and MIE cleared on both harts. In a hundred trials each way:
+Selection 323 (tasks/253, 254) releases hart 1 as 232 does. MIE is
+cleared on both harts, and each hart sets up its own line 34 disabled and
+positive-edge: a level line's pending bit follows its source, so it would
+not hold a store. In a hundred trials each way:
 
 - hart 0 stores its own byte of line 34 pended and reads it set, hart 1
   reads its own clear, and hart 0 clears its own and reads it clear;
@@ -1249,7 +1251,7 @@ release's own bound.
 | --- | --- |
 | `0x3a00` | trials, hart 0's own byte read set, hart 1's own byte read clear while hart 0's was set |
 | `0x3a01` | hart 0's own byte read clear after its clear, hart 1's own byte read set, hart 0's own byte read clear while hart 1's was set |
-| `0x3a02` | hart 1's own byte read clear after its clear, enables (hart 0, hart 1 << 8), hart 1's stage (`0xfac71003` done, `0xfac7100e` not hart 1) |
+| `0x3a02` | hart 1's own byte read clear after its clear; line 34's state on hart 0 (bits 0–15) and on hart 1 (bits 16–31), each its enable (bit 0) and trigger (bits 1–2) before the setup, and the same after it at bit 8; hart 1's stage (`0xfac71003` done, `0xfac7100e` not hart 1) |
 | `0x3a03` | the release: routes found connected on hart 1's bank, the first, stall polls |
 
 Only line 34 and these two harts are observed. Hart 1 takes no entry

@@ -48,13 +48,18 @@ const CROSS: u32 = 1;
 const CROSS_LINE: usize = 34;
 /// 323's trials each way.
 const CROSS_TRIALS: u32 = 100;
-/// 323's words in `FACTS_HART1`, written by hart 1: its reads of its own
-/// byte while hart 0's is pended (clear), after its own store (set) and
-/// after its own clear (clear), and its line's enable.
-const CROSS_FOREIGN_CLEAR: usize = 1;
-const CROSS_OWN_SET: usize = 2;
-const CROSS_OWN_CLEARED: usize = 3;
-const CROSS_ENABLE: usize = 4;
+/// 323's words in `FACTS_HART1`, written by hart 1 past the entry's CSR
+/// snapshot (words 1 to 68), in the CLIC view's words, which 323 does not
+/// take: its reads of its own byte while hart 0's is pended (clear), after
+/// its own store (set) and after its own clear (clear), and its line's
+/// enable and trigger before and after its setup.
+const CROSS_FOREIGN_CLEAR: usize = 100;
+const CROSS_OWN_SET: usize = 101;
+const CROSS_OWN_CLEARED: usize = 102;
+const CROSS_LINE_STATE: usize = 103;
+const _: () = if CROSS_LINE_STATE >= TRAP {
+    panic!("323's words lie below the trap words");
+};
 /// A phase's bound, in cycles: far above one handshake.
 const PHASE_CYCLES: u32 = 1_000_000;
 const TRAPPED: u32 = 0xfac7_100f;
@@ -98,12 +103,15 @@ extern "C" fn facts_hart1_main() -> ! {
     let observer = OBSERVER.load(Ordering::Acquire);
     let pending = PENDING.load(Ordering::Acquire);
     if !clic.is_null() && !observer.is_null() && !pending.is_null() {
-        // SAFETY: hart 0 lent these owners for this window and only polls
-        // FACTS_HART1 (and, in 323, the phase words) until hart 1 is parked;
-        // every access below is a read, but for 323's stores of hart 1's
-        // own pending byte through the shared part (`&self`, hart 1's proof),
-        // which hart 0 never stores.
-        let (clic, observer, pending) = unsafe { (&*clic, &*observer, &*pending) };
+        // SAFETY: hart 0 lent these owners for this window, derived from
+        // its exclusive borrow of the session, and only polls FACTS_HART1
+        // (and, in 323, the phase words) until hart 1 is parked; it never
+        // touches hart 1's CLIC parts meanwhile, which only hart 1 reaches.
+        // Every access below is a read, but for 323's setup of hart 1's own
+        // line 34 (its enable and trigger, through the exclusive CLIC part)
+        // and its stores of hart 1's own pending byte through the shared
+        // part (`&self`, hart 1's proof), which hart 0 never stores.
+        let (clic, observer, pending) = unsafe { (&mut *clic, &*observer, &*pending) };
         if HART1_MODE.load(Ordering::Acquire) == CROSS {
             cross(clic, pending);
         } else {
@@ -119,7 +127,7 @@ extern "C" fn facts_hart1_main() -> ! {
 /// `CROSS_LINE`. Phase `3k + 1`: hart 0 stored its own byte pended; hart 1
 /// reads its own. `3k + 2`: hart 1 stores its own pended and reads it.
 /// `3k + 3`: hart 1 stores its own cleared and reads it.
-fn cross(clic: &pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
+fn cross(clic: &mut pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
     let (Ok(hart), Ok(i)) = (
         oer_portable_riscv::OnHart::<1>::check(),
         Index::new(CROSS_LINE),
@@ -127,7 +135,9 @@ fn cross(clic: &pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
         store(0, CROSS_NOT_HART1);
         return;
     };
-    store(CROSS_ENABLE, u32::from(clic.read_ie(i).ie()));
+    let before = line_state(clic, i);
+    edge_disabled(clic, i);
+    store(CROSS_LINE_STATE, before | line_state(clic, i) << 8);
     if let Some(word) = FACTS_HART1.first() {
         word.store(CROSS_READY, Ordering::Release);
     }
@@ -161,6 +171,22 @@ fn cross(clic: &pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
     if let Some(word) = FACTS_HART1.first() {
         word.store(CROSS_DONE, Ordering::Release);
     }
+}
+
+/// A line's enable (bit 0) and trigger (bits 1 to 2).
+fn line_state(clic: &pac::clic::Clic, i: Index<{ pac::clic::ip::COUNT }>) -> u32 {
+    u32::from(clic.read_ie(i).ie()) | clic.read_attr(i).trig().get() << 1
+}
+
+/// Leave the line disabled and positive-edge, the one trigger whose pending
+/// bit is software's: a level line's bit follows its source.
+fn edge_disabled(clic: &mut pac::clic::Clic, i: Index<{ pac::clic::ip::COUNT }>) {
+    clic.modify_ie(i, |w| {
+        w.set_ie(false);
+    });
+    clic.modify_attr(i, |w| {
+        w.set_trig(pac::clic::attr::Trig::PositiveEdge);
+    });
 }
 
 /// 232 and 233 on hart 1: hart 1's CLIC as it addresses it.
@@ -377,7 +403,7 @@ fn lend(s: &mut Session<'_>, mode: u32) {
     ACK.store(0, Ordering::Relaxed);
     HART1_MODE.store(mode, Ordering::Relaxed);
     CLIC.store(
-        ptr::from_ref(&s.interrupt_matrix.clic[1]).cast_mut(),
+        ptr::from_mut(&mut s.interrupt_matrix.clic[1]),
         Ordering::Relaxed,
     );
     OBSERVER.store(
@@ -470,10 +496,9 @@ pub(super) fn stores_stay_their_harts(s: &mut Session<'_>) {
         emit(0x3aff, 0, 0, 0);
         return;
     };
-    s.interrupt_matrix.clic[0].modify_ie(i, |w| {
-        w.set_ie(false);
-    });
-    let enable0 = u32::from(s.interrupt_matrix.clic[0].read_ie(i).ie());
+    let before = line_state(&s.interrupt_matrix.clic[0], i);
+    edge_disabled(&mut s.interrupt_matrix.clic[0], i);
+    let state0 = before | line_state(&s.interrupt_matrix.clic[0], i) << 8;
     lend(s, CROSS);
     let (_entry, polls, released) = release(s, false);
     // Hart 1's entry runs the ROM's path first: wait for its ready word
@@ -534,7 +559,7 @@ pub(super) fn stores_stay_their_harts(s: &mut Session<'_>) {
     emit(
         0x3a02,
         load(CROSS_OWN_CLEARED),
-        enable0 | load(CROSS_ENABLE) << 8,
+        state0 | load(CROSS_LINE_STATE) << 16,
         stage,
     );
     emit(0x3a03, routed, first, polls);
