@@ -255,6 +255,9 @@ fn handler_a(step: Step) -> u32 {
             } else {
                 let previous = oer_portable_riscv::swap_interrupt_threshold(threshold);
                 let value = facts_mnxti_read();
+                // Read the threshold back by storing the same value again.
+                let held = oer_portable_riscv::swap_interrupt_threshold(threshold);
+                see(4, u32::from(held));
                 oer_portable_riscv::restore_interrupt_threshold(previous);
                 value
             };
@@ -439,7 +442,8 @@ pub(in super::super) fn claim(s: &mut Session<'_>) {
 /// 4's control byte. Holds with A entered once from P (`mcause.mpil` P's
 /// control byte) and a value of B's word when B qualifies, else zero.
 /// `(0x3e00 | case, trials, held, last value)`, `(0x3e10 | case, mcause,
-/// mintstatus, B pending)`, then the common words at `0x3e20 | case`.
+/// mintstatus, B pending | the threshold read back << 8)`, then the common
+/// words at `0x3e20 | case`.
 pub(in super::super) fn qualifies(s: &mut Session<'_>) {
     const CASES: [(usize, usize, bool); 6] = [
         (3, 0, true),
@@ -472,7 +476,7 @@ pub(in super::super) fn qualifies(s: &mut Session<'_>) {
         }
         THRESHOLD.store(0, Ordering::Relaxed);
         emit(0x3e00 | case, TRIALS, held, seen(0));
-        emit(0x3e10 | case, seen(1), seen(2), seen(3));
+        emit(0x3e10 | case, seen(1), seen(2), seen(3) | seen(4) << 8);
         emit_common(0x3e20 | case);
     }
 }

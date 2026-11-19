@@ -1266,7 +1266,7 @@ hundred trials, each from its own setup with a 60,000-cycle window.
 | 324 | `mnxti` read from the thread, MIE clear, nothing pending | `(0x3b00, reads, zeros, traps)`, `(0x3b01, mcause, mepc, mtval)` of the last trap, `(0x3b02, last value, mtvt, 0)` |
 | 325 | in A, B (level 3) pended, read without a claim: B's table word, `mcause` and `mintstatus` unchanged, B still pending | `(0x3c00, trials, held, value)`, `(0x3c01, B's word, mcause, mintstatus)` before, `(0x3c02, mcause, mintstatus, B pending)` after |
 | 326 | in A, B pended, the claim `csrrsi mnxti, MIE`: B's word, B's bit clear, `mcause` code B's, `mintstatus` level B's, MIE set | `(0x3d00, trials, held, value)`, `(0x3d01, mstatus, mcause, mintstatus)`, `(0x3d02, B pending, B's word, B's control byte)` |
-| 327 | A entered from P's handler (`mcause.mpil` P's); B at 3, 4, 6 (qualify), 2, 1, and 3 with `mintthresh` at level 4 (do not) | per case c: `(0x3e00 + c, trials, held, value)`, `(0x3e10 + c, mcause, mintstatus, B pending)` |
+| 327 | A entered from P's handler (`mcause.mpil` P's); B at 3, 4, 6 (qualify), 2, 1, and 3 with `mintthresh` at level 4 (do not) | per case c: `(0x3e00 + c, trials, held, value)`, `(0x3e10 + c, mcause, mintstatus, B pending \| the threshold read back << 8)` |
 | 328 | in A, a hardware-vectored B (level 3) pended, read | `(0x3f00, trials, zeros, value)`, `(0x3f01, B's word, B pending, 0)` |
 | 329 | A pends C, then leaves through the exit (variant 0: A's frame restored, `mret`, C entered at the common entry and its frame saved) or through the claim (1: `csrrsi`, the load of C's word, the jump, in A's frame) | `(0x4000 + v, trials, held, 0)`, `(0x4010 + v, least, most, last)` cycles |
 

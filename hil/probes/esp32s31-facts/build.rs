@@ -65,9 +65,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if chain >= count {
         return Err("the chained line lies past the CLIC's lines".into());
     }
+    // The label follows the alignment: the table starts on its own
+    // boundary after the first one, and mtvt names that boundary.
     asm.push_str(".macro FACTS_MNXTI_TABLE\n");
     asm.push_str(&format!(
-        ".balign {}\n.word 0\n",
+        ".balign {}\n_facts_mnxti_mtvt:\n.word 0\n",
         (count * 4).next_power_of_two()
     ));
     for line in 1..count {

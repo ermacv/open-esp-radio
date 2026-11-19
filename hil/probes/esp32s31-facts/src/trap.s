@@ -207,9 +207,9 @@ _facts_mtvt:
     FACTS_VECTOR_TABLE
     .size _facts_mtvt, . - _facts_mtvt
 
+    // Its label is the macro's, after its alignment.
     .global _facts_mnxti_mtvt
     .type _facts_mnxti_mtvt, @object
-_facts_mnxti_mtvt:
     FACTS_MNXTI_TABLE
     .size _facts_mnxti_mtvt, . - _facts_mnxti_mtvt
 
