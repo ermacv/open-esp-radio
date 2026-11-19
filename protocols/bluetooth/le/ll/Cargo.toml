@@ -10,7 +10,7 @@ description = "Allocation-free Bluetooth LE Link Layer protocol, role state, eve
 [dependencies]
 oer-protocols-bluetooth-le-wire = { path = "../wire" }
 oer-protocols-bluetooth-le-cipher = { path = "../cipher" }
-oer-protocols-bluetooth-le-port = { path = "../port" }
+oer-protocols-bluetooth-le-contracts-port = { path = "../contracts/port" }
 
 [lints]
 workspace = true

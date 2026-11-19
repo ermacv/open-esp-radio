@@ -1,6 +1,6 @@
 # Bluetooth LE port vocabulary
 
-`oer-protocols-bluetooth-le-port` holds the vocabulary of the Bluetooth LE
+`oer-protocols-bluetooth-le-contracts-port` holds the vocabulary of the Bluetooth LE
 radio's boundary and no boundary: no trait, right or lifecycle, and no
 backend implements a Bluetooth LE port. No hardware, PHY membership, SRAM
 addresses or HAL proofs appear in it.

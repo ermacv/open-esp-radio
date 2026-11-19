@@ -1459,7 +1459,7 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
         BTreeSet::from([
             "oer-protocols-bluetooth-le-ll".into(),
             "oer-protocols-bluetooth-hci".into(),
-            "oer-protocols-bluetooth-le-port".into(),
+            "oer-protocols-bluetooth-le-contracts-port".into(),
             "oer-protocols-bluetooth-le-wire".into(),
         ]),
     )]);
@@ -1473,7 +1473,7 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
             Role::Protocol(ProtocolRole::Core),
         ),
         (
-            "oer-protocols-bluetooth-le-port".into(),
+            "oer-protocols-bluetooth-le-contracts-port".into(),
             Role::Protocol(ProtocolRole::Port),
         ),
         (
@@ -2804,7 +2804,7 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("chips/family/facts", false),
         ("chips/esp32s31/pac", false),
         ("chips/esp32s31/hal", false),
-        ("protocols/bluetooth/le/port", true),
+        ("protocols/bluetooth/le/contracts/port", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
         ("chips/esp32s31/radio/bluetooth/backend", true),
@@ -7347,7 +7347,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "protocols/bluetooth/le/port/src/request.rs",
+        "protocols/bluetooth/le/contracts/port/src/request.rs",
         1,
         BY_RADIO_SYSTEM,
     ),
@@ -8380,7 +8380,7 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("protocols/bluetooth/le/cipher", 0, 6, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/controller", 1, 1, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/ll", 2, 5, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/port", 2, 0, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/contracts/port", 2, 0, BY_RADIO_SYSTEM),
     ("protocols/bluetooth/le/wire", 0, 3, BY_RADIO_SYSTEM),
     ("protocols/hil/agent", 1, 0, BY_HIL),
     ("protocols/hil/protocol", 2, 0, BY_HIL),

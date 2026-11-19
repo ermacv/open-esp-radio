@@ -44,7 +44,8 @@ portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort,
     sync, time, time-virtual, trace, trace-recorder, wire}/
 portable/embassy/{net, time}/
 protocols/bluetooth/hci/
-protocols/bluetooth/le/{cipher, controller, ll, port, wire}/
+protocols/bluetooth/le/{cipher, controller, ll, wire}/
+protocols/bluetooth/le/contracts/port/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee80211/{runtime, wire}/

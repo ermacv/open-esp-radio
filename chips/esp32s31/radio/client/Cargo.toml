@@ -10,10 +10,10 @@ description = "The ESP32-S31 radio system's client contract: membership cells, P
 [features]
 # Host-test construction of cells outside the one static claim.
 test-support = []
-bluetooth = ["dep:oer-protocols-bluetooth-le-port", "oer-chips-esp32s31-hal/bluetooth-engine"]
+bluetooth = ["dep:oer-protocols-bluetooth-le-contracts-port", "oer-chips-esp32s31-hal/bluetooth-engine"]
 
 [dependencies]
-oer-protocols-bluetooth-le-port = { path = "../../../../protocols/bluetooth/le/port", optional = true }
+oer-protocols-bluetooth-le-contracts-port = { path = "../../../../protocols/bluetooth/le/contracts/port", optional = true }
 oer-portable-memory = { path = "../../../../portable/memory" }
 oer-protocols-radio-regulatory = { path = "../../../../protocols/radio/regulatory" }
 oer-portable-time = { path = "../../../../portable/time" }

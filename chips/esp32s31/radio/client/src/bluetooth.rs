@@ -11,7 +11,7 @@ use oer_chips_esp32s31_hal::{
     radio::domain::RadioDomain,
 };
 use oer_chips_esp32s31_radio_phy::{bluetooth_client::BluetoothRfReady, concurrent::ConcurrentPhy};
-use oer_protocols_bluetooth_le_port::{LeBand, TxPower};
+use oer_protocols_bluetooth_le_contracts_port::{LeBand, TxPower};
 use oer_protocols_radio_regulatory::{Initiate, Permitted, PowerLimits, TxCeiling};
 
 use crate::{Client, PhyPreparation, sealed};
