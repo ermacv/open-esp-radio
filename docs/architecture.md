@@ -1334,8 +1334,8 @@ its model and conformance case.
   from the mint or the port's `PortKey`; a role's right and its places name
   their instance by index. The installation's geometry is the trait's const
   generics, checked against the capabilities at build. No call returns an
-  error. The host model (`le/testing/model`) implements it; no chip backend
-  does yet.
+  error. The host model (`le/testing/model`) implements it and runs its
+  conformance suite (`le/testing/conformance`); no chip backend does yet.
 - No radio-system token crosses a port; PHY membership stays inside the
   backend.
 
