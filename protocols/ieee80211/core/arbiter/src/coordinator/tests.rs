@@ -190,10 +190,7 @@ fn the_default_policy_stops_the_access_point_where_it_may_not_follow_and_starts_
 #[test]
 fn a_channel_that_needs_radar_detection_is_never_served_even_in_an_allowed_band() {
     let both = ApFollowPolicy {
-        bands: ApBands {
-            ghz2_4: true,
-            ghz5: true,
-        },
+        bands: BandSet::GHZ2_4.union(BandSet::GHZ5),
         unservable: ApUnservable::LeaveUpstream,
         announce_count: NonZeroU8::new(5).unwrap(),
         min_follow_interval: Duration::from_secs(30),
