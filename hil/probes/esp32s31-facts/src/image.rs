@@ -743,27 +743,27 @@ const PROBES: &[Probe] = &[
     },
     Probe {
         id: 141,
-        run: Action::Sar(|s| s.hold(false, false)),
+        run: Action::Sar(|s| s.hold(sar::Timing::Every, sar::ToneClear::Kept)),
     },
     Probe {
         id: 142,
-        run: Action::Sar(|s| s.hold(true, false)),
+        run: Action::Sar(|s| s.hold(sar::Timing::Delayed, sar::ToneClear::Kept)),
     },
     Probe {
         id: 143,
-        run: Action::Sar(|s| s.hold(false, true)),
+        run: Action::Sar(|s| s.hold(sar::Timing::Every, sar::ToneClear::Cleared)),
     },
     Probe {
         id: 144,
-        run: Action::Sar(|s| s.hold(true, true)),
+        run: Action::Sar(|s| s.hold(sar::Timing::Delayed, sar::ToneClear::Cleared)),
     },
     Probe {
         id: 145,
-        run: Action::Sar(|s| s.edge(false)),
+        run: Action::Sar(|s| s.edge(sar::Timing::Every)),
     },
     Probe {
         id: 146,
-        run: Action::Sar(|s| s.edge(true)),
+        run: Action::Sar(|s| s.edge(sar::Timing::Delayed)),
     },
     Probe {
         id: 149,
@@ -1135,17 +1135,13 @@ fn setup(s: &mut Session<'_>) {
     oer_portable_riscv::restore_interrupt_threshold(0);
     IRQ_COUNT.store(0, Ordering::Relaxed);
 }
-fn line(s: &mut Session<'_>, control: u8, edge: bool) {
+fn line(s: &mut Session<'_>, control: u8, trigger: pac::clic::attr::Trig) {
     let i = CPU_LINE;
     s.interrupt_matrix.clic[0].modify_ie(i, |w| {
         w.set_ie(false);
     });
     s.interrupt_matrix.clic[0].modify_attr(i, |w| {
-        w.set_shv(true).set_trig(if edge {
-            pac::clic::attr::Trig::PositiveEdge
-        } else {
-            pac::clic::attr::Trig::PositiveLevel
-        });
+        w.set_shv(true).set_trig(trigger);
     });
     s.interrupt_matrix.clic[0].modify_ctl(i, |w| {
         w.set_ctl(control);
@@ -1161,7 +1157,7 @@ fn wait_window() {
 }
 fn edge(s: &mut Session<'_>) {
     setup(s);
-    line(s, CONTROLS[1], true);
+    line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveEdge);
     let i = CPU_LINE;
     if let Ok(hart) = oer_portable_riscv::OnHart::<0>::check() {
         s.interrupt_matrix.clic_pending.0.pend_line(i, &hart);
@@ -1193,7 +1189,7 @@ fn threshold(s: &mut Session<'_>) {
     for (level, &control) in CONTROLS.iter().enumerate() {
         setup(s);
         route_source(s);
-        line(s, control, false);
+        line(s, control, pac::clic::attr::Trig::PositiveLevel);
         oer_portable_riscv::restore_interrupt_threshold(u8::MAX);
         raise(s);
         oer_portable_riscv::enable_interrupts();
@@ -1218,7 +1214,7 @@ fn threshold(s: &mut Session<'_>) {
 fn latency(s: &mut Session<'_>) {
     setup(s);
     route_source(s);
-    line(s, CONTROLS[1], false);
+    line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveLevel);
     for sample in 0..5 {
         IRQ_COUNT.store(0, Ordering::Relaxed);
         oer_portable_riscv::enable_interrupts();
@@ -1252,7 +1248,7 @@ fn threshold_raising(s: &mut Session<'_>) {
     };
     setup(s);
     route_source(s);
-    line(s, CONTROLS[0], false);
+    line(s, CONTROLS[0], pac::clic::attr::Trig::PositiveLevel);
     emit(0x95, k, u32::from(CONTROLS[0]), u32::from(CONTROLS[1]));
     for (variant, &entry) in entries.iter().enumerate() {
         for sample in 0..3 {
@@ -1419,7 +1415,7 @@ fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
 fn run_sar(s: &mut Session<'_>, id: u32) {
     setup(s);
     route_source(s);
-    line(s, CONTROLS[1], false);
+    line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveLevel);
     SAR_SELECTION.store(id, Ordering::Relaxed);
     SAR_DONE.store(0, Ordering::Relaxed);
     SAR_CONTEXT.store(ptr::addr_of_mut!(s.sar), Ordering::Release);

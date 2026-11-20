@@ -110,10 +110,10 @@ fn state(s: &Session<'_>, tag: u32) {
     );
     let m = t.read_word_0058_opaque();
     use pac::modem_pwr::word_0058_opaque as f;
-    let readable_mode = u32::from(m.control_0()) * f::CONTROL_0_MASK
-        | u32::from(m.control_2()) * f::CONTROL_2_MASK
-        | u32::from(m.bit_3_opaque()) * f::BIT_3_OPAQUE_MASK
-        | u32::from(m.control_4()) * f::CONTROL_4_MASK
+    let readable_mode = (u32::from(m.control_0()) * f::CONTROL_0_MASK)
+        | (u32::from(m.control_2()) * f::CONTROL_2_MASK)
+        | (u32::from(m.bit_3_opaque()) * f::BIT_3_OPAQUE_MASK)
+        | (u32::from(m.control_4()) * f::CONTROL_4_MASK)
         | (m.bits_5_31_opaque().get() << f::BITS_5_31_OPAQUE_MASK.trailing_zeros());
     emit(
         tag + 2,

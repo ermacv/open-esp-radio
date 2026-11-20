@@ -451,7 +451,7 @@ impl Sar {
         p.lp_tsens.modify_ctrl(|w| {
             w.set_power_up(pac::tsens::ctrl::PowerUp::Enabled);
         });
-        self.temperature_acquired = true;
+        self.temperature = Temperature::Acquired;
     }
     fn enable_pwdet(&mut self) {
         let p = &mut self.radio;

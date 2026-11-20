@@ -251,7 +251,24 @@ fn zb_observe(s: &Session<'_>, tag: u32) -> u32 {
     );
     bits
 }
-fn ed_leaf(s: &mut Session<'_>, stop: bool) {
+/// Whether the energy detection runs long enough to be stopped, or completes.
+#[derive(Clone, Copy, PartialEq)]
+enum EdRun {
+    Completed,
+    Stopped,
+}
+
+impl EdRun {
+    /// The record's code: 1 for [`Self::Stopped`].
+    const fn code(self) -> u32 {
+        match self {
+            Self::Completed => 0,
+            Self::Stopped => 1,
+        }
+    }
+}
+
+fn ed_leaf(s: &mut Session<'_>, stop: EdRun) {
     use pac::ieee802154::command::Opcode;
     ieee_prepare(s);
     zb_enable(s, true);
@@ -272,8 +289,12 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
             .set_ed_coexistence_reject(true);
     });
     s.radio.zb.ieee802154_mac_task.modify_ed_duration(|w| {
-        w.set_duration(Bits::truncate(if stop { 100_000 } else { 32 }))
-            .set_delay(Bits::constant::<0>());
+        w.set_duration(Bits::truncate(if stop == EdRun::Stopped {
+            100_000
+        } else {
+            32
+        }))
+        .set_delay(Bits::constant::<0>());
     });
     s.radio.zb.ieee802154_mac_task.modify_ed_config(|w| {
         w.set_ed_sample_rate(pac::ieee802154::ed_config::EdSampleRate::OnePerUs)
@@ -284,7 +305,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
         .zb
         .ieee802154_mac_task
         .write_command(Opcode::EdStart, |_| {});
-    if stop {
+    if stop == EdRun::Stopped {
         window();
         zb_observe(s, 0x22310);
         s.radio
@@ -301,7 +322,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
     }
     emit(
         0x22318,
-        u32::from(stop),
+        stop.code(),
         oer_portable_riscv::cycle32().wrapping_sub(start),
         0,
     );
@@ -332,7 +353,7 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
         .zb
         .ieee802154_mac_task
         .write_command(Opcode::EdStart, |_| {});
-    if stop {
+    if stop == EdRun::Stopped {
         window();
         s.radio
             .zb
@@ -359,8 +380,8 @@ fn ed_leaf(s: &mut Session<'_>, stop: bool) {
     zb_observe(s, 0x223f0);
 }
 pub(in crate::image) fn ed(s: &mut Session<'_>) {
-    ed_leaf(s, false);
+    ed_leaf(s, EdRun::Completed);
 }
 pub(in crate::image) fn ed_stop(s: &mut Session<'_>) {
-    ed_leaf(s, true);
+    ed_leaf(s, EdRun::Stopped);
 }

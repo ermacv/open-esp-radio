@@ -91,16 +91,23 @@ fn reference(s: &Session<'_>) -> bool {
 }
 
 pub(in crate::image) fn natural_wrap(s: &mut Session<'_>) {
-    run(s, true);
+    run(s, Period::Full);
 }
 
 /// Bounded readiness fact: prove reset-origin captures advance before leasing
 /// the full observation interval. This never starts the long observation.
 pub(in crate::image) fn natural_ready(s: &mut Session<'_>) {
-    run(s, false);
+    run(s, Period::Half);
 }
 
-fn run(s: &mut Session<'_>, full_period: bool) {
+/// Whether the natural case waits a full timer period or stops at half.
+#[derive(Clone, Copy, PartialEq)]
+enum Period {
+    Half,
+    Full,
+}
+
+fn run(s: &mut Session<'_>, full_period: Period) {
     // Unlike setup(), this stops before the positional seed / TIMER_ARM writes.
     // The hardware reset supplies the initial state; CONTROL0 starts it directly.
     super::super::digital_setup(s);
@@ -148,7 +155,7 @@ fn run(s: &mut Session<'_>, full_period: bool) {
         finish(s);
         return;
     }
-    if !full_period {
+    if full_period == Period::Half {
         emit(0xe6fe, 1, 0, 0);
         finish(s);
         return;

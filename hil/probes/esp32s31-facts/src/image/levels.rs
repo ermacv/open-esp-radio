@@ -282,7 +282,20 @@ pub(super) fn interrupt(cycle: u32) -> bool {
 
 /// Configures a line with MIE cleared and the session's own borrow: enable
 /// off, then attributes and control, then the enable as asked.
-fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: bool) {
+/// Whether a configured line is enabled at once, or left masked.
+#[derive(Clone, Copy, PartialEq)]
+enum LineEnable {
+    Masked,
+    Enabled,
+}
+
+fn configure(
+    s: &mut Session<'_>,
+    line: u32,
+    level: usize,
+    trigger: pac::clic::attr::Trig,
+    enable: LineEnable,
+) {
     let (Some(i), Some(&control)) = (index(line), LEVEL_CONTROL.get(level.wrapping_sub(1))) else {
         return;
     };
@@ -292,16 +305,12 @@ fn configure(s: &mut Session<'_>, line: u32, level: usize, edge: bool, enable: b
     clear_in(&s.interrupt_matrix, line);
     let clic = &mut s.interrupt_matrix.clic[0];
     clic.modify_attr(i, |w| {
-        w.set_shv(true).set_trig(if edge {
-            pac::clic::attr::Trig::PositiveEdge
-        } else {
-            pac::clic::attr::Trig::PositiveLevel
-        });
+        w.set_shv(true).set_trig(trigger);
     });
     clic.modify_ctl(i, |w| {
         w.set_ctl(control);
     });
-    if enable {
+    if enable == LineEnable::Enabled {
         clic.modify_ie(i, |w| {
             w.set_ie(true);
         });
@@ -391,8 +400,20 @@ pub(super) fn nesting(s: &mut Session<'_>) {
         feed(s);
         setup(s);
         for n in 1..=7 {
-            configure(s, PRIMARY + n as u32 - 1, n, true, true);
-            configure(s, SIBLING + n as u32 - 1, n, true, true);
+            configure(
+                s,
+                PRIMARY + n as u32 - 1,
+                n,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Enabled,
+            );
+            configure(
+                s,
+                SIBLING + n as u32 - 1,
+                n,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Enabled,
+            );
         }
         begin(s, Mode::Nesting);
         oer_portable_riscv::enable_interrupts();
@@ -409,8 +430,20 @@ fn from_higher(s: &mut Session<'_>, mode: Mode, tag: u32) {
     for repeat in 0..REPEATS {
         feed(s);
         setup(s);
-        configure(s, LOW, 1, true, true);
-        configure(s, HIGH, 3, true, true);
+        configure(
+            s,
+            LOW,
+            1,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
+        configure(
+            s,
+            HIGH,
+            3,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
         begin(s, mode);
         oer_portable_riscv::enable_interrupts();
         pend(HIGH);
@@ -429,8 +462,20 @@ pub(super) fn from_lower(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
         feed(s);
         setup(s);
-        configure(s, LOW, 1, true, true);
-        configure(s, MIDDLE, 2, true, true);
+        configure(
+            s,
+            LOW,
+            1,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
+        configure(
+            s,
+            MIDDLE,
+            2,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
         begin(s, Mode::FromLower);
         oer_portable_riscv::enable_interrupts();
         pend(MIDDLE);
@@ -447,7 +492,13 @@ pub(super) fn own_handler(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
         feed(s);
         setup(s);
-        configure(s, MIDDLE, 2, true, true);
+        configure(
+            s,
+            MIDDLE,
+            2,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
         begin(s, Mode::OwnHandler);
         oer_portable_riscv::enable_interrupts();
         pend(MIDDLE);
@@ -478,9 +529,31 @@ pub(super) fn neighbours(s: &mut Session<'_>) {
                 });
             s.source.store_hp_cpu_int_from_cpu_2(false);
             let _ = s.source.read_hp_cpu_int_from_cpu_2();
-            configure(s, NEIGHBOUR_PENDING, 2, true, false);
-            configure(s, TARGET, 2, true, true);
-            configure(s, NEIGHBOUR_SOURCE, 2, variant >= 3, true);
+            configure(
+                s,
+                NEIGHBOUR_PENDING,
+                2,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Masked,
+            );
+            configure(
+                s,
+                TARGET,
+                2,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Enabled,
+            );
+            configure(
+                s,
+                NEIGHBOUR_SOURCE,
+                2,
+                if variant >= 3 {
+                    pac::clic::attr::Trig::PositiveEdge
+                } else {
+                    pac::clic::attr::Trig::PositiveLevel
+                },
+                LineEnable::Enabled,
+            );
             pend_in(&s.interrupt_matrix, NEIGHBOUR_PENDING);
             let before = [
                 word(s, NEIGHBOUR_PENDING),
@@ -544,7 +617,13 @@ pub(super) fn twice(s: &mut Session<'_>) {
     for repeat in 0..REPEATS {
         feed(s);
         setup(s);
-        configure(s, MIDDLE, 2, true, true);
+        configure(
+            s,
+            MIDDLE,
+            2,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
         // Both pends before any entry: MIE stays cleared across them.
         for _ in 0..2 {
             pend_in(&s.interrupt_matrix, MIDDLE);
@@ -577,8 +656,20 @@ pub(super) fn latency(s: &mut Session<'_>) {
     for sample in 0..SAMPLES {
         feed(s);
         setup(s);
-        configure(s, LOW, 1, true, true);
-        configure(s, HIGH, 3, true, true);
+        configure(
+            s,
+            LOW,
+            1,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
+        configure(
+            s,
+            HIGH,
+            3,
+            pac::clic::attr::Trig::PositiveEdge,
+            LineEnable::Enabled,
+        );
         PEND_CYCLE.store(0, Ordering::Relaxed);
         ENTRY_CYCLE.store(0, Ordering::Relaxed);
         begin(s, Mode::Latency);
@@ -619,8 +710,20 @@ pub(super) fn clear_from_higher(s: &mut Session<'_>) {
         for _ in 0..SAMPLES {
             feed(s);
             setup(s);
-            configure(s, TASK, 3, true, true);
-            configure(s, ABOVE, 4, true, true);
+            configure(
+                s,
+                TASK,
+                3,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Enabled,
+            );
+            configure(
+                s,
+                ABOVE,
+                4,
+                pac::clic::attr::Trig::PositiveEdge,
+                LineEnable::Enabled,
+            );
             begin(s, mode);
             oer_portable_riscv::enable_interrupts();
             let _ = masked(|matrix| pend_in(matrix, ABOVE));

@@ -79,12 +79,19 @@ fn wrap(s: &Session<'_>, tag: u32) -> bool {
     false
 }
 pub(in crate::image) fn lp_clear(s: &mut Session<'_>) {
-    lp_clear_run(s, true);
+    lp_clear_run(s, InitialClear::Clear);
 }
 pub(in crate::image) fn lp_masked(s: &mut Session<'_>) {
-    lp_clear_run(s, false);
+    lp_clear_run(s, InitialClear::Keep);
 }
-fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
+/// Whether a run starts by clearing the LP timer's state (command 0x34).
+#[derive(Clone, Copy, PartialEq)]
+enum InitialClear {
+    Keep,
+    Clear,
+}
+
+fn lp_clear_run(s: &mut Session<'_>, initial_clear: InitialClear) {
     ble::init_lp(s);
     s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
     if !wrap(s, 0x96ff) {
@@ -97,7 +104,7 @@ fn lp_clear_run(s: &mut Session<'_>, initial_clear: bool) {
         .publish_bluetooth_modem_lp_timer_software_pending();
     enable18(s);
     state(s, 0x9600);
-    if initial_clear {
+    if initial_clear == InitialClear::Clear {
         s.ble.timer.prepare_bluetooth_modem_lp_timer_command_0034();
         oer_portable_riscv::fence();
         state(s, 0x9608);
@@ -322,7 +329,14 @@ fn reset(s: &mut Session<'_>, tag: u32) {
     oer_portable_riscv::fence();
     state(s, tag + 32);
 }
-fn shutdown(s: &mut Session<'_>, rollover: bool) {
+/// Which cause the shutdown case leaves pending: the compare, or a rollover with the compare disabled.
+#[derive(Clone, Copy, PartialEq)]
+enum ShutdownCause {
+    Compare,
+    Rollover,
+}
+
+fn shutdown(s: &mut Session<'_>, rollover: ShutdownCause) {
     ble::init_lp(s);
     if !mac::prepare(s) {
         quiet(s);
@@ -335,7 +349,7 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
         mac::finish(s);
         return;
     }
-    if rollover {
+    if rollover == ShutdownCause::Rollover {
         s.ble.timer.disable_bluetooth_modem_lp_timer_compare();
         if !wrap(s, 0x99fe) {
             quiet(s);
@@ -501,8 +515,8 @@ fn shutdown(s: &mut Session<'_>, rollover: bool) {
     mac::finish(s);
 }
 pub(in crate::image) fn shutdown_soft(s: &mut Session<'_>) {
-    shutdown(s, false);
+    shutdown(s, ShutdownCause::Compare);
 }
 pub(in crate::image) fn shutdown_wrap(s: &mut Session<'_>) {
-    shutdown(s, true);
+    shutdown(s, ShutdownCause::Rollover);
 }

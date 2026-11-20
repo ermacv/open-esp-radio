@@ -98,7 +98,12 @@ fn reset_busy(s: &mut Session<'_>) -> u32 {
     }
     published
 }
-fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, tag: u32) -> bool {
+fn command(
+    s: &mut Session<'_>,
+    commands: &[(Host, Address, u8)],
+    reset: BusyReset,
+    tag: u32,
+) -> bool {
     if busy(s, Host::Host0) || busy(s, Host::Host1) {
         emit(0x34ee, 2, tag, 0);
         return false;
@@ -116,7 +121,11 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
         .interrupt_core0_status
         .read_int_status_reg_4()
         .int_status_4();
-    let reset_mask = if reset { reset_busy(s) } else { 0 };
+    let reset_mask = if reset == BusyReset::Reset {
+        reset_busy(s)
+    } else {
+        0
+    };
     let input_after = s
         .interrupt_matrix
         .interrupt_core0_status
@@ -142,7 +151,7 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
     record(after_reset, tag + 6);
     record(last, tag + 9);
     emit(tag + 12, seen_busy, reset_mask, polls);
-    if reset {
+    if reset == BusyReset::Reset {
         emit(0x34f0, input_before, input_after, reset_mask);
     }
     emit(tag + 13, matrix3, matrix4, irq_observer::pending(s));
@@ -160,7 +169,20 @@ fn command(s: &mut Session<'_>, commands: &[(Host, Address, u8)], reset: bool, t
     }
     true
 }
-fn serial_observe(s: &mut Session<'_>, address: Address, seed: u8, reset: bool, tag: u32) -> bool {
+/// Whether an observation resets a host's busy state after starting its command.
+#[derive(Clone, Copy, PartialEq)]
+enum BusyReset {
+    Kept,
+    Reset,
+}
+
+fn serial_observe(
+    s: &mut Session<'_>,
+    address: Address,
+    seed: u8,
+    reset: BusyReset,
+    tag: u32,
+) -> bool {
     let Some(r) = analog_i2c::route(Profile::LibphyNormal, address.block()) else {
         emit(0x34ee, 4, tag, 0);
         return false;
@@ -179,7 +201,9 @@ pub(in crate::image) fn reads(s: &mut Session<'_>) {
     }
     let b = analog_i2c::bbtop::byte_04_opaque::ADDRESS;
     let t = analog_i2c::txrf::byte_08_opaque::ADDRESS;
-    if !serial_observe(s, b, 0xa5, false, 0x3500) || !serial_observe(s, t, 0x5a, false, 0x3520) {
+    if !serial_observe(s, b, 0xa5, BusyReset::Kept, 0x3500)
+        || !serial_observe(s, t, 0x5a, BusyReset::Kept, 0x3520)
+    {
         return;
     }
     // SOURCE: the admitted ROM parallel-map transaction, as in wave2.
@@ -207,12 +231,14 @@ pub(in crate::image) fn reads(s: &mut Session<'_>) {
     if !command(
         s,
         &[(Host::Host0, b, 0x3c), (Host::Host1, t, 0xc3)],
-        false,
+        BusyReset::Kept,
         0x3540,
     ) {
         return;
     }
-    if !serial_observe(s, b, 0x5a, false, 0x3560) || !serial_observe(s, t, 0xa5, false, 0x3580) {
+    if !serial_observe(s, b, 0x5a, BusyReset::Kept, 0x3560)
+        || !serial_observe(s, t, 0xa5, BusyReset::Kept, 0x3580)
+    {
         return;
     }
     irq_observer::inherited(s);
@@ -223,8 +249,10 @@ pub(in crate::image) fn reset(s: &mut Session<'_>) {
         return;
     }
     let b = analog_i2c::bbtop::byte_04_opaque::ADDRESS;
-    if !serial_observe(s, b, 0xa5, false, 0x35a0) || !serial_observe(s, b, 0x5a, true, 0x35c0) {
+    if !serial_observe(s, b, 0xa5, BusyReset::Kept, 0x35a0)
+        || !serial_observe(s, b, 0x5a, BusyReset::Reset, 0x35c0)
+    {
         return;
     }
-    let _ = serial_observe(s, b, 0x3c, false, 0x35e0);
+    let _ = serial_observe(s, b, 0x3c, BusyReset::Kept, 0x35e0);
 }

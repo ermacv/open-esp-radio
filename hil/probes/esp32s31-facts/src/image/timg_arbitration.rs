@@ -368,11 +368,22 @@ fn route(s: &mut Session<'_>, source: pac::Interrupt, line: usize) {
         });
     }
 }
-fn arbitration(s: &mut Session<'_>, timer_high: bool) {
+/// Whether the timer's interrupt takes the higher priority line, or the software one.
+#[derive(Clone, Copy, PartialEq)]
+enum TimerPriority {
+    Low,
+    High,
+}
+
+fn arbitration(s: &mut Session<'_>, timer_high: TimerPriority) {
     if !begin(s) {
         return;
     }
-    let (timer, software) = if timer_high { (HIGH, LOW) } else { (LOW, HIGH) };
+    let (timer, software) = if timer_high == TimerPriority::High {
+        (HIGH, LOW)
+    } else {
+        (LOW, HIGH)
+    };
     route(s, pac::Interrupt::TIMERGRP0_T0, timer.get());
     route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, software.get());
     for i in [LOW, HIGH] {
@@ -446,8 +457,8 @@ fn arbitration(s: &mut Session<'_>, timer_high: bool) {
     finish(s);
 }
 pub(super) fn timer_low(s: &mut Session<'_>) {
-    arbitration(s, false);
+    arbitration(s, TimerPriority::Low);
 }
 pub(super) fn timer_high(s: &mut Session<'_>) {
-    arbitration(s, true);
+    arbitration(s, TimerPriority::High);
 }

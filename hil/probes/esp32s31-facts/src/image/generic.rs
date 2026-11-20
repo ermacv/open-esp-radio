@@ -143,7 +143,7 @@ fn admit(s: &mut Session<'_>, tag: u32) {
 fn begin(s: &mut Session<'_>, source: pac::Interrupt) {
     setup(s);
     feed(s);
-    line(s, CONTROLS[1], false);
+    line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveLevel);
     route(s, source, true);
 }
 
@@ -168,7 +168,7 @@ pub(super) fn matrix(s: &mut Session<'_>) {
         }
     }
     setup(s);
-    line(s, CONTROLS[1], false);
+    line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveLevel);
     s.source.store_hp_cpu_int_from_cpu_2(false);
     wait_window();
     matrix_state(s, 0x4010);
