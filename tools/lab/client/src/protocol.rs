@@ -29,8 +29,10 @@ pub mod station_link;
 /// operation. Version 3 added [`Reply::Ready`]; version 4
 /// [`Operation::FlashConsole`]; version 5 names the rows of a router's queue
 /// file the kernel's buffer cut (`station_link::queue`), which a version 4
-/// client cannot parse.
-pub const PROTOCOL: u32 = 5;
+/// client cannot parse; version 6 gives a router's station profile its
+/// format and its width apart ([`RouterFormat`], [`RouterWidth`]), both
+/// required.
+pub const PROTOCOL: u32 = 6;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
@@ -422,19 +424,28 @@ pub struct HolderStatus {
     pub operations: usize,
 }
 
-/// The width of the station profile's channel.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+/// The PHY format of the station profile.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum RouterChannelWidth {
-    /// HT 20 MHz.
-    #[default]
-    Ht20,
-    /// HT 40 MHz, the secondary channel below the primary on channels 5 to
-    /// 13 and above it on 1 to 4.
-    Ht40,
-    /// HE 20 MHz, 802.11ax on: the HE20 station profile. Every other width
-    /// runs with HE off.
-    He20,
+pub enum RouterFormat {
+    /// HT (802.11n), HE off.
+    Ht,
+    /// HE (802.11ax) on.
+    He,
+}
+
+/// The width of the station profile's channel. With [`RouterFormat`] every
+/// pair is a profile; a pair the router's radio does not run is the
+/// router's refusal when the profile is applied.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RouterWidth {
+    /// 20 MHz.
+    Mhz20,
+    /// 40 MHz: for HT the secondary channel below the primary on channels 5
+    /// to 13 and above it on 1 to 4; for HE the side OpenWrt chooses, above
+    /// on 1 to 6 and below from 7.
+    Mhz40,
 }
 
 /// An access category of the AP radio's airtime queue limits.
@@ -452,7 +463,8 @@ pub enum RouterAccessCategory {
 #[serde(tag = "router", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RouterOperation {
     /// Apply the WPA2 station profile with `ssid` and `passphrase` on
-    /// `channel`, one the stand file's `[router]` allows, `width` wide, to
+    /// `channel`, one the stand file's `[router]` allows, in `format`,
+    /// `width` wide, to
     /// the stand's AP; its isolated network forwards UDP and TCP between its
     /// stations and `forward_host` when given (a run's load generator or TCP
     /// peer on the host), and its DHCP server serves. Result: the applied
@@ -461,9 +473,8 @@ pub enum RouterOperation {
         ssid: String,
         passphrase: String,
         channel: u8,
-        /// Absent from a client older than the width: HT20.
-        #[serde(default)]
-        width: RouterChannelWidth,
+        format: RouterFormat,
+        width: RouterWidth,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         forward_host: Option<Ipv4Addr>,
     },

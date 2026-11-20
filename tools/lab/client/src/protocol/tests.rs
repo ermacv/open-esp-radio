@@ -52,34 +52,61 @@ fn a_truncated_or_unknown_frame_is_an_error() {
 }
 
 #[test]
-fn a_station_profile_without_a_width_is_twenty_megahertz() {
-    let older = r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":13}"#;
-    let operation: RouterOperation = serde_json::from_str(older).unwrap();
-    assert!(matches!(
-        operation,
-        RouterOperation::ApplyStationProfile {
-            width: RouterChannelWidth::Ht20,
-            ..
-        }
-    ));
+fn a_station_profile_names_its_format_and_its_width() {
+    for (format, width, text) in [
+        (
+            RouterFormat::Ht,
+            RouterWidth::Mhz20,
+            r#""format":"ht","width":"mhz20""#,
+        ),
+        (
+            RouterFormat::Ht,
+            RouterWidth::Mhz40,
+            r#""format":"ht","width":"mhz40""#,
+        ),
+        (
+            RouterFormat::He,
+            RouterWidth::Mhz20,
+            r#""format":"he","width":"mhz20""#,
+        ),
+        (
+            RouterFormat::He,
+            RouterWidth::Mhz40,
+            r#""format":"he","width":"mhz40""#,
+        ),
+    ] {
+        let operation = RouterOperation::ApplyStationProfile {
+            ssid: "s".into(),
+            passphrase: "p".into(),
+            channel: 6,
+            format,
+            width,
+            forward_host: None,
+        };
+        let json = serde_json::to_string(&operation).unwrap();
+        assert!(json.contains(text), "{json}");
+        assert_eq!(
+            serde_json::from_str::<RouterOperation>(&json).unwrap(),
+            operation
+        );
+    }
 }
 
 #[test]
-fn the_he20_station_profile_is_its_own_width() {
-    let text = r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"width":"he20"}"#;
-    let operation: RouterOperation = serde_json::from_str(text).unwrap();
-    assert!(matches!(
-        operation,
-        RouterOperation::ApplyStationProfile {
-            width: RouterChannelWidth::He20,
-            ..
-        }
-    ));
-    assert!(
-        serde_json::to_string(&operation)
-            .unwrap()
-            .contains(r#""width":"he20""#)
-    );
+fn a_station_profile_without_its_format_or_width_or_in_the_old_spelling_is_refused() {
+    for text in [
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":13}"#,
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"width":"mhz20"}"#,
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"format":"ht"}"#,
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"width":"he20"}"#,
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"format":"he","width":"he20"}"#,
+        r#"{"router":"apply-station-profile","ssid":"s","passphrase":"p","channel":6,"format":"ht","width":"ht40"}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<RouterOperation>(text).is_err(),
+            "{text}"
+        );
+    }
 }
 
 #[test]

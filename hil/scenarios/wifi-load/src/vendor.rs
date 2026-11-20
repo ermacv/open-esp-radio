@@ -32,7 +32,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use oer_tools_hil_harness::{Failure, RouterChannelWidth, RouterOperation};
+use oer_tools_hil_harness::{Failure, RouterFormat, RouterOperation, RouterWidth};
 use oer_tools_lab_arbiter::{
     claims::{AIR, Claim},
     journal::ImageIdentity,
@@ -48,9 +48,9 @@ use serde_json::{Value, json};
 mod report;
 
 use crate::{
-    DELAY_MS, DEVICE_PORT, DRAIN_MS, Mode, Offer, PROBE_PERIOD, ROUTER_ADDRESS, channel, generated,
-    host_route, levels_mbps, link, mbps, percent, probes, round, rtt, run_id, traffic, width,
-    window_ms,
+    DELAY_MS, DEVICE_PORT, DRAIN_MS, Mode, Offer, PROBE_PERIOD, ROUTER_ADDRESS, channel, format,
+    generated, host_route, levels_mbps, link, mbps, percent, probes, round, rtt, run_id, traffic,
+    width, window_ms,
 };
 
 /// Selects the vendor receiver and its variant.
@@ -138,7 +138,8 @@ struct Plan {
     levels: Vec<u64>,
     window_ms: u32,
     probing: bool,
-    width: RouterChannelWidth,
+    format: RouterFormat,
+    width: RouterWidth,
 }
 
 /// Whether `names` select the levels; an unknown case is an error.
@@ -158,6 +159,7 @@ impl Plan {
             levels: levels_mbps().map_err(failure)?,
             window_ms: window_ms().map_err(failure)?,
             probing: probes().map_err(failure)?,
+            format: format().map_err(failure)?,
             width: width().map_err(failure)?,
         })
     }
@@ -373,6 +375,7 @@ fn leased(
             ssid: ssid.clone(),
             passphrase: passphrase.clone(),
             channel,
+            format: plan.format,
             width: plan.width,
             forward_host: Some(host),
         },

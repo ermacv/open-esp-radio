@@ -52,7 +52,7 @@ use oer_hil_services_wifi_station::{
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{
-    BuildChoice, Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+    BuildChoice, Case, Cx, Failure, RouterFormat, RouterOperation, RouterWidth, Scenario, check,
 };
 
 /// The image the scenario runs: the station on the network core.
@@ -543,26 +543,64 @@ fn link_measurement(
 /// each direction's rate stays a `u32` of bit/s.
 const MAX_LEVEL_MBPS: u64 = 1000;
 
-/// The channel width the router's profile asks for: HT40, or the
-/// `OER_WIFI_LOAD_WIDTH` it names (`ht20`, `ht40`, or `he20`: the router's
-/// HE20 station profile, and the station's join asks for HE20).
+/// The PHY format the router's profile asks for: HT, or the
+/// `OER_WIFI_LOAD_FORMAT` it names (`ht` or `he`: HE on, and the station's
+/// join asks for HE).
+const FORMAT_ENV: &str = "OER_WIFI_LOAD_FORMAT";
+/// The channel width the router's profile asks for: 40 MHz, or the
+/// `OER_WIFI_LOAD_WIDTH` it names (`20` or `40`).
 const WIDTH_ENV: &str = "OER_WIFI_LOAD_WIDTH";
 
-fn width() -> Result<RouterChannelWidth, Failure> {
+fn format() -> Result<RouterFormat, Failure> {
+    match std::env::var(FORMAT_ENV) {
+        Err(_) => Ok(RouterFormat::Ht),
+        Ok(text) => parse_format(&text),
+    }
+}
+
+fn parse_format(text: &str) -> Result<RouterFormat, Failure> {
+    match text.trim() {
+        "ht" => Ok(RouterFormat::Ht),
+        "he" => Ok(RouterFormat::He),
+        other => Err(Failure::Incomplete(format!(
+            "{FORMAT_ENV}=`{other}` is neither `ht` nor `he`"
+        ))),
+    }
+}
+
+fn width() -> Result<RouterWidth, Failure> {
     match std::env::var(WIDTH_ENV) {
-        Err(_) => Ok(RouterChannelWidth::Ht40),
+        Err(_) => Ok(RouterWidth::Mhz40),
         Ok(text) => parse_width(&text),
     }
 }
 
-fn parse_width(text: &str) -> Result<RouterChannelWidth, Failure> {
+fn parse_width(text: &str) -> Result<RouterWidth, Failure> {
     match text.trim() {
-        "ht20" => Ok(RouterChannelWidth::Ht20),
-        "ht40" => Ok(RouterChannelWidth::Ht40),
-        "he20" => Ok(RouterChannelWidth::He20),
+        "20" => Ok(RouterWidth::Mhz20),
+        "40" => Ok(RouterWidth::Mhz40),
         other => Err(Failure::Incomplete(format!(
-            "{WIDTH_ENV}=`{other}` is none of `ht20`, `ht40` and `he20`"
+            "{WIDTH_ENV}=`{other}` is neither `20` nor `40` (the format is {FORMAT_ENV})"
         ))),
+    }
+}
+
+/// The router profile's format and width for the S31 station: its HE is
+/// 20 MHz only (`ESP32S31_HE_CHANNEL_WIDTH_SET`), so HE at 40 MHz is refused
+/// here, before the stand; the vendor peer's run takes every pair.
+fn station_mode() -> Result<(RouterFormat, RouterWidth), Failure> {
+    station_pair(format()?, width()?)
+}
+
+fn station_pair(
+    format: RouterFormat,
+    width: RouterWidth,
+) -> Result<(RouterFormat, RouterWidth), Failure> {
+    match (format, width) {
+        (RouterFormat::He, RouterWidth::Mhz40) => Err(Failure::Incomplete(format!(
+            "{FORMAT_ENV}=he with {WIDTH_ENV}=40: the S31 station's HE is 20 MHz only"
+        ))),
+        pair => Ok(pair),
     }
 }
 
@@ -928,11 +966,12 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let host = host_route(Ipv4Addr::from(ROUTER_ADDRESS))?.source;
     let channel = channel()?;
     let (ssid, passphrase) = (generated("oer-load-"), generated("oer-"));
-    let width = width()?;
+    let (format, width) = station_mode()?;
     cx.router(RouterOperation::ApplyStationProfile {
         ssid: ssid.clone(),
         passphrase: passphrase.clone(),
         channel,
+        format,
         width,
         forward_host: Some(host),
     })?;
@@ -942,7 +981,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         passphrase: heapless::String::try_from(passphrase.as_str())
             .map_err(|_| Failure::Incomplete("the generated passphrase is too long".into()))?,
         channel,
-        he20: width == RouterChannelWidth::He20,
+        he20: format == RouterFormat::He,
     };
     let joined = cx.call(join, JOIN_TIMEOUT)?;
     // The connect's timeline is the trace's: the measuring build keeps none.
@@ -2033,11 +2072,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_width_is_ht20_ht40_or_he20_and_nothing_else() {
-        assert_eq!(parse_width("ht20").unwrap(), RouterChannelWidth::Ht20);
-        assert_eq!(parse_width(" ht40 ").unwrap(), RouterChannelWidth::Ht40);
-        assert_eq!(parse_width("he20").unwrap(), RouterChannelWidth::He20);
-        assert!(parse_width("40").is_err());
+    fn the_format_is_ht_or_he_and_the_width_20_or_40_and_no_old_spelling() {
+        assert_eq!(parse_format("ht").unwrap(), RouterFormat::Ht);
+        assert_eq!(parse_format(" he ").unwrap(), RouterFormat::He);
+        assert_eq!(parse_width("20").unwrap(), RouterWidth::Mhz20);
+        assert_eq!(parse_width(" 40 ").unwrap(), RouterWidth::Mhz40);
+        for old in ["ht20", "ht40", "he20", "HT", "mhz40"] {
+            assert!(parse_format(old).is_err(), "{old}");
+            assert!(parse_width(old).is_err(), "{old}");
+        }
+    }
+
+    #[test]
+    fn the_s31_station_takes_every_pair_but_he_at_40_mhz() {
+        for (format, width) in [
+            (RouterFormat::Ht, RouterWidth::Mhz20),
+            (RouterFormat::Ht, RouterWidth::Mhz40),
+            (RouterFormat::He, RouterWidth::Mhz20),
+        ] {
+            assert_eq!(station_pair(format, width).unwrap(), (format, width));
+        }
+        assert!(matches!(
+            station_pair(RouterFormat::He, RouterWidth::Mhz40),
+            Err(Failure::Incomplete(reason)) if reason.contains("20 MHz only")
+        ));
     }
 
     #[test]

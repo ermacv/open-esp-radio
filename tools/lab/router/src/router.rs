@@ -17,8 +17,10 @@
 //!    the world domain (`00`, no-IR on channels 12 and 13) until a radio
 //!    starts with its country; then the radio's channels as its PHY lists
 //!    them: the profile's channel is offered and neither disabled nor no-IR
-//!    in the regulatory domain;
-//! 4. the profile: on the radio `channel`, `htmode` (its [`ChannelWidth`]),
+//!    in the regulatory domain; and the radio's 2.4 GHz modes as OpenWrt
+//!    detected them (`/etc/board.json`): the profile's format and width is
+//!    among them, or the profile is refused naming the modes there are;
+//! 4. the profile: on the radio `channel`, `htmode` (its [`PhyMode`]),
 //!    `beacon_int` [`BEACON_INTERVAL_TU`] and `disabled=0`, on the AP
 //!    section `ssid`, `disabled=0` and `hidden=0`; `uci commit wireless`;
 //!    `wifi reload`;
@@ -46,39 +48,86 @@ use zeroize::Zeroizing;
 pub use crate::ssh::{Remote, Result};
 use crate::{mac::Mac, ssh::token};
 
-/// The width of a profile's channel, the radio's `htmode`.
+/// The PHY format of a profile, the radio's `ieee80211ax`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ChannelWidth {
-    /// `HT20`: HT 20 MHz, which every 802.11n radio (mt76 included, HE
-    /// capable or not) accepts.
-    Ht20,
-    /// HT 40 MHz: `HT40-`, the secondary channel below the primary, on
-    /// channels 5 to 13, and `HT40+`, above it, on channels 1 to 4. IEEE Std
-    /// 802.11-2020 Annex E.1 (Table E-4, operating classes 83 and 84) allows
-    /// the secondary below on primaries 5 to 13 and above on 1 to 9; the
-    /// profile takes it below wherever it may.
-    Ht40,
-    /// `HE20`: HE 20 MHz, 802.11ax on (`ieee80211ax=1`). A station profile
-    /// of its own: every other width runs with HE off.
-    He20,
+pub enum Format {
+    /// HT (802.11n), HE off (`ieee80211ax=0`).
+    Ht,
+    /// HE (802.11ax) on (`ieee80211ax=1`).
+    He,
 }
 
-impl ChannelWidth {
-    /// The radio's `htmode` on `channel`.
+/// The width of a profile's channel.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChannelWidth {
+    /// 20 MHz.
+    Mhz20,
+    /// 40 MHz.
+    Mhz40,
+}
+
+/// A profile's format and width: every pair is a value. Whether the radio
+/// runs it is the radio's answer at the profile's application (step 3, its
+/// modes in OpenWrt's `/etc/board.json`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhyMode {
+    pub format: Format,
+    pub width: ChannelWidth,
+}
+
+impl PhyMode {
+    /// HT 20 MHz, which every 802.11n radio accepts.
+    pub const HT20: Self = Self {
+        format: Format::Ht,
+        width: ChannelWidth::Mhz20,
+    };
+
+    /// The radio's `htmode` on `channel`:
+    /// - HT 40 MHz names its secondary: `HT40-`, below the primary, on
+    ///   channels 5 to 13, and `HT40+`, above it, on 1 to 4. IEEE Std
+    ///   802.11-2020 Annex E.1 (Table E-4, operating classes 83 and 84)
+    ///   allows the secondary below on primaries 5 to 13 and above on 1 to
+    ///   9; the profile takes it below wherever it may.
+    /// - HE 40 MHz is `HE40`, which names no side: OpenWrt chooses it
+    ///   ([`Self::secondary_above`]).
     pub const fn htmode(self, channel: u8) -> &'static str {
-        match self {
-            Self::Ht20 => "HT20",
-            Self::Ht40 if channel >= 5 => "HT40-",
-            Self::Ht40 => "HT40+",
-            Self::He20 => "HE20",
+        match (self.format, self.width) {
+            (Format::Ht, ChannelWidth::Mhz20) => "HT20",
+            (Format::Ht, ChannelWidth::Mhz40) if channel >= 5 => "HT40-",
+            (Format::Ht, ChannelWidth::Mhz40) => "HT40+",
+            (Format::He, ChannelWidth::Mhz20) => "HE20",
+            (Format::He, ChannelWidth::Mhz40) => "HE40",
         }
     }
 
-    /// The radio's `ieee80211ax` of a station profile this wide.
+    /// The name of this pair among the radio's modes in `/etc/board.json`
+    /// (OpenWrt's `wifi-detect.uc`, from `iw phy`).
+    pub const fn board_mode(self) -> &'static str {
+        match (self.format, self.width) {
+            (Format::Ht, ChannelWidth::Mhz20) => "HT20",
+            (Format::Ht, ChannelWidth::Mhz40) => "HT40",
+            (Format::He, ChannelWidth::Mhz20) => "HE20",
+            (Format::He, ChannelWidth::Mhz40) => "HE40",
+        }
+    }
+
+    /// The radio's `ieee80211ax`.
     pub const fn ieee80211ax(self) -> &'static str {
-        match self {
-            Self::Ht20 | Self::Ht40 => "0",
-            Self::He20 => "1",
+        match self.format {
+            Format::Ht => "0",
+            Format::He => "1",
+        }
+    }
+
+    /// Whether a 40 MHz channel's secondary lies above `channel`. HT names
+    /// its side ([`Self::htmode`]); for `HE40` on 2.4 GHz OpenWrt's
+    /// hostapd configuration takes `[HT40+]` below channel 7 and `[HT40-]`
+    /// from it (OpenWrt 25.12.5 `/usr/share/ucode/wifi/hostapd.uc`, the
+    /// `ht_capab` of a 40 MHz `htmode` without a sign).
+    const fn secondary_above(self, channel: u8) -> bool {
+        match self.format {
+            Format::Ht => channel < 5,
+            Format::He => channel < 7,
         }
     }
 
@@ -86,13 +135,14 @@ impl ChannelWidth {
     /// `iw` prints it in `center1`.
     const fn centre_mhz(self, channel: u8) -> u32 {
         let primary = 2407 + 5 * channel as u32;
-        match self {
-            Self::Ht20 | Self::He20 => primary,
-            Self::Ht40 if channel >= 5 => primary - 10,
-            Self::Ht40 => primary + 10,
+        match self.width {
+            ChannelWidth::Mhz20 => primary,
+            ChannelWidth::Mhz40 if self.secondary_above(channel) => primary + 10,
+            ChannelWidth::Mhz40 => primary - 10,
         }
     }
 }
+
 /// The radio's `beacon_int`, in TU.
 pub const BEACON_INTERVAL_TU: u16 = 100;
 /// How many times the AP interface is read after the reload.
@@ -184,7 +234,7 @@ pub struct Profile {
     ap_section: String,
     interface: String,
     channel: u8,
-    width: ChannelWidth,
+    mode: PhyMode,
     ssid: Zeroizing<String>,
     security: Security,
     group_rekey_seconds: u32,
@@ -199,7 +249,7 @@ impl fmt::Debug for Profile {
             .field("radio", &self.radio)
             .field("ap_section", &self.ap_section)
             .field("channel", &self.channel)
-            .field("width", &self.width)
+            .field("mode", &self.mode)
             .finish_non_exhaustive()
     }
 }
@@ -248,7 +298,7 @@ impl Profile {
             ap_section: ap_section.to_owned(),
             interface: interface.to_owned(),
             channel,
-            width: ChannelWidth::Ht20,
+            mode: PhyMode::HT20,
             ssid: Zeroizing::new(ssid.to_owned()),
             security: Security::Unchanged,
             group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
@@ -257,8 +307,8 @@ impl Profile {
     }
 
     /// WPA2 station's WPA2-Personal/CCMP profile, with PMF disabled, HT
-    /// 20 MHz wide with HE disabled unless [`Self::width`] widens it or
-    /// asks for HE20.
+    /// 20 MHz wide with HE disabled unless [`Self::mode`] asks for another
+    /// format or width.
     /// Callers generate the SSID and passphrase with [`crate::credentials`]
     /// for each run. The passphrase is write-only and zeroized on drop.
     pub fn station_wpa2(
@@ -286,14 +336,14 @@ impl Profile {
         self
     }
 
-    /// This profile on a channel `width` wide.
-    pub fn width(mut self, width: ChannelWidth) -> Self {
-        self.width = width;
+    /// This profile in `mode`, its format and width.
+    pub fn mode(mut self, mode: PhyMode) -> Self {
+        self.mode = mode;
         self
     }
 
     fn htmode(&self) -> &'static str {
-        self.width.htmode(self.channel)
+        self.mode.htmode(self.channel)
     }
 
     fn station_network(&self) -> bool {
@@ -319,6 +369,18 @@ impl Profile {
             "phy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname') && test -n \"$phy\" \
              && info=$(iw phy \"$phy\" info) && printf '%s\\n' \"$info\" | grep -E \
              '^[[:space:]]*\\* [0-9]+(\\.[0-9]+)? MHz \\['",
+            quote(&format!("{{\"section\":\"{}\"}}", self.radio))?
+        ))
+    }
+
+    /// Step 3, continued: the modes OpenWrt detected for the radio's PHY at
+    /// 2.4 GHz (`/etc/board.json`, written by `wifi-detect.uc` from the
+    /// PHY's capabilities), one per line.
+    fn modes_script(&self) -> Result<String> {
+        Ok(format!(
+            "board_phy=$(ubus call iwinfo phyname {} | jsonfilter -e '@.phyname') \
+             && test -n \"$board_phy\" && jsonfilter -i /etc/board.json \
+             -e \"@.wlan['$board_phy'].info.bands['2G'].modes[*]\"",
             quote(&format!("{{\"section\":\"{}\"}}", self.radio))?
         ))
     }
@@ -354,7 +416,7 @@ impl Profile {
             }
         }
         if self.station_network() {
-            steps.push(set(&self.radio, "ieee80211ax", self.width.ieee80211ax())?);
+            steps.push(set(&self.radio, "ieee80211ax", self.mode.ieee80211ax())?);
             steps.push(set(
                 &self.ap_section,
                 "network",
@@ -411,7 +473,7 @@ pub fn plan() -> Result<Vec<String>> {
         ap_section: "<ap_section>".to_owned(),
         interface: "<wireless_interface>".to_owned(),
         channel: 0,
-        width: ChannelWidth::Ht20,
+        mode: PhyMode::HT20,
         ssid: Zeroizing::new("<ssid>".to_owned()),
         security: Security::Unchanged,
         group_rekey_seconds: crate::station_wpa2::GROUP_REKEY_SECONDS,
@@ -422,6 +484,7 @@ pub fn plan() -> Result<Vec<String>> {
         show_script(),
         regulatory_script("DE")?.replace("DE", "<country>"),
         profile.channels_script()?,
+        profile.modes_script()?,
         profile
             .apply_script()?
             .replace("channel=0", "channel=<channel>"),
@@ -486,6 +549,10 @@ fn apply_inner(remote: &mut dyn Remote, profile: &Profile) -> Result<Applied> {
         .run(&profile.channels_script()?)
         .map_err(step("reading the radio's channels"))?;
     check_channel(&channels, profile.channel, radio.option("country"))?;
+    let modes = remote
+        .run(&profile.modes_script()?)
+        .map_err(step("reading the radio's modes"))?;
+    check_mode(&modes, profile.mode)?;
     let previous_network = if profile.station_network() {
         let fingerprint = crate::station::network::prepare(remote)?;
         remote
@@ -552,7 +619,7 @@ fn settle(remote: &mut dyn Remote, profile: &Profile, country: [u8; 2]) -> Resul
             Err(error) => Err(error),
         };
         match info {
-            Ok(info) => match info.mismatch(profile.channel, profile.width) {
+            Ok(info) => match info.mismatch(profile.channel, profile.mode) {
                 None => {
                     return Ok(Applied {
                         bssid: info.bssid,
@@ -861,15 +928,14 @@ impl Wireless {
                 || ap.option("ieee80211w") != Some("0")
                 || ap.option("wpa_group_rekey")
                     != Some(profile.group_rekey_seconds.to_string().as_str())
-                || radio.option("ieee80211ax") != Some(profile.width.ieee80211ax()))
+                || radio.option("ieee80211ax") != Some(profile.mode.ieee80211ax()))
         {
             return Err(format!(
                 "the committed WPA2 station profile is not WPA2/CCMP with FT and PMF disabled, \
                  HE {} and the run's GTK rekey interval",
-                if profile.width == ChannelWidth::He20 {
-                    "enabled"
-                } else {
-                    "disabled"
+                match profile.mode.format {
+                    Format::He => "enabled",
+                    Format::Ht => "disabled",
                 }
             ));
         }
@@ -930,6 +996,41 @@ pub fn check_channel(text: &str, channel: u8, country: Option<&str>) -> Result<(
     Ok(())
 }
 
+/// Step 3: the radio runs `mode`: its name is among the PHY's 2.4 GHz modes
+/// (`text`, one per line, as `/etc/board.json` lists them). A pair it does
+/// not run is refused here, before the profile changes anything.
+pub fn check_mode(text: &str, mode: PhyMode) -> Result<()> {
+    let mut modes = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if !line
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
+        {
+            return Err(format!(
+                "the radio's mode list's line {} is outside the allowlist",
+                number + 1
+            ));
+        }
+        modes.push(line);
+    }
+    if modes.is_empty() {
+        return Err("the radio lists no 2.4 GHz modes in /etc/board.json".to_owned());
+    }
+    let wanted = mode.board_mode();
+    if modes.contains(&wanted) {
+        Ok(())
+    } else {
+        Err(format!(
+            "the radio does not run {wanted} at 2.4 GHz: its modes are {}",
+            modes.join(", ")
+        ))
+    }
+}
+
 /// What `iw dev <interface> info` says of the AP.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IwInfo {
@@ -955,12 +1056,12 @@ pub enum Width {
 }
 
 impl IwInfo {
-    /// Why it is not yet the profile on `channel`, `width` wide.
-    fn mismatch(&self, channel: u8, width: ChannelWidth) -> Option<String> {
-        let wanted = match width {
-            ChannelWidth::Ht20 | ChannelWidth::He20 => Width::Ht20,
-            ChannelWidth::Ht40 => Width::Ht40 {
-                centre_mhz: width.centre_mhz(channel),
+    /// Why it is not yet the profile on `channel` in `mode`.
+    fn mismatch(&self, channel: u8, mode: PhyMode) -> Option<String> {
+        let wanted = match mode.width {
+            ChannelWidth::Mhz20 => Width::Ht20,
+            ChannelWidth::Mhz40 => Width::Ht40 {
+                centre_mhz: mode.centre_mhz(channel),
             },
         };
         if !self.ap {
@@ -974,7 +1075,7 @@ impl IwInfo {
             Some(format!(
                 "the AP's width is {:?}, not the profile's {wanted:?} ({})",
                 self.width,
-                width.htmode(channel)
+                mode.htmode(channel)
             ))
         } else if !self.stand_ssid {
             Some("the AP does not carry the stand's SSID".to_owned())
