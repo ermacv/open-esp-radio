@@ -27,6 +27,7 @@ const ALL: LeRadioCapabilities = LeRadioCapabilities {
         connection_events: 4,
         transmit_places: 5,
         receive_nodes: 6,
+        accept_list: 0,
     },
     ..LeRadioCapabilities::NONE
 };
@@ -117,6 +118,7 @@ fn an_index_is_one_octet_and_a_node_two() {
             connection_events: usize::MAX,
             transmit_places: usize::MAX,
             receive_nodes: usize::MAX,
+            accept_list: usize::MAX,
         },
         ..ALL
     };

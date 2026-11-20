@@ -7,11 +7,11 @@
 
 use core::{marker::PhantomData, task::Context};
 
-use oer_protocols_bluetooth_le_wire::{DataPduKind, LeDeviceAddress};
+use oer_protocols_bluetooth_le_wire::DataPduKind;
 
 use crate::{
-    AdvertisingData, AdvertisingEvent, AdvertisingSet, ConnectionEvent, ConnectionSetup,
-    LeCapabilities, LeInstant, ScanWindow, ScannerSetup, Supported, TestWindow,
+    AcceptEntries, AdvertisingData, AdvertisingEvent, AdvertisingSet, ConnectionEvent,
+    ConnectionSetup, LeCapabilities, LeInstant, ScanWindow, ScannerSetup, Supported, TestWindow,
     dtm::DtmTest,
     rights::{
         AcceptList, AdvEvent, AdvPlace, Advertiser, ConnEvent, ConnPlace, Connection, EventPlace,
@@ -484,7 +484,11 @@ pub trait LePort<
     fn close_test(&mut self, role: Test<'id>, home: TestEvent<'id>) -> TestPlace<'id>;
 
     /// Write the whole filter accept list.
-    fn write_accept_list(&mut self, list: &mut AcceptList<'id>, entries: &[LeDeviceAddress]);
+    fn write_accept_list(
+        &mut self,
+        list: &mut AcceptList<'id>,
+        entries: &Supported<Self::Caps, AcceptEntries<'_>>,
+    );
 
     /// Publish an advertising set's event. Its place comes back with its
     /// end in a round.
@@ -526,8 +530,10 @@ pub trait LePort<
     /// Append the PDU of its place to its connection's chain.
     fn submit(&mut self, place: TxPlace<'id>);
 
-    /// Open a round: [`Round::open`] of the port.
-    fn round(&mut self) -> Round<'_, 'id, Self>;
+    /// Open a round.
+    fn round(&mut self) -> Round<'_, 'id, Self> {
+        Round::open(self)
+    }
 
     /// Arm the port's one alarm, or disarm it.
     fn alarm(&mut self, at: Option<LeInstant>);

@@ -337,6 +337,24 @@ pub enum ScanFilterPolicy {
     AcceptListOnly,
 }
 
+/// The whole filter accept list, as the controller holds it: each entry an
+/// address with its type. Built from the host's commands and checked
+/// against the capabilities' list size ([`Supported`](crate::Supported)).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AcceptEntries<'a>(&'a [LeDeviceAddress]);
+
+impl<'a> AcceptEntries<'a> {
+    /// The list `entries`.
+    pub const fn new(entries: &'a [LeDeviceAddress]) -> Self {
+        Self(entries)
+    }
+
+    /// Its entries.
+    pub const fn get(self) -> &'a [LeDeviceAddress] {
+        self.0
+    }
+}
+
 /// How a scanner treats scannable advertising.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanType {
