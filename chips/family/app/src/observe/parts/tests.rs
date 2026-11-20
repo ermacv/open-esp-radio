@@ -8,11 +8,11 @@ fn a_part_counts_its_polls_and_their_time_with_the_open_one() {
         Ok(PartSample::default()),
         "nothing seen"
     );
-    counter.observe(10, false, 0);
-    counter.observe(25, true, 0);
-    counter.observe(30, false, 0);
-    counter.observe(70, true, 0);
-    counter.observe(100, false, 0);
+    counter.observe(10, PollEdge::Start, 0);
+    counter.observe(25, PollEdge::End, 0);
+    counter.observe(30, PollEdge::Start, 0);
+    counter.observe(70, PollEdge::End, 0);
+    counter.observe(100, PollEdge::Start, 0);
     assert_eq!(
         counter.sample(104, 0),
         Ok(PartSample {
@@ -27,23 +27,23 @@ fn a_part_counts_its_polls_and_their_time_with_the_open_one() {
 #[test]
 fn the_longest_poll_counts_only_in_its_epoch() {
     let counter = PartCounter::new();
-    counter.observe(0, false, 0);
-    counter.observe(500, true, 0);
+    counter.observe(0, PollEdge::Start, 0);
+    counter.observe(500, PollEdge::End, 0);
     assert_eq!(counter.sample(600, 1).unwrap().longest_us, None);
-    counter.observe(600, false, 1);
-    counter.observe(620, true, 1);
-    counter.observe(700, false, 1);
-    counter.observe(710, true, 1);
+    counter.observe(600, PollEdge::Start, 1);
+    counter.observe(620, PollEdge::End, 1);
+    counter.observe(700, PollEdge::Start, 1);
+    counter.observe(710, PollEdge::End, 1);
     assert_eq!(counter.sample(800, 1).unwrap().longest_us, Some(20));
 }
 
 #[test]
 fn an_end_without_its_start_adds_nothing_and_spans_cross_the_wrap() {
     let counter = PartCounter::new();
-    counter.observe(10, true, 0);
+    counter.observe(10, PollEdge::End, 0);
     assert_eq!(counter.sample(20, 0), Ok(PartSample::default()));
-    counter.observe(u32::MAX - 4, false, 0);
-    counter.observe(5, true, 0);
+    counter.observe(u32::MAX - 4, PollEdge::Start, 0);
+    counter.observe(5, PollEdge::End, 0);
     assert_eq!(counter.sample(6, 0).unwrap().poll_us, 10);
 }
 

@@ -63,11 +63,11 @@ oer_tools_probe_macros::probe! {
         status(0x1950_0002);
         let result = crate::session::with(|session| {
             if !session.calibrated { return Err(13); }
-            if !session.measurement_clocks(true) { return Err(2); }
+            if session.measurement_clocks(crate::session::ClockModule::Enable).is_err() { return Err(2); }
             let result = session.phy(|phy| {
                 if selection == 151 { estimator(phy) } else { frequency(phy) }
             });
-            if !session.measurement_clocks(false) { return Err(3); }
+            if session.measurement_clocks(crate::session::ClockModule::Disable).is_err() { return Err(3); }
             result
         });
         let code = match result { Some(Ok(())) => 0, Some(Err(reason)) => reason, None => 4 };

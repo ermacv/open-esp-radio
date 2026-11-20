@@ -130,6 +130,13 @@ pub struct PartCounter {
     epoch: AtomicU32,
 }
 
+/// Which end of a poll [`PartCounter::observe`] accounts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PollEdge {
+    Start,
+    End,
+}
+
 impl PartCounter {
     pub const fn new() -> Self {
         Self {
@@ -143,15 +150,14 @@ impl PartCounter {
         }
     }
 
-    /// Account a poll's start (`end` false) or end at `at_us` in `epoch`;
-    /// only the part's executor calls it. An end without its start adds
-    /// nothing.
-    pub fn observe(&self, at_us: u32, end: bool, epoch: u32) {
+    /// Account a poll's start or end at `at_us` in `epoch`; only the part's
+    /// executor calls it. An end without its start adds nothing.
+    pub fn observe(&self, at_us: u32, edge: PollEdge, epoch: u32) {
         let sequence = self.sequence.load(Ordering::Relaxed);
         self.sequence
             .store(sequence.wrapping_add(1), Ordering::Relaxed);
         fence(Ordering::Release);
-        if !end {
+        if edge == PollEdge::Start {
             self.start.store(at_us, Ordering::Relaxed);
             self.open.store(1, Ordering::Relaxed);
         } else if self.open.load(Ordering::Relaxed) != 0 {

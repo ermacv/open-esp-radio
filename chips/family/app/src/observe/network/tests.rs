@@ -19,8 +19,8 @@ fn turn(
     for _ in 0..accepted {
         tally.accepted();
     }
-    tally.published(publish);
-    tally.ended(counter, true, true, 0);
+    tally.published(counter, publish);
+    tally.ended(counter, Blocks::Free, Credits::Free, 0);
 }
 
 #[test]
@@ -102,13 +102,13 @@ fn a_turn_counts_how_publishing_ended_and_what_was_out() {
         Publish::Budget,
         Publish::Fault,
     ] {
-        tally.published(publish);
-        tally.ended(&counter, true, true, 0);
+        tally.published(&counter, publish);
+        tally.ended(&counter, Blocks::Free, Credits::Free, 0);
     }
-    tally.published(Publish::Chose);
-    tally.ended(&counter, false, true, 0);
-    tally.published(Publish::Chose);
-    tally.ended(&counter, true, false, 0);
+    tally.published(&counter, Publish::Chose);
+    tally.ended(&counter, Blocks::Exhausted, Credits::Free, 0);
+    tally.published(&counter, Publish::Chose);
+    tally.ended(&counter, Blocks::Free, Credits::Exhausted, 0);
     let read = counter.read();
     assert_eq!(
         [
@@ -131,8 +131,8 @@ fn a_yield_counts_whether_its_turn_left_work() {
     tally.yielded(&counter);
     // So does a full intake.
     tally.intake_full();
-    tally.published(Publish::Chose);
-    tally.ended(&counter, true, true, 0);
+    tally.published(&counter, Publish::Chose);
+    tally.ended(&counter, Blocks::Free, Credits::Free, 0);
     tally.yielded(&counter);
     // And publishing at its budget, or notices past theirs.
     turn(&mut tally, &counter, &[], 0, 8, Publish::Budget);
@@ -155,9 +155,9 @@ fn a_yield_counts_whether_its_turn_left_work() {
 fn a_wait_counts_whether_it_found_something() {
     let counter = NetworkCounter::new();
     let mut tally = TurnTally::new();
-    tally.waited(&counter, false);
-    tally.waited(&counter, false);
-    tally.waited(&counter, true);
+    tally.waited(&counter, Wait::Pending);
+    tally.waited(&counter, Wait::Pending);
+    tally.waited(&counter, Wait::Ready);
     let read = counter.read();
     assert_eq!((read.waits_pending, read.waits_ready), (2, 1));
     assert_eq!(read.turns, 0);
@@ -254,9 +254,19 @@ fn a_turn_counts_the_loans_out_at_its_end_the_last_bin_holding_the_rest() {
     let counter = NetworkCounter::new();
     let mut tally = TurnTally::new();
     for loans in [0, 1, 1, 4, 5, 9] {
-        tally.ended(&counter, true, true, loans);
+        tally.ended(&counter, Blocks::Free, Credits::Free, loans);
     }
     let read = counter.read();
     assert_eq!(read.loans_at_turn_end, [1, 2, 0, 0, 1, 2]);
     assert_eq!(read.drops, [0; DROP_KINDS]);
+}
+
+#[test]
+fn a_publish_is_counted_when_it_is_reported() {
+    let counter = NetworkCounter::new();
+    let mut tally = TurnTally::new();
+    tally.published(&counter, Publish::Refused);
+    assert_eq!(counter.read().publish_refused, 1, "before the turn ends");
+    tally.ended(&counter, Blocks::Free, Credits::Free, 0);
+    assert_eq!(counter.read().publish_refused, 1, "the end adds no second");
 }

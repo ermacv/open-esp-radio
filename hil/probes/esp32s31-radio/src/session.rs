@@ -174,19 +174,33 @@ pub(crate) async fn calibrated(
     }
 }
 
+/// What [`Session::measurement_clocks`] does to the PHY's calibration clock
+/// module.
+#[cfg(target_arch = "riscv32")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ClockModule {
+    Enable,
+    Disable,
+}
+
 #[cfg(target_arch = "riscv32")]
 impl Session {
-    pub(crate) fn measurement_clocks(&mut self, enabled: bool) -> bool {
+    /// Enable or disable the PHY's calibration clock module.
+    ///
+    /// # Errors
+    ///
+    /// The radio domain's refusal of the module's change.
+    pub(crate) fn measurement_clocks(
+        &mut self,
+        change: ClockModule,
+    ) -> Result<(), oer_chips_esp32s31_hal::radio::domain::ModemClockError> {
         use oer_chips_esp32s31_hal::radio::domain::PhyClockModule;
         let radio = self.radio_fault.require_owner(self.radio.as_mut());
-        if enabled {
-            radio
-                .enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
-                .is_ok()
-        } else {
-            radio
-                .disable_phy_modem_clocks(PhyClockModule::Calibration)
-                .is_ok()
+        match change {
+            ClockModule::Enable => {
+                radio.enable_phy_modem_clocks(PhyClockModule::Calibration, &self._clocks)
+            }
+            ClockModule::Disable => radio.disable_phy_modem_clocks(PhyClockModule::Calibration),
         }
     }
 }

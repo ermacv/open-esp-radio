@@ -184,10 +184,9 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   instructions), `portable/memory` (cells, placement, DMA custody, typed symbol
   exports), `portable/waker`, Espressif interrupt bindings in
   `chips/family/platform/interrupt-table`, the PAC's one root claim, probe
-  images, the placement constructor, the HAL's PSRAM owner (slice creation),
-  the HAL's DMA release proofs (one constructor a kind of observation, each
-  citing its stand record) and the HAL's protocol core, narrow and with
-  `// SAFETY:`; crates above the
+  images, the placement constructor, the HAL's PSRAM owner (slice creation)
+  and the HAL's DMA release proofs (one constructor a kind of observation,
+  each citing its stand record), narrow and with `// SAFETY:`; crates above the
   HAL forbid it. Moving an existing site into its narrow home may raise the
   home's count only by the moved sites, when the touched crates' total falls
   and no calling crate's count grows; each site retains its narrow contract

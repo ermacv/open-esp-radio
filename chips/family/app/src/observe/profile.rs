@@ -282,83 +282,122 @@ impl Default for ProfileCounter {
     }
 }
 
-/// The turn under way, as the network's task holds it: when it began, what
-/// it did so far, and when the last one ended and how its pass went on.
+/// What a turn did so far.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ProfileTally {
-    began: Option<u64>,
+struct TurnCounts {
     frames: u32,
     accepted: u32,
     notices: u32,
     requests: u32,
-    /// The last ended turn's end and cycles.
-    ended: Option<(u64, u32)>,
-    /// How the pass after the last turn went on.
-    gap: Option<Gap>,
+}
+
+/// The last ended turn's end and cycles.
+#[derive(Clone, Copy, Debug)]
+struct Last {
+    end: u64,
+    cycles: u32,
+}
+
+/// Where the network's task is between its turns.
+#[derive(Clone, Copy, Debug, Default)]
+enum Phase {
+    /// No turn began yet.
+    #[default]
+    Idle,
+    /// A turn began at `began` and did `counts`; `last` is the turn before.
+    Running {
+        began: u64,
+        counts: TurnCounts,
+        last: Option<Last>,
+    },
+    /// A turn ended; its pass has not said how it went on.
+    Ended { last: Last },
+    /// A turn ended and its pass went on as `gap`.
+    Passed { last: Last, gap: Gap },
+}
+
+/// The turn under way, as the network's task holds it: when it began, what
+/// it did so far, and when the last one ended and how its pass went on.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ProfileTally {
+    phase: Phase,
 }
 
 impl ProfileTally {
     pub const fn new() -> Self {
-        Self {
-            began: None,
-            frames: 0,
-            accepted: 0,
-            notices: 0,
-            requests: 0,
-            ended: None,
-            gap: None,
-        }
+        Self { phase: Phase::Idle }
     }
 
     /// A turn began at cycle `now`: the gap since the last one's end counts
     /// by how its pass went on.
     pub fn began(&mut self, counter: &ProfileCounter, now: u64) {
-        if let (Some((end, _)), Some(gap)) = (self.ended, self.gap) {
-            let first = word::GAPS.saturating_add(2 * gap as usize);
-            counter.add(first, 1);
-            counter.add(first.saturating_add(1), now.wrapping_sub(end));
-        }
-        *self = Self {
-            began: Some(now),
-            ended: self.ended,
-            ..Self::new()
+        let last = match self.phase {
+            Phase::Idle => None,
+            Phase::Running { last, .. } => last,
+            Phase::Ended { last } => Some(last),
+            Phase::Passed { last, gap } => {
+                let first = word::GAPS.saturating_add(2 * gap as usize);
+                counter.add(first, 1);
+                counter.add(first.saturating_add(1), now.wrapping_sub(last.end));
+                Some(last)
+            }
         };
+        self.phase = Phase::Running {
+            began: now,
+            counts: TurnCounts::default(),
+            last,
+        };
+    }
+
+    /// The counts of the turn under way; none between turns.
+    fn counts(&mut self) -> Option<&mut TurnCounts> {
+        match &mut self.phase {
+            Phase::Running { counts, .. } => Some(counts),
+            Phase::Idle | Phase::Ended { .. } | Phase::Passed { .. } => None,
+        }
     }
 
     /// The turn took in one received frame.
     pub fn frame(&mut self) {
-        self.frames = self.frames.saturating_add(1);
+        if let Some(counts) = self.counts() {
+            counts.frames = counts.frames.saturating_add(1);
+        }
     }
 
     /// The port accepted one frame of the turn.
     pub fn accepted(&mut self) {
-        self.accepted = self.accepted.saturating_add(1);
+        if let Some(counts) = self.counts() {
+            counts.accepted = counts.accepted.saturating_add(1);
+        }
     }
 
     /// The turn handed the policy one notice.
     pub fn noticed(&mut self) {
-        self.notices = self.notices.saturating_add(1);
+        if let Some(counts) = self.counts() {
+            counts.notices = counts.notices.saturating_add(1);
+        }
     }
 
     /// The turn took one request from a socket's lane.
     pub fn took(&mut self) {
-        self.requests = self.requests.saturating_add(1);
+        if let Some(counts) = self.counts() {
+            counts.requests = counts.requests.saturating_add(1);
+        }
     }
 
     /// The turn ended at cycle `now`. One that never said it began counts
     /// nothing.
     pub fn ended(&mut self, counter: &ProfileCounter, now: u64) {
-        let Some(began) = self.began.take() else {
+        let Phase::Running { began, counts, .. } = self.phase else {
             return;
         };
         let cycles = u32::try_from(now.wrapping_sub(began)).unwrap_or(u32::MAX);
-        let Self {
+        let TurnCounts {
             frames,
             accepted,
             notices,
             requests,
-            ..
-        } = *self;
+        } = counts;
         let variables = [1, frames, accepted, notices, requests, cycles];
         let mut index = word::MOMENTS;
         for (i, left) in variables.iter().enumerate() {
@@ -412,22 +451,42 @@ impl ProfileTally {
             counter.add(word::SETTLING.saturating_add(1), u64::from(accepted != 0));
             counter.add(word::SETTLING.saturating_add(2), u64::from(accepted));
         }
-        self.ended = Some((now, u32::try_from(cycles).unwrap_or(u32::MAX)));
-        self.gap = None;
+        self.phase = Phase::Ended {
+            last: Last {
+                end: now,
+                cycles: u32::try_from(cycles).unwrap_or(u32::MAX),
+            },
+        };
     }
 
     /// The pass after the last turn yielded to its executor.
     pub fn yielded(&mut self) {
-        self.gap = Some(Gap::Yielded);
+        if let Phase::Ended { last } | Phase::Passed { last, .. } = self.phase {
+            self.phase = Phase::Passed {
+                last,
+                gap: Gap::Yielded,
+            };
+        }
     }
 
-    /// The pass after the last turn waited, `ready` when something was there
-    /// as it registered: that turn moved nothing.
-    pub fn waited(&mut self, counter: &ProfileCounter, ready: bool) {
-        self.gap = Some(if ready { Gap::Ready } else { Gap::Pending });
-        if let Some((_, cycles)) = self.ended {
+    /// The pass after the last turn waited, and what it found as it
+    /// registered: that turn moved nothing.
+    pub fn waited(&mut self, counter: &ProfileCounter, wait: super::Wait) {
+        let gap = match wait {
+            super::Wait::Ready => Gap::Ready,
+            super::Wait::Pending => Gap::Pending,
+        };
+        let last = match self.phase {
+            Phase::Ended { last } | Phase::Passed { last, .. } => {
+                self.phase = Phase::Passed { last, gap };
+                Some(last)
+            }
+            Phase::Running { last, .. } => last,
+            Phase::Idle => None,
+        };
+        if let Some(last) = last {
             counter.add(word::IDLE, 1);
-            counter.add(word::IDLE.saturating_add(1), u64::from(cycles));
+            counter.add(word::IDLE.saturating_add(1), u64::from(last.cycles));
         }
     }
 }

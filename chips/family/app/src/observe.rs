@@ -29,6 +29,15 @@ pub mod parts;
 pub mod profile;
 pub mod tracking;
 
+/// What the pass after a turn found as it registered its wait.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Wait {
+    /// Something was already there.
+    Ready,
+    /// Nothing was: the poll ended.
+    Pending,
+}
+
 /// A reading ran while the counter's writer wrote: it holds no state the
 /// writer published.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
