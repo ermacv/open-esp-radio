@@ -23,7 +23,11 @@ ownership and the service's progress, not claims about real air.
 
 ## Station simulation
 
-`tests/station/` composes the station and the network as the `hil-wifi-network`
+`station-suite/` is kept as a source beside the package and is not built: it is
+the station's acceptance suite and returns to `tests/` with the station, whose
+runtime it composes (`docs/repository-layout.md`).
+
+`station-suite/` composes the station and the network as the `hil-wifi-network`
 image does, minus the hardware, over the IEEE 802.11 reference model's data port:
 the station and arbiter cores and the network core, service and one channel
 socket, all on one virtual clock. In place of the product it has the model's port
