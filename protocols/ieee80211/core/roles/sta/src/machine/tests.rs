@@ -1564,7 +1564,7 @@ fn a_scan_that_hears_nothing_ends_not_found_after_one_window_per_channel() {
                 matches!(
                     seen,
                     Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::NotFound {
-                        partial: false
+                        scan: crate::machine::ScanCoverage::Complete
                     }))
                 )
             }) {
@@ -1576,7 +1576,7 @@ fn a_scan_that_hears_nothing_ends_not_found_after_one_window_per_channel() {
             world.seen.iter().any(|seen| matches!(
                 seen,
                 Seen::Notify(StaNotice::Disconnected(StaDisconnectReason::NotFound {
-                    partial: false
+                    scan: crate::machine::ScanCoverage::Complete
                 }))
             )),
             "{:?}",
@@ -1843,7 +1843,9 @@ fn a_scan_ends_with_a_partial_result_after_skipped_absences() {
             world.run(at(20));
         }
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
-            StaDisconnectReason::NotFound { partial: true }
+            StaDisconnectReason::NotFound {
+                scan: crate::machine::ScanCoverage::Partial
+            }
         ))));
     });
 }
@@ -3998,7 +4000,11 @@ fn every_control_encoder_takes_its_place_before_consuming_its_sequence() {
                                 .unwrap(),
                                 &reason_code::UNSPECIFIED.to_le_bytes(),
                                 TxPurpose::Deauthentication,
-                                encoding == 6,
+                                if encoding == 6 {
+                                    oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+                                } else {
+                                    oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
+                                },
                             )
                             .ok(),
                         _ => unreachable!(),
@@ -4110,7 +4116,7 @@ fn a_lease_terminal_during_leave_preserves_deauthentication_and_configuration() 
             // The lease terminal races the existing Leave, before the key
             // removals or the deauthentication have been taken as actions.
             let (mut context, state) = world.station.transition();
-            let change = context.lease_ended(state, false);
+            let change = context.lease_ended(state, super::LeaseEnd::Ended);
             state.apply(change);
             world.run(at(50));
             let seen = world.take();

@@ -192,10 +192,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         if connected.transmission != super::Transmission::Free {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
-        let protected = connected
-            .rsn
-            .as_ref()
-            .is_some_and(|rsn| rsn.management.is_some());
+        let protection = super::management_frame_protection(connected);
         let bssid = connected.bssid;
         let length = if reply.body.get(1) == Some(&2) { 6 } else { 9 };
         let Some(body) = reply.body.get(..length) else {
@@ -207,7 +204,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             bssid,
             body,
             TxPurpose::Connected(Sending::BlockAck),
-            protected,
+            protection,
         ) {
             Ok(encoded) => encoded,
             Err(Unsent::Out) => return Err((reply, BlockAckReplyRefusal::Busy)),
@@ -216,7 +213,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         };
         // A protected frame the station numbered itself goes under its
         // installed key; the handed-over link keys its own frames.
-        if protected
+        if protection == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
             && !self.keys.keyed()
             && !matches!(encoded.number, crate::link::FrameNumber::Link { .. })
         {
@@ -226,7 +223,9 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         if let State::Connected(connected) = &mut self.state {
             connected.transmission = super::Transmission::Busy;
         }
-        let under_key = protected && matches!(encoded.number, crate::link::FrameNumber::Open);
+        let under_key = protection
+            == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+            && matches!(encoded.number, crate::link::FrameNumber::Open);
         let transmit = self.hand_out(encoded);
         Ok(if under_key {
             StaAction::TransmitProtected(transmit)

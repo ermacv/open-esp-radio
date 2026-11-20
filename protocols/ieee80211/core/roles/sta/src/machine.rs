@@ -344,6 +344,14 @@ pub enum StaKeyOutcome {
     Expired,
 }
 
+/// What a connect's scan covered: every channel, or it ended early after
+/// cancelled absences.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanCoverage {
+    Complete,
+    Partial,
+}
+
 /// How a frame the station handed out ended.
 #[derive(Clone, Copy, Debug)]
 pub enum StaFrameEnd<A, D> {
@@ -864,17 +872,15 @@ pub enum StaDisconnectReason {
     TransmitRefused(TxRefusal),
     /// The application asked it to leave.
     Requested,
-    /// No access point of the network answered the scan; `partial` when
-    /// the scan ended early after cancelled absences.
+    /// No access point of the network answered the scan, which covered
+    /// every channel or ended early after cancelled absences.
     NotFound {
-        /// The scan ended early.
-        partial: bool,
+        scan: ScanCoverage,
     },
     /// Access points of the network answered, and none offers a format the
-    /// profile's request admits; `partial` as for [`Self::NotFound`].
+    /// profile's request admits; `scan` as for [`Self::NotFound`].
     NoAdmittedFormat {
-        /// The scan ended early.
-        partial: bool,
+        scan: ScanCoverage,
     },
     /// The arbiter did not let the station on a channel.
     Refused(Refusal),
@@ -1883,6 +1889,14 @@ enum TxAgreements {
     Started,
 }
 
+/// How a lease or an absence ended: at its own end, or cancelled before it
+/// began.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LeaseEnd {
+    Ended,
+    Cancelled,
+}
+
 /// What the connected station's transmission in flight is for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Sending {
@@ -1952,6 +1966,22 @@ fn route_block_ack<T: StaTypes, K>(
 ) {
     if !tx_agreements(tx, connected).is_some_and(|tx| tx.on_action(action, now)) {
         connected.block_ack = Some(action);
+    }
+}
+
+/// The protection of the connected station's robust management frames:
+/// protected once the association protects management frames.
+fn management_frame_protection<T: StaTypes, K>(
+    connected: &Connected<T, K>,
+) -> oer_protocols_ieee80211_wire::frame::FrameProtection {
+    if connected
+        .rsn
+        .as_ref()
+        .is_some_and(|rsn| rsn.management.is_some())
+    {
+        oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+    } else {
+        oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
     }
 }
 
@@ -3951,9 +3981,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }
     }
 
-    /// The background scan's step after its absence ended, `cancelled` or
+    /// The background scan's step after its absence ended (`end`), cancelled or
     /// not.
-    fn absence_over(&mut self, state: &mut State<T, K>, cancelled: bool) {
+    fn absence_over(&mut self, state: &mut State<T, K>, end: LeaseEnd) {
         (*self.absence) = None;
         let limit = self.config.skipped_absences;
         let connected = match state {
@@ -3963,7 +3993,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let Some(background) = &mut connected.background else {
             return;
         };
-        background.step = if cancelled {
+        background.step = if end == LeaseEnd::Cancelled {
             background.skipped = background.skipped.saturating_add(1);
             if connected.power.asleep() {
                 // A PM=1 may have reached the access point: wake first.
@@ -4003,12 +4033,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             StationNotice::AbsenceEnded(place) => {
                 *self.absence_place = Some(place);
-                self.absence_over(state, false);
+                self.absence_over(state, LeaseEnd::Ended);
                 Change::Keep
             }
             StationNotice::AbsenceCancelled(_, place) => {
                 *self.absence_place = Some(place);
-                self.absence_over(state, true);
+                self.absence_over(state, LeaseEnd::Cancelled);
                 Change::Keep
             }
             StationNotice::LeaseStarted(id) => {
@@ -4029,12 +4059,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             StationNotice::LeaseEnded(place) => {
                 *self.lease = Held::None;
                 *self.place = Some(place);
-                self.lease_ended(state, false)
+                self.lease_ended(state, LeaseEnd::Ended)
             }
             StationNotice::LeaseCancelled(_, place) => {
                 *self.lease = Held::None;
                 *self.place = Some(place);
-                self.lease_ended(state, true)
+                self.lease_ended(state, LeaseEnd::Cancelled)
             }
             StationNotice::Moved(channel) => {
                 if let State::Connected(connected) = &mut *state
@@ -4074,16 +4104,16 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         state.apply(change);
     }
 
-    /// The state after the lease ended, at its own end or `cancelled`.
-    fn lease_ended(&mut self, state: &mut State<T, K>, cancelled: bool) -> Change<T, K> {
+    /// The state after the lease ended (`end`): at its own end or cancelled.
+    fn lease_ended(&mut self, state: &mut State<T, K>, end: LeaseEnd) -> Change<T, K> {
         let lost = StaDisconnectReason::Arbiter(LeaveReason::PortFailed);
         match state {
             // A skipped absence: the same channel again, until too many in
             // a row end the scan with what it found.
-            State::Scan(scan) if cancelled => {
+            State::Scan(scan) if end == LeaseEnd::Cancelled => {
                 let skipped = scan.skipped.saturating_add(1);
                 if skipped >= self.config.skipped_absences {
-                    self.select(true, scan.access_point)
+                    self.select(ScanCoverage::Partial, scan.access_point)
                 } else {
                     Change::Scan(Scan {
                         skipped,
@@ -4562,7 +4592,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 step: ScanStep::NeedLease,
                 access_point,
             }),
-            None => self.select(false, access_point),
+            None => self.select(ScanCoverage::Complete, access_point),
         }
     }
 
@@ -4571,13 +4601,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// the station is within the margin of it.
     fn select(
         &mut self,
-        partial: bool,
+        scan: ScanCoverage,
         access_point_channel: Option<SupportedChannel<K>>,
     ) -> Change<T, K> {
         let ssid = self.ssid();
         let policy = self.policy();
         let Some(request) = self.profile.as_ref().map(|profile| profile.phy) else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+            return leave_unkeyed(StaDisconnectReason::NotFound { scan });
         };
         let channels = &self.config.channels;
         let wide = &self.config.wide_channels;
@@ -4618,9 +4648,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let Some(strongest) = candidates().max_by_key(|candidate| candidate.observation.rssi)
         else {
             let reason = if network().next().is_some() {
-                StaDisconnectReason::NoAdmittedFormat { partial }
+                StaDisconnectReason::NoAdmittedFormat { scan }
             } else {
-                StaDisconnectReason::NotFound { partial }
+                StaDisconnectReason::NotFound { scan }
             };
             return leave_unkeyed(reason);
         };
@@ -5409,7 +5439,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     bssid,
                     &reason_code.to_le_bytes(),
                     TxPurpose::Deauthentication,
-                    protected,
+                    if protected {
+                        oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+                    } else {
+                        oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
+                    },
                 ) {
                     Ok(transmit) => {
                         if protected {
@@ -5624,7 +5658,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let priority = eapol_priority(admission)?;
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         Ok(self
             .encode_reserved(
                 epoch,
@@ -5784,7 +5819,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             connected.bssid,
             &query.encode(),
             TxPurpose::Connected(Sending::SaQuery),
-            true,
+            oer_protocols_ieee80211_wire::frame::FrameProtection::Protected,
         ) {
             Ok(transmit) => {
                 management.submitted(query);
@@ -5874,16 +5909,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             Body::Delba(_, delba) => (delba, Sending::Delba),
             Body::Addba(tid, request) => (request, Sending::AddbaRequest { tid: *tid }),
         };
-        let protected = connected
-            .rsn
-            .as_ref()
-            .is_some_and(|rsn| rsn.management.is_some());
+        let protection = management_frame_protection(connected);
         match self.encode_management(
             StaManagementSubtype::Action,
             connected.bssid,
             frame,
             TxPurpose::Connected(sending),
-            protected,
+            protection,
         ) {
             Ok(transmit) => {
                 connected.transmission = Transmission::Busy;
@@ -5891,10 +5923,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 {
                     tx.delba_sent(*tid);
                 }
-                Some(Ok(if protected {
-                    Owed::TransmitProtected(transmit)
-                } else {
-                    Owed::Transmit(transmit)
+                Some(Ok(match protection {
+                    oer_protocols_ieee80211_wire::frame::FrameProtection::Protected => {
+                        Owed::TransmitProtected(transmit)
+                    }
+                    oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected => {
+                        Owed::Transmit(transmit)
+                    }
                 }))
             }
             Err(Unsent::Out) => {
@@ -6383,7 +6418,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         });
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         let transmit = self.encode_reserved(
             epoch,
             |frame| {
@@ -6859,13 +6895,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// the station's next while it holds its link; zero once the link's
     /// holder has the link, which numbers it as it submits it
     /// (`protected`, under the link's key).
-    fn station_number(&mut self, protected: bool) -> (SequenceNumber, FrameNumber) {
+    fn station_number(
+        &mut self,
+        protection: oer_protocols_ieee80211_wire::frame::FrameProtection,
+    ) -> (SequenceNumber, FrameNumber) {
         if self.link.lent() {
             (
                 SequenceNumber::ZERO,
                 FrameNumber::Link {
                     space: LinkSpace::Station,
-                    protected,
+                    protected: protection
+                        == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected,
                 },
             )
         } else {
@@ -6910,7 +6950,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     FrameNumber::Open
                 },
             ),
-            None => self.station_number(true),
+            None => {
+                self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Protected)
+            }
         };
         let frame = oer_protocols_ieee80211_wire::station::StaProtectedDataFrame {
             source: self.config.address,
@@ -6941,7 +6983,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// A Probe Request takes its place before consuming its sequence.
     fn encode_probe(&mut self, purpose: TxPurpose) -> Result<Encoded<K>, Unsent> {
         let epoch = self.reserve_transmit(purpose)?;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         let rates = self.config.supported_rates;
         let address = self.config.address.get();
         let ssid = self
@@ -6978,16 +7021,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         bssid: Bssid,
         body: &[u8],
         purpose: TxPurpose,
-        protected: bool,
+        protection: oer_protocols_ieee80211_wire::frame::FrameProtection,
     ) -> Result<Encoded<K>, Unsent> {
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(protected);
+        let (sequence_number, number) = self.station_number(protection);
         Ok(self
             .encode_reserved(
                 epoch,
                 |frame| {
-                    if protected {
+                    if protection == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+                    {
                         return oer_protocols_ieee80211_wire::station::StaProtectedManagementFrame {
                         subtype,
                         source: address,
