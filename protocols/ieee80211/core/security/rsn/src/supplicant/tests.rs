@@ -1097,3 +1097,20 @@ fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
         ))
     ));
 }
+
+#[test]
+fn management_frames_are_protected_only_when_both_elements_are_capable() {
+    let mut capable = RSN;
+    capable[20] = 0x80; // MFPC
+    let bip = Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
+    for (own, authenticator, expected) in [
+        (&capable, &capable, bip),
+        (&capable, &RSN, None),
+        (&RSN, &capable, None),
+        (&RSN, &RSN, None),
+    ] {
+        let supplicant =
+            RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, own, authenticator, &[]).unwrap();
+        assert_eq!(supplicant.group_management(), expected);
+    }
+}
