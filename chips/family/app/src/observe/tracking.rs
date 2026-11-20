@@ -27,16 +27,66 @@ pub enum Ran {
     Unavailable,
 }
 
-/// The branches one tracked tick committed.
+/// A branch a tracked tick may commit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Branch {
+    Inhibited,
+    RfpllCorrected,
+    WifiI2cChanged,
+    WifiTxPower,
+    BluetoothIeee802154TxPower,
+    CalibrationCommon,
+    CalibrationTransmit,
+}
+
+impl Branch {
+    /// Every branch, in its count's order.
+    pub const ALL: [Self; 7] = [
+        Self::Inhibited,
+        Self::RfpllCorrected,
+        Self::WifiI2cChanged,
+        Self::WifiTxPower,
+        Self::BluetoothIeee802154TxPower,
+        Self::CalibrationCommon,
+        Self::CalibrationTransmit,
+    ];
+
+    const fn bit(self) -> u8 {
+        1 << self as u8
+    }
+
+    const fn count(self) -> usize {
+        match self {
+            Self::Inhibited => INHIBITED,
+            Self::RfpllCorrected => RFPLL,
+            Self::WifiI2cChanged => WIFI_I2C,
+            Self::WifiTxPower => WIFI_TX_POWER,
+            Self::BluetoothIeee802154TxPower => BLE_TX_POWER,
+            Self::CalibrationCommon => CALIBRATION_COMMON,
+            Self::CalibrationTransmit => CALIBRATION_TRANSMIT,
+        }
+    }
+}
+
+/// The branches one tracked tick committed, a set of [`Branch`]es.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Branches {
-    pub inhibited: bool,
-    pub rfpll_corrected: bool,
-    pub wifi_i2c_changed: bool,
-    pub wifi_tx_power: bool,
-    pub bluetooth_ieee802154_tx_power: bool,
-    pub calibration_common: bool,
-    pub calibration_transmit: bool,
+pub struct Branches(u8);
+
+impl Branches {
+    /// No branch.
+    pub const NONE: Self = Self(0);
+
+    /// These branches and `branch`.
+    #[must_use]
+    pub const fn with(self, branch: Branch) -> Self {
+        Self(self.0 | branch.bit())
+    }
+
+    /// Whether `branch` is among them.
+    #[must_use]
+    pub const fn contains(self, branch: Branch) -> bool {
+        self.0 & branch.bit() != 0
+    }
 }
 
 /// The counts by kind, in this order.
@@ -125,16 +175,8 @@ impl TrackingCounter {
         match tick.ran {
             Ran::Tracked(branches) => {
                 self.bump(TICKS, 1);
-                for (taken, count) in [
-                    (branches.inhibited, INHIBITED),
-                    (branches.rfpll_corrected, RFPLL),
-                    (branches.wifi_i2c_changed, WIFI_I2C),
-                    (branches.wifi_tx_power, WIFI_TX_POWER),
-                    (branches.bluetooth_ieee802154_tx_power, BLE_TX_POWER),
-                    (branches.calibration_common, CALIBRATION_COMMON),
-                    (branches.calibration_transmit, CALIBRATION_TRANSMIT),
-                ] {
-                    self.bump(count, u32::from(taken));
+                for branch in Branch::ALL {
+                    self.bump(branch.count(), u32::from(branches.contains(branch)));
                 }
             }
             Ran::NotDue => self.bump(NOT_DUE, 1),

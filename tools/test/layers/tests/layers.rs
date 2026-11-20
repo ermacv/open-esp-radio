@@ -8011,30 +8011,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_P2),
     ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_P2),
     (
-        "chips/family/app/src/observe/connect.rs::Connect.ended",
-        BY_NONE,
-    ),
-    (
-        "chips/family/app/src/observe/connect.rs::Visit.ended",
-        BY_NONE,
-    ),
-    (
-        "chips/family/app/src/observe/network.rs::TurnTally.publish",
-        BY_NONE,
-    ),
-    (
-        "chips/family/app/src/observe/profile.rs::ProfileTally.began",
-        BY_NONE,
-    ),
-    (
-        "chips/family/app/src/observe/profile.rs::ProfileTally.ended",
-        BY_NONE,
-    ),
-    (
-        "chips/family/app/src/observe/profile.rs::ProfileTally.gap",
-        BY_NONE,
-    ),
-    (
         "chips/family/radio/ieee80211/policy/src/rate_control.rs::StaRateControlAssociation.ampdu_runtime",
         BY_P3,
     ),

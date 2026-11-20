@@ -8,6 +8,7 @@
 
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use super::Wait;
 use super::bump;
 
 /// A request a turn took from a socket's lane.
@@ -321,17 +322,63 @@ const fn reserve_bin(blocks: u8) -> usize {
     }
 }
 
+/// Whether a turn took in its whole budget of received frames.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Intake {
+    #[default]
+    Room,
+    Full,
+}
+
+/// Whether a turn took its whole budget of notices.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Notices {
+    #[default]
+    Room,
+    Full,
+}
+
+/// Whether a turn's publishing took its whole budget of frames.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Publishing {
+    #[default]
+    Within,
+    OutOfBudget,
+}
+
+/// Whether the last ended turn left work it knew of.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Work {
+    #[default]
+    Done,
+    Left,
+}
+
+/// Whether a turn ended with a free block of the pool.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Blocks {
+    Free,
+    Exhausted,
+}
+
+/// Whether a turn ended with a free credit at every open socket.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Credits {
+    Free,
+    Exhausted,
+}
+
 /// The turn under way, as its writer holds it, and whether the last turn
 /// left work.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TurnTally {
     spent: u32,
     accepted: u32,
-    intake_full: bool,
-    notices_full: bool,
-    publish: Option<Publish>,
-    /// The last ended turn left work it knew of.
-    work_left: bool,
+    intake: Intake,
+    notices: Notices,
+    publishing: Publishing,
+    /// The last ended turn's.
+    work: Work,
 }
 
 impl TurnTally {
@@ -339,10 +386,10 @@ impl TurnTally {
         Self {
             spent: 0,
             accepted: 0,
-            intake_full: false,
-            notices_full: false,
-            publish: None,
-            work_left: false,
+            intake: Intake::Room,
+            notices: Notices::Room,
+            publishing: Publishing::Within,
+            work: Work::Done,
         }
     }
 
@@ -391,12 +438,12 @@ impl TurnTally {
 
     /// The turn took in its whole budget of received frames.
     pub fn intake_full(&mut self) {
-        self.intake_full = true;
+        self.intake = Intake::Full;
     }
 
     /// The turn took its whole budget of notices.
     pub fn notices_full(&mut self) {
-        self.notices_full = true;
+        self.notices = Notices::Full;
     }
 
     /// The port accepted a frame.
@@ -404,9 +451,20 @@ impl TurnTally {
         self.accepted = self.accepted.wrapping_add(1);
     }
 
-    /// The turn's publishing ended so.
-    pub fn published(&mut self, end: Publish) {
-        self.publish = Some(end);
+    /// The turn's publishing ended so; counted now.
+    pub fn published(&mut self, counter: &NetworkCounter, end: Publish) {
+        counter.bump(
+            match end {
+                Publish::Chose => word::PUBLISH_CHOSE,
+                Publish::Refused => word::PUBLISH_REFUSED,
+                Publish::Budget => word::PUBLISH_BUDGET,
+                Publish::Fault => word::PUBLISH_FAULT,
+            },
+            1,
+        );
+        if end == Publish::Budget {
+            self.publishing = Publishing::OutOfBudget;
+        }
     }
 
     /// The turn ended, with a free block or none, every open socket with a
@@ -414,63 +472,58 @@ impl TurnTally {
     pub fn ended(
         &mut self,
         counter: &NetworkCounter,
-        blocks_free: bool,
-        credits_free: bool,
+        blocks: Blocks,
+        credits: Credits,
         loans: usize,
     ) {
         let Self {
             spent,
             accepted,
-            intake_full,
-            notices_full,
-            publish,
+            intake,
+            notices,
+            publishing,
             ..
         } = core::mem::take(self);
         counter.bump(word::TURNS, 1);
         counter.bump(word::BUDGET_SPENT, spent);
         counter.bump(word::BUDGET_TURNS, u32::from(spent != 0));
-        counter.bump(word::INTAKE_FULL, u32::from(intake_full));
-        counter.bump(word::NOTICES_FULL, u32::from(notices_full));
+        counter.bump(word::INTAKE_FULL, u32::from(intake == Intake::Full));
+        counter.bump(word::NOTICES_FULL, u32::from(notices == Notices::Full));
         counter.bump(word::ACCEPTED, accepted);
         counter.bump(
             word::ACCEPTED_BY_TURN.saturating_add(accepted_bin(accepted)),
             1,
         );
-        if let Some(publish) = publish {
-            counter.bump(
-                match publish {
-                    Publish::Chose => word::PUBLISH_CHOSE,
-                    Publish::Refused => word::PUBLISH_REFUSED,
-                    Publish::Budget => word::PUBLISH_BUDGET,
-                    Publish::Fault => word::PUBLISH_FAULT,
-                },
-                1,
-            );
-        }
-        counter.bump(word::BLOCKS_OUT, u32::from(!blocks_free));
-        counter.bump(word::CREDITS_OUT, u32::from(!credits_free));
+        counter.bump(word::BLOCKS_OUT, u32::from(blocks == Blocks::Exhausted));
+        counter.bump(word::CREDITS_OUT, u32::from(credits == Credits::Exhausted));
         counter.bump(
             word::LOANS_AT_TURN_END.saturating_add(loans.min(LOAN_BINS.saturating_sub(1))),
             1,
         );
-        self.work_left =
-            spent != 0 || intake_full || notices_full || matches!(publish, Some(Publish::Budget));
+        self.work = if spent != 0
+            || intake == Intake::Full
+            || notices == Notices::Full
+            || publishing == Publishing::OutOfBudget
+        {
+            Work::Left
+        } else {
+            Work::Done
+        };
     }
 
     /// The pass after the last turn yielded to the executor.
     pub fn yielded(&mut self, counter: &NetworkCounter) {
         counter.bump(word::YIELDS, 1);
-        counter.bump(word::YIELDS_WITH_WORK, u32::from(self.work_left));
+        counter.bump(word::YIELDS_WITH_WORK, u32::from(self.work == Work::Left));
     }
 
-    /// The pass after the last turn waited; `ready` when something was there
-    /// as it registered.
-    pub fn waited(&mut self, counter: &NetworkCounter, ready: bool) {
+    /// The pass after the last turn waited, and what it found as it
+    /// registered.
+    pub fn waited(&mut self, counter: &NetworkCounter, wait: Wait) {
         counter.bump(
-            if ready {
-                word::WAITS_READY
-            } else {
-                word::WAITS_PENDING
+            match wait {
+                Wait::Ready => word::WAITS_READY,
+                Wait::Pending => word::WAITS_PENDING,
             },
             1,
         );

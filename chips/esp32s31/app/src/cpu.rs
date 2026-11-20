@@ -24,6 +24,15 @@ pub struct Cpu0 {
     _hart: PhantomData<*mut ()>,
 }
 
+/// What a reading of [`Cpu0::counters`] does to the cache counters first.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CacheRun {
+    /// Clear every bus's counters and start them.
+    Restart,
+    /// Leave them running as they are.
+    Keep,
+}
+
 /// The boot hart's counters at one instant.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HartCounters {
@@ -41,11 +50,12 @@ impl Cpu0 {
         }
     }
 
-    /// The boot hart's counters and the cache's; with `start`, clear and run
-    /// every bus's cache counters first.
-    pub fn counters(&mut self, start: bool) -> HartCounters {
-        if start {
-            self.cache.start(Buses::all());
+    /// The boot hart's counters and the cache's; with [`CacheRun::Restart`],
+    /// clear and run every bus's cache counters first.
+    pub fn counters(&mut self, run: CacheRun) -> HartCounters {
+        match run {
+            CacheRun::Restart => self.cache.start(Buses::all()),
+            CacheRun::Keep => {}
         }
         let cycles = oer_portable_riscv::cycle64();
         let instructions = oer_portable_riscv::instret64();

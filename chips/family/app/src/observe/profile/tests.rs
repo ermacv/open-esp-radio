@@ -26,8 +26,8 @@ fn turn(
     tally.ended(counter, at + cycles);
     match after {
         Some(Gap::Yielded) => tally.yielded(),
-        Some(Gap::Ready) => tally.waited(counter, true),
-        Some(Gap::Pending) => tally.waited(counter, false),
+        Some(Gap::Ready) => tally.waited(counter, crate::observe::Wait::Ready),
+        Some(Gap::Pending) => tally.waited(counter, crate::observe::Wait::Pending),
         None => {}
     }
 }
@@ -210,4 +210,27 @@ fn return_bursts_count_their_size_the_queue_around_them_and_what_stayed() {
     assert_eq!(window.bursts, 1);
     assert_eq!(window.queued_by_burst, [0, 1, 0, 0, 0, 0, 0]);
     assert_eq!(window.held, 0);
+}
+
+#[test]
+fn a_pass_counts_its_gap_only_after_a_turn_ended() {
+    let counter = ProfileCounter::new();
+    let mut tally = ProfileTally::new();
+    // Before any turn, a pass has no turn to measure from.
+    tally.waited(&counter, crate::observe::Wait::Ready);
+    tally.yielded();
+    tally.began(&counter, 100);
+    // A pass reported while the turn runs leaves no gap for the next one.
+    tally.yielded();
+    tally.ended(&counter, 150);
+    tally.began(&counter, 200);
+    tally.ended(&counter, 260);
+    tally.waited(&counter, crate::observe::Wait::Pending);
+    tally.began(&counter, 300);
+    let profile = counter.read();
+    assert_eq!(profile.gaps[Gap::Yielded as usize], [0, 0]);
+    assert_eq!(profile.gaps[Gap::Pending as usize], [1, 40]);
+    assert_eq!(profile.gaps[Gap::Ready as usize], [0, 0]);
+    // The wait after the second turn counts it idle, with its cycles.
+    assert_eq!(profile.idle, [1, 60]);
 }

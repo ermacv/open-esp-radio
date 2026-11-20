@@ -16,11 +16,9 @@ fn a_reading_counts_ticks_and_branches_and_keeps_its_epoch_s_extremes() {
     let start = counter.sample(1).unwrap();
     assert_eq!(start.temperature_min, None, "epoch 1 has no tick yet");
     assert_eq!((start.ticks, start.tick_us), (1, 5_000));
-    let corrected = Branches {
-        rfpll_corrected: true,
-        calibration_transmit: true,
-        ..Branches::default()
-    };
+    let corrected = Branches::NONE
+        .with(Branch::RfpllCorrected)
+        .with(Branch::CalibrationTransmit);
     counter.observe(tracked(40, 300, corrected), 1);
     counter.observe(
         Tick {
@@ -31,14 +29,7 @@ fn a_reading_counts_ticks_and_branches_and_keeps_its_epoch_s_extremes() {
         1,
     );
     counter.observe(
-        tracked(
-            -7,
-            1_200,
-            Branches {
-                wifi_i2c_changed: true,
-                ..Branches::default()
-            },
-        ),
+        tracked(-7, 1_200, Branches::NONE.with(Branch::WifiI2cChanged)),
         1,
     );
     counter.observe(tracked(12, 100, Branches::default()), 1);

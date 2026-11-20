@@ -118,9 +118,7 @@ impl Counts {
 /// A reading of the diagnostics.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NetworkDiagnostics {
-    /// Whether they were asked to be on.
-    pub on: bool,
-    /// The control word at the reading: whether on, and how many switches
+    /// The control word at the reading: whether on ([`Self::switch`]), and how many switches
     /// and resets were asked before it ([`Self::switches`],
     /// [`Self::resets`]). Every change moves it.
     pub marker: u32,
@@ -131,7 +129,38 @@ pub struct NetworkDiagnostics {
     pub counts: Counts,
 }
 
+/// Whether the diagnostics are asked to count.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Switch {
+    #[default]
+    Off,
+    On,
+}
+
+impl Switch {
+    const fn of(control: u32) -> Self {
+        if control & ON != 0 {
+            Self::On
+        } else {
+            Self::Off
+        }
+    }
+
+    const fn bit(self) -> u32 {
+        match self {
+            Self::Off => 0,
+            Self::On => ON,
+        }
+    }
+}
+
 impl NetworkDiagnostics {
+    /// Whether they were asked to be on at the reading.
+    #[must_use]
+    pub const fn switch(&self) -> Switch {
+        Switch::of(self.marker)
+    }
+
     /// Switches that changed the state since boot, up to
     /// [`MARKER_SWITCHES`].
     #[must_use]
@@ -164,7 +193,8 @@ impl NetworkDiagnostics {
         if self.exhausted() || start.exhausted() {
             return Err(NoWindow::Exhausted);
         }
-        if self.on && self.settled && start.on && start.settled && self.marker == start.marker {
+        let on = |reading: &Self| matches!(reading.switch(), Switch::On) && reading.settled;
+        if on(self) && on(start) && self.marker == start.marker {
             Ok(self.counts.since(&start.counts))
         } else {
             Err(NoWindow::Changed)
@@ -228,27 +258,26 @@ impl DiagnosticsCounter {
         }
     }
 
-    /// Ask them on or off, from the network's next turn; whether they were
-    /// asked on before. A switch that changes the state moves the switch
-    /// count in the same word; at its end the count stays there, the marker
-    /// spent, and the state still switches.
-    pub fn switch(&self, on: bool) -> bool {
+    /// Ask them on or off, from the network's next turn; what they were
+    /// asked before. A switch that changes the state moves the switch count
+    /// in the same word; at its end the count stays there, the marker spent,
+    /// and the state still switches.
+    pub fn switch(&self, to: Switch) -> Switch {
         let changed = |control: u32| {
-            let was_on = control & ON != 0;
-            (was_on != on).then(|| {
+            (Switch::of(control) != to).then(|| {
                 let switches = if control & SWITCHES == SWITCHES {
                     SWITCHES
                 } else {
                     control.wrapping_add(SWITCH) & SWITCHES
                 };
-                (control & !(SWITCHES | ON)) | switches | u32::from(on)
+                (control & !(SWITCHES | ON)) | switches | to.bit()
             })
         };
         match self
             .control
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, changed)
         {
-            Ok(was) | Err(was) => was & ON != 0,
+            Ok(was) | Err(was) => Switch::of(was),
         }
     }
 
@@ -322,7 +351,6 @@ impl DiagnosticsCounter {
         let applied = self.applied.load(Ordering::Acquire);
         let after = self.control.load(Ordering::Acquire);
         NetworkDiagnostics {
-            on: before & ON != 0,
             marker: before,
             settled: before == applied && applied == after,
             counts: Counts::from_words(

@@ -19,11 +19,15 @@ fn one_turn() -> Counts {
 fn off_by_default_and_a_switch_takes_effect_at_the_writer_s_next_check() {
     let counter = DiagnosticsCounter::new();
     assert!(!counter.check(), "off by default");
-    assert!(!counter.read().on);
-    assert!(!counter.switch(true));
+    assert_eq!(counter.read().switch(), Switch::Off);
+    assert_eq!(counter.switch(Switch::On), Switch::Off);
     assert!(counter.check());
-    assert!(counter.switch(true), "already on: no switch");
-    assert!(counter.switch(false));
+    assert_eq!(
+        counter.switch(Switch::On),
+        Switch::On,
+        "already on: no switch"
+    );
+    assert_eq!(counter.switch(Switch::Off), Switch::On);
     assert!(!counter.check());
     assert_eq!(counter.read().switches(), 2, "on, then off");
 }
@@ -31,7 +35,7 @@ fn off_by_default_and_a_switch_takes_effect_at_the_writer_s_next_check() {
 #[test]
 fn counts_add_per_turn_and_a_reset_zeroes_them_at_the_next_check() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     assert!(counter.check());
     counter.add(&one_turn());
     counter.add(&one_turn());
@@ -59,10 +63,10 @@ fn counts_add_per_turn_and_a_reset_zeroes_them_at_the_next_check() {
 #[test]
 fn a_reset_asked_while_off_is_applied_at_the_next_check_too() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     counter.add(&one_turn());
-    counter.switch(false);
+    counter.switch(Switch::Off);
     counter.reset().unwrap();
     assert!(!counter.check());
     assert_eq!(counter.read().counts, Counts::default());
@@ -86,7 +90,7 @@ fn a_stage_sum_carries_into_its_high_half() {
 #[test]
 fn a_window_is_whole_only_when_on_throughout_with_no_switch_or_reset_between() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     counter.add(&one_turn());
     let start = counter.read();
@@ -99,12 +103,12 @@ fn a_window_is_whole_only_when_on_throughout_with_no_switch_or_reset_between() {
     assert_eq!(counter.read().window(&start), Err(NoWindow::Changed));
     // Switched off and on inside: no window.
     let start = counter.read();
-    counter.switch(false);
-    counter.switch(true);
+    counter.switch(Switch::Off);
+    counter.switch(Switch::On);
     assert_eq!(counter.read().window(&start), Err(NoWindow::Changed));
     // Off at either end: no window.
     let start = counter.read();
-    counter.switch(false);
+    counter.switch(Switch::Off);
     assert_eq!(counter.read().window(&start), Err(NoWindow::Changed));
     let off = DiagnosticsCounter::new();
     assert_eq!(off.read().window(&off.read()), Err(NoWindow::Changed));
@@ -133,18 +137,18 @@ fn a_window_s_counts_wrap() {
 #[test]
 fn on_off_on_within_a_window_leaves_no_whole_window() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     assert!(counter.check());
     let start = counter.read();
     assert!(start.settled);
     counter.add(&one_turn());
-    counter.switch(false);
+    counter.switch(Switch::Off);
     assert!(!counter.check(), "this turn counts nothing");
-    counter.switch(true);
+    counter.switch(Switch::On);
     assert!(counter.check());
     counter.add(&one_turn());
     let end = counter.read();
-    assert!(end.on && end.settled);
+    assert!(end.switch() == Switch::On && end.settled);
     assert_eq!(end.window(&start), Err(NoWindow::Changed));
 }
 
@@ -154,9 +158,9 @@ fn on_off_on_within_a_window_leaves_no_whole_window() {
 fn an_unfinished_change_at_either_end_leaves_no_whole_window() {
     let counter = DiagnosticsCounter::new();
     // Switched on, read before the writer's next turn.
-    counter.switch(true);
+    counter.switch(Switch::On);
     let unsettled = counter.read();
-    assert!(unsettled.on && !unsettled.settled);
+    assert!(unsettled.switch() == Switch::On && !unsettled.settled);
     assert!(counter.check());
     let settled = counter.read();
     assert_eq!(
@@ -176,10 +180,10 @@ fn an_unfinished_change_at_either_end_leaves_no_whole_window() {
     counter.check();
     // Switched off at the end, not yet applied.
     let start = counter.read();
-    counter.switch(false);
+    counter.switch(Switch::Off);
     assert_eq!(counter.read().window(&start), Err(NoWindow::Changed));
     // Two settled readings of one word make a whole window.
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     let start = counter.read();
     counter.add(&one_turn());
@@ -189,10 +193,10 @@ fn an_unfinished_change_at_either_end_leaves_no_whole_window() {
 #[test]
 fn a_switch_that_changes_nothing_moves_no_marker() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     let start = counter.read();
-    assert!(counter.switch(true));
+    assert_eq!(counter.switch(Switch::On), Switch::On);
     assert_eq!(counter.read().marker, start.marker);
     assert_eq!(counter.read().window(&start).ok(), Some(Counts::default()));
 }
@@ -204,13 +208,13 @@ fn a_switch_that_changes_nothing_moves_no_marker() {
 #[test]
 fn a_spent_switch_count_leaves_every_window_unwhole() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     let start = counter.read();
     for _ in 0..=MARKER_SWITCHES {
-        counter.switch(false);
+        counter.switch(Switch::Off);
         assert!(!counter.check(), "a switched-off turn");
-        counter.switch(true);
+        counter.switch(Switch::On);
         counter.check();
     }
     let end = counter.read();
@@ -221,9 +225,9 @@ fn a_spent_switch_count_leaves_every_window_unwhole() {
     let late = counter.read();
     counter.add(&one_turn());
     assert_eq!(counter.read().window(&late), Err(NoWindow::Exhausted));
-    assert!(counter.switch(false));
+    assert_eq!(counter.switch(Switch::Off), Switch::On);
     assert!(!counter.check());
-    assert!(!counter.switch(true));
+    assert_eq!(counter.switch(Switch::On), Switch::Off);
     assert!(counter.check());
 }
 
@@ -234,7 +238,7 @@ fn a_spent_switch_count_leaves_every_window_unwhole() {
 #[test]
 fn a_spent_reset_count_refuses_resets_and_leaves_no_false_delta() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     counter.add(&one_turn());
     let start = counter.read();
@@ -259,7 +263,7 @@ fn a_spent_reset_count_refuses_resets_and_leaves_no_false_delta() {
 #[test]
 fn resets_asked_before_one_check_are_applied_or_refused_never_skipped() {
     let counter = DiagnosticsCounter::new();
-    counter.switch(true);
+    counter.switch(Switch::On);
     counter.check();
     counter.add(&one_turn());
     let answers: Vec<_> = (0..=MARKER_RESETS).map(|_| counter.reset()).collect();

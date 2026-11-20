@@ -62,12 +62,34 @@ impl Step {
 /// One frame a scan heard.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Heard {
-    /// It names the connect's network.
-    pub own: bool,
-    pub probe_response: bool,
-    /// Addressed to the station, not overheard.
-    pub to_us: bool,
+    /// Whether it names the connect's network.
+    pub network: Network,
+    pub frame: HeardFrame,
     pub rssi: Option<i8>,
+}
+
+/// Whose network a heard frame names.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Network {
+    /// The connect's network.
+    Own,
+    Other,
+}
+
+/// What a scan heard.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HeardFrame {
+    Beacon,
+    ProbeResponse(Addressed),
+}
+
+/// Whom a probe response is addressed to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Addressed {
+    /// The station.
+    ToUs,
+    /// Another station: overheard.
+    Overheard,
 }
 
 const PROBE_BUILT: u32 = 1;
@@ -441,25 +463,23 @@ impl ConnectCounter {
         let since = self.since(at);
         first(&cell.first_heard, since);
         bump(&cell.heard, 1);
-        if heard.probe_response {
+        if let HeardFrame::ProbeResponse(addressed) = heard.frame {
             bump(
-                if heard.to_us {
-                    &cell.responses_to_us
-                } else {
-                    &cell.responses_overheard
+                match addressed {
+                    Addressed::ToUs => &cell.responses_to_us,
+                    Addressed::Overheard => &cell.responses_overheard,
                 },
                 1,
             );
         }
-        if !heard.own {
+        if heard.network == Network::Other {
             return;
         }
         first(&cell.first_own, since);
         bump(
-            if heard.probe_response {
-                &cell.own_probe_responses
-            } else {
-                &cell.own_beacons
+            match heard.frame {
+                HeardFrame::ProbeResponse(_) => &cell.own_probe_responses,
+                HeardFrame::Beacon => &cell.own_beacons,
             },
             1,
         );
@@ -515,9 +535,8 @@ mod tests {
     use super::*;
 
     const OWN_BEACON: Heard = Heard {
-        own: true,
-        probe_response: false,
-        to_us: false,
+        network: Network::Own,
+        frame: HeardFrame::Beacon,
         rssi: Some(-40),
     };
 
@@ -576,9 +595,8 @@ mod tests {
         counter.heard(
             10,
             Heard {
-                own: false,
-                probe_response: false,
-                to_us: false,
+                network: Network::Other,
+                frame: HeardFrame::Beacon,
                 rssi: Some(-20),
             },
         );
@@ -586,9 +604,8 @@ mod tests {
         counter.heard(
             30,
             Heard {
-                own: true,
-                probe_response: true,
-                to_us: true,
+                network: Network::Own,
+                frame: HeardFrame::ProbeResponse(Addressed::ToUs),
                 rssi: Some(-30),
             },
         );
@@ -673,9 +690,8 @@ mod tests {
         counter.heard(
             20,
             Heard {
-                own: false,
-                probe_response: true,
-                to_us: false,
+                network: Network::Other,
+                frame: HeardFrame::ProbeResponse(Addressed::Overheard),
                 rssi: None,
             },
         );
@@ -694,9 +710,8 @@ mod tests {
         counter.heard(
             520,
             Heard {
-                own: true,
-                probe_response: true,
-                to_us: true,
+                network: Network::Own,
+                frame: HeardFrame::ProbeResponse(Addressed::ToUs),
                 rssi: None,
             },
         );
