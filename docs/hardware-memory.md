@@ -312,7 +312,7 @@ Wi-Fi DMA splits by what each part answers:
 | Memory | Where it lies and how long it stays | `oer-portable-memory`; the chip's window in `hal::system::memory` |
 | Ownership | Who may touch this descriptor now | HAL `radio::ieee80211::dma`: ring and storage |
 | Engine | Which registers start and steer the walker | HAL `radio::ieee80211::dma::rx_dma` and `registers` |
-| Driver | What to do with a frame or a buffer | `radio/ieee80211/backend` |
+| Driver | What to do with a frame or a buffer | `radio/ieee80211/backend` (sources outside the build) |
 
 The ring and its storage stay in the HAL: safe code there, such as `commit`,
 `validate_live_ring` and the ring's cursor, is what proves that hardware

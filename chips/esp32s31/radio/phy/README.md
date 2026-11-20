@@ -3,8 +3,10 @@
 This crate owns S31 RF algorithms, calibration state and finite hardware
 transitions. It consumes typed HAL operations; it does not link the vendor PHY
 library. Protocol runtimes own their MAC, descriptors, interrupt routes and
-connection state. The radio system owns the shared radio domain and serializes
-PHY lifecycle, retune and tracking calls through exclusive ownership.
+connection state. In the built tree a probe holds the shared radio domain
+and calls the PHY's lifecycle, retune and tracking itself; the radio system,
+which owned the domain and serialized those calls, is a source outside the
+build.
 
 The [chip overview](../../README.md) links protocol and coexistence scopes.
 The [tracking contract](src/tracking/README.md) is the
@@ -70,7 +72,7 @@ reset or retained-sleep wakeup replay.
 | [Tracking graphs](src/tracking.rs) and [executor](src/executor.rs) | Execute selected children and validate their completions | No independent RF arbitration |
 | [Target port](src/target_port.rs), [family PHY](../../../family/radio/phy/README.md) and [HAL PHY](../../hal/src/radio/phy.rs) | Driver sequences over owned HAL register atoms | Hardware access is borrowed from the admitted owner |
 | [Analog register bus](../../../family/drivers/regi2c/README.md) | Field, configuration and parallel transitions of the vendor analog-I2C leaves | The transitions touch no bus; the target port and HAL drive them |
-| [Radio system](../system/README.md) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor transfers an owned PHY transaction for tracking with grant-protect brackets; it pauses no protocol |
+| [Radio system](../system/README.md) (outside the build) | The radio domain, platform resources, first-join registration and deadline-driven periodic tracking | The P2 actor transfers an owned PHY transaction for tracking with grant-protect brackets; it pauses no protocol |
 | [HAL stopped-MAC check](../../hal/src/system/owner/maintenance.rs) | The stopped Wi-Fi MAC check at the final-client boundary | A CPU mutex does not stop MAC or DMA |
 | [Hardware coex control](../../../family/radio/coex/README.md) | Recovered timer requests, PTI, clock conversion and withdrawal accounting | Programmed timer identity is not an RF grant |
 

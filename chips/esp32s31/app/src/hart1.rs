@@ -12,7 +12,7 @@
 //!
 //! No waker crosses harts: each future that waits on the other hart waits
 //! on its own executor's signal, which the other hart raises
-//! ([`APPLICATION`], [`SECOND`], and the station's in `wifi`).
+//! ([`APPLICATION`], [`SECOND`]).
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -171,7 +171,7 @@ pub fn hart1_main<H: GroupStarted>(
         alarm,
         handed,
     } = parts;
-    let mut group = GroupBoot::new();
+    let group = GroupBoot::new();
     let mut adopted = handoff
         .adopt(InterruptTable)
         .unwrap_or_else(|error| fail(error.name()));
@@ -200,6 +200,6 @@ pub fn hart1_main<H: GroupStarted>(
     observed_root!(second, Group);
     let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));
     match executor
-        .run::<Hart1Tasks, _, _, _, 1, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
+        .run::<Hart1Tasks, _, _, _, 1, _, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
         .unwrap_or_else(|failure| failure.reset()) {}
 }

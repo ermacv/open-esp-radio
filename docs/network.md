@@ -39,10 +39,12 @@ executor. A socket lives on its network's hart.
 | `oer-protocols-network-port` (`protocols/network/port`) | link state, frame and admission errors, the `NetDevice` contract, and `FramePort`, `FrameSource` and `OwnedTransmit`, the core's port | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
-| `oer-chips-esp32s31-radio-ieee80211-backend::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
+| `oer-chips-esp32s31-radio-ieee80211-backend::mac` (sources outside the build) | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
 | the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets |
 
 ## TX cost model (`oer-chips-esp32s31-radio-ieee80211-backend::mac`)
+
+The model lives in the old Wi-Fi backend, a source outside the build.
 
 - `PpduTiming` includes preamble, SERVICE and tail bits, whole-symbol rounding
   and the 2.4 GHz signal extension; HT uses the exact bits per symbol, not

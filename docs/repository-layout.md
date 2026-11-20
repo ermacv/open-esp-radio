@@ -61,10 +61,7 @@ protocols/radio/{coex, port, regulatory}/
 chips/esp32s31/{app, hal, knowledge, pac}/
 chips/esp32s31/drivers/aes/
 chips/esp32s31/platform/{board, bootstrap, layout, runtime}/
-chips/esp32s31/radio/{client, phy, system}/
-chips/esp32s31/radio/bluetooth/backend/
-chips/esp32s31/radio/ieee80211/{backend, station}/
-chips/esp32s31/radio/ieee802154/backend/
+chips/esp32s31/radio/phy/
 chips/family/{app, boot, facts}/
 chips/family/drivers/{efuse, pmu, regi2c, system-timer, usb-serial-jtag,
     watchdog}/
@@ -75,15 +72,24 @@ chips/family/radio/bluetooth/ports/
 chips/family/radio/ieee80211/policy/
 chips/family/radio/ieee802154/{engine, values}/
 oer/
-examples/wifi-station/
 hil/agent/
-hil/images/{aes, wifi-station}/
+hil/images/aes/
 hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
     esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
-    esp32s31-register, esp32s31-rx-chain}/
-hil/scenarios/{aes, sdk-station, wifi-load, wifi-station}/
-hil/services/{aes, fault, load, sdk-station, wifi-station}/
+    esp32s31-register}/
+hil/scenarios/{aes, sdk-station, wifi-access-point}/
+hil/services/{aes, fault, load, sdk-station, wifi-access-point}/
 ```
+
+The workspace's `exclude` names the packages that stay as sources and are
+not built. Kept as sources: the Bluetooth LE and IEEE 802.15.4 backends
+(`chips/esp32s31/radio/{bluetooth, ieee802154}/backend/`). Awaiting deletion
+at their successor: the old Wi-Fi path, its backend and station
+(`chips/esp32s31/radio/ieee80211/{backend, station}/`), the radio system and
+its client contract (`chips/esp32s31/radio/{system, client}/`), and what
+stands on it (`examples/wifi-station/`, `hil/images/{wifi-station,
+wifi-access-point}/`, `hil/probes/esp32s31-rx-chain/`,
+`hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/wifi-station/`).
 
 ## Data and supporting files
 
@@ -125,8 +131,8 @@ only for code proved neutral.
 `chips/<chip>/hal/src/` groups its modules in `system`, `power`, `peripherals`
 and `radio`; `peripherals` there holds a block's atoms, not its driver.
 `chips/<chip>/radio/` holds the crates above the HAL's radio atoms: the PHY
-driver, the radio system and its client, and under each protocol its backend
-and facade.
+driver, and (as sources not built) the radio system, its client, and under
+each protocol its backend and facade.
 
 ## Names
 
@@ -138,13 +144,13 @@ application entry (`oer/`) is `oer`. Rust imports replace hyphens with
 underscores. A program called by name, such as the image linker or a
 privileged helper, sets its binary name with `[[bin]] name`. `cargo fw`
 names an image by its directory: an example or a probe by it alone, a HIL
-image as `hil-<directory>` (`hil-wifi-station`).
+image as `hil-<directory>` (`hil-aes`).
 
 ## Layer roles
 
 Each package under `chips/`, `protocols/hil/` and `hil/` (but `hil/probes/`) has one
 role in `oer-tools-test-layers` that names its level
-([architecture](architecture.md#layers)); a directory name grants nothing. `chips/esp32s31/radio/ieee80211/station` assembles the S31 station backend and portable runtime as the Wi-Fi facade.
+([architecture](architecture.md#layers)); a directory name grants nothing.
 A protocol leaf named `hil` takes its role from the list. A package under a protocol's
 `contracts/` is a protocol contract, which a backend may use, except
 `contracts/port`, which keeps the port's role; `testing/conformance` is a
@@ -159,13 +165,10 @@ network contract on the codec.
 
 - `protocols/ieee80211/runtime` and `protocols/network/testing/model` have a
   dev-dependency on `chips/family/radio/ieee80211/policy`.
-- `chips/family/radio/ieee80211/policy` has a dev-dependency on
-  `chips/esp32s31/radio/ieee80211/backend`.
 - Normal dependencies outside their role:
   `chips/esp32s31/pac` renders the analog-I2C model types of
   `chips/family/drivers/regi2c`; `chips/esp32s31/hal` depends on
-  `protocols/radio/coex`; `chips/esp32s31/radio/ieee802154/backend` depends on `portable/mmio` for
-  `Placement`.
+  `protocols/radio/coex`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `radio::bluetooth`, `system::boot`, `radio::ieee80211` and
   `radio::phy`, and

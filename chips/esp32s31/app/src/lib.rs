@@ -19,9 +19,8 @@
 //! chip facts: each entry's line, its context's level and its hart.
 //!
 //! The application executor runs in thread mode on hart 0; the library's
-//! service tasks ([`SdkTasks`]) and the image's tasks share it. The radio
-//! executor runs only when a Wi-Fi station starts. An entry no driver binds
-//! routes no source.
+//! service tasks ([`SdkTasks`]) and the image's tasks share it. An entry no
+//! driver binds routes no source.
 
 use oer_chips_esp32s31_hal::{
     peripherals::{
@@ -115,7 +114,7 @@ oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime:
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
     /// The AES accelerator: [`AesPeripheral::engine`] makes it the image's
-    /// synchronous AES engine, or [`wifi::Station::start`] takes it.
+    /// synchronous AES engine.
     pub aes: AesPeripheral,
     /// The USB Serial/JTAG console: [`Console::open`] takes it.
     #[cfg(feature = "console")]
@@ -133,17 +132,16 @@ pub struct AesPeripheral(pub(crate) AesParts);
 /// boot function runs, before any executor.
 pub struct Boot {
     adopted: Adopted<InterruptController, InterruptTable>,
-    pub(crate) pending: Pending,
     /// The system timer, until a driver installs it or the boot ends.
     timer: Option<SystemTimer>,
     app_alarm: Option<AppAlarmToken>,
-    /// The entropy source, until a station takes it or the boot ends.
+    /// The entropy source, until the boot ends.
     pub(crate) entropy: Option<EntropyRegisters>,
-    /// The boot's identity, once a station drew it.
+    /// The boot's identity, once drawn.
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
     /// The time driver's authority and the comparator for hart 1's
-    /// executor, once a station installed the time driver.
+    /// executor, once the time driver is installed.
     #[cfg(feature = "group")]
     pub(crate) timers: Option<(
         oer_chips_family_platform_executor::TimeDriverReady<Esp32s31>,
@@ -214,10 +212,6 @@ pub(crate) fn draw_boot_id(
     Ok(crate::boot::identity(bytes))
 }
 
-/// Service tasks a boot step prepared, started with the executor.
-#[derive(Default)]
-pub(crate) struct Pending {}
-
 impl Boot {
     /// End the boot: run the future `app` builds on hart 0 beside the
     /// library's service tasks once the executor starts. The library calls
@@ -266,16 +260,15 @@ where
     }
 }
 
-/// What the group owns: each role's network device when the boot started
-/// that role, and with `group` hart 1's counters.
+/// What the group owns: with `group`, hart 1's counters.
 pub struct GroupPeripherals {
     /// Hart 1's cycle and instruction counters ([`cpu::Cpu1`]).
     #[cfg(feature = "group")]
     pub cpu: cpu::Cpu1,
 }
 
-/// What the boot hands the group, on its way to the group's hart: each
-/// role's network device. The group's hart adds its own counters.
+/// What the boot hands the group, on its way to the group's hart: nothing
+/// of its own; the group's hart adds its counters.
 pub(crate) struct Handed {}
 
 impl Handed {
@@ -294,13 +287,12 @@ impl Handed {
 
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
-/// ends with beside the networks it started. Both run where the second
+/// ends with. Both run where the second
 /// boot runs: on hart 0, the application's executor, or with the `group`
 /// feature on hart 1's own executor, which hart 1 runs alone.
 ///
-/// `N` is the networks the group started, each over storage the image
-/// lent: [`NoNet`] until `wifi::Network::start` consumes the context and
-/// returns it with that network beside the ones before.
+/// `N` is the networks the group started: [`NoNet`], since no network
+/// role is built.
 pub struct GroupBoot<N = NoNet> {
     net: N,
 }
@@ -439,8 +431,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
 }
 
 /// The group of an image that declares none: it drops what the boot
-/// handed it (a station's device tells the station that no network takes
-/// its frames) and runs nothing.
+/// handed it and runs nothing.
 #[doc(hidden)]
 pub fn no_group(_handed: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     Ok(boot.run(core::future::pending::<AppResult>))
@@ -611,9 +602,8 @@ pub fn start<S: Started, H: GroupStarted>(
         fail(Error::InterruptTaken.name());
     };
     let software: SoftwareInterrupts = hardware.software;
-    let mut setup = Boot {
+    let setup = Boot {
         adopted,
-        pending: Pending::default(),
         timer: Some(hardware.system_timer),
         app_alarm: Some(interrupts.alarm),
         entropy: Some(hardware.entropy),
@@ -662,8 +652,7 @@ pub fn start<S: Started, H: GroupStarted>(
         #[cfg(not(feature = "group"))]
         let _ = ready;
     }
-    // A station drew the identity with the entropy source it took; otherwise
-    // the timer is installed now, and the read gap has a clock.
+    // The timer is installed now, and the read gap has a clock.
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
@@ -702,9 +691,7 @@ pub fn start<S: Started, H: GroupStarted>(
             handed,
         )
     };
-    let Boot {
-        adopted, pending, ..
-    } = setup;
+    let Boot { adopted, .. } = setup;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(enabled) => enabled,
@@ -712,7 +699,6 @@ pub fn start<S: Started, H: GroupStarted>(
     };
     let starts = Starts {
         watchdog: hardware.watchdog,
-        pending,
     };
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
@@ -757,21 +743,12 @@ pub fn start<S: Started, H: GroupStarted>(
 /// The library's tasks the executor starts.
 struct Starts {
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
-    pending: Pending,
 }
 
 impl Starts {
-    // An AP start refused by the executor drops its network endpoint and
-    // notifies the producer. Keep that cleanup separate from the datapath's:
-    // merging their Waker tails loses the operation's debug scope and the
-    // image can no longer prove its supported waker targets.
-
     fn spawn(self, library: &Spawner<SdkTasks>) {
-        let Self { watchdog, pending } = self;
+        let Self { watchdog } = self;
         let started = SdkTasks::watchdog(library, watchdog).is_ok();
-        &&pending
-            .station
-            .is_none_or(|start| SdkTasks::station(library, start).is_ok());
         if !started {
             fail(Error::AlreadyStarted.name());
         }

@@ -27,10 +27,10 @@ other `portable/` support, firmware images and tools.
 | `Pac` | `esp32s31/pac` | facts, portable, hardware access |
 | `Hal` | `esp32s31/hal` | PAC, facts, platform contracts, family hardware drivers (their register ports), portable, hardware access |
 | `HardwareDriver` | `espressif/{analog,boot,coex,ieee802154-engine,modem-clock,usb-serial-jtag,watchdog}`, `esp32s31/{boot,crypto,phy}` | HAL, hardware drivers, platform contracts, facts, observation contracts, portable, shared vocabulary, wire, port, cipher |
-| `ChipAdapter` | `esp32s31/{bluetooth/driver,ieee80211/driver,ieee802154/driver}` | as a hardware driver, and chip adapters and service clients |
+| `ChipAdapter` | none built (the three radio backends are outside the build) | as a hardware driver, and chip adapters and service clients |
 | `CoreSidePolicy` | `espressif/ieee80211-policy` | wire, port, cipher, cores, facts, observation contracts, portable, shared vocabulary |
-| `ServiceClient` | `esp32s31/radio/client` | as a hardware driver |
-| `Service` | `esp32s31/radio/system` | as a hardware driver, and service clients |
+| `ServiceClient` | none built (`esp32s31/radio/client` is outside the build) | as a hardware driver |
+| `Service` | none built (`esp32s31/radio/system` is outside the build) | as a hardware driver, and service clients |
 | `PlatformContract` | `espressif/{interrupt-table,platform-port,platform-layout}` | platform contracts, facts, portable, hardware access |
 | `Platform` | `espressif/{executor,platform-bootstrap,platform-runtime}`, `esp32s31/{board,layout}` | platform, platform contracts, family hardware drivers, facts, shared vocabulary, portable, hardware access |
 | `Composition` | `esp32s31/compose` | every chip role but PAC, composition and facade, every protocol role, portable, Embassy adapters, hardware access; no HIL |

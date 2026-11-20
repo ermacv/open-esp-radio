@@ -6,21 +6,17 @@ the executors and service tasks, and the peripherals, drivers and services an
 image takes. An image names no chip; `oer` re-exports this crate for an image
 built for the ESP32-S31.
 
-`pilot::Storage` holds the permanent affine SAR/PWDET request/reply cells,
-handler and signal. An image places it in critical data, selects its PHY and
-radio-executor entries and calls `init` once before enabling interrupts. The PHY
-driver stops/masks the timer and discards stale RAW before binding. Interrupt
-service returns custody through the same P2 signal; neither a task waker nor a
-hardware owner crosses into the handler. Existing retained faults and explicit
-reset policy apply to setup failure and an orphan alarm.
+The entry has no Wi-Fi role and no observation of its own in the built tree:
+`wifi.rs`, `wifi/`, `pilot.rs` and `observed.rs` are files it does not
+declare, which stood on the old Wi-Fi path (outside the build). Its features
+are `console` and `group`.
 
-`execution-inventory.toml` lists what the entry's execution consists of today:
-interrupts, executors, task sets, signals, timers, the hart start and the known
-waits. It records cfgs, source locations, existing checks and gaps. The 29
+`execution-inventory.toml` lists the entry's execution: interrupts, executors,
+task sets, signals, timers, the hart start and the known waits. It records
+cfgs, source locations, existing checks and gaps. Its layer test reads the
+entry's source directory, so the rows of the undeclared files stay with them. The 29
 `number-site` rows distinguish 25 SWI uses, three observer indices and one
-hart argument; the executor declarations are included in that count. Timer
-installation distinguishes starting a radio executor from the fallback path,
-which can also be taken with the `wifi` feature enabled.
+hart argument; the executor declarations are included in that count.
 
 The twelve known waits separate queue readiness, lent-buffer returns, network
 stop, application/group send and receive, MAC facts and USB read and write.

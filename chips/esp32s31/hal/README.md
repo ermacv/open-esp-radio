@@ -76,8 +76,8 @@ request/reply exchange, terminal output release and role workers remain here.
 For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
 permanent DMA static and projects each frame into the typed DMA window.
-`oer-chips-esp32s31-radio-ieee802154-backend` implements the family engine's LL contract
-and owns its service/placement wrapper above HAL. HAL has no normal or test
+`oer-chips-esp32s31-radio-ieee802154-backend` (kept as sources, not built) implements the
+family engine's LL contract and owns its service/placement wrapper above HAL. HAL has no normal or test
 engine dependency.
 The family engine owns reset/foundation validation, static policy and
 startup/teardown order. HAL supplies register atoms, reset loans and consuming
@@ -337,7 +337,7 @@ the generated ordinary-queue geometry. Raw input is admitted with `new`;
 fixed identities use `constant`, checked during monomorphization. Bank selection
 and event acknowledgement match that domain exhaustively.
 The reserved-TXOP-slot adjustment is a known vendor difference, documented in
-[the driver](../radio/ieee80211/backend/README.md#tx-control-bit-22)
+[the old driver](../radio/ieee80211/backend/README.md#tx-control-bit-22), a source outside the build
 (`VENDOR_WIFI_TXOP_DESCRIPTOR_CLASS`).
 FE `+0x8d0[21:20]` remains opaque: its nonzero sample contributes diagnostic
 and RX-saturation observations, while estimator completion uses READY.

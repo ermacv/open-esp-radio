@@ -39,72 +39,12 @@ check = ['table-rules', 'router-hart', 'image-table']
 gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
 
 [[interrupt]]
-name = 'radio_alarm'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'radio_alarm: RadioAlarmToken ='
-part = 'SystimerAlarm0'
-class = 'Hardware'
-cfg = 'feature = "wifi"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
-name = 'phy'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'phy: PhyToken ='
-part = 'Timg0AlarmInterrupt'
-class = 'Exempt(ExecutorLevel)'
-cfg = 'feature = "wifi"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
-name = 'radio'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'radio: RadioToken ='
-part = 'FromCpu2Irq'
-class = 'Executor'
-cfg = 'feature = "wifi"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
-name = 'wifi'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'wifi: WifiToken ='
-part = 'wifi::WifiPart'
-class = 'Hardware'
-cfg = 'feature = "wifi"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
 name = 'console_usb'
 site = 'chips/esp32s31/app/src/interrupt_table.in'
 anchor = 'console_usb: ConsoleToken ='
 part = 'ConsoleInterrupt'
 class = 'Hardware'
 cfg = 'feature = "console"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
-name = 'sampler'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'sampler: SamplerToken ='
-part = 'Timg1AlarmInterrupt'
-class = 'Hardware'
-cfg = 'feature = "observe"'
-check = ['table-rules', 'router-hart', 'image-table']
-gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
-
-[[interrupt]]
-name = 'sampler1'
-site = 'chips/esp32s31/app/src/interrupt_table.in'
-anchor = 'sampler1: Sampler1Token ='
-part = 'Timg1Timer1Interrupt'
-class = 'Hardware'
-cfg = 'all(feature = "observe", feature = "group")'
 check = ['table-rules', 'router-hart', 'image-table']
 gap = ['no exact Part::SOURCES link: the facts name the entry, only Rust knows its sources']
 
@@ -277,7 +217,7 @@ use = 'application executor start'
 
 [[number-site]]
 site = 'chips/esp32s31/app/src/hart1.rs'
-anchor = '.run::<Hart1Tasks, _, _, _, 1, _>('
+anchor = '.run::<Hart1Tasks, _, _, _, 1, _, _>('
 kind = 'hart'
 use = 'hart argument of Executor::run; its SWI comes from Self'
 
