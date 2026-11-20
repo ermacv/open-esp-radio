@@ -11,8 +11,8 @@
 
 use core::num::{NonZeroU32, NonZeroU64};
 
-use oer_protocols_bluetooth_le_port::LeRadio;
-use oer_protocols_bluetooth_le_port::{
+use oer_protocols_bluetooth_le_contracts_port::LeRadio;
+use oer_protocols_bluetooth_le_contracts_port::{
     ConnectionAllowances, ConnectionEventTiming, LeInstant, LeWindow, NonZeroRadioDuration,
     RadioDuration, RadioTiming,
 };
@@ -354,7 +354,7 @@ fn advertising_error(calculation: C) -> EpochExhausted {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::disallowed_macros, clippy::arithmetic_side_effects)]
-    use oer_protocols_bluetooth_le_port::{
+    use oer_protocols_bluetooth_le_contracts_port::{
         ConnectionAllowances, ConnectionEventTiming, LeInstant, RadioDuration,
     };
 
@@ -365,9 +365,10 @@ mod tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_protocols_bluetooth_le_port::NonZeroRadioDuration::from_micros(
-            core::num::NonZeroU64::MIN,
-        ),
+        boundary_guard:
+            oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
+                core::num::NonZeroU64::MIN,
+            ),
         first_event_guard: RadioDuration::from_micros(16),
         event_length: RadioDuration::from_micros(5_047),
         first_event_length: RadioDuration::from_micros(5_155),
@@ -436,9 +437,10 @@ mod boundary_tests {
         widening_jitter: RadioDuration::from_micros(63),
         receive_guard: RadioDuration::from_micros(10),
         receive_tail: RadioDuration::from_micros(2),
-        boundary_guard: oer_protocols_bluetooth_le_port::NonZeroRadioDuration::from_micros(
-            core::num::NonZeroU64::MIN,
-        ),
+        boundary_guard:
+            oer_protocols_bluetooth_le_contracts_port::NonZeroRadioDuration::from_micros(
+                core::num::NonZeroU64::MIN,
+            ),
         first_event_guard: RadioDuration::from_micros(16),
         event_length: RadioDuration::from_micros(5_047),
         first_event_length: RadioDuration::from_micros(5_155),

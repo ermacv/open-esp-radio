@@ -1,0 +1,22 @@
+error[E0080]: evaluation panicked: more advertising sets than the capabilities hold
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_protocols_bluetooth_le_contracts_port::geometry::Geometry::<Caps, 2, 0, 0, 2, 0, 0, 0>::CHECKED` failed here
+  |
+ ::: src/geometry.rs
+  |
+  |         Some(Misfit::AdvertisingSets) => panic!("more advertising sets than the capabilities hold"),
+  |                                          ---------------------------------------------------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/rights.rs
+  |
+  |         crate::geometry::Geometry::<K, ADV, SCAN, CONN, EVENTS, TX, RX, TEST>::CHECKED;
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note: erroneous constant encountered
+  --> tests/ui/mint_count_above_the_capabilities.rs:18:25
+   |
+18 | pub const REFUSED: () = PortPools::<Caps, 2, 0, 0, 2, 0, 0, 0>::GEOMETRY; // ui-error@outside: E0080: evaluation panicked: more adve...
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

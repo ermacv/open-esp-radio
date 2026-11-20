@@ -1,0 +1,13 @@
+warning: unused variable: `place`
+ --> tests/ui/publication_with_a_forged_place.rs:5:5
+  |
+5 |     place: AdvEvent<'id>,
+  |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_place`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: fields `brand` and `instance` of struct `AdvEvent` are private
+ --> tests/ui/publication_with_a_forged_place.rs:9:28
+  |
+9 |     let place = AdvEvent { brand: core::marker::PhantomData, instance: 0 }; // ui-error: E0451
+  |                            ^^^^^ private field               ^^^^^^^^ private field

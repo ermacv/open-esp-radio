@@ -10,7 +10,7 @@ description = "ESP32-S31 Bluetooth hardware engine: controller HAL and time, BLE
 [dependencies]
 oer-chips-family-radio-bluetooth-ports = { path = "../../../../family/radio/bluetooth/ports" }
 oer-protocols-bluetooth-le-wire = { path = "../../../../../protocols/bluetooth/le/wire" }
-oer-protocols-bluetooth-le-port = { path = "../../../../../protocols/bluetooth/le/port" }
+oer-protocols-bluetooth-le-contracts-port = { path = "../../../../../protocols/bluetooth/le/contracts/port" }
 oer-portable-memory = { path = "../../../../../portable/memory" }
 oer-chips-esp32s31-radio-client = { path = "../../client", features = ["bluetooth"] }
 oer-chips-esp32s31-hal = { path = "../../../hal", features = ["bluetooth-engine"] }

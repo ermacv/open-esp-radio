@@ -1,0 +1,11 @@
+error[E0382]: use of moved value: `place`
+  --> tests/ui/publication_without_its_place.rs:10:38
+   |
+ 5 |     place: AdvEvent<'id>,
+   |     ----- move occurs because `place` has type `AdvEvent<'_>`, which does not implement the `Copy` trait
+...
+ 8 |     let _ = port.publish_advertising(place, event);
+   |                                      ----- value moved here
+ 9 |     #[cfg(all())]
+10 |     let _ = port.publish_advertising(place, event); // ui-error: E0382
+   |                                      ^^^^^ value used here after move

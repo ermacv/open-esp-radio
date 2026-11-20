@@ -1325,6 +1325,16 @@ its model and conformance case.
   reclaims exactly once. Event streams end with the uninstall.
 - The Wi-Fi port's stop always ends; the data's stop removes
   its keys and agreements by their own commands before a retirement.
+- The Bluetooth LE port (`LePort`, `oer-protocols-bluetooth-le-contracts-port`)
+  takes the same form: the radio's life (start, stop, retire, release, with a
+  stop that always ends), the roles' openings and closings, events published
+  ahead and ended in a round, a connection's transmit chain, received PDUs
+  read in place, one alarm and the facts, among them the one indication that
+  the port needs a stop. Every right is branded and made only by the contract,
+  from the mint or the port's `PortKey`; a role's right and its places name
+  their instance by index. The installation's geometry is the trait's const
+  generics, checked against the capabilities at build. No call returns an
+  error. No backend implements it yet.
 - No radio-system token crosses a port; PHY membership stays inside the
   backend.
 
@@ -1343,10 +1353,11 @@ its model and conformance case.
   (`core/datapath`) fills and publishes the arenas, settles their ends and
   charges what an attempt cost on the air.
 - **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`).
-  Wire formats carry no protocol state or clock domain. `le/port` holds the
-  vocabulary of the radio's boundary (the clock domain, the request values of
-  every role, the capabilities, the outcomes and the Core Part F DTM window
-  arithmetic) and no boundary: no backend implements a Bluetooth LE port.
+  Wire formats carry no protocol state or clock domain. `le/contracts/port`
+  is the boundary between a chip's port and the cores ([radio
+  ports](#radio-ports)) with its vocabulary: the clock domain, the request
+  values of every role checked against the capabilities, and the Core Part F
+  DTM window arithmetic. No backend implements it yet.
   Public backend identity is an explicit wire value with named
   canonical/air byte order; the driver depends on neither LL nor HCI.
   The backend does not parse air PDUs: wire codecs, LL decisions and role

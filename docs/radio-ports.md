@@ -6,7 +6,8 @@ model. Everything above a port is written once for every backend; everything
 below it is the backend's. The ports are not frozen; this page states the
 principles the port crates follow. The shared lifecycle and vocabulary are in
 [`oer-protocols-radio-port`](../protocols/radio/port/README.md), the Wi-Fi port in
-[`oer-protocols-ieee80211-contracts-port`](../protocols/ieee80211/contracts/port/README.md).
+[`oer-protocols-ieee80211-contracts-port`](../protocols/ieee80211/contracts/port/README.md), the Bluetooth LE port in
+[`oer-protocols-bluetooth-le-contracts-port`](../protocols/bluetooth/le/contracts/port/README.md).
 
 ## Placement follows hardware autonomy
 
@@ -25,8 +26,13 @@ in the CCMP header, which retries retain. For IEEE 802.15.4 the acknowledgement
 assessment per transmission and the cipher run below the port from tables and
 parameters the core sets through it; the CSMA-CA backoff between assessments
 and frame retries stay above.
-For Bluetooth LE the backend reports its event timing allowances, and the
-link layer decides how long each event may last.
+For Bluetooth LE the unit of work is an event (an advertising event, a scan
+window, a connection event, a test's window), published before it begins:
+inside it the hardware keeps the inter-frame spacing, the CRC, the sequence
+numbers and the retransmission, and software reads its end in a round. The
+plan of the air, the procedures and the order of a connection's PDUs stay
+above. The backend reports its event timing allowances, and the link layer
+decides how long each event may last.
 
 ## Five parts of every port
 

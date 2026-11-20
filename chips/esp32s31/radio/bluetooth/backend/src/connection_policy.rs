@@ -15,7 +15,7 @@
 
 use core::num::NonZeroU64;
 
-use oer_protocols_bluetooth_le_port::{
+use oer_protocols_bluetooth_le_contracts_port::{
     ConnectionAllowances, LeRadio, NonZeroRadioDuration, RadioDuration,
 };
 

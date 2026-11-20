@@ -1,0 +1,13 @@
+warning: unused variable: `from`
+ --> tests/ui/stopping_without_the_key.rs:3:44
+  |
+3 | pub fn stop<'id>(key: &PortKey<'id, 2, 1>, from: StopFrom<'id>) -> Stopping<'id> {
+  |                                            ^^^^ help: if this is intentional, prefix it with an underscore: `_from`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+error[E0451]: field `brand` of struct `Stopping` is private
+ --> tests/ui/stopping_without_the_key.rs:6:31
+  |
+6 |     let stopping = Stopping { brand: core::marker::PhantomData }; // ui-error: E0451
+  |                               ^^^^^ private field

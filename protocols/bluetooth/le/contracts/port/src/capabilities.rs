@@ -117,6 +117,34 @@ impl LegacyAdvertisingTypes {
     }
 }
 
+/// How many of each place a backend holds: the most an installation's
+/// geometry may ask ([`PortPools`](crate::PortPools)). A scanner and a
+/// test session are one at most, by the contract.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LeLimits {
+    /// Advertising sets.
+    pub advertising_sets: usize,
+    /// Connections.
+    pub connections: usize,
+    /// Event places a connection.
+    pub connection_events: usize,
+    /// Transmit places a connection.
+    pub transmit_places: usize,
+    /// Receive nodes a connection and of each shared chain.
+    pub receive_nodes: usize,
+}
+
+impl LeLimits {
+    /// None of anything.
+    pub const NONE: Self = Self {
+        advertising_sets: 0,
+        connections: 0,
+        connection_events: 0,
+        transmit_places: 0,
+        receive_nodes: 0,
+    };
+}
+
 /// What a backend serves.
 ///
 /// Every value a Controller submits is checked against these capabilities
@@ -149,6 +177,8 @@ pub struct LeRadioCapabilities {
     /// How the backend keeps reservations apart and admits events, which
     /// the planner uses.
     pub timing: RadioTiming,
+    /// How many of each place it holds.
+    pub limits: LeLimits,
 }
 
 impl LeRadioCapabilities {
@@ -165,6 +195,7 @@ impl LeRadioCapabilities {
         min_tx_power_dbm: i8::MAX,
         max_ahead: RadioDuration::from_micros(0),
         timing: RadioTiming::MINIMAL,
+        limits: LeLimits::NONE,
     };
 
     /// Whether any scanner is served.

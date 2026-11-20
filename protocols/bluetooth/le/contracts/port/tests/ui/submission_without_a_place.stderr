@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `place`
+ --> tests/ui/submission_without_a_place.rs:6:17
+  |
+3 | pub fn submit<'id, P: LePort<'id, 1, 0, 1, 2, 1, 2, 0>>(port: &mut P, place: TxPlace<'id>) {
+  |                                                                       ----- move occurs because `place` has type `TxPlace<'_>`, which does not implement the `Copy` trait
+4 |     port.submit(place);
+  |                 ----- value moved here
+5 |     #[cfg(all())]
+6 |     port.submit(place); // ui-error: E0382
+  |                 ^^^^^ value used here after move

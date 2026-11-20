@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `running`
+ --> tests/ui/right_is_not_copy.rs:6:37
+  |
+3 | pub fn twice<'id>(running: Running<'id>) -> StopFrom<'id> {
+  |                   ------- move occurs because `running` has type `oer_protocols_bluetooth_le_contracts_port::Running<'_>`, which does not implement the `Copy` trait
+4 |     let first = StopFrom::Running(running);
+  |                                   ------- value moved here
+5 |     #[cfg(all())]
+6 |     let _second = StopFrom::Running(running); // ui-error: E0382
+  |                                     ^^^^^^^ value used here after move

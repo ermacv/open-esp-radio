@@ -15,12 +15,26 @@ const TIMING: RadioTiming = RadioTiming {
     },
 };
 
+/// A power under the open test domain's ceiling.
+fn power() -> crate::TxPower {
+    let band = oer_protocols_radio_regulatory::TEST_DOMAIN
+        .permit(crate::LeBand)
+        .unwrap();
+    let ceiling = band.tx_ceiling(oer_protocols_radio_regulatory::PowerLimits {
+        antenna_gain_mbm: 0,
+        chip_maximum_mbm: i32::MAX,
+        owner_cap_mbm: None,
+    });
+    crate::TxPower::within(crate::LeTxCeiling::new(band, ceiling), 0).unwrap()
+}
+
 fn transmit() -> DtmTest {
     DtmTest::Transmit {
         channel: TestChannel::new(0).unwrap(),
         phy: TestPhy::Le1M,
         pattern: DtmPayloadPattern::Prbs9,
         length: 37,
+        power: power(),
     }
 }
 
@@ -31,6 +45,7 @@ fn detached_coded_tx_window_is_refused_without_a_session_or_payload() {
         phy: TestPhy::LeCodedS8,
         pattern: DtmPayloadPattern::Prbs9,
         length: 37,
+        power: power(),
     };
     assert_eq!(
         next_window(test, LeInstant::from_micros(0), RadioTiming::MINIMAL, None),
@@ -98,6 +113,7 @@ fn every_transmit_length_preserves_specified_airtime_and_interval() {
                 phy,
                 pattern: DtmPayloadPattern::Prbs9,
                 length,
+                power: power(),
             };
             let first = next_window(test, LeInstant::from_micros(0), TIMING, None).unwrap();
             let air = if phy == TestPhy::Le1M {
