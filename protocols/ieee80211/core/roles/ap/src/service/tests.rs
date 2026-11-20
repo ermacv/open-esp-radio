@@ -2657,3 +2657,90 @@ fn a_request_whose_element_list_is_cut_short_is_an_invalid_element_and_makes_no_
         ..security
     });
 }
+
+/// A buffered unicast completion counts only against the release in flight:
+/// with none out it changes nothing; the one out ends by its `BufferedEnd`,
+/// a delivered frame leaving the queue and a returned one staying.
+#[test]
+fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        )
+        .unwrap();
+    let open_security = ApAssociationSecurityObservation {
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
+        rsn_ie: None,
+        rsn_ie_count: 0,
+        rsnxe: None,
+        rsnxe_count: 0,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
+    };
+    service
+        .authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
+        .unwrap();
+    service
+        .associate_open(
+            PEER,
+            open_security,
+            LEGACY_CAPABILITIES,
+            oer_portable_time::Instant::from_micros(1),
+        )
+        .unwrap();
+    service
+        .observe_power_save(
+            ApPowerSaveObservation::Sleeping { peer: PEER },
+            oer_portable_time::Instant::from_micros(2),
+        )
+        .unwrap();
+    let admitted = service.admit_downlink(PEER).unwrap();
+    let identity = admitted.identity();
+    service.commit_buffered_unicast(identity).unwrap();
+    service.commit_buffered_unicast(identity).unwrap();
+    let status = |service: &AccessPointService<'_, _>| {
+        let status = service.peer_status(PEER).unwrap();
+        (status.buffered_unicast_frames, status.buffered_release)
+    };
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // None in flight: a completion changes nothing.
+    let stray = ApBufferedUnicastRelease {
+        identity,
+        more_data: true,
+    };
+    assert_eq!(
+        service.complete_buffered_unicast_release(stray, BufferedEnd::Delivered),
+        Err(ApServiceError::StaleBufferedRelease)
+    );
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // A returned frame stays queued; the release ends.
+    let release = service
+        .begin_buffered_unicast_release(identity)
+        .unwrap()
+        .unwrap();
+    assert_eq!(status(&service), (2, BufferedRelease::InFlight));
+    assert_eq!(
+        service.complete_buffered_unicast_release(release, BufferedEnd::Returned),
+        Ok(2)
+    );
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // A delivered frame leaves the queue; the release ends.
+    let release = service
+        .begin_buffered_unicast_release(identity)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        service.complete_buffered_unicast_release(release, BufferedEnd::Delivered),
+        Ok(1)
+    );
+    assert_eq!(status(&service), (1, BufferedRelease::Idle));
+}
