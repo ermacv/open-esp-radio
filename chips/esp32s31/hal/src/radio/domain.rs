@@ -1043,7 +1043,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     }
 
     /// Reset the Wi-Fi MAC's block for its member, whose clocks `_clocks`
-    /// proves on, and write back what the block's other owners keep in it;
+    /// proves on, for the first time since their clocking (`first`, one a
+    /// clocking), and write back what the block's other owners keep in it;
     /// `cbw` is the channel the member is tuned to, lowered for the PHY. The
     /// answer is the reset's proof, which the member's cold preparation
     /// takes. A few writes and one read, with no wait and no failure.
@@ -1054,8 +1055,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub fn reset_wifi_mac_block(
         &mut self,
         _clocks: &crate::radio::ieee80211::client::WifiClocksOn,
+        first: crate::radio::ieee80211::client::MacFirstReset,
         cbw: u8,
     ) -> crate::radio::ieee80211::init::MacBlockReset {
+        let crate::radio::ieee80211::client::MacFirstReset { _private: () } = first;
         reset_wifi_mac_block(self.registers_mut(), cbw)
     }
 

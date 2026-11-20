@@ -5,9 +5,7 @@ use crate::power::PlatformClockBackend;
 use crate::{radio::domain::RadioDomain, radio::ieee80211::channel};
 
 use crate::{
-    radio::ieee80211::{
-        dma::rx_dma::WifiRxDmaEngine, mac as wifi_mac, station_wake::StationWakeState,
-    },
+    radio::ieee80211::{mac as wifi_mac, station_wake::StationWakeState},
     radio::phy::i2c::PhyAdcRate,
     types::{
         MacInterruptEnableState, MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot,
@@ -17,11 +15,9 @@ use crate::{
 
 use crate::*;
 
-use crate::radio::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
+use crate::radio::ieee80211::registers::WifiRadioRegisters;
 use crate::radio::phy::registers::RadioPhyParts;
 use crate::radio::phy::{baseband::ops as bb_ops, restore::PhyRouteState};
-
-pub mod maintenance;
 
 pub use crate::radio::phy::registration::{PhyRegistrationEpoch, PhyRegistrationGrant};
 
@@ -376,7 +372,6 @@ pub(crate) fn phy_parts_mut(
 /// ```
 pub struct RadioAccess {
     pub(crate) registers: WifiRadioRegisters,
-    rx_dma: WifiRxDmaEngine,
     station_wake: StationWakeState,
     initialized: bool,
 }
@@ -394,39 +389,25 @@ impl RadioAccess {
             )
             .expect("identity capacity");
         let clocked = crate::radio::ieee80211::client::WifiClocked::for_host_test(
-            crate::radio::ieee80211::client::WifiCold::from_partition(partitions.wifi),
+            crate::radio::ieee80211::client::WifiCold::from_partition(partitions.wifi).0,
         );
         clocked.into_running().0
     }
 
     pub(crate) fn from_clocked(
         registers: WifiRadioRegisters,
-        rx_dma: WifiRxDmaRegisters,
         station_wake: StationWakeState,
         initialized: bool,
     ) -> Self {
         Self {
             registers,
-            rx_dma: WifiRxDmaEngine::new(rx_dma),
             station_wake,
             initialized,
         }
     }
 
-    pub(crate) fn into_clocked_parts(
-        self,
-    ) -> (
-        WifiRadioRegisters,
-        WifiRxDmaRegisters,
-        StationWakeState,
-        bool,
-    ) {
-        (
-            self.registers,
-            self.rx_dma.into_registers(),
-            self.station_wake,
-            self.initialized,
-        )
+    pub(crate) fn into_clocked_parts(self) -> (WifiRadioRegisters, StationWakeState, bool) {
+        (self.registers, self.station_wake, self.initialized)
     }
 
     pub fn wifi_mac_hal(&mut self) -> wifi_mac::WifiMacHal<'_> {
@@ -437,20 +418,6 @@ impl RadioAccess {
     /// prevents this transaction at compile time.
     pub fn set_station_tsf(&mut self, value: u64) {
         self.wifi_mac_hal().set_station_tsf(value);
-    }
-
-    /// The RX DMA engine, the only owner of the RX descriptor walker.
-    pub fn rx_dma(&mut self) -> &mut WifiRxDmaEngine {
-        &mut self.rx_dma
-    }
-
-    /// The MAC HAL and the RX DMA engine at once, for a receive path that
-    /// drives both.
-    pub fn split_rx_dma(&mut self) -> (wifi_mac::WifiMacHal<'_>, &mut WifiRxDmaEngine) {
-        (
-            wifi_mac::WifiMacHal::from_mac(&mut self.registers),
-            &mut self.rx_dma,
-        )
     }
 
     /// Borrow the channel HAL for one channel transaction, with the shared
@@ -498,10 +465,6 @@ impl RadioAccess {
 
     pub fn coex_priority_snapshot(&self) -> wifi_mac::MacCoexPrioritySnapshot {
         self.registers.mac_coex_priority_snapshot()
-    }
-
-    pub fn receive_dma_snapshot(&self) -> wifi_mac::MacRxDmaSnapshot {
-        self.rx_dma.snapshot()
     }
 
     /// Latch one indirect SoftAP receive-BA bank through the reviewed HAL

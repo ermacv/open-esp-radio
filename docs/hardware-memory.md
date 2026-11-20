@@ -234,11 +234,12 @@ CPU/hardware ownership protocol belong to the HAL.
 
 ### 2. Protocol: the HAL
 
-Hand-written and typed, as in `rx_ring.rs`, `rx_storage.rs` and the TX
-storage: the ownership machine (armed, completed, detached, rearmed), the
+Hand-written and typed, as in the receive ring (`receive.rs`) and the TX
+storage: the custody of each buffer (held or lent, the arena's), the
 publication order (buffer address, then `CONTROL` with `OWNER = 1`, a fence,
-the doorbell), the proofs (`RxDmaWalkerStopped` naming its arena), the
-reserved descriptor behind `BASE`. The HAL reaches the structures only
+the doorbell), the proofs of the start and the stop (`WalkerStart`,
+`WalkerEnabled`, `WalkerEdge`, `StopRequested`, `MacStopReset`), the reserved
+descriptor behind `BASE`. The HAL reaches the structures only
 through the generated types; `CLAUDE.md`'s rule against local masks extends
 to hardware-shared memory.
 
@@ -253,11 +254,10 @@ runtime linker script includes it and asserts that all DMA storage lies in
 the window and holds no address whose low address bits are zero; the
 runtime link uses `--orphan-handling=error`, so a mistyped section name
 cannot leave a static unplaced. A storage that publishes its own addresses
-binds from a `Placed` value: the receive static is the driver's arena and the
-HAL's RX DMA storage placed together (`WifiRxStatic`), split once
-(`Placed::split`); only a `PlacedRxDma` (`RxDmaStorage::place`) prepares a
-ring, and the TX storages pin only placed storage (`TxDmaStorage::pin`,
-`AmpduDmaStorage::pin`). Host models use `Placed::host` (test support).
+binds from a `Placed` value: the receive ring's descriptor table is
+projected once (`RxTable::place`) and its buffers are an arena over a placed
+static (`arena!` over `dma_static!`); the TX storages pin only placed storage
+(`TxDmaStorage::pin`, `AmpduDmaStorage::pin`). Host models use `Placed::host` (test support).
 `DmaSpace` and `StableDmaRange` stay. The run-time window checks and the
 firmware placement warning's DMA rules are gone: the link proves what they
 checked. `cargo fw` refuses an image that enables `test-support`.
@@ -311,7 +311,7 @@ Wi-Fi DMA splits by what each part answers:
 | Format | Which bits mean what | Register model and PAC (`layouts/`) |
 | Memory | Where it lies and how long it stays | `oer-portable-memory`; the chip's window in `hal::system::memory` |
 | Ownership | Who may touch this descriptor now | HAL `radio::ieee80211::dma`: ring and storage |
-| Engine | Which registers start and steer the walker | HAL `radio::ieee80211::dma::rx_dma` and `registers` |
+| Engine | Which registers start and steer the walker | HAL `radio::ieee80211::dma::receive` (the ring holds the walker's registers) and `registers` |
 | Driver | What to do with a frame or a buffer | `radio/ieee80211/backend` (sources outside the build) |
 
 The ring and its storage stay in the HAL: safe code there, such as `commit`,

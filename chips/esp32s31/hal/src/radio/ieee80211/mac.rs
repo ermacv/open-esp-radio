@@ -9,11 +9,11 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 pub use crate::types::{
     ExtraSoftApRxBlockAckEntrySnapshot, MacApReceivePolicySnapshot, MacCoexPrioritySnapshot,
     MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti, MacRoleReceivePolicy,
-    MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxDmaSnapshot,
-    MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxPrimaryStatistics,
-    MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode,
-    MacStaReceivePolicySnapshot, MacTxPowerTable, MacTxPtiCount, MacTxPtiProgram, MacTxQueueIndex,
-    MacTxStatisticsSnapshot, RxBlockAckEntrySnapshot,
+    MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
+    MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
+    MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode, MacStaReceivePolicySnapshot,
+    MacTxPowerTable, MacTxPtiCount, MacTxPtiProgram, MacTxQueueIndex, MacTxStatisticsSnapshot,
+    RxBlockAckEntrySnapshot,
 };
 
 use crate::types::{
@@ -141,10 +141,6 @@ impl<'registers> WifiMacColdHal<'registers> {
 
     pub fn initialize_last_rx_buffer_table(&mut self) {
         self.mac().initialize_mac_last_rx_buffer();
-    }
-
-    pub fn initialize_rx_buffer_prefix(&mut self) {
-        self.registers.rx_dma.initialize_mac_rx_buffer_prefix();
     }
 
     pub fn initialize_receive_policy(&mut self) {
@@ -297,9 +293,14 @@ impl<'registers> WifiMacHal<'registers> {
         &mut self.registers
     }
 
-    /// Clock the MAC core with its runtime stop held, before the receive
-    /// ring's cold publication writes BASE.
-    pub fn open_core(&mut self) -> MacCoreOpen {
+    /// Clock the MAC core with its runtime stop held, after a completed cold
+    /// preparation (`prepared`, one an opening) and before the receive ring's
+    /// cold publication writes BASE.
+    pub fn open_core(
+        &mut self,
+        prepared: crate::radio::ieee80211::init::MacPrepared,
+    ) -> MacCoreOpen {
+        let crate::radio::ieee80211::init::MacPrepared { _private: () } = prepared;
         open_core(self.pac_mut())
     }
 
@@ -322,36 +323,6 @@ impl<'registers> WifiMacHal<'registers> {
     ) -> StopRequested {
         let crate::radio::ieee80211::dma::receive::WalkerEdge { .. } = edge;
         request_stop(self.pac_mut(), clock)
-    }
-
-    /// Open common gates with runtime stop held, after descriptor memory and
-    /// its private binding are prepared, but before the sole BASE publication.
-    pub fn prepare_mac_runtime<'a, const COUNT: usize>(
-        &mut self,
-        ring: crate::radio::ieee80211::dma::rx_ring::RxRingPrepared<'a, COUNT>,
-    ) -> crate::radio::ieee80211::dma::rx_ring::RxRingCoreReady<'a, COUNT> {
-        self.pac_mut().prepare_mac_runtime();
-        ring.core_ready()
-    }
-
-    /// Reopen common gates after a MAC reset while retaining prepared memory.
-    /// The stopped ring still owns its buffers and private DMA binding. Keep
-    /// the runtime stop held while rebuilding/publishing its next epoch;
-    /// releasing MAC RX still requires a live walker.
-    pub fn reopen_mac_core<const COUNT: usize>(
-        &mut self,
-        _ring: &crate::radio::ieee80211::dma::rx_ring::RxRingStopped<'_, COUNT>,
-    ) {
-        self.pac_mut().prepare_mac_runtime();
-    }
-
-    /// Release MAC RX only with a live walker carrying its private DMA
-    /// binding. A register owner cannot manufacture either ring proof.
-    pub fn start_mac_runtime<const COUNT: usize>(
-        &mut self,
-        _ring: &crate::radio::ieee80211::dma::rx_ring::RxRingLive<'_, COUNT>,
-    ) {
-        let _ = self.restart_after_channel_switch();
     }
 
     /// Read back the common gates held by cold MAC preparation.

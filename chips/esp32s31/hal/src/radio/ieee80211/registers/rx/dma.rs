@@ -9,18 +9,6 @@ use oer_portable_memory::DmaRef;
 
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters, bits};
 
-/// Read-only hardware frontier of the MAC RX descriptor walker.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacRxDmaSnapshot {
-    pub walker_enabled: bool,
-    pub reload_pending: bool,
-    pub descriptor_base: u32,
-    pub next_descriptor_low: u32,
-    /// True when the unassigned upper `RX_NEXT_DESCRIPTOR` field is nonzero.
-    pub next_descriptor_upper_unknown: bool,
-    pub last_descriptor_low: u32,
-}
-
 /// Field-level observation of `RX_NEXT_DESCRIPTOR`.
 ///
 /// Keeping the address and unknown hardware state separate preserves the
@@ -57,20 +45,6 @@ const RX_C68_INIT_IMAGE: u32 = 0x000f_ffff;
 const RX_C6C_INIT_IMAGE: u32 = 4;
 
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
-    /// Snapshot the complete published RX walker frontier without changing it.
-    pub fn mac_rx_dma_snapshot(&self) -> MacRxDmaSnapshot {
-        let control = self.dma.read_rx_control();
-        let next_descriptor = self.mac_rx_next_descriptor();
-        MacRxDmaSnapshot {
-            walker_enabled: control.walker_enable(),
-            reload_pending: control.append_descriptor_reload(),
-            descriptor_base: self.dma.read_rx_descriptor_base().address(),
-            next_descriptor_low: next_descriptor.address_low(),
-            next_descriptor_upper_unknown: next_descriptor.has_unknown_upper_state(),
-            last_descriptor_low: self.mac_rx_last_descriptor_low(),
-        }
-    }
-
     /// Initialize the RX walker configuration without publishing a descriptor.
     ///
     /// SOURCE: first four RMWs of complete pinned
@@ -105,10 +79,6 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
         }
     }
 
-    pub fn mac_rx_walker_enabled(&self) -> bool {
-        self.dma.read_rx_control().walker_enable()
-    }
-
     /// Whether the append/reload doorbell is still pending: the hardware
     /// clears it when it accepts the request.
     pub fn mac_rx_reload_pending(&self) -> bool {
@@ -141,22 +111,6 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// [`Self::mac_rx_reload_pending`] reading false.
     pub fn request_mac_rx_descriptor_reload(&mut self) {
         self.dma.trigger_rx_control_append_descriptor_reload();
-    }
-
-    /// Start and confirm the walker.
-    pub fn try_enable_mac_rx_walker(&mut self) -> bool {
-        if self.mac_rx_walker_enabled() {
-            return false;
-        }
-        self.set_walker_enabled(true);
-        oer_portable_riscv::fence();
-        self.mac_rx_walker_enabled()
-    }
-
-    pub fn try_disable_mac_rx_walker(&mut self) -> bool {
-        self.set_walker_enabled(false);
-        oer_portable_riscv::fence();
-        !self.mac_rx_walker_enabled()
     }
 
     /// Enable the hardware-beacon selection for RX-buffer reload, the edge

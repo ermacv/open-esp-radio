@@ -25,6 +25,8 @@ pub(crate) struct Session {
     radio_fault: oer_chips_esp32s31_hal::radio::domain::transaction::FaultHandle,
     /// The running Wi-Fi register owner.
     pub(crate) wifi: RadioAccess,
+    /// The receive walker's registers, which no ring takes here.
+    pub(crate) walker: oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRxDmaRegisters,
     /// Wi-Fi's common power, held for the session.
     _power: CommonPower<WifiClient>,
     /// The proof that Wi-Fi's module clocks are on.
@@ -97,10 +99,11 @@ fn powered(
     wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     clocks: ChipClocks,
 ) -> Result<Session, u32> {
-    let Ok((powered, power)) = WifiCold::from_partition(wifi).power_up(&mut radio, &clocks) else {
+    let (cold, walker) = WifiCold::from_partition(wifi);
+    let Ok((powered, power)) = cold.power_up(&mut radio, &clocks) else {
         return Err(WIFI_POWER);
     };
-    let Ok(clocked) = powered.enable_clocks(&mut radio, &clocks) else {
+    let Ok((clocked, _first)) = powered.enable_clocks(&mut radio, &clocks) else {
         return Err(WIFI_CLOCKS);
     };
     let (wifi, clocks_on) = clocked.into_running();
@@ -110,6 +113,7 @@ fn powered(
         radio: Some(radio),
         radio_fault,
         wifi,
+        walker,
         _power: power,
         _clocks_on: clocks_on,
         _clocks: clocks,

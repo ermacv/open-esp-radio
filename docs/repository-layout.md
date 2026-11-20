@@ -76,7 +76,7 @@ hil/agent/
 hil/images/aes/
 hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
     esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
-    esp32s31-register}/
+    esp32s31-register, esp32s31-rx-ring}/
 hil/scenarios/{aes, sdk-station, wifi-access-point}/
 hil/services/{aes, fault, load, sdk-station, wifi-access-point}/
 ```
@@ -88,7 +88,7 @@ at their successor: the old Wi-Fi path, its backend and station
 (`chips/esp32s31/radio/ieee80211/{backend, station}/`), the radio system and
 its client contract (`chips/esp32s31/radio/{system, client}/`), and what
 stands on it (`examples/wifi-station/`, `hil/images/{wifi-station,
-wifi-access-point}/`, `hil/probes/esp32s31-rx-chain/`,
+wifi-access-point}/`,
 `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/wifi-station/`).
 
 ## Data and supporting files

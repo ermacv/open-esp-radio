@@ -50,7 +50,7 @@ oer_tools_probe_macros::probe! {
 
 oer_tools_probe_macros::probe! {
     pub fn open_libpp_rx_trace_hal_mac_rx_is_dscr_reload() -> u32 {
-        session::with(|session| u32::from(session.wifi.rx_dma().snapshot().reload_pending))
+        session::with(|session| u32::from(session.walker.mac_rx_reload_pending()))
             .unwrap_or(REJECTED)
     }
 }

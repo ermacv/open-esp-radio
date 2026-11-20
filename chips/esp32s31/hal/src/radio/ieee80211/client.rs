@@ -51,11 +51,11 @@ impl WifiPowerPort for crate::radio::phy::RadioPhyRegisters {
     }
 }
 
-/// The Wi-Fi MAC register set and the RX walker's registers. The MAC's
-/// interrupt banks belong to the radio interrupt handler, not the client.
+/// The Wi-Fi MAC register set. The MAC's interrupt banks belong to the radio
+/// interrupt handler, and the receive walker's registers to the receive
+/// ring's parts ([`WifiCold::from_partition`]).
 struct WifiClientRegisters {
     mac: WifiRadioRegisters,
-    rx_dma: WifiRxDmaRegisters,
 }
 
 /// Unpowered Wi-Fi client holding its partition.
@@ -79,6 +79,21 @@ pub struct WifiClocked {
     initialized: bool,
     station_wake: StationWakeState,
     clocks: WifiClocksOn,
+}
+
+/// The proof that the client was clocked and its MAC block not reset since:
+/// what the block's first reset takes (`RadioDomain::reset_wifi_mac_block`).
+/// One a clocking: `WifiPowered::enable_clocks` gives it. Every later reset is
+/// one after a stop (`reset_stopped_wifi_mac_block`), so a reset under a
+/// running MAC cannot be written.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::client::MacFirstReset;
+/// let _made = MacFirstReset { _private: () };
+/// ```
+#[must_use = "the block's first reset takes it"]
+pub struct MacFirstReset {
+    pub(crate) _private: (),
 }
 
 /// Proof that the Wi-Fi module clocks are enabled.
@@ -128,20 +143,25 @@ impl<Owner, Error: fmt::Debug> fmt::Debug for WifiTransitionFailure<Owner, Error
 }
 
 impl WifiCold {
-    /// Take the partition of a concurrent split. This performs no MMIO.
-    pub fn from_partition(partition: WifiPartition) -> Self {
+    /// Take the partition of a concurrent split: the client, and the receive
+    /// walker's registers by value, which the receive ring's parts hold
+    /// (`RxRingParts`). This performs no MMIO.
+    pub fn from_partition(partition: WifiPartition) -> (Self, WifiRxDmaRegisters) {
         let (mac, rx_dma) = partition.into_parts();
-        Self {
-            registers: WifiClientRegisters {
-                mac: WifiRadioRegisters::new(mac),
-                rx_dma,
+        (
+            Self {
+                registers: WifiClientRegisters {
+                    mac: WifiRadioRegisters::new(mac),
+                },
             },
-        }
+            rx_dma,
+        )
     }
 
-    /// Return the partition. This performs no MMIO.
-    pub fn into_partition(self) -> WifiPartition {
-        let WifiClientRegisters { mac, rx_dma } = self.registers;
+    /// Return the partition, with the walker's registers. This performs no
+    /// MMIO.
+    pub fn into_partition(self, rx_dma: WifiRxDmaRegisters) -> WifiPartition {
+        let WifiClientRegisters { mac } = self.registers;
         WifiPartition::from_parts(mac.into_partition(), rx_dma)
     }
 
@@ -217,14 +237,17 @@ impl WifiPowered {
         self,
         radio: &mut RadioDomain<B, T>,
         platform: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<WifiClocked, WifiTransitionFailure<Self, ModemClockError>> {
+    ) -> Result<(WifiClocked, MacFirstReset), WifiTransitionFailure<Self, ModemClockError>> {
         match radio.enable_modem_clocks(&self.registers.mac, platform) {
-            Ok(()) => Ok(WifiClocked {
-                registers: self.registers,
-                initialized: false,
-                station_wake: StationWakeState::default(),
-                clocks: WifiClocksOn { _private: () },
-            }),
+            Ok(()) => Ok((
+                WifiClocked {
+                    registers: self.registers,
+                    initialized: false,
+                    station_wake: StationWakeState::default(),
+                    clocks: WifiClocksOn { _private: () },
+                },
+                MacFirstReset { _private: () },
+            )),
             Err(error) => Err(WifiTransitionFailure { owner: self, error }),
         }
     }
@@ -271,12 +294,15 @@ impl WifiClocked {
         self.initialized
     }
 
-    /// Borrow the cold MAC HAL over the Wi-Fi partition alone, for the cold
-    /// preparation that follows the radio system's reset of the block
-    /// (`initialize_wifi_mac` takes that reset's proof).
-    pub fn cold_mac_hal(&mut self) -> WifiMacColdHal<'_> {
-        let WifiClientRegisters { mac, rx_dma } = &mut self.registers;
-        WifiMacColdHal::from_partition(mac, rx_dma)
+    /// Borrow the cold MAC HAL over the Wi-Fi partition, with the walker's
+    /// registers lent for the preparation's two `RX_CONTROL` edges, for the
+    /// cold preparation that follows the block's reset (`initialize_wifi_mac`
+    /// takes that reset's proof).
+    pub fn cold_mac_hal<'a>(
+        &'a mut self,
+        rx_dma: &'a mut WifiRxDmaRegisters,
+    ) -> WifiMacColdHal<'a> {
+        WifiMacColdHal::from_partition(&mut self.registers.mac, rx_dma)
     }
 
     /// Borrow the runtime MAC HAL over the MAC alone.
@@ -316,9 +342,9 @@ impl WifiClocked {
     /// interrupts stay masked until the radio interrupt handler activates
     /// them. This performs no MMIO.
     pub fn into_running(self) -> (RadioAccess, WifiClocksOn) {
-        let WifiClientRegisters { mac, rx_dma } = self.registers;
+        let WifiClientRegisters { mac } = self.registers;
         (
-            RadioAccess::from_clocked(mac, rx_dma, self.station_wake, self.initialized),
+            RadioAccess::from_clocked(mac, self.station_wake, self.initialized),
             self.clocks,
         )
     }
@@ -330,9 +356,9 @@ impl WifiClocked {
     /// the MAC's interrupt epoch. This performs no MMIO; the Wi-Fi clocks
     /// stay enabled.
     pub fn from_running(runtime: RadioAccess, clocks: WifiClocksOn) -> Self {
-        let (mac, rx_dma, station_wake, initialized) = runtime.into_clocked_parts();
+        let (mac, station_wake, initialized) = runtime.into_clocked_parts();
         Self {
-            registers: WifiClientRegisters { mac, rx_dma },
+            registers: WifiClientRegisters { mac },
             initialized,
             station_wake,
             clocks,

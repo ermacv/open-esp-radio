@@ -1,0 +1,37 @@
+#![cfg_attr(target_arch = "riscv32", no_main)]
+#![cfg_attr(target_arch = "riscv32", no_std)]
+#![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unreachable,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::indexing_slicing
+)]
+
+//! Case C's sender (`tasks/154`, `159`, cell E of `161`): frames to the
+//! peer it learns, on the receive ring's atoms over the radio domain the
+//! probe holds itself. See the README.
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "the receiver's half is esp32s31-rx-ring's")
+)]
+mod case_c;
+#[cfg(target_arch = "riscv32")]
+mod diagnostic;
+#[cfg(target_arch = "riscv32")]
+mod image;
+#[cfg(target_arch = "riscv32")]
+mod phy_pilot;
+#[cfg(target_arch = "riscv32")]
+mod radio;
+#[cfg(target_arch = "riscv32")]
+mod usb;
+#[cfg(target_arch = "riscv32")]
+use image::*;
+#[cfg(not(target_arch = "riscv32"))]
+fn main() {}

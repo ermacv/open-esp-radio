@@ -25,14 +25,14 @@ pub use crate::radio::ieee80211::registers::{
     MacPowerInterruptObservation, MacPowerInterruptSnapshot, MacPti, MacRoleReceivePolicy,
     MacRtcCalibration, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid,
     MacRxBlockAckWindow, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta,
-    MacRxDmaSnapshot, MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxLane,
-    MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacSppMode,
-    MacStaApReceivePlan, MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxAbortCause,
-    MacTxAbortOutcome, MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome,
-    MacTxDetachReason, MacTxPowerPair, MacTxPowerTable, MacTxPrepareFault, MacTxPrepareRefused,
-    MacTxProtection, MacTxPtiCount, MacTxPtiProgram, MacTxQueueAborted, MacTxQueueDetached,
-    MacTxQueueIndex, MacTxQueueReleased, MacTxStatisticsSnapshot, RxBlockAckEntrySnapshot,
-    StaTbttSchedule, TxBlockAckPayload,
+    MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxLane, MacRxPrimaryStatistics,
+    MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacSppMode, MacStaApReceivePlan,
+    MacStaPolicyMode, MacStaReceivePolicySnapshot, MacTxAbortCause, MacTxAbortOutcome,
+    MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxPowerPair, MacTxPowerTable, MacTxPrepareFault, MacTxPrepareRefused, MacTxProtection,
+    MacTxPtiCount, MacTxPtiProgram, MacTxQueueAborted, MacTxQueueDetached, MacTxQueueIndex,
+    MacTxQueueReleased, MacTxStatisticsSnapshot, RxBlockAckEntrySnapshot, StaTbttSchedule,
+    TxBlockAckPayload,
 };
 
 pub use crate::radio::phy::restore::{

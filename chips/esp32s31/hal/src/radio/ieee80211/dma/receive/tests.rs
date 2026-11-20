@@ -605,3 +605,68 @@ fn a_stopped_ring_s_release_gives_every_buffer_back_and_publishes_again() {
     assert_eq!(again.start.get(), 0, "a cold start from the head");
     assert!(!again.walker.enabled, "the walker is started apart");
 }
+
+brand!(standing);
+#[test]
+fn the_standing_names_the_cursor_and_the_tail_as_read() {
+    use super::NextAt;
+    let mut bench = bench::<standing::Rx>();
+    bench.cursor(Some(2), None);
+    bench.cursor(Some(2), None);
+    let seen = bench.ring.standing();
+    assert_eq!(seen.last, Some(2));
+    assert_eq!(seen.next, NextAt::Zero);
+    assert_eq!(seen.tail, RING - 1);
+    assert!(!seen.tail_done && seen.unchanged);
+    bench.cursor(Some(2), Some(RING - 1));
+    bench.cursor(Some(3), Some(RING - 1));
+    let moving = bench.ring.standing();
+    assert_eq!(moving.next, NextAt::Ring(RING - 1));
+    assert!(!moving.unchanged, "the cursor moved between the reads");
+}
+
+brand!(standing_completed);
+#[test]
+fn the_standing_names_a_completed_tail_with_next_zero() {
+    // The second recorded state of a stall: the walker wrote the tail and
+    // stopped there, NEXT zero.
+    use super::NextAt;
+    let mut bench = bench::<standing_completed::Rx>();
+    bench.complete(RING - 1, 40, true);
+    bench.cursor(Some(RING - 1), None);
+    bench.cursor(Some(RING - 1), None);
+    let seen = bench.ring.standing();
+    assert_eq!(seen.last, Some(RING - 1));
+    assert_eq!(seen.next, NextAt::Zero);
+    assert_eq!(seen.tail, RING - 1);
+    assert!(seen.tail_done, "the tail's word reads RX_DONE");
+    assert!(seen.unchanged);
+}
+
+brand!(continuation_words);
+#[test]
+fn a_chain_shows_its_continuations_words_as_the_walker_left_them() {
+    let mut bench = bench::<continuation_words::Rx>();
+    bench.complete(0, 200, false);
+    bench.complete(1, 128, false);
+    bench.complete(2, 40, true);
+    bench.cursor(Some(2), Some(3));
+    let first = bench.ring.table.descriptors.ring[0].word0();
+    let middle = bench.ring.table.descriptors.ring[1].word0();
+    let clock: VirtualClock = VirtualClock::new();
+    let seen = bench
+        .ring
+        .serve(&clock, |view| match view.next_unit() {
+            Some(Unit::Chain(chain)) => {
+                let words: Vec<_> = chain.continuation_words().collect();
+                let count = chain.count();
+                let _ = chain.copy_in_place(|frame| frame.len());
+                Some((words, count))
+            }
+            _ => None,
+        })
+        .ok()
+        .flatten()
+        .unwrap();
+    assert_eq!(seen, (vec![first, middle], 3));
+}
