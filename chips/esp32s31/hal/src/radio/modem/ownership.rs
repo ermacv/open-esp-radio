@@ -45,34 +45,30 @@ pub struct SharedRadioRegisters {
     pub(crate) shared_radio: SharedBasebandParts,
 }
 impl SharedRadioRegisters {
-    /// Assemble the unique shared parts without accessing registers.
+    /// Assemble the unique shared parts without accessing registers. The
+    /// Bluetooth and IEEE 802.15.4 baseband words have no owner in the
+    /// build: they are dropped here, as the root drops those radios' own
+    /// blocks.
     pub fn new(
         radio_phy: RadioPhyRegisters,
         coexistence: CoexistencePeripherals,
         shared_radio: SharedRadioPeripherals,
-    ) -> (Self, oer_chips_esp32s31_pac::bt_bb::BtV32BasebandRxInfo) {
+    ) -> Self {
         let SharedRadioPeripherals {
-            bt_v32_baseband,
-            bt_v32_baseband_rx_info,
+            bt_v32_baseband: _,
+            bt_v32_baseband_rx_info: _,
             shared_radio_init_control,
-            shared_baseband_reset_idle_status,
-            shared_baseband_tx_timing,
-            zbbb_radio_control,
+            shared_baseband_reset_idle_status: _,
+            shared_baseband_tx_timing: _,
+            zbbb_radio_control: _,
         } = shared_radio;
-        (
-            Self {
-                radio_phy,
-                coexistence,
-                shared_radio: SharedBasebandParts {
-                    bt_v32_baseband,
-                    shared_radio_init_control,
-                    shared_baseband_reset_idle_status,
-                    shared_baseband_tx_timing,
-                    zbbb_radio_control,
-                },
+        Self {
+            radio_phy,
+            coexistence,
+            shared_radio: SharedBasebandParts {
+                shared_radio_init_control,
             },
-            bt_v32_baseband_rx_info,
-        )
+        }
     }
 
     pub const fn radio_phy(&self) -> &RadioPhyRegisters {
@@ -154,31 +150,6 @@ impl SharedRadioRegisters {
         &mut self.shared_radio.shared_radio_init_control
     }
 
-    /// Execute the MMIO path of vendor `bt_bb_v2_init_cmplx(1)` over the
-    /// shared baseband parts and the radio PHY's Bluetooth AGC and
-    /// baseband-configuration words.
-    ///
-    /// SOURCE: BLOB_LIBBTBB_BT_BB_V2_INIT.
-    pub(crate) fn initialize_btbb_v2_arg_one(&mut self, gain_parameter: u8) {
-        use crate::radio::bluetooth::registers::baseband::{
-            BtbbV2Registers, ChipBtbb, initialize_btbb_v2_arg_one,
-        };
-        let phy = &mut self.radio_phy.peripherals;
-        let shared = &mut self.shared_radio;
-        initialize_btbb_v2_arg_one::<ChipBtbb>(
-            BtbbV2Registers {
-                btagc: &mut phy.phy_btagc_recovered,
-                oracle_fe: &mut phy.phy_baseband_config_oracle.fe,
-                oracle_wifi_bb: &mut phy.phy_baseband_config_oracle.wifi_bb,
-                baseband: &mut shared.bt_v32_baseband,
-                init_control: &mut shared.shared_radio_init_control,
-                tx_timing: &mut shared.shared_baseband_tx_timing,
-                zbbb: &mut shared.zbbb_radio_control,
-            },
-            gain_parameter,
-        );
-    }
-
     pub fn coex_timers_mut(&mut self) -> CoexTimerBankRegisters<'_> {
         CoexTimerBankRegisters::new(
             &mut self.coexistence.coex_policy_timers,
@@ -237,14 +208,9 @@ impl SharedRadioRegisters {
     }
 }
 
-/// Shared baseband ownership after the root transfers RSSI to IEEE 802.15.4.
+/// The shared baseband word Wi-Fi writes: `RADIO_INIT_CONTROL`.
 pub struct SharedBasebandParts {
-    pub(crate) bt_v32_baseband: oer_chips_esp32s31_pac::bt_bb::BtV32Baseband,
     pub(crate) shared_radio_init_control: oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl,
-    pub(crate) shared_baseband_reset_idle_status:
-        oer_chips_esp32s31_pac::ieee802154::SharedBasebandResetIdleStatus,
-    pub(crate) shared_baseband_tx_timing: oer_chips_esp32s31_pac::bt_bb::SharedBasebandTxTiming,
-    pub(crate) zbbb_radio_control: oer_chips_esp32s31_pac::bt_bb::ZbbbRadioControl,
 }
 
 /// [`SharedRadioRegisters::write_back_wifi_mac_foreign_words`] over its

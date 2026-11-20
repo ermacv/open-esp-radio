@@ -24,10 +24,7 @@ fn registered_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, Conc
         let grant = domain.begin_registration_for_host_test();
         let epoch = grant.epoch();
         *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
-            RegisteredPhyState::from_wrapper_test_model(
-                PhyState::new(PhyConfig::production()),
-                grant,
-            ),
+            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
     }
@@ -47,10 +44,7 @@ fn rf_closed_domain() -> RadioDomain<crate::test_clocks::TestClockBackend, Concu
         let grant = domain.begin_registration_for_host_test();
         let epoch = grant.epoch();
         *domain.attachment_mut() = ConcurrentPhy::rf_closed_for_test(PhyDomain::new(
-            RegisteredPhyState::from_wrapper_test_model(
-                PhyState::new(PhyConfig::production()),
-                grant,
-            ),
+            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
     }

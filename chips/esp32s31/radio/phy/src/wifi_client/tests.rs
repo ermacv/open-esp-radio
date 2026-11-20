@@ -29,10 +29,7 @@ fn registered() -> (
         let grant = domain.begin_registration_for_host_test();
         let epoch = grant.epoch();
         *domain.attachment_mut() = ConcurrentPhy::registered_for_test(PhyDomain::new(
-            RegisteredPhyState::from_wrapper_test_model(
-                PhyState::new(PhyConfig::production()),
-                grant,
-            ),
+            RegisteredPhyState::from_wrapper_test_model(PhyState::new(PhyConfig::production())),
             PhyClientState::for_registration(DEFAULT_PLL_TRACK_PERIOD_MICROS, epoch),
         ));
     }
@@ -247,6 +244,4 @@ fn wifi_due_rejoin_and_clock_refusal_preserve_membership_authority() {
     assert_eq!(acquired, ConcurrentAcquire::TrackingDue);
     assert!(radio.attachment_mut().complete_tracking_for_test());
     assert!(leave_wifi(&mut radio, &clocked, membership).expect("valid PHY lifecycle fixture"));
-    assert!(!radio.holds_btbb(RadioClient::Bluetooth));
-    assert!(!radio.holds_btbb(RadioClient::Ieee802154));
 }

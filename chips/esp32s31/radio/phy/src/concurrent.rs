@@ -25,9 +25,7 @@
 
 use oer_chips_esp32s31_hal::power::PlatformClockBackend;
 
-use oer_chips_esp32s31_hal::radio::domain::{
-    BtbbAcquired, BtbbError, BtbbGain, ModemClockError, RadioClient, RadioDomain,
-};
+use oer_chips_esp32s31_hal::radio::domain::{ModemClockError, RadioClient, RadioDomain};
 
 use crate::{
     PhyState, RegisteredPhyState,
@@ -392,16 +390,8 @@ pub trait PhyClientKind: client_kind_sealed::Sealed {
     const CLIENT: RadioClient;
 }
 impl client_kind_sealed::Sealed for crate::wifi_client::WifiPhyMembership {}
-impl client_kind_sealed::Sealed for crate::bluetooth_client::BluetoothPhyMembership {}
-impl client_kind_sealed::Sealed for crate::ieee802154_client::Ieee802154PhyMembership {}
 impl PhyClientKind for crate::wifi_client::WifiPhyMembership {
     const CLIENT: RadioClient = RadioClient::Wifi;
-}
-impl PhyClientKind for crate::bluetooth_client::BluetoothPhyMembership {
-    const CLIENT: RadioClient = RadioClient::Bluetooth;
-}
-impl PhyClientKind for crate::ieee802154_client::Ieee802154PhyMembership {
-    const CLIENT: RadioClient = RadioClient::Ieee802154;
 }
 
 pub enum PhyClientAccess<'l, B: PlatformClockBackend, K: PhyClientKind> {
@@ -571,66 +561,6 @@ pub(crate) fn acquire_client<B: PlatformClockBackend>(
             Err(ConcurrentPhyError::Acquire(error))
         }
     }
-}
-
-pub(crate) enum BtbbClientAcquireError {
-    Phy(ConcurrentPhyError),
-    Btbb(BtbbError),
-}
-
-/// Prepare the pure client transition before any shared-baseband acquisition.
-/// Until BTBB accepts, the original client owner remains unchanged. After it
-/// accepts, committing the prepared evaluation is infallible, including when
-/// that commit makes tracking pending. There is no fallible client rollback.
-pub(crate) fn acquire_btbb_client<B: PlatformClockBackend>(
-    radio: &mut RadioDomain<B, ConcurrentPhy>,
-    client: RadioClient,
-    clock: &impl oer_portable_time::Clock,
-    acquire: impl FnOnce(
-        &mut RadioDomain<B, ConcurrentPhy>,
-        &BtbbGain,
-    ) -> Result<BtbbAcquired, BtbbError>,
-) -> Result<ConcurrentAcquire, BtbbClientAcquireError> {
-    use BtbbClientAcquireError::{Btbb, Phy};
-    radio.attachment().settled().map_err(Phy)?;
-    if radio.holds_btbb(client) {
-        return Err(Btbb(BtbbError::AlreadyAcquired));
-    }
-    let PhyDomain {
-        registered,
-        clients,
-    } = radio.attachment_mut().settled_domain().map_err(Phy)?;
-    let available = match clients.client(client) {
-        ClientStateAccess::Available(available) => available,
-        other => {
-            radio.attachment_mut().slot =
-                Slot::Registered(PhyDomain::new(registered, other.into_owner()));
-            return Err(Phy(ConcurrentPhyError::ClientPhase(client)));
-        }
-    };
-    let prepared = match available.prepare(clock) {
-        Ok(prepared) => prepared,
-        Err(failure) => {
-            let error = failure.error();
-            radio.attachment_mut().slot =
-                Slot::Registered(PhyDomain::new(registered, failure.into_owner()));
-            return Err(Phy(ConcurrentPhyError::Acquire(error)));
-        }
-    };
-    // The registered owner is retained locally while the slot is lent. Publish
-    // its gain before committing the client evaluation can create Pending.
-    let gain = registered.publish_btbb_gain(radio.btbb_publisher().1);
-    let result = gain.and_then(|gain| acquire(radio, &gain));
-    if let Err(error) = result {
-        radio.attachment_mut().slot =
-            Slot::Registered(PhyDomain::new(registered, prepared.into_owner()));
-        return Err(Btbb(error));
-    }
-    Ok(publish_acquisition(
-        radio.attachment_mut(),
-        registered,
-        prepared.commit(),
-    ))
 }
 
 fn publish_acquisition(

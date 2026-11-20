@@ -23,36 +23,32 @@ use crate::power::radio::{RadioClient, RadioClientKind};
 /// A client leaves common power only while it shows this state:
 ///
 /// ```
-/// use oer_chips_esp32s31_hal::{
-///     radio::ieee802154::Ieee802154Powered,
-///     radio::domain::{CoexAbsent, CommonPower, Ieee802154Client, RadioDomain},
-/// };
+/// use oer_chips_esp32s31_hal::radio::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
+/// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
 ///
 /// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
-///     powered: Ieee802154Powered,
-///     power: CommonPower<Ieee802154Client>,
-///     coex: &CoexAbsent<Ieee802154Client>,
+///     wifi: &WifiRadioRegisters,
+///     power: CommonPower<WifiClient>,
+///     coex: &CoexAbsent<WifiClient>,
 /// ) {
-///     let _ = powered.power_down(radio, power, coex);
+///     let _ = radio.exit_common_power(wifi, power, coex);
 /// }
 /// ```
 ///
 /// Not while it takes part:
 ///
 /// ```compile_fail,E0308
-/// use oer_chips_esp32s31_hal::{
-///     radio::ieee802154::Ieee802154Powered,
-///     radio::domain::{CommonPower, Coexisting, Ieee802154Client, RadioDomain},
-/// };
+/// use oer_chips_esp32s31_hal::radio::domain::{CommonPower, Coexisting, RadioDomain, WifiClient};
+/// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
 ///
 /// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
-///     powered: Ieee802154Powered,
-///     power: CommonPower<Ieee802154Client>,
-///     coex: &Coexisting<Ieee802154Client>,
+///     wifi: &WifiRadioRegisters,
+///     power: CommonPower<WifiClient>,
+///     coex: &Coexisting<WifiClient>,
 /// ) {
-///     let _ = powered.power_down(radio, power, coex);
+///     let _ = radio.exit_common_power(wifi, power, coex);
 /// }
 /// ```
 ///

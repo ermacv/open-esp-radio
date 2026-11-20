@@ -905,18 +905,15 @@ enum Role {
 const ROLES: &[(&str, Role)] = &[
     ("chips/family/facts", Role::Facts),
     ("chips/family/drivers/efuse", Role::Facts),
-    ("chips/family/radio/ieee802154/values", Role::Facts),
     ("chips/esp32s31/knowledge", Role::Facts),
     ("chips/esp32s31/pac", Role::Pac),
     ("chips/esp32s31/hal", Role::Hal),
     ("chips/family/drivers/regi2c", Role::HardwareDriver),
     ("chips/family/boot", Role::HardwareDriver),
     ("chips/family/radio/coex", Role::HardwareDriver),
-    ("chips/family/radio/ieee802154/engine", Role::HardwareDriver),
     ("chips/family/radio/modem-clock", Role::HardwareDriver),
     ("chips/family/radio/power", Role::HardwareDriver),
     ("chips/family/radio/phy", Role::HardwareDriver),
-    ("chips/family/radio/bluetooth/ports", Role::HardwareDriver),
     ("chips/family/drivers/usb-serial-jtag", Role::HardwareDriver),
     ("chips/family/drivers/watchdog", Role::HardwareDriver),
     ("chips/family/drivers/system-timer", Role::HardwareDriver),
@@ -2181,7 +2178,7 @@ fn protocol_cores_never_wait_outside_their_tests() {
         }
     }
     // The rule takes the cores the tree has today, and more as they come.
-    assert!(cores >= 22, "only {cores} packages must not wait");
+    assert!(cores >= 18, "only {cores} packages must not wait");
     let known = WAITING_DEVIATIONS
         .iter()
         .map(|(file, count, _)| (*file, *count))
@@ -4007,42 +4004,6 @@ fn hal_sequence_marker(word: &str) -> bool {
 /// marker counts. The list only shrinks: a lower count lowers its entry, and
 /// a file without markers leaves it. No new file belongs here.
 const HAL_SEQUENCES: &[(&str, usize)] = &[
-    ("chips/esp32s31/hal/src/radio/bluetooth.rs", 10),
-    ("chips/esp32s31/hal/src/radio/bluetooth/engine/lease.rs", 4),
-    ("chips/esp32s31/hal/src/radio/bluetooth/engine/live.rs", 27),
-    ("chips/esp32s31/hal/src/radio/bluetooth/engine/owner.rs", 6),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/hardware.rs",
-        13,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/hardware/live.rs",
-        17,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/interrupt.rs",
-        45,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/timing.rs",
-        1,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
-        10,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/scheduler_execution_lock.rs",
-        11,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/scheduler_execution_modify.rs",
-        26,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/scheduler_stop.rs",
-        12,
-    ),
     ("chips/esp32s31/hal/src/system/boot.rs", 16),
     ("chips/esp32s31/hal/src/radio/ieee80211/init.rs", 5),
     (
@@ -4634,16 +4595,11 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
-    (
-        "radio/bluetooth/engine/",
-        15970,
-        "Bluetooth controller driver out of the HAL (#848)",
-    ),
     ("radio/phy/i2c.rs", 685, PHY_DRIVER),
     ("radio/phy/restore.rs", 368, PHY_DRIVER),
     ("radio/phy/temperature.rs", 152, PHY_DRIVER),
     ("radio/phy/temperature/", 78, PHY_DRIVER),
-    ("radio/domain/transaction.rs", 542, PHY_DRIVER),
+    ("radio/domain/transaction.rs", 532, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
 ];
 
@@ -4806,11 +4762,6 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/platform/runtime/src/sampler.rs",
         1,
         "product: `&mut dyn FnMut()` of the masked section, removed in T8b",
-    ),
-    (
-        "protocols/ieee802154/port/src/owner.rs",
-        1,
-        "product: `&dyn Release`, removed in T8b",
     ),
     (
         "chips/esp32s31/platform/layout/src/lib.rs",
@@ -4993,54 +4944,8 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "AnalogI2cPowerAccess::analog_i2c_reset_is_released",
         SAMPLED_BIT,
     ),
-    ("BankControl::fault_acknowledged", SAMPLED_BIT),
-    (
-        "BluetoothSchedulerCancellationControl::observe_status_0208",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerCancellationControl::observe_status_0324",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_lock_ready",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_modify_ready",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_modify_rejected",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerSoftwareListRemovalControl::read_command_0_status_26",
-        SAMPLED_BIT,
-    ),
-    (
-        "BluetoothSchedulerSoftwareListRemovalControl::read_command_1_status_18",
-        SAMPLED_BIT,
-    ),
     ("CacheSyncRegisters::done", SAMPLED_BIT),
-    (
-        "Capability::supported",
-        "predicate: a capability is supported",
-    ),
     ("ClockUpdate::update_pending", SAMPLED_BIT),
-    ("Control::btbb_held", SAMPLED_BIT),
-    ("Control::commands_ready", SAMPLED_BIT),
-    ("Control::engines_idle", SAMPLED_BIT),
-    ("Control::is_busy", SAMPLED_BIT),
-    ("Control::ready", SAMPLED_BIT),
-    ("Control::rejected", SAMPLED_BIT),
-    ("Control::reset_released", SAMPLED_BIT),
-    ("Control::time_pending", SAMPLED_BIT),
-    ("Control::timer_separated", SAMPLED_BIT),
-    (
-        "ControllerTimeRegisters::latch_request_pending",
-        SAMPLED_BIT,
-    ),
     (
         "Correlation::is_backend_reserved",
         "predicate: the correlation is the backend's",
@@ -5070,13 +4975,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "predicate: whether the port ended the frame",
     ),
     ("FrameSource::register", PHASE_C),
-    ("Ieee802154LowLevel::cca_busy", SAMPLED_BIT),
-    ("Ieee802154LowLevel::etm_channel_enabled", SAMPLED_BIT),
-    ("Ieee802154LowLevel::is_current_rx_frame", SAMPLED_BIT),
-    ("Ieee802154LowLevel::pending_mode", SAMPLED_BIT),
-    ("Ieee802154LowLevel::rx_auto_ack", SAMPLED_BIT),
-    ("Ieee802154LowLevel::tx_auto_ack", SAMPLED_BIT),
-    ("Ieee802154LowLevel::tx_enhanced_ack", SAMPLED_BIT),
     ("Io::ready", SAMPLED_BIT),
     ("Local::again", PHASE_C),
     ("Local::deliver", PHASE_C),
@@ -5090,8 +4988,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "Mask::take_interrupts",
         "predicate: interrupts were enabled before the mask",
     ),
-    ("Memory::retirement_ready", SAMPLED_BIT),
-    ("Memory::scheduler_stopped", SAMPLED_BIT),
     (
         "ModemClockDependency::refcounted",
         "predicate: a fact of the modem clock's dependency (chip knowledge)",
@@ -5099,26 +4995,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     (
         "ModemClockDependency::retained_while_wifi_initialized",
         "predicate: a fact of the modem clock's dependency (chip knowledge)",
-    ),
-    (
-        "ModemLpTimerHandlerRegisterTransaction::sample_state_0024_low_byte_nonzero",
-        SAMPLED_BIT,
-    ),
-    (
-        "ModemLpTimerHandlerRegisterTransaction::sample_state_002c_low_byte_nonzero",
-        SAMPLED_BIT,
-    ),
-    (
-        "ModemLpTimerInterruptTransaction::control_0058_bit_2_is_set",
-        SAMPLED_BIT,
-    ),
-    (
-        "ModemLpTimerLowPowerInitTransaction::control_2_is_set",
-        SAMPLED_BIT,
-    ),
-    (
-        "ModemLpTimerRuntimeTransaction::rollover_low_byte_nonzero",
-        SAMPLED_BIT,
     ),
     ("OwnedTransmit::notice_waiting", PHASE_C),
     ("ParallelAnalogBus::is_busy", SAMPLED_BIT),
@@ -5154,10 +5030,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("SamplerTimer::acknowledge", SAMPLED_BIT),
     ("SamplerTimer::alarm_at", SAMPLED_BIT),
     ("SamplerTimer::arm_after", SAMPLED_BIT),
-    ("SchedulerRoleStorage::admits", RADIO_SYSTEM),
-    ("SchedulerTaskPort::commands_ready", SAMPLED_BIT),
-    ("SchedulerTaskPort::execution_modify_ready", SAMPLED_BIT),
-    ("SchedulerTaskPort::execution_modify_rejected", SAMPLED_BIT),
     ("SecondaryFetchRegisters::autoload_done", SAMPLED_BIT),
     ("SecondaryFetchRegisters::autoload_enabled", SAMPLED_BIT),
     ("SecondaryFetchRegisters::freeze_done", SAMPLED_BIT),
@@ -5169,7 +5041,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("SharedPhyAccess::analog_i2c_is_powered", SAMPLED_BIT),
     ("SharedPhyAccess::analog_i2c_reset_is_released", SAMPLED_BIT),
     ("SharedPhyAccess::tx_dc_measurement_is_ready", SAMPLED_BIT),
-    ("TaskControl::head_present", SAMPLED_BIT),
 ];
 
 #[test]
@@ -6051,33 +5922,8 @@ const CLAIMS: &[(&str, usize, &str)] = &[("chips/esp32s31/app/src/lib.rs", 1, BY
 const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs", 1, BY_P2),
     ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_NONE),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/controller_time.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/live.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/owner.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/executor.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/interrupt.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("chips/esp32s31/hal/src/radio/coex.rs", 2, BY_RADIO_SYSTEM),
-    ("chips/esp32s31/hal/src/radio/domain.rs", 3, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/domain.rs", 1, BY_PHY),
     ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_PHY),
     ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 1, BY_PHY),
     ("chips/esp32s31/hal/src/system/cores.rs", 2, BY_NONE),
@@ -6191,7 +6037,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    ("protocols/ieee802154/port/src/work.rs", 1, BY_NONE),
     ("protocols/network/runtime/src/local.rs", 1, BY_PHASE_C),
     ("protocols/network/runtime/src/returns.rs", 1, BY_PHASE_C),
     ("protocols/network/runtime/src/socket.rs", 1, BY_PHASE_C),
@@ -6280,11 +6125,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     ("portable/memory/src/rx_external_handoff.rs", 1, BY_NONE),
-    (
-        "protocols/bluetooth/le/ll/src/security.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("protocols/ieee80211/core/roles/sta/src/ftm.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/roles/sta/src/join/association.rs",
@@ -6312,16 +6152,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
 /// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`), by file with their
 /// count. The list only shrinks; each site is read by the inventory.
 const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/executor/live.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     (
         "chips/esp32s31/platform/runtime/src/exception.rs",
         1,
@@ -6353,7 +6183,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
     ("protocols/network/core/src/block.rs", 1, BY_PHASE_C),
     ("protocols/network/core/src/dhcp.rs", 1, BY_PHASE_C),
     ("protocols/network/runtime/src/service.rs", 1, BY_PHASE_C),
@@ -6363,31 +6192,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
 /// `Quarantin…`, `ResetRequired…`, `Unfinished…`), mentions by file. The
 /// list only shrinks.
 const KEPT_OUT: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/access.rs",
-        7,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/finished.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/live.rs",
-        13,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/owner.rs",
-        6,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/interrupt.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_PHY),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
@@ -6468,26 +6272,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ("portable/memory/src/request_slot.rs", 4, BY_NONE),
     ("portable/time/src/connected_tasks.rs", 3, BY_NONE),
     ("portable/waker/src/lib.rs", 4, BY_NONE),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs",
-        9,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/port/src/conformance.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    ("protocols/bluetooth/le/port/src/lib.rs", 1, BY_RADIO_SYSTEM),
-    (
-        "protocols/bluetooth/le/runtime/src/host.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("protocols/ieee80211/contracts/port/src/lib.rs", 1, BY_P3),
-    ("protocols/ieee802154/port/src/config.rs", 1, BY_NONE),
-    ("protocols/ieee802154/port/src/lib.rs", 1, BY_NONE),
-    ("protocols/ieee802154/port/src/owner.rs", 6, BY_NONE),
     (
         "protocols/radio/port/src/conformance/registration.rs",
         1,
@@ -6563,131 +6348,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/peripherals/watchdog/registers.rs",
         3,
         BY_NONE,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/controller_time.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/advertising_image.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/ble_phy_engine.rs",
-        9,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/connectable_advertising.rs",
-        14,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
-        15,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm_image.rs",
-        7,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm_rx_result.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_phy_packet.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_rx_packet.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_tx_packet.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/legacy_advertising.rs",
-        11,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/legacy_scanning.rs",
-        14,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/peripheral_connection.rs",
-        15,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/rx_memory_list.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/rx_packet_bytes.rs",
-        6,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler_item.rs",
-        10,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/sram_link.rs",
-        4,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/time.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
-        12,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/phy.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/runtime.rs",
-        5,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/stop.rs",
-        1,
-        BY_RADIO_SYSTEM,
     ),
     ("chips/esp32s31/hal/src/radio/coex.rs", 1, BY_RADIO_SYSTEM),
     (
@@ -6789,21 +6449,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
         23,
         BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee802154/mac/codes.rs",
-        1,
-        BY_NONE,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee802154/mac/etm.rs",
-        4,
-        BY_NONE,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee802154/mac/task.rs",
-        1,
-        BY_NONE,
     ),
     (
         "chips/esp32s31/hal/src/radio/modem/platform.rs",
@@ -6928,51 +6573,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     ("protocols/bluetooth/hci/src/wire.rs", 1, BY_RADIO_SYSTEM),
-    (
-        "protocols/bluetooth/le/cipher/src/lib.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/bootstrap.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs",
-        4,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs",
-        11,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/port/src/request.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/connection.rs",
-        14,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/control.rs",
-        10,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/data_length.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/encryption.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     ("protocols/hil/agent/src/postmortem.rs", 3, BY_NONE),
     ("protocols/hil/protocol/src/framing.rs", 12, BY_NONE),
     ("protocols/hil/protocol/src/key.rs", 1, BY_NONE),
@@ -7128,13 +6728,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/wire/src/trigger.rs", 10, BY_P3),
     ("protocols/ieee80211/wire/src/tsf.rs", 2, BY_P3),
     ("protocols/ieee80211/wire/src/twt.rs", 14, BY_P3),
-    ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
-    ("protocols/ieee802154/wire/src/csl.rs", 5, BY_NONE),
-    ("protocols/ieee802154/wire/src/enhanced_ack.rs", 4, BY_NONE),
-    ("protocols/ieee802154/wire/src/frame.rs", 3, BY_NONE),
-    ("protocols/ieee802154/wire/src/link_metrics.rs", 4, BY_NONE),
-    ("protocols/ieee802154/wire/src/security.rs", 1, BY_NONE),
-    ("protocols/ieee802154/wire/src/time_sync.rs", 1, BY_NONE),
     ("protocols/network/core/src/dhcp.rs", 3, BY_PHASE_C),
     ("protocols/network/core/src/interface.rs", 4, BY_PHASE_C),
     ("protocols/network/wire/src/arp.rs", 3, BY_PHASE_C),
@@ -7850,9 +7443,6 @@ fn silences_a_bool_lint(source: &str) -> bool {
 /// register model gives a read value. A word decides nothing, so a new
 /// caller fails here; the developer's tools are aside.
 const RECORD_WORD_CALLERS: &[&str] = &[
-    "chips/esp32s31/hal/src/radio/bluetooth.rs",
-    "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
-    "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
     "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
     "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
     "hil/probes/esp32s31-facts/src/image/ble.rs",
@@ -7954,8 +7544,6 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/platform/interrupt-table", 0, 1, BY_PLATFORM),
     ("chips/family/platform/runtime", 0, 2, BY_PLATFORM),
     ("chips/family/radio/coex", 1, 0, BY_RADIO_SYSTEM),
-    ("chips/family/radio/ieee802154/engine", 8, 0, BY_IEEE802154),
-    ("chips/family/radio/ieee802154/values", 6, 9, BY_IEEE802154),
     ("chips/family/radio/phy", 2, 1, BY_PHY),
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
     ("hil/probes/esp32s31-aes-timing", 0, 1, BY_HIL),
@@ -7963,18 +7551,8 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("hil/scenarios/wifi-access-point", 0, 1, BY_HIL),
     ("hil/services/load", 5, 0, BY_HIL),
     ("protocols/bluetooth/hci", 2, 4, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/cipher", 0, 6, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/controller", 1, 1, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/ll", 2, 5, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/model", 0, 3, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/port", 2, 0, BY_RADIO_SYSTEM),
-    ("protocols/bluetooth/le/wire", 0, 3, BY_RADIO_SYSTEM),
     ("protocols/hil/agent", 1, 0, BY_HIL),
     ("protocols/hil/protocol", 2, 0, BY_HIL),
-    ("protocols/ieee802154/mac", 0, 2, BY_IEEE802154),
-    ("protocols/ieee802154/model", 2, 1, BY_IEEE802154),
-    ("protocols/ieee802154/port", 2, 5, BY_IEEE802154),
-    ("protocols/ieee802154/wire", 0, 3, BY_IEEE802154),
     ("protocols/network/core", 2, 5, BY_PHASE_C),
     ("protocols/network/runtime", 10, 4, BY_PHASE_C),
     ("protocols/network/testing/model", 1, 1, BY_PHASE_C),
@@ -8478,90 +8056,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/bluetooth/hci/src/h4.rs::CommandReceiver.expected",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.host_buffers",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.requested_random_address",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.admitted",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.config",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.lease",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.pending",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.response",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/controller/src/dtm.rs::Service.retained",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_channel_map",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_connection_update",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventCompleted.connection_timing_transition",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventPrepared.connection_timing_transition",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionRecurringEventProvisional.connection_timing_transition",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/connection/acknowledgement.rs::Acknowledgement.in_flight",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.data_length_request",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.local_version",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_features",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_version",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_features_result",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_version_result",
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.termination",
         BY_RADIO_SYSTEM,
     ),
     (

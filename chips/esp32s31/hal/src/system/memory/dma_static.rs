@@ -133,20 +133,6 @@ impl<T: 'static> core::fmt::Debug for Placed<T> {
 }
 
 impl<T: 'static> Placed<T> {
-    /// Reunite an allocation whose HAL owner retained its original placement.
-    ///
-    /// # Safety
-    /// `value` is the exact original allocation consumed from `Placed<T>`.
-    /// All field borrows have ended and hardware has stopped following it.
-    #[cfg(feature = "bluetooth-engine")]
-    #[allow(
-        unsafe_code,
-        reason = "the retained owner restores the original placement"
-    )]
-    pub(crate) unsafe fn from_retained(value: &'static mut T) -> Self {
-        Self { value }
-    }
-
     /// Bind the allocation in space `S`: its complete DMA range and its
     /// projection, then `bind`'s binding computed from them. A refusal of
     /// the address, or of `bind`, returns the placement whole: the same

@@ -6,7 +6,6 @@ use oer_portable_diagnostics::{DiagPath, DiagnosticPath};
 
 use crate::calibration::registration::PhyCalibrationPath;
 use crate::concurrent::{ConcurrentAcquire, ConcurrentPhyError, JoinRefused};
-use crate::ieee802154_client::Ieee802154PhyClientError;
 use crate::state::client::{PhyClientAcquireError, PhyPllTrackClass, PhyTrackTimeError};
 
 impl PhyCalibrationPath {
@@ -117,21 +116,6 @@ impl DiagnosticPath for ConcurrentPhyError {
                     RadioClient::Bluetooth => "Bluetooth",
                     RadioClient::Ieee802154 => "Ieee802154",
                 });
-            }
-        }
-    }
-}
-
-impl DiagnosticPath for Ieee802154PhyClientError {
-    fn push_path(&self, path: &mut DiagPath) {
-        match self {
-            Self::Phy(error) => {
-                path.name("Phy");
-                error.push_path(path);
-            }
-            Self::Btbb(error) => {
-                path.name("Btbb");
-                error.push_path(path);
             }
         }
     }

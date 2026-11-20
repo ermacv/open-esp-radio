@@ -231,14 +231,6 @@ impl PhyClientAvailable {
         let client = self.owner.selected_client;
         self.owner.acquire_available(client, clock)
     }
-
-    pub(crate) fn prepare(
-        self,
-        clock: &impl oer_portable_time::Clock,
-    ) -> Result<PreparedClientAcquire, PhyClientAcquireFailure> {
-        let client = self.owner.selected_client;
-        self.owner.prepare_available(client, clock)
-    }
 }
 
 /// The original client owner and an exact clock evaluation, before any client
@@ -251,10 +243,6 @@ pub(crate) struct PreparedClientAcquire {
 }
 
 impl PreparedClientAcquire {
-    pub(crate) fn into_owner(self) -> PhyClientState {
-        self.owner
-    }
-
     pub(crate) fn commit(self) -> PhyClientAcquireOutcome {
         let Self {
             mut owner,
