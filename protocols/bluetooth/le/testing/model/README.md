@@ -14,7 +14,8 @@ product package depends on it.
 - **An air with a scripted peer** a role (`script`, one `Turn` an event):
   a scanner's or an initiator's request to an advertising set, the
   advertisers a scan window hears, a central that sends, acknowledges,
-  withholds its acknowledgement or is lost, a tester's packets.
+  withholds its acknowledgement or is lost, a central whose exchange
+  overruns the event's window (the event ends cut), a tester's packets.
 - **A connection's transmit chain and receive nodes** by the geometry: `RX`
   nodes a connection and for each of the two shared chains (advertising
   and scanning). A PDU of the chain is `Transmitted` in the event whose
@@ -33,7 +34,12 @@ product package depends on it.
 - **A record** of each run (`runs`): what the model was asked to program
   and what it answered, instants as offsets from the run's start, so that
   a second run's record equals the first's.
-- **Counts** of its calls (`counts`).
+- **Counts** of its calls (`counts`), the last run's record (`record`) and
+  what the hardware holds (`state`), for the conformance suite's harness.
+
+Its tests run the conformance suite
+(`oer-protocols-bluetooth-le-testing-conformance`) over it, every
+property, in `tests/conformance.rs`.
 
 The crate's documentation names what it assumes where the stand has not
 answered (the contract's open points B4, B5, B6, B10, B11), what it does

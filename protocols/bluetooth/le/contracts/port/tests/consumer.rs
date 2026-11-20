@@ -146,7 +146,7 @@ impl<'id> LeRounds<'id> for Idle<'id> {
         self.current.pop_front()
     }
 
-    fn round_view(&self, _: &RoundSeal, _: &u16) -> Received<'_> {
+    fn round_view<'a>(&'a self, _: &RoundSeal, _: &'a u16) -> Received<'a> {
         self.view()
     }
 

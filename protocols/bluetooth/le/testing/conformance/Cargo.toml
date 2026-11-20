@@ -1,0 +1,16 @@
+[package]
+name = "oer-protocols-bluetooth-le-testing-conformance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The conformance suite of the Bluetooth LE port's contract: its properties as checks over any port"
+readme = "README.md"
+
+[dependencies]
+oer-protocols-bluetooth-le-contracts-port = { path = "../../contracts/port" }
+oer-protocols-bluetooth-le-wire = { path = "../../wire" }
+
+[lints]
+workspace = true

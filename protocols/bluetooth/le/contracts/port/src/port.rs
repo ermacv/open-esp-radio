@@ -236,8 +236,9 @@ pub trait LeRounds<'id> {
     /// The next reception of the event `round_next` gave last, in the air's
     /// order.
     fn round_received(&mut self, seal: &RoundSeal) -> Option<Self::Node>;
-    /// A reception of this round, in place.
-    fn round_view(&self, seal: &RoundSeal, node: &Self::Node) -> Received<'_>;
+    /// A reception of this round, in place: in the port's memory or in the
+    /// reading itself.
+    fn round_view<'a>(&'a self, seal: &RoundSeal, node: &'a Self::Node) -> Received<'a>;
     /// Hold a reception of this round: its node stays out of the hardware
     /// until its release.
     fn round_take(&mut self, seal: &RoundSeal, node: Self::Node) -> PduHandle<'id>;

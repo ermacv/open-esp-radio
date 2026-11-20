@@ -15,6 +15,7 @@ oer-protocols-radio-port = { path = "../../../../radio/port" }
 oer-portable-time = { path = "../../../../../portable/time" }
 
 [dev-dependencies]
+oer-protocols-bluetooth-le-testing-conformance = { path = "../conformance" }
 oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory", features = ["test-support"] }
 
 [lints]

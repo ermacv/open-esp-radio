@@ -2576,11 +2576,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-bluetooth-le-testing-conformance"
+version = "0.1.0"
+dependencies = [
+ "oer-protocols-bluetooth-le-contracts-port",
+ "oer-protocols-bluetooth-le-wire",
+]
+
+[[package]]
 name = "oer-protocols-bluetooth-le-testing-model"
 version = "0.1.0"
 dependencies = [
  "oer-portable-time",
  "oer-protocols-bluetooth-le-contracts-port",
+ "oer-protocols-bluetooth-le-testing-conformance",
  "oer-protocols-bluetooth-le-wire",
  "oer-protocols-radio-port",
  "oer-protocols-radio-regulatory",
