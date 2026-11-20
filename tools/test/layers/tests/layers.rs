@@ -7945,11 +7945,6 @@ const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/wire/src/ap.rs::ApManagementRequest::Association",
-        2,
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",
         2,
         BY_P3,
@@ -8340,10 +8335,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.timing",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PhaseTiming.deadline",
         BY_P3,
     ),
     (

@@ -1,6 +1,4 @@
-//! The station's power-management state as its access point sees it: the
-//! first decision of `modem_sleep`'s portable decision half, which its split
-//! takes over without a second copy.
+//! The station's power-management state as its access point sees it.
 //!
 //! A station tells its access point whether it sleeps with the PM bit of a
 //! Null. A Null's retries are its retry plan in the driver
@@ -17,10 +15,16 @@ use core::num::NonZeroU8;
 use oer_protocols_ieee80211_wire::station_beacon::StaTimObservation;
 use oer_protocols_ieee80211_wire::station_power_save::StaPowerManagement;
 
+/// Consecutive active Null failures after which the station stops retrying.
+///
+/// SOURCE: `pm_tx_null_data_done_process` of the pinned `libpp.a[pm.o]` of
+/// espressif/esp32-wifi-lib `f856b5db`.
+pub const NULL_RETRY_LIMIT: u8 = 15;
+
 /// The transmissions a Null's retry plan makes: the vendor's limit of
 /// Null retries, plus the first.
 pub const NULL_TRANSMISSIONS: NonZeroU8 = {
-    match NonZeroU8::MIN.checked_add(crate::modem_sleep::NULL_RETRY_LIMIT) {
+    match NonZeroU8::MIN.checked_add(NULL_RETRY_LIMIT) {
         Some(count) => count,
         None => panic!("a Null's retry limit plus its first transmission must fit"),
     }

@@ -115,8 +115,6 @@ vendor function it follows:
 - chips/esp32s31/radio/phy and the PHY modules of chips/esp32s31/hal and
   chips/esp32s31/pac: libphy.a calibration, tracking and analog-bus
   algorithms
-- protocols/ieee80211/core/roles/sta/src/modem_sleep.rs: libpp.a [pm.o] and
-  [pm_coex.o], the station power manager
 - chips/family/radio/ieee80211/policy: libpp.a and libnet80211.a rate
   schedules, rate control, retry ladder and LMAC limits
 - chips/family/radio/coex: libcoexist.a coexistence schedule and event
