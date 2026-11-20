@@ -63,6 +63,14 @@
 //! event whose `Ended` was dropped took its place with it: the model holds
 //! no copy of a right.
 //!
+//! # A held PDU's bytes
+//!
+//! A reception is read from the reading the round gives (`Reading`); a held
+//! PDU from its node, named by its handle. The handle is made only by
+//! `round_take`, which holds that node, so no read of a node without a PDU
+//! is reached; the model counts any such read (`unheld_reads`) and its tests
+//! assert there is none.
+//!
 //! # Receptions not read
 //!
 //! The receptions of an `Ended` not read before the next `ended`, and a
@@ -260,6 +268,54 @@ pub enum Turn {
     /// The packets a tester sends in a receiver test's window with a good
     /// CRC.
     Packets(u8),
+    /// The central of a connection event goes on exchanging past the
+    /// event's window: the event is cut, with `exchanged` packets before
+    /// the cut and the central's More Data set.
+    Overrun {
+        /// The packets exchanged before the cut.
+        exchanged: u8,
+    },
+}
+
+/// What the modelled hardware holds that a stop takes down, as one value
+/// a test compares for equality.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HardwareState {
+    /// The events listed.
+    pub listed: usize,
+    /// The PDUs in the chains.
+    pub chained: usize,
+    /// The ends and the transmit ends not given yet.
+    pub unread: usize,
+    /// The receive nodes the hardware may fill.
+    pub free_nodes: usize,
+    /// The receive nodes held by a handle.
+    pub held_nodes: usize,
+    /// The roles' images open.
+    pub open_images: usize,
+    /// Whether the port needs a stop.
+    pub needs_stop: Signal,
+    /// The alarm armed, if one is.
+    pub alarm: Option<LeInstant>,
+    /// The controller's phase.
+    pub phase: ModelPhase,
+}
+
+/// The modelled controller's phase, as [`HardwareState`] gives it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelPhase {
+    /// Stopped: as the install or the last reset left it.
+    Stopped,
+    /// A start in progress.
+    Starting,
+    /// Running.
+    Running,
+    /// The stop's request taken.
+    Stopping,
+    /// Retired.
+    Retired,
+    /// Released.
+    Released,
 }
 
 /// One entry of a run's record: what the model was asked to program and
@@ -395,9 +451,9 @@ struct Finished<'id> {
     receptions: VecDeque<u16>,
 }
 
-/// A received PDU in its node.
+/// A received PDU, in its node or in a reading of a round.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct Reception {
+pub struct Reception {
     header: [u8; 2],
     payload: Vec<u8>,
     captured_at: Option<LeInstant>,
@@ -410,8 +466,10 @@ enum Node {
     Free,
     /// Filled, held for a round with its event's end.
     Filled(Reception),
-    /// Given in a round, not taken.
+    /// Given in a round with its event's end, not read yet.
     Given(Reception),
+    /// Read in a round: its PDU is in the round's reading, not taken.
+    Reading,
     /// Taken: its handle is held.
     Held(Reception),
     /// Released: it goes back at the round's close.
@@ -475,6 +533,16 @@ pub struct ModelPort<
     record: Vec<Programmed>,
     runs: Vec<Vec<Programmed>>,
     counts: Counts,
+    /// The reads of a held PDU whose node holds none (never, by the
+    /// contract; see [`ModelPort::unheld_reads`]).
+    unheld: core::cell::Cell<u32>,
+}
+
+/// One reception being read in a round: its node and its PDU.
+#[derive(Debug)]
+pub struct Reading {
+    node: u16,
+    reception: Reception,
 }
 
 /// The shared chains' order after the connections' nodes.
@@ -525,6 +593,7 @@ impl<
             record: Vec::new(),
             runs: Vec::new(),
             counts: Counts::default(),
+            unheld: core::cell::Cell::new(0),
         }
     }
 
@@ -618,6 +687,55 @@ impl<
     /// The model's counts.
     pub const fn counts(&self) -> Counts {
         self.counts
+    }
+
+    /// The last run's record.
+    pub fn record(&self) -> Vec<Programmed> {
+        self.runs.last().cloned().unwrap_or_default()
+    }
+
+    /// What the modelled hardware holds.
+    pub fn state(&self) -> HardwareState {
+        HardwareState {
+            listed: self.list.len(),
+            chained: self.chains.iter().map(VecDeque::len).sum(),
+            unread: self.finished.len().saturating_add(self.transmitted.len()),
+            free_nodes: self.free_nodes(),
+            held_nodes: self
+                .nodes
+                .iter()
+                .filter(|node| matches!(node, Node::Held(_)))
+                .count(),
+            open_images: self
+                .images
+                .iter()
+                .flatten()
+                .filter(|image| **image == Image::Open)
+                .count(),
+            needs_stop: match self.needs_stop {
+                NeedsStop::Quiet => Signal::Quiet,
+                NeedsStop::Raised(_) => Signal::Raised,
+            },
+            alarm: match self.alarm {
+                Alarm::Disarmed => None,
+                Alarm::At(at) => Some(at),
+            },
+            phase: match self.phase {
+                Phase::Stopped => ModelPhase::Stopped,
+                Phase::Starting(_) => ModelPhase::Starting,
+                Phase::Running(_) => ModelPhase::Running,
+                Phase::Stopping(_) => ModelPhase::Stopping,
+                Phase::Retired => ModelPhase::Retired,
+                Phase::Released => ModelPhase::Released,
+            },
+        }
+    }
+
+    /// The reads of a held PDU whose node held none. The contract gives a
+    /// round's `pdu` a handle made only by `round_take`, so a port of this
+    /// model never answers one: a test asserts it stays 0.
+    pub fn unheld_reads(&self) -> u32 {
+        self.unheld.get()
     }
 
     /// The events listed, not ended.
@@ -753,6 +871,12 @@ impl<
                 self.connection_event(id, start, heard, ack, sends, &mut receptions)
             }
             (Role::Test, Some(Turn::Packets(packets))) => Self::executed(None, packets, None),
+            (Role::Connection, Some(Turn::Overrun { exchanged })) => EventEnd::Executed(Executed {
+                anchor: Some(start),
+                exchanged,
+                cut: Cut::Cut,
+                peer: Some(MoreData::More),
+            }),
             (Role::Connection, _) => Self::executed(None, 0, None),
             (Role::Advertising | Role::Test, _) => Self::executed(Some(start), listed.sends, None),
             (Role::Scan, _) => Self::executed(None, 0, None),
@@ -923,20 +1047,12 @@ impl<
         }
     }
 
-    fn view(node: &Node) -> Received<'_> {
-        match node {
-            Node::Filled(reception) | Node::Given(reception) | Node::Held(reception) => Received {
-                header: reception.header,
-                payload: &reception.payload,
-                rssi_dbm: -40,
-                captured_at: reception.captured_at,
-            },
-            Node::Free | Node::Released => Received {
-                header: [0, 0],
-                payload: &[],
-                rssi_dbm: 0,
-                captured_at: None,
-            },
+    fn view(reception: &Reception) -> Received<'_> {
+        Received {
+            header: reception.header,
+            payload: &reception.payload,
+            rssi_dbm: -40,
+            captured_at: reception.captured_at,
         }
     }
 }
@@ -961,7 +1077,7 @@ impl<
     const TEST: usize,
 > LeRounds<'id> for ModelPort<'id, ADV, SCAN, CONN, EVENTS, TX, RX, TEST>
 {
-    type Node = u16;
+    type Node = Reading;
 
     fn round_open(&mut self, _: &RoundSeal) -> LeInstant {
         self.call();
@@ -982,54 +1098,57 @@ impl<
         self.reading = finished.receptions;
         for &node in &self.reading {
             if let Some(slot) = self.nodes.get_mut(usize::from(node))
-                && let Node::Filled(reception) = slot
+                && let Node::Filled(_) = slot
+                && let Node::Filled(reception) = core::mem::replace(slot, Node::Reading)
             {
-                *slot = Node::Given(core::mem::replace(
-                    reception,
-                    Reception {
-                        header: [0, 0],
-                        payload: Vec::new(),
-                        captured_at: None,
-                    },
-                ));
+                *slot = Node::Given(reception);
             }
         }
         Some((finished.place, finished.end))
     }
 
-    fn round_received(&mut self, _: &RoundSeal) -> Option<u16> {
+    fn round_received(&mut self, _: &RoundSeal) -> Option<Reading> {
         self.call();
-        self.reading.pop_front()
+        while let Some(node) = self.reading.pop_front() {
+            if let Some(slot) = self.nodes.get_mut(usize::from(node))
+                && let Node::Given(_) = slot
+                && let Node::Given(reception) = core::mem::replace(slot, Node::Reading)
+            {
+                return Some(Reading { node, reception });
+            }
+        }
+        None
     }
 
-    fn round_view(&self, _: &RoundSeal, node: &u16) -> Received<'_> {
-        self.nodes
-            .get(usize::from(*node))
-            .map_or(Self::view(&Node::Free), Self::view)
+    fn round_view<'a>(&'a self, _: &RoundSeal, reading: &'a Reading) -> Received<'a> {
+        Self::view(&reading.reception)
     }
 
-    fn round_take(&mut self, _: &RoundSeal, node: u16) -> PduHandle<'id> {
+    fn round_take(&mut self, _: &RoundSeal, reading: Reading) -> PduHandle<'id> {
         self.call();
-        if let Some(slot) = self.nodes.get_mut(usize::from(node))
-            && let Node::Given(reception) = slot
-        {
-            *slot = Node::Held(core::mem::replace(
-                reception,
-                Reception {
-                    header: [0, 0],
-                    payload: Vec::new(),
-                    captured_at: None,
-                },
-            ));
+        let Reading { node, reception } = reading;
+        if let Some(slot) = self.nodes.get_mut(usize::from(node)) {
+            *slot = Node::Held(reception);
         }
         self.record.push(Programmed::Taken(node));
         self.key.hold(node)
     }
 
     fn round_held(&self, _: &RoundSeal, handle: &PduHandle<'id>) -> Received<'_> {
-        self.nodes
-            .get(usize::from(handle.node()))
-            .map_or(Self::view(&Node::Free), Self::view)
+        match self.nodes.get(usize::from(handle.node())) {
+            Some(Node::Held(reception)) => Self::view(reception),
+            // A handle is made only by `round_take`, which holds its node:
+            // no port of this model reaches this arm (`unheld_reads`).
+            _ => {
+                self.unheld.set(self.unheld.get().saturating_add(1));
+                Received {
+                    header: [0, 0],
+                    payload: &[],
+                    rssi_dbm: 0,
+                    captured_at: None,
+                }
+            }
+        }
     }
 
     fn round_release(&mut self, _: &RoundSeal, handle: PduHandle<'id>) {
@@ -1056,7 +1175,7 @@ impl<
         self.call();
         self.reading.clear();
         for node in &mut self.nodes {
-            if matches!(node, Node::Given(_) | Node::Released) {
+            if matches!(node, Node::Given(_) | Node::Reading | Node::Released) {
                 *node = Node::Free;
             }
         }
