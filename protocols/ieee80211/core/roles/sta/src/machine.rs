@@ -1074,6 +1074,14 @@ pub struct Station<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> 
     he: bool,
 }
 
+/// Whether the link's next change includes the changes of the transmit
+/// agreements: they wait for [`Station::poll_action`], and are due there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AgreementChanges {
+    Wait,
+    Due,
+}
+
 /// Who holds the station's connected link ([`crate::link`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LinkCustody {
@@ -1082,7 +1090,7 @@ enum LinkCustody {
     /// The link's holder: whether the station last told it the link
     /// carries data, and each TID's transmit window it last told it.
     Lent {
-        carries: bool,
+        carriage: crate::link::Carriage,
         windows: [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
     },
     /// The station asked for it back.
@@ -1918,15 +1926,20 @@ fn route_block_ack<T: StaTypes, K>(
 
 /// Whether the connected link carries data now: confirmed, home, awake and,
 /// on a protected link, keyed.
-fn data_link_up<T: StaTypes, K>(connected: &Connected<T, K>, absent: bool, keys: &Keys) -> bool {
+fn data_link_up<T: StaTypes, K, A>(
+    connected: &Connected<T, K>,
+    absence: Option<&A>,
+    keys: &Keys,
+) -> bool {
     connected.confirmation.is_none()
-        && !absent
+        && absence.is_none()
         && !connected.power.asleep()
         && (connected.rsn.as_ref().is_none() || keys.keyed())
 }
 
 /// The data plane's state of `connected`'s link, the station at `address`:
-/// its header template (`keyed`, under the pairwise key), the admission
+/// its header template (under the pairwise key once `protection` is
+/// CCMP's), the admission
 /// its access point's EDCA set names, the retry of the transmit agreements
 /// `tx` and the access point's A-MPDU limits; no agreement is operational
 /// yet. `None` for a BSSID the station sends no data to.
@@ -1934,7 +1947,7 @@ fn handover_data<T: StaTypes, K>(
     address: OwnAddress,
     bssid: Bssid,
     connected: &Connected<T, K>,
-    keyed: bool,
+    protection: oer_protocols_ieee80211_wire::security::LinkProtection,
     tx: Option<&StaTxBlockAck>,
 ) -> Option<oer_protocols_ieee80211_core_datapath::plane::DataLink> {
     let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
@@ -1945,11 +1958,7 @@ fn handover_data<T: StaTypes, K>(
         } else {
             oer_protocols_ieee80211_wire::data::PeerQos::NonQos
         },
-        if keyed {
-            oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
-        } else {
-            oer_protocols_ieee80211_wire::security::LinkProtection::Open
-        },
+        protection,
     )?;
     let parameters = oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([connected
         .peer
@@ -2782,19 +2791,19 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
     /// or its return. A change of a transmit agreement waits for
     /// [`Self::poll_action`], as each of these does too.
     pub fn poll_link(&mut self) -> Option<LinkAction> {
-        self.owe_link(false)
+        self.owe_link(AgreementChanges::Wait)
     }
 
     /// The link's next change: once connected the station hands its link
     /// over; it holds the link's data while it sleeps, is away or its keys
-    /// are not confirmed and releases it again; `agreements` adds each
-    /// change of a TID's transmit agreement; once it left, it asks for the
-    /// link back.
-    fn owe_link(&mut self, agreements: bool) -> Option<LinkAction> {
-        let protected = self
-            .profile
-            .as_ref()
-            .is_some_and(|profile| profile.security.policy() != StaSecurityPolicy::Open);
+    /// are not confirmed and releases it again; with `agreements` due it
+    /// adds each change of a TID's transmit agreement; once it left, it asks
+    /// for the link back.
+    fn owe_link(&mut self, agreements: AgreementChanges) -> Option<LinkAction> {
+        let protection = self.profile.as_ref().map_or(
+            oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+            |profile| profile.security.policy().link_protection(),
+        );
         let connected = match &mut self.state {
             State::Connected(connected) => Some(connected),
             _ => None,
@@ -2804,14 +2813,20 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                 let epoch = self.epoch?;
                 // A protected link goes once its key is installed, with its
                 // replay check; the key itself is the engine's.
-                let (keyed, replay) = match connected.rsn.as_mut() {
+                let (header_protection, replay) = match connected.rsn.as_mut() {
                     Some(rsn) => {
                         if !self.keys.keyed() || rsn.replay.is_none() {
                             return None;
                         }
-                        (true, rsn.replay.take())
+                        (
+                            oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
+                            rsn.replay.take(),
+                        )
                     }
-                    None => (false, None),
+                    None => (
+                        oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+                        None,
+                    ),
                 };
                 let address = self.config.address;
                 let bssid = connected.bssid;
@@ -2819,7 +2834,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     address,
                     bssid,
                     connected,
-                    keyed,
+                    header_protection,
                     self.config.tx_block_ack.as_ref(),
                 );
                 if let Some(tx) = self.config.tx_block_ack.as_mut() {
@@ -2830,14 +2845,14 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     connected.qos.then_some(connected.qos_sequences),
                 );
                 self.link = LinkCustody::Lent {
-                    carries: false,
+                    carriage: crate::link::Carriage::Held,
                     windows: [None; 8],
                 };
                 Some(LinkAction::HandOver(LinkHandover::new(
                     epoch,
                     data,
                     numbers,
-                    RxLink::new(address, bssid, protected, replay),
+                    RxLink::new(address, bssid, protection, replay),
                 )))
             }
             (LinkCustody::Lent { .. }, None) => {
@@ -2846,25 +2861,28 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             }
             (
                 LinkCustody::Lent {
-                    mut carries,
+                    mut carriage,
                     mut windows,
                 },
                 Some(connected),
             ) => {
-                let now = data_link_up(connected, self.absence.is_some(), &self.keys);
-                let action = if now != carries {
-                    carries = now;
-                    Some(if now {
-                        LinkAction::Release
-                    } else {
-                        LinkAction::Hold
+                let now = if data_link_up(connected, self.absence.as_ref(), &self.keys) {
+                    crate::link::Carriage::Carries
+                } else {
+                    crate::link::Carriage::Held
+                };
+                let action = if now != carriage {
+                    carriage = now;
+                    Some(match now {
+                        crate::link::Carriage::Carries => LinkAction::Release,
+                        crate::link::Carriage::Held => LinkAction::Hold,
                     })
-                } else if agreements {
+                } else if agreements == AgreementChanges::Due {
                     agreement_change(&mut self.config.tx_block_ack, connected, &mut windows)
                 } else {
                     None
                 };
-                self.link = LinkCustody::Lent { carries, windows };
+                self.link = LinkCustody::Lent { carriage, windows };
                 action
             }
             (LinkCustody::Station | LinkCustody::Returning, _) => None,
@@ -3181,7 +3199,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             // The link's change comes first, also after a transition of
             // this call: a station that left asks for its link back before
             // it owes anything that needs it.
-            if let Some(link) = self.owe_link(true) {
+            if let Some(link) = self.owe_link(AgreementChanges::Due) {
                 return Some(StaAction::Link(link));
             }
             let (mut context, state) = self.transition();
@@ -3198,7 +3216,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                 ActionProgress::Action(owed) => break owed,
                 ActionProgress::Transition => continue,
                 ActionProgress::Wait if changed => {
-                    return self.owe_link(true).map(StaAction::Link);
+                    return self.owe_link(AgreementChanges::Due).map(StaAction::Link);
                 }
                 ActionProgress::Wait => return None,
             }
@@ -3324,7 +3342,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                         )
                     });
                 let can_send = !connected.sending
-                    && data_link_up(connected, self.absence.is_some(), &self.keys)
+                    && data_link_up(connected, self.absence.as_ref(), &self.keys)
                     && !self.out.holds(CONNECTED_PLACE);
                 let tx_block_ack = self
                     .config
@@ -3453,8 +3471,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// Whether the profile protects its link.
-    fn protected(&self) -> bool {
-        self.policy() != StaSecurityPolicy::Open
+    fn link_protection(&self) -> oer_protocols_ieee80211_wire::security::LinkProtection {
+        self.policy().link_protection()
     }
 
     fn ssid(&self) -> &[u8] {
@@ -4816,7 +4834,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             replay,
         )?;
         let mut received = StaReceived::Data;
-        for msdu in crate::link::msdus(&admitted, self.config.address, self.protected())? {
+        for msdu in crate::link::msdus(&admitted, self.config.address, self.link_protection())? {
             match msdu? {
                 None => {}
                 Some(crate::link::LinkMsdu::Eapol {
@@ -4902,11 +4920,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             match StaAssociationRuntime::new(
                                 self.config.address,
                                 join.access_point.bssid,
-                                if self.protected() {
-                                    oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
-                                } else {
-                                    oer_protocols_ieee80211_wire::security::LinkProtection::Open
-                                },
+                                self.link_protection(),
                                 now,
                             ) {
                                 Ok(runtime) => {
@@ -5729,7 +5743,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
         let can_send = !connected.sending
-            && data_link_up(connected, self.absence.is_some(), &(*self.keys))
+            && data_link_up(connected, self.absence.as_ref(), &(*self.keys))
             && !self.out.holds(CONNECTED_PLACE);
         // An ADDBA Request whose number the link's holder told goes first;
         // one that waits for it owes nothing else of the agreements.

@@ -183,7 +183,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         };
         // Its data waits while the station sleeps or is away; so does this.
-        if !super::data_link_up(connected, self.absence.is_some(), &self.keys) {
+        if !super::data_link_up(connected, self.absence.as_ref(), &self.keys) {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
         if connected.bssid != reply.bssid {

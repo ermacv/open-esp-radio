@@ -954,7 +954,9 @@ impl<'id, const G: usize> World<'id, G> {
             // The engine's key goes with a protected link and comes back
             // with it.
             crate::link::LinkAction::HandOver(link) => {
-                let key = if link.protected() {
+                let key = if link.protection()
+                    == oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
+                {
                     self.pairwise.take()
                 } else {
                     None
@@ -964,8 +966,16 @@ impl<'id, const G: usize> World<'id, G> {
                     "one link at a time"
                 );
             }
-            crate::link::LinkAction::Hold => self.link.as_mut().unwrap().hold(true),
-            crate::link::LinkAction::Release => self.link.as_mut().unwrap().hold(false),
+            crate::link::LinkAction::Hold => self
+                .link
+                .as_mut()
+                .unwrap()
+                .carry(crate::link::Carriage::Held),
+            crate::link::LinkAction::Release => self
+                .link
+                .as_mut()
+                .unwrap()
+                .carry(crate::link::Carriage::Carries),
             crate::link::LinkAction::Agreement { tid, window } => {
                 let _ = self.link.as_mut().unwrap().agreement(tid, window);
             }
@@ -5394,13 +5404,21 @@ fn received_data_is_admitted_by_the_link_without_the_station() {
         );
         assert_eq!(delivered, 1);
         // A held link gives no data.
-        world.link.as_mut().unwrap().hold(true);
+        world
+            .link
+            .as_mut()
+            .unwrap()
+            .carry(crate::link::Carriage::Held);
         assert_eq!(
             world.deliver_with(at(41), &frame, meta(), |_| delivered += 1),
             Err(oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::NotConnected.into())
         );
         assert_eq!(delivered, 1);
-        world.link.as_mut().unwrap().hold(false);
+        world
+            .link
+            .as_mut()
+            .unwrap()
+            .carry(crate::link::Carriage::Carries);
         world
             .deliver_with(at(42), &frame, meta(), |_| delivered += 1)
             .unwrap();

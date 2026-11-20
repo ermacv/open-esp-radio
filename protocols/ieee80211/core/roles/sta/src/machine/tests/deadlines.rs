@@ -11,7 +11,12 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
         }]
     );
     assert!(world.station.is_connected());
-    assert!(world.link.as_ref().is_some_and(|link| link.carries()));
+    assert!(
+        world
+            .link
+            .as_ref()
+            .is_some_and(|link| link.carriage() == crate::link::Carriage::Carries)
+    );
     assert_eq!(world.arbiter.channel(), Some(channel(6)));
     assert!(world.station.absence.is_none());
     assert!(world.station.absence_place.is_some());
@@ -38,7 +43,12 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
             outcome: StaCommandOutcome::BackgroundScan { interrupted: None },
         }]
     );
-    assert!(world.link.as_ref().is_some_and(|link| link.carries()));
+    assert!(
+        world
+            .link
+            .as_ref()
+            .is_some_and(|link| link.carriage() == crate::link::Carriage::Carries)
+    );
 }
 
 #[test]
