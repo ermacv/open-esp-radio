@@ -1421,9 +1421,7 @@ dependencies = [
  "oer-chips-family-facts",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-port",
- "oer-chips-family-radio-bluetooth-ports",
  "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee802154-values",
  "oer-chips-family-radio-modem-clock",
  "oer-chips-family-radio-phy",
  "oer-chips-family-radio-power",
@@ -1684,13 +1682,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-family-radio-bluetooth-ports"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
-]
-
-[[package]]
 name = "oer-chips-family-radio-coex"
 version = "0.1.0"
 dependencies = [
@@ -1708,27 +1699,6 @@ dependencies = [
  "oer-protocols-ieee80211-wire",
  "oer-protocols-network-wire",
  "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-chips-family-radio-ieee802154-engine"
-version = "0.1.0"
-dependencies = [
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee802154-values",
- "oer-portable-memory",
- "oer-protocols-ieee802154-port",
- "oer-protocols-ieee802154-wire",
- "oer-protocols-radio-regulatory",
-]
-
-[[package]]
-name = "oer-chips-family-radio-ieee802154-values"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "oer-portable-memory",
- "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
@@ -2258,82 +2228,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-protocols-bluetooth-le-cipher"
-version = "0.1.0"
-dependencies = [
- "aes",
- "ccm",
- "oer-protocols-bluetooth-le-wire",
- "zeroize",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-controller"
-version = "0.1.0"
-dependencies = [
- "oer-protocols-bluetooth-hci",
- "oer-protocols-bluetooth-le-model",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-ll"
-version = "0.1.0"
-dependencies = [
- "oer-protocols-bluetooth-le-cipher",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-model"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-port"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-coex",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-runtime"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-protocols-bluetooth-hci",
- "oer-protocols-bluetooth-le-controller",
- "oer-protocols-bluetooth-le-model",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
-]
-
-[[package]]
-name = "oer-protocols-bluetooth-le-wire"
-version = "0.1.0"
-dependencies = [
- "oer-portable-wire",
-]
-
-[[package]]
 name = "oer-protocols-bridges-ieee80211-ethernet"
 version = "0.1.0"
 dependencies = [
@@ -2580,44 +2474,6 @@ version = "0.1.0"
 dependencies = [
  "oer-portable-wire",
  "tempfile",
-]
-
-[[package]]
-name = "oer-protocols-ieee802154-mac"
-version = "0.1.0"
-dependencies = [
- "oer-protocols-ieee802154-port",
- "oer-protocols-ieee802154-wire",
-]
-
-[[package]]
-name = "oer-protocols-ieee802154-model"
-version = "0.1.0"
-dependencies = [
- "oer-protocols-ieee802154-port",
- "oer-protocols-ieee802154-wire",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-protocols-ieee802154-port"
-version = "0.1.0"
-dependencies = [
- "oer-portable-time",
- "oer-protocols-ieee802154-wire",
- "oer-protocols-radio-coex",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
- "scopeguard",
-]
-
-[[package]]
-name = "oer-protocols-ieee802154-wire"
-version = "0.1.0"
-dependencies = [
- "oer-portable-wire",
- "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
@@ -3439,32 +3295,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
-]
-
-[[package]]
-name = "oer-tools-vendor-ieee802154-esp32s31"
-version = "0.1.0"
-dependencies = [
- "cc",
- "hex",
- "oer-chips-esp32s31-knowledge",
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee802154-engine",
- "oer-chips-family-radio-ieee802154-values",
- "oer-protocols-ieee802154-port",
- "oer-protocols-ieee802154-wire",
- "oer-protocols-radio-regulatory",
- "oer-tools-pins-artifacts",
- "tempfile",
-]
-
-[[package]]
-name = "oer-tools-vendor-ieee802154-esp32s31-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "oer-tools-os-process",
- "oer-tools-vendor-ieee802154-esp32s31",
 ]
 
 [[package]]

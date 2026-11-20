@@ -356,11 +356,6 @@ impl TargetRegistrationWitness {
     ) -> oer_chips_esp32s31_hal::system::owner::PhyRegistrationEpoch {
         self.grant.epoch()
     }
-
-    /// The registration's grant, which the registered state keeps.
-    pub(crate) fn into_grant(self) -> oer_chips_esp32s31_hal::system::owner::PhyRegistrationGrant {
-        self.grant
-    }
 }
 
 /// Complete target-side implementation of the registration graph port.

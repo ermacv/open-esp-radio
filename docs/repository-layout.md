@@ -82,14 +82,35 @@ hil/services/{aes, fault, load, sdk-station, wifi-access-point}/
 ```
 
 The workspace's `exclude` names the packages that stay as sources and are
-not built. Kept as sources: the Bluetooth LE and IEEE 802.15.4 backends
-(`chips/esp32s31/radio/{bluetooth, ieee802154}/backend/`). Awaiting deletion
-at their successor: the old Wi-Fi path, its backend and station
-(`chips/esp32s31/radio/ieee80211/{backend, station}/`), the radio system and
-its client contract (`chips/esp32s31/radio/{system, client}/`), and what
-stands on it (`examples/wifi-station/`, `hil/images/{wifi-station,
-wifi-access-point}/`,
-`hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/wifi-station/`).
+not built. Kept as sources until their radio returns:
+- the Bluetooth LE and IEEE 802.15.4 backends
+  (`chips/esp32s31/radio/{bluetooth, ieee802154}/backend/`);
+- their protocols (`protocols/bluetooth/le/{cipher, controller, ll, model,
+  port, runtime, wire}/`, `protocols/ieee802154/{mac, model, port, wire}/`);
+- their family crates (`chips/family/radio/bluetooth/ports/`,
+  `chips/family/radio/ieee802154/{engine, values}/`);
+- the IEEE 802.15.4 host stand (`tools/vendor/ieee802154-esp32s31{,-cli}/`).
+
+`protocols/bluetooth/hci/` stays built: the stand's Linux fixture helpers
+(`tools/lab/fixture-helpers`) depend on it, the Wi-Fi fixture's programs
+among them. Inside built packages, files stay as sources outside their
+crate's module tree:
+- the HAL's `radio/{bluetooth, ieee802154}` modules, with their
+  compile-fail cases (`ui/` beside each);
+- the PHY crate's `bluetooth_client` and `ieee802154_client`.
+
+Awaiting deletion at their successor:
+- the old Wi-Fi path, its backend and station
+  (`chips/esp32s31/radio/ieee80211/{backend, station}/`);
+- the radio system and its client contract
+  (`chips/esp32s31/radio/{system, client}/`);
+- what stands on it: `examples/wifi-station/`,
+  `hil/images/{wifi-station, wifi-access-point}/`,
+  `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/wifi-station/`.
+
+The station's acceptance suite
+(`protocols/network/testing/model/station-suite/`) is kept beside its package
+and returns to its `tests/` with the station.
 
 ## Data and supporting files
 

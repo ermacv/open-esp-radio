@@ -72,11 +72,10 @@ pub mod state;
 pub mod tracking;
 mod tx;
 
-pub mod bluetooth_client;
 pub mod concurrent;
 mod diagnostic_path;
 pub mod domain;
-pub mod ieee802154_client;
+
 mod size_limits;
 pub mod wifi_client;
 

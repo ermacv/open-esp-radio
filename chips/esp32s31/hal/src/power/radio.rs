@@ -205,16 +205,16 @@ impl RadioClientKind for Ieee802154Client {
 /// Not with another client's:
 ///
 /// ```compile_fail,E0308
-/// use oer_chips_esp32s31_hal::radio::domain::{CoexAbsent, CommonPower, RadioDomain, WifiClient};
-/// use oer_chips_esp32s31_hal::radio::ieee802154::mac::Ieee802154TaskOwner;
+/// use oer_chips_esp32s31_hal::radio::domain::{BluetoothClient, CoexAbsent, CommonPower, RadioDomain};
+/// use oer_chips_esp32s31_hal::radio::ieee80211::registers::WifiRadioRegisters;
 ///
 /// fn leave<B: oer_chips_esp32s31_hal::power::PlatformClockBackend>(
 ///     radio: &mut RadioDomain<B>,
-///     ieee802154: &Ieee802154TaskOwner,
-///     power: CommonPower<WifiClient>,
-///     coex: &CoexAbsent<WifiClient>,
+///     wifi: &WifiRadioRegisters,
+///     power: CommonPower<BluetoothClient>,
+///     coex: &CoexAbsent<BluetoothClient>,
 /// ) {
-///     let _ = radio.exit_common_power(ieee802154, power, coex);
+///     let _ = radio.exit_common_power(wifi, power, coex);
 /// }
 /// ```
 ///

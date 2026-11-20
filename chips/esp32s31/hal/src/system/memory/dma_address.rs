@@ -121,57 +121,6 @@ impl PlacementProjection {
         }
     }
 
-    #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn take_controller<S: crate::radio::bluetooth::engine::ControllerDmaSpace, T>(
-        placed: crate::system::memory::dma_static::Placed<T>,
-    ) -> (&'static mut T, Self) {
-        let geometry = Self::controller_geometry::<S, T>(&placed);
-        (placed.into_inner(), geometry)
-    }
-
-    #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn try_with_controller<
-        S: crate::radio::bluetooth::engine::ControllerDmaSpace,
-        T,
-        R,
-    >(
-        placed: crate::system::memory::dma_static::Placed<T>,
-        project: impl FnOnce(&T, &Self) -> Result<R, ProjectionError>,
-    ) -> Result<
-        (&'static mut T, Self, R),
-        (
-            ProjectionError,
-            crate::system::memory::dma_static::Placed<T>,
-        ),
-    > {
-        let geometry = Self::controller_geometry::<S, T>(&placed);
-        match project(placed.as_ref(), &geometry) {
-            Ok(value) => Ok((placed.into_inner(), geometry, value)),
-            Err(error) => Err((error, placed)),
-        }
-    }
-
-    #[cfg(feature = "bluetooth-engine")]
-    fn controller_geometry<S: crate::radio::bluetooth::engine::ControllerDmaSpace, T>(
-        placed: &crate::system::memory::dma_static::Placed<T>,
-    ) -> Self {
-        #[cfg(target_arch = "riscv32")]
-        const {
-            assert!(size_of::<usize>() == size_of::<u32>());
-        }
-        const {
-            if let Some(base) = S::HOST_BASE {
-                let window = crate::layouts::DMA_WINDOW;
-                assert!(base > window.start && base < window.end);
-                assert!(base.is_multiple_of(align_of::<T>() as u32));
-                assert!(size_of::<T>() <= (window.end - base) as usize);
-            }
-        }
-        let storage = placed.as_ref();
-        let base = S::HOST_BASE.unwrap_or_else(|| core::ptr::from_ref(storage).addr() as u32);
-        Self::from_storage(storage, base)
-    }
-
     #[cfg(test)]
     pub(crate) fn for_test<T>(
         placed: crate::system::memory::dma_static::Placed<T>,
@@ -280,38 +229,6 @@ impl PlacementProjection {
         })
     }
 
-    #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn offset(
-        &self,
-        base: DmaWindowAddress,
-        offset: usize,
-        bytes: usize,
-    ) -> Result<DmaWindowAddress, ProjectionError> {
-        let start = base
-            .get()
-            .checked_sub(self.base)
-            .ok_or(ProjectionError::OutsideAllocation)? as usize;
-        let offset = start
-            .checked_add(offset)
-            .ok_or(ProjectionError::OutsideAllocation)?;
-        let cpu = self
-            .root
-            .checked_add(offset)
-            .ok_or(ProjectionError::AddressWidth)?;
-        let address = self.checked(cpu, bytes, 1)?;
-        // Reuse the byte-region stepping proof; the checked full allocation
-        // address is already typed by the caller's base.
-        let delta = address
-            .checked_sub(base.get())
-            .ok_or(ProjectionError::OutsideAllocation)?;
-        PlacedRegion::new(
-            base,
-            delta.checked_add(1).ok_or(ProjectionError::AddressWidth)?,
-        )
-        .and_then(|region| region.at(delta))
-        .ok_or(ProjectionError::AddressWidth)
-    }
-
     pub(crate) fn link<L: DmaLayout>(&self, field: &L) -> Result<DmaRef<L>, ProjectionError> {
         self.link_at::<L>(core::ptr::from_ref(field).addr())
     }
@@ -367,29 +284,6 @@ impl PlacementProjection {
 
     pub(crate) fn region(&self, bytes: &[u8]) -> Result<PlacedRegion, ProjectionError> {
         self.checked_region(bytes.as_ptr().addr(), bytes.len(), 1)
-    }
-
-    /// A reviewed generated volatile layout inside a workspace field.
-    #[cfg(feature = "bluetooth-engine")]
-    pub(crate) fn reference_at<L: DmaLayout, B, F>(
-        &self,
-        workspace: &B,
-        field: &F,
-    ) -> Result<DmaRef<L>, ProjectionError> {
-        const {
-            assert!(size_of::<L>() <= size_of::<B>());
-            assert!(align_of::<B>() >= align_of::<L>());
-        }
-        let root = core::ptr::from_ref(workspace).addr();
-        self.checked(root, size_of::<B>(), align_of::<B>())?;
-        let cpu = core::ptr::from_ref(field).addr();
-        let offset = cpu
-            .checked_sub(root)
-            .ok_or(ProjectionError::OutsideAllocation)?;
-        if offset > size_of::<B>() || size_of::<L>() > size_of::<B>() - offset {
-            return Err(ProjectionError::OutsideAllocation);
-        }
-        self.link_at(cpu)
     }
 }
 

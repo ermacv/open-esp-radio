@@ -47,8 +47,8 @@ fn due_evaluation_does_not_imply_due_calibration_or_commit_references() {
                 oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity::for_host_test(),
             )
             .expect("identity capacity");
-    let grant = radio.begin_registration_for_host_test();
-    let registered = RegisteredPhyState::from_wrapper_test_model(state, grant);
+    let _grant = radio.begin_registration_for_host_test();
+    let registered = RegisteredPhyState::from_wrapper_test_model(state);
     let clients = clients(&[RadioClient::Wifi]);
     let before = registered.state().calibration_tracking_parameters(None);
     let first = Inspection::registered(&registered, clients, 1001).unwrap();

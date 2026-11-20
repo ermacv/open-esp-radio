@@ -28,7 +28,7 @@ wake through the waker it was given. Its model checks run with
 
 Paths in the table are relative to the repository root. A row naming a file
 of a package in the workspace's `exclude` (the Bluetooth LE and IEEE 802.15.4
-backends, the old Wi-Fi path) describes sources outside the build: no built
+backends, protocols and engine, the old Wi-Fi path) describes sources outside the build: no built
 image runs it ([repository layout](repository-layout.md)). P1 includes the
 station service, network stack and applications; the word “radio” in a type
 name does not establish that its task runs on P2.

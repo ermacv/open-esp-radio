@@ -37,12 +37,18 @@ core (`memory`: `dma_address`, `dma_static`; the `dma_static!` macro is exported
 at the crate root) and the bootstrap's owners (`boot`). `power` holds the
 platform clocks, common radio power and the PMU sleep (`sleep`). `radio` holds the shared domain
 (`domain`), the modem (`modem`), coexistence (`coex`), the PHY's registers
-(`phy`) and each protocol's hardware (`ieee80211`, `bluetooth`, `ieee802154`).
+(`phy`) and Wi-Fi's hardware (`ieee80211`). The `bluetooth` and
+`ieee802154` modules, with their compile-fail cases (`ui/` beside each), are
+kept as sources outside the crate's module tree and are not built
+([repository layout](../../../docs/repository-layout.md)); the sections on
+them below describe those sources. The root drops the PAC's owners of their
+blocks at its claim, as it drops the PMU wake observer, and the shared radio
+drops the Bluetooth and IEEE 802.15.4 baseband words; the domain keeps no
+BTBB membership and no Bluetooth low-power timer clock.
 
 Production files that wait, poll or run on deadlines are a per-file list
 with exact marker counts in `oer-tools-test-layers`
-([layer tests](../../../tools/test/layers/README.md)): the Bluetooth
-controller engine, scheduler and modem timer, the boot policy and waits in
+([layer tests](../../../tools/test/layers/README.md)): the boot policy and waits in
 `system::boot`, the Wi-Fi cold start in `radio::ieee80211`, and the entropy read gap in
 `peripherals/entropy.rs`. The list only shrinks; no
 new file joins it. The scan does not find driver code without such a marker.
@@ -65,7 +71,7 @@ caller or substituted with a fake port’s address. PHY calibration
 configuration/restore machines and other cross-block calibration operations
 remain here; the no-wait scan does not classify them as atoms.
 
-For BLE, `oer-chips-family-radio-bluetooth-ports` supplies the task/interrupt register
+For BLE (kept as sources), `oer-chips-family-radio-bluetooth-ports` supplies the task/interrupt register
 contracts, controller-time contracts, modify/stop progress values and
 non-repeating installation identity. The existing HAL owners implement these
 ports without transferring a P3 writer to P2. HAL retains affine publication
@@ -73,7 +79,7 @@ and release receipts, generative pool/epoch brands, arena projection and DMA
 custody. The execution-lock/modify/stop machines, diagnostic settling,
 request/reply exchange, terminal output release and role workers remain here.
 
-For IEEE 802.15.4, `ieee802154::polled` retains task/IRQ owners with `Silent`
+For IEEE 802.15.4 (kept as sources), `ieee802154::polled` retains task/IRQ owners with `Silent`
 while exposing finite semantic transactions. `ieee802154::frames` owns the
 permanent DMA static and projects each frame into the typed DMA window.
 `oer-chips-esp32s31-radio-ieee802154-backend` (kept as sources, not built) implements the
@@ -257,6 +263,8 @@ literal zero to analog69.04. SOURCE: `phy/temperature.rs`, pinned ESP-IDF
 
 ## Bluetooth register transactions
 
+Kept as sources, not built.
+
 The interrupt bank clears and enables baseline images `0x8000` / `0x1302`,
 including `CONTROLLER_TIME_OVERFLOW` in bank one. A primary status snapshot
 carries this normal event separately from fault and dynamic scheduler sources.
@@ -418,8 +426,8 @@ Shared radio membership and registration epoch policy execute in
 `oer-chips-family-radio-power` over the S31 binding. The HAL retains affine power,
 coexistence and registration proofs, platform clock guards, register owners,
 restore storage, transaction seat/reunion checks and both quarantine guards.
-BTBB and module membership, first/last common-power ordering and low-power /
-external coexistence sequencing belong to the family driver. S31 modem settings
+Module membership, first/last common-power ordering and external
+coexistence sequencing belong to the family driver. S31 modem settings
 remain in `knowledge::modem_clock`.
 
 ## Typical AES

@@ -128,7 +128,7 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/platform/board`, `chips/family/platform/bootstrap`, `chips/family/platform/runtime`, `chips/family/platform/interrupt-table`, `chips/family/platform/executor`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `chips/family/platform/layout` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
-| The C-driver stand | `tools/vendor/ieee802154-esp32s31` |
+| The C-driver stand (kept as sources, not built) | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `chips/esp32s31/platform/bootstrap/`, `hil/probes/` |
 
 `oer-chips-family-platform-interrupt-table` owns the Espressif interrupt matrix contract,
@@ -481,6 +481,8 @@ packet-pool owners without adopting detached DMA storage. Preserve the proof
 at the smallest operation; a safe state machine in a crate below the boundary
 remains safe.
 
+Kept as sources, not built (the HAL's `radio/bluetooth` and `radio/ieee802154`
+modules, to the end of the IEEE 802.15.4 paragraphs below):
 `oer_chips_esp32s31_hal::radio::bluetooth::engine` owns the controller-SRAM protocol.
 One `Engine` owns the register token and the complete `Placed<BluetoothArena>`;
 its private components retain graph bindings. The codecs
@@ -914,7 +916,8 @@ same way), and, behind the `linux-socket` feature, `linux_socket` for the
 link-layer, HCI and L2CAP addresses and three socket options. `oer-tools-os-serial`
 takes an open serial port's descriptor; it is its own crate so that the root
 fixture installer, which links `oer-tools-os-process`, does not link `serialport`.
-The 802.15.4 host stand binds the pinned ESP-IDF C driver through its FFI.
+The 802.15.4 host stand (kept as sources, not built) binds the pinned ESP-IDF
+C driver through its FFI.
 
 ## Firmware and platform code below the boundary
 
@@ -1033,6 +1036,7 @@ owners. MMIO outside the restricted PAC must use typed accessors. Missing
 register fields are reviewed in `chips/<chip>/registers/` and regenerated
 into the PAC, never reconstructed with local masks in a HAL or adapter.
 
+Kept as sources, not built, to the end of the Bluetooth paragraphs:
 Bluetooth admission checks primary and task enables before HAL/PHY
 initialization can mask inherited lanes. `ForeignEnable` retains primary
 enables, masked status, NRT words and task enables. The opaque task +0x4bc

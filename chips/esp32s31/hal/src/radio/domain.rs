@@ -22,7 +22,6 @@
 //! The domain is not a coexistence grant: it serializes register access, not
 //! air time.
 
-use crate::radio::bluetooth::registers::BluetoothTaskRegisters;
 use crate::radio::ieee80211::registers::WifiRadioRegisters;
 
 use crate::power::clock::{
@@ -45,8 +44,8 @@ use crate::radio::coex::{
     PHY_GRANT_PROTECT_EVENT, PhyGrantProtect,
 };
 use crate::{
-    power::radio::CommonRadioPower, radio::ieee802154::mac::Ieee802154TaskOwner,
-    radio::phy::restore::PhyRouteState, system::owner::PhyRegistrationEpoch,
+    power::radio::CommonRadioPower, radio::phy::restore::PhyRouteState,
+    system::owner::PhyRegistrationEpoch,
 };
 
 pub mod transaction;
@@ -70,112 +69,19 @@ impl sealed::RadioClientOwner for WifiRadioRegisters {}
 impl RadioClientOwner for WifiRadioRegisters {
     type Client = WifiClient;
 }
-impl sealed::RadioClientOwner for BluetoothTaskRegisters {}
-impl RadioClientOwner for BluetoothTaskRegisters {
-    type Client = BluetoothClient;
-}
-impl sealed::RadioClientOwner for Ieee802154TaskOwner {}
-impl RadioClientOwner for Ieee802154TaskOwner {
-    type Client = Ieee802154Client;
-}
 
-/// Protocol register owner that may use the shared BTBB baseband.
-pub trait BtbbClientOwner: RadioClientOwner {}
-impl BtbbClientOwner for BluetoothTaskRegisters {}
-impl BtbbClientOwner for Ieee802154TaskOwner {}
-
-/// Why a client cannot take, leave or use the shared BTBB baseband.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BtbbError {
-    /// The client already holds the BTBB baseband.
-    AlreadyAcquired,
-    /// The client does not hold the BTBB baseband.
-    NotAcquired,
-    /// No PHY registration describes the shared PHY, so no gain parameter can
-    /// come from a registered state.
-    Unregistered,
-    /// The gain was published for an earlier registration, or a later
-    /// publication replaced it.
-    Stale,
-}
-
-impl oer_portable_diagnostics::DiagnosticPath for BtbbError {
-    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
-        path.name(match self {
-            Self::AlreadyAcquired => "AlreadyAcquired",
-            Self::NotAcquired => "NotAcquired",
-            Self::Unregistered => "Unregistered",
-            Self::Stale => "Stale",
-        });
-    }
-}
-
-/// The BTBB gain byte (`phy_param[0x120]`) one registered PHY state published
-/// to the domain ([`BtbbPublisher::publish`]). Only the latest
-/// publication of the current registration admits [`RadioDomain::btbb_acquire`];
-/// any earlier one is [`BtbbError::Stale`].
-#[derive(Debug, Eq, PartialEq)]
-pub struct BtbbGain(oer_chips_family_radio_power::domain::Gain<PhyRegistrationEpoch>);
-impl BtbbGain {
-    pub const fn value(&self) -> u8 {
-        self.0.value()
-    }
-}
-
-/// The domain's right to publish a BTBB gain, borrowed beside its attachment
-/// ([`RadioDomain::btbb_publisher`]).
-pub struct BtbbPublisher<'d> {
-    current: Option<PhyRegistrationEpoch>,
-    membership: &'d mut oer_chips_family_radio_power::domain::BtbbMembership,
-}
-
-impl BtbbPublisher<'_> {
-    /// Publish `value`, the BTBB gain byte of the registered PHY state that
-    /// `grant` is the right over, replacing every earlier publication. The
-    /// registered state's owner publishes its current byte right before a
-    /// BTBB acquisition, so the acquisition writes the value the vendor reads
-    /// from `phy_param[0x120]` at that moment.
-    ///
-    /// # Errors
-    ///
-    /// No registration describes the shared PHY, or `grant` is the right over
-    /// an earlier one ([`BtbbError::Stale`]).
-    pub fn publish(
-        self,
-        grant: &crate::system::owner::PhyRegistrationGrant,
-        value: u8,
-    ) -> Result<BtbbGain, BtbbError> {
-        self.membership
-            .publish(self.current, grant.epoch(), value)
-            .map(BtbbGain)
-            .map_err(btbb_error)
-    }
-}
-
-/// Whether a BTBB acquisition ran the shared initialization.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BtbbAcquired {
-    /// The first holder ran `bt_bb_v2_init_cmplx(1)`.
-    Initialized,
-    /// Another client already initialized the baseband; no register access.
-    Joined,
-}
-
-/// Shared registers, the PHY, power and BTBB state that must stay with them,
+/// Shared registers, the PHY and power state that must stay with them,
 /// and the upper layer's attachment.
 struct SharedRadioState<B: PlatformClockBackend, T> {
     registers: SharedRadioRegisters,
     phy: PhyRouteState,
     power: CommonRadioPower<B>,
-    btbb: oer_chips_family_radio_power::domain::BtbbMembership,
     clocks: ModemClocks,
     /// Platform references of the modem clock planner's enabled
     /// dependencies; a poisoned planner keeps them held.
     modem_platform_clocks: ModemPlatformClocks<B>,
     coex_pti: CoexPtiTable,
     phy_grant_protected: bool,
-    /// The low-power timer gate reference while Bluetooth selects its clock.
-    bluetooth_low_power_clock: Option<PlatformClockGuard<B>>,
     external_coex: Option<crate::radio::coex::ExternalCoexConfig>,
     coex_participants: CoexParticipants,
     attachment: T,
@@ -183,32 +89,18 @@ struct SharedRadioState<B: PlatformClockBackend, T> {
 }
 
 impl<B: PlatformClockBackend, T> SharedRadioState<B, T> {
-    /// The platform clock references the radio holds: common power, the
-    /// modem clock dependencies (also while poisoned) and the Bluetooth
-    /// low-power timer gate.
+    /// The platform clock references the radio holds: common power and the
+    /// modem clock dependencies (also while poisoned).
     fn platform_clock_holds(&self) -> PlatformClockHolds {
         let mut holds = PlatformClockHolds::default();
         self.power.count_platform_clocks(&mut holds);
         self.modem_platform_clocks.count_into(&mut holds);
-        holds.count(self.bluetooth_low_power_clock.as_ref());
         holds
     }
 }
 
 type ModemClocks =
     oer_chips_family_radio_power::modem::ModemClocks<crate::power::clock::Dependency, CLOCK_SLOTS>;
-
-/// Why the Bluetooth low-power timer clock selection cannot change.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LowPowerClockError {
-    /// Bluetooth already selects its low-power timer clock.
-    AlreadySelected,
-    /// Bluetooth does not select its low-power timer clock.
-    NotSelected,
-    /// The platform clock owner refused to take or give back the timer
-    /// gate reference.
-    PlatformClock(PlatformClockError),
-}
 
 /// Why a module's modem clocks cannot change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -321,12 +213,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 registers,
                 phy,
                 power: CommonRadioPower::default(),
-                btbb: Default::default(),
                 clocks: ModemClocks::new(clock_identity),
                 modem_platform_clocks: ModemPlatformClocks::default(),
                 coex_pti: CoexPtiTable::VENDOR,
                 phy_grant_protected: false,
-                bluetooth_low_power_clock: None,
                 external_coex: None,
                 coex_participants: CoexParticipants::default(),
                 attachment,
@@ -356,9 +246,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
                 RadioDomainReleaseError::CommonPowerHeld,
             ));
         }
-        if state.btbb.any_held() {
-            return Err((Self::from_state(state), RadioDomainReleaseError::BtbbHeld));
-        }
         if state.clocks.any_held() {
             return Err((
                 Self::from_state(state),
@@ -369,12 +256,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             return Err((
                 Self::from_state(state),
                 RadioDomainReleaseError::PhyGrantProtectHeld,
-            ));
-        }
-        if state.bluetooth_low_power_clock.is_some() {
-            return Err((
-                Self::from_state(state),
-                RadioDomainReleaseError::BluetoothLowPowerClockSelected,
             ));
         }
         if state.external_coex.is_some() {
@@ -424,15 +305,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         );
     }
 
-    /// Seed an already initialized baseband reference in a native radio model.
-    /// Subsequent joins exercise gain admission and ownership without host MMIO;
-    /// cold baseband initialization still requires a target test.
-    #[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
-    #[doc(hidden)]
-    pub fn hold_btbb_for_test(&mut self, client: RadioClient) {
-        self.state.btbb.hold_for_test(client);
-    }
-
     /// Record a programmed PHY grant-protect request without register
     /// access, so a host test or a probe image can check the release alone.
     #[cfg(test)]
@@ -451,9 +323,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         let state = &mut self.state;
         state.power.abandon_platform_clocks();
         core::mem::take(&mut state.modem_platform_clocks).abandon();
-        if let Some(guard) = state.bluetooth_low_power_clock.take() {
-            guard.abandon();
-        }
     }
 
     /// Take a platform reference into common power as a failed power
@@ -480,14 +349,10 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 pub enum RadioDomainReleaseError {
     /// A client still holds common radio power.
     CommonPowerHeld,
-    /// A client still holds the shared BTBB baseband.
-    BtbbHeld,
     /// A client still holds modem clocks, or they are poisoned.
     ModemClocksHeld,
     /// The PHY grant-protect request is still programmed.
     PhyGrantProtectHeld,
-    /// Bluetooth still selects its low-power timer clock.
-    BluetoothLowPowerClockSelected,
     /// External coexistence still runs.
     ExternalCoexActive,
     /// The radio still holds a platform clock reference no client accounts
@@ -518,9 +383,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.state().power.holds(client)
     }
 
-    /// The platform clock references the radio holds: common power, the
-    /// modem clock dependencies (also while poisoned) and the Bluetooth
-    /// low-power timer gate.
+    /// The platform clock references the radio holds: common power and the
+    /// modem clock dependencies (also while poisoned).
     pub fn platform_clock_holds(&self) -> PlatformClockHolds {
         self.state().platform_clock_holds()
     }
@@ -609,71 +473,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         state.power.exit(state.registers.radio_phy_mut(), power)
     }
 
-    /// Whether `client` currently holds the shared BTBB baseband.
-    pub fn holds_btbb(&self, client: RadioClient) -> bool {
-        self.state().btbb.holds(client)
-    }
-
-    /// The attachment beside the domain's BTBB gain publisher, borrowed
-    /// apart, so the registered PHY state the attachment holds can publish
-    /// its gain with its registration's grant ([`BtbbPublisher::publish`]).
-    pub fn btbb_publisher(&mut self) -> (&T, BtbbPublisher<'_>) {
-        let state = self.state_mut();
-        (
-            &state.attachment,
-            BtbbPublisher {
-                current: state.phy.registration_epoch(),
-                membership: &mut state.btbb,
-            },
-        )
-    }
-
-    /// Take the shared BTBB baseband as the protocol that owns `owner`.
-    ///
-    /// This is ESP-IDF's reference-counted `esp_btbb_enable`: only the first
-    /// holder runs the `bt_bb_v2_init_cmplx(1)` body with `gain`'s byte, which
-    /// also writes the Bluetooth value of the shared TX-on delay; later
-    /// holders join without register access. `owner` proves the
-    /// Bluetooth/BTBB clocks and resets.
-    ///
-    /// # Errors
-    ///
-    /// The client already holds BTBB, no registration describes the shared
-    /// PHY, or `gain` is not the latest publication of the current
-    /// registration. Each is rejected before any register access.
-    pub fn btbb_acquire<O: BtbbClientOwner>(
-        &mut self,
-        _owner: &O,
-        gain: &BtbbGain,
-    ) -> Result<BtbbAcquired, BtbbError> {
-        let state = self.state_mut();
-        state
-            .btbb
-            .acquire(
-                O::CLIENT,
-                state.phy.registration_epoch(),
-                &gain.0,
-                &mut state.registers,
-            )
-            .map(|acquired| match acquired {
-                oer_chips_family_radio_power::domain::BtbbAcquired::Initialized => {
-                    BtbbAcquired::Initialized
-                }
-                oer_chips_family_radio_power::domain::BtbbAcquired::Joined => BtbbAcquired::Joined,
-            })
-            .map_err(btbb_error)
-    }
-
-    /// Leave the shared BTBB baseband. Like ESP-IDF's `esp_btbb_disable`,
-    /// this only drops the reference and performs no register access.
-    ///
-    /// # Errors
-    ///
-    /// The client does not hold BTBB.
-    pub fn btbb_release<O: BtbbClientOwner>(&mut self, _owner: &O) -> Result<(), BtbbError> {
-        self.state_mut().btbb.release(O::CLIENT).map_err(btbb_error)
-    }
-
     /// Borrow the shared PHY registers with the route restore state, for a
     /// protocol capability that also borrows its own registers.
     pub(crate) fn phy_parts_mut(
@@ -739,72 +538,6 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
             .clocks
             .set_wifi_initialized(initialized)
             .map_err(modem_error)
-    }
-
-    /// Whether Bluetooth currently selects its low-power timer clock.
-    pub fn bluetooth_low_power_clock_selected(&self) -> bool {
-        self.state().bluetooth_low_power_clock.is_some()
-    }
-
-    /// Select the main crystal as the Bluetooth low-power timer clock.
-    ///
-    /// This is ESP-IDF's
-    /// `modem_clock_select_lp_clock_source(PERIPH_BT_MODULE, MAIN_XTAL, divider)`
-    /// (`components/esp_hw_support/modem/modem_clock.c`, esp-idf
-    /// `4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d`), with the same register
-    /// writes in the same order: every source is deselected, the main
-    /// crystal is selected, the S31 Bluetooth divider is written and the
-    /// timer clock gate is enabled. ESP32-S31 has neither the BLE RTC-timer
-    /// nor the Wi-Fi power-clock workaround. The selector fields belong to
-    /// Bluetooth alone; the timer gate shares its word with other platform
-    /// gates, so its reference comes from `clocks`.
-    ///
-    /// # Errors
-    ///
-    /// Bluetooth already selects its clock, or the platform refused the timer
-    /// gate after the selector writes.
-    pub fn select_bluetooth_low_power_clock(
-        &mut self,
-        _owner: &BluetoothTaskRegisters,
-        clocks: &impl PlatformClockProvider<Backend = B>,
-    ) -> Result<(), LowPowerClockError> {
-        let state = self.state_mut();
-        oer_chips_family_radio_power::domain::select_low_power(
-            &mut state.bluetooth_low_power_clock,
-            &mut LowPowerBinding {
-                phy: state.registers.radio_phy_mut(),
-                platform: clocks,
-                backend: core::marker::PhantomData,
-            },
-        )
-        .map_err(low_power_error)
-    }
-
-    /// Deselect the Bluetooth low-power timer clock.
-    ///
-    /// This is `modem_clock_deselect_lp_clock_source(PERIPH_BT_MODULE)` of the
-    /// same source: every source is deselected and the timer clock gate
-    /// reference is released; the divider keeps its value.
-    ///
-    /// # Errors
-    ///
-    /// Bluetooth does not select its clock, or the platform refused to take
-    /// the timer gate reference back: the sources stay deselected and the
-    /// reference stays held, for a retry.
-    pub fn deselect_bluetooth_low_power_clock(
-        &mut self,
-        _owner: &BluetoothTaskRegisters,
-    ) -> Result<(), LowPowerClockError> {
-        let state = self.state_mut();
-        oer_chips_family_radio_power::domain::deselect_low_power(
-            &mut state.bluetooth_low_power_clock,
-            &mut LowPowerBinding::<B, ()> {
-                phy: state.registers.radio_phy_mut(),
-                platform: (),
-                backend: core::marker::PhantomData,
-            },
-        )
-        .map_err(low_power_error)
     }
 
     /// Enable a modem clock module of the shared PHY domain, with the same
@@ -1142,33 +875,11 @@ pub(crate) fn reset_stopped_wifi_mac_block(
     )
 }
 
-/// Register transaction of [`RadioDomain::select_bluetooth_low_power_clock`].
-pub(crate) fn select_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
-    phy.select_bluetooth_low_power_timer_main_crystal(BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER);
-}
-
-/// Register transaction of [`RadioDomain::deselect_bluetooth_low_power_clock`].
-pub(crate) fn deselect_bluetooth_low_power_clock(phy: &mut RadioPhyRegisters) {
-    phy.deselect_bluetooth_low_power_timer_sources();
-}
-
 #[cfg(test)]
 mod tests;
 
-use crate::{
-    radio::modem::{BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER, SharedRadioRegisters},
-    radio::phy::RadioPhyRegisters,
-};
+use crate::radio::modem::SharedRadioRegisters;
 
-fn btbb_error(error: oer_chips_family_radio_power::domain::BtbbError) -> BtbbError {
-    use oer_chips_family_radio_power::domain::BtbbError as E;
-    match error {
-        E::AlreadyAcquired => BtbbError::AlreadyAcquired,
-        E::NotAcquired => BtbbError::NotAcquired,
-        E::Unregistered => BtbbError::Unregistered,
-        E::Stale => BtbbError::Stale,
-    }
-}
 fn modem_error(error: oer_chips_family_radio_power::modem::Error) -> ModemClockError {
     use oer_chips_family_radio_power::modem::Error;
     match error {
@@ -1176,51 +887,6 @@ fn modem_error(error: oer_chips_family_radio_power::modem::Error) -> ModemClockE
         Error::NotEnabled => ModemClockError::NotEnabled,
         Error::Rejected => ModemClockError::Rejected,
         Error::Poisoned => ModemClockError::Poisoned,
-    }
-}
-fn low_power_error(
-    error: oer_chips_family_radio_power::domain::LowPowerError<PlatformClockError>,
-) -> LowPowerClockError {
-    use oer_chips_family_radio_power::domain::LowPowerError;
-    match error {
-        LowPowerError::AlreadySelected => LowPowerClockError::AlreadySelected,
-        LowPowerError::NotSelected => LowPowerClockError::NotSelected,
-        LowPowerError::Platform(error) => LowPowerClockError::PlatformClock(error),
-    }
-}
-impl oer_chips_family_radio_power::domain::BtbbPort for SharedRadioRegisters {
-    fn initialize(&mut self, gain: u8) {
-        self.initialize_btbb_v2_arg_one(gain);
-    }
-}
-struct LowPowerBinding<'a, B, P> {
-    phy: &'a mut RadioPhyRegisters,
-    platform: P,
-    backend: core::marker::PhantomData<fn() -> B>,
-}
-impl<B: PlatformClockBackend, P> oer_chips_family_radio_power::domain::LowPowerPort
-    for LowPowerBinding<'_, B, P>
-{
-    type Guard = PlatformClockGuard<B>;
-    type Error = PlatformClockError;
-    fn deselect(&mut self) {
-        deselect_bluetooth_low_power_clock(self.phy);
-    }
-    fn release(&mut self, guard: Self::Guard) -> Result<(), (Self::Guard, Self::Error)> {
-        guard.release().map_err(|refused| {
-            let error = refused.error();
-            (refused.into_guard(), error)
-        })
-    }
-}
-impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
-    oer_chips_family_radio_power::domain::LowPowerAcquirePort for LowPowerBinding<'_, B, &P>
-{
-    fn select(&mut self) {
-        select_bluetooth_low_power_clock(self.phy);
-    }
-    fn acquire(&mut self) -> Result<Self::Guard, Self::Error> {
-        self.platform.acquire(PlatformClock::ModemLowPowerTimer)
     }
 }
 struct ExternalBinding<'a, B: PlatformClockBackend, P> {
