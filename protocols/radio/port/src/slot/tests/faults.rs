@@ -157,6 +157,36 @@ fn unexpected_join_in_a_failure_wait_retains_the_observed_state() {
 }
 
 #[test]
+fn only_a_finished_frontend_s_join_reuses_the_slot() {
+    let signals = Signals::new();
+    signals.state.store(JOINED, Ordering::Relaxed);
+    let abandoned = SlotJoin::<LocalId<'_>> {
+        signals: &signals,
+        kind: JoinKind::Abandoned,
+        armed: true,
+        identity: PhantomData,
+    };
+    let Err(quarantined) = finish(abandoned.wait()) else {
+        panic!("an abandoned frontend's join is quarantine");
+    };
+    assert_eq!(
+        quarantined.cause(),
+        LifecycleError::InvalidState(SlotObservation {
+            phase: JOINED,
+            storage: SlotStorageState::Unavailable,
+            invocation_present: false,
+        })
+    );
+    let finished = SlotJoin::<LocalId<'_>> {
+        signals: &signals,
+        kind: JoinKind::Finished,
+        armed: true,
+        identity: PhantomData,
+    };
+    assert!(finish(finished.wait()).is_ok(), "a closed frontend joins");
+}
+
+#[test]
 fn a_completed_local_runner_is_fused_instead_of_panicking_on_an_empty_output() {
     let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {

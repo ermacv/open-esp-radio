@@ -549,6 +549,27 @@ mod tests {
     }
 
     #[test]
+    fn the_profile_keeps_its_flow_control() {
+        let controlled = LeControllerToHostAclProfile::new(27, None, AclFlowControl::Controlled);
+        let uncontrolled =
+            LeControllerToHostAclProfile::new(27, None, AclFlowControl::Uncontrolled);
+        assert!(controlled.is_flow_controlled());
+        assert!(!uncontrolled.is_flow_controlled());
+    }
+
+    #[test]
+    fn a_continuing_packet_s_first_host_fragment_stays_continuing() {
+        let owned =
+            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::Continuing, &[1, 2])
+                .unwrap();
+        assert_eq!(owned.next_host_fragment(0, usize::MAX), Some(owned));
+        let first =
+            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::First, &[1, 2])
+                .unwrap();
+        assert_ne!(first.next_host_fragment(0, usize::MAX), Some(owned));
+    }
+
+    #[test]
     fn controller_acl_fragment_bounds_preserve_the_entire_admitted_payload() {
         let data = [0x5a; LE_ACL_DATA_PACKET_CAPACITY];
         let owned = LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::First, &data)

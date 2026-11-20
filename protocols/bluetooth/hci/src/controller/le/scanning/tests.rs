@@ -91,6 +91,7 @@ fn unsupported_profiles_and_invalid_timing_fail_closed() {
         panic!("accept-list scanning parameters decode");
     };
     assert!(filtered.is_accept_list_only());
+    assert!(!filtered.is_active(), "a passive scan sends no request");
 
     for command in [
         LeSetScanParams::new(

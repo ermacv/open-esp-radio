@@ -332,3 +332,33 @@ fn connectable_enable_retains_scan_response_and_requires_a_random_address() {
         LeLegacyAdvertisingAddress::Random(random)
     );
 }
+
+#[test]
+fn each_primary_channel_decodes_alone() {
+    for (map, expected) in [
+        (0x01, [true, false, false]),
+        (0x02, [false, true, false]),
+        (0x04, [false, false, true]),
+    ] {
+        let command = LeLegacyAdvertisingCommand::decode(HciCommandPacket::new(
+            LeSetAdvParams::OPCODE,
+            &[
+                0x20, 0x00, 0x40, 0x00, 0x03, 0x01, 0x00, 0, 0, 0, 0, 0, 0, map, 0x00,
+            ],
+        ))
+        .expect("the supported standard parameters decode");
+        let LeLegacyAdvertisingCommand::SetParameters(parameters) = command else {
+            panic!("parameters changed semantic command kind");
+        };
+        let channels = parameters.channels();
+        assert_eq!(
+            [
+                channels.channel_37(),
+                channels.channel_38(),
+                channels.channel_39()
+            ],
+            expected,
+            "map {map:#x}"
+        );
+    }
+}
