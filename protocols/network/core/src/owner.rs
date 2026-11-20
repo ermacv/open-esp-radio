@@ -230,9 +230,13 @@ impl<
         });
         match published {
             Ok(ticket) => {
-                let written = filled == Filled::Wrote;
-                let ended = self.core.commit(now, grant, written, &mut self.pool);
-                if written {
+                let frame = if filled == Filled::Wrote {
+                    crate::machine::FrameWritten::Written
+                } else {
+                    crate::machine::FrameWritten::Missing
+                };
+                let ended = self.core.commit(now, grant, frame, &mut self.pool);
+                if frame == crate::machine::FrameWritten::Written {
                     Ok(Transmitted { ticket, ended })
                 } else {
                     self.broken = Some(Broken::Contract);

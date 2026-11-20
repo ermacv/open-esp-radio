@@ -211,7 +211,7 @@ impl<'m, Id: SlotIdentity> SlotBody<Id, QueueOwner<'m, Id>> for EchoBody {
 
 #[test]
 fn fresh_body_loan_returns_owned_payloads_without_leaving_a_body_reference_in_p2() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     let context = Rc::new(Cell::new(1));
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -243,7 +243,7 @@ fn fresh_body_loan_returns_owned_payloads_without_leaving_a_body_reference_in_p2
 
 #[test]
 fn cancelling_a_borrowed_body_resource_only_queues_its_whole_owned_return_on_p1() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     let context = Rc::new(Cell::new(123));
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -282,7 +282,7 @@ fn cancelling_a_borrowed_body_resource_only_queues_its_whole_owned_return_on_p1(
 #[test]
 fn supervisor_cancels_an_unrelated_body_wait_but_keeps_a_returned_request() {
     for returns in [false, true] {
-        let model = model(false);
+        let model = model(Answer::Unconfirmed);
         let context = Rc::new(Cell::new(123));
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
@@ -489,7 +489,7 @@ impl<Id: SlotIdentity> ModelSlotOwner<Id> for QueueOwner<'_, Id> {
 
 #[test]
 fn separate_queue_backing_transfers_whole_owned_tokens_and_non_send_contexts() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     let context = Rc::new(Cell::new(1));
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -550,7 +550,7 @@ fn separate_queue_backing_transfers_whole_owned_tokens_and_non_send_contexts() {
 
 #[test]
 fn cancellation_before_first_driver_poll_preserves_queue_endpoints_for_p2_cleanup() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     let context = Rc::new(Cell::new(123));
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -613,7 +613,7 @@ impl<'m, Id: SlotIdentity> SlotBody<Id, QueueOwner<'m, Id>> for EmptyBody {
 
 #[test]
 fn a_registration_never_lends_its_initial_body_resources_twice() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let owner = QueueOwner {

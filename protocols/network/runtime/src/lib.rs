@@ -49,7 +49,9 @@ pub use diagnostics::{Diagnosis, Diagnostics, STAGES, Stage};
 pub use local::{
     Interest, LocalEnd, LocalRefused, Next, Offer, Produce, Producer, Producers, Work,
 };
-pub use observation::{LocalEvent, PublishEnd, RequestKind, ServiceEvent, TurnEnd};
+pub use observation::{
+    Blocks, Credits, LocalEvent, PublishEnd, RequestKind, ServiceEvent, TurnEnd,
+};
 pub use returns::{NotHome, ReturnEnd, ReturnLane, ReturnRefusal, Returner};
 pub use service::{
     BindRefused, EndCause, Ended, MemoryPolicy, Service, StopLane, serve_late_loans,

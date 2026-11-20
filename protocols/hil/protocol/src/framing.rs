@@ -318,11 +318,21 @@ impl Drop for FrameEncoder {
     }
 }
 
+/// Where a decoder is in the byte stream.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Phase {
+    /// Before a frame's opening delimiter.
+    Outside,
+    /// After it, collecting the frame's bytes.
+    Inside,
+    /// After an overflow, until the next delimiter.
+    Discarding,
+}
+
 pub struct FrameDecoder {
     encoded: [u8; MAX_COBS_FRAME_BYTES],
     length: usize,
-    inside_frame: bool,
-    discard_until_delimiter: bool,
+    phase: Phase,
     counters: DecodeCounters,
 }
 
@@ -337,8 +347,7 @@ impl FrameDecoder {
         Self {
             encoded: [0; MAX_COBS_FRAME_BYTES],
             length: 0,
-            inside_frame: false,
-            discard_until_delimiter: false,
+            phase: Phase::Outside,
             counters: DecodeCounters {
                 frames: 0,
                 cobs_errors: 0,
@@ -376,16 +385,18 @@ impl FrameDecoder {
     ) {
         for &byte in bytes {
             if byte == 0 {
-                if self.discard_until_delimiter {
-                    self.discard_until_delimiter = false;
-                    self.inside_frame = false;
-                    self.length = 0;
-                    continue;
-                }
-                if !self.inside_frame {
-                    self.inside_frame = true;
-                    self.length = 0;
-                    continue;
+                match self.phase {
+                    Phase::Discarding => {
+                        self.phase = Phase::Outside;
+                        self.length = 0;
+                        continue;
+                    }
+                    Phase::Outside => {
+                        self.phase = Phase::Inside;
+                        self.length = 0;
+                        continue;
+                    }
+                    Phase::Inside => {}
                 }
                 if self.length == 0 {
                     // Repeated leading delimiters deliberately keep the
@@ -393,7 +404,7 @@ impl FrameDecoder {
                     continue;
                 }
                 let length = self.length;
-                self.inside_frame = false;
+                self.phase = Phase::Outside;
                 self.length = 0;
                 match self.decode(kind, length) {
                     Ok(frame) => receive(Ok(frame)),
@@ -403,7 +414,7 @@ impl FrameDecoder {
                 continue;
             }
 
-            if self.discard_until_delimiter || !self.inside_frame {
+            if self.phase != Phase::Inside {
                 continue;
             }
             if let Some((slot, next_length)) = self
@@ -416,7 +427,7 @@ impl FrameDecoder {
             } else {
                 self.counters.overflows = self.counters.overflows.saturating_add(1);
                 self.encoded.zeroize();
-                self.discard_until_delimiter = true;
+                self.phase = Phase::Discarding;
                 self.length = 0;
             }
         }

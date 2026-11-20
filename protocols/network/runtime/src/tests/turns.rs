@@ -40,7 +40,7 @@ fn flow<B: 'static>() -> (
     let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, FLOW_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -260,18 +260,18 @@ fn an_unpaced_sender_s_turns_take_its_reserves_and_sends_within_the_budget() {
         busy.len()
     );
     assert!(
-        turns
-            .iter()
-            .all(|turn| turn.end.is_some_and(|end| end.blocks_free)),
+        turns.iter().all(|turn| turn
+            .end
+            .is_some_and(|end| end.blocks == crate::Blocks::Free)),
         "blocks never run out"
     );
     // Datagrams wait for the peer's address under their credits; from the
     // first one the port took, credits never run out either.
     let resolved = turns.iter().position(|turn| turn.accepted > 1).unwrap();
     assert!(
-        turns[resolved..]
-            .iter()
-            .all(|turn| turn.end.is_some_and(|end| end.credits_free)),
+        turns[resolved..].iter().all(|turn| turn
+            .end
+            .is_some_and(|end| end.credits == crate::Credits::Free)),
         "credits never run out once datagrams go"
     );
     assert!(
@@ -324,8 +324,8 @@ fn a_spent_budget_counts_only_while_the_lane_holds_more() {
             release,
             ServiceEvent::Published(PublishEnd::Chose),
             ServiceEvent::TurnEnded(TurnEnd {
-                blocks_free: true,
-                credits_free: true,
+                blocks: crate::Blocks::Free,
+                credits: crate::Credits::Free,
                 loans: 0,
             }),
             ServiceEvent::Waited { ready: false },
@@ -373,7 +373,7 @@ fn a_turn_says_which_resource_was_out_when_it_ended() {
             }
         }
         // A full port, and a datagram under every credit: each stays queued.
-        wire.0.borrow_mut().full = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Full);
         for mut block in blocks.drain(..FLOW_CREDITS) {
             block.fill(b"held").unwrap();
             observers.push(socket.send(peer(), block).ok().unwrap());
@@ -389,8 +389,8 @@ fn a_turn_says_which_resource_was_out_when_it_ended() {
     assert_eq!(
         last.end,
         Some(TurnEnd {
-            blocks_free: false,
-            credits_free: false,
+            blocks: crate::Blocks::Exhausted,
+            credits: crate::Credits::Exhausted,
             loans: 0,
         })
     );
@@ -508,7 +508,7 @@ fn ready_work_the_port_has_no_room_for_leaves_the_service_waiting() {
     let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
     let (pool, brand) = claim::<Net, SIZE, FLOW_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -526,7 +526,7 @@ fn ready_work_the_port_has_no_room_for_leaves_the_service_waiting() {
         RECEIVED,
         WirePort,
     > = Service::new(owner, MemoryPolicy::KEEP, stopping);
-    wire.0.borrow_mut().full = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Full);
     let mut socket = service
         .bind(
             5000,
@@ -615,14 +615,14 @@ fn a_block_ack_s_ends_settle_in_one_turn_which_publishes_again() {
         send(&mut run);
         assert_eq!(datagrams(&wire.0.borrow()).len(), 1);
         // The port is full: an aggregate is out, and the next datagram waits.
-        wire.0.borrow_mut().full = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Full);
         send(&mut run);
         assert_eq!(datagrams(&wire.0.borrow()).len(), 1);
         // Its Block Ack: every end at once, and the room they free.
         {
             let mut wire = wire.0.borrow_mut();
             wire.ended.extend(0..AGGREGATE);
-            wire.full = false;
+            wire.switches.off(WireSwitch::Full);
         }
         let before = turns(&tape.borrow()).len();
         while !wire.0.borrow().ended.is_empty() || datagrams(&wire.0.borrow()).len() < 2 {
@@ -660,7 +660,7 @@ fn a_spent_publishing_budget_turns_again_unwoken() {
         socket.credit().await.unwrap();
         let first = socket.send(peer(), block).ok().unwrap();
         assert_eq!(result_of(first).await, Sent::Ended(Outcome::Accepted));
-        wire.0.borrow_mut().full = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Full);
         for count in 0..QUEUED {
             let mut block = socket.reserve().await.unwrap();
             block.fill(&[u8::try_from(count).unwrap()]).unwrap();
@@ -670,7 +670,7 @@ fn a_spent_publishing_budget_turns_again_unwoken() {
         settle().await;
         {
             let mut wire = wire.0.borrow_mut();
-            wire.full = false;
+            wire.switches.off(WireSwitch::Full);
             wire.wake();
         }
         // Only the service's own next turn sends what the budget left.

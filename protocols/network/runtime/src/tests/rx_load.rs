@@ -64,7 +64,7 @@ fn a_receive_load_lends_every_frame_and_counts_its_turns() {
     let wire = WirePort::default();
     {
         let mut state = wire.0.borrow_mut();
-        state.answers = true;
+        state.switches.on(super::WireSwitch::Answers);
         state.holding = Some(Holding::Lendable);
     }
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());

@@ -228,6 +228,24 @@ struct Hold<T> {
     waits: Waits,
 }
 
+/// Whether a producer's flow takes part in the rest of a turn.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Flow {
+    In,
+    /// A fill declined: out for the rest of the turn.
+    Out,
+}
+
+/// How a producer's last offer step ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Offering {
+    /// The producer said it had no more.
+    Exhausted,
+    /// Before that: at a hold or a budget, which no wake of the producer's
+    /// names.
+    Stopped,
+}
+
 /// A service's producer, by value, with what the service keeps of it: its
 /// socket, its open works and their tags, its hold, and the guard of its end
 /// flag.
@@ -242,14 +260,13 @@ pub struct Producer<'a, B, P: Produce, const CREDITS: usize> {
     /// The generation the open works were last checked against.
     generation: u32,
     hold: Option<Hold<P::Tag>>,
-    /// A fill declined this turn: the producer's flow is out of the rest of
-    /// it.
-    declined: bool,
+    /// Whether a fill declined this turn, which leaves the producer's flow
+    /// out of the rest of it.
+    flow: Flow,
     /// When the producer said it has more.
     at: Option<Instant>,
-    /// The last offer step stopped before the producer said it had no more:
-    /// at a hold or a budget, which no wake of the producer's names.
-    stopped: bool,
+    /// How the last offer step ended.
+    offering: Offering,
     /// Last, so it goes after the producer.
     ending: Ending<'a>,
 }
@@ -263,9 +280,9 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
             open: 0,
             generation: 0,
             hold: None,
-            declined: false,
+            flow: Flow::In,
             at: None,
-            stopped: false,
+            offering: Offering::Exhausted,
             ending: Ending(end),
         }
     }
@@ -525,7 +542,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
     type Tag = P::Tag;
 
     fn turn_begins(&mut self) {
-        self.declined = false;
+        self.flow = Flow::In;
     }
 
     fn offers(
@@ -536,7 +553,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         count: &impl Count,
     ) -> bool {
         self.at = None;
-        self.stopped = false;
+        self.offering = Offering::Exhausted;
         if self.socket.is_none() {
             return false;
         }
@@ -565,7 +582,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             if released || hold.generation != generation || !self.producer.current(hold.tag) {
                 self.hold = None;
             } else {
-                self.stopped = true;
+                self.offering = Offering::Stopped;
                 return moved;
             }
         }
@@ -574,7 +591,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         };
         for _ in 0..TURN_FRAMES {
             if self.open >= TURN_FRAMES {
-                self.stopped = true;
+                self.offering = Offering::Stopped;
                 return moved;
             }
             let offer = match self.producer.offer(now) {
@@ -608,13 +625,13 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
                         generation,
                         waits,
                     });
-                    self.stopped = true;
+                    self.offering = Offering::Stopped;
                     return moved;
                 }
             }
         }
         // The budget is spent with more to ask: the next turn asks again.
-        self.stopped = true;
+        self.offering = Offering::Stopped;
         true
     }
 
@@ -638,13 +655,13 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
     }
 
     fn declined(&mut self) {
-        self.declined = true;
+        self.flow = Flow::Out;
     }
 
     fn filtered(&self) -> Option<u8> {
         self.socket
             .as_ref()
-            .filter(|_| self.declined)
+            .filter(|_| self.flow == Flow::Out)
             .map(SocketId::flow)
     }
 
@@ -700,7 +717,8 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
     }
 
     fn again(&self, owner: &impl Owner<B, P::Tag>) -> bool {
-        if !self.stopped || self.socket.is_none() || self.open >= TURN_FRAMES {
+        if self.offering == Offering::Exhausted || self.socket.is_none() || self.open >= TURN_FRAMES
+        {
             return false;
         }
         self.hold.as_ref().is_none_or(|hold| {

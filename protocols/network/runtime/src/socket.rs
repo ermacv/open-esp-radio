@@ -376,8 +376,7 @@ pub(crate) fn lanes<
             places,
             reserving: 0,
             ahead: Batch::clamped(1),
-            closing: false,
-            closed: false,
+            life: Life::Open,
         },
         ServiceEnd {
             requests: request_receiver,
@@ -581,6 +580,16 @@ impl<'m, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize>
     }
 }
 
+/// Where a socket is in its life.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Life {
+    Open,
+    /// It asked to close: no command follows.
+    Closing,
+    /// Its close finished, or the service stopped.
+    Closed,
+}
+
 /// What an application holds of a socket. Dropping it aborts the socket
 /// without waiting: its accepted commands still reach their results, and its
 /// lanes' blocks go back to the pool. A block in the application's hands stays
@@ -604,10 +613,8 @@ pub struct Socket<
     reserving: usize,
     /// The blocks to hold or have asked for ([`Socket::reserve_ahead`]).
     ahead: Batch,
-    /// The socket asked to close: no command follows.
-    closing: bool,
-    /// The socket's close finished, or the service stopped.
-    closed: bool,
+    /// Where the socket is in its life.
+    life: Life,
 }
 
 impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CREDITS: usize> Drop
@@ -638,16 +645,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
                         *place = Some(block);
                     }
                 }
-                Answer::Closed => self.closed = true,
+                Answer::Closed => self.life = Life::Closed,
                 Answer::Stopped(requests) => {
-                    self.closed = true;
+                    self.life = Life::Closed;
                     inbound.stopped = Some(requests);
                 }
             }
         }
         // After the lane: a service's last answer comes before this word.
         if self.credits.stopped.load(Ordering::Acquire) {
-            self.closed = true;
+            self.life = Life::Closed;
         }
     }
 
@@ -701,8 +708,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// none, as before. A closed socket asks for nothing.
     fn refill(&mut self) {
         if self.ahead.blocks() == 1
-            || self.closed
-            || self.closing
+            || self.life != Life::Open
             || self.credits.stopped.load(Ordering::Acquire)
         {
             return;
@@ -739,7 +745,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// Whether the socket closed or its service stopped.
     pub fn closed(&mut self) -> bool {
         self.take_answers();
-        self.closed
+        self.life == Life::Closed
     }
 
     /// Wait for room in the request lane. Nothing can take it but this
@@ -776,7 +782,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     /// [`SocketClosed`].
     pub async fn credit(&mut self) -> Result<(), SocketClosed> {
         self.take_answers();
-        if self.closed || self.closing {
+        if self.life != Life::Open {
             return Err(SocketClosed);
         }
         let credits = self.credits;
@@ -807,7 +813,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
             if let Some(block) = self.take_reserved() {
                 return Ok(block);
             }
-            if self.closed || self.closing {
+            if self.life != Life::Open {
                 return Err(SocketClosed);
             }
             if self.reserving == 0 {
@@ -829,7 +835,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         if held.is_some() {
             return Ok(held);
         }
-        if self.closed || self.closing || self.credits.stopped.load(Ordering::Acquire) {
+        if self.life != Life::Open || self.credits.stopped.load(Ordering::Acquire) {
             return Err(SocketClosed);
         }
         self.ask_ahead();
@@ -850,7 +856,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
         block: Block<'m, B, SIZE>,
     ) -> Result<Observer<'a>, Refused<'m, B, SIZE>> {
         self.take_answers();
-        if self.closed || self.closing || self.credits.stopped.load(Ordering::Acquire) {
+        if self.life != Life::Open || self.credits.stopped.load(Ordering::Acquire) {
             return Err(Refused {
                 reason: Refusal::Closed,
                 block,
@@ -890,7 +896,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
             if let Some(datagram) = inbound.datagrams.try_receive() {
                 return Ok(datagram);
             }
-            if self.closed {
+            if self.life == Life::Closed {
                 return Err(SocketClosed);
             }
             let _any = select3(
@@ -936,14 +942,16 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, co
     pub async fn close(&mut self) {
         loop {
             self.take_answers();
-            if self.closed {
+            if self.life == Life::Closed {
                 return;
             }
-            if !self.closing {
+            if self.life == Life::Open {
                 if self.room().await.is_err() {
                     return;
                 }
-                self.closing = self.requests.try_send(Request::Close).is_ok();
+                if self.requests.try_send(Request::Close).is_ok() {
+                    self.life = Life::Closing;
+                }
             }
             self.answered().await;
         }

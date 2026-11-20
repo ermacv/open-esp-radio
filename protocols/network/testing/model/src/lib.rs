@@ -79,12 +79,18 @@ impl Spent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NoRoom;
 
+/// Whether the air reports what a peer's frame cost.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Cost {
+    Known,
+    Unknown,
+}
+
 #[derive(Debug)]
 struct Peer {
     spec: PeerSpec,
     generation: u16,
-    asleep: bool,
-    unknown_cost: bool,
+    cost: Cost,
     spent: Spent,
 }
 
@@ -262,7 +268,7 @@ impl State {
         match flight.peer.and_then(|peer| self.peers.get_mut(peer)) {
             Some(peer) => {
                 peer.spent.add(flight.cost);
-                if peer.unknown_cost {
+                if peer.cost == Cost::Unknown {
                     charged = None;
                 }
             }
@@ -307,8 +313,7 @@ impl Medium {
                 .map(|spec| Peer {
                     spec: *spec,
                     generation: 0,
-                    asleep: false,
-                    unknown_cost: false,
+                    cost: Cost::Known,
                     spent: Spent::default(),
                 })
                 .collect(),
@@ -369,11 +374,12 @@ impl Medium {
         Some(Instant::from_micros(flight.ends_at))
     }
 
-    /// A peer falls asleep or wakes.
-    pub fn set_asleep(&self, peer: usize, asleep: bool) {
+    /// A peer fell asleep or woke: the medium's version moves, so a
+    /// registration hears it. The model's air does not depend on sleep.
+    pub fn peer_changed(&self, peer: usize) {
         let mut state = self.0.borrow_mut();
-        if let Some(peer) = state.peers.get_mut(peer) {
-            peer.asleep = asleep;
+        if state.peers.get(peer).is_none() {
+            return;
         }
         state.version = state.version.wrapping_add(1);
         state.changed = true;
@@ -402,7 +408,7 @@ impl Medium {
     /// From now on a peer's frames end with no known cost.
     pub fn set_unknown_cost(&self, peer: usize) {
         if let Some(peer) = self.0.borrow_mut().peers.get_mut(peer) {
-            peer.unknown_cost = true;
+            peer.cost = Cost::Unknown;
         }
     }
 

@@ -340,15 +340,27 @@ fn assert_selecting_request(sent: &Sent, xid: u32) {
     );
 }
 
-/// A renewal (to the server) or a rebinding (broadcast) REQUEST.
-fn assert_extension(sent: &Sent, broadcast: bool) -> u32 {
+/// Whom a lease's extension goes to.
+#[derive(Clone, Copy)]
+enum Extension {
+    /// A renewal, to the server.
+    Renewal,
+    /// A rebinding, broadcast.
+    Rebinding,
+}
+
+/// A renewal or a rebinding REQUEST.
+fn assert_extension(sent: &Sent, extension: Extension) -> u32 {
     assert_eq!(sent.kind(), MessageType::Request);
     assert_eq!(sent.source, OFFERED);
     assert_eq!(sent.message().fixed.ciaddr, OFFERED);
-    if broadcast {
-        assert_eq!((sent.destination, sent.hardware), ([255; 4], [0xFF; 6]));
-    } else {
-        assert_eq!((sent.destination, sent.hardware), (SERVER_IP, SERVER));
+    match extension {
+        Extension::Rebinding => {
+            assert_eq!((sent.destination, sent.hardware), ([255; 4], [0xFF; 6]));
+        }
+        Extension::Renewal => {
+            assert_eq!((sent.destination, sent.hardware), (SERVER_IP, SERVER));
+        }
     }
     assert_eq!(sent.option(option::REQUESTED_ADDRESS), None);
     assert_eq!(sent.option(option::SERVER_IDENTIFIER), None);
@@ -529,7 +541,7 @@ fn an_ack_after_requests_repeated_still_binds() {
 /// refused. Nothing is left ready at `now` after it, so the client waits for
 /// a time of its own.
 fn refused_turn<B>(stack: &mut Stack<B>, now: Instant) -> usize {
-    stack.port_mut().rejects = true;
+    stack.port_mut().faults.inject(PortFault::Rejects);
     stack.observe_link(now);
     stack.tick(now, &mut Dropped::default());
     let mut refused = 0;
@@ -542,7 +554,7 @@ fn refused_turn<B>(stack: &mut Stack<B>, now: Instant) -> usize {
         refused += 1;
         assert!(refused < 16, "a refusal is offered again at once");
     }
-    stack.port_mut().rejects = false;
+    stack.port_mut().faults.clear(PortFault::Rejects);
     refused
 }
 
@@ -617,7 +629,7 @@ fn a_renewal_whose_server_never_answers_arp_starts_no_lease_clock() {
         let frames = turn(stack, due, &mut Dropped::default());
         assert_eq!(frames.len(), 1, "an ARP request");
         server_answers_arp(stack, due);
-        let xid = assert_extension(&one(stack, due), false);
+        let xid = assert_extension(&one(stack, due), Extension::Renewal);
         give(stack, due, &Reply::new(MessageType::Ack, xid).frame());
         let lease = configuration(stack).lease.unwrap();
         assert_eq!(lease.obtained, due);
@@ -679,7 +691,7 @@ fn renewal_at_t1_goes_to_the_server_and_an_ack_extends_from_its_request() {
         assert_eq!(configuration(stack).dhcp, Some(DhcpState::Renewing));
         server_answers_arp(stack, secs(500));
         let sent = one(stack, secs(500));
-        let xid = assert_extension(&sent, false);
+        let xid = assert_extension(&sent, Extension::Renewal);
         // The server extends the lease: no new version, times from now.
         assert!(
             give(stack, secs(501), &Reply::new(MessageType::Ack, xid).frame())
@@ -701,30 +713,30 @@ fn renewals_then_rebinds_follow_rfc_2131_4_4_5_until_the_lease_expires() {
         // T1 = 500 s, T2 = 875 s, the end at 1000 s.
         turn(stack, secs(500), &mut Dropped::default());
         server_answers_arp(stack, secs(500));
-        let first = assert_extension(&one(stack, secs(500)), false);
+        let first = assert_extension(&one(stack, secs(500)), Extension::Renewal);
         // Half the time to T2: 500 + 187.5. The server's entry has expired
         // by then, and is asked for again.
         quiet(stack, at(687_499));
         server_answers_arp(stack, at(687_000));
-        let second = assert_extension(&one(stack, at(687_500)), false);
+        let second = assert_extension(&one(stack, at(687_500)), Extension::Renewal);
         assert_ne!(first, second, "a new transaction for each try");
         // Half again: 687.5 + 93.75.
         quiet(stack, at(781_249));
         server_answers_arp(stack, at(781_000));
-        assert_extension(&one(stack, at(781_250)), false);
+        assert_extension(&one(stack, at(781_250)), Extension::Renewal);
         // Half of 93.75 s is under 60 s: 60 s later, which T2 cuts.
         quiet(stack, at(841_249));
         server_answers_arp(stack, at(841_000));
-        assert_extension(&one(stack, at(841_250)), false);
+        assert_extension(&one(stack, at(841_250)), Extension::Renewal);
         quiet(stack, at(874_999));
         // T2: broadcast, to any server.
-        assert_extension(&one(stack, secs(875)), true);
+        assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         assert_eq!(configuration(stack).dhcp, Some(DhcpState::Rebinding));
         // Half the time left: 875 + 62.5; then 60 s, past the end.
         quiet(stack, at(937_499));
-        assert_extension(&one(stack, at(937_500)), true);
+        assert_extension(&one(stack, at(937_500)), Extension::Rebinding);
         quiet(stack, at(997_499));
-        assert_extension(&one(stack, at(997_500)), true);
+        assert_extension(&one(stack, at(997_500)), Extension::Rebinding);
         // The lease ends at 1000 s, not a moment before.
         quiet(stack, at(999_999));
         assert_eq!(configuration(stack).ipv4, Some(leased_ipv4()));
@@ -741,7 +753,7 @@ fn renewals_then_rebinds_follow_rfc_2131_4_4_5_until_the_lease_expires() {
 fn a_rebind_ack_just_before_the_end_renews_the_lease_from_its_request() {
     leasing!(|stack| {
         bound(stack, at(0));
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         assert!(
             give(stack, secs(900), &Reply::new(MessageType::Ack, xid).frame())
                 .0
@@ -757,7 +769,7 @@ fn a_rebind_ack_just_before_the_end_renews_the_lease_from_its_request() {
 fn a_nak_to_a_renewal_takes_the_address_away() {
     leasing!(|stack| {
         bound(stack, at(0));
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         give(stack, secs(876), &Reply::new(MessageType::Nak, xid).frame());
         assert_eq!(configuration(stack).ipv4, None);
         assert_discover(&one(stack, secs(876)));
@@ -793,7 +805,7 @@ fn a_new_address_at_renewal_ends_old_work_and_new_work_goes_from_it() {
         let socket = stack.open(7, best_effort()).unwrap();
         let block = filled(stack.pool(), b"old");
         let command = stack.send(secs(870), &socket, peer(), block).unwrap();
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         let version = stack.address_version();
         let moved = [192, 0, 2, 77];
         let mut ack = Reply::new(MessageType::Ack, xid);
@@ -836,7 +848,7 @@ fn a_new_address_takes_the_next_datagram_past_what_the_old_one_prepared() {
             .expect("it went");
         assert_eq!(&datagram[26..30], &OFFERED);
         assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         let moved = [192, 0, 2, 77];
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.yiaddr = moved;
@@ -874,7 +886,7 @@ fn a_new_address_takes_the_next_broadcast_past_what_the_old_one_prepared() {
             .find(|frame| frame.len() > 42)
             .expect("it went");
         assert_eq!(&datagram[26..30], &OFFERED);
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         let moved = [192, 0, 2, 77];
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.yiaddr = moved;
@@ -1339,7 +1351,7 @@ fn data_leaves_a_neighbor_entry_for_the_renewal() {
             "ARP for the server"
         );
         server_answers_arp(stack, secs(500));
-        assert_extension(&one(stack, secs(500)), false);
+        assert_extension(&one(stack, secs(500)), Extension::Renewal);
     });
 }
 
@@ -1463,7 +1475,7 @@ fn an_echo_refused_for_good_releases_the_neighbors_wait_counter() {
         let request = super::echo::icmp_frame(OFFERED, &super::echo::echo(1, b"ping"));
         stack.input(now, &request, &mut ());
         let seen = stack.neighbors_changed();
-        stack.port_mut().rejects = true;
+        stack.port_mut().faults.inject(PortFault::Rejects);
         let demand = stack.poll_demand(now).unwrap();
         assert!(
             stack
@@ -1677,7 +1689,7 @@ fn a_renewal_ack_already_past_its_end_keeps_the_lease_to_its_own_end() {
     leasing!(|stack| {
         bound(stack, at(0));
         // A rebind REQUEST at T2, its ACK of a 100 s lease 200 s late.
-        let xid = assert_extension(&one(stack, secs(875)), true);
+        let xid = assert_extension(&one(stack, secs(875)), Extension::Rebinding);
         let mut ack = Reply::new(MessageType::Ack, xid);
         ack.options = with(
             ack_options(),

@@ -150,6 +150,13 @@ impl Diagnosis {
     }
 }
 
+/// Whether a tally counts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Counting {
+    Off,
+    On,
+}
+
 /// What the core counts of a turn or a pass, while it is on.
 pub(crate) struct Steps<D> {
     on: bool,
@@ -203,10 +210,10 @@ pub(crate) struct Tally<D> {
 }
 
 impl<D: Diagnostics> Tally<D> {
-    const fn new(on: bool, last: u64) -> Self {
+    const fn new(counting: Counting, last: u64) -> Self {
         Self {
             steps: Steps {
-                on,
+                on: matches!(counting, Counting::On),
                 walked: Cell::new(0),
                 told: Cell::new(0),
                 materialised: Cell::new(0),
@@ -234,7 +241,7 @@ impl<D: Diagnostics> Tally<D> {
 
     /// A tally that counts nothing, where no turn or pass counts.
     pub(crate) const fn off() -> Self {
-        Self::new(false, 0)
+        Self::new(Counting::Off, 0)
     }
 
     /// The tally of a pass that may count, as `diagnostics` say now: a
@@ -242,7 +249,7 @@ impl<D: Diagnostics> Tally<D> {
     #[inline(always)]
     pub(crate) fn begin(diagnostics: &mut D) -> Self {
         if D::ENABLED && diagnostics.on() {
-            Self::new(true, diagnostics.clock())
+            Self::new(Counting::On, diagnostics.clock())
         } else {
             Self::off()
         }

@@ -27,7 +27,7 @@ fn refusal_script<Net: 'static>(diagnostics: Probe) -> Decided {
         let observers = queue_four_each(&mut sockets, &wire).await;
         take_then_fill(&wire, 5);
         settle().await;
-        open_port(&wire, false);
+        open_port(&wire, Room::Free);
         let mut results = Vec::new();
         for observer in observers {
             results.push(result_of(observer).await);
@@ -146,13 +146,13 @@ fn diagnostics_switched_on_count_from_the_next_turn() {
     let drive = async {
         let observers = queue_four_each(&mut sockets, &wire).await;
         switched.set(policy.0.borrow().len());
-        probe.switch(true);
-        open_port(&wire, false);
+        probe.switch(crate::tests::probe::ProbeSwitch::On);
+        open_port(&wire, Room::Free);
         for observer in observers {
             assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
         }
         settle().await;
-        probe.switch(false);
+        probe.switch(crate::tests::probe::ProbeSwitch::Off);
         let off = policy.0.borrow().len();
         // Off again: the next turns count nothing.
         let _late = plan_send(&mut sockets[0], b"late").await;

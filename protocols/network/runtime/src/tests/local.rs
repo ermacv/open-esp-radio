@@ -5,6 +5,7 @@
 
 extern crate std;
 
+use crate::tests::Room;
 use std::boxed::Box;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -270,22 +271,36 @@ enum Reply {
     Misreport,
 }
 
+/// A switch of the local tests' line: full, down; and an observation, the last frame refused for room.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LineSwitch {
+    Full,
+    Down,
+    Refused,
+}
+
+impl crate::tests::Switch for LineSwitch {
+    fn bit(self) -> u16 {
+        match self {
+            Self::Full => 1 << 0,
+            Self::Down => 1 << 1,
+            Self::Refused => 1 << 2,
+        }
+    }
+}
+
 #[derive(Default)]
 struct Line {
+    switches: crate::tests::Switches<LineSwitch>,
     incoming: VecDeque<Vec<u8>>,
     notices: VecDeque<u32>,
     sent: Vec<Vec<u8>>,
-    full: bool,
     /// The answers to the next publications; then `Take`, or `Full` while
     /// `full`.
     replies: VecDeque<Reply>,
     publishes: usize,
     tickets: u32,
     waker: Option<Waker>,
-    /// The link is down.
-    down: bool,
-    /// The last frame was refused for room.
-    refused: bool,
     /// Each publication moves the clock to this time, as a turn takes time.
     elapse: Option<(&'static VirtualClock, Instant)>,
 }
@@ -294,9 +309,12 @@ struct Line {
 struct LocalPort(Rc<RefCell<Line>>);
 
 impl LocalPort {
-    fn open(&self, full: bool) {
+    fn open(&self, room: Room) {
         let mut line = self.0.borrow_mut();
-        line.full = full;
+        match room {
+            Room::Full => line.switches.on(LineSwitch::Full),
+            Room::Free => line.switches.off(LineSwitch::Full),
+        }
         if let Some(waker) = line.waker.take() {
             waker.wake();
         }
@@ -356,8 +374,8 @@ impl FramePort for LocalPort {
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
         // As a device's port, a link that is down takes no frame.
-        if line.down {
-            line.refused = true;
+        if line.switches.has(LineSwitch::Down) {
+            line.switches.on(LineSwitch::Refused);
             return Err(Unpublished::Port(()));
         }
         if let Some((clock, at)) = line.elapse
@@ -365,11 +383,19 @@ impl FramePort for LocalPort {
         {
             clock.advance_to(at);
         }
-        let reply =
-            line.replies
-                .pop_front()
-                .unwrap_or(if line.full { Reply::Full } else { Reply::Take });
-        line.refused = reply == Reply::Full;
+        let reply = line
+            .replies
+            .pop_front()
+            .unwrap_or(if line.switches.has(LineSwitch::Full) {
+                Reply::Full
+            } else {
+                Reply::Take
+            });
+        if reply == Reply::Full {
+            line.switches.on(LineSwitch::Refused);
+        } else {
+            line.switches.off(LineSwitch::Refused);
+        }
         let mut frame = vec![0; length];
         match reply {
             Reply::Full => Err(Unpublished::Port(())),
@@ -427,7 +453,7 @@ impl FrameSource for LocalPort {
     }
 
     fn link(&self) -> LinkSnapshot {
-        if self.0.borrow().down {
+        if self.0.borrow().switches.has(LineSwitch::Down) {
             LinkSnapshot::DOWN
         } else {
             LinkSnapshot {
@@ -440,7 +466,9 @@ impl FrameSource for LocalPort {
     fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut line = self.0.borrow_mut();
         line.waker = Some(cx.waker().clone());
-        !line.incoming.is_empty() || !line.notices.is_empty() || (line.refused && !line.full)
+        !line.incoming.is_empty()
+            || !line.notices.is_empty()
+            || (line.switches.has(LineSwitch::Refused) && !line.switches.has(LineSwitch::Full))
     }
 }
 
@@ -710,7 +738,7 @@ fn no_place_asks_nothing_until_a_place_frees() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     for index in 0..3 {
         script.push(tag(0, index), broadcast(), 16);
     }
@@ -736,7 +764,7 @@ fn no_place_asks_nothing_until_a_place_frees() {
     script.wake();
     settle(&mut run, &count, &waker);
     assert_eq!(script.calls().len(), 4, "no ask before a place frees");
-    line.open(false);
+    line.open(Room::Free);
     let cx = &mut Context::from_waker(&waker);
     assert!(poll(&mut run, cx).is_pending());
     assert_eq!(
@@ -851,7 +879,7 @@ fn a_stale_no_place_hold_is_cancelled<Net: 'static>(how: Stale) {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     for index in 0..3 {
         script.push(tag(0, index), broadcast(), 16);
     }
@@ -912,7 +940,7 @@ fn a_neighbors_full_hold_waits_for_a_release_without_any_arp_entry() {
         ..
     } = direct::<Net>();
     line.0.borrow_mut().incoming.push_back(peer_asks());
-    line.open(true);
+    line.open(Room::Full);
     let mut events = ();
     let mut run = pin!(service.run(clock, &mut events));
     let (count, waker) = counter();
@@ -934,7 +962,7 @@ fn a_neighbors_full_hold_waits_for_a_release_without_any_arp_entry() {
     script.wake();
     settle(&mut run, &count, &waker);
     assert_eq!(script.calls().len(), 2, "the hold stays");
-    line.open(false);
+    line.open(Room::Free);
     settle(&mut run, &count, &waker);
     assert_eq!(
         result_now(known),
@@ -1029,7 +1057,7 @@ fn after_a_declining_fill_the_next_socket_goes_first() {
     drop(socket.send(broadcast(), block).ok().unwrap());
     assert!(poll(&mut run, cx).is_pending());
     assert_eq!(line.sent(), 0, "the decline, then no room");
-    line.open(false);
+    line.open(Room::Free);
     for _ in 0..4 {
         let _pending = poll(&mut run, cx);
     }
@@ -1060,7 +1088,7 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 0), broadcast(), 16);
     script.push(tag(0, 1), broadcast(), 16);
     let mut events = ();
@@ -1075,7 +1103,7 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
         source.held.clear();
     }
     script.push(tag(1, 0), broadcast(), 16);
-    line.open(false);
+    line.open(Room::Free);
     script.wake();
     let cx = &mut Context::from_waker(&waker);
     assert!(poll(&mut run, cx).is_pending());
@@ -1129,7 +1157,7 @@ fn an_accepted_work_ends_once_and_a_new_generation_withdraws_only_open_work() {
             Call::Ended(tag(0, 1), Outcome::Accepted),
         ]
     );
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 2), broadcast(), 16);
     script.wake();
     settle(&mut run, &count, &waker);
@@ -1163,7 +1191,7 @@ fn a_work_not_current_at_its_fill_ends_declined_unfilled() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 0), broadcast(), 16);
     let mut events = ();
     let mut run = pin!(service.run(clock, &mut events));
@@ -1171,7 +1199,7 @@ fn a_work_not_current_at_its_fill_ends_declined_unfilled() {
     settle(&mut run, &count, &waker);
     // The entry is reused for other data, the generation unchanged.
     script.0.borrow_mut().held[0].tag = tag(0, 7);
-    line.open(false);
+    line.open(Room::Free);
     settle(&mut run, &count, &waker);
     assert_eq!(
         script.calls(),
@@ -1295,7 +1323,7 @@ fn a_cancelled_run_keeps_declared_work_and_a_new_run_fills_each_once() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 0), broadcast(), 16);
     script.push(tag(0, 1), broadcast(), 16);
     let mut events = ();
@@ -1305,7 +1333,7 @@ fn a_cancelled_run_keeps_declared_work_and_a_new_run_fills_each_once() {
         settle(&mut run, &count, &waker);
     }
     assert_eq!(script.calls().len(), 2, "no end from the cancel");
-    line.open(false);
+    line.open(Room::Free);
     let mut run = pin!(service.run(clock, &mut events));
     settle(&mut run, &count, &waker);
     assert_eq!(
@@ -1331,7 +1359,7 @@ fn a_retirement_ends_each_open_work_retired_and_returns_the_producer() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 0), broadcast(), 16);
     script.push(tag(0, 1), broadcast(), 16);
     let mut events = ();
@@ -1468,7 +1496,7 @@ fn a_producer_at_its_open_budget_waits_for_changes_only() {
         clock,
         ..
     } = bench::<Net, 16>();
-    line.open(true);
+    line.open(Room::Full);
     let mut events = ();
     let mut run = pin!(service.run(clock, &mut events));
     let (count, waker) = counter();
@@ -1492,7 +1520,7 @@ fn a_producer_at_its_open_budget_waits_for_changes_only() {
     };
     assert_eq!(offered(&script), 8, "eight open works at most");
     assert_eq!(script.interest(), Some(Interest::Changes));
-    line.open(false);
+    line.open(Room::Free);
     settle(&mut run, &count, &waker);
     assert_eq!(offered(&script), 9, "the ninth once places came back");
     assert_eq!(line.produced().len(), 9);
@@ -1530,7 +1558,7 @@ fn a_counting_sink_hears_each_of_the_producer_s_steps() {
         clock,
         ..
     } = direct::<Net>();
-    line.open(true);
+    line.open(Room::Full);
     script.push(tag(0, 9), broadcast(), 2000);
     for index in 0..3 {
         script.push(tag(0, index), broadcast(), 16);
@@ -1569,7 +1597,7 @@ fn a_counting_sink_hears_each_of_the_producer_s_steps() {
         [Withdrawn, Withdrawn, Offered, Waits(Interest::Offers)]
     );
     script.0.borrow_mut().declines = true;
-    line.open(false);
+    line.open(Room::Free);
     {
         let mut run = pin!(service.run(clock, &mut steps));
         settle(&mut run, &count, &waker);
@@ -1618,7 +1646,7 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             .borrow_mut()
             .incoming
             .push_back(dhcp_reply(MessageType::Offer, xid, 600));
-        line.open(false);
+        line.open(Room::Free);
         settle(&mut run, &count, &waker);
         assert_eq!(
             dhcp_messages(&line.0.borrow().sent).last(),
@@ -1629,7 +1657,7 @@ fn a_producer_held_without_an_address_offers_once_the_lease_comes_and_the_watch_
             .incoming
             .push_back(dhcp_reply(MessageType::Ack, xid, 600));
         line.0.borrow_mut().incoming.push_back(peer_asks());
-        line.open(false);
+        line.open(Room::Free);
         settle(&mut run, &count, &waker);
         // The watch has the address, published at the turn's end.
         assert_ne!(watch.changes(), first);
@@ -1716,7 +1744,7 @@ fn an_echo_reply_s_end_releases_a_neighbors_full_hold() {
     // reply holds its entry, a channel datagram holds the other.
     line.0.borrow_mut().incoming.push_back(peer_asks());
     line.0.borrow_mut().incoming.push_back(peer_pings());
-    line.open(true);
+    line.open(Room::Full);
     let mut events = ();
     let mut run = pin!(service.run(clock, &mut events));
     let (count, waker) = counter();
@@ -1734,7 +1762,7 @@ fn an_echo_reply_s_end_releases_a_neighbors_full_hold() {
         ]
     );
     // The reply goes: its entry is free, and the hold gives way.
-    line.open(false);
+    line.open(Room::Free);
     settle(&mut run, &count, &waker);
     let replies = line
         .0
@@ -2262,14 +2290,14 @@ fn a_link_down_in_packet_turns_stops_the_frames_at_the_next_turn() {
         polls += 1;
         assert!(polls < 64, "frames always ready reach a packet turn");
     }
-    line.0.borrow_mut().down = true;
+    line.0.borrow_mut().switches.on(LineSwitch::Down);
     let sent = line.sent();
     for _ in 0..4 {
         assert!(poll(&mut run, cx).is_pending());
     }
     assert_eq!(line.sent(), sent, "nothing goes while the link is down");
-    line.0.borrow_mut().down = false;
-    line.open(false);
+    line.0.borrow_mut().switches.off(LineSwitch::Down);
+    line.open(Room::Free);
     script.wake();
     let mut polls = 0;
     while line.sent() < 200 {

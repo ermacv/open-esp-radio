@@ -431,6 +431,7 @@ disallowed-macros = [
     "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]
 
-# Deferred until clean of the two bool lints (DEFERRED_BOOL_LINTS, layer tests).
-max-struct-bools = 255
-max-fn-params-bools = 255
+# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
+# as flags; a `bool` parameter selects behaviour.
+max-struct-bools = 1
+max-fn-params-bools = 0

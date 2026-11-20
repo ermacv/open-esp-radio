@@ -60,11 +60,20 @@ impl LeLegacyScanningCommandKind {
     }
 }
 
+/// Which advertisers a scanner receives (the scanning filter policy).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Filter {
+    /// Every advertiser (policy 0).
+    All,
+    /// The filter accept list's alone (policy 1).
+    AcceptListOnly,
+}
+
 /// Validated LE 1M scan type and timing supplied by the Host.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeLegacyScanParameters {
-    active: bool,
-    accept_list_only: bool,
+    kind: LeScanKind,
+    filter: Filter,
     interval_units_625_us: u16,
     window_units_625_us: u16,
 }
@@ -72,12 +81,12 @@ pub struct LeLegacyScanParameters {
 impl LeLegacyScanParameters {
     /// Whether the scanner sends scan requests.
     pub const fn is_active(self) -> bool {
-        self.active
+        matches!(self.kind, LeScanKind::Active)
     }
 
     /// Whether only filter accept list devices are received (filter policy 1).
     pub const fn is_accept_list_only(self) -> bool {
-        self.accept_list_only
+        matches!(self.filter, Filter::AcceptListOnly)
     }
 
     /// Start-to-start scan interval in 0.625 ms units.
@@ -253,10 +262,10 @@ impl LeLegacyScanningCommand {
             scanning_filter_policy,
         } = parameters;
 
-        let accept_list_only = if scanning_filter_policy == ScanningFilterPolicy::BasicUnfiltered {
-            false
+        let filter = if scanning_filter_policy == ScanningFilterPolicy::BasicUnfiltered {
+            Filter::All
         } else if scanning_filter_policy == ScanningFilterPolicy::BasicFiltered {
-            true
+            Filter::AcceptListOnly
         } else {
             return Err(LeLegacyScanningDecodeError::UnsupportedFeature { command });
         };
@@ -274,8 +283,8 @@ impl LeLegacyScanningCommand {
         }
 
         Ok(Self::SetParameters(LeLegacyScanParameters {
-            active: le_scan_kind == LeScanKind::Active,
-            accept_list_only,
+            kind: le_scan_kind,
+            filter,
             interval_units_625_us,
             window_units_625_us,
         }))

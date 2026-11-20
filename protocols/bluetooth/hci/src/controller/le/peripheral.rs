@@ -288,6 +288,13 @@ impl HciControllerResponse for LeLongTermKeyRequestEvent {
     }
 }
 
+/// Whether a link is encrypted after an encryption change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Encryption {
+    Off,
+    On,
+}
+
 /// Host-visible transition into or out of LE AES-CCM encryption.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeEncryptionChangeEvent {
@@ -295,7 +302,7 @@ pub struct LeEncryptionChangeEvent {
 }
 
 impl LeEncryptionChangeEvent {
-    pub fn new(status: Status, handle: ConnHandle, enabled: bool) -> Self {
+    pub fn new(status: Status, handle: ConnHandle, encryption: Encryption) -> Self {
         let handle = handle.raw().to_le_bytes();
         Self {
             bytes: [
@@ -304,7 +311,10 @@ impl LeEncryptionChangeEvent {
                 status.into_inner(),
                 handle[0],
                 handle[1],
-                u8::from(enabled),
+                match encryption {
+                    Encryption::Off => 0,
+                    Encryption::On => 1,
+                },
             ],
         }
     }

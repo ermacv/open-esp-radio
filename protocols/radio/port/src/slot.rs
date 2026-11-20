@@ -446,18 +446,18 @@ impl Signals {
         LifecycleError::decode(self.error.load(Ordering::Acquire))
     }
 
-    fn invalid(&self, storage: SlotStorageState, invocation_present: bool) -> LifecycleError {
+    fn invalid(&self, storage: SlotStorageState, invocation: Invocation) -> LifecycleError {
         LifecycleError::InvalidState(SlotObservation {
             phase: self.state.load(Ordering::Acquire),
             storage,
-            invocation_present,
+            invocation_present: invocation == Invocation::Present,
         })
     }
 
     fn observed_failure(&self) -> LifecycleError {
         match self.failure() {
             Some(cause) => cause,
-            None => self.invalid(SlotStorageState::Unavailable, false),
+            None => self.invalid(SlotStorageState::Unavailable, Invocation::Absent),
         }
     }
 
@@ -581,7 +581,9 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
         S: 's,
         Id: 's,
     {
-        let cause = self.signals.invalid(storage_state(&self.owner), false);
+        let cause = self
+            .signals
+            .invalid(storage_state(&self.owner), Invocation::Absent);
         if self.signals.state.load(Ordering::Acquire) != JOINED {
             return Err(SlotRegisterError::InvalidState {
                 cause,
@@ -621,7 +623,9 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
     /// backing stays in place and accepts no later registration; a refusal
     /// keeps the vacant owner in the slot and returns the authority.
     pub fn retire(&mut self, joined: Joined<Id>) -> Result<S::Vacant, SlotRetireRefused<Id>> {
-        let cause = self.signals.invalid(storage_state(&self.owner), false);
+        let cause = self
+            .signals
+            .invalid(storage_state(&self.owner), Invocation::Absent);
         if self.signals.state.load(Ordering::Acquire) != JOINED {
             return Err(SlotRetireRefused { cause, joined });
         }
@@ -667,7 +671,8 @@ impl<Id: SlotIdentity, S: SlotOwner<Id>> PortSlot<Id, S> {
                 crate::Mint::<'static, S::Pools, Id>::new(),
             ),
             Err(storage) => {
-                let cause = SlotInitError::Lifecycle(self.signals.invalid(storage, false));
+                let cause =
+                    SlotInitError::Lifecycle(self.signals.invalid(storage, Invocation::Absent));
                 self.signals.request_failure(LifecycleError::Construction);
                 return Err(SlotRegisterError::Initialization {
                     cause,
@@ -807,7 +812,7 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
         SlotJoin {
             signals,
             armed: true,
-            ordinary: false,
+            kind: JoinKind::Abandoned,
             identity: PhantomData,
         }
     }
@@ -830,7 +835,7 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotFrontend<'s, Id, S> {
         SlotJoin {
             signals,
             armed: true,
-            ordinary: true,
+            kind: JoinKind::Finished,
             identity: PhantomData,
         }
     }
@@ -886,19 +891,46 @@ pub struct Joined<Id: SlotIdentity> {
 pub struct SlotJoin<'s, Id: SlotIdentity> {
     signals: &'s Signals,
     armed: bool,
-    ordinary: bool,
+    kind: JoinKind,
     identity: PhantomData<fn(Id) -> Id>,
+}
+
+/// Whether the P2 owner holds an invocation where an invalid state is
+/// observed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Invocation {
+    Absent,
+    Present,
+}
+
+impl Invocation {
+    const fn of<T>(invocation: &Option<T>) -> Self {
+        match invocation {
+            Some(_) => Self::Present,
+            None => Self::Absent,
+        }
+    }
+}
+
+/// How the frontend ended before its join: closed, which an ordinary
+/// unregistration answers, or abandoned, which only quarantine answers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum JoinKind {
+    Finished,
+    Abandoned,
 }
 
 impl<Id: SlotIdentity> SlotJoin<'_, Id> {
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Result<Joined<Id>, SlotQuarantined<Id>>> {
         self.signals.join.register(cx.waker());
         match self.signals.state.load(Ordering::Acquire) {
-            JOINED if self.ordinary => Poll::Ready(Ok(Joined {
+            JOINED if self.kind == JoinKind::Finished => Poll::Ready(Ok(Joined {
                 identity: PhantomData,
             })),
             JOINED => Poll::Ready(Err(SlotQuarantined {
-                cause: self.signals.invalid(SlotStorageState::Unavailable, false),
+                cause: self
+                    .signals
+                    .invalid(SlotStorageState::Unavailable, Invocation::Absent),
                 outcome: Abandon::Unconfirmed(Quarantine::new()),
                 identity: PhantomData,
             })),
@@ -924,7 +956,9 @@ impl<Id: SlotIdentity> SlotJoin<'_, Id> {
             let expired = bound.as_mut().poll(cx).is_ready();
             if self.signals.state.load(Ordering::Acquire) == JOINED {
                 return Poll::Ready(SlotQuarantined {
-                    cause: self.signals.invalid(SlotStorageState::Unavailable, false),
+                    cause: self
+                        .signals
+                        .invalid(SlotStorageState::Unavailable, Invocation::Absent),
                     outcome: Abandon::Unconfirmed(Quarantine::new()),
                     identity: PhantomData,
                 });
@@ -1087,10 +1121,10 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
         &mut self,
         _: &Quarantine,
     ) -> Result<(&mut S, Option<&mut S::Invocation<'s>>), LifecycleError> {
-        let present = self.invocation.is_some();
+        let invocation = Invocation::of(&self.invocation);
         match registered_owner(self.owner) {
             Ok(owner) => Ok((owner, self.invocation.as_mut())),
-            Err(storage) => Err(self.signals.invalid(storage, present)),
+            Err(storage) => Err(self.signals.invalid(storage, invocation)),
         }
     }
 
@@ -1111,17 +1145,17 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             if !self.armed {
                 return Err(self
                     .signals
-                    .invalid(storage_state(self.owner), self.invocation.is_some()));
+                    .invalid(storage_state(self.owner), Invocation::of(&self.invocation)));
             }
             if let Some(cause) = self.failure() {
                 return Err(cause);
             }
             let observed = self
                 .signals
-                .invalid(storage_state(self.owner), self.invocation.is_some());
+                .invalid(storage_state(self.owner), Invocation::of(&self.invocation));
             let invocation = self.invocation.as_mut().ok_or(observed)?;
             let owner = registered_owner(self.owner)
-                .map_err(|storage| self.signals.invalid(storage, true))?;
+                .map_err(|storage| self.signals.invalid(storage, Invocation::Present))?;
             let stopped = {
                 let signals = self.signals;
                 let mut stopping = pin!(owner.run(
@@ -1154,14 +1188,16 @@ impl<'s, Id: SlotIdentity + 's, S: SlotOwner<Id> + 's> SlotRegistration<'s, Id, 
             {
                 return Err(self
                     .signals
-                    .invalid(storage_state(self.owner), self.invocation.is_some()));
+                    .invalid(storage_state(self.owner), Invocation::of(&self.invocation)));
             }
             let SlotStopped {
                 identity: _,
                 owner: _,
             } = stopped;
-            finish_owner(self.owner, &mut self.invocation)
-                .map_err(|storage| self.signals.invalid(storage, self.invocation.is_some()))?;
+            finish_owner(self.owner, &mut self.invocation).map_err(|storage| {
+                self.signals
+                    .invalid(storage, Invocation::of(&self.invocation))
+            })?;
             self.armed = false;
             Ok(SlotCompletion {
                 signals: self.signals,

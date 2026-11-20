@@ -52,13 +52,28 @@ pub enum LocalEvent {
     Waits(crate::Interest),
 }
 
+/// Whether the pool had a free block when a turn ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Blocks {
+    Free,
+    Exhausted,
+}
+
+/// Whether every open socket had a free credit when a turn ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Credits {
+    Free,
+    /// Some open socket had none.
+    Exhausted,
+}
+
 /// What was free when a turn ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TurnEnd {
-    /// The pool had a free block.
-    pub blocks_free: bool,
-    /// Every open socket had a free credit.
-    pub credits_free: bool,
+    /// Whether the pool had a free block.
+    pub blocks: Blocks,
+    /// Whether every open socket had a free credit.
+    pub credits: Credits,
     /// Receive loans out of the pool's account, old installations'
     /// included.
     pub loans: usize,

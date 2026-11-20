@@ -2,7 +2,9 @@
 
 use oer_protocols_network_port::{CopyReason, EthernetFrame, Holding};
 
-use super::{Dropped, OUR_IP, PEER_IP, Stack, at, best_effort, interface, run, udp_frame};
+use super::{
+    Dropped, OUR_IP, PEER_IP, PortFault, Stack, at, best_effort, interface, run, udp_frame,
+};
 use crate::{Intake, LoansRefused, NetEvent, NotLent, OpenRefused, Remote};
 
 const PORT: u16 = 9;
@@ -193,7 +195,7 @@ fn a_port_that_keeps_no_buffer_ends_the_loan_at_once() {
         stack.pool().loans().pool(4, 1).unwrap();
         let group = stack.pool().group(4).unwrap();
         let _socket = stack.open_lending(PORT, best_effort(), group, 1).unwrap();
-        stack.port_mut().keeps_nothing = true;
+        stack.port_mut().faults.inject(PortFault::KeepsNothing);
         arrives(stack, b"kept", Holding::Lendable);
         let mut dropped = Dropped::default();
         assert!(matches!(
