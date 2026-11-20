@@ -98,14 +98,18 @@ pub fn observe_scan<const N: usize>(
 /// [`observe_scan`] recorded as `observation`.
 pub(crate) fn scan_heard(
     subtype: u16,
-    to_us: bool,
+    addressing: crate::events::Addressing,
     meta: &impl RxMetadata,
     observation: ScanObservation,
 ) -> crate::events::ScanHeard {
     crate::events::ScanHeard {
         own: !matches!(observation, ScanObservation::Ignored),
-        probe_response: subtype == PROBE_RESPONSE,
-        to_us,
+        frame: if subtype == PROBE_RESPONSE {
+            crate::events::ScanFrame::ProbeResponse
+        } else {
+            crate::events::ScanFrame::Beacon
+        },
+        addressing,
         rssi: match meta.common().rssi_dbm {
             RxEvidence::HardwareObserved(rssi) | RxEvidence::ProtocolValidated(rssi) => Some(rssi),
             RxEvidence::Unavailable => None,

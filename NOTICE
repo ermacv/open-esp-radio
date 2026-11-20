@@ -115,8 +115,6 @@ vendor function it follows:
 - chips/esp32s31/radio/phy and the PHY modules of chips/esp32s31/hal and
   chips/esp32s31/pac: libphy.a calibration, tracking and analog-bus
   algorithms
-- protocols/ieee80211/core/roles/sta/src/modem_sleep.rs: libpp.a [pm.o] and
-  [pm_coex.o], the station power manager
 - chips/family/radio/ieee80211/policy: libpp.a and libnet80211.a rate
   schedules, rate control, retry ladder and LMAC limits
 - chips/family/radio/coex: libcoexist.a coexistence schedule and event
@@ -194,12 +192,12 @@ Partly ported and modified:
 
 - protocols/ieee80211/core/security/rsn/src/sae.rs: src/common/sae.c and
   dragonfly.c
-- protocols/ieee80211/core/roles/ap/src/sae.rs: src/ap/ieee802_11.c
-  (handle_auth_sae, sae_sm_step), src/ap/ap_config.h, src/common/sae.c
-- protocols/ieee80211/core/roles/ap/src/pmksa.rs: src/ap/pmksa_cache_auth.c and
-  src/ap/wpa_auth.c
-- protocols/ieee80211/core/roles/sta/src/pmksa.rs: src/rsn_supp/pmksa_cache.c and
-  src/rsn_supp/wpa.c
+- protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs:
+  src/ap/ieee802_11.c (handle_auth_sae, sae_sm_step), src/ap/ap_config.h,
+  src/common/sae.c
+- protocols/ieee80211/core/security/rsn/src/pmksa.rs: src/ap/pmksa_cache_auth.c
+  and src/ap/wpa_auth.c (the authenticator's cache), src/rsn_supp/pmksa_cache.c
+  and src/rsn_supp/wpa.c (the supplicant's)
 - protocols/ieee80211/core/roles/sta/src/machine/deferred_eapol.rs: behaviour of
   src/rsn_supp/wpa.c
 
@@ -248,7 +246,7 @@ Not derived
 Test vectors from IEEE Std 802.11 Annex J, RFC 3394 and the Bluetooth Core
 sample data are facts and keep their citations. Bluetooth encryption samples
 in protocols/bluetooth/le/cipher/src/tests.rs are from Core Vol 6 Part C.
-Linux mac80211 (GPL-2.0) is cited for behaviour only: protocols/ieee80211/core/security/rsn/src/ccmp_mpdu.rs and
+Linux mac80211 (GPL-2.0) is cited for behaviour only: protocols/ieee80211/core/security/cipher/src/ccmp_mpdu.rs and
 protocols/ieee80211/wire/src/data.rs implement the IEEE 802.11 rules
 independently.
 

@@ -36,24 +36,25 @@ mod tests {
                         CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap(),
                     ),
                 },
-                true,
+                GroupRole::Current,
             );
         }
         // A selection round trip does not renew the installation's age.
         let selected = keys.take_matching(id, &[0; 16]).unwrap();
-        keys.restore(selected, true);
+        keys.restore(selected, GroupRole::Current);
         let selected = keys.take_matching(id, &[2; 16]).unwrap();
-        keys.restore(selected, true);
+        keys.restore(selected, GroupRole::Current);
         let old = keys.replace().unwrap();
         assert_eq!(old.material.as_bytes(), &[0; 16]);
         assert_eq!(keys.current_id(), Some(id));
         keys.release(old.place, &mut ());
-        let next = keys.take_retiring().unwrap();
+        // The next replacement takes the remaining non-current one.
+        let next = keys.replace().unwrap();
         assert_eq!(next.material.as_bytes(), &[1; 16]);
         keys.release(next.place, &mut ());
         let single = keys.replace().unwrap();
         assert_eq!(single.material.as_bytes(), &[2; 16]);
-        keys.install(single, true);
+        keys.install(single, GroupRole::Current);
         let last = keys.take_any().unwrap();
         keys.release(last.place, &mut ());
         assert_eq!(keys.vacant.len(), 8);
@@ -128,6 +129,22 @@ pub(super) enum Replay {
     Retained(CcmpRxReplayState),
 }
 
+/// Whether an installed group key becomes the current one, which receives,
+/// or stays beside it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum GroupRole {
+    Current,
+    Other,
+}
+
+/// How a group key comes into the table: a new installation, or a selection
+/// of one it holds already, which keeps its installation age.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum GroupArrival {
+    Installed,
+    Selected,
+}
+
 pub(super) struct GroupKeys {
     entries: [Option<Installed>; 8],
     vacant: Pool<StaGroupPlace>,
@@ -165,9 +182,9 @@ impl GroupKeys {
         self.vacant.take()
     }
 
-    pub(super) fn install(&mut self, entry: Installed, current: bool) {
+    pub(super) fn install(&mut self, entry: Installed, role: GroupRole) {
         let index = entry.place.0;
-        self.restore(entry, current);
+        self.restore(entry, role);
         let mut carry = index;
         for position in self.order.iter_mut().rev() {
             if *position == index {
@@ -180,10 +197,10 @@ impl GroupKeys {
 
     /// Selection restores an existing record without changing its physical
     /// installation age, used to choose the oldest non-current eviction.
-    pub(super) fn restore(&mut self, entry: Installed, current: bool) {
+    pub(super) fn restore(&mut self, entry: Installed, role: GroupRole) {
         let index = entry.place.0;
         *index.select_mut(&mut self.entries) = Some(entry);
-        if current {
+        if role == GroupRole::Current {
             self.current = Some(index);
         }
     }
@@ -258,10 +275,6 @@ impl GroupKeys {
             .iter()
             .copied()
             .find(|index| Some(*index) != self.current && index.select(&self.entries).is_some())
-    }
-
-    pub(super) fn take_retiring(&mut self) -> Option<Installed> {
-        self.take(self.oldest_retiring()?)
     }
 
     pub(super) fn take_any(&mut self) -> Option<Installed> {

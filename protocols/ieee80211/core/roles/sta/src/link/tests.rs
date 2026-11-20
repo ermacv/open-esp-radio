@@ -17,7 +17,7 @@ fn protected_link(replay: CcmpRxReplayEpoch) -> RxLink {
     RxLink::new(
         OwnAddress::new(IndividualAddress::new(LOCAL).unwrap()),
         Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
-        true,
+        oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
         Some(replay),
     )
 }
@@ -54,13 +54,13 @@ fn decrypted() -> RxMeta {
 }
 
 /// What `link` takes from `frame`, which `meta` describes, while it
-/// `carries` data: the network's MSDUs and the EAPOL packets it handed the
+/// carries data or is held (`carriage`): the network's MSDUs and the EAPOL packets it handed the
 /// station, which answers `eapol`.
 fn admitted<'f>(
     link: &mut RxLink,
     frame: &'f [u8],
     meta: &RxMeta,
-    carries: bool,
+    carriage: crate::link::Carriage,
     eapol: StaEapol,
 ) -> Result<(Vec<MsduDelivery<'f>>, Vec<&'f [u8]>), StaRxError> {
     let header = DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?;
@@ -70,7 +70,7 @@ fn admitted<'f>(
         header,
         frame,
         crate::data::integrity(meta.common()),
-        carries,
+        carriage,
         |delivery| data.push(delivery),
         |payload, _| {
             station.push(payload);
@@ -85,7 +85,14 @@ fn received<'f>(
     frame: &'f [u8],
     meta: &RxMeta,
 ) -> Result<Vec<MsduDelivery<'f>>, StaRxError> {
-    admitted(link, frame, meta, true, StaEapol::Taken).map(|(data, _)| data)
+    admitted(
+        link,
+        frame,
+        meta,
+        crate::link::Carriage::Carries,
+        StaEapol::Taken,
+    )
+    .map(|(data, _)| data)
 }
 
 #[test]
@@ -102,7 +109,14 @@ fn a_decrypted_data_mpdu_gives_its_msdu_and_an_unverified_or_eapol_one_none() {
     assert!(received(&mut link, &frame, &meta(RxEvidence::Unavailable)).is_err());
     // EAPOL is the station's, not the network's.
     let eapol = received_frame(0x4288, 0x888e, 3, 0);
-    let (data, station) = admitted(&mut link, &eapol, &decrypted(), true, StaEapol::Taken).unwrap();
+    let (data, station) = admitted(
+        &mut link,
+        &eapol,
+        &decrypted(),
+        crate::link::Carriage::Carries,
+        StaEapol::Taken,
+    )
+    .unwrap();
     assert!(data.is_empty());
     assert_eq!(station, [&[0xcd; 20][..]]);
 }
@@ -174,7 +188,13 @@ fn a_held_link_checks_replay_but_gives_no_data_and_eapol_still_goes_to_the_stati
     let frame = received_frame(0x4288, 0x0800, 5, 0);
     // Held, the frame passes the replay check and gives the network nothing.
     assert_eq!(
-        admitted(&mut link, &frame, &decrypted(), false, StaEapol::Taken),
+        admitted(
+            &mut link,
+            &frame,
+            &decrypted(),
+            crate::link::Carriage::Held,
+            StaEapol::Taken
+        ),
         Err(RxDropReason::NotConnected.into())
     );
     // Released, the same packet number is a replay: the check ran.
@@ -184,8 +204,14 @@ fn a_held_link_checks_replay_but_gives_no_data_and_eapol_still_goes_to_the_stati
     );
     // The station's EAPOL goes to it while the link holds.
     let eapol = received_frame(0x4288, 0x888e, 6, 0);
-    let (data, station) =
-        admitted(&mut link, &eapol, &decrypted(), false, StaEapol::Taken).unwrap();
+    let (data, station) = admitted(
+        &mut link,
+        &eapol,
+        &decrypted(),
+        crate::link::Carriage::Held,
+        StaEapol::Taken,
+    )
+    .unwrap();
     assert!(data.is_empty());
     assert_eq!(station.len(), 1);
 }
@@ -194,7 +220,14 @@ fn a_held_link_checks_replay_but_gives_no_data_and_eapol_still_goes_to_the_stati
 fn a_failed_rsn_ends_the_links_data_from_the_next_msdu_on() {
     let mut link = protected_link(epoch());
     let eapol = received_frame(0x4288, 0x888e, 1, 0);
-    let (_, station) = admitted(&mut link, &eapol, &decrypted(), true, StaEapol::Faulted).unwrap();
+    let (_, station) = admitted(
+        &mut link,
+        &eapol,
+        &decrypted(),
+        crate::link::Carriage::Carries,
+        StaEapol::Faulted,
+    )
+    .unwrap();
     assert_eq!(station.len(), 1);
     let frame = received_frame(0x4288, 0x0800, 2, 0);
     assert_eq!(
@@ -218,7 +251,7 @@ fn unprotected_data_of_a_protected_link_is_refused_and_foreign_open_eapol_goes_n
         &mut link,
         &foreign,
         &meta(RxEvidence::Unavailable),
-        true,
+        crate::link::Carriage::Carries,
         StaEapol::Taken,
     )
     .unwrap();
@@ -232,8 +265,16 @@ fn unprotected_data_of_a_protected_link_is_refused_and_foreign_open_eapol_goes_n
 fn a_fault_the_station_reports_later_ends_the_links_data() {
     let address = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
     let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
-    let mut link = LinkHandover::<()>::for_test(1, address, bssid, false, false, None, None);
-    link.hold(false);
+    let mut link = LinkHandover::<()>::for_test(
+        1,
+        address,
+        bssid,
+        oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+        oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
+        None,
+        None,
+    );
+    link.carry(crate::link::Carriage::Carries);
     let frame = received_frame(0x0288, 0x0800, 0, 0);
     let deliveries = |link: &mut LinkHandover<()>| {
         let mut count = 0;

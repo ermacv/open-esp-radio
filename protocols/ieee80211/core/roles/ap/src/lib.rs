@@ -63,5 +63,5 @@ pub use service::{
     ApManagementProtection, ApManagementRejection, ApManagementRx, ApManagementRxProtection,
     ApMlmeAction, ApPeerBinding, ApPeerClose, ApPeerCloseKind, ApPeerPhase, ApPeerPowerState,
     ApPeerStatus, ApPowerSaveAction, ApServiceError, ApServiceRefused, ApWpa2Error, ApWpa2Progress,
-    ApWpa2RetryProgress,
+    ApWpa2RetryProgress, BufferedEnd, BufferedRelease,
 };

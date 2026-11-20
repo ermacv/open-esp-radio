@@ -14,6 +14,7 @@
     clippy::arithmetic_side_effects
 )]
 
+use oer_protocols_ieee80211_wire::security::ManagementProtection;
 use oer_protocols_ieee80211_wire::security::rsn::{
     RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RSN_CIPHER_BIP_CMAC_128, RSN_CIPHER_CCMP,
     RSN_PMKID_LEN, RsnElement, RsnSyntaxError, ieee_suite,
@@ -33,22 +34,6 @@ pub enum RsnElementError {
     UnsupportedPairwiseCipher,
     UnsupportedAkm,
     UnsupportedGroupManagementCipher,
-}
-
-/// The management frame protection an RSN element advertises.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ManagementFrameProtection {
-    /// MFPC: the party protects management frames when its peer does.
-    pub capable: bool,
-    /// MFPR: the party associates only with protected management frames.
-    pub required: bool,
-}
-
-impl ManagementFrameProtection {
-    /// Protection is in effect when both parties are capable.
-    pub const fn negotiated(self, peer: Self) -> bool {
-        self.capable && peer.capable
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -98,10 +83,15 @@ impl ValidatedRsnElement {
         Ok(self.element()?.pmkids())
     }
 
-    pub const fn management_frame_protection(&self) -> ManagementFrameProtection {
-        ManagementFrameProtection {
-            capable: self.capabilities & RSN_CAPABILITY_MFPC != 0,
-            required: self.capabilities & RSN_CAPABILITY_MFPR != 0,
+    /// The management frame protection the element advertises: its MFPC
+    /// and MFPR. Validation refused MFPR without MFPC.
+    pub const fn management_frame_protection(&self) -> ManagementProtection {
+        if self.capabilities & RSN_CAPABILITY_MFPR != 0 {
+            ManagementProtection::Required
+        } else if self.capabilities & RSN_CAPABILITY_MFPC != 0 {
+            ManagementProtection::Capable
+        } else {
+            ManagementProtection::Disabled
         }
     }
 

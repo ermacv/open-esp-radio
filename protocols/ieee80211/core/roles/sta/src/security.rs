@@ -181,29 +181,31 @@ fn select_personal_rsn(
     // Advertise support and retain the negotiated decision for key installation.
     // SOURCE[HIL_VENDOR_HE20_NDPA_CBF_2026_07_24]: frame 7624 carries RSN
     // Capabilities 0x0400 in the successful HE association request.
-    Ok(personal_rsn(akm, spp, management_protection))
+    Ok(personal_rsn(
+        akm,
+        spp,
+        management_protection
+            .then_some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
+    ))
 }
 
 /// The RSN element of a personal association negotiating `akm`, and under
 /// SAE an RSNXE announcing hash to element.
 ///
-/// Its RSN Capabilities advertise SPP A-MSDU capability, MFPC when
-/// `management_protection` holds and MFPR under SAE; protected management
-/// frames take BIP-CMAC-128.
+/// Its RSN Capabilities advertise SPP A-MSDU capability, MFPC with a group
+/// `management` cipher and MFPR under SAE.
 pub fn personal_rsn(
     akm: AssociationAkm,
     spp: oer_protocols_ieee80211_wire::security::Spp,
-    management_protection: bool,
+    management: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher>,
 ) -> SelectedRsn {
     use oer_protocols_ieee80211_wire::security::rsn::{
         RSN_CAPABILITY_MFPC, RSN_CAPABILITY_MFPR, RsnExtendedCapabilities,
     };
-    use oer_protocols_ieee80211_wire::security::{
-        GroupManagementCipher, RsnAssociation, SppCapability,
-    };
+    use oer_protocols_ieee80211_wire::security::{RsnAssociation, SppCapability};
     let sae = matches!(akm, AssociationAkm::Sae(_));
     let mut capabilities = SppCapability::Capable.rsn_bits();
-    if management_protection {
+    if management.is_some() {
         capabilities |= RSN_CAPABILITY_MFPC;
     }
     if sae {
@@ -213,7 +215,7 @@ pub fn personal_rsn(
         RsnAssociation {
             akm,
             spp,
-            management: management_protection.then_some(GroupManagementCipher::BipCmac128),
+            management,
             pmkid: None,
         },
         capabilities,

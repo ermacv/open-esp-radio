@@ -15,6 +15,15 @@ use crate::{Akm, Ptk, RSN_KCK_LEN, RsnInterface, RsnKeyConfirmationKey};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee80211_wire::eapol::{EapolKey, EapolParseError, KeyInformation};
 
+/// Why an EAPOL-Key frame's MIC did not verify.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MicFailure {
+    /// The MIC is not the frame's under the key: a peer's frame to refuse.
+    Mismatch,
+    /// The AES engine refused the MIC's key or a block.
+    Engine(BlockError),
+}
+
 pub const DEFAULT_EAPOL_FRAME_CAPACITY: usize = 512;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -166,6 +175,15 @@ impl<'a> EapolKeyFrame<'a> {
 
     pub const fn key_data(self) -> &'a [u8] {
         self.0.key_data()
+    }
+
+    /// The MIC checked under the PTK's KCK: it verifies, or the failure.
+    pub fn check_mic<E: Aes128Engine>(self, ptk: &Ptk, engine: &mut E) -> Result<(), MicFailure> {
+        match self.verify_mic(ptk, engine) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(MicFailure::Mismatch),
+            Err(error) => Err(MicFailure::Engine(error)),
+        }
     }
 
     /// Whether the MIC verifies under the PTK's KCK. An AES-CMAC suite runs

@@ -25,7 +25,12 @@ fn equal_numeric_generations_never_route_a_completion_into_another_requester() {
         second.transmission_generation()
     );
     assert_eq!(first.body(), second.body());
-    let (session, _) = first.complete(true, Instant::from_micros(10)).unwrap();
+    let (session, _) = first
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            Instant::from_micros(10),
+        )
+        .unwrap();
     assert_eq!(session.operation().peer(), individual(1));
     let (second_terminal, _) = second.reject_hardware_admission();
     let (_, FtmOutcome::Failed { partial, reason }) = second_terminal.into_parts() else {
@@ -270,7 +275,10 @@ fn start_published<const N: usize>(
     };
     assert_eq!(transmission.body()[..3], [4, 32, 1]);
     transmission
-        .complete(true, Instant::from_micros(20))
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            Instant::from_micros(20),
+        )
         .unwrap()
         .0
 }
@@ -356,7 +364,12 @@ fn request_retries_transfer_the_only_session_owner() {
         panic!()
     };
     let first_generation = first.transmission_generation();
-    let (session, event) = first.complete(false, Instant::from_micros(10)).unwrap();
+    let (session, event) = first
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Unacknowledged,
+            Instant::from_micros(10),
+        )
+        .unwrap();
     assert_eq!(
         event,
         FtmRequesterEvent::RequestRetryScheduled {
@@ -372,7 +385,12 @@ fn request_retries_transfer_the_only_session_owner() {
         panic!("retry due")
     };
     assert_ne!(first_generation, second.transmission_generation());
-    let (session, _) = second.complete(true, Instant::from_micros(111)).unwrap();
+    let (session, _) = second
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            Instant::from_micros(111),
+        )
+        .unwrap();
     assert_eq!(session.next_deadline(), Some(Instant::from_micros(1_111)));
 }
 
@@ -401,7 +419,10 @@ fn scheduling_overflow_returns_the_unchanged_requester_or_transmission() {
         error,
         owner: transmission,
     } = transmission
-        .complete(true, Instant::from_micros(u64::MAX))
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            Instant::from_micros(u64::MAX),
+        )
         .err()
         .unwrap();
     assert_eq!(error, FtmRequesterError::DeadlineOverflow);
@@ -411,7 +432,10 @@ fn scheduling_overflow_returns_the_unchanged_requester_or_transmission() {
         error,
         owner: transmission,
     } = transmission
-        .complete(false, Instant::from_micros(u64::MAX))
+        .complete(
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Unacknowledged,
+            Instant::from_micros(u64::MAX),
+        )
         .err()
         .unwrap();
     assert_eq!(error, FtmRequesterError::DeadlineOverflow);

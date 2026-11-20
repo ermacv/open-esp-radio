@@ -8,11 +8,16 @@ use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 
 use crate::{Ptk, RsnInterface, frames::RsnGtk};
+use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnKeyKind {
     Pairwise,
-    Group { key_id: GroupKeyId, transmit: bool },
+    /// A group key and its GTK KDE's Tx bit.
+    Group {
+        key_id: GroupKeyId,
+        tx: GtkTx,
+    },
 }
 
 /// One key installation request with all key material owned by the request.
@@ -46,7 +51,7 @@ impl RsnKeyInstall {
             peer: [0xff; 6],
             kind: RsnKeyKind::Group {
                 key_id: gtk.key_id(),
-                transmit: gtk.transmit(),
+                tx: gtk.tx(),
             },
             receive_sequence,
             key: Ccmp128Key::new(gtk.key()),

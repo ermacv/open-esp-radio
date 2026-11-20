@@ -588,8 +588,8 @@ fn association_retains_the_highest_common_advertised_legacy_rate() {
             },
             maximum_legacy_rate_500kbps: 108,
             ht_capabilities: None,
-            qos_supported: false,
-            short_preamble: false,
+            qos: crate::data::PeerQos::NonQos,
+            preamble: crate::phy::DsssPreamble::Long,
         })
     );
 }
@@ -638,7 +638,7 @@ fn association_retains_the_peers_complete_ht40_receive_facts() {
     let Some(ApManagementRequest::Association {
         maximum_legacy_rate_500kbps,
         ht_capabilities: Some(ht),
-        qos_supported,
+        qos,
         ..
     }) = parse_ap_management_request(&TEST_ADVERTISEMENT, &association, access_point)
     else {
@@ -648,7 +648,7 @@ fn association_retains_the_peers_complete_ht40_receive_facts() {
     assert!(ht.supports_40_mhz());
     assert!(ht.supports_short_guard_interval(crate::channel::ChannelWidth::Mhz40Above));
     assert_eq!(ht.highest_rx_mcs(), 7);
-    assert!(qos_supported);
+    assert_eq!(qos, crate::data::PeerQos::Qos);
 }
 
 #[test]

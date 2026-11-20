@@ -23,7 +23,10 @@ fn begin(
 
 #[test]
 fn message2_before_message1_terminal_cannot_arm_message3() {
-    for acknowledged in [false, true] {
+    for outcome in [
+        oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Unacknowledged,
+        oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+    ] {
         let mut storage = AccessPointPeerStorage::new();
         let mut service = service(&mut storage);
         let (_message1, message1_context) = begin(&mut service, [7; 32], 9).into_parts();
@@ -37,7 +40,7 @@ fn message2_before_message1_terminal_cannot_arm_message3() {
         assert_eq!(
             service.observe_wpa2_transmit(
                 message1_context,
-                acknowledged,
+                outcome,
                 oer_portable_time::Instant::from_micros(10),
             ),
             Ok(ApEapolTxCompletion::Superseded),
@@ -47,7 +50,7 @@ fn message2_before_message1_terminal_cannot_arm_message3() {
         assert_eq!(
             service.observe_wpa2_transmit(
                 context,
-                acknowledged,
+                outcome,
                 oer_portable_time::Instant::from_micros(20)
             ),
             Ok(ApEapolTxCompletion::WindowArmed),
@@ -65,7 +68,11 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     let mut service = service(&mut storage);
     let (_message1, context) = begin(&mut service, [7; 32], 9).into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(2))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(2),
+        )
         .unwrap();
     let message2 = signed_message2(&WPA2_RSN, &[], [7; 32], [8; 32]);
     let ApWpa2Progress::Transmit(message3) =
@@ -90,7 +97,11 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
     ));
     let (_message3, context) = message3.into_parts();
     assert_eq!(
-        service.observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(20)),
+        service.observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(20)
+        ),
         Ok(ApEapolTxCompletion::Superseded),
     );
     assert_eq!(service.next_wpa2_retry_deadline(), None);
@@ -109,7 +120,7 @@ fn an_old_publication_does_not_refresh_a_reassociated_peer() {
     service
         .observe_wpa2_transmit(
             new_context,
-            false,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Unacknowledged,
             oer_portable_time::Instant::from_micros(20),
         )
         .unwrap();
@@ -118,7 +129,7 @@ fn an_old_publication_does_not_refresh_a_reassociated_peer() {
     assert_eq!(
         service.observe_wpa2_transmit(
             old_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(30)
         ),
         Ok(ApEapolTxCompletion::Superseded),
@@ -136,7 +147,11 @@ fn another_peer_authenticating_keeps_the_original_publication_current() {
         .authenticate_open(OTHER, oer_portable_time::Instant::from_micros(10))
         .unwrap();
     assert_eq!(
-        service.observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(20)),
+        service.observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(20)
+        ),
         Ok(ApEapolTxCompletion::WindowArmed),
     );
     assert_eq!(
@@ -151,7 +166,11 @@ fn a_retry_terminal_does_not_postpone_its_next_deadline() {
     let mut service = service(&mut storage);
     let (_message1, context) = begin(&mut service, [7; 32], 9).into_parts();
     service
-        .observe_wpa2_transmit(context, false, oer_portable_time::Instant::from_micros(10))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Unacknowledged,
+            oer_portable_time::Instant::from_micros(10),
+        )
         .unwrap();
     let ApWpa2RetryProgress::Transmit(retry) = service
         .take_due_wpa2_retry::<512, _>(
@@ -167,7 +186,7 @@ fn a_retry_terminal_does_not_postpone_its_next_deadline() {
     assert_eq!(
         service.observe_wpa2_transmit(
             context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(500_000)
         ),
         Ok(ApEapolTxCompletion::WindowRetained),

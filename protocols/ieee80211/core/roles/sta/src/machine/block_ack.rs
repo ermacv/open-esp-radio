@@ -8,7 +8,23 @@ pub struct PendingRxBlockAck {
     epoch: LinkEpoch,
     bssid: Bssid,
     action: BlockAckAction,
-    supported: bool,
+    admission: BlockAckAdmission,
+}
+
+/// Whether an association admits Block Ack agreements: a QoS association
+/// of an HT or HE format does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockAckAdmission {
+    Admitted,
+    Refused,
+}
+
+/// Whether the connected station has room to send now: no control
+/// transmission of its own is out, and it is home, awake and keyed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SendRoom {
+    Free,
+    Blocked,
 }
 
 impl PendingRxBlockAck {
@@ -16,13 +32,13 @@ impl PendingRxBlockAck {
         epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
-        supported: bool,
+        admission: BlockAckAdmission,
     ) -> Self {
         Self {
             epoch,
             bssid,
             action,
-            supported,
+            admission,
         }
     }
     /// A request of the association `epoch`, for a host test that plays the
@@ -32,17 +48,17 @@ impl PendingRxBlockAck {
         epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
-        supported: bool,
+        admission: BlockAckAdmission,
     ) -> Self {
         Self {
             epoch,
             bssid,
             action,
-            supported,
+            admission,
         }
     }
-    pub const fn supported(&self) -> bool {
-        self.supported
+    pub const fn admission(&self) -> BlockAckAdmission {
+        self.admission
     }
     pub const fn action(&self) -> BlockAckAction {
         self.action
@@ -183,19 +199,16 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         };
         // Its data waits while the station sleeps or is away; so does this.
-        if !super::data_link_up(connected, self.absence.is_some(), &self.keys) {
+        if !super::data_link_up(connected, self.absence.as_ref(), &self.keys) {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
         if connected.bssid != reply.bssid {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
-        if connected.sending {
+        if connected.transmission != super::Transmission::Free {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
-        let protected = connected
-            .rsn
-            .as_ref()
-            .is_some_and(|rsn| rsn.management.is_some());
+        let protection = super::management_frame_protection(connected);
         let bssid = connected.bssid;
         let length = if reply.body.get(1) == Some(&2) { 6 } else { 9 };
         let Some(body) = reply.body.get(..length) else {
@@ -207,7 +220,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             bssid,
             body,
             TxPurpose::Connected(Sending::BlockAck),
-            protected,
+            protection,
         ) {
             Ok(encoded) => encoded,
             Err(Unsent::Out) => return Err((reply, BlockAckReplyRefusal::Busy)),
@@ -216,7 +229,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         };
         // A protected frame the station numbered itself goes under its
         // installed key; the handed-over link keys its own frames.
-        if protected
+        if protection == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
             && !self.keys.keyed()
             && !matches!(encoded.number, crate::link::FrameNumber::Link { .. })
         {
@@ -224,9 +237,11 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if let State::Connected(connected) = &mut self.state {
-            connected.sending = true;
+            connected.transmission = super::Transmission::Busy;
         }
-        let under_key = protected && matches!(encoded.number, crate::link::FrameNumber::Open);
+        let under_key = protection
+            == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+            && matches!(encoded.number, crate::link::FrameNumber::Open);
         let transmit = self.hand_out(encoded);
         Ok(if under_key {
             StaAction::TransmitProtected(transmit)

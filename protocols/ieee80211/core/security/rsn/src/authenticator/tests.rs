@@ -73,7 +73,11 @@ fn group_packet_number(value: u64) -> CcmpPacketNumber {
 }
 
 fn key_data() -> RsnPlainKeyData {
-    let gtk = RsnGtk::new(GroupKeyId::new(1).unwrap(), true, &[0x55; 16]);
+    let gtk = RsnGtk::new(
+        GroupKeyId::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
+        &[0x55; 16],
+    );
     RsnPlainKeyData::build(&AP_RSN, &gtk, None).unwrap()
 }
 
@@ -105,7 +109,7 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     assert_eq!(key_frame.key_receive_sequence(), &[1, 2, 3, 4, 5, 6, 0, 0]);
     assert!(key_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
     let plain = crate::test_unwrap_bytes(ptk.kek(), key_frame.key_data()).unwrap();
-    assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], false).is_ok());
+    assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], None).is_ok());
     // A retransmission takes the next counter and the GTK's packet number
     // at its own time, with the same key data under the same PTK.
     let (again, again_transmit) = authenticator
@@ -399,4 +403,45 @@ fn a_message1_that_failed_to_build_is_not_awaited() {
             .unwrap(),
         RsnAuthenticatorStep::PrepareMessage3(_)
     ));
+}
+
+/// `frame` with one bit of its MIC flipped.
+fn forged(frame: &OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
+    let mut bytes = [0; 512];
+    let len = frame.as_bytes().len();
+    bytes[..len].copy_from_slice(frame.as_bytes());
+    bytes[81] ^= 1;
+    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, &bytes[..len]).unwrap()
+}
+
+#[test]
+fn a_forged_message2_prepares_no_message3_and_the_real_one_still_does() {
+    let mut authenticator = authenticator(&STATION_RSN);
+    let genuine = message2(&STATION_RSN, &ptk());
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), forged(&genuine), &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::None)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::AwaitingMessage2);
+    assert!(authenticator.pending_ptk().is_none());
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), genuine, &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::PrepareMessage3(_))
+    ));
+}
+
+#[test]
+fn a_forged_message4_authorizes_nobody_and_the_real_one_still_does() {
+    let mut authenticator = awaiting_message4();
+    let genuine = signed_message4(REPLAY + 1);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), forged(&genuine), &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::None)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::AwaitingMessage4);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), genuine, &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::Authorized)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::Authorized);
 }

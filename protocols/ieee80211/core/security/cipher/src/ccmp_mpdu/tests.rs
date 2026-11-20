@@ -3,26 +3,24 @@ use crate::aes::SoftwareAes128;
 use std::vec::Vec;
 
 // Independent Python cryptography AESCCM fixtures, explicit 802.11 AAD/nonce.
-// Both directions carry the same valid one-subframe A-MSDU, TID 5, PN 010203040506.
-const WIRE: &[(bool, bool, &str)] = &[
+// Both directions carry the same valid one-subframe A-MSDU, TID 5, PN 010203040506:
+// each SPP mode once to the access point (To DS) and once from it (From DS), as
+// each frame's Frame Control says.
+const WIRE: &[(Spp, &str)] = &[
     (
-        false,
-        false,
+        Spp::NotNegotiated,
         "88410000020000000002020000000001020000000003301285000605002004030201f07eede0098f221607e15fba00f6d3700d45aacc36579a5c2fb58aad5da6dac379a5",
     ),
     (
-        false,
-        true,
+        Spp::NotNegotiated,
         "88420000020000000001020000000002020000000003301285000605002004030201d48908a774db803d957983d3cada8502b9396fef745b09a70a3e9546c93ea961a5e2",
     ),
     (
-        true,
-        false,
+        Spp::Negotiated,
         "884100000200000000020200000000010200000000033012850006050020040302013edc756662394dbcfb0ae5899079214592511815ae78bf94e73bebfda59517877bdd",
     ),
     (
-        true,
-        true,
+        Spp::Negotiated,
         "88420000020000000001020000000002020000000003301285000605002004030201bcd472f2766f73794735481b94e75ff9bde8c13d1359f9fd5341ddf58e25ff82a425",
     ),
 ];
@@ -33,12 +31,8 @@ fn bytes(hex: &str) -> Vec<u8> {
         .map(|pair| u8::from_str_radix(core::str::from_utf8(pair).unwrap(), 16).unwrap())
         .collect()
 }
-fn mode(spp: bool) -> CcmpAssociation {
-    CcmpAssociation::new(if spp {
-        Spp::Negotiated
-    } else {
-        Spp::NotNegotiated
-    })
+fn mode(spp: Spp) -> CcmpAssociation {
+    CcmpAssociation::new(spp)
 }
 fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
     oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
@@ -46,7 +40,7 @@ fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
 
 #[test]
 fn amsdu_wire_peer_matches_in_both_directions_with_and_without_spp() {
-    for &(spp, _down, fixture) in WIRE {
+    for &(spp, fixture) in WIRE {
         let wire = bytes(fixture);
         let mut opened = wire.clone();
         let association = mode(spp);
@@ -64,21 +58,20 @@ fn amsdu_wire_peer_matches_in_both_directions_with_and_without_spp() {
 
 #[test]
 fn spp_authenticates_amsdu_present_but_ordinary_ccmp_does_not() {
-    for &(spp, _, fixture) in WIRE {
+    for &(spp, fixture) in WIRE {
         let mut changed = bytes(fixture);
         changed[24] ^= 0x80;
         let result = mode(spp).open(&mut SoftwareAes128, &key(), &mut changed);
-        if spp {
-            assert_eq!(result, Err(CcmpMpduError::InvalidMic));
-        } else {
-            assert!(result.is_ok());
+        match spp {
+            Spp::Negotiated => assert_eq!(result, Err(CcmpMpduError::InvalidMic)),
+            Spp::NotNegotiated => assert!(result.is_ok()),
         }
     }
 }
 
 #[test]
 fn mutable_retry_power_and_sequence_fields_do_not_change_mic() {
-    for &(spp, _, fixture) in WIRE {
+    for &(spp, fixture) in WIRE {
         let mut changed = bytes(fixture);
         changed[1] ^= 0x38;
         changed[22] ^= 0xf0;
@@ -104,10 +97,10 @@ fn mutable_retry_power_and_sequence_fields_do_not_change_mic() {
 
 #[test]
 fn oversized_data_is_refused_before_encryption_or_decryption() {
-    let mut oversized = bytes(WIRE[0].2);
+    let mut oversized = bytes(WIRE[0].1);
     oversized.resize(26 + 8 + usize::from(u16::MAX) + 1 + MIC_LEN, 0xa5);
     let before = oversized.clone();
-    let association = mode(false);
+    let association = mode(Spp::NotNegotiated);
     assert_eq!(
         association.seal(&mut SoftwareAes128, &key(), &mut oversized),
         Err(CcmpMpduError::TooLong)
@@ -130,19 +123,19 @@ fn four_address_wire_vectors_cover_the_28_and_30_byte_aad_shapes() {
         let wire = bytes(wire);
         let mut opened = wire.clone();
         assert_eq!(
-            mode(true)
+            mode(Spp::Negotiated)
                 .open(&mut SoftwareAes128, &key(), &mut opened)
                 .unwrap(),
             b"four-address"
         );
-        mode(true)
+        mode(Spp::Negotiated)
             .seal(&mut SoftwareAes128, &key(), &mut opened)
             .unwrap();
         assert_eq!(opened, wire);
         let mut changed = wire.clone();
         changed[29] ^= 1; // Last address-4 byte lies in the second AAD block.
         assert_eq!(
-            mode(true).open(&mut SoftwareAes128, &key(), &mut changed),
+            mode(Spp::Negotiated).open(&mut SoftwareAes128, &key(), &mut changed),
             Err(CcmpMpduError::InvalidMic)
         );
     }
@@ -186,7 +179,7 @@ impl oer_portable_crypto::block::BlockEngine for RefusingKeyed {
 
 #[test]
 fn a_refused_block_is_an_engine_error_that_erases_the_body() {
-    let (spp, _, fixture) = WIRE[0];
+    let (spp, fixture) = WIRE[0];
     let wire = bytes(fixture);
     // A QoS data header and the CCMP header precede the body; the MIC ends it.
     let body = 26 + 8..wire.len() - 8;

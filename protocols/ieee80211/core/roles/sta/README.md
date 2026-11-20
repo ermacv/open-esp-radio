@@ -243,8 +243,6 @@ Module map:
   the TIM's decision;
 - `station`: the application's vocabulary (lifecycle stages, fault reasons,
   reconnect policy);
-- `modem_sleep`: the connected station's power manager, after the vendor's
-  `pm.o` and `pm_coex.o`, with the vendor's timing constants;
 - `sa_query`: the SA Query procedure of an association under management
   frame protection;
 - `link_monitor`: beacon-loss decisions;
@@ -306,25 +304,6 @@ WMM priorities and TWT flow IDs select exact arrays without numeric
 indexing; an unpublished data return retains its checked frame description.
 Data writes an open MAC header directly into its proven span, so it fits an
 exact-size buffer without a temporary CCMP gap or a second payload move.
-The PM owner retains a NonZero beacon period through its divisions. Listen
-intervals and TBTT periods keep their full `u64` value. Monotonic arithmetic
-is checked: a short slice emits `Due`, and a future slice or preemption uses
-an absolute `ArmAt` deadline, so delayed execution cannot extend it. Fallible
-clock inputs and interval products return `PmScheduleError` without changing
-state or publishing effects. It validates a transition on a value-only copy and commits that
-copy; the transition has a finite effect bound and no allocation. Relative
-timers are validated against one captured clock before a consumer applies the
-batch; a backend must also reject intervals its hardware cannot represent.
-`ModemSleep::start` returns a fallible batch as well. Only the activity
-presence counter retains intentional modular rollover.
-Each modem-sleep input returns a fresh `PmActions` batch. Before changing
-state, its helpers receive fixed arrays of affine effect places: writing
-consumes a place, so neither overflow nor overwriting another effect is
-possible. TBTT reserves the largest batch: 1 normalization + 1 RF wake +
-13 coexistence + 1 interval + 8 parameter effects, totaling 24. Other inputs
-reserve fewer places. Consumers execute each returned batch in order;
-separate inputs cannot append into the same batch. The TX offer returns its
-hold decision alongside the effects, including when the frame must wait.
 The station owns `Counter`, the saturating diagnostic value its data path
 and service loop report. It carries no lower-MAC contract, resource capacity
 or protocol-state decision.
@@ -629,9 +608,9 @@ and stale configuration ends.
   `Connected` reacts.
 - **AP-initiated PTK rekey is not supported** (`machine.rs::ConnectedRsn::receive`
   answers it `UnsupportedMessage`). A recorded capability gap, not planned.
-- **Modem sleep is not wired.** `modem_sleep.rs::ModemSleep` (bool fields,
-  `Clone` as rollback, the coexistence slice inside) has no caller; only
-  `power_save.rs` is in the machine. No power save on hardware.
+- **No modem sleep.** Only `power_save.rs` is in the machine: the station
+  tells its access point its power state, and never sleeps. No power save
+  on hardware.
 - **Only `UpstreamFact::Connected` reaches the arbiter**; `SwitchAnnounced`,
   `Lost`, `Found`, `JoinFailed`, `NotFound` and `Purpose::Search` are never
   used, so the arbiter cannot follow a switch or a loss.

@@ -9,6 +9,7 @@
 //! the protocol's absent-token value and cannot be inserted into that set.
 
 use core::num::NonZeroU8;
+use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 
 use heapless::Vec;
 use oer_portable_time::{Duration, Instant};
@@ -433,11 +434,11 @@ impl<const N: usize> FtmRequestTransmission<N> {
     )]
     pub fn complete(
         self,
-        acknowledged: bool,
+        outcome: MpduOutcome,
         now: Instant,
     ) -> Result<(FtmSession<N>, FtmRequesterEvent), FtmRefusal<Self>> {
         let config = self.owner.requester.config;
-        let (phase, event) = if acknowledged {
+        let (phase, event) = if outcome == MpduOutcome::Acknowledged {
             let (Some(response_deadline), Some(session_deadline)) = (
                 now.checked_add(config.response_timeout),
                 now.checked_add(config.session_timeout),

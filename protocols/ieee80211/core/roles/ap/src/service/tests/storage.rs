@@ -77,7 +77,7 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
         let timeout = AccessPointInactiveTimeout::default();
         let gtk = RsnGtk::new(
             oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
             &[0x55; 16],
         );
         let result = match policy {

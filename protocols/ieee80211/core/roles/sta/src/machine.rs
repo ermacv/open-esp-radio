@@ -152,8 +152,10 @@ mod group_keys;
 mod management;
 mod tx_block_ack;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
+use block_ack::SendRoom;
 pub use block_ack::{
-    BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck, RxBlockAckReply,
+    BlockAckAdmission, BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck,
+    RxBlockAckReply,
 };
 use commands::Commands;
 pub use commands::{
@@ -163,7 +165,9 @@ pub use commands::{
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
 pub use group_keys::StaGroupPlace;
-use group_keys::{GroupKeys, Installed as InstalledGroup, Replay as GroupReplay};
+use group_keys::{
+    GroupArrival, GroupKeys, GroupRole, Installed as InstalledGroup, Replay as GroupReplay,
+};
 use management::{ManagementEvent, ManagementProtection};
 use tx_block_ack::TxBlockAckOwed;
 pub use tx_block_ack::{StaTxBlockAck, StaTxBlockAckPolicy, StaTxBlockAckPolicyError};
@@ -339,6 +343,14 @@ pub enum StaKeyOutcome {
     Done,
     /// The operation did not take effect within its bound.
     Expired,
+}
+
+/// What a connect's scan covered: every channel, or it ended early after
+/// cancelled absences.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanCoverage {
+    Complete,
+    Partial,
 }
 
 /// How a frame the station handed out ended.
@@ -861,17 +873,15 @@ pub enum StaDisconnectReason {
     TransmitRefused(TxRefusal),
     /// The application asked it to leave.
     Requested,
-    /// No access point of the network answered the scan; `partial` when
-    /// the scan ended early after cancelled absences.
+    /// No access point of the network answered the scan, which covered
+    /// every channel or ended early after cancelled absences.
     NotFound {
-        /// The scan ended early.
-        partial: bool,
+        scan: ScanCoverage,
     },
     /// Access points of the network answered, and none offers a format the
-    /// profile's request admits; `partial` as for [`Self::NotFound`].
+    /// profile's request admits; `scan` as for [`Self::NotFound`].
     NoAdmittedFormat {
-        /// The scan ended early.
-        partial: bool,
+        scan: ScanCoverage,
     },
     /// The arbiter did not let the station on a channel.
     Refused(Refusal),
@@ -1074,6 +1084,14 @@ pub struct Station<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> 
     he: bool,
 }
 
+/// Whether the link's next change includes the changes of the transmit
+/// agreements: they wait for [`Station::poll_action`], and are due there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AgreementChanges {
+    Wait,
+    Due,
+}
+
 /// Who holds the station's connected link ([`crate::link`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LinkCustody {
@@ -1082,7 +1100,7 @@ enum LinkCustody {
     /// The link's holder: whether the station last told it the link
     /// carries data, and each TID's transmit window it last told it.
     Lent {
-        carries: bool,
+        carriage: crate::link::Carriage,
         windows: [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
     },
     /// The station asked for it back.
@@ -1301,13 +1319,15 @@ impl Keys {
     fn group_installed(
         &mut self,
         pending: PendingGroupKey,
-        current: bool,
+        role: GroupRole,
         replay: Option<&mut CcmpRxReplayEpoch>,
-        selected: bool,
+        arrival: GroupArrival,
     ) {
         let mut pending = pending;
         // A link's holder switched the lane already, the station otherwise.
-        if current && let Some(replay) = replay {
+        if role == GroupRole::Current
+            && let Some(replay) = replay
+        {
             pending.activate(replay);
         }
         let PendingGroupKey {
@@ -1332,23 +1352,18 @@ impl Keys {
             material,
             replay,
         };
-        if selected {
-            self.groups.restore(entry, current);
-        } else {
-            self.groups.install(entry, current);
+        match arrival {
+            GroupArrival::Selected => self.groups.restore(entry, role),
+            GroupArrival::Installed => self.groups.install(entry, role),
         }
     }
 
     /// An installed group key to remove, while no group operation is out.
-    fn take_group_key(&mut self, retiring: bool) -> Option<InstalledGroup> {
+    fn take_group_key(&mut self) -> Option<InstalledGroup> {
         if !matches!(self.group, GroupOperation::Idle) {
             return None;
         }
-        if retiring {
-            self.groups.take_retiring()
-        } else {
-            self.groups.take_any()
-        }
+        self.groups.take_any()
     }
 
     fn current_group(&self) -> Option<GroupKeyId> {
@@ -1530,16 +1545,19 @@ impl<T: StaTypes, K> State<T, K> {
                 .confirmation
                 .is_none()
                 .then_some(UpstreamFact::Connected(new.channel)),
-            edca: false,
-            exchange: false,
+            edca: Owing::Clear,
+            exchange: Owing::Clear,
             power: PowerSaveView::Awake,
-            wake: false,
-            sending: false,
-            waking: false,
+            wake: Owing::Clear,
+            transmission: Transmission::Free,
             background: None,
-            connected_notice: new.confirmation.is_none(),
+            connected_notice: if new.confirmation.is_none() {
+                Owing::Owed
+            } else {
+                Owing::Clear
+            },
             block_ack: None,
-            tx_block_ack: false,
+            tx_block_ack: TxAgreements::Unstarted,
             rsn: None,
         });
     }
@@ -1821,27 +1839,59 @@ struct Connected<T: StaTypes, K> {
     report: Option<UpstreamFact<K>>,
     /// The access point's beacons announced another EDCA set, already in
     /// `peer`, which the interface has yet to take.
-    edca: bool,
+    edca: Owing,
     /// The primary lease to exchange after the port moved.
-    exchange: bool,
+    exchange: Owing,
     /// What the access point knows of the station's power state.
     power: PowerSaveView,
     /// A Null with PM=0 the station owes its access point.
-    wake: bool,
+    wake: Owing,
     /// Admission: at most one connected control transmission at a time.
-    sending: bool,
-    /// A PM=0 transition is outstanding; beacons need not request another.
-    waking: bool,
+    transmission: Transmission,
     /// The background scan, if one runs.
     background: Option<Background>,
     /// The application has yet to hear the station connected.
-    connected_notice: bool,
+    connected_notice: Owing,
     /// Parsed management to hand to the service before the next RX input.
     block_ack: Option<oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction>,
-    /// The transmit Block Ack originator started this association.
-    tx_block_ack: bool,
+    /// Whether the transmit Block Ack originator started this association.
+    tx_block_ack: TxAgreements,
     /// The supplicant of a protected link and its group key's handshake.
     rsn: Option<ConnectedRsn>,
+}
+
+/// Whether the connected station still owes something: a notice, an
+/// exchange or a frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Owing {
+    Owed,
+    Clear,
+}
+
+/// The connected station's one control transmission at a time: none, one,
+/// or a Null with PM=0, whose outstanding transition beacons need not
+/// request again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Transmission {
+    Free,
+    Busy,
+    Waking,
+}
+
+/// Whether the transmit Block Ack originator started the association's
+/// agreements.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxAgreements {
+    Unstarted,
+    Started,
+}
+
+/// How a lease or an absence ended: at its own end, or cancelled before it
+/// began.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LeaseEnd {
+    Ended,
+    Cancelled,
 }
 
 /// What the connected station's transmission in flight is for.
@@ -1892,15 +1942,24 @@ fn tx_agreements<'c, T: StaTypes, K>(
     connected: &mut Connected<T, K>,
 ) -> Option<&'c mut StaTxBlockAck> {
     let tx = tx.as_mut()?;
-    if !connected.tx_block_ack {
-        connected.tx_block_ack = true;
-        tx.associate(
-            connected.qos
-                && connected.peer.associated.phy.format()
-                    != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-        );
+    if connected.tx_block_ack == TxAgreements::Unstarted {
+        connected.tx_block_ack = TxAgreements::Started;
+        tx.associate(block_ack_admission(connected));
     }
     Some(tx)
+}
+
+/// Whether `connected`'s association admits Block Ack agreements: a QoS
+/// association of an HT or HE format.
+fn block_ack_admission<T: StaTypes, K>(connected: &Connected<T, K>) -> BlockAckAdmission {
+    if connected.qos
+        && connected.peer.associated.phy.format()
+            != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt
+    {
+        BlockAckAdmission::Admitted
+    } else {
+        BlockAckAdmission::Refused
+    }
 }
 
 /// Hand a received Block Ack action to the transmit agreements, or keep it
@@ -1916,17 +1975,38 @@ fn route_block_ack<T: StaTypes, K>(
     }
 }
 
+/// The protection of the connected station's robust management frames:
+/// protected once the association protects management frames.
+fn management_frame_protection<T: StaTypes, K>(
+    connected: &Connected<T, K>,
+) -> oer_protocols_ieee80211_wire::frame::FrameProtection {
+    if connected
+        .rsn
+        .as_ref()
+        .is_some_and(|rsn| rsn.management.is_some())
+    {
+        oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+    } else {
+        oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
+    }
+}
+
 /// Whether the connected link carries data now: confirmed, home, awake and,
 /// on a protected link, keyed.
-fn data_link_up<T: StaTypes, K>(connected: &Connected<T, K>, absent: bool, keys: &Keys) -> bool {
+fn data_link_up<T: StaTypes, K, A>(
+    connected: &Connected<T, K>,
+    absence: Option<&A>,
+    keys: &Keys,
+) -> bool {
     connected.confirmation.is_none()
-        && !absent
+        && absence.is_none()
         && !connected.power.asleep()
         && (connected.rsn.as_ref().is_none() || keys.keyed())
 }
 
 /// The data plane's state of `connected`'s link, the station at `address`:
-/// its header template (`keyed`, under the pairwise key), the admission
+/// its header template (under the pairwise key once `protection` is
+/// CCMP's), the admission
 /// its access point's EDCA set names, the retry of the transmit agreements
 /// `tx` and the access point's A-MPDU limits; no agreement is operational
 /// yet. `None` for a BSSID the station sends no data to.
@@ -1934,7 +2014,7 @@ fn handover_data<T: StaTypes, K>(
     address: OwnAddress,
     bssid: Bssid,
     connected: &Connected<T, K>,
-    keyed: bool,
+    protection: oer_protocols_ieee80211_wire::security::LinkProtection,
     tx: Option<&StaTxBlockAck>,
 ) -> Option<oer_protocols_ieee80211_core_datapath::plane::DataLink> {
     let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
@@ -1945,11 +2025,7 @@ fn handover_data<T: StaTypes, K>(
         } else {
             oer_protocols_ieee80211_wire::data::PeerQos::NonQos
         },
-        if keyed {
-            oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
-        } else {
-            oer_protocols_ieee80211_wire::security::LinkProtection::Open
-        },
+        protection,
     )?;
     let parameters = oer_protocols_ieee80211_wire::ht::HtAmpduParameters::from_bytes([connected
         .peer
@@ -1981,7 +2057,9 @@ fn agreement_change<T: StaTypes, K>(
     connected: &Connected<T, K>,
     told: &mut [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
 ) -> Option<LinkAction> {
-    let tx = tx.as_mut().filter(|_| connected.tx_block_ack)?;
+    let tx = tx
+        .as_mut()
+        .filter(|_| connected.tx_block_ack == TxAgreements::Started)?;
     if !tx.changed() {
         return None;
     }
@@ -2029,7 +2107,7 @@ impl ConnectedRsn {
         }
         let frame = self
             .supplicant
-            .complete_group_key_install(request, true)
+            .complete_group_key_install(request)
             .map_err(|_| StaDisconnectReason::HandshakeFailed)?;
         self.rekey = Rekey::Send(EapolResponse { frame, protection });
         Ok(())
@@ -2782,19 +2860,19 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
     /// or its return. A change of a transmit agreement waits for
     /// [`Self::poll_action`], as each of these does too.
     pub fn poll_link(&mut self) -> Option<LinkAction> {
-        self.owe_link(false)
+        self.owe_link(AgreementChanges::Wait)
     }
 
     /// The link's next change: once connected the station hands its link
     /// over; it holds the link's data while it sleeps, is away or its keys
-    /// are not confirmed and releases it again; `agreements` adds each
-    /// change of a TID's transmit agreement; once it left, it asks for the
-    /// link back.
-    fn owe_link(&mut self, agreements: bool) -> Option<LinkAction> {
-        let protected = self
-            .profile
-            .as_ref()
-            .is_some_and(|profile| profile.security.policy() != StaSecurityPolicy::Open);
+    /// are not confirmed and releases it again; with `agreements` due it
+    /// adds each change of a TID's transmit agreement; once it left, it asks
+    /// for the link back.
+    fn owe_link(&mut self, agreements: AgreementChanges) -> Option<LinkAction> {
+        let protection = self.profile.as_ref().map_or(
+            oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+            |profile| profile.security.policy().link_protection(),
+        );
         let connected = match &mut self.state {
             State::Connected(connected) => Some(connected),
             _ => None,
@@ -2804,14 +2882,20 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                 let epoch = self.epoch?;
                 // A protected link goes once its key is installed, with its
                 // replay check; the key itself is the engine's.
-                let (keyed, replay) = match connected.rsn.as_mut() {
+                let (header_protection, replay) = match connected.rsn.as_mut() {
                     Some(rsn) => {
                         if !self.keys.keyed() || rsn.replay.is_none() {
                             return None;
                         }
-                        (true, rsn.replay.take())
+                        (
+                            oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp,
+                            rsn.replay.take(),
+                        )
                     }
-                    None => (false, None),
+                    None => (
+                        oer_protocols_ieee80211_wire::security::LinkProtection::Open,
+                        None,
+                    ),
                 };
                 let address = self.config.address;
                 let bssid = connected.bssid;
@@ -2819,7 +2903,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     address,
                     bssid,
                     connected,
-                    keyed,
+                    header_protection,
                     self.config.tx_block_ack.as_ref(),
                 );
                 if let Some(tx) = self.config.tx_block_ack.as_mut() {
@@ -2830,14 +2914,14 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     connected.qos.then_some(connected.qos_sequences),
                 );
                 self.link = LinkCustody::Lent {
-                    carries: false,
+                    carriage: crate::link::Carriage::Held,
                     windows: [None; 8],
                 };
                 Some(LinkAction::HandOver(LinkHandover::new(
                     epoch,
                     data,
                     numbers,
-                    RxLink::new(address, bssid, protected, replay),
+                    RxLink::new(address, bssid, protection, replay),
                 )))
             }
             (LinkCustody::Lent { .. }, None) => {
@@ -2846,25 +2930,28 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             }
             (
                 LinkCustody::Lent {
-                    mut carries,
+                    mut carriage,
                     mut windows,
                 },
                 Some(connected),
             ) => {
-                let now = data_link_up(connected, self.absence.is_some(), &self.keys);
-                let action = if now != carries {
-                    carries = now;
-                    Some(if now {
-                        LinkAction::Release
-                    } else {
-                        LinkAction::Hold
+                let now = if data_link_up(connected, self.absence.as_ref(), &self.keys) {
+                    crate::link::Carriage::Carries
+                } else {
+                    crate::link::Carriage::Held
+                };
+                let action = if now != carriage {
+                    carriage = now;
+                    Some(match now {
+                        crate::link::Carriage::Carries => LinkAction::Release,
+                        crate::link::Carriage::Held => LinkAction::Hold,
                     })
-                } else if agreements {
+                } else if agreements == AgreementChanges::Due {
                     agreement_change(&mut self.config.tx_block_ack, connected, &mut windows)
                 } else {
                     None
                 };
-                self.link = LinkCustody::Lent { carries, windows };
+                self.link = LinkCustody::Lent { carriage, windows };
                 action
             }
             (LinkCustody::Station | LinkCustody::Returning, _) => None,
@@ -3181,7 +3268,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             // The link's change comes first, also after a transition of
             // this call: a station that left asks for its link back before
             // it owes anything that needs it.
-            if let Some(link) = self.owe_link(true) {
+            if let Some(link) = self.owe_link(AgreementChanges::Due) {
                 return Some(StaAction::Link(link));
             }
             let (mut context, state) = self.transition();
@@ -3198,7 +3285,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                 ActionProgress::Action(owed) => break owed,
                 ActionProgress::Transition => continue,
                 ActionProgress::Wait if changed => {
-                    return self.owe_link(true).map(StaAction::Link);
+                    return self.owe_link(AgreementChanges::Due).map(StaAction::Link);
                 }
                 ActionProgress::Wait => return None,
             }
@@ -3316,22 +3403,32 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     .and_then(|rsn| rsn.management.as_ref())
                     .and_then(|management| {
                         management.deadline(
-                            connected.sending
+                            if connected.transmission != Transmission::Free
                                 || self.out.holds(CONNECTED_PLACE)
                                 || !(self.absence.is_none()
                                     && !connected.power.asleep()
-                                    && self.keys.keyed()),
+                                    && self.keys.keyed())
+                            {
+                                SendRoom::Blocked
+                            } else {
+                                SendRoom::Free
+                            },
                         )
                     });
-                let can_send = !connected.sending
-                    && data_link_up(connected, self.absence.is_some(), &self.keys)
-                    && !self.out.holds(CONNECTED_PLACE);
+                let room = if (connected.transmission == Transmission::Free)
+                    && data_link_up(connected, self.absence.as_ref(), &self.keys)
+                    && !self.out.holds(CONNECTED_PLACE)
+                {
+                    SendRoom::Free
+                } else {
+                    SendRoom::Blocked
+                };
                 let tx_block_ack = self
                     .config
                     .tx_block_ack
                     .as_ref()
-                    .filter(|_| connected.tx_block_ack)
-                    .and_then(|tx| tx.deadline(can_send));
+                    .filter(|_| connected.tx_block_ack == TxAgreements::Started)
+                    .and_then(|tx| tx.deadline(room));
                 crate::time::earliest(crate::time::earliest(background, management), tx_block_ack)
             }
             _ => None,
@@ -3453,8 +3550,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// Whether the profile protects its link.
-    fn protected(&self) -> bool {
-        self.policy() != StaSecurityPolicy::Open
+    fn link_protection(&self) -> oer_protocols_ieee80211_wire::security::LinkProtection {
+        self.policy().link_protection()
     }
 
     fn ssid(&self) -> &[u8] {
@@ -3654,7 +3751,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     GroupOperation::Select(pending) => {
                         // The selected installation stays, not current.
                         let epoch = pending.install.epoch;
-                        (*self.keys).group_installed(pending.install, false, None, true);
+                        (*self.keys).group_installed(
+                            pending.install,
+                            GroupRole::Other,
+                            None,
+                            GroupArrival::Selected,
+                        );
                         epoch
                     }
                     GroupOperation::Remove(pending) => {
@@ -3677,14 +3779,32 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 match core::mem::replace(&mut self.keys.group, GroupOperation::Idle) {
                     GroupOperation::Idle => {}
                     GroupOperation::Install(pending) => {
-                        self.group_transition(state, pending, None, false, events);
+                        self.group_transition(
+                            state,
+                            pending,
+                            None,
+                            GroupArrival::Installed,
+                            events,
+                        );
                     }
                     GroupOperation::Replace(pending) => {
                         let retired = pending.retired_lane();
-                        self.group_transition(state, pending.install, retired, false, events);
+                        self.group_transition(
+                            state,
+                            pending.install,
+                            retired,
+                            GroupArrival::Installed,
+                            events,
+                        );
                     }
                     GroupOperation::Select(pending) => {
-                        self.group_transition(state, pending.install, None, true, events);
+                        self.group_transition(
+                            state,
+                            pending.install,
+                            None,
+                            GroupArrival::Selected,
+                            events,
+                        );
                     }
                     GroupOperation::Remove(pending) => self.group_removed(state, pending, events),
                 }
@@ -3780,10 +3900,15 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         state: &mut State<T, K>,
         pending: PendingGroupKey,
         retired: Option<GroupKeyId>,
-        selected: bool,
+        arrival: GroupArrival,
         events: &mut impl EventSink<StaEvent>,
     ) {
         let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
+        let role = if current {
+            GroupRole::Current
+        } else {
+            GroupRole::Other
+        };
         // While the link's holder keeps the replay check, it applied the
         // end to it already.
         let replay = if current { active_replay(state) } else { None };
@@ -3793,7 +3918,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             replay.remove_group(old);
         }
-        (*self.keys).group_installed(pending, current, replay, selected);
+        (*self.keys).group_installed(pending, role, replay, arrival);
         if current {
             self.group_installed(state, events);
         }
@@ -3872,9 +3997,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }
     }
 
-    /// The background scan's step after its absence ended, `cancelled` or
+    /// The background scan's step after its absence ended (`end`), cancelled or
     /// not.
-    fn absence_over(&mut self, state: &mut State<T, K>, cancelled: bool) {
+    fn absence_over(&mut self, state: &mut State<T, K>, end: LeaseEnd) {
         (*self.absence) = None;
         let limit = self.config.skipped_absences;
         let connected = match state {
@@ -3884,7 +4009,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let Some(background) = &mut connected.background else {
             return;
         };
-        background.step = if cancelled {
+        background.step = if end == LeaseEnd::Cancelled {
             background.skipped = background.skipped.saturating_add(1);
             if connected.power.asleep() {
                 // A PM=1 may have reached the access point: wake first.
@@ -3924,12 +4049,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             StationNotice::AbsenceEnded(place) => {
                 *self.absence_place = Some(place);
-                self.absence_over(state, false);
+                self.absence_over(state, LeaseEnd::Ended);
                 Change::Keep
             }
             StationNotice::AbsenceCancelled(_, place) => {
                 *self.absence_place = Some(place);
-                self.absence_over(state, true);
+                self.absence_over(state, LeaseEnd::Cancelled);
                 Change::Keep
             }
             StationNotice::LeaseStarted(id) => {
@@ -3950,19 +4075,19 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             StationNotice::LeaseEnded(place) => {
                 *self.lease = Held::None;
                 *self.place = Some(place);
-                self.lease_ended(state, false)
+                self.lease_ended(state, LeaseEnd::Ended)
             }
             StationNotice::LeaseCancelled(_, place) => {
                 *self.lease = Held::None;
                 *self.place = Some(place);
-                self.lease_ended(state, true)
+                self.lease_ended(state, LeaseEnd::Cancelled)
             }
             StationNotice::Moved(channel) => {
                 if let State::Connected(connected) = &mut *state
                     && connected.confirmation.is_none()
                 {
                     connected.channel = channel;
-                    connected.exchange = true;
+                    connected.exchange = Owing::Owed;
                 }
                 Change::Keep
             }
@@ -3995,16 +4120,16 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         state.apply(change);
     }
 
-    /// The state after the lease ended, at its own end or `cancelled`.
-    fn lease_ended(&mut self, state: &mut State<T, K>, cancelled: bool) -> Change<T, K> {
+    /// The state after the lease ended (`end`): at its own end or cancelled.
+    fn lease_ended(&mut self, state: &mut State<T, K>, end: LeaseEnd) -> Change<T, K> {
         let lost = StaDisconnectReason::Arbiter(LeaveReason::PortFailed);
         match state {
             // A skipped absence: the same channel again, until too many in
             // a row end the scan with what it found.
-            State::Scan(scan) if cancelled => {
+            State::Scan(scan) if end == LeaseEnd::Cancelled => {
                 let skipped = scan.skipped.saturating_add(1);
                 if skipped >= self.config.skipped_absences {
-                    self.select(true, scan.access_point)
+                    self.select(ScanCoverage::Partial, scan.access_point)
                 } else {
                     Change::Scan(Scan {
                         skipped,
@@ -4252,7 +4377,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
                 {
                     connected.confirmation = None;
-                    connected.connected_notice = true;
+                    connected.connected_notice = Owing::Owed;
                     connected.report = Some(UpstreamFact::Connected(connected.channel));
                 }
                 change
@@ -4331,10 +4456,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             _ => None,
         };
         if let Some((sending, outcome)) = sent {
-            connected.sending = false;
+            connected.transmission = Transmission::Free;
             match sending {
                 Sending::Wake => {
-                    connected.waking = false;
                     connected
                         .power
                         .null_sent(StaPowerManagement::Active, outcome);
@@ -4484,7 +4608,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 step: ScanStep::NeedLease,
                 access_point,
             }),
-            None => self.select(false, access_point),
+            None => self.select(ScanCoverage::Complete, access_point),
         }
     }
 
@@ -4493,13 +4617,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// the station is within the margin of it.
     fn select(
         &mut self,
-        partial: bool,
+        scan: ScanCoverage,
         access_point_channel: Option<SupportedChannel<K>>,
     ) -> Change<T, K> {
         let ssid = self.ssid();
         let policy = self.policy();
         let Some(request) = self.profile.as_ref().map(|profile| profile.phy) else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+            return leave_unkeyed(StaDisconnectReason::NotFound { scan });
         };
         let channels = &self.config.channels;
         let wide = &self.config.wide_channels;
@@ -4540,9 +4664,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let Some(strongest) = candidates().max_by_key(|candidate| candidate.observation.rssi)
         else {
             let reason = if network().next().is_some() {
-                StaDisconnectReason::NoAdmittedFormat { partial }
+                StaDisconnectReason::NoAdmittedFormat { scan }
             } else {
-                StaDisconnectReason::NotFound { partial }
+                StaDisconnectReason::NotFound { scan }
             };
             return leave_unkeyed(reason);
         };
@@ -4816,7 +4940,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             replay,
         )?;
         let mut received = StaReceived::Data;
-        for msdu in crate::link::msdus(&admitted, self.config.address, self.protected())? {
+        for msdu in crate::link::msdus(&admitted, self.config.address, self.link_protection())? {
             match msdu? {
                 None => {}
                 Some(crate::link::LinkMsdu::Eapol {
@@ -4868,13 +4992,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     .as_ref()
                     .map_or(&[][..], |profile| profile.ssid.as_slice());
                 let subtype = management.subtype();
-                let to_us = management.header().receiver() == self.config.address.get();
+                let addressing = if management.header().receiver() == self.config.address.get() {
+                    crate::events::Addressing::ToUs
+                } else {
+                    crate::events::Addressing::Overheard
+                };
                 let observation =
                     observe_scan(&mut (*self.scan), now, management, &meta, Some(ssid));
                 report_scan(events, observation);
                 report(events, || StaEvent::ScanHeard {
                     at: now,
-                    heard: crate::receive::scan_heard(subtype, to_us, &meta, observation),
+                    heard: crate::receive::scan_heard(subtype, addressing, &meta, observation),
                 });
                 Change::Keep
             }
@@ -4898,11 +5026,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             match StaAssociationRuntime::new(
                                 self.config.address,
                                 join.access_point.bssid,
-                                if self.protected() {
-                                    oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
-                                } else {
-                                    oer_protocols_ieee80211_wire::security::LinkProtection::Open
-                                },
+                                self.link_protection(),
                                 now,
                             ) {
                                 Ok(runtime) => {
@@ -4978,7 +5102,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             State::Handshake(handshake) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.management_protection(),
+                    Ok(supplicant) => supplicant.group_management().is_some(),
                     Err(_) => {
                         let change = leave_handshake(handshake, reason_code::UNSPECIFIED);
                         state.apply(change);
@@ -5103,12 +5227,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 && edca != connected.peer.associated.edca
             {
                 connected.peer.associated.edca = edca;
-                connected.edca = true;
+                connected.edca = Owing::Owed;
             }
             if connected.power.beacon(beacon.observation.tim) == PowerSaveDecision::SendActive
-                && !connected.waking
+                && connected.transmission != Transmission::Waking
             {
-                connected.wake = true;
+                connected.wake = Owing::Owed;
             }
         }
         Change::Keep
@@ -5244,7 +5368,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     fn owe_reclaim(&mut self, reclaim: Reclaim) -> ActionStep<'id, T, K> {
         match reclaim {
             Reclaim::Keys => {
-                if let Some(removal) = self.group_removal(false) {
+                if let Some(removal) = self.group_removal() {
                     (
                         Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(removal),
@@ -5301,7 +5425,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 return (Change::Keep, ActionProgress::Transition);
             }
             LeaveStep::RemoveKeys(deauthentication) => {
-                if let Some(removal) = self.group_removal(false) {
+                if let Some(removal) = self.group_removal() {
                     Some(removal)
                 } else if let Some(owed) = self.pairwise_removal() {
                     Some(owed)
@@ -5331,7 +5455,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     bssid,
                     &reason_code.to_le_bytes(),
                     TxPurpose::Deauthentication,
-                    protected,
+                    if protected {
+                        oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+                    } else {
+                        oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
+                    },
                 ) {
                     Ok(transmit) => {
                         if protected {
@@ -5452,7 +5580,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             HandshakeStep::Install(request, protection) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.management_protection(),
+                    Ok(supplicant) => supplicant.group_management().is_some(),
                     Err(_) => {
                         return (
                             leave_handshake(handshake, reason_code::UNSPECIFIED),
@@ -5546,7 +5674,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         let priority = eapol_priority(admission)?;
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         Ok(self
             .encode_reserved(
                 epoch,
@@ -5610,17 +5739,15 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 epoch,
                 connected.bssid,
                 action,
-                connected.qos
-                    && connected.peer.associated.phy.format()
-                        != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                block_ack_admission(connected),
             );
             return (
                 Change::Keep,
                 ActionProgress::Action(Owed::BlockAck(request)),
             );
         }
-        if connected.connected_notice {
-            connected.connected_notice = false;
+        if connected.connected_notice == Owing::Owed {
+            connected.connected_notice = Owing::Clear;
             let notice = StaNotice::Connected {
                 bssid: connected.bssid,
                 channel: connected.channel.channel().number(),
@@ -5631,7 +5758,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         if let Some(fact) = connected.report.take() {
             return (Change::Keep, ActionProgress::Action(Owed::Upstream(fact)));
         }
-        if core::mem::take(&mut connected.edca)
+        if core::mem::replace(&mut connected.edca, Owing::Clear) == Owing::Owed
             && let Some(edca) = SupportedEdca::new(
                 oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
                     connected.peer.associated.edca,
@@ -5640,10 +5767,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             return (Change::Keep, ActionProgress::Action(Owed::SetEdca(edca)));
         }
-        if connected.exchange {
+        if connected.exchange == Owing::Owed {
             match core::mem::replace(&mut (*self.lease), Held::None) {
                 Held::Lease(lease) => {
-                    connected.exchange = false;
+                    connected.exchange = Owing::Clear;
                     return (Change::Keep, ActionProgress::Action(Owed::Exchange(lease)));
                 }
                 held => (*self.lease) = held,
@@ -5674,7 +5801,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // nothing: the connected link's every turn ends here, its action's
         // place untouched.
         if connected.background.is_none()
-            && !(connected.wake && !connected.power.asleep() && !connected.sending)
+            && !(connected.wake == Owing::Owed
+                && !connected.power.asleep()
+                && (connected.transmission == Transmission::Free))
         {
             return (Change::Keep, ActionProgress::Wait);
         }
@@ -5692,7 +5821,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         now: Instant,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
+        if connected.transmission != Transmission::Free
+            || !self.link_up(&connected.power, &(*self.keys))
+        {
             return None;
         }
         let management = connected.rsn.as_mut()?.management.as_mut()?;
@@ -5702,11 +5833,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             connected.bssid,
             &query.encode(),
             TxPurpose::Connected(Sending::SaQuery),
-            true,
+            oer_protocols_ieee80211_wire::frame::FrameProtection::Protected,
         ) {
             Ok(transmit) => {
                 management.submitted(query);
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 Some(Ok(Owed::TransmitProtected(transmit)))
             }
             Err(Unsent::Out) => None,
@@ -5724,15 +5855,20 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let can_send = !connected.sending
-            && data_link_up(connected, self.absence.is_some(), &(*self.keys))
-            && !self.out.holds(CONNECTED_PLACE);
+        let room = if (connected.transmission == Transmission::Free)
+            && data_link_up(connected, self.absence.as_ref(), &(*self.keys))
+            && !self.out.holds(CONNECTED_PLACE)
+        {
+            SendRoom::Free
+        } else {
+            SendRoom::Blocked
+        };
         // An ADDBA Request whose number the link's holder told goes first;
         // one that waits for it owes nothing else of the agreements.
         let fresh = match connected.sequence {
             TidSequence::Unasked => None,
             TidSequence::Asked(_) => return None,
-            TidSequence::Fresh(_) if !can_send => return None,
+            TidSequence::Fresh(_) if room == SendRoom::Blocked => return None,
             TidSequence::Fresh(tid) => {
                 connected.sequence = TidSequence::Unasked;
                 Some(tid)
@@ -5755,7 +5891,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         let owed = match fresh {
             Some(tid) => TxBlockAckOwed::Negotiate { tid: tid.value() },
-            None => tx.poll(now, can_send)?,
+            None => tx.poll(now, room)?,
         };
         let body = match owed {
             TxBlockAckOwed::Request { tid, start } => {
@@ -5792,27 +5928,27 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             Body::Delba(_, delba) => (delba, Sending::Delba),
             Body::Addba(tid, request) => (request, Sending::AddbaRequest { tid: *tid }),
         };
-        let protected = connected
-            .rsn
-            .as_ref()
-            .is_some_and(|rsn| rsn.management.is_some());
+        let protection = management_frame_protection(connected);
         match self.encode_management(
             StaManagementSubtype::Action,
             connected.bssid,
             frame,
             TxPurpose::Connected(sending),
-            protected,
+            protection,
         ) {
             Ok(transmit) => {
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 if let (Body::Delba(tid, _), Some(tx)) = (&body, self.config.tx_block_ack.as_mut())
                 {
                     tx.delba_sent(*tid);
                 }
-                Some(Ok(if protected {
-                    Owed::TransmitProtected(transmit)
-                } else {
-                    Owed::Transmit(transmit)
+                Some(Ok(match protection {
+                    oer_protocols_ieee80211_wire::frame::FrameProtection::Protected => {
+                        Owed::TransmitProtected(transmit)
+                    }
+                    oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected => {
+                        Owed::Transmit(transmit)
+                    }
                 }))
             }
             Err(Unsent::Out) => {
@@ -5861,7 +5997,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             tx.request_sent(tid);
         }
         report(events, || StaEvent::BlockAckRequestSent);
-        connected.sending = true;
+        connected.transmission = Transmission::Busy;
         // The port encodes a BlockAckReq: nothing of it is in the buffer.
         self.out.take(purpose);
         Some(Ok(Owed::Transmit(Encoded {
@@ -5886,7 +6022,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         purpose: TxPurpose,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
+        if connected.transmission != Transmission::Free
+            || !self.link_up(&connected.power, &(*self.keys))
+        {
             return None;
         }
         let rsn = connected.rsn.as_mut()?;
@@ -5898,7 +6036,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         match self.encode_eapol_response(connected.bssid, qos, admission, message, purpose) {
             Ok(owed) => {
                 rsn.message4 = DuplicateMessage4::AwaitSent;
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 Some(Ok(owed))
             }
             Err(unsent) => unsent.disconnect_reason().map(Err),
@@ -6017,14 +6155,14 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }))
     }
 
-    fn group_removal(&mut self, retiring: bool) -> Option<Owed<'id, T, K>> {
+    fn group_removal(&mut self) -> Option<Owed<'id, T, K>> {
         let InstalledGroup {
             place,
             key_id,
             material,
             replay,
             ..
-        } = self.keys.take_group_key(retiring)?;
+        } = self.keys.take_group_key()?;
         self.keys.group = GroupOperation::Remove(PendingGroupRemoval {
             place,
             key_id,
@@ -6083,7 +6221,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     }
                 }
                 Rekey::Send(message)
-                    if !connected.sending && self.link_up(&connected.power, &(*self.keys)) =>
+                    if (connected.transmission == Transmission::Free)
+                        && self.link_up(&connected.power, &(*self.keys)) =>
                 {
                     let message_kind = match message.frame.key_frame() {
                         Ok(frame) => frame.message(),
@@ -6105,7 +6244,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         }
                     ) {
                         Ok(owed) => {
-                            connected.sending = true;
+                            connected.transmission = Transmission::Busy;
                             (Rekey::AwaitSent, Some(owed))
                         }
                         Err(unsent) => match unsent.disconnect_reason() {
@@ -6181,7 +6320,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     }
                     _ => step,
                 },
-                BackgroundStep::NeedSleep if !connected.sending => {
+                BackgroundStep::NeedSleep if (connected.transmission == Transmission::Free) => {
                     power = Some((StaPowerManagement::PowerSave, Sending::Sleep));
                     BackgroundStep::AwaitSleep
                 }
@@ -6195,8 +6334,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     owed = self.configure(StationReceive::OtherBssManagement);
                     BackgroundStep::AwaitConfigured
                 }
-                BackgroundStep::NeedProbe if !connected.sending => {
-                    owed = self.probe(&mut connected.sending)?;
+                BackgroundStep::NeedProbe if (connected.transmission == Transmission::Free) => {
+                    owed = self.probe(&mut connected.transmission)?;
                     if owed.is_some() {
                         BackgroundStep::Listen
                     } else {
@@ -6207,12 +6346,14 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     owed = self.configure(bss_rules(bssid, Rules::<K>::MEMBER));
                     BackgroundStep::AwaitHome
                 }
-                BackgroundStep::NeedWake if !connected.sending => {
+                BackgroundStep::NeedWake if (connected.transmission == Transmission::Free) => {
                     power = Some((StaPowerManagement::Active, Sending::Wake));
                     BackgroundStep::AwaitWake
                 }
-                BackgroundStep::HomeProbe { until } if !connected.sending => {
-                    owed = self.probe(&mut connected.sending)?;
+                BackgroundStep::HomeProbe { until }
+                    if (connected.transmission == Transmission::Free) =>
+                {
+                    owed = self.probe(&mut connected.transmission)?;
                     if owed.is_some() {
                         BackgroundStep::HomeListen { until }
                     } else {
@@ -6227,16 +6368,22 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
                 step => step,
             };
-        } else if connected.wake && !connected.power.asleep() && !connected.sending {
+        } else if connected.wake == Owing::Owed
+            && !connected.power.asleep()
+            && (connected.transmission == Transmission::Free)
+        {
             // The access point buffers for an awake station: PM=0 again.
-            connected.wake = false;
+            connected.wake = Owing::Clear;
             power = Some((StaPowerManagement::Active, Sending::Wake));
         }
         if let Some((power_management, sending)) = power {
             match self.encode_null(bssid, power_management) {
                 Ok(transmit) => {
-                    connected.sending = true;
-                    connected.waking = sending == Sending::Wake;
+                    connected.transmission = if sending == Sending::Wake {
+                        Transmission::Waking
+                    } else {
+                        Transmission::Busy
+                    };
                     owed = Some(Owed::Transmit(transmit));
                 }
                 // Its purpose's frame is still out: the step waits for its end.
@@ -6248,7 +6395,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             step => step,
                         };
                     } else {
-                        connected.wake = true;
+                        connected.wake = Owing::Owed;
                     }
                 }
                 Err(Unsent::Encode) => return Err(StaDisconnectReason::Encode),
@@ -6263,11 +6410,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// A Probe Request of the background scan, marked in flight.
     fn probe(
         &mut self,
-        sending: &mut bool,
+        transmission: &mut Transmission,
     ) -> Result<Option<Owed<'id, T, K>>, StaDisconnectReason> {
         match self.encode_probe(TxPurpose::Connected(Sending::Probe)) {
             Ok(transmit) => {
-                *sending = true;
+                *transmission = Transmission::Busy;
                 Ok(Some(Owed::Transmit(transmit)))
             }
             Err(Unsent::Out) => Ok(None),
@@ -6290,7 +6437,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         });
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         let transmit = self.encode_reserved(
             epoch,
             |frame| {
@@ -6766,13 +6914,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// the station's next while it holds its link; zero once the link's
     /// holder has the link, which numbers it as it submits it
     /// (`protected`, under the link's key).
-    fn station_number(&mut self, protected: bool) -> (SequenceNumber, FrameNumber) {
+    fn station_number(
+        &mut self,
+        protection: oer_protocols_ieee80211_wire::frame::FrameProtection,
+    ) -> (SequenceNumber, FrameNumber) {
         if self.link.lent() {
             (
                 SequenceNumber::ZERO,
                 FrameNumber::Link {
                     space: LinkSpace::Station,
-                    protected,
+                    protected: protection
+                        == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected,
                 },
             )
         } else {
@@ -6817,7 +6969,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     FrameNumber::Open
                 },
             ),
-            None => self.station_number(true),
+            None => {
+                self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Protected)
+            }
         };
         let frame = oer_protocols_ieee80211_wire::station::StaProtectedDataFrame {
             source: self.config.address,
@@ -6848,7 +7002,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// A Probe Request takes its place before consuming its sequence.
     fn encode_probe(&mut self, purpose: TxPurpose) -> Result<Encoded<K>, Unsent> {
         let epoch = self.reserve_transmit(purpose)?;
-        let (sequence_number, number) = self.station_number(false);
+        let (sequence_number, number) =
+            self.station_number(oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected);
         let rates = self.config.supported_rates;
         let address = self.config.address.get();
         let ssid = self
@@ -6885,16 +7040,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         bssid: Bssid,
         body: &[u8],
         purpose: TxPurpose,
-        protected: bool,
+        protection: oer_protocols_ieee80211_wire::frame::FrameProtection,
     ) -> Result<Encoded<K>, Unsent> {
         let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
-        let (sequence_number, number) = self.station_number(protected);
+        let (sequence_number, number) = self.station_number(protection);
         Ok(self
             .encode_reserved(
                 epoch,
                 |frame| {
-                    if protected {
+                    if protection == oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+                    {
                         return oer_protocols_ieee80211_wire::station::StaProtectedManagementFrame {
                         subtype,
                         source: address,
@@ -7098,7 +7254,7 @@ fn finish_handshake_install<T: StaTypes, K, E: oer_portable_crypto::block::Aes12
         management.install_igtk(igtk);
     }
     match handshake.supplicant().and_then(|supplicant| {
-        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, true, engine)
+        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, engine)
     }) {
         Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
             replay,

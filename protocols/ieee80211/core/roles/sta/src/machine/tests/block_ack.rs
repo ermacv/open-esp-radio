@@ -74,12 +74,14 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
         let (reply, reason) = world.station.try_block_ack_reply(reply).err().unwrap();
         assert_eq!(reason, BlockAckReplyRefusal::Encode);
         assert!(world.station.is_connected());
-        assert!(matches!(&world.station.state, State::Connected(connected) if !connected.sending));
+        assert!(
+            matches!(&world.station.state, State::Connected(connected) if connected.transmission == crate::machine::Transmission::Free)
+        );
         world.station.frame.limit = STA_FRAME_CAPACITY;
         let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
             panic!("the same reply fits the restored buffer");
         };
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         let clock = VirtualClock::<8>::starting_at(at(40));
         world.run(clock.now());
     });

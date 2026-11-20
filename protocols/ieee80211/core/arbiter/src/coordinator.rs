@@ -34,34 +34,11 @@
 use core::num::{NonZeroU8, NonZeroU64};
 
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
-use oer_protocols_ieee80211_wire::channel::{Band, Channel};
+use oer_protocols_ieee80211_contracts_port::{BandSet, Ieee80211Capabilities, SupportedChannel};
+use oer_protocols_ieee80211_wire::channel::Channel;
 use oer_protocols_ieee80211_wire::channel_switch::ChannelSwitchMode;
 
 use crate::channel::requires_radar_detection;
-
-/// The bands an access point beside a station may serve.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ApBands {
-    pub ghz2_4: bool,
-    pub ghz5: bool,
-}
-
-impl ApBands {
-    /// The 2.4 GHz band alone: the access point's peers that know no other
-    /// band never lose it to a move.
-    pub const GHZ2_4: Self = Self {
-        ghz2_4: true,
-        ghz5: false,
-    };
-
-    pub const fn contains(self, band: Band) -> bool {
-        match band {
-            Band::Ghz2_4 => self.ghz2_4,
-            Band::Ghz5 => self.ghz5,
-        }
-    }
-}
 
 /// What happens when the upstream goes where the access point may not
 /// follow.
@@ -79,7 +56,8 @@ pub enum ApUnservable {
 /// How the access point follows the upstream.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApFollowPolicy {
-    pub bands: ApBands,
+    /// The bands an access point beside a station may serve.
+    pub bands: BandSet,
     pub unservable: ApUnservable,
     /// The beacons that announce a move the coordinator starts itself (to
     /// where a lost upstream was found, or where the station joins).
@@ -120,7 +98,9 @@ impl ApFollowPolicy {
     ///
     /// Owner policy (2026-10-18 confirmation).
     pub const DEFAULT: Self = Self {
-        bands: ApBands::GHZ2_4,
+        // The 2.4 GHz band alone: the access point's peers that know no
+        // other band never lose it to a move.
+        bands: BandSet::GHZ2_4,
         unservable: ApUnservable::StopAccessPoint,
         announce_count: const { NonZeroU8::new(5).unwrap() },
         min_follow_interval: Duration::from_secs(30),
@@ -446,7 +426,7 @@ enum AccessPoint<K> {
 /// One owner can consume facts and move its coordinator:
 /// ```
 /// use oer_protocols_ieee80211_core_arbiter::coordinator::{ApFollowPolicy, ChannelCoordinator};
-/// use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, SupportedChannel};
+/// use oer_protocols_ieee80211_contracts_port::{BandSet, Ieee80211Capabilities, SupportedChannel};
 /// fn accept<K: Ieee80211Capabilities>(channel: SupportedChannel<K>) {
 ///     let mut coordinator = ChannelCoordinator::new(ApFollowPolicy::DEFAULT);
 ///     let actions = coordinator.station_connected(channel);

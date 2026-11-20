@@ -1,7 +1,10 @@
 #![allow(
     clippy::disallowed_methods,
     clippy::disallowed_macros,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "known-answer test: a malformed vector or a wrong answer fails it"
 )]
 //! Independent CCMP known-answer tests; only vector facts are incorporated.
 //!

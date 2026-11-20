@@ -197,6 +197,32 @@ impl IndividualTwtSetupCommand {
     }
 }
 
+/// The Trigger subfield of a TWT Request Type field: the agreement's
+/// service periods carry Trigger frames, or none (IEEE Std 802.11-2020,
+/// 9.4.2.199).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndividualTwtTrigger {
+    TriggerEnabled,
+    NonTriggerEnabled,
+}
+
+/// The Implicit subfield of a TWT Request Type field: each next wake follows
+/// by the wake interval, or each is announced explicitly (IEEE Std
+/// 802.11-2020, 9.4.2.199).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndividualTwtImplicit {
+    Implicit,
+    Explicit,
+}
+
+/// The TWT Protection subfield of a TWT Request Type field (IEEE Std
+/// 802.11-2020, 9.4.2.199).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IndividualTwtProtection {
+    Protected,
+    Unprotected,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IndividualTwtFlowType {
     Announced,
@@ -268,12 +294,20 @@ impl IndividualTwtParameterSet {
         IndividualTwtSetupCommand::from_field(self.request.setup_command())
     }
 
-    pub const fn trigger(self) -> bool {
-        self.request.trigger()
+    pub const fn trigger(self) -> IndividualTwtTrigger {
+        if self.request.trigger() {
+            IndividualTwtTrigger::TriggerEnabled
+        } else {
+            IndividualTwtTrigger::NonTriggerEnabled
+        }
     }
 
-    pub const fn implicit(self) -> bool {
-        self.request.implicit()
+    pub const fn implicit(self) -> IndividualTwtImplicit {
+        if self.request.implicit() {
+            IndividualTwtImplicit::Implicit
+        } else {
+            IndividualTwtImplicit::Explicit
+        }
     }
 
     pub const fn flow_type(self) -> IndividualTwtFlowType {
@@ -288,8 +322,12 @@ impl IndividualTwtParameterSet {
         IndividualTwtFlowId::from_field(self.request.flow_id())
     }
 
-    pub const fn protection(self) -> bool {
-        self.request.protection()
+    pub const fn protection(self) -> IndividualTwtProtection {
+        if self.request.protection() {
+            IndividualTwtProtection::Protected
+        } else {
+            IndividualTwtProtection::Unprotected
+        }
     }
 
     pub const fn wake_interval_micros(self) -> Result<u64, TwtWireError> {

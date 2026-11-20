@@ -155,22 +155,22 @@ fn corrupt_mic(frame: OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
 fn ht_capabilities() -> ApAssociationCapabilities {
     ApAssociationCapabilities {
         maximum_legacy_rate_500kbps: 108,
-        short_preamble: true,
+        preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
         ht: ht_peer_capabilities(&ht_capability_ie(
             TEST_HT_CAPABILITIES,
             oer_protocols_ieee80211_wire::channel::Channel::from_ghz2_4_channel(
                 Ghz2_4Channel::mhz20(6).unwrap(),
             ),
         )),
-        qos_supported: true,
+        qos: oer_protocols_ieee80211_wire::data::PeerQos::Qos,
     }
 }
 
 const LEGACY_CAPABILITIES: ApAssociationCapabilities = ApAssociationCapabilities {
     maximum_legacy_rate_500kbps: 108,
-    short_preamble: true,
+    preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
     ht: None,
-    qos_supported: false,
+    qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
 };
 
 fn service(
@@ -192,7 +192,7 @@ fn service(
         },
         RsnGtk::new(
             oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
             &[0x55; 16],
         ),
         TEST_GTK_GENERATION,
@@ -374,7 +374,7 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         "an old queue owner must not bind to the reused AID and MAC"
     );
     assert_eq!(
-        service.complete_buffered_unicast_release(release, false),
+        service.complete_buffered_unicast_release(release, crate::BufferedEnd::Returned),
         Err(ApServiceError::AssociationIdMismatch),
         "an affine release from the old epoch must fail closed"
     );
@@ -636,7 +636,7 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -727,7 +727,7 @@ fn association_owns_a_bounded_wpa2_state() {
         ApMlmeAction::BeginWpa2 { peer: PEER }
     );
     assert!(matches!(
-        service.wpa2(PEER).unwrap().message1(false).unwrap(),
+        service.wpa2(PEER).unwrap().message1().unwrap(),
         RsnApAction::Transmit(_)
     ));
     let _ticket_type_is_owned: Option<RsnTicket> = None;
@@ -747,9 +747,9 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
                 association_security(&WPA2_RSN),
                 ApAssociationCapabilities {
                     maximum_legacy_rate_500kbps: 0,
-                    short_preamble: true,
+                    preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
                     ht: None,
-                    qos_supported: false,
+                    qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
                 },
                 [7; 32],
                 9,
@@ -799,7 +799,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     service
         .observe_wpa2_transmit(
             message1_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(10),
         )
         .unwrap();
@@ -883,7 +883,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
             plaintext.as_bytes(),
             &AP_WPA2_PERSONAL_RSN_ELEMENT,
             &[],
-            false
+            None
         )
         .is_ok()
     );
@@ -891,7 +891,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(2_000_000),
         )
         .unwrap();
@@ -920,7 +920,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         12
     );
     assert!(matches!(
-        parse_gtk_key_data(plaintext.as_bytes(), &SUPPLICANT_RSN, &[], false),
+        parse_gtk_key_data(plaintext.as_bytes(), &SUPPLICANT_RSN, &[], None),
         Err(RsnFrameError::RsnIeMismatch)
     ));
 
@@ -1213,7 +1213,11 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
         .unwrap();
     let (_message1, context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(0))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(0),
+        )
         .unwrap();
 
     for deadline in [1_000_000, 2_000_000, 3_000_000] {
@@ -1308,7 +1312,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -1727,7 +1731,10 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
     service
         .authenticate_open(OTHER, oer_portable_time::Instant::from_micros(0))
         .unwrap();
-    assert_eq!(service.bss_protection(true), ApBssProtection::default());
+    assert_eq!(
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above),
+        ApBssProtection::default()
+    );
 
     // A 20-MHz-only, non-greenfield HT peer in a 40-MHz BSS.
     service
@@ -1746,7 +1753,7 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         non_greenfield_present: true,
     };
     assert_eq!(
-        service.bss_protection(true),
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above),
         ApBssProtection {
             non_erp_present: false,
             erp: ErpProtection::NONE,
@@ -1754,7 +1761,10 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         }
     );
     assert_eq!(
-        service.bss_protection(false).ht.mode,
+        service
+            .bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20)
+            .ht
+            .mode,
         HtProtectionMode::None
     );
 
@@ -1766,14 +1776,15 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
             open,
             ApAssociationCapabilities {
                 maximum_legacy_rate_500kbps: 22,
-                short_preamble: false,
+                preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Long,
                 ht: None,
-                qos_supported: false,
+                qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
             },
             oer_portable_time::Instant::from_micros(3),
         )
         .unwrap();
-    let mixed = service.bss_protection(true);
+    let mixed =
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above);
     assert!(mixed.non_erp_present);
     assert_eq!(
         mixed.erp,
@@ -1807,7 +1818,7 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -1846,7 +1857,7 @@ fn wpa3_service(
         AP,
         RsnGtk::new(
             oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
             &[0x55; 16],
         ),
         TEST_GTK_GENERATION,
@@ -1903,7 +1914,11 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let (_frame, context) = message1.into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(2))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(2),
+        )
         .unwrap();
 
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
@@ -1948,14 +1963,14 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         plaintext.as_bytes(),
         &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
         &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
-        true,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     )
     .unwrap();
     assert_eq!(keys.igtk.unwrap().key(), &[0x66; 16]);
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(3),
         )
         .unwrap();
@@ -2297,7 +2312,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         plaintext.as_bytes(),
         &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
         &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
-        true,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     )
     .unwrap();
     let delivered = keys.igtk.unwrap();
@@ -2310,7 +2325,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(10),
         )
         .unwrap();
@@ -2397,7 +2412,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -2641,4 +2656,91 @@ fn a_request_whose_element_list_is_cut_short_is_an_invalid_element_and_makes_no_
         information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Truncated,
         ..security
     });
+}
+
+/// A buffered unicast completion counts only against the release in flight:
+/// with none out it changes nothing; the one out ends by its `BufferedEnd`,
+/// a delivered frame leaving the queue and a returned one staying.
+#[test]
+fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
+    let mut storage = AccessPointPeerStorage::new();
+    let mut service =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(2).unwrap(),
+            AccessPointInactiveTimeout::new(10).unwrap(),
+            storage.lend(),
+        )
+        .unwrap();
+    let open_security = ApAssociationSecurityObservation {
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
+        rsn_ie: None,
+        rsn_ie_count: 0,
+        rsnxe: None,
+        rsnxe_count: 0,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
+    };
+    service
+        .authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
+        .unwrap();
+    service
+        .associate_open(
+            PEER,
+            open_security,
+            LEGACY_CAPABILITIES,
+            oer_portable_time::Instant::from_micros(1),
+        )
+        .unwrap();
+    service
+        .observe_power_save(
+            ApPowerSaveObservation::Sleeping { peer: PEER },
+            oer_portable_time::Instant::from_micros(2),
+        )
+        .unwrap();
+    let admitted = service.admit_downlink(PEER).unwrap();
+    let identity = admitted.identity();
+    service.commit_buffered_unicast(identity).unwrap();
+    service.commit_buffered_unicast(identity).unwrap();
+    let status = |service: &AccessPointService<'_, _>| {
+        let status = service.peer_status(PEER).unwrap();
+        (status.buffered_unicast_frames, status.buffered_release)
+    };
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // None in flight: a completion changes nothing.
+    let stray = ApBufferedUnicastRelease {
+        identity,
+        more_data: true,
+    };
+    assert_eq!(
+        service.complete_buffered_unicast_release(stray, BufferedEnd::Delivered),
+        Err(ApServiceError::StaleBufferedRelease)
+    );
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // A returned frame stays queued; the release ends.
+    let release = service
+        .begin_buffered_unicast_release(identity)
+        .unwrap()
+        .unwrap();
+    assert_eq!(status(&service), (2, BufferedRelease::InFlight));
+    assert_eq!(
+        service.complete_buffered_unicast_release(release, BufferedEnd::Returned),
+        Ok(2)
+    );
+    assert_eq!(status(&service), (2, BufferedRelease::Idle));
+
+    // A delivered frame leaves the queue; the release ends.
+    let release = service
+        .begin_buffered_unicast_release(identity)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        service.complete_buffered_unicast_release(release, BufferedEnd::Delivered),
+        Ok(1)
+    );
+    assert_eq!(status(&service), (1, BufferedRelease::Idle));
 }

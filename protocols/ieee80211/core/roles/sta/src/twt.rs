@@ -10,11 +10,11 @@
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
+use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 use oer_protocols_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
     IndividualTwtAction, IndividualTwtFlowId, IndividualTwtParameterSet, IndividualTwtSetup,
-    IndividualTwtSetupCommand, IndividualTwtTeardown, TwtControlFields, TwtWakeDurationUnit,
-    TwtWireError,
+    IndividualTwtSetupCommand, IndividualTwtTeardown, TwtControlFields, TwtWireError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,7 +98,9 @@ impl IndividualTwtProposal {
             return Err(TwtWireError::ResponseCommandFromRequester.into());
         }
         self.parameters.validate(self.control)?;
-        if !self.parameters.implicit() {
+        if self.parameters.implicit()
+            == oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit::Explicit
+        {
             return Err(
                 IndividualTwtRequesterError::ExplicitTwtInformationUnsupported(
                     IndividualTwtInformationFrontier::from_fields(self.control, self.parameters),
@@ -138,10 +140,10 @@ impl IndividualTwtInformationFrontier {
 pub struct IndividualTwtAgreement {
     pub flow_id: IndividualTwtFlowId,
     pub control: TwtControlFields,
-    pub trigger: bool,
-    pub implicit: bool,
+    pub trigger: oer_protocols_ieee80211_wire::twt::IndividualTwtTrigger,
+    pub implicit: oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit,
     pub flow_type: oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType,
-    pub protection: bool,
+    pub protection: oer_protocols_ieee80211_wire::twt::IndividualTwtProtection,
     pub target_wake_time: TsfInstant,
     pub wake_interval: TsfDuration,
     pub wake_duration: TsfDuration,
@@ -167,14 +169,15 @@ impl IndividualTwtAgreement {
 
     /// Return the explicit-information frontier for a non-periodic agreement.
     pub const fn information_frontier(self) -> Option<IndividualTwtInformationFrontier> {
-        if self.implicit {
-            None
-        } else {
-            Some(IndividualTwtInformationFrontier {
-                flow_id: self.flow_id,
-                initial_target_wake_time: self.target_wake_time,
-                information_frames_disabled: self.control.information_disabled(),
-            })
+        match self.implicit {
+            oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit::Implicit => None,
+            oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit::Explicit => {
+                Some(IndividualTwtInformationFrontier {
+                    flow_id: self.flow_id,
+                    initial_target_wake_time: self.target_wake_time,
+                    information_frames_disabled: self.control.information_disabled(),
+                })
+            }
         }
     }
 }
@@ -610,7 +613,7 @@ impl IndividualTwtRequester {
     pub fn complete_transmission(
         &mut self,
         transmission: IndividualTwtTransmission,
-        acknowledged: bool,
+        outcome: MpduOutcome,
         now: Instant,
     ) -> Result<IndividualTwtRequesterEvent, IndividualTwtRequesterError> {
         let flow_id = transmission.flow_id;
@@ -624,7 +627,7 @@ impl IndividualTwtRequester {
                 },
                 IndividualTwtTxKind::Setup,
             ) if generation == transmission.generation => {
-                if acknowledged {
+                if outcome == MpduOutcome::Acknowledged {
                     let deadline = now
                         .checked_add(self.config.response_timeout)
                         .ok_or(IndividualTwtRequesterError::DeadlineOverflow)?;
@@ -645,7 +648,6 @@ impl IndividualTwtRequester {
                         proposal,
                         attempts_remaining,
                         now,
-                        false,
                     )
                 }
             }
@@ -656,7 +658,7 @@ impl IndividualTwtRequester {
                 },
                 IndividualTwtTxKind::Teardown,
             ) if generation == transmission.generation => {
-                if acknowledged {
+                if outcome == MpduOutcome::Acknowledged {
                     *flow_id.select_mut(&mut self.flows) = FlowPhase::Idle;
                     Ok(IndividualTwtRequesterEvent::TeardownComplete {
                         flow_id: transmission.flow_id,
@@ -736,7 +738,8 @@ impl IndividualTwtRequester {
         }
 
         if response.parameters.setup_command() == IndividualTwtSetupCommand::Accept
-            && !response.parameters.implicit()
+            && response.parameters.implicit()
+                == oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit::Explicit
         {
             let frontier = IndividualTwtInformationFrontier::from_fields(
                 response.control,
@@ -956,15 +959,10 @@ impl IndividualTwtRequester {
         proposal: IndividualTwtProposal,
         attempts_remaining: u8,
         now: Instant,
-        timed_out: bool,
     ) -> Result<IndividualTwtRequesterEvent, IndividualTwtRequesterError> {
         if attempts_remaining == 0 {
             *flow_id.select_mut(&mut self.flows) = FlowPhase::Idle;
-            return Ok(if timed_out {
-                IndividualTwtRequesterEvent::SetupTimedOut { flow_id }
-            } else {
-                IndividualTwtRequesterEvent::SetupTxFailed { flow_id }
-            });
+            return Ok(IndividualTwtRequesterEvent::SetupTxFailed { flow_id });
         }
         let retry_at = now
             .checked_add(self.config.retry_interval)
@@ -1137,18 +1135,6 @@ pub const fn conservative_individual_twt_requester_config() -> IndividualTwtRequ
         setup_attempt_limit: 3,
         teardown_attempt_limit: 3,
     }
-}
-
-/// Helper for constructing a control field without importing the wire crate.
-pub const fn individual_twt_control(
-    responder_power_save: bool,
-    information_frames_disabled: bool,
-    wake_duration_unit: TwtWakeDurationUnit,
-) -> TwtControlFields {
-    TwtControlFields::REQUEST
-        .with_responder_pm(responder_power_save)
-        .with_information_disabled(information_frames_disabled)
-        .with_duration_unit(matches!(wake_duration_unit, TwtWakeDurationUnit::Tu1024))
 }
 
 #[cfg(test)]

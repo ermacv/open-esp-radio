@@ -6,6 +6,7 @@
 )]
 use super::*;
 use crate::frames::RsnTxFrame;
+
 use oer_protocols_ieee80211_wire::eapol::{
     EAPOL_KEY_FIXED_LEN, EAPOL_KEY_PACKET_LEN, EAPOL_PACKET_TYPE_KEY, RSN_KEY_DESCRIPTOR_TYPE,
 };
@@ -97,9 +98,7 @@ fn sta_completes_once_and_does_not_reinstall_on_message3_replay() {
         action => panic!("unexpected action: {action:?}"),
     };
     assert_eq!(
-        state
-            .complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket, true)
-            .unwrap(),
+        state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket).unwrap(),
         RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage2,
             replay_counter: 10,
@@ -112,18 +111,18 @@ fn sta_completes_once_and_does_not_reinstall_on_message3_replay() {
         RsnStaAction::VerifyMessage3Mic { ticket, frame } => (ticket, frame),
         action => panic!("unexpected action: {action:?}"),
     };
-    let (ticket, retained) = match state.complete_message3_mic(ticket, retained, true).unwrap() {
+    let (ticket, retained) = match state.complete_message3_mic(ticket, retained).unwrap() {
         RsnStaAction::DecryptMessage3KeyData { ticket, frame } => (ticket, frame),
         action => panic!("unexpected action: {action:?}"),
     };
-    let (ticket, retained) = match state.complete_key_data(ticket, retained, true).unwrap() {
+    let (ticket, retained) = match state.complete_key_data(ticket, retained).unwrap() {
         RsnStaAction::InstallKeys { ticket, frame } => (ticket, frame),
         action => panic!("unexpected action: {action:?}"),
     };
     assert_eq!(retained.key_frame().unwrap().replay_counter(), 11);
     assert_eq!(
         state
-            .complete_key_install::<MESSAGE3_CAPACITY>(ticket, true)
+            .complete_key_install::<MESSAGE3_CAPACITY>(ticket)
             .unwrap(),
         RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage4,
@@ -160,12 +159,10 @@ fn sta_rejects_stale_completion_and_stale_message3() {
         _ => unreachable!(),
     };
     assert_eq!(
-        state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(RsnTicket(ticket.raw() + 1), true),
+        state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(RsnTicket(ticket.raw() + 1)),
         Err(RsnStateError::StaleCompletion)
     );
-    state
-        .complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket, true)
-        .unwrap();
+    state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket).unwrap();
     assert_eq!(
         state.on_frame(message3([2; 6], 7, [4; 32])),
         Err(RsnStateError::StaleReplayCounter)
@@ -182,10 +179,7 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
         replay_counter: 20,
         retransmission: false,
     };
-    assert_eq!(
-        state.message1(false).unwrap(),
-        RsnApAction::Transmit(message1)
-    );
+    assert_eq!(state.message1().unwrap(), RsnApAction::Transmit(message1));
     state.record_built(message1).unwrap();
 
     let message2 = frame(
@@ -201,11 +195,11 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
         } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
+    let (ticket, retained) = match state.complete_ptk(ticket, retained).unwrap() {
         RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
+    let ticket = match state.complete_message2_mic(ticket, retained).unwrap() {
         RsnApAction::PrepareMessage3 { ticket } => ticket,
         action => panic!("unexpected action: {action:?}"),
     };
@@ -216,7 +210,7 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
     };
     assert_eq!(
         state
-            .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
+            .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket)
             .unwrap(),
         RsnApAction::Transmit(message3)
     );
@@ -234,7 +228,7 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
         action => panic!("unexpected action: {action:?}"),
     };
     assert_eq!(
-        state.complete_message4_mic(ticket, retained, true).unwrap(),
+        state.complete_message4_mic(ticket, retained).unwrap(),
         RsnApAction::AuthorizePeer
     );
     assert_eq!(state.phase(), RsnApPhase::Authorized);
@@ -243,7 +237,7 @@ fn ap_orders_crypto_install_transmit_and_authorization() {
 /// A handshake whose first Message 1 (counter `initial`) was built.
 fn ap_state(station: [u8; 6], initial: u64) -> RsnApState {
     let mut state = RsnApState::new(crate::Akm::Psk, [1; 6], station, [3; 32], initial).unwrap();
-    let RsnApAction::Transmit(message1) = state.message1(false).unwrap() else {
+    let RsnApAction::Transmit(message1) = state.message1().unwrap() else {
         panic!("Message 1 is a transmission");
     };
     state.record_built(message1).unwrap();
@@ -266,16 +260,16 @@ fn ap_awaiting_message4(state: &mut RsnApState, station: [u8; 6], answered: u64)
         } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
+    let (ticket, retained) = match state.complete_ptk(ticket, retained).unwrap() {
         RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
+    let ticket = match state.complete_message2_mic(ticket, retained).unwrap() {
         RsnApAction::PrepareMessage3 { ticket } => ticket,
         action => panic!("unexpected action: {action:?}"),
     };
     match state
-        .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
+        .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket)
         .unwrap()
     {
         RsnApAction::Transmit(transmit) => {
@@ -463,16 +457,16 @@ fn ap_message3_owns_no_window_until_its_frame_is_built() {
         } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let (ticket, retained) = match state.complete_ptk(ticket, retained, true).unwrap() {
+    let (ticket, retained) = match state.complete_ptk(ticket, retained).unwrap() {
         RsnApAction::VerifyMessage2Mic { ticket, message2 } => (ticket, message2),
         action => panic!("unexpected action: {action:?}"),
     };
-    let ticket = match state.complete_message2_mic(ticket, retained, true).unwrap() {
+    let ticket = match state.complete_message2_mic(ticket, retained).unwrap() {
         RsnApAction::PrepareMessage3 { ticket } => ticket,
         action => panic!("unexpected action: {action:?}"),
     };
     let RsnApAction::Transmit(message3) = state
-        .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket, true)
+        .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket)
         .unwrap()
     else {
         panic!("Message 3 is a transmission");
@@ -524,7 +518,7 @@ fn ap_completion_binds_the_answer_it_verifies() {
     };
     // Another awaited Message 2 cannot stand in for the one being verified.
     assert_eq!(
-        state.complete_ptk(ticket, message2(station, 21), true),
+        state.complete_ptk(ticket, message2(station, 21)),
         Err(RsnStateError::RetainedFrameMismatch)
     );
 
@@ -536,7 +530,7 @@ fn ap_completion_binds_the_answer_it_verifies() {
         action => panic!("unexpected action: {action:?}"),
     };
     assert_eq!(
-        state.complete_message4_mic(ticket, message4(station, 22), true),
+        state.complete_message4_mic(ticket, message4(station, 22)),
         Err(RsnStateError::RetainedFrameMismatch)
     );
 }
@@ -564,7 +558,7 @@ fn ap_message4_answering_an_earlier_message3_stays_awaited_until_completion() {
     // A duplicate while its MIC is verified changes nothing.
     assert_eq!(state.on_frame(message4(station, 23)), Ok(RsnApAction::None));
     assert_eq!(
-        state.complete_message4_mic(ticket, retained, true).unwrap(),
+        state.complete_message4_mic(ticket, retained).unwrap(),
         RsnApAction::AuthorizePeer
     );
     // The window closed with the step: no later Message 4 authorizes again,
@@ -696,9 +690,7 @@ fn encrypted_message3_requires_owned_key_data() {
         RsnStaAction::DerivePtk { ticket, .. } => ticket,
         _ => unreachable!(),
     };
-    state
-        .complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket, true)
-        .unwrap();
+    state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket).unwrap();
     assert_eq!(
         state.on_frame(raw_message3(
             [2; 6],
@@ -732,9 +724,7 @@ fn sta_binds_message3_fields_to_the_accepted_message1() {
             RsnStaAction::DerivePtk { ticket, .. } => ticket,
             action => panic!("unexpected action: {action:?}"),
         };
-        state
-            .complete_ptk::<MESSAGE3_CAPACITY>(ticket, true)
-            .unwrap();
+        state.complete_ptk::<MESSAGE3_CAPACITY>(ticket).unwrap();
         state
     }
 
@@ -824,4 +814,161 @@ fn sta_binds_message3_fields_to_the_accepted_message1() {
         Err(RsnStateError::NonzeroKeyIdentifier)
     );
     assert_eq!(state.phase(), RsnStaPhase::AwaitingMessage3);
+}
+
+/// A station whose Message 3 (counter 11) awaits its MIC check.
+fn sta_verifying_message3() -> (RsnStaState, RsnTicket, OwnedEapolFrame<MESSAGE3_CAPACITY>) {
+    let ap = [2; 6];
+    let anonce = [4; 32];
+    let mut state = RsnStaState::new(crate::Akm::Psk, [1; 6], ap, [3; 32]).unwrap();
+    let RsnStaAction::DerivePtk { ticket, .. } = state
+        .on_frame(frame(RsnInterface::Station, ap, PAIRWISE | ACK, 10, anonce))
+        .unwrap()
+    else {
+        panic!("Message 1 derives the PTK");
+    };
+    state.complete_ptk::<EAPOL_KEY_PACKET_LEN>(ticket).unwrap();
+    let RsnStaAction::VerifyMessage3Mic { ticket, frame } =
+        state.on_frame(message3(ap, 11, anonce)).unwrap()
+    else {
+        panic!("Message 3 is verified");
+    };
+    (state, ticket, frame)
+}
+
+#[test]
+fn sta_a_failed_message3_mic_awaits_message3_again_and_closes_its_ticket() {
+    let (mut state, ticket, frame) = sta_verifying_message3();
+    state.fail_message3_mic(ticket, frame.clone()).unwrap();
+    assert_eq!(state.phase(), RsnStaPhase::AwaitingMessage3);
+    assert!(state.complete_message3_mic(ticket, frame.clone()).is_err());
+    assert_eq!(state.phase(), RsnStaPhase::AwaitingMessage3);
+    // The real Message 3 is accepted afterwards, under the same counter.
+    assert!(matches!(
+        state.on_frame(frame).unwrap(),
+        RsnStaAction::VerifyMessage3Mic { .. }
+    ));
+}
+
+#[test]
+fn sta_failed_key_data_and_key_install_fail_the_handshake_and_close_their_tickets() {
+    let (mut state, ticket, frame) = sta_verifying_message3();
+    let RsnStaAction::DecryptMessage3KeyData { ticket, frame } =
+        state.complete_message3_mic(ticket, frame).unwrap()
+    else {
+        panic!("encrypted key data is unwrapped");
+    };
+    state.fail_key_data(ticket, frame.clone()).unwrap();
+    assert_eq!(state.phase(), RsnStaPhase::Failed);
+    assert!(state.complete_key_data(ticket, frame).is_err());
+    assert_eq!(state.phase(), RsnStaPhase::Failed);
+
+    let (mut state, ticket, frame) = sta_verifying_message3();
+    let RsnStaAction::DecryptMessage3KeyData { ticket, frame } =
+        state.complete_message3_mic(ticket, frame).unwrap()
+    else {
+        panic!("encrypted key data is unwrapped");
+    };
+    let RsnStaAction::InstallKeys { ticket, .. } = state.complete_key_data(ticket, frame).unwrap()
+    else {
+        panic!("its keys are installed next");
+    };
+    state.fail_key_install(ticket).unwrap();
+    assert_eq!(state.phase(), RsnStaPhase::Failed);
+    assert!(
+        state
+            .complete_key_install::<MESSAGE3_CAPACITY>(ticket)
+            .is_err()
+    );
+    assert_eq!(state.phase(), RsnStaPhase::Failed);
+}
+
+/// An authenticator whose Message 2 (counter 20) awaits its MIC check.
+fn ap_verifying_message2(
+    station: [u8; 6],
+) -> (RsnApState, RsnTicket, OwnedEapolFrame<EAPOL_KEY_PACKET_LEN>) {
+    let mut state = ap_state(station, 20);
+    let RsnApAction::DerivePtk {
+        ticket, message2, ..
+    } = state.on_frame(message2(station, 20)).unwrap()
+    else {
+        panic!("Message 2 derives the PTK");
+    };
+    let RsnApAction::VerifyMessage2Mic { ticket, message2 } =
+        state.complete_ptk(ticket, message2).unwrap()
+    else {
+        panic!("its MIC is checked next");
+    };
+    (state, ticket, message2)
+}
+
+#[test]
+fn ap_a_failed_message2_mic_awaits_message2_again_and_closes_its_ticket() {
+    let station = [7; 6];
+    let (mut state, ticket, message2) = ap_verifying_message2(station);
+    state.fail_message2_mic(ticket, message2.clone()).unwrap();
+    assert_eq!(state.phase(), RsnApPhase::AwaitingMessage2);
+    assert!(
+        state
+            .complete_message2_mic(ticket, message2.clone())
+            .is_err()
+    );
+    assert_eq!(state.phase(), RsnApPhase::AwaitingMessage2);
+    // The peer's real Message 2 is taken afterwards.
+    assert!(matches!(
+        state.on_frame(message2).unwrap(),
+        RsnApAction::DerivePtk { .. }
+    ));
+}
+
+#[test]
+fn ap_a_failed_message3_preparation_deauthenticates_and_closes_its_ticket() {
+    let station = [7; 6];
+    let (mut state, ticket, message2) = ap_verifying_message2(station);
+    let RsnApAction::PrepareMessage3 { ticket } =
+        state.complete_message2_mic(ticket, message2).unwrap()
+    else {
+        panic!("Message 3 is prepared next");
+    };
+    assert_eq!(
+        state.fail_message3_preparation(ticket),
+        Ok(RsnDeauthenticatePeer)
+    );
+    assert_eq!(state.phase(), RsnApPhase::Failed);
+    assert!(
+        state
+            .complete_message3_preparation::<EAPOL_KEY_PACKET_LEN>(ticket)
+            .is_err()
+    );
+    assert_eq!(state.phase(), RsnApPhase::Failed);
+}
+
+#[test]
+fn ap_a_failed_message4_mic_awaits_message4_again_and_closes_its_ticket() {
+    let station = [7; 6];
+    let mut state = ap_state(station, 20);
+    let message3 = ap_awaiting_message4(&mut state, station, 20);
+    let RsnApAction::VerifyMessage4Mic { ticket, message4 } = state
+        .on_frame(message4(station, message3.replay_counter))
+        .unwrap()
+    else {
+        panic!("Message 4 is verified");
+    };
+    state.fail_message4_mic(ticket, message4.clone()).unwrap();
+    assert_eq!(state.phase(), RsnApPhase::AwaitingMessage4);
+    assert!(
+        state
+            .complete_message4_mic(ticket, message4.clone())
+            .is_err()
+    );
+    assert_eq!(state.phase(), RsnApPhase::AwaitingMessage4);
+    // The peer's real Message 4 still authorizes it.
+    let RsnApAction::VerifyMessage4Mic { ticket, message4 } = state.on_frame(message4).unwrap()
+    else {
+        panic!("Message 4 is verified again");
+    };
+    assert_eq!(
+        state.complete_message4_mic(ticket, message4).unwrap(),
+        RsnApAction::AuthorizePeer
+    );
 }

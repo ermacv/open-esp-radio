@@ -13,10 +13,14 @@
 
 pub mod sae;
 
+use crate::MicFailure;
 use crate::{
     AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame, build_ap_action_frame},
-    state::{RsnApAction, RsnApPhase, RsnApState, RsnStateError, RsnTicket, RsnTransmit},
+    state::{
+        RsnApAction, RsnApPhase, RsnApState, RsnDeauthenticatePeer, RsnStateError, RsnTicket,
+        RsnTransmit,
+    },
 };
 use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
@@ -129,7 +133,7 @@ impl RsnAuthenticator {
     pub fn message1<const N: usize>(
         &mut self,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
-        let RsnApAction::Transmit(transmit) = self.state.message1(false)? else {
+        let RsnApAction::Transmit(transmit) = self.state.message1()? else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
         let frame = build_ap_action_frame(&self.state, transmit, [0; 8], &[])?;
@@ -179,17 +183,22 @@ impl RsnAuthenticator {
                         .pending_ptk
                         .as_ref()
                         .ok_or(RsnAuthenticatorError::MissingPairwiseKey)?;
-                    message4.key_frame()?.verify_mic(ptk, engine)
+                    message4.key_frame()?.check_mic(ptk, engine)
                 };
-                let action =
-                    self.state
-                        .complete_message4_mic(ticket, message4, verified == Ok(true))?;
-                verified?;
-                match action {
-                    RsnApAction::AuthorizePeer => Ok(RsnAuthenticatorStep::Authorized),
-                    RsnApAction::None => Ok(RsnAuthenticatorStep::None),
-                    RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
-                    _ => Err(RsnAuthenticatorError::UnexpectedAction),
+                match verified {
+                    Ok(()) => match self.state.complete_message4_mic(ticket, message4)? {
+                        RsnApAction::AuthorizePeer => Ok(RsnAuthenticatorStep::Authorized),
+                        _ => Err(RsnAuthenticatorError::UnexpectedAction),
+                    },
+                    Err(failure) => {
+                        self.state.fail_message4_mic(ticket, message4)?;
+                        match failure {
+                            // A forged Message 4 is ignored; a valid retry
+                            // still authorizes the handshake.
+                            MicFailure::Mismatch => Ok(RsnAuthenticatorStep::None),
+                            MicFailure::Engine(error) => Err(RsnAuthenticatorError::Engine(error)),
+                        }
+                    }
                 }
             }
             RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
@@ -215,13 +224,13 @@ impl RsnAuthenticator {
             },
         );
         let RsnApAction::VerifyMessage2Mic { ticket, message2 } =
-            self.state.complete_ptk(ticket, message2, true)?
+            self.state.complete_ptk(ticket, message2)?
         else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };
         let key_frame = message2.key_frame()?;
-        let verified = key_frame.verify_mic(&ptk, engine);
-        let valid = verified == Ok(true);
+        let verified = key_frame.check_mic(&ptk, engine);
+        let valid = verified.is_ok();
         // The association commitment is an authenticated semantic binding.
         // Do not let attacker-controlled Key Data decide peer teardown until
         // this exact M2 has passed its PTK-derived MIC.
@@ -230,22 +239,23 @@ impl RsnAuthenticator {
                 .association_security_binding
                 .as_ref()
                 .is_some_and(|binding| binding.matches(pmk, key_frame.key_data()));
-        let action = self.state.complete_message2_mic(ticket, message2, valid)?;
-        verified?;
-        let ticket = match action {
+        if let Err(failure) = verified {
+            self.state.fail_message2_mic(ticket, message2)?;
+            return match failure {
+                // A spoofed Message 2 is ignored; the peer may send it again.
+                MicFailure::Mismatch => Ok(RsnAuthenticatorStep::None),
+                MicFailure::Engine(error) => Err(RsnAuthenticatorError::Engine(error)),
+            };
+        }
+        let ticket = match self.state.complete_message2_mic(ticket, message2)? {
             RsnApAction::PrepareMessage3 { ticket } => ticket,
-            RsnApAction::None => return Ok(RsnAuthenticatorStep::None),
-            RsnApAction::DeauthenticatePeer => return Ok(RsnAuthenticatorStep::Deauthenticate),
             _ => return Err(RsnAuthenticatorError::UnexpectedAction),
         };
         if !association_security_ies_match {
-            return match self
-                .state
-                .complete_message3_preparation::<N>(ticket, false)?
-            {
-                RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
-                _ => Err(RsnAuthenticatorError::UnexpectedAction),
-            };
+            // The authenticated Message 2 names other security elements than
+            // the association: the handshake fails and the peer goes.
+            let RsnDeauthenticatePeer = self.state.fail_message3_preparation(ticket)?;
+            return Ok(RsnAuthenticatorStep::Deauthenticate);
         }
         Ok(RsnAuthenticatorStep::PrepareMessage3(
             RsnMessage3Preparation { ticket, ptk },
@@ -265,10 +275,16 @@ impl RsnAuthenticator {
         engine: &mut E,
     ) -> Result<(RsnTxFrame<N>, RsnTransmit), RsnAuthenticatorError> {
         let RsnMessage3Preparation { ticket, ptk } = preparation;
-        let wrapped = software_aes128_key_wrap(ptk.kek(), key_data.as_bytes())?;
-        let RsnApAction::Transmit(transmit) = self
-            .state
-            .complete_message3_preparation::<N>(ticket, true)?
+        let wrapped = match software_aes128_key_wrap(ptk.kek(), key_data.as_bytes()) {
+            Ok(wrapped) => wrapped,
+            Err(error) => {
+                // The handshake fails with the wrap's error.
+                let RsnDeauthenticatePeer = self.state.fail_message3_preparation(ticket)?;
+                return Err(RsnAuthenticatorError::KeyWrap(error));
+            }
+        };
+        let RsnApAction::Transmit(transmit) =
+            self.state.complete_message3_preparation::<N>(ticket)?
         else {
             return Err(RsnAuthenticatorError::UnexpectedAction);
         };

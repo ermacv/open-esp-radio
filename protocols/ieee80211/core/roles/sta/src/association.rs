@@ -90,11 +90,10 @@ impl<K: Ieee80211Capabilities> StaPhyRequest<K> {
         let offered = K::CAPS.formats;
         let mut admitted_widest = false;
         let mut any = false;
-        let all = [PhyFormat::NonHt, PhyFormat::Ht, PhyFormat::He];
-        let mut index = 0;
-        while index < all.len() {
-            let format = all[index];
-            index += 1;
+        let mut remaining: &[PhyFormat] = &[PhyFormat::NonHt, PhyFormat::Ht, PhyFormat::He];
+        while let [format, rest @ ..] = remaining {
+            remaining = rest;
+            let format = *format;
             if !formats.contains(format) {
                 continue;
             }

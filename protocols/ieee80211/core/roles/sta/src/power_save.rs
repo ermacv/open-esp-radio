@@ -1,6 +1,4 @@
-//! The station's power-management state as its access point sees it: the
-//! first decision of `modem_sleep`'s portable decision half, which its split
-//! takes over without a second copy.
+//! The station's power-management state as its access point sees it.
 //!
 //! A station tells its access point whether it sleeps with the PM bit of a
 //! Null. A Null's retries are its retry plan in the driver
@@ -17,10 +15,16 @@ use core::num::NonZeroU8;
 use oer_protocols_ieee80211_wire::station_beacon::StaTimObservation;
 use oer_protocols_ieee80211_wire::station_power_save::StaPowerManagement;
 
+/// Consecutive active Null failures after which the station stops retrying.
+///
+/// SOURCE: `pm_tx_null_data_done_process` of the pinned `libpp.a[pm.o]` of
+/// espressif/esp32-wifi-lib `f856b5db`.
+pub const NULL_RETRY_LIMIT: u8 = 15;
+
 /// The transmissions a Null's retry plan makes: the vendor's limit of
 /// Null retries, plus the first.
 pub const NULL_TRANSMISSIONS: NonZeroU8 = {
-    match NonZeroU8::MIN.checked_add(crate::modem_sleep::NULL_RETRY_LIMIT) {
+    match NonZeroU8::MIN.checked_add(NULL_RETRY_LIMIT) {
         Some(count) => count,
         None => panic!("a Null's retry limit plus its first transmission must fit"),
     }
@@ -115,15 +119,13 @@ impl PowerSaveView {
 mod tests {
     use super::*;
 
-    fn tim(unicast_buffered: bool) -> Option<StaTimObservation> {
+    use oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic;
+
+    fn tim(unicast: BufferedTraffic) -> Option<StaTimObservation> {
         Some(StaTimObservation {
             dtim_count: 0,
             dtim_period: 1,
-            unicast: if unicast_buffered {
-                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
-            } else {
-                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
-            },
+            unicast,
             group: oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear,
         })
     }
@@ -134,12 +136,21 @@ mod tests {
         view.null_sent(StaPowerManagement::PowerSave, NullOutcome::Delivered);
         view.null_sent(StaPowerManagement::Active, NullOutcome::Unconfirmed);
         // The access point buffers for the station: send PM=0 again.
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::SendActive);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::SendActive
+        );
         // A TIM without the station's bit says nothing.
-        assert_eq!(view.beacon(tim(false)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Clear)),
+            PowerSaveDecision::Keep
+        );
         // Delivered at last: the two sides agree.
         view.null_sent(StaPowerManagement::Active, NullOutcome::Delivered);
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 
     #[test]
@@ -147,7 +158,10 @@ mod tests {
         let mut view = PowerSaveView::Awake;
         view.null_sent(StaPowerManagement::PowerSave, NullOutcome::Unconfirmed);
         assert!(view.asleep());
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 
     #[test]
@@ -155,6 +169,9 @@ mod tests {
         let mut view = PowerSaveView::Awake;
         view.null_sent(StaPowerManagement::Active, NullOutcome::Unconfirmed);
         assert_eq!(view, PowerSaveView::Awake);
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 }

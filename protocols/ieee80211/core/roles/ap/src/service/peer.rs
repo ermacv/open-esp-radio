@@ -209,9 +209,9 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             existing.pmkid = Some(pmkid);
         }
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
-        existing.short_preamble = capabilities.short_preamble;
+        existing.preamble = capabilities.preamble;
         existing.ht = capabilities.ht;
-        existing.qos_supported = capabilities.qos_supported;
+        existing.qos = capabilities.qos;
         existing.last_activity = now;
         existing.deadline = now.saturating_add(inactive_timeout);
         let association_id = existing.association_id;
@@ -295,12 +295,12 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         existing.phase = ApPeerPhase::Authorized;
         existing.authenticator = None;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
-        existing.short_preamble = capabilities.short_preamble;
+        existing.preamble = capabilities.preamble;
         existing.ht = capabilities.ht;
         // Ordinary Open MSDUs retain the non-QoS sequence space. The bounded
         // A-MSDU owner uses this peer's independent QoS/TID-0 counter only
         // after validating HT and QoS support for both coalesced leases.
-        existing.qos_supported = capabilities.qos_supported;
+        existing.qos = capabilities.qos;
         existing.tx_block_ack.stop_all();
         existing.last_activity = now;
         existing.deadline = now.saturating_add(inactive_timeout);

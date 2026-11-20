@@ -5,6 +5,7 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
 fn key(peer: [u8; 6], value: u8) -> RsnKeyInstall {
     RsnKeyInstall {
@@ -30,12 +31,12 @@ fn group_transmit_flag_change_reuses_key_id_slot() {
     let mut keys = StaticRsnKeys::<1>::new();
     let first = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[6; 16],
     );
     let second = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        true,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
         &[7; 16],
     );
     assert_eq!(
@@ -58,7 +59,7 @@ fn group_transmit_flag_change_reuses_key_id_slot() {
         keys.get(0).unwrap().kind(),
         RsnKeyKind::Group {
             key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-            transmit: true
+            tx: GtkTx::TransmitAndReceive
         }
     );
 }

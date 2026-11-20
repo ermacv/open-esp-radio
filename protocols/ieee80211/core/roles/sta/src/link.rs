@@ -49,6 +49,7 @@ use oer_protocols_ieee80211_wire::eapol::PAE_GROUP_ADDRESS;
 use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::frame::{DecodedHeader, MacHeader};
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
+use oer_protocols_ieee80211_wire::security::LinkProtection;
 pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::data::MsduDelivery;
@@ -60,6 +61,15 @@ use crate::machine::{
 use crate::receive::{Received, sort};
 use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
 use oer_protocols_ieee80211_core_datapath::plane::{DataLink, TxWindow};
+
+/// Whether a lent link carries data: from its handover it is held until
+/// the station releases it ([`LinkAction::Release`]), and held again at
+/// each [`LinkAction::Hold`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Carriage {
+    Carries,
+    Held,
+}
 
 /// Who numbers a station frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -156,7 +166,7 @@ fn renumber<K: Ieee80211Capabilities>(
 pub struct RxLink {
     address: OwnAddress,
     bssid: Bssid,
-    protected: bool,
+    protection: LinkProtection,
     replay: Option<CcmpRxReplayEpoch>,
     /// The station's RSN failed on an EAPOL frame of the link: the link
     /// gives no more data until it returns.
@@ -167,13 +177,13 @@ impl RxLink {
     pub(crate) const fn new(
         address: OwnAddress,
         bssid: Bssid,
-        protected: bool,
+        protection: LinkProtection,
         replay: Option<CcmpRxReplayEpoch>,
     ) -> Self {
         Self {
             address,
             bssid,
-            protected,
+            protection,
             replay,
             faulted: false,
         }
@@ -186,14 +196,14 @@ impl RxLink {
 
     /// Admit one received data frame of the link at `integrity`: the
     /// replay check passes it once, then each MSDU goes on, EAPOL to
-    /// `eapol` and data to `deliver` while the link `carries` data. A frame
+    /// `eapol` and data to `deliver` while the link carries data. A frame
     /// refused for a typed reason keeps the MSDUs delivered before it.
     pub(crate) fn receive<'f>(
         &mut self,
         header: DecodedHeader<'f>,
         frame: &'f [u8],
         integrity: Integrity,
-        carries: bool,
+        carriage: Carriage,
         mut deliver: impl FnMut(MsduDelivery<'f>),
         mut eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError>,
     ) -> Result<StaReceived, StaRxError> {
@@ -205,7 +215,7 @@ impl RxLink {
             self.replay.as_mut(),
         )?;
         let mut received = StaReceived::Data;
-        for msdu in msdus(&admitted, self.address, self.protected)? {
+        for msdu in msdus(&admitted, self.address, self.protection)? {
             match msdu? {
                 None => {}
                 Some(LinkMsdu::Eapol {
@@ -218,7 +228,7 @@ impl RxLink {
                     received = StaReceived::Input;
                 }
                 Some(LinkMsdu::Data(parts)) => {
-                    if !carries || self.faulted {
+                    if carriage == Carriage::Held || self.faulted {
                         return Err(RxDropReason::NotConnected.into());
                     }
                     deliver(MsduDelivery::locate(frame, parts).ok_or(RxDropReason::Payload)?);
@@ -253,15 +263,16 @@ pub(crate) enum LinkMsdu<'f> {
 }
 
 /// The MSDUs of `admitted`, a frame to the station at `address` of a link
-/// the profile protects or not (`protected`): an unprotected EAPOL frame of
+/// the profile protects or not (`protection`): an unprotected EAPOL frame of
 /// a protected link that names neither the station nor the PAE group goes
 /// nowhere (`None`), and unprotected data of a protected link is refused.
 pub(crate) fn msdus<'f>(
     admitted: &AdmittedData<'f>,
     address: OwnAddress,
-    protected: bool,
+    protection: LinkProtection,
 ) -> Result<impl Iterator<Item = Result<Option<LinkMsdu<'f>>, StaRxError>> + 'f, StaRxError> {
     let frame_protected = admitted.protected();
+    let protected = protection == LinkProtection::Ccmp;
     Ok(admitted.msdus()?.map(move |parts| {
         let parts = parts?;
         if parts.ether_type == ETHER_TYPE_EAPOL {
@@ -310,8 +321,8 @@ pub struct LinkHandover<P> {
     /// frames draw; `None` on an open connection.
     key: Option<P>,
     rx: RxLink,
-    /// The link carries data now, as the station last said.
-    carries: bool,
+    /// Whether the link carries data now, as the station last said.
+    carriage: Carriage,
 }
 
 impl LinkHandover<()> {
@@ -327,7 +338,7 @@ impl LinkHandover<()> {
             numbers,
             key: None,
             rx,
-            carries: false,
+            carriage: Carriage::Held,
         }
     }
 
@@ -341,7 +352,7 @@ impl LinkHandover<()> {
             numbers,
             key: _none,
             rx,
-            carries,
+            carriage,
         } = self;
         // The station hands over no key.
         LinkHandover {
@@ -350,14 +361,14 @@ impl LinkHandover<()> {
             numbers,
             key,
             rx,
-            carries,
+            carriage,
         }
     }
 
     /// Whether the link is protected: its holder adds its pairwise key
     /// ([`Self::with_key`]).
-    pub const fn protected(&self) -> bool {
-        self.rx.protected
+    pub const fn protection(&self) -> LinkProtection {
+        self.rx.protection
     }
 }
 
@@ -370,13 +381,14 @@ impl<P> LinkHandover<P> {
     /// Whether the link carries data now: it is held from its handover to
     /// the station's first [`LinkAction::Release`], and from each
     /// [`LinkAction::Hold`] to the next release.
-    pub const fn carries(&self) -> bool {
-        self.carries
+    pub const fn carriage(&self) -> Carriage {
+        self.carriage
     }
 
-    /// Take a [`LinkAction::Hold`] or [`LinkAction::Release`].
-    pub fn hold(&mut self, hold: bool) {
-        self.carries = !hold;
+    /// Take a [`LinkAction::Hold`] ([`Carriage::Held`]) or
+    /// [`LinkAction::Release`] ([`Carriage::Carries`]).
+    pub fn carry(&mut self, carriage: Carriage) {
+        self.carriage = carriage;
     }
 
     /// The data plane's state of the link, until the holder hands it to its
@@ -459,7 +471,7 @@ impl<P> LinkHandover<P> {
             header,
             frame,
             crate::data::integrity(meta.common()),
-            self.carries,
+            self.carriage,
             deliver,
             eapol,
         ))
@@ -531,15 +543,15 @@ impl<P> LinkHandover<P> {
 
     /// An open link of the connection `sequence` for a host test of its
     /// holder: own `address`, `bssid`, the profile's protection
-    /// (`protected`), QoS sequence spaces when `qos`, the holder's pairwise
-    /// `key`, and the data plane's state of it.
+    /// (`protection`), QoS sequence spaces for a `qos` peer, the holder's
+    /// pairwise `key`, and the data plane's state of it.
     #[cfg(any(test, feature = "test-support"))]
     pub fn for_test(
         sequence: u64,
         address: OwnAddress,
         bssid: Bssid,
-        protected: bool,
-        qos: bool,
+        protection: LinkProtection,
+        qos: oer_protocols_ieee80211_wire::data::PeerQos,
         key: Option<P>,
         data: Option<DataLink>,
     ) -> Self {
@@ -548,11 +560,12 @@ impl<P> LinkHandover<P> {
             data,
             numbers: TxNumbers::new(
                 SequenceCounter::new(SequenceNumber::ZERO),
-                qos.then_some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
+                (qos == oer_protocols_ieee80211_wire::data::PeerQos::Qos)
+                    .then_some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
             ),
             key,
-            rx: RxLink::new(address, bssid, protected, None),
-            carries: false,
+            rx: RxLink::new(address, bssid, protection, None),
+            carriage: Carriage::Held,
         }
     }
 

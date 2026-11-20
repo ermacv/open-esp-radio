@@ -11,7 +11,12 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
         }]
     );
     assert!(world.station.is_connected());
-    assert!(world.link.as_ref().is_some_and(|link| link.carries()));
+    assert!(
+        world
+            .link
+            .as_ref()
+            .is_some_and(|link| link.carriage() == crate::link::Carriage::Carries)
+    );
     assert_eq!(world.arbiter.channel(), Some(channel(6)));
     assert!(world.station.absence.is_none());
     assert!(world.station.absence_place.is_some());
@@ -38,7 +43,12 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
             outcome: StaCommandOutcome::BackgroundScan { interrupted: None },
         }]
     );
-    assert!(world.link.as_ref().is_some_and(|link| link.carries()));
+    assert!(
+        world
+            .link
+            .as_ref()
+            .is_some_and(|link| link.carriage() == crate::link::Carriage::Carries)
+    );
 }
 
 #[test]
@@ -76,14 +86,14 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
         world.completed.clear();
         world.frames.clear();
         world.take();
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world
             .command(at(50), 401, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(50));
         assert_eq!(world.take(), [Seen::Configure("bss+scan")]);
         let late = Instant::from_micros(u64::MAX - 1);
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.input(late, StaInput::Configured);
         world.run(late);
         assert_eq!(world.take(), [Seen::Configure("bss")]);
@@ -92,9 +102,9 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
             "cleanup still owns the accepted request"
         );
         assert!(world.station.poll_deadline().is_none());
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.input(late, StaInput::Configured);
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(late);
         assert_scan_overflow(&mut world, late);
     });
@@ -119,7 +129,7 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
         let Some(StaAction::Transmit(transmit)) = poll!(world, deadline) else {
             panic!()
         };
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         world.frames.clear();
         world.take();
         world.end_transmissions(late);

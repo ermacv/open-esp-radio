@@ -7945,11 +7945,6 @@ const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/wire/src/ap.rs::ApManagementRequest::Association",
-        2,
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",
         2,
         BY_P3,
@@ -7971,18 +7966,7 @@ const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
 /// without being it), by `file::function` with their number. It misses a
 /// `bool` behind a type alias, and a closure's parameter. The list only
 /// shrinks.
-const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::probe",
-        1,
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::commit_step_with",
-        1,
-        BY_P3,
-    ),
-];
+const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[];
 
 /// K0, `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
 /// inserts into, assigns or borrows `&mut`, by `file::Struct.field`: a slot
@@ -8345,10 +8329,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.timing",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PhaseTiming.deadline",
         BY_P3,
     ),
     (

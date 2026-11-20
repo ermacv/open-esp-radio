@@ -26,13 +26,21 @@ fn message3(ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk, counter: u64) 
 }
 
 /// Group Message 1 of key `key_id` with replay counter `replay`, protected
-/// under packet number `pn`; `corrupt` flips a bit of the wrapped key data.
+/// under packet number `pn`; [`KeyData::Corrupt`] flips a bit of the wrapped
+/// key data.
+/// Whether a test frame's wrapped key data is as built or changed.
+#[derive(Clone, Copy, PartialEq)]
+enum KeyData {
+    Intact,
+    Corrupt,
+}
+
 fn group_message1_at(
     ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
     replay: u64,
     key_id: u8,
     pn: u64,
-    corrupt: bool,
+    key_data: KeyData,
 ) -> Vec<u8> {
     use oer_protocols_ieee80211_core_security_rsn::frames::RsnTxFrame;
     use oer_protocols_ieee80211_wire::security::rsn::Akm;
@@ -47,7 +55,7 @@ fn group_message1_at(
     )
     .unwrap();
     let mut wrapped = wrapped.as_bytes().to_vec();
-    if corrupt {
+    if key_data == KeyData::Corrupt {
         wrapped[0] ^= 1;
     }
     let message = RsnTxFrame::<512>::group_message1(Akm::Psk, LOCAL, replay, [0; 8], &wrapped)
@@ -76,9 +84,9 @@ fn a_group_rekey_unwraps_each_frame_in_its_step_and_answers_each() {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let before = world.unwraps();
         let frames = world.frames.len();
-        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, false));
+        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, KeyData::Intact));
         world.run(at(50));
-        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, false));
+        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, KeyData::Intact));
         world.run(at(51));
         assert_eq!(world.unwraps(), before + 2);
         assert_eq!(world.frames.len(), frames + 2, "GM2 for each counter");
@@ -92,13 +100,13 @@ fn key_data_that_fails_its_integrity_check_is_a_counted_drop_and_the_link_stays(
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         let before = world.losses.rsn;
         let frames = world.frames.len();
-        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, true));
+        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, KeyData::Corrupt));
         world.run(at(50));
         assert_eq!(world.losses.rsn, before + 1);
         assert_eq!(world.frames.len(), frames, "no GM2 for refused key data");
         assert!(world.station.is_connected());
         // The next valid group message still installs and answers.
-        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, false));
+        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, KeyData::Intact));
         world.run(at(51));
         assert_eq!(world.frames.len(), frames + 1);
     });
@@ -112,13 +120,13 @@ fn an_engine_that_refuses_the_unwrap_is_a_counted_drop_and_the_link_stays() {
         let frames = world.frames.len();
         world.station.config.callbacks.blocks.refuse =
             Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
-        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, false));
+        world.receive_verified(at(50), &group_message1_at(&ptk, 3, 2, 3, KeyData::Intact));
         world.run(at(50));
         assert_eq!(world.losses.rsn, before + 1);
         assert_eq!(world.frames.len(), frames, "no GM2 for an engine refusal");
         assert!(world.station.is_connected());
         world.station.config.callbacks.blocks.refuse = None;
-        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, false));
+        world.receive_verified(at(51), &group_message1_at(&ptk, 4, 1, 4, KeyData::Intact));
         world.run(at(51));
         assert_eq!(world.frames.len(), frames + 1);
     });

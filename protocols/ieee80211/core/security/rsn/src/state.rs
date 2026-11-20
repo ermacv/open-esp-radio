@@ -118,6 +118,7 @@ mod supplicant;
 
 pub use authenticator::{
     RSN_AP_REPLAY_WINDOW, RsnApAction, RsnApPeerError, RsnApPeers, RsnApPhase, RsnApState,
+    RsnDeauthenticatePeer,
 };
 pub use supplicant::{RsnStaAction, RsnStaPhase, RsnStaState};
 

@@ -165,10 +165,10 @@ impl ManagementProtection {
         }
     }
 
-    pub(super) fn deadline(&self, blocked: bool) -> Option<Instant> {
+    pub(super) fn deadline(&self, room: super::SendRoom) -> Option<Instant> {
         // A pending request waits for its frame's end. Its absolute timeout
         // still runs; an elapsed retry must not keep the service ready-spinning.
-        if self.request.is_some() || blocked {
+        if self.request.is_some() || room == super::SendRoom::Blocked {
             self.query.timeout()
         } else {
             self.query.next_deadline()

@@ -251,16 +251,12 @@ impl RsnStaState {
         }
     }
 
+    /// The PTK is derived: Message 2 follows. A derivation cannot fail.
     pub fn complete_ptk<const N: usize>(
         &mut self,
         ticket: RsnTicket,
-        valid: bool,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::DerivingPtk)?;
-        if !valid {
-            self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
-        }
         self.phase = RsnStaPhase::AwaitingMessage3;
         Ok(RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage2,
@@ -269,24 +265,15 @@ impl RsnStaState {
         }))
     }
 
+    /// Message 3's MIC verified: its key data is unwrapped next, or its
+    /// keys are installed.
     pub fn complete_message3_mic<const N: usize>(
         &mut self,
         ticket: RsnTicket,
         frame: OwnedEapolFrame<N>,
-        valid: bool,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::VerifyingMessage3)?;
         self.validate_retained_message3(&frame)?;
-        if !valid {
-            // The candidate replay counter is not authenticated until the
-            // MIC succeeds. Roll back the speculative M3 edge so a forged
-            // parse-valid frame cannot kill the join or reserve its replay
-            // value ahead of the real authenticator frame.
-            self.message3_replay = 0;
-            self.phase = RsnStaPhase::AwaitingMessage3;
-            return Ok(RsnStaAction::None);
-        }
-
         let key = frame.key_frame()?;
         if key.key_info().encrypted_key_data() {
             if key.key_data().is_empty() {
@@ -302,39 +289,68 @@ impl RsnStaState {
         }
     }
 
+    /// Message 3's MIC did not verify: the station awaits Message 3 again.
+    pub fn fail_message3_mic<const N: usize>(
+        &mut self,
+        ticket: RsnTicket,
+        frame: OwnedEapolFrame<N>,
+    ) -> Result<(), RsnStateError> {
+        self.check_completion(ticket, RsnStaPhase::VerifyingMessage3)?;
+        self.validate_retained_message3(&frame)?;
+        // The candidate replay counter is not authenticated until the
+        // MIC succeeds. Roll back the speculative M3 edge so a forged
+        // parse-valid frame cannot kill the join or reserve its replay
+        // value ahead of the real authenticator frame.
+        self.message3_replay = 0;
+        self.phase = RsnStaPhase::AwaitingMessage3;
+        Ok(())
+    }
+
+    /// Message 3's key data is unwrapped: its keys are installed next.
     pub fn complete_key_data<const N: usize>(
         &mut self,
         ticket: RsnTicket,
         frame: OwnedEapolFrame<N>,
-        valid: bool,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::DecryptingKeyData)?;
         self.validate_retained_message3(&frame)?;
-        if !valid {
-            self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
-        }
         self.phase = RsnStaPhase::InstallingKeys;
         let ticket = self.issue_ticket();
         Ok(RsnStaAction::InstallKeys { ticket, frame })
     }
 
+    /// Message 3's key data did not unwrap: the handshake fails.
+    pub fn fail_key_data<const N: usize>(
+        &mut self,
+        ticket: RsnTicket,
+        frame: OwnedEapolFrame<N>,
+    ) -> Result<(), RsnStateError> {
+        self.check_completion(ticket, RsnStaPhase::DecryptingKeyData)?;
+        self.validate_retained_message3(&frame)?;
+        self.phase = RsnStaPhase::Failed;
+        Ok(())
+    }
+
+    /// Message 3's keys are installed: Message 4 follows.
     pub fn complete_key_install<const N: usize>(
         &mut self,
         ticket: RsnTicket,
-        installed: bool,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::InstallingKeys)?;
-        if !installed {
-            self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
-        }
         self.phase = RsnStaPhase::Completed;
         Ok(RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage4,
             replay_counter: self.message3_replay,
             retransmission: false,
         }))
+    }
+
+    /// Message 3's keys cannot be installed (its key data did not parse):
+    /// the handshake fails.
+    pub fn fail_key_install(&mut self, ticket: RsnTicket) -> Result<(), RsnStateError> {
+        self.check_completion(ticket, RsnStaPhase::InstallingKeys)?;
+        self.phase = RsnStaPhase::Failed;
+        Ok(())
     }
 
     const fn ptk_context(&self) -> PtkContext {

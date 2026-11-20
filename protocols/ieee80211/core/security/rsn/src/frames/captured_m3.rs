@@ -17,6 +17,12 @@
 //! bytes are retained unchanged; SNonce is from Message 2.
 
 use super::*;
+use oer_protocols_ieee80211_wire::eapol::GtkTx;
+
+/// The negotiated group management cipher of an association that protects
+/// its management frames.
+const BIP: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher> =
+    Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
 use crate::{Akm, EapolKeyFrame, EapolKeyMessage, PtkContext};
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 
@@ -73,10 +79,10 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     );
     assert!(frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
     let plain = crate::test_unwrap_bytes(ptk.kek(), frame.key_data()).unwrap();
-    let keys = parse_gtk_key_data(plain.as_bytes(), &RSN_IE, &[], true).unwrap();
+    let keys = parse_gtk_key_data(plain.as_bytes(), &RSN_IE, &[], BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);
     assert_eq!(keys.gtk.key(), &GTK);
-    assert!(!keys.gtk.transmit());
+    assert_eq!(keys.gtk.tx(), GtkTx::ReceiveOnly);
     assert_eq!(keys.igtk.unwrap().key_id(), 4);
 
     // Variants of the recorded KDE exercise every two-bit wire ID. Only
@@ -84,7 +90,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
     for raw_id in 0..=3 {
         let mut changed = std::vec::Vec::from(plain.as_bytes());
         changed[28] = raw_id;
-        let keys = parse_gtk_key_data(&changed, &RSN_IE, &[], true).unwrap();
+        let keys = parse_gtk_key_data(&changed, &RSN_IE, &[], BIP).unwrap();
         let install = crate::keys::RsnKeyInstall::group(
             crate::RsnInterface::Station,
             &keys.gtk,
@@ -94,7 +100,7 @@ fn recorded_message3_authenticates_and_retains_its_gtk_wire_id() {
             install.kind(),
             crate::keys::RsnKeyKind::Group {
                 key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(raw_id).unwrap(),
-                transmit: false,
+                tx: GtkTx::ReceiveOnly,
             }
         );
         assert_eq!(install.key().as_bytes(), &GTK);

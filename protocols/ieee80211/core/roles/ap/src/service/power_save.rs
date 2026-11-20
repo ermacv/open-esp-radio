@@ -63,13 +63,13 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             if peer.phase != ApPeerPhase::Authorized {
                 return Err(ApServiceError::WrongPeerPhase);
             }
-            if peer.buffered_release_in_flight {
+            if peer.buffered_release == BufferedRelease::InFlight {
                 return Err(ApServiceError::BufferedReleaseInFlight);
             }
             if peer.buffered_unicast_frames == 0 {
                 return Ok(None);
             }
-            peer.buffered_release_in_flight = true;
+            peer.buffered_release = BufferedRelease::InFlight;
             ApBufferedUnicastRelease {
                 identity,
                 more_data: peer.buffered_unicast_frames > 1,
@@ -84,7 +84,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn complete_buffered_unicast_release(
         &mut self,
         release: ApBufferedUnicastRelease,
-        delivered: bool,
+        end: BufferedEnd,
     ) -> Result<u16, ApServiceError> {
         let remaining = {
             let peer = self
@@ -93,16 +93,16 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             // The release is affine and this peer permits only one release
             // in flight. Association identity fences slot reuse, so a second
             // serial number would duplicate those two ownership invariants.
-            if !peer.buffered_release_in_flight {
+            if peer.buffered_release == BufferedRelease::Idle {
                 return Err(ApServiceError::StaleBufferedRelease);
             }
-            if delivered {
+            if end == BufferedEnd::Delivered {
                 peer.buffered_unicast_frames = peer
                     .buffered_unicast_frames
                     .checked_sub(1)
                     .ok_or(ApServiceError::NoBufferedTraffic)?;
             }
-            peer.buffered_release_in_flight = false;
+            peer.buffered_release = BufferedRelease::Idle;
             peer.buffered_unicast_frames
         };
         self.status_revision = self.status_revision.wrapping_add(1);
@@ -144,7 +144,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                     }
                     existing.last_activity = now;
                     existing.deadline = now.saturating_add(inactive_timeout);
-                    existing.buffered_release_in_flight
+                    existing.buffered_release == BufferedRelease::InFlight
                 };
                 // A retried PS-Poll may arrive while the exact oldest frame is
                 // already reserved or crossing TX. It is idempotent: never
@@ -310,7 +310,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn begin_buffered_group_release(
         &mut self,
     ) -> Result<Option<ApBufferedGroupRelease>, ApServiceError> {
-        if self.buffered_group_release_in_flight {
+        if self.buffered_group_release == BufferedRelease::InFlight {
             return Err(ApServiceError::BufferedReleaseInFlight);
         }
         if self.buffered_group_frames == 0 {
@@ -320,7 +320,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             .buffered_group_release_generation
             .checked_add(1)
             .ok_or(ApServiceError::BufferedTrafficOverflow)?;
-        self.buffered_group_release_in_flight = true;
+        self.buffered_group_release = BufferedRelease::InFlight;
         self.status_revision = self.status_revision.wrapping_add(1);
         Ok(Some(ApBufferedGroupRelease {
             generation: self.buffered_group_release_generation,
@@ -331,36 +331,37 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// Resolve one affine group release after its exact retained payload
     /// reached terminal hardware publication or was restored to the queue.
     ///
-    /// `delivered` means terminal publication success. Group-addressed MPDUs
-    /// have no acknowledgement, so this API never manufactures ACK evidence.
+    /// [`BufferedEnd::Delivered`] means terminal publication success.
+    /// Group-addressed MPDUs have no acknowledgement, so this API never
+    /// manufactures ACK evidence.
     pub fn complete_buffered_group_release(
         &mut self,
         release: ApBufferedGroupRelease,
-        delivered: bool,
+        end: BufferedEnd,
     ) -> Result<u16, ApServiceError> {
-        if !self.buffered_group_release_in_flight
+        if self.buffered_group_release == BufferedRelease::Idle
             || release.generation != self.buffered_group_release_generation
         {
             return Err(ApServiceError::StaleBufferedRelease);
         }
-        if delivered {
+        if end == BufferedEnd::Delivered {
             self.buffered_group_frames = self
                 .buffered_group_frames
                 .checked_sub(1)
                 .ok_or(ApServiceError::NoBufferedTraffic)?;
         }
-        self.buffered_group_release_in_flight = false;
+        self.buffered_group_release = BufferedRelease::Idle;
         self.status_revision = self.status_revision.wrapping_add(1);
         Ok(self.buffered_group_frames)
     }
 
     /// Account one group frame only after its DTIM-scoped publication has
     /// reached a terminal success. Failed frames remain advertised.
-    pub fn complete_buffered_group(&mut self, delivered: bool) -> Result<u16, ApServiceError> {
-        if self.buffered_group_release_in_flight {
+    pub fn complete_buffered_group(&mut self, end: BufferedEnd) -> Result<u16, ApServiceError> {
+        if self.buffered_group_release == BufferedRelease::InFlight {
             return Err(ApServiceError::BufferedReleaseInFlight);
         }
-        if delivered {
+        if end == BufferedEnd::Delivered {
             self.buffered_group_frames = self
                 .buffered_group_frames
                 .checked_sub(1)
@@ -377,7 +378,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// owners it must drop. An in-flight affine release must be rolled back
     /// before this operation is legal.
     pub fn discard_buffered_groups(&mut self) -> Result<u16, ApServiceError> {
-        if self.buffered_group_release_in_flight {
+        if self.buffered_group_release == BufferedRelease::InFlight {
             return Err(ApServiceError::BufferedReleaseInFlight);
         }
         let discarded = self.buffered_group_frames;

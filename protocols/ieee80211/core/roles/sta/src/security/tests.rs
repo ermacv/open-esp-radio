@@ -381,7 +381,7 @@ fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
     use oer_protocols_ieee80211_wire::security::{
         AssociationAkm, AssociationSecurity, SaePwe, Spp,
     };
-    let psk = super::personal_rsn(AssociationAkm::Psk, Spp::NotNegotiated, false);
+    let psk = super::personal_rsn(AssociationAkm::Psk, Spp::NotNegotiated, None);
     // SPP A-MSDU capable only, no RSNXE.
     assert_eq!(&psk.as_bytes()[20..22], &[0, 4]);
     assert_eq!(psk.as_bytes().len(), 22);
@@ -390,7 +390,7 @@ fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
     let sae = super::personal_rsn(
         AssociationAkm::Sae(SaePwe::HashToElement),
         Spp::Negotiated,
-        true,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     );
     // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
     assert_eq!(&sae.as_bytes()[20..22], &[0xc0, 4]);
@@ -402,7 +402,11 @@ fn a_personal_selection_advertises_spp_and_the_protection_it_negotiates() {
     assert!(sae.security().protects_management());
 
     // Management protection without SAE: MFPC, no MFPR, no RSNXE.
-    let psk_mfp = super::personal_rsn(AssociationAkm::PskSha256, Spp::NotNegotiated, true);
+    let psk_mfp = super::personal_rsn(
+        AssociationAkm::PskSha256,
+        Spp::NotNegotiated,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
+    );
     assert_eq!(&psk_mfp.as_bytes()[20..22], &[0x80, 4]);
     assert_eq!(psk_mfp.as_bytes().len(), 22);
 }

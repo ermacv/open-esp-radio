@@ -5,6 +5,7 @@
     clippy::unreachable
 )]
 use hmac::Mac;
+use oer_protocols_ieee80211_wire::eapol::GtkTx;
 
 use super::*;
 use crate::test_engine::Refusing;
@@ -113,21 +114,28 @@ fn connected(ptk: Ptk) -> RsnConnectedSupplicant {
         completed_message3,
         replay_counter: 2,
         completed_group_message1: None,
-        management_protection: false,
+        group_management: None,
     }
+}
+
+/// Whether a changed test frame carries a MIC over its changed bytes.
+#[derive(Clone, Copy)]
+enum Mic {
+    Resigned,
+    Stale,
 }
 
 fn resign_eapol_key_variant(
     original: &crate::OwnedEapolFrame<512>,
     ptk: &Ptk,
-    resign: bool,
+    mic: Mic,
     mutate: impl FnOnce(&mut [u8]),
 ) -> crate::OwnedEapolFrame<512> {
     let mut bytes = [0; 512];
     let len = original.as_bytes().len();
     bytes[..len].copy_from_slice(original.as_bytes());
     mutate(&mut bytes[..len]);
-    if resign {
+    if let Mic::Resigned = mic {
         bytes[81..97].fill(0);
         let mut mac = hmac::Hmac::<sha1::Sha1>::new_from_slice(ptk.kck()).unwrap();
         mac.update(&bytes[..len]);
@@ -156,7 +164,7 @@ fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -167,7 +175,7 @@ fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>
         panic!("Message 3 must produce one key transaction")
     };
     let RsnStaReady::Transmit(_) = supplicant
-        .complete_key_install::<512, _>(request, true, &mut SoftwareAes128)
+        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("installed keys must produce Message 4")
@@ -216,7 +224,7 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -238,14 +246,14 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
         request.group().kind(),
         RsnKeyKind::Group {
             key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-            transmit: false,
+            tx: GtkTx::ReceiveOnly,
         }
     );
     assert_eq!(request.group().receive_sequence(), &rsc);
     assert_eq!(request.group().key().as_bytes(), &[0x5a; 16]);
 
     let RsnStaReady::Transmit(message4) = supplicant
-        .complete_key_install::<512, _>(request, true, &mut SoftwareAes128)
+        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("installed keys must produce Message 4")
@@ -281,7 +289,7 @@ fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[9; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -360,7 +368,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
         Err(RsnConnectedSupplicantError::WrongPeer)
     ));
 
-    let wrong_protocol = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let wrong_protocol = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         bytes[0] ^= 1;
     });
     assert!(matches!(
@@ -368,7 +376,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
         Err(RsnConnectedSupplicantError::ProtocolVersionMismatch)
     ));
 
-    let wrong_descriptor = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let wrong_descriptor = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         let key_info = u16::from_be_bytes([bytes[5], bytes[6]]);
         bytes[5..7].copy_from_slice(&((key_info & !0x0007) | 1).to_be_bytes());
     });
@@ -377,7 +385,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
         Err(RsnConnectedSupplicantError::UnsupportedDescriptorVersion)
     ));
 
-    let wrong_flags = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let wrong_flags = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         let key_info = u16::from_be_bytes([bytes[5], bytes[6]]) ^ (1 << 9);
         bytes[5..7].copy_from_slice(&key_info.to_be_bytes());
     });
@@ -386,7 +394,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
         Err(RsnConnectedSupplicantError::UnsupportedMessage)
     ));
 
-    let wrong_replay = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let wrong_replay = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         bytes[9..17].copy_from_slice(&1_u64.to_be_bytes());
     });
     assert!(matches!(
@@ -394,7 +402,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
         Err(RsnConnectedSupplicantError::StaleReplayCounter)
     ));
 
-    let wrong_anonce = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let wrong_anonce = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         bytes[17] ^= 1;
     });
     assert!(matches!(
@@ -407,7 +415,7 @@ fn connected_duplicate_message3_rejects_changed_protocol_fields() {
 fn connected_duplicate_message3_rejects_bad_mic_and_changed_commitment() {
     let (mut connected, duplicate, ptk) = completed_connected();
 
-    let bad_mic = resign_eapol_key_variant(&duplicate, &ptk, false, |bytes| {
+    let bad_mic = resign_eapol_key_variant(&duplicate, &ptk, Mic::Stale, |bytes| {
         bytes[81] ^= 1;
     });
     assert!(matches!(
@@ -415,7 +423,7 @@ fn connected_duplicate_message3_rejects_bad_mic_and_changed_commitment() {
         Err(RsnConnectedSupplicantError::InvalidMic)
     ));
 
-    let changed_rsc = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let changed_rsc = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         bytes[65] ^= 1;
     });
     assert!(matches!(
@@ -423,7 +431,7 @@ fn connected_duplicate_message3_rejects_bad_mic_and_changed_commitment() {
         Err(RsnConnectedSupplicantError::RetainedMessage3Mismatch)
     ));
 
-    let changed_key_data = resign_eapol_key_variant(&duplicate, &ptk, true, |bytes| {
+    let changed_key_data = resign_eapol_key_variant(&duplicate, &ptk, Mic::Resigned, |bytes| {
         bytes[99] ^= 1;
     });
     assert!(matches!(
@@ -464,10 +472,10 @@ fn a_newer_completed_group_request_cannot_be_rolled_back_by_an_older_owner() {
     else {
         panic!()
     };
-    let response = connected.complete_group_key_install(newer, true).unwrap();
+    let response = connected.complete_group_key_install(newer).unwrap();
     assert_eq!(response.key_frame().unwrap().replay_counter(), 4);
     assert!(matches!(
-        connected.complete_group_key_install(older, true),
+        connected.complete_group_key_install(older),
         Err(RsnConnectedSupplicantError::StaleCompletion)
     ));
     assert_eq!(connected.replay_counter(), 4);
@@ -503,11 +511,11 @@ fn connected_group_rekey_installs_once_and_retransmits_idempotently() {
         request.group().kind(),
         RsnKeyKind::Group {
             key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            transmit: false,
+            tx: GtkTx::ReceiveOnly,
         }
     );
     assert_eq!(request.group().key().as_bytes(), &[0x6a; 16]);
-    let response = connected.complete_group_key_install(request, true).unwrap();
+    let response = connected.complete_group_key_install(request).unwrap();
     assert_eq!(
         response.key_frame().unwrap().message(),
         crate::EapolKeyMessage::GroupMessage2
@@ -559,7 +567,7 @@ fn connected_group_rekey_authenticates_duplicate_before_cached_response() {
     let GroupStep::Install(request) = group_message1(&mut connected, owned(&frame)).unwrap() else {
         panic!("new Group Message 1 must request one GTK replacement")
     };
-    connected.complete_group_key_install(request, true).unwrap();
+    connected.complete_group_key_install(request).unwrap();
 
     let mut bytes = [0; 512];
     let length = frame.as_bytes().len();
@@ -603,9 +611,9 @@ fn connected_group_rekey_rejects_authenticated_changed_same_replay() {
     else {
         panic!("new Group Message 1 must request one GTK replacement")
     };
-    connected.complete_group_key_install(request, true).unwrap();
+    connected.complete_group_key_install(request).unwrap();
 
-    let changed_rsc = resign_eapol_key_variant(&original, &ptk, true, |bytes| {
+    let changed_rsc = resign_eapol_key_variant(&original, &ptk, Mic::Resigned, |bytes| {
         bytes[65] ^= 1;
     });
     assert!(matches!(
@@ -615,7 +623,7 @@ fn connected_group_rekey_rejects_authenticated_changed_same_replay() {
         ))
     ));
 
-    let changed_key_data = resign_eapol_key_variant(&original, &ptk, true, |bytes| {
+    let changed_key_data = resign_eapol_key_variant(&original, &ptk, Mic::Resigned, |bytes| {
         bytes[99] ^= 1;
     });
     assert!(matches!(
@@ -651,15 +659,13 @@ fn failed_group_rekey_does_not_retain_message1_commitment() {
     let GroupStep::Install(request) = group_message1(&mut connected, owned(&frame)).unwrap() else {
         panic!("new Group Message 1 must request one GTK replacement")
     };
-    assert_eq!(
-        connected.complete_group_key_install(request, false),
-        Err(RsnConnectedSupplicantError::InstallFailed)
-    );
+    // The installation did not take effect: its owner never completes it.
+    drop(request);
 
     let GroupStep::Install(retry) = group_message1(&mut connected, owned(&frame)).unwrap() else {
         panic!("failed publication must leave the same frame eligible for retry")
     };
-    connected.complete_group_key_install(retry, true).unwrap();
+    connected.complete_group_key_install(retry).unwrap();
     assert!(matches!(
         group_message1(&mut connected, owned(&frame)).unwrap(),
         GroupStep::Retransmit(_)
@@ -779,7 +785,7 @@ fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<51
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -833,7 +839,7 @@ fn message3_key_data_beyond_the_bound_fails_the_handshake() {
 #[test]
 fn completed_handshake_repeated_m3_only_grants_group_installation() {
     let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
-    let retry = resign_eapol_key_variant(&message3, &ptk, true, |bytes| {
+    let retry = resign_eapol_key_variant(&message3, &ptk, Mic::Resigned, |bytes| {
         bytes[9..17].copy_from_slice(&3_u64.to_be_bytes());
     });
     let RsnStaReady::InstallKeys(initial) = process(&mut supplicant, message3, &pmk).unwrap()
@@ -841,7 +847,7 @@ fn completed_handshake_repeated_m3_only_grants_group_installation() {
         panic!("initial installation")
     };
     let RsnStaReady::Transmit(_) = supplicant
-        .complete_key_install::<512, _>(initial, true, &mut SoftwareAes128)
+        .complete_key_install::<512, _>(initial, &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("initial M4")
@@ -852,7 +858,7 @@ fn completed_handshake_repeated_m3_only_grants_group_installation() {
     assert_eq!(group.replay_counter(), 3);
     assert_eq!(group.group().key().as_bytes(), &[0x5a; 16]);
     let RsnStaReady::Transmit(message4) = supplicant
-        .complete_retry_install::<512, _>(group, true, &mut SoftwareAes128)
+        .complete_retry_install::<512, _>(group, &mut SoftwareAes128)
         .unwrap()
     else {
         panic!("retry M4")
@@ -913,7 +919,7 @@ fn an_authenticated_group_frame_waits_without_blocking_new_authentication() {
         .unwrap();
     assert_eq!(install.replay_counter(), 3);
     assert_eq!(install.group().key().as_bytes(), &[0x6a; 16]);
-    connected.complete_group_key_install(install, true).unwrap();
+    connected.complete_group_key_install(install).unwrap();
     assert_eq!(connected.replay_counter(), 3);
 }
 
@@ -951,7 +957,7 @@ fn a_waiting_group_frame_behind_the_frontier_is_stale() {
     else {
         panic!()
     };
-    connected.complete_group_key_install(newer, true).unwrap();
+    connected.complete_group_key_install(newer).unwrap();
     assert!(matches!(
         connected.prepare_group_key_install(older, &mut SoftwareAes128),
         Err(RsnConnectedProcessError::Supplicant(
@@ -1066,18 +1072,18 @@ fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
         panic!()
     };
     let _ = supplicant
-        .complete_key_install::<512, _>(request, true, &mut SoftwareAes128)
+        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
         .unwrap();
     let mut connected = supplicant.into_connected().unwrap();
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
     let message3 = encrypted_message3(&ptk, [0; 8], plain.as_bytes());
-    let retry = resign_eapol_key_variant(&message3, &ptk, true, |bytes| bytes[16] = 3);
+    let retry = resign_eapol_key_variant(&message3, &ptk, Mic::Resigned, |bytes| bytes[16] = 3);
     let RsnConnectedAction::GroupKeyData(waiting) =
         connected.on_message3(retry, &mut SoftwareAes128).unwrap()
     else {
@@ -1090,4 +1096,21 @@ fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
             RsnConnectedSupplicantError::RetainedSecurityIes(RsnFrameError::InvalidRsnIe)
         ))
     ));
+}
+
+#[test]
+fn management_frames_are_protected_only_when_both_elements_are_capable() {
+    let mut capable = RSN;
+    capable[20] = 0x80; // MFPC
+    let bip = Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
+    for (own, authenticator, expected) in [
+        (&capable, &capable, bip),
+        (&capable, &RSN, None),
+        (&RSN, &capable, None),
+        (&RSN, &RSN, None),
+    ] {
+        let supplicant =
+            RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, own, authenticator, &[]).unwrap();
+        assert_eq!(supplicant.group_management(), expected);
+    }
 }
