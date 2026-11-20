@@ -192,8 +192,10 @@ pub const MAC_STOP_HOLD: SettleLimit = match SettleLimit::new(Duration::from_mic
     None => panic!("the stop's hold is a valid settle"),
 };
 
-/// The MAC core clocked with its runtime stop held: what the receive ring's
-/// cold publication takes before its one BASE.
+/// The proof that [`WifiMacHal::open_core`] was called: the core clocked
+/// with its runtime stop held at that call. The receive ring's cold
+/// publication takes it before its one BASE. It is not one a cold
+/// preparation: a proof made before a reset opens a publication after it.
 ///
 /// ```compile_fail,E0451
 /// use oer_chips_esp32s31_hal::radio::ieee80211::mac::MacCoreOpen;
@@ -214,6 +216,63 @@ pub struct MacCoreOpen {
 #[must_use = "the block's reset after a stop takes it"]
 pub struct StopRequested {
     pub(crate) _private: (),
+}
+
+/// The MAC's writes of the runtime start and stop; none of them reads.
+pub(crate) trait MacRuntimePort {
+    /// The stop request, without power save.
+    fn request_stop(&mut self);
+    /// Order MMIO.
+    fn fence(&mut self);
+    /// Clock the core with its runtime stop held.
+    fn open_core(&mut self);
+    /// Release the stop request.
+    fn resume(&mut self);
+    /// Select the no-power-save REGDMA link.
+    fn select_regdma_link(&mut self);
+}
+
+impl MacRuntimePort for WifiRadioRegisters {
+    fn request_stop(&mut self) {
+        self.request_mac_channel_stop_without_power_save();
+    }
+    fn fence(&mut self) {
+        oer_portable_riscv::fence();
+    }
+    fn open_core(&mut self) {
+        self.prepare_mac_runtime();
+    }
+    fn resume(&mut self) {
+        self.resume_mac_channel_without_power_save();
+    }
+    fn select_regdma_link(&mut self) {
+        self.select_wifi_no_power_save_regdma_link();
+    }
+}
+
+/// Register transaction of [`WifiMacHal::open_core`].
+pub(crate) fn open_core(port: &mut impl MacRuntimePort) -> MacCoreOpen {
+    port.open_core();
+    MacCoreOpen { _private: () }
+}
+
+/// Register transaction of [`WifiMacHal::start_receive`]: the resume, then
+/// the REGDMA link (`restart_after_channel_switch`'s writes).
+pub(crate) fn start_receive(port: &mut impl MacRuntimePort) {
+    port.resume();
+    port.select_regdma_link();
+}
+
+/// Register transaction of [`WifiMacHal::request_stop`]: the request, the
+/// fence, then the hold.
+pub(crate) fn request_stop<C: oer_portable_time::Clock + ?Sized>(
+    port: &mut impl MacRuntimePort,
+    clock: &C,
+) -> StopRequested {
+    port.request_stop();
+    port.fence();
+    oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(MAC_STOP_HOLD, clock));
+    StopRequested { _private: () }
 }
 
 /// Closed HAL authority for reviewed runtime Wi-Fi MAC transactions.
@@ -241,17 +300,16 @@ impl<'registers> WifiMacHal<'registers> {
     /// Clock the MAC core with its runtime stop held, before the receive
     /// ring's cold publication writes BASE.
     pub fn open_core(&mut self) -> MacCoreOpen {
-        self.pac_mut().prepare_mac_runtime();
-        MacCoreOpen { _private: () }
+        open_core(self.pac_mut())
     }
 
     /// Release the MAC's receive with the walker started on a published
-    /// ring.
+    /// ring: the two writes of the vendor's restart, nothing read.
     pub fn start_receive(
         &mut self,
         _walker: &crate::radio::ieee80211::dma::receive::WalkerEnabled,
     ) {
-        let _ = self.restart_after_channel_switch();
+        start_receive(self.pac_mut());
     }
 
     /// The MAC's stop request after the walker's edge, held for
@@ -263,13 +321,7 @@ impl<'registers> WifiMacHal<'registers> {
         clock: &C,
     ) -> StopRequested {
         let crate::radio::ieee80211::dma::receive::WalkerEdge { .. } = edge;
-        self.pac_mut().request_mac_channel_stop_without_power_save();
-        oer_portable_riscv::fence();
-        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
-            MAC_STOP_HOLD,
-            clock,
-        ));
-        StopRequested { _private: () }
+        request_stop(self.pac_mut(), clock)
     }
 
     /// Open common gates with runtime stop held, after descriptor memory and
@@ -819,3 +871,6 @@ impl<'registers> WifiMacHal<'registers> {
             .set_he_trigger_based_tid_enabled(tid, enabled);
     }
 }
+
+#[cfg(test)]
+mod tests;
