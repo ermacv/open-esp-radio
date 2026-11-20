@@ -1,7 +1,9 @@
 # open-esp-radio
 
 Rust 2024 `no_std` radio stack for Espressif chips, today the ESP32-S31:
-Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries.
+Wi-Fi, Bluetooth LE and IEEE 802.15.4, without vendor radio binaries. The
+build holds Wi-Fi and the shared PHY; Bluetooth LE and IEEE 802.15.4 are kept
+as sources outside the build ([repository layout](docs/repository-layout.md)).
 Read [docs/architecture.md](docs/architecture.md) before any task: it is the
 system these rules serve. This file holds the rules; the contracts of each
 subsystem live in its page or README, listed under **Subsystem contracts**.
@@ -325,8 +327,6 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 | Unsafe homes and their exceptions (PHY-fault `LinkSlot`, trace clock slot, `ContextCell`), lint catalogues, panic budgets and `panic_const_async_fn_resumed` | [docs/unsafe.md](docs/unsafe.md) |
 | Harts, executors, interrupt enable, signal raisers, pilot handlers and lines | [Execution](docs/architecture.md#execution), [interrupt-table](chips/family/platform/interrupt-table/README.md), [executor](chips/family/platform/executor/README.md) |
 | Fatal policy, terminal-site classes and reset owners | [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset), [terminal-site registry](tools/test/layers/README.md#terminal-site-registry) |
-| IEEE 802.15.4 pre-bind discard, runtime acknowledgements, secured ACK | [docs/unsafe.md](docs/unsafe.md), [engine](chips/family/radio/ieee802154/engine/README.md) |
-| BLE terminal output release, owned PHY transactions and their quarantine | [docs/unsafe.md](docs/unsafe.md), [HAL](chips/esp32s31/hal/README.md), [PHY](chips/family/radio/phy/README.md) |
 | WT/WTC triggers, `read-observed` and `zero-register-writes` words | [register model](tools/registers/model/README.md) |
 | Runtime-switchable network-core diagnostics, the one exception to zero-cost instrumentation | [Switchable network-core diagnostics](docs/architecture.md#switchable-network-core-diagnostics) |
 
