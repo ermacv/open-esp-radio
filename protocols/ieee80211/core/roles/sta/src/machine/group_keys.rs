@@ -48,7 +48,8 @@ mod tests {
         assert_eq!(old.material.as_bytes(), &[0; 16]);
         assert_eq!(keys.current_id(), Some(id));
         keys.release(old.place, &mut ());
-        let next = keys.take_retiring().unwrap();
+        // The next replacement takes the remaining non-current one.
+        let next = keys.replace().unwrap();
         assert_eq!(next.material.as_bytes(), &[1; 16]);
         keys.release(next.place, &mut ());
         let single = keys.replace().unwrap();
@@ -142,16 +143,6 @@ pub(super) enum GroupRole {
 pub(super) enum GroupArrival {
     Installed,
     Selected,
-}
-
-/// Which installed group key a removal takes: any, or, in a test that
-/// plays a removal the station itself never asks for, the oldest one that is
-/// not current.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum GroupRemoval {
-    Any,
-    #[cfg(test)]
-    Retiring,
 }
 
 pub(super) struct GroupKeys {
@@ -284,11 +275,6 @@ impl GroupKeys {
             .iter()
             .copied()
             .find(|index| Some(*index) != self.current && index.select(&self.entries).is_some())
-    }
-
-    #[cfg(test)]
-    pub(super) fn take_retiring(&mut self) -> Option<Installed> {
-        self.take(self.oldest_retiring()?)
     }
 
     pub(super) fn take_any(&mut self) -> Option<Installed> {

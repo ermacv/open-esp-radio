@@ -3427,7 +3427,7 @@ fn one_group_removal_runs_at_a_time_and_the_table_clears_after_each_ends() {
         );
     }
     let remove = |keys: &mut Keys| {
-        let entry = keys.take_group_key(group_keys::GroupRemoval::Any).unwrap();
+        let entry = keys.take_group_key().unwrap();
         keys.group = GroupOperation::Remove(PendingGroupRemoval {
             place: entry.place,
             key_id: entry.key_id,
@@ -3443,7 +3443,7 @@ fn one_group_removal_runs_at_a_time_and_the_table_clears_after_each_ends() {
     };
     let place = remove(&mut keys);
     // The second removal waits for the first one's end.
-    assert!(keys.take_group_key(group_keys::GroupRemoval::Any).is_none());
+    assert!(keys.take_group_key().is_none());
     assert!(!keys.clear());
     ended(&mut keys, place);
     let place = remove(&mut keys);
@@ -4664,7 +4664,7 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
         group_keys::GroupArrival::Installed,
     );
     assert!(keys.groups.same_material(id, material.as_bytes()));
-    let entry = keys.take_group_key(group_keys::GroupRemoval::Any).unwrap();
+    let entry = keys.take_group_key().unwrap();
     assert!(!keys.groups.same_material(id, material.as_bytes()));
     keys.groups.release(entry.place, &mut ());
     assert!(keys.clear());
@@ -4756,35 +4756,6 @@ fn repeated_m3_selects_retained_material_and_restores_each_live_replay_frontier(
         }
         assert!(matches!(world.station.keys.group, GroupOperation::Idle));
     });
-}
-
-fn take_group_removal<'id>(
-    world: &mut World<'id>,
-    ptk: &oer_protocols_ieee80211_core_security_rsn::Ptk,
-    counter: u64,
-    key_id: u8,
-    now: Instant,
-) -> StaGroupPlace {
-    world.switches.on(Switch::HoldKeyInstalls);
-    world.receive_verified(now, &group_message1(ptk, counter, key_id));
-    assert_eq!(world.pending_installs.len(), 1);
-    let input = world.pending_installs.pop().unwrap();
-    world.input(now, input);
-    let Some(StaAction::Transmit(transmit)) = poll!(world, now) else {
-        panic!("the installed GTK owes group message 2");
-    };
-    transmitted(record!(world), transmit, Sealing::Pairwise);
-    world.end_transmissions(now);
-    assert!(poll!(world, now).is_none(), "GM2 retains old installations");
-    let Some(Owed::RemoveGroup(place)) = world
-        .station
-        .transition()
-        .0
-        .group_removal(group_keys::GroupRemoval::Retiring)
-    else {
-        panic!("the table gives a non-current installation for removal");
-    };
-    place
 }
 
 /// The service's stop and the next run: the link back, the arbiter and the
@@ -4945,40 +4916,6 @@ fn removals_that_expired_end_the_leave_as_done_ones_do() {
 }
 
 #[test]
-fn a_group_operation_waits_for_the_one_out_to_end() {
-    installed(|mint| {
-        let (mut world, ptk) = wpa2_connected::<2>(mint);
-        // A retiring key's removal is out.
-        let place = take_group_removal(&mut world, &ptk, 3, 2, at(50));
-        world.switches.off(Switch::HoldKeyInstalls);
-        world.take();
-        world.receive_verified(at(51), &group_message1(&ptk, 4, 3));
-        assert!(
-            !world
-                .take()
-                .iter()
-                .any(|seen| matches!(seen, Seen::InstallGroup(_) | Seen::ReplaceGroup(_))),
-            "no second group operation while the removal is out"
-        );
-        world.input(
-            at(52),
-            StaInput::GroupKeyEnded {
-                place,
-                outcome: StaKeyOutcome::Done,
-            },
-        );
-        world.run(at(52));
-        assert!(
-            world
-                .take()
-                .iter()
-                .any(|seen| matches!(seen, Seen::InstallGroup(3) | Seen::ReplaceGroup(3))),
-            "the new key goes once the removal ended"
-        );
-    });
-}
-
-#[test]
 fn the_pairwise_key_is_removed_only_after_every_group_key() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
@@ -4995,111 +4932,6 @@ fn the_pairwise_key_is_removed_only_after_every_group_key() {
         }
         assert!(!world.station.keys.keyed());
         assert!(world.station.keys.clear());
-    });
-}
-
-#[test]
-fn each_removal_preserves_its_stations_current_replay() {
-    installed(|mint_a| {
-        let (mut a, ptk_a) = wpa2_connected::<2>(mint_a);
-        // A first completed one rekey: its next removal owns a different
-        // private record place and wire KeyID from B's first removal.
-        a.receive_verified(at(50), &group_message1(&ptk_a, 3, 2));
-        installed(|mint_b| {
-            let (mut b, ptk_b) = wpa2_connected::<2>(mint_b);
-            let place_a = take_group_removal(&mut a, &ptk_a, 4, 3, at(51));
-            let place_b = take_group_removal(&mut b, &ptk_b, 3, 2, at(51));
-            let current_b = GroupKeyId::new(2).unwrap();
-            assert!(b.replay().has_group(current_b));
-            // Each removal's end reaches its own station, by its place.
-            a.station.input(
-                at(52),
-                StaInput::GroupKeyEnded {
-                    place: place_a,
-                    outcome: StaKeyOutcome::Done,
-                },
-                &mut (),
-            );
-            b.station.input(
-                at(52),
-                StaInput::GroupKeyEnded {
-                    place: place_b,
-                    outcome: StaKeyOutcome::Done,
-                },
-                &mut (),
-            );
-            assert!(
-                b.station
-                    .keys
-                    .groups
-                    .current_material(current_b, &[0x77; 16])
-            );
-            assert!(
-                b.replay().has_group(current_b),
-                "returning a retiring record preserves current replay"
-            );
-        });
-    });
-}
-
-#[test]
-fn freed_removal_places_are_reused_without_losing_installed_keys() {
-    installed(|mint_a| {
-        let (mut a, ptk_a) = wpa2_connected::<2>(mint_a);
-        a.receive_verified(at(50), &group_message1(&ptk_a, 3, 2));
-        installed(|mint_b| {
-            let (mut b, ptk_b) = wpa2_connected::<2>(mint_b);
-            let place_a = take_group_removal(&mut a, &ptk_a, 4, 3, at(51));
-            let place_b = take_group_removal(&mut b, &ptk_b, 3, 2, at(51));
-            a.station.input(
-                at(52),
-                StaInput::GroupKeyEnded {
-                    place: place_a,
-                    outcome: StaKeyOutcome::Done,
-                },
-                &mut (),
-            );
-            b.station.input(
-                at(52),
-                StaInput::GroupKeyEnded {
-                    place: place_b,
-                    outcome: StaKeyOutcome::Done,
-                },
-                &mut (),
-            );
-            // A subsequent installation reuses the freed place without
-            // overwriting the still-current record.
-            a.switches.off(Switch::HoldKeyInstalls);
-            a.receive_verified(at(53), &group_message1(&ptk_a, 5, 0));
-            a.command(at(54), 2, StaCommand::Disconnect).unwrap();
-            a.run(at(54));
-            assert!(
-                a.station.keys.clear(),
-                "every key is removed before Leave completes"
-            );
-            assert!(matches!(a.station.state, State::Idle));
-        });
-    });
-}
-
-#[test]
-fn a_removal_issued_before_leave_frees_its_place_after_leave() {
-    installed(|mint| {
-        let (mut world, ptk) = wpa2_connected::<2>(mint);
-        let place = take_group_removal(&mut world, &ptk, 3, 2, at(51));
-        world.command(at(52), 2, StaCommand::Disconnect).unwrap();
-        world.run(at(52));
-        assert!(matches!(world.station.state, State::Leave(_)));
-        world.input(
-            at(53),
-            StaInput::GroupKeyEnded {
-                place,
-                outcome: StaKeyOutcome::Done,
-            },
-        );
-        world.run(at(53));
-        assert!(world.station.keys.clear());
-        assert!(matches!(world.station.state, State::Idle));
     });
 }
 

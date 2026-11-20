@@ -166,8 +166,7 @@ pub use commands::{
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
 pub use group_keys::StaGroupPlace;
 use group_keys::{
-    GroupArrival, GroupKeys, GroupRemoval, GroupRole, Installed as InstalledGroup,
-    Replay as GroupReplay,
+    GroupArrival, GroupKeys, GroupRole, Installed as InstalledGroup, Replay as GroupReplay,
 };
 use management::{ManagementEvent, ManagementProtection};
 use tx_block_ack::TxBlockAckOwed;
@@ -1360,15 +1359,11 @@ impl Keys {
     }
 
     /// An installed group key to remove, while no group operation is out.
-    fn take_group_key(&mut self, removal: GroupRemoval) -> Option<InstalledGroup> {
+    fn take_group_key(&mut self) -> Option<InstalledGroup> {
         if !matches!(self.group, GroupOperation::Idle) {
             return None;
         }
-        match removal {
-            #[cfg(test)]
-            GroupRemoval::Retiring => self.groups.take_retiring(),
-            GroupRemoval::Any => self.groups.take_any(),
-        }
+        self.groups.take_any()
     }
 
     fn current_group(&self) -> Option<GroupKeyId> {
@@ -5373,7 +5368,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     fn owe_reclaim(&mut self, reclaim: Reclaim) -> ActionStep<'id, T, K> {
         match reclaim {
             Reclaim::Keys => {
-                if let Some(removal) = self.group_removal(GroupRemoval::Any) {
+                if let Some(removal) = self.group_removal() {
                     (
                         Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(removal),
@@ -5430,7 +5425,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 return (Change::Keep, ActionProgress::Transition);
             }
             LeaveStep::RemoveKeys(deauthentication) => {
-                if let Some(removal) = self.group_removal(GroupRemoval::Any) {
+                if let Some(removal) = self.group_removal() {
                     Some(removal)
                 } else if let Some(owed) = self.pairwise_removal() {
                     Some(owed)
@@ -6160,14 +6155,14 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }))
     }
 
-    fn group_removal(&mut self, removal: GroupRemoval) -> Option<Owed<'id, T, K>> {
+    fn group_removal(&mut self) -> Option<Owed<'id, T, K>> {
         let InstalledGroup {
             place,
             key_id,
             material,
             replay,
             ..
-        } = self.keys.take_group_key(removal)?;
+        } = self.keys.take_group_key()?;
         self.keys.group = GroupOperation::Remove(PendingGroupRemoval {
             place,
             key_id,
