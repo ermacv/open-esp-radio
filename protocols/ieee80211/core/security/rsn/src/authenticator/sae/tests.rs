@@ -470,3 +470,28 @@ fn a_commit_curve_fault_retains_peer_and_stage_without_replies_or_phase_advance(
     assert!(session.own.is_none());
     assert!(session.keys.is_none());
 }
+
+/// A second Commit of the same group while the session is Committed keeps
+/// the access point's own Commit (`allow_reuse` of `handle_auth_sae`): the
+/// answer repeats the first one's scalar and element.
+#[test]
+fn a_repeated_commit_of_the_offered_group_reuses_the_own_commit() {
+    let mut access_point = responder();
+    let mut random = Counter(0);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HuntingAndPecking);
+    let (commit, len) = station.commit_body(None);
+    let first = only_reply(&access_point.receive(
+        frame(STATION, 1, station.status(), &commit[..len]),
+        oer_portable_time::Instant::from_micros(0),
+        0,
+        &mut random,
+    ));
+    let second = only_reply(&access_point.receive(
+        frame(STATION, 1, station.status(), &commit[..len]),
+        oer_portable_time::Instant::from_micros(1),
+        0,
+        &mut random,
+    ));
+    assert_eq!((second.transaction, second.status), (1, station.status()));
+    assert_eq!(second.body(), first.body(), "the own Commit is reused");
+}
