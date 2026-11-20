@@ -47,10 +47,6 @@ fn the_descriptor_base_takes_the_typed_reference_whole() {
         owners.rx_dma.dma.read_rx_descriptor_base().address(),
         head.bits()
     );
-    assert_eq!(
-        owners.rx_dma.mac_rx_dma_snapshot().descriptor_base,
-        head.bits()
-    );
 }
 
 #[test]
@@ -76,9 +72,7 @@ fn the_walker_enable_edges_keep_every_other_control_bit() {
     let mut after = before.clone();
     {
         let mut owners = after.owners();
-        assert!(owners.rx_dma.try_enable_mac_rx_walker());
-        assert!(!owners.rx_dma.try_enable_mac_rx_walker(), "already enabled");
-        assert!(owners.rx_dma.mac_rx_dma_snapshot().walker_enabled);
+        owners.rx_dma.publish_mac_rx_walker_enable();
         owners.rx_dma.enable_mac_rx_hw_beacon_reload();
     }
     let control = after.owners().rx_dma.dma.read_rx_control();
@@ -87,12 +81,9 @@ fn the_walker_enable_edges_keep_every_other_control_bit() {
     assert_eq!(before.changes(&after).len(), 1);
 
     let mut owners = after.owners();
-    assert!(owners.rx_dma.try_disable_mac_rx_walker());
+    owners.rx_dma.clear_mac_rx_walker_enable();
     let control = owners.rx_dma.dma.read_rx_control();
     assert!(!control.walker_enable() && control.rxbuf_reload_use_hw_beacon_enable());
-    owners.rx_dma.publish_mac_rx_walker_enable();
-    owners.rx_dma.clear_mac_rx_walker_enable();
-    assert!(!owners.rx_dma.mac_rx_walker_enabled());
 }
 
 #[test]

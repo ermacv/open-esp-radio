@@ -551,7 +551,7 @@ pub use interrupt::{
     MacRxInterrupts, MacRxLane,
 };
 pub use rx::{
-    dma::{MacRxDmaSnapshot, MacRxNextDescriptorObservation},
+    dma::MacRxNextDescriptorObservation,
     policy::{
         MacApReceivePolicySnapshot, MacRoleReceivePolicy, MacStaApReceivePlan, MacStaPolicyMode,
         MacStaReceivePolicySnapshot,

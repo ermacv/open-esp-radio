@@ -34,24 +34,19 @@ publication, and later retries preserve it. Aggregate retries likewise follow
 the caller's plan. Republication after protection failure retains every MPDU
 unchanged, including its Retry bit.
 
-Every arena is published by its DMA addresses in a [`DmaSpace`](space.rs):
-`ChipDma` on the chip, where a field's address is its DMA address, and the
-host models' `HostDma` (test support), where it is `HOST_ARENA_BASE` plus the
-field's offset in its arena. Every storage is placed
-([`Placed`](../../dma_static.rs)): the RX storage records its descriptor base
-and buffer addresses once when it is placed (`RxDmaStorage::place`), and only
-the resulting `PlacedRxDma` prepares a ring; a TX storage takes its space when
-its placed binding is built (`pin::<S>`). The link keeps every placed static in
-the DMA window and off an address with zero low DMA address bits
-(`dma-window.x`), so no published address is checked against the window at
-run time; what the walker reports back (NEXT, LAST) is resolved against the
-arena. The arena checks run the same code in both spaces. Test support supplies models of the hardware (the host
-space, the proofs a mock walker reports, the shared register model of the
-RX walker, [`RxWalkerModel`](rx_dma/model.rs), the DMA engine's landing of a
-unit (`RxDmaStorage::land_unit`) and the MAC's reading of a published chain
-(`CommitTxDma::read_chain`)), never bypasses of these checks. A walker stop proof names the arena whose binding it stopped; an RX
-ring halts or rebuilds only on a proof naming its own arena, and a proof for
-another arena poisons the arena until radio reset.
+Every table and storage is published by its DMA addresses in a
+[`DmaSpace`](space.rs): `ChipDma` on the chip, where a field's address is its
+DMA address, and the host models' `HostDma` (test support), where it is
+`HOST_ARENA_BASE` plus the field's offset. Every storage is placed
+([`Placed`](../../dma_static.rs)): the receive ring's table is projected once
+(`RxTable::place`), its buffers are an arena over a placed static, and a TX
+storage takes its space when its placed binding is built (`pin::<S>`). The
+link keeps every placed static in the DMA window and off an address with zero
+low DMA address bits (`dma-window.x`), so no published address is checked
+against the window at run time; what the walker reports back (NEXT, LAST) is
+resolved against the ring. Test support supplies models of the hardware (the
+host space, the ring's model walker, the MAC's reading of a published chain,
+`CommitTxDma::read_chain`), never bypasses of these checks.
 
 ## The receive ring over the arena
 
@@ -59,7 +54,7 @@ another arena poisons the arena until radio reset.
 `N` descriptors and R after them, every one always holding a buffer lent
 to the walker, and the walker's registers. `publish_cold` arms and links
 the ring, R and BASE = R, in its place; `enable_walker` starts the walker.
-`serve(settle, f)` lends `f` the completed units up to the `LAST` it read,
+`serve(clock, f)` lends `f` the completed units up to the `LAST` it read,
 in the ring's order: a single unit is exchanged for a spare (`lend`), a
 chain or a single is copied out through its `Frame` reader and re-armed in
 place (`copy_in_place`), or a unit is dropped and stays, ending the view.
@@ -71,81 +66,33 @@ its anomalies (`RingAnomaly`): the view stops at the first, `serve` returns
 it with `f`'s result, and the keeper raises the one indication. A unit's header is read from the
 floor of the `Handle` its holder has (`Arena::floor`), by the PAC's
 layouts; bytes 48 to 52 of the prefix, which the MAC writes late, hold no
-field of `WifiRxControlPrefix`. The old machines below give way to it with
-the ownership of the walker's registers.
+field of `WifiRxControlPrefix`.
 
-## RX publication
+## The ring's start and stop
 
-The RX arena publishes a descriptor table: the ring and, right after it, a
-reserved descriptor R with its own buffer
-([`RxDescriptorTable`](rx_ring.rs)). `RX_DESCRIPTOR_BASE` names R and
-nothing else, by type: `RxDma::write_descriptor_base` takes only the binding.
-The cold publication of an epoch is the one BASE write: BASE = R, `R.next` =
-the ring head. A frame landing in R before the first ring take is counted and
-dropped uncopied; that take clears `R.next`, and any later write into R
-fails closed. Every live publication links the accepted tail and rings the
-reload doorbell. A settled doorbell that left NEXT zero short of the new
-tail is rung once more; a group that would cover the accepted tail appends
-all but it. R is never observed, taken, leased or recycled. A detach
-(`RxDmaCompletedUnit::detach_single`) clears the descriptor's owner bit
-(`OWNER`, bit 31) and fences before the lease is returned, LAST included;
-the rearm sets it again. A walker reaching a detached descriptor would stop
-on it instead of writing the lease; a NEXT naming one (read by the reload
-settle and the frozen cursor) is counted, `walker_on_detached`, and fails
-closed. SOURCE: `HIL_W1_RX_WALKER_2026_10_18` and
-`HIL_W1_OWNER_BIT_2026_10_18` in
-[the evidence catalog](../../../../../registers/evidence/hil-open.toml).
-An exhausted enabled walker reloads from `LAST.next`; an owner-clear descriptor
-stops it unwritten at NEXT. The reload does not require LAST to remain owned.
-These bounded 32-descriptor W1 observations do not prove general DMA quiescence.
+The walker's registers leave the Wi-Fi client at the partition's split
+(`WifiCold::from_partition`) and live in the ring's parts (`RxRingParts`),
+which the cold preparation borrows for its two `RX_CONTROL` writes. The
+proofs chain one atom to the next, each made by one HAL operation:
 
-[`PinnedTxDmaStorage`](tx_storage.rs) permanently retains its descriptor
-allocation and holds the one `PlacedBacking` buffer lease attached to it
-while free; reservation publishes that lease's placed address. Dropping the
-movable owner does not free or detach hardware-visible memory: a lease the
-hardware may still read is leaked, never returned. The lease leaves only
-while the descriptor is free again.
-External aggregate retention takes only `PlacedBacking` leases (a placed
-TX pool's, `oer_chips_esp32s31_hal::system::memory::dma_static`), whose addresses it publishes
-without a window check, and stores them without automatic destruction.
-Only cancellation before publication or a proven detach releases them, and
-the release hands each lease back to its caller in push order. Safe
-`forget` of an aggregate owner followed by destruction of its local retention
-arena leaks the allocations; neither destructor is needed to keep DMA memory
-alive. The arena itself is never referenced by a DMA descriptor.
-[`TxSlot`](../../../../../radio/ieee80211/backend/src/mac/tx.rs) adds the active queue and generation cookie;
-[`OrdinaryTxOwner`](../../../../../radio/ieee80211/backend/src/ordinary_tx.rs) retains retry and deadline state.
+| Step | Takes | Gives |
+|---|---|---|
+| `WifiPowered::enable_clocks` | | `MacFirstReset`, one per clocking |
+| `RadioDomain::reset_wifi_mac_block` | `MacFirstReset` | `MacBlockReset` |
+| `initialize_wifi_mac` | `MacBlockReset` | `MacPrepared`, one per preparation |
+| `WifiMacHal::open_core` | `MacPrepared` | `MacCoreOpen` |
+| `RxRing::publish_cold` | `RxRingParts`, `MacCoreOpen` | the ring, `WalkerStart` |
+| `RxRing::enable_walker` | `WalkerStart` | `WalkerEnabled` |
+| `WifiMacHal::start_receive` | `&WalkerEnabled` | |
+| `RxRing::stop_walker` | `WalkerEnabled` | `WalkerEdge` |
+| `WifiMacHal::request_stop` | `WalkerEdge` | `StopRequested` |
+| `RadioDomain::reset_stopped_wifi_mac_block` | `StopRequested` | `MacBlockReset`, `MacStopReset` |
+| `RxRing::release` | the ring, `MacStopReset` | `RxRingParts`, every buffer's handle |
 
-| State | Permitted operation | Memory ownership |
-| --- | --- | --- |
-| `Free` | Encode the next MPDU, then reserve | CPU may mutate packet backing |
-| `Reserved` | Prepare queue registers or cancel reservation | Descriptor and payload remain retained; hardware queue is not published |
-| `HardwareOwned` | Observe completion or begin a qualified abort | No safe buffer mutation or reservation cancellation |
-| `Completed` | Detach the exact queue and descriptor | Completion alone does not permit reuse |
-| `ResetRequired` | Return failure to the radio lifecycle owner | No local release or reuse, including after a late completion |
-
-Reservation prepares the descriptor, including its hardware ownership word.
-That word alone is not the queue publication edge. `TxDmaPublication::commit`
-records software `HardwareOwned` before passing the start authority to the PAC.
-`start_bound_mac_tx` takes the publication by value and reads back that the
-queue names its chain before `commit`, in one call, so a refusal leaves the
-chain with its owner and a queue prepared for another chain since starts
-nothing. The production `start_prepared_mac_tx` fences device access and updates the existing control
-word's ENABLE and VALID fields without reconstructing other queue fields.
-
-The PAC checks the queue completion event, samples result registers and trigger
-flow, then acknowledges completion. The slot returns the decoded completion and retains its
-generation. Normal turnover disables the retained queue, fences, and reads back
-ENABLE and VALID. Its scoped detach proof also identifies the descriptor head.
-Only that proof permits `Completed -> Free`. A failed readback quarantines the
-slot even if the transmission status reported success. A stale software cookie
-cannot release a later generation; this does not identify an untagged stale
-hardware event after a radio reset, which remains an IRQ-epoch responsibility.
-
-Timeout abort has a separate force-CCA/settle/invalidate/disable sequence.
-An executor deadline without the required hardware event quarantines storage.
-Neither a timeout nor cancellation is an implicit completion. Per-queue turnover
-is not proof that all radio DMA has stopped during global teardown.
+So a pulse of `RST_WIFIMAC` follows a clocking or a stop request, and a
+reset under a running MAC cannot be written. A stop ends in the block's
+reset; the next start is cold, from the preparation, with the stop's
+`MacBlockReset`.
 
 ## Source and test boundary
 

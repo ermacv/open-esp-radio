@@ -4630,13 +4630,7 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 962, RX_RING_ATOMS),
-    ("radio/ieee80211/dma/rx_dma.rs", 527, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_dma/model.rs", 580, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_ring.rs", 3096, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_storage.rs", 1198, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_storage/buffers.rs", 511, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_storage/host_dma.rs", 203, WIFI_DMA),
+    ("radio/ieee80211/dma/receive.rs", 1027, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
@@ -4817,12 +4811,6 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
         "protocols/ieee802154/port/src/owner.rs",
         1,
         "product: `&dyn Release`, removed in T8b",
-    ),
-    // Never in an image: each stays.
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma/model.rs",
-        2,
-        "stays: the receive walker's host model, behind `cfg(any(test, feature = \"test-support\"))`",
     ),
     (
         "chips/esp32s31/platform/layout/src/lib.rs",
@@ -5132,7 +5120,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "ModemLpTimerRuntimeTransaction::rollover_low_byte_nonzero",
         SAMPLED_BIT,
     ),
-    ("Observation::rx_walker_enabled", SAMPLED_BIT),
     ("OwnedTransmit::notice_waiting", PHASE_C),
     ("ParallelAnalogBus::is_busy", SAMPLED_BIT),
     ("PbusAccess::is_busy", SAMPLED_BIT),
@@ -5163,8 +5150,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Registers::rtc_wake_pending", SAMPLED_BIT),
     ("RuntimeRegisters::held", SAMPLED_BIT),
     ("RuntimeRegisters::is_stalled", SAMPLED_BIT),
-    ("RxDma::reload_pending", SAMPLED_BIT),
-    ("RxDma::walker_enabled", SAMPLED_BIT),
     ("SamplePort::is_busy", SAMPLED_BIT),
     ("SamplerTimer::acknowledge", SAMPLED_BIT),
     ("SamplerTimer::alarm_at", SAMPLED_BIT),
@@ -6338,11 +6323,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma/model.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/platform/runtime/src/exception.rs",
         1,
         BY_NONE,
@@ -6413,21 +6393,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
         9,
         BY_PHY,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_ring.rs",
-        13,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_storage.rs",
-        7,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_storage/buffers.rs",
-        2,
-        BY_P3,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
@@ -6737,16 +6702,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/descriptor.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_ring.rs",
         2,
         BY_P3,
     ),
