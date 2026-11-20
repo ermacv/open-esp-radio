@@ -67,8 +67,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         .map_err(ApAssociationSecurityError::Spp)?;
         let protection = rsn.management_frame_protection();
         let management = policy.management_protection();
-        if management.required() && !protection.capable
-            || !management.capable() && protection.required
+        if management.required() && !protection.capable()
+            || !management.capable() && protection.required()
         {
             return Err(ApAssociationSecurityError::InvalidElements);
         }
@@ -107,7 +107,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         let association = RsnAssociation {
             akm,
             spp,
-            management: (management.capable() && protection.capable)
+            management: (management.capable() && protection.capable())
                 .then_some(GroupManagementCipher::BipCmac128),
             pmkid: None,
         };

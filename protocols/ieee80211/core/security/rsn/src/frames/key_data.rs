@@ -13,24 +13,26 @@
 use super::*;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 use oer_protocols_ieee80211_wire::eapol::{
-    GTK_KDE_LEN, GtkKde, GtkKdeInfo, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements, key_data_padding,
-    write_key_data_padding,
+    GTK_KDE_LEN, GtkKde, GtkKdeInfo, GtkTx, IGTK_KDE_LEN, IgtkKde, Kde, KeyDataElements,
+    key_data_padding, write_key_data_padding,
 };
+use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct RsnGtk {
     #[zeroize(skip)]
     key_id: GroupKeyId,
-    transmit: bool,
+    #[zeroize(skip)]
+    tx: GtkTx,
     key: [u8; RSN_GTK_LEN],
 }
 
 impl RsnGtk {
     /// Copy borrowed key data straight into its zeroizing protocol owner.
-    pub fn new(key_id: GroupKeyId, transmit: bool, key: &[u8; RSN_GTK_LEN]) -> Self {
+    pub fn new(key_id: GroupKeyId, tx: GtkTx, key: &[u8; RSN_GTK_LEN]) -> Self {
         let mut gtk = Self {
             key_id,
-            transmit,
+            tx,
             key: [0; RSN_GTK_LEN],
         };
         gtk.key = *key;
@@ -41,8 +43,9 @@ impl RsnGtk {
         self.key_id
     }
 
-    pub const fn transmit(&self) -> bool {
-        self.transmit
+    /// The GTK KDE's Tx bit.
+    pub const fn tx(&self) -> GtkTx {
+        self.tx
     }
 
     pub const fn key(&self) -> &[u8; RSN_GTK_LEN] {
@@ -139,7 +142,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
             .split_first_chunk_mut::<GTK_KDE_LEN>()
             .ok_or(RsnFrameError::CapacityExceeded)?;
         *gtk_kde = GtkKde {
-            info: GtkKdeInfo::new(gtk.key_id).with_transmit(gtk.transmit),
+            info: GtkKdeInfo::new(gtk.key_id).with_tx(gtk.tx),
             key: gtk.key(),
         }
         .encode();
@@ -178,13 +181,14 @@ enum KeyDataContext<'a> {
     GroupMessage1,
 }
 
-/// Parse the decrypted key-data body of pairwise Message 3. With
-/// `management_protection`, the IGTK KDE is required; without it, refused.
+/// Parse the decrypted key-data body of pairwise Message 3. With a
+/// negotiated `group_management` cipher, the IGTK KDE is required; without
+/// one, refused.
 pub fn parse_gtk_key_data(
     bytes: &[u8],
     expected_rsn_ie: &[u8],
     expected_rsnxe: &[u8],
-    management_protection: bool,
+    group_management: Option<GroupManagementCipher>,
 ) -> Result<RsnGroupKeys, RsnFrameError> {
     parse_key_data(
         bytes,
@@ -192,7 +196,7 @@ pub fn parse_gtk_key_data(
             expected_rsn_ie,
             expected_rsnxe,
         },
-        management_protection,
+        group_management,
     )
 }
 
@@ -203,15 +207,15 @@ pub fn parse_gtk_key_data(
 /// padding are accepted; unrelated elements fail closed.
 pub fn parse_group_gtk_key_data(
     bytes: &[u8],
-    management_protection: bool,
+    group_management: Option<GroupManagementCipher>,
 ) -> Result<RsnGroupKeys, RsnFrameError> {
-    parse_key_data(bytes, KeyDataContext::GroupMessage1, management_protection)
+    parse_key_data(bytes, KeyDataContext::GroupMessage1, group_management)
 }
 
 fn parse_key_data(
     bytes: &[u8],
     context: KeyDataContext<'_>,
-    management_protection: bool,
+    group_management: Option<GroupManagementCipher>,
 ) -> Result<RsnGroupKeys, RsnFrameError> {
     let mut saw_rsn = false;
     let mut saw_rsnxe = false;
@@ -266,10 +270,10 @@ fn parse_key_data(
                             return Err(RsnFrameError::DuplicateGtk);
                         }
                         let key_id = info.group_key_id().ok_or(RsnFrameError::InvalidKeyId)?;
-                        gtk = Some(RsnGtk::new(key_id, info.transmit(), key));
+                        gtk = Some(RsnGtk::new(key_id, info.tx(), key));
                     }
                     IGTK_KDE_TYPE => {
-                        if !management_protection {
+                        if group_management.is_none() {
                             return Err(RsnFrameError::UnexpectedIgtk);
                         }
                         let IgtkKde {
@@ -300,7 +304,7 @@ fn parse_key_data(
         }
     }
     let gtk = gtk.ok_or(RsnFrameError::MissingGtk)?;
-    if management_protection && igtk.is_none() {
+    if group_management.is_some() && igtk.is_none() {
         return Err(RsnFrameError::MissingIgtk);
     }
     Ok(RsnGroupKeys { gtk, igtk })

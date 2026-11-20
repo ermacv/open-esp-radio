@@ -192,7 +192,7 @@ fn service(
         },
         RsnGtk::new(
             oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
             &[0x55; 16],
         ),
         TEST_GTK_GENERATION,
@@ -636,7 +636,7 @@ fn associated_activity_refreshes_the_configured_inactivity_frontier() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -727,7 +727,7 @@ fn association_owns_a_bounded_wpa2_state() {
         ApMlmeAction::BeginWpa2 { peer: PEER }
     );
     assert!(matches!(
-        service.wpa2(PEER).unwrap().message1(false).unwrap(),
+        service.wpa2(PEER).unwrap().message1().unwrap(),
         RsnApAction::Transmit(_)
     ));
     let _ticket_type_is_owned: Option<RsnTicket> = None;
@@ -883,7 +883,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
             plaintext.as_bytes(),
             &AP_WPA2_PERSONAL_RSN_ELEMENT,
             &[],
-            false
+            None
         )
         .is_ok()
     );
@@ -920,7 +920,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         12
     );
     assert!(matches!(
-        parse_gtk_key_data(plaintext.as_bytes(), &SUPPLICANT_RSN, &[], false),
+        parse_gtk_key_data(plaintext.as_bytes(), &SUPPLICANT_RSN, &[], None),
         Err(RsnFrameError::RsnIeMismatch)
     ));
 
@@ -1308,7 +1308,7 @@ fn all_fifteen_aids_are_stable_and_reused_after_removal() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -1807,7 +1807,7 @@ fn a_station_resuming_a_pmksa_is_refused_by_an_access_point_without_a_cache() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,
@@ -1846,7 +1846,7 @@ fn wpa3_service(
         AP,
         RsnGtk::new(
             oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
             &[0x55; 16],
         ),
         TEST_GTK_GENERATION,
@@ -1948,7 +1948,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
         plaintext.as_bytes(),
         &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
         &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
-        true,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     )
     .unwrap();
     assert_eq!(keys.igtk.unwrap().key(), &[0x66; 16]);
@@ -2297,7 +2297,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
         plaintext.as_bytes(),
         &crate::security_policy::AP_WPA3_PERSONAL_RSN_ELEMENT,
         &crate::security_policy::AP_SAE_H2E_RSNX_ELEMENT,
-        true,
+        Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128),
     )
     .unwrap();
     let delivered = keys.igtk.unwrap();
@@ -2397,7 +2397,7 @@ fn interface_scoped_ap_sends_refusal_for_required_spp_without_admitting_peer() {
             },
             RsnGtk::new(
                 oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-                true,
+                oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
                 &[0x55; 16],
             ),
             TEST_GTK_GENERATION,

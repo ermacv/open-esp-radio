@@ -91,7 +91,11 @@ fn engine<'s>(
     let service = AccessPointService::<Association>::new(
         AP,
         pmk,
-        RsnGtk::new(GroupKeyId::new(1).unwrap(), true, &[0x55; 16]),
+        RsnGtk::new(
+            GroupKeyId::new(1).unwrap(),
+            oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
+            &[0x55; 16],
+        ),
         3,
         AccessPointClientLimit::new(2).unwrap(),
         AccessPointInactiveTimeout::default(),

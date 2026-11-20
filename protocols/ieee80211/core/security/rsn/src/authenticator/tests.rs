@@ -73,7 +73,11 @@ fn group_packet_number(value: u64) -> CcmpPacketNumber {
 }
 
 fn key_data() -> RsnPlainKeyData {
-    let gtk = RsnGtk::new(GroupKeyId::new(1).unwrap(), true, &[0x55; 16]);
+    let gtk = RsnGtk::new(
+        GroupKeyId::new(1).unwrap(),
+        oer_protocols_ieee80211_wire::eapol::GtkTx::TransmitAndReceive,
+        &[0x55; 16],
+    );
     RsnPlainKeyData::build(&AP_RSN, &gtk, None).unwrap()
 }
 
@@ -105,7 +109,7 @@ fn a_verified_handshake_wraps_message3_and_authorizes_on_message4() {
     assert_eq!(key_frame.key_receive_sequence(), &[1, 2, 3, 4, 5, 6, 0, 0]);
     assert!(key_frame.verify_mic(&ptk, &mut SoftwareAes128).unwrap());
     let plain = crate::test_unwrap_bytes(ptk.kek(), key_frame.key_data()).unwrap();
-    assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], false).is_ok());
+    assert!(parse_gtk_key_data(plain.as_bytes(), &AP_RSN, &[], None).is_ok());
     // A retransmission takes the next counter and the GTK's packet number
     // at its own time, with the same key data under the same PTK.
     let (again, again_transmit) = authenticator

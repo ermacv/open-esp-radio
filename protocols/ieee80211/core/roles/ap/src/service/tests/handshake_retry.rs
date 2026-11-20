@@ -70,7 +70,7 @@ impl ReplayCheckingStation {
             plaintext.as_bytes(),
             &AP_WPA2_PERSONAL_RSN_ELEMENT,
             &[],
-            false,
+            None,
         )
         .unwrap();
         let group_receive_sequence =

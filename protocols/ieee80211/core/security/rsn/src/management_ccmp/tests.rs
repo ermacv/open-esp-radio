@@ -150,12 +150,8 @@ fn data_and_reserved_ccmp_headers_never_reach_management_replay() {
     assert!(ccmp.open(&mut SoftwareAes128, &mut frame()).is_ok());
 }
 
-fn mode(spp: bool) -> CcmpAssociation {
-    CcmpAssociation::new(if spp {
-        Spp::Negotiated
-    } else {
-        Spp::NotNegotiated
-    })
+fn mode(spp: Spp) -> CcmpAssociation {
+    CcmpAssociation::new(spp)
 }
 fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
     oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&core::array::from_fn(|i| i as u8))
@@ -164,7 +160,7 @@ fn key() -> oer_protocols_ieee80211_contracts_security::Ccmp128Key {
 #[test]
 fn management_wire_vector_matches_the_replay_receiver_in_both_spp_modes() {
     use oer_protocols_ieee80211_wire::management_ccmp_vector::{MANAGEMENT_BODY, management_wire};
-    for spp in [false, true] {
+    for spp in [Spp::NotNegotiated, Spp::Negotiated] {
         let wire = management_wire();
         let mut mpdu = wire.clone();
         assert_eq!(

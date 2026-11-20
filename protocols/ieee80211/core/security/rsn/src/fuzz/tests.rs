@@ -11,6 +11,11 @@
 //! a scalar multiplication per accepted commit, runs a tenth as many.
 
 use oer_protocols_ieee80211_core_security_cipher::ccmp_mpdu::CcmpAssociation;
+
+/// The negotiated group management cipher of an association that protects
+/// its management frames.
+const BIP: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher> =
+    Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
 use oer_protocols_ieee80211_wire::management_ccmp_vector::management_wire;
 
 use std::vec::Vec;
@@ -103,7 +108,7 @@ fn eapol_key_frames_never_panic_full() {
 fn key_data(count: usize) {
     let (_, plain) = message3();
     inputs(&[&plain], count, 200, |bytes| {
-        for protection in [false, true] {
+        for protection in [None, BIP] {
             let _ = parse_gtk_key_data(bytes, &RSN_IE, &[], protection);
             let _ = parse_gtk_key_data(bytes, &RSN_IE, &[0xf4, 1, 0x20], protection);
             let _ = parse_group_gtk_key_data(bytes, protection);
@@ -343,7 +348,7 @@ fn the_seeds_are_real_frames() {
     // the parsers' depths rather than stopping at the first check.
     assert!(EapolKeyFrame::parse(&MESSAGE3).is_ok());
     let (_, plain) = message3();
-    assert!(parse_gtk_key_data(&plain, &RSN_IE, &[], true).is_ok());
+    assert!(parse_gtk_key_data(&plain, &RSN_IE, &[], BIP).is_ok());
     assert!(validate_rsn_element(&RSN_IE).is_ok());
     let _ = GroupKeyId::new(1);
 }

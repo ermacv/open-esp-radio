@@ -251,16 +251,12 @@ impl RsnStaState {
         }
     }
 
+    /// The PTK is derived: Message 2 follows. A derivation cannot fail.
     pub fn complete_ptk<const N: usize>(
         &mut self,
         ticket: RsnTicket,
-        valid: bool,
     ) -> Result<RsnStaAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::DerivingPtk)?;
-        if !valid {
-            self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
-        }
         self.phase = RsnStaPhase::AwaitingMessage3;
         Ok(RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage2,
@@ -269,22 +265,24 @@ impl RsnStaState {
         }))
     }
 
-    pub fn complete_message3_mic<const N: usize>(
+    /// The check of Message 3's MIC ended with `verified`. A failure
+    /// returns the station to Message 3 and comes back as the inner error.
+    pub fn complete_message3_mic<const N: usize, F>(
         &mut self,
         ticket: RsnTicket,
         frame: OwnedEapolFrame<N>,
-        valid: bool,
-    ) -> Result<RsnStaAction<N>, RsnStateError> {
+        verified: Result<(), F>,
+    ) -> Result<Result<RsnStaAction<N>, F>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::VerifyingMessage3)?;
         self.validate_retained_message3(&frame)?;
-        if !valid {
+        if let Err(failure) = verified {
             // The candidate replay counter is not authenticated until the
             // MIC succeeds. Roll back the speculative M3 edge so a forged
             // parse-valid frame cannot kill the join or reserve its replay
             // value ahead of the real authenticator frame.
             self.message3_replay = 0;
             self.phase = RsnStaPhase::AwaitingMessage3;
-            return Ok(RsnStaAction::None);
+            return Ok(Err(failure));
         }
 
         let key = frame.key_frame()?;
@@ -294,47 +292,52 @@ impl RsnStaState {
             }
             self.phase = RsnStaPhase::DecryptingKeyData;
             let ticket = self.issue_ticket();
-            Ok(RsnStaAction::DecryptMessage3KeyData { ticket, frame })
+            Ok(Ok(RsnStaAction::DecryptMessage3KeyData { ticket, frame }))
         } else {
             self.phase = RsnStaPhase::InstallingKeys;
             let ticket = self.issue_ticket();
-            Ok(RsnStaAction::InstallKeys { ticket, frame })
+            Ok(Ok(RsnStaAction::InstallKeys { ticket, frame }))
         }
     }
 
-    pub fn complete_key_data<const N: usize>(
+    /// Message 3's key data was unwrapped with `unwrapped`. A failure fails
+    /// the handshake and comes back as the inner error.
+    pub fn complete_key_data<const N: usize, F>(
         &mut self,
         ticket: RsnTicket,
         frame: OwnedEapolFrame<N>,
-        valid: bool,
-    ) -> Result<RsnStaAction<N>, RsnStateError> {
+        unwrapped: Result<(), F>,
+    ) -> Result<Result<RsnStaAction<N>, F>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::DecryptingKeyData)?;
         self.validate_retained_message3(&frame)?;
-        if !valid {
+        if let Err(failure) = unwrapped {
             self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
+            return Ok(Err(failure));
         }
         self.phase = RsnStaPhase::InstallingKeys;
         let ticket = self.issue_ticket();
-        Ok(RsnStaAction::InstallKeys { ticket, frame })
+        Ok(Ok(RsnStaAction::InstallKeys { ticket, frame }))
     }
 
-    pub fn complete_key_install<const N: usize>(
+    /// The keys of Message 3 ended with `installed`: their key data parsed
+    /// and the keys installed, or a failure, which fails the handshake and
+    /// comes back as the inner error.
+    pub fn complete_key_install<const N: usize, F>(
         &mut self,
         ticket: RsnTicket,
-        installed: bool,
-    ) -> Result<RsnStaAction<N>, RsnStateError> {
+        installed: Result<(), F>,
+    ) -> Result<Result<RsnStaAction<N>, F>, RsnStateError> {
         self.check_completion(ticket, RsnStaPhase::InstallingKeys)?;
-        if !installed {
+        if let Err(failure) = installed {
             self.phase = RsnStaPhase::Failed;
-            return Ok(RsnStaAction::Deauthenticate);
+            return Ok(Err(failure));
         }
         self.phase = RsnStaPhase::Completed;
-        Ok(RsnStaAction::Transmit(RsnTransmit {
+        Ok(Ok(RsnStaAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage4,
             replay_counter: self.message3_replay,
             retransmission: false,
-        }))
+        })))
     }
 
     const fn ptk_context(&self) -> PtkContext {

@@ -74,16 +74,38 @@ oer_portable_wire::bitfield! {
     /// Key ID in bits 0..2, Tx in bit 2, bits 3..8 reserved.
     pub struct GtkKdeInfo[1] (little) {
         pub key_id, with_key_id: (u8) = 0..2;
-        pub transmit, with_transmit: bool = 2..3;
+        transmit, with_transmit: bool = 2..3;
         pub reserved, with_reserved: u8 = 3..8;
     }
 }
 
+/// The Tx bit of a GTK KDE: the GTK serves transmission and reception, or
+/// reception only (IEEE Std 802.11-2020, 12.7.2, Figure 12-36).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GtkTx {
+    ReceiveOnly,
+    TransmitAndReceive,
+}
+
 impl GtkKdeInfo {
     /// The info octet of a GTK named `key_id`, its Tx bit clear: a GTK
-    /// for transmission sets it ([`Self::with_transmit`]).
+    /// for transmission sets it ([`Self::with_tx`]).
     pub const fn new(key_id: GroupKeyId) -> Self {
         Self::from_bytes([0]).with_key_id(oer_portable_wire::U8::<2>::from_low_bits(key_id.get()))
+    }
+
+    /// The Tx bit.
+    pub const fn tx(self) -> GtkTx {
+        if self.transmit() {
+            GtkTx::TransmitAndReceive
+        } else {
+            GtkTx::ReceiveOnly
+        }
+    }
+
+    /// The info octet with its Tx bit `tx`.
+    pub const fn with_tx(self, tx: GtkTx) -> Self {
+        self.with_transmit(matches!(tx, GtkTx::TransmitAndReceive))
     }
 
     /// The GTK's key ID, `None` when a reserved bit is set.
@@ -607,10 +629,11 @@ mod tests {
 
     #[test]
     fn gtk_info_round_trips_and_refuses_reserved_bits() {
-        let info = GtkKdeInfo::new(GroupKeyId::new(2).unwrap()).with_transmit(true);
+        let info = GtkKdeInfo::new(GroupKeyId::new(2).unwrap()).with_tx(GtkTx::TransmitAndReceive);
         assert_eq!(info.to_bytes(), [0x06]);
         assert_eq!(info.group_key_id(), GroupKeyId::new(2));
-        assert!(info.transmit());
+        assert_eq!(info.tx(), GtkTx::TransmitAndReceive);
+        assert_eq!(GtkKdeInfo::from_bytes([0x02]).tx(), GtkTx::ReceiveOnly);
         assert_eq!(GtkKdeInfo::from_bytes([0x08]).group_key_id(), None);
     }
 
@@ -717,7 +740,7 @@ mod tests {
     #[test]
     fn group_key_kdes_have_their_reference_layout_and_refuse_other_lengths() {
         let gtk = GtkKde {
-            info: GtkKdeInfo::new(GroupKeyId::new(1).unwrap()).with_transmit(true),
+            info: GtkKdeInfo::new(GroupKeyId::new(1).unwrap()).with_tx(GtkTx::TransmitAndReceive),
             key: &[0x11; 16],
         }
         .encode();

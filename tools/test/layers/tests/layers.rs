@@ -7977,11 +7977,6 @@ const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::commit_step_with",
-        1,
-        BY_P3,
-    ),
 ];
 
 /// K0, `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,

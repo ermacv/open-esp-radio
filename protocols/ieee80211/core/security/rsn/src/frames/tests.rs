@@ -5,6 +5,12 @@
     clippy::unreachable
 )]
 use super::*;
+use oer_protocols_ieee80211_wire::eapol::GtkTx;
+
+/// The negotiated group management cipher of an association that protects
+/// its management frames.
+const BIP: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher> =
+    Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
 use crate::EapolKeyMessage;
 use crate::state::RsnApAction;
 
@@ -42,16 +48,16 @@ fn gtk_key_data_round_trips_with_key_wrap_padding() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let data = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
     assert_eq!(data.as_bytes().len() % 8, 0);
-    let parsed = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &[], false)
+    let parsed = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &[], None)
         .map(|keys| keys.gtk)
         .unwrap();
     assert_eq!(parsed.key_id().get(), 2);
-    assert!(!parsed.transmit());
+    assert_eq!(parsed.tx(), GtkTx::ReceiveOnly);
     assert_eq!(parsed.key(), &[0x5a; 16]);
 }
 
@@ -64,13 +70,13 @@ fn protected_key_data_carries_the_rsnxe_and_an_igtk_the_station_reads() {
     elements[22..].copy_from_slice(&rsnxe);
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x5a; 16],
     );
     let igtk = RsnIgtk::new(4, [1, 0, 0, 0, 0, 0], &[0x6b; 16]).unwrap();
     let data = RsnPlainKeyData::<96>::build(&elements, &gtk, Some(&igtk)).unwrap();
     assert_eq!(data.as_bytes().len() % 8, 0);
-    let keys = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &rsnxe, true).unwrap();
+    let keys = parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &rsnxe, BIP).unwrap();
     assert_eq!(keys.gtk.key(), &[0x5a; 16]);
     let parsed = keys.igtk.unwrap();
     assert_eq!(parsed.key_id(), 4);
@@ -137,7 +143,7 @@ fn state_actions_are_bound_to_role_peer_and_nonce_context() {
     );
 
     let ap = RsnApState::new(crate::Akm::Psk, [2; 6], [1; 6], [4; 32], 7).unwrap();
-    let RsnApAction::Transmit(m1_action) = ap.message1(false).unwrap() else {
+    let RsnApAction::Transmit(m1_action) = ap.message1().unwrap() else {
         panic!("message1 must produce a transmit action")
     };
     let m1 = build_ap_action_frame::<128>(&ap, m1_action, [0; 8], &[]).unwrap();
@@ -150,7 +156,7 @@ fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[7; 16],
     );
     let data = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -159,7 +165,7 @@ fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
     other[1] = 20;
     other[2] = 1;
     assert_eq!(
-        parse_gtk_key_data(data.as_bytes(), &other, &[], false)
+        parse_gtk_key_data(data.as_bytes(), &other, &[], None)
             .map(|keys| keys.gtk)
             .err(),
         Some(RsnFrameError::RsnIeMismatch)
@@ -170,7 +176,7 @@ fn parser_rejects_changed_rsn_ie_and_duplicate_gtk() {
     duplicate[..46].copy_from_slice(&source[..46]);
     duplicate[46..70].copy_from_slice(&source[22..46]);
     assert_eq!(
-        parse_gtk_key_data(&duplicate, rsn.as_bytes(), &[], false)
+        parse_gtk_key_data(&duplicate, rsn.as_bytes(), &[], None)
             .map(|keys| keys.gtk)
             .err(),
         Some(RsnFrameError::DuplicateGtk)
@@ -182,7 +188,7 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
     let rsn = rsn_ie();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[7; 16],
     );
     let data = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
@@ -194,20 +200,20 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
     with_rsnxe[26..50].copy_from_slice(&source[22..46]);
     with_rsnxe[50] = KDE_ELEMENT_ID;
 
-    let parsed = parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &rsnxe, false)
+    let parsed = parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &rsnxe, None)
         .map(|keys| keys.gtk)
         .unwrap();
     assert_eq!(parsed.key_id().get(), 1);
     assert_eq!(parsed.key(), &[7; 16]);
 
     assert_eq!(
-        parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &[], false)
+        parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &[], None)
             .map(|keys| keys.gtk)
             .err(),
         Some(RsnFrameError::UnexpectedRsnxe)
     );
     assert_eq!(
-        parse_gtk_key_data(source, rsn.as_bytes(), &rsnxe, false)
+        parse_gtk_key_data(source, rsn.as_bytes(), &rsnxe, None)
             .map(|keys| keys.gtk)
             .err(),
         Some(RsnFrameError::MissingRsnxe)
@@ -215,7 +221,7 @@ fn parser_validates_authenticator_rsnxe_without_ignoring_unknown_elements() {
 
     let changed = [RSNXE_ELEMENT_ID, 2, 0x21, 0x00];
     assert_eq!(
-        parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &changed, false)
+        parse_gtk_key_data(&with_rsnxe, rsn.as_bytes(), &changed, None)
             .map(|keys| keys.gtk)
             .err(),
         Some(RsnFrameError::RsnxeMismatch)
@@ -238,7 +244,7 @@ fn igtk_kde(key_id: u16) -> [u8; 30] {
 fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        false,
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
         &[0x55; 16],
     );
     let rsn = rsn_ie();
@@ -246,7 +252,7 @@ fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
     let mut with_igtk = std::vec::Vec::from(&data.as_bytes()[..rsn.as_bytes().len() + 24]);
     with_igtk.extend_from_slice(&igtk_kde(4));
 
-    let keys = parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], true).unwrap();
+    let keys = parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 1);
     let igtk = keys.igtk.expect("IGTK KDE");
     assert_eq!(igtk.key_id(), 4);
@@ -254,23 +260,23 @@ fn protected_management_requires_exactly_one_igtk_beside_the_gtk() {
     assert_eq!(igtk.key(), &[0x77; 16]);
 
     assert_eq!(
-        parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], false).err(),
+        parse_gtk_key_data(&with_igtk, rsn.as_bytes(), &[], None).err(),
         Some(RsnFrameError::UnexpectedIgtk)
     );
     assert_eq!(
-        parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &[], true).err(),
+        parse_gtk_key_data(data.as_bytes(), rsn.as_bytes(), &[], BIP).err(),
         Some(RsnFrameError::MissingIgtk)
     );
     let mut duplicate = with_igtk.clone();
     duplicate.extend_from_slice(&igtk_kde(5));
     assert_eq!(
-        parse_gtk_key_data(&duplicate, rsn.as_bytes(), &[], true).err(),
+        parse_gtk_key_data(&duplicate, rsn.as_bytes(), &[], BIP).err(),
         Some(RsnFrameError::DuplicateIgtk)
     );
     let mut wrong_id = std::vec::Vec::from(&data.as_bytes()[..rsn.as_bytes().len() + 24]);
     wrong_id.extend_from_slice(&igtk_kde(1));
     assert_eq!(
-        parse_gtk_key_data(&wrong_id, rsn.as_bytes(), &[], true).err(),
+        parse_gtk_key_data(&wrong_id, rsn.as_bytes(), &[], BIP).err(),
         Some(RsnFrameError::InvalidKeyId)
     );
 }
@@ -281,11 +287,11 @@ fn a_group_rekey_carries_the_igtk_of_a_protected_association() {
     body.extend_from_slice(&[0xdd, 22, 0x00, 0x0f, 0xac, 1, 2, 0]);
     body.extend_from_slice(&[0x66; 16]);
     body.extend_from_slice(&igtk_kde(5));
-    let keys = parse_group_gtk_key_data(&body, true).unwrap();
+    let keys = parse_group_gtk_key_data(&body, BIP).unwrap();
     assert_eq!(keys.gtk.key_id().get(), 2);
     assert_eq!(keys.igtk.unwrap().key_id(), 5);
     assert_eq!(
-        parse_group_gtk_key_data(&body, false).err(),
+        parse_group_gtk_key_data(&body, None).err(),
         Some(RsnFrameError::UnexpectedIgtk)
     );
 }

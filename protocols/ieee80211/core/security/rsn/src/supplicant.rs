@@ -13,6 +13,7 @@
 //! `Engine` error of the call.
 
 use crate::AkmKeys;
+use crate::MicFailure;
 use crate::{
     Akm, EapolKeyFrame, Pmk, Ptk, PtkContext, RSN_KEK_LEN, RsnInterface, RsnKeyConfirmationKey,
     RsnKeyEncryptionKey,
@@ -24,12 +25,14 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
+use core::convert::Infallible;
 use oer_portable_crypto::{
     Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError},
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_security_cipher::aes::RsnKeyData;
+use oer_protocols_ieee80211_wire::security::GroupManagementCipher;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Hardware-qualified open-STA compatibility window for the first EAPOL-Key
@@ -322,7 +325,6 @@ pub enum RsnConnectedSupplicantError {
     InvalidMic,
     StaleReplayCounter,
     StaleCompletion,
-    InstallFailed,
     Frame(RsnFrameError),
     InvalidFrame(oer_protocols_ieee80211_wire::eapol::EapolParseError),
     /// A previously validated local security-IE owner lost its invariant.
@@ -519,7 +521,7 @@ pub struct RsnConnectedSupplicant {
     completed_message3: RsnCompletedMessage3,
     replay_counter: u64,
     completed_group_message1: Option<RsnCompletedGroupMessage1>,
-    management_protection: bool,
+    group_management: Option<GroupManagementCipher>,
 }
 
 impl RsnConnectedSupplicant {
@@ -687,7 +689,7 @@ impl RsnConnectedSupplicant {
                     self.authenticator_security_ies
                         .rsnxe()
                         .map_err(RsnConnectedSupplicantError::RetainedSecurityIes)?,
-                    self.management_protection,
+                    self.group_management,
                 ),
                 RsnCompletedKeyMessage::Pairwise(RsnCompletedMessage3::capture(key)),
                 RsnTxFrame::message4(
@@ -697,7 +699,7 @@ impl RsnConnectedSupplicant {
                 ),
             ),
             crate::EapolKeyMessage::GroupMessage1 => (
-                parse_group_gtk_key_data(plain.as_bytes(), self.management_protection),
+                parse_group_gtk_key_data(plain.as_bytes(), self.group_management),
                 RsnCompletedKeyMessage::Group(RsnCompletedGroupMessage1::capture(key)),
                 RsnTxFrame::group_message2(
                     self.key_confirmation.akm(),
@@ -730,16 +732,15 @@ impl RsnConnectedSupplicant {
         })
     }
 
+    /// The platform installed the group keys of `request`: the response
+    /// follows. An installation that did not take effect never comes here:
+    /// its owner ends the attempt.
     pub fn complete_group_key_install<const N: usize>(
         &mut self,
         request: RsnGroupKeyInstallRequest<N>,
-        installed: bool,
     ) -> Result<RsnTxFrame<N>, RsnConnectedSupplicantError> {
         if request.replay_counter <= self.replay_counter {
             return Err(RsnConnectedSupplicantError::StaleCompletion);
-        }
-        if !installed {
-            return Err(RsnConnectedSupplicantError::InstallFailed);
         }
         self.replay_counter = request.replay_counter;
         match request.commitment {
@@ -762,8 +763,9 @@ pub struct RsnStaSupplicant {
     completed_message3: Option<RsnCompletedMessage3>,
     association_security_ies: OwnedAssociationSecurityIes,
     authenticator_security_ies: OwnedAssociationSecurityIes,
-    /// Both RSN elements advertise MFPC: management frames are protected.
-    management_protection: bool,
+    /// The group management cipher, when both RSN elements advertise MFPC:
+    /// management frames are protected.
+    group_management: Option<GroupManagementCipher>,
 }
 
 impl RsnStaSupplicant {
@@ -787,11 +789,14 @@ impl RsnStaSupplicant {
         let own = validate_rsn_element(association_security_ies.rsn_ie()?)
             .map_err(RsnStaSupplicantError::Element)?;
         let akm = own.akm();
-        let management_protection = own.management_frame_protection().negotiated(
-            validate_rsn_element(authenticator_rsn_ie)
-                .map_err(RsnStaSupplicantError::Element)?
-                .management_frame_protection(),
-        );
+        let peer_protection = validate_rsn_element(authenticator_rsn_ie)
+            .map_err(RsnStaSupplicantError::Element)?
+            .management_frame_protection();
+        // Protection is in effect when both parties are capable; the
+        // validated elements carry BIP-CMAC-128 then.
+        let group_management = (own.management_frame_protection().capable()
+            && peer_protection.capable())
+        .then_some(GroupManagementCipher::BipCmac128);
         let state = RsnStaState::new(akm, local, authenticator, supplicant_nonce)
             .map_err(RsnStaSupplicantError::State)?;
         let authenticator_rsn_ie =
@@ -806,13 +811,14 @@ impl RsnStaSupplicant {
             completed_message3: None,
             association_security_ies,
             authenticator_security_ies,
-            management_protection,
+            group_management,
         })
     }
 
-    /// Whether the association protects its management frames.
-    pub const fn management_protection(&self) -> bool {
-        self.management_protection
+    /// The group management cipher, when the association protects its
+    /// management frames.
+    pub const fn group_management(&self) -> Option<GroupManagementCipher> {
+        self.group_management
     }
 
     pub const fn phase(&self) -> RsnStaPhase {
@@ -837,7 +843,7 @@ impl RsnStaSupplicant {
             completed_message3,
             replay_counter,
             completed_group_message1: None,
-            management_protection: self.management_protection,
+            group_management: self.group_management,
         })
     }
 
@@ -890,7 +896,7 @@ impl RsnStaSupplicant {
                 ));
                 let action = self
                     .state
-                    .complete_ptk::<N>(ticket, true)
+                    .complete_ptk::<N>(ticket)
                     .map_err(RsnStaSupplicantError::State)?;
                 let RsnStaAction::Transmit(transmit) = action else {
                     return Err(RsnStaSupplicantError::UnexpectedAction.into());
@@ -899,22 +905,20 @@ impl RsnStaSupplicant {
             }
             RsnStaAction::Transmit(transmit) => Ok(self.build_transmit(transmit, engine)?),
             RsnStaAction::VerifyMessage3Mic { ticket, frame } => {
-                let verified = frame.key_frame()?.verify_mic(self.ptk()?, engine);
-                if verified != Ok(true) {
-                    self.state
-                        .complete_message3_mic::<N>(ticket, frame, false)
-                        .map_err(RsnStaSupplicantError::State)?;
-                    return Err(match verified {
-                        Err(error) => RsnStaSupplicantError::Engine(error),
-                        Ok(_) => RsnStaSupplicantError::InvalidMessage3Mic,
-                    }
-                    .into());
-                }
-                let action = self
+                let verified = frame.key_frame()?.check_mic(self.ptk()?, engine);
+                match self
                     .state
-                    .complete_message3_mic(ticket, frame, true)
-                    .map_err(RsnStaSupplicantError::State)?;
-                self.resolve_message3(action, engine)
+                    .complete_message3_mic(ticket, frame, verified)
+                    .map_err(RsnStaSupplicantError::State)?
+                {
+                    Ok(action) => self.resolve_message3(action, engine),
+                    Err(MicFailure::Mismatch) => {
+                        Err(RsnStaSupplicantError::InvalidMessage3Mic.into())
+                    }
+                    Err(MicFailure::Engine(error)) => {
+                        Err(RsnStaSupplicantError::Engine(error).into())
+                    }
+                }
             }
             RsnStaAction::Deauthenticate => Ok(RsnStaReady::Deauthenticate),
             RsnStaAction::DecryptMessage3KeyData { .. } | RsnStaAction::InstallKeys { .. } => {
@@ -939,52 +943,57 @@ impl RsnStaSupplicant {
         let unwrapped = match unwrapped {
             Ok(unwrapped) => unwrapped,
             Err(error) => {
-                self.state
-                    .complete_key_data::<N>(ticket, frame, false)
-                    .map_err(RsnStaSupplicantError::State)?;
-                return Err(error.into_sta());
+                return Err(
+                    match self
+                        .state
+                        .complete_key_data::<N, _>(ticket, frame, Err(error))
+                        .map_err(RsnStaSupplicantError::State)?
+                    {
+                        Err(error) => error.into_sta(),
+                        Ok(_) => RsnStaSupplicantError::UnexpectedAction.into(),
+                    },
+                );
             }
         };
-        let action = self
+        let (ticket, frame) = match self
             .state
-            .complete_key_data(ticket, frame, true)
-            .map_err(RsnStaSupplicantError::State)?;
-        let RsnStaAction::InstallKeys { ticket, frame } = action else {
-            return Err(RsnStaSupplicantError::UnexpectedAction.into());
+            .complete_key_data::<N, Infallible>(ticket, frame, Ok(()))
+            .map_err(RsnStaSupplicantError::State)?
+        {
+            Ok(RsnStaAction::InstallKeys { ticket, frame }) => (ticket, frame),
+            Ok(_) => return Err(RsnStaSupplicantError::UnexpectedAction.into()),
+            Err(never) => match never {},
         };
         Ok(self.prepare_key_install(ticket, frame, Some(unwrapped.as_bytes()))?)
     }
 
-    /// Complete the exact platform key-slot transaction represented by
-    /// `request`. A successful completion produces an already authenticated
-    /// Message 4, authenticated on `engine`; a failed completion moves the
-    /// protocol state to Failed.
+    /// The platform installed the keys of `request`: Message 4 follows,
+    /// authenticated on `engine`. An installation that did not take effect
+    /// never comes here: its owner ends the attempt.
     pub fn complete_key_install<const N: usize, E: Aes128Engine>(
         &mut self,
         request: RsnStaKeyInstallRequest,
-        installed: bool,
         engine: &mut E,
     ) -> Result<RsnStaReady<N>, RsnStaSupplicantError> {
         let (pairwise, group) = request.into_parts();
         drop(pairwise);
-        self.complete_retry_install(group, installed, engine)
+        self.complete_retry_install(group, engine)
     }
 
     /// Complete group work without obtaining pairwise installation authority.
     pub fn complete_retry_install<const N: usize, E: Aes128Engine>(
         &mut self,
         request: RsnStaRetryInstall,
-        installed: bool,
         engine: &mut E,
     ) -> Result<RsnStaReady<N>, RsnStaSupplicantError> {
-        let action = self
+        match self
             .state
-            .complete_key_install::<N>(request.ticket, installed)
-            .map_err(RsnStaSupplicantError::State)?;
-        match action {
-            RsnStaAction::Transmit(transmit) => self.build_transmit(transmit, engine),
-            RsnStaAction::Deauthenticate => Ok(RsnStaReady::Deauthenticate),
-            _ => Err(RsnStaSupplicantError::UnexpectedAction),
+            .complete_key_install::<N, Infallible>(request.ticket, Ok(()))
+            .map_err(RsnStaSupplicantError::State)?
+        {
+            Ok(RsnStaAction::Transmit(transmit)) => self.build_transmit(transmit, engine),
+            Ok(_) => Err(RsnStaSupplicantError::UnexpectedAction),
+            Err(never) => match never {},
         }
     }
 
@@ -1024,14 +1033,20 @@ impl RsnStaSupplicant {
             self.authenticator_security_ies
                 .rsnxe()
                 .map_err(RsnStaSupplicantError::RetainedSecurityIes)?,
-            self.management_protection,
+            self.group_management,
         ) {
             Ok(keys) => keys,
             Err(error) => {
-                self.state
-                    .complete_key_install::<N>(ticket, false)
-                    .map_err(RsnStaSupplicantError::State)?;
-                return Err(RsnStaSupplicantError::Frame(error));
+                return Err(
+                    match self
+                        .state
+                        .complete_key_install::<N, _>(ticket, Err(error))
+                        .map_err(RsnStaSupplicantError::State)?
+                    {
+                        Err(error) => RsnStaSupplicantError::Frame(error),
+                        Ok(_) => RsnStaSupplicantError::UnexpectedAction,
+                    },
+                );
             }
         };
         let retry = self.completed_message3.is_some();

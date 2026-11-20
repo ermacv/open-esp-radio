@@ -5201,7 +5201,8 @@ fn review_negotiated_pmf_rejects_unprotected_deauthentication() {
                     .supplicant
                     .as_ref()
                     .unwrap()
-                    .management_protection()
+                    .group_management()
+                    .is_some()
             ),
             _ => panic!("expected handshake"),
         }

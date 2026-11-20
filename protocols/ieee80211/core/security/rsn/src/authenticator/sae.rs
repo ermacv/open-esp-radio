@@ -43,6 +43,7 @@ use oer_protocols_ieee80211_wire::sae::{
     SaeCommitRefusal, SaeCommitValues, SaeReceivedCommit, anti_clogging_token_container_header,
     finite_cyclic_group, finite_cyclic_group_field, send_confirm,
 };
+use oer_protocols_ieee80211_wire::security::SaePwe;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::station::{SAE_COMMIT_TRANSACTION, SAE_CONFIRM_TRANSACTION};
 use oer_protocols_ieee80211_wire::status::status_code;
@@ -231,7 +232,10 @@ pub enum ApSaePhase {
 struct Session {
     peer: [u8; 6],
     phase: ApSaePhase,
-    h2e: bool,
+    /// The password element method of the exchange: hash to element when
+    /// the peer's Commit status named it.
+    pwe: SaePwe,
+    /// The peer's Commit carried a Password Identifier element.
     password_identifier: bool,
     own: Option<SaeCommit>,
     peer_commit: Option<SaeCommitValues>,
@@ -248,7 +252,7 @@ impl Session {
         Self {
             peer,
             phase: ApSaePhase::Nothing,
-            h2e: false,
+            pwe: SaePwe::HuntingAndPecking,
             password_identifier: false,
             own: None,
             peer_commit: None,
@@ -392,25 +396,21 @@ impl<const N: usize> ApSaeResponder<N> {
         let Some(session) = self.sessions.get_mut(slot).and_then(Option::as_mut) else {
             return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
         };
-        let mut allow_reuse = false;
+        let mut own = OwnCommit::Redraw;
         if session.phase == ApSaePhase::Committed {
             session.phase = ApSaePhase::Nothing;
             if group_offered {
-                allow_reuse = true;
+                own = OwnCommit::MayReuse;
             } else {
                 session.clear_exchange();
             }
         }
-        let h2e = status == status_code::SAE_HASH_TO_ELEMENT;
-        let commit = match SaeReceivedCommit::parse(
-            body,
-            if h2e {
-                oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-            } else {
-                oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-            },
-        )
-        .and_then(|commit| {
+        let pwe = if status == status_code::SAE_HASH_TO_ELEMENT {
+            SaePwe::HashToElement
+        } else {
+            SaePwe::HuntingAndPecking
+        };
+        let commit = match SaeReceivedCommit::parse(body, pwe).and_then(|commit| {
             if valid_peer_commit(&commit.values) {
                 Ok(commit)
             } else {
@@ -473,18 +473,25 @@ impl<const N: usize> ApSaeResponder<N> {
                 ReplyBody::Empty,
             );
         }
-        if commit.token.is_none() && !allow_reuse && self.use_anti_clogging(queued_commits) {
+        if commit.token.is_none()
+            && own == OwnCommit::Redraw
+            && self.use_anti_clogging(queued_commits)
+        {
             let Some(session) = self.sessions.get(slot).and_then(Option::as_ref) else {
                 return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
             };
-            let h2e = h2e || session.h2e;
+            let token_pwe = if session.pwe == SaePwe::HashToElement {
+                SaePwe::HashToElement
+            } else {
+                pwe
+            };
             let token = self.comeback.issue(peer, now, || {
                 let mut key = [0; 32];
                 random.fill(&mut key);
                 key
             });
             let group = finite_cyclic_group_field(SAE_GROUP_P256);
-            let reply_body = if h2e {
+            let reply_body = if token_pwe == SaePwe::HashToElement {
                 const CONTAINER: [u8; 3] =
                     match anti_clogging_token_container_header(SAE_ANTI_CLOGGING_TOKEN_LEN) {
                         Some(header) => header,
@@ -522,15 +529,7 @@ impl<const N: usize> ApSaeResponder<N> {
             return ApSaeOutput::fault(ApSaeFault::MissingSession { slot });
         };
         session.password_identifier = commit.password_identifier;
-        commit_step(
-            local,
-            credential,
-            session,
-            commit.values,
-            h2e,
-            allow_reuse,
-            random,
-        )
+        commit_step(local, credential, session, commit.values, pwe, own, random)
     }
 
     fn receive_confirm(&mut self, peer: [u8; 6], status: u16, body: &[u8]) -> ApSaeOutput {
@@ -624,18 +623,27 @@ impl<const N: usize> ApSaeResponder<N> {
     }
 }
 
+/// Whether a Commit handled in the Committed phase may keep the own Commit
+/// already sent (`allow_reuse` of `sae_sm_step`): it may when the peer
+/// offered the same group.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OwnCommit {
+    Redraw,
+    MayReuse,
+}
+
 /// `sae_sm_step` for a Commit that passed every check.
 fn commit_step<R: ApSaeRandom>(
     local: [u8; 6],
     credential: &ApSaeCredential,
     session: &mut Session,
     peer_commit: SaeCommitValues,
-    h2e: bool,
-    allow_reuse: bool,
+    pwe: SaePwe,
+    own: OwnCommit,
     random: &mut R,
 ) -> ApSaeOutput {
-    commit_step_with(session, peer_commit, h2e, allow_reuse, |peer, use_token| {
-        draw_commit(local, peer, credential, use_token, random)
+    commit_step_with(session, peer_commit, pwe, own, |peer, pwe| {
+        draw_commit(local, peer, credential, pwe, random)
     })
 }
 
@@ -643,16 +651,16 @@ fn commit_step<R: ApSaeRandom>(
 fn commit_step_with(
     session: &mut Session,
     peer_commit: SaeCommitValues,
-    h2e: bool,
-    allow_reuse: bool,
-    draw: impl FnOnce([u8; 6], bool) -> Result<SaeCommit, SaeError>,
+    pwe: SaePwe,
+    own: OwnCommit,
+    draw: impl FnOnce([u8; 6], SaePwe) -> Result<SaeCommit, SaeError>,
 ) -> ApSaeOutput {
     let mut output = ApSaeOutput::new();
     let peer = session.peer;
     let refresh = match session.phase {
         ApSaePhase::Nothing => {
-            session.h2e = h2e;
-            !allow_reuse
+            session.pwe = pwe;
+            own == OwnCommit::Redraw
         }
         ApSaePhase::Committed => return ApSaeOutput::fault(session.fault()),
         ApSaePhase::Confirmed => {
@@ -670,8 +678,13 @@ fn commit_step_with(
         ApSaePhase::Accepted => true,
     };
     if refresh || session.own.is_none() {
-        let use_token = session.password_identifier || h2e;
-        match draw(peer, use_token) {
+        // A password identifier takes the password token as well.
+        let draw_pwe = if session.password_identifier {
+            SaePwe::HashToElement
+        } else {
+            pwe
+        };
+        match draw(peer, draw_pwe) {
             Ok(own) => session.own = Some(own),
             Err(SaeError::Crypto) => {
                 return ApSaeOutput::fault(ApSaeFault::Crypto {
@@ -693,15 +706,7 @@ fn commit_step_with(
         return ApSaeOutput::fault(session.fault());
     };
     let mut body = [0_u8; SAE_COMMIT_LEN];
-    let len = match own.values().encode(
-        None,
-        if session.h2e {
-            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-        } else {
-            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-        },
-        &mut body,
-    ) {
+    let len = match own.values().encode(None, session.pwe, &mut body) {
         Ok(len) => len,
         Err(error) => {
             return ApSaeOutput::fault(ApSaeFault::Crypto {
@@ -713,10 +718,9 @@ fn commit_step_with(
     if len != SAE_COMMIT_LEN {
         return ApSaeOutput::fault(ApSaeFault::CommitLength { length: len });
     }
-    let commit_status = if session.h2e {
-        status_code::SAE_HASH_TO_ELEMENT
-    } else {
-        status_code::SUCCESS
+    let commit_status = match session.pwe {
+        SaePwe::HashToElement => status_code::SAE_HASH_TO_ELEMENT,
+        SaePwe::HuntingAndPecking => status_code::SUCCESS,
     };
     let commit_reply = ApSaeReply::new(
         peer,
@@ -765,13 +769,14 @@ fn draw_commit<R: ApSaeRandom>(
     local: [u8; 6],
     peer: [u8; 6],
     credential: &ApSaeCredential,
-    use_token: bool,
+    pwe: SaePwe,
     random: &mut R,
 ) -> Result<SaeCommit, SaeError> {
-    let pwe = if use_token {
-        credential.token.password_element(local, peer)
-    } else {
-        SaePasswordElement::hunting_and_pecking(credential.password.as_bytes(), local, peer)?
+    let pwe = match pwe {
+        SaePwe::HashToElement => credential.token.password_element(local, peer),
+        SaePwe::HuntingAndPecking => {
+            SaePasswordElement::hunting_and_pecking(credential.password.as_bytes(), local, peer)?
+        }
     };
     for _ in 0..SAE_SCALAR_DRAWS {
         let mut rand = [0; SAE_PRIME_LEN];

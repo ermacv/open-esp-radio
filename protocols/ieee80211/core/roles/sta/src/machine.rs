@@ -2029,7 +2029,7 @@ impl ConnectedRsn {
         }
         let frame = self
             .supplicant
-            .complete_group_key_install(request, true)
+            .complete_group_key_install(request)
             .map_err(|_| StaDisconnectReason::HandshakeFailed)?;
         self.rekey = Rekey::Send(EapolResponse { frame, protection });
         Ok(())
@@ -4978,7 +4978,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             State::Handshake(handshake) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.management_protection(),
+                    Ok(supplicant) => supplicant.group_management().is_some(),
                     Err(_) => {
                         let change = leave_handshake(handshake, reason_code::UNSPECIFIED);
                         state.apply(change);
@@ -5452,7 +5452,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             HandshakeStep::Install(request, protection) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.management_protection(),
+                    Ok(supplicant) => supplicant.group_management().is_some(),
                     Err(_) => {
                         return (
                             leave_handshake(handshake, reason_code::UNSPECIFIED),
@@ -7098,7 +7098,7 @@ fn finish_handshake_install<T: StaTypes, K, E: oer_portable_crypto::block::Aes12
         management.install_igtk(igtk);
     }
     match handshake.supplicant().and_then(|supplicant| {
-        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, true, engine)
+        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, engine)
     }) {
         Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
             replay,

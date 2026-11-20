@@ -50,29 +50,29 @@ fn responder() -> ApSaeResponder<CLIENTS> {
 /// station role uses.
 struct Station {
     commit: SaeCommit,
-    h2e: bool,
+    pwe: SaePwe,
 }
 
 impl Station {
-    fn new(station: [u8; 6], password: &[u8], h2e: bool) -> Self {
-        let pwe = if h2e {
-            SaePasswordToken::derive(SSID, password, None)
+    fn new(station: [u8; 6], password: &[u8], pwe: SaePwe) -> Self {
+        let element = match pwe {
+            SaePwe::HashToElement => SaePasswordToken::derive(SSID, password, None)
                 .unwrap()
-                .password_element(station, ACCESS_POINT)
-        } else {
-            SaePasswordElement::hunting_and_pecking(password, station, ACCESS_POINT).unwrap()
+                .password_element(station, ACCESS_POINT),
+            SaePwe::HuntingAndPecking => {
+                SaePasswordElement::hunting_and_pecking(password, station, ACCESS_POINT).unwrap()
+            }
         };
         Self {
-            commit: SaeCommit::new(&pwe, [0x21; 32], [0x43; 32]).unwrap(),
-            h2e,
+            commit: SaeCommit::new(&element, [0x21; 32], [0x43; 32]).unwrap(),
+            pwe,
         }
     }
 
     fn status(&self) -> u16 {
-        if self.h2e {
-            status_code::SAE_HASH_TO_ELEMENT
-        } else {
-            status_code::SUCCESS
+        match self.pwe {
+            SaePwe::HashToElement => status_code::SAE_HASH_TO_ELEMENT,
+            SaePwe::HuntingAndPecking => status_code::SUCCESS,
         }
     }
 
@@ -81,15 +81,7 @@ impl Station {
         let len = self
             .commit
             .values()
-            .encode(
-                token,
-                if self.h2e {
-                    oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-                } else {
-                    oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-                },
-                &mut body,
-            )
+            .encode(token, self.pwe, &mut body)
             .unwrap();
         (body, len)
     }
@@ -102,10 +94,10 @@ fn only_reply(output: &ApSaeOutput) -> ApSaeReply {
     reply
 }
 
-fn exchange(h2e: bool) {
+fn exchange(pwe: SaePwe) {
     let mut access_point = responder();
     let mut random = Counter(0);
-    let station = Station::new(STATION, PASSWORD, h2e);
+    let station = Station::new(STATION, PASSWORD, pwe);
     let (commit, len) = station.commit_body(None);
 
     let output = access_point.receive(
@@ -117,15 +109,7 @@ fn exchange(h2e: bool) {
     assert_eq!(output.result, ApSaeResult::Continue);
     let reply = only_reply(&output);
     assert_eq!((reply.transaction, reply.status), (1, station.status()));
-    let access_point_commit = SaeCommitValues::parse(
-        reply.body(),
-        if h2e {
-            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-        } else {
-            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-        },
-    )
-    .unwrap();
+    let access_point_commit = SaeCommitValues::parse(reply.body(), pwe).unwrap();
     let keys = station.commit.process(access_point_commit).unwrap();
 
     let confirm = keys.own_confirm(1);
@@ -157,19 +141,19 @@ fn exchange(h2e: bool) {
 
 #[test]
 fn a_hunting_and_pecking_exchange_is_accepted_with_the_stations_pmk() {
-    exchange(false);
+    exchange(SaePwe::HuntingAndPecking);
 }
 
 #[test]
 fn a_hash_to_element_exchange_is_accepted_with_the_stations_pmk() {
-    exchange(true);
+    exchange(SaePwe::HashToElement);
 }
 
 #[test]
 fn a_wrong_password_fails_the_confirm() {
     let mut access_point = responder();
     let mut random = Counter(7);
-    let station = Station::new(STATION, b"wrong password", false);
+    let station = Station::new(STATION, b"wrong password", SaePwe::HuntingAndPecking);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
@@ -204,7 +188,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     let mut access_point = responder();
     let mut random = Counter(3);
     for peer in [[2, 0, 0, 0, 0, 3], [2, 0, 0, 0, 0, 4]] {
-        let station = Station::new(peer, PASSWORD, false);
+        let station = Station::new(peer, PASSWORD, SaePwe::HuntingAndPecking);
         let (commit, len) = station.commit_body(None);
         let output = access_point.receive(
             frame(peer, 1, 0, &commit[..len]),
@@ -215,7 +199,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
         assert_eq!(only_reply(&output).status, status_code::SUCCESS);
     }
 
-    let station = Station::new(STATION, PASSWORD, false);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HuntingAndPecking);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
@@ -260,7 +244,7 @@ fn two_open_sessions_require_an_anti_clogging_token() {
 #[test]
 fn queued_commits_count_toward_anti_clogging() {
     let mut access_point = responder();
-    let station = Station::new(STATION, PASSWORD, true);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HashToElement);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, status_code::SAE_HASH_TO_ELEMENT, &commit[..len]),
@@ -284,7 +268,7 @@ fn queued_commits_count_toward_anti_clogging() {
 #[test]
 fn a_commit_of_another_group_is_refused_with_its_group() {
     let mut access_point = responder();
-    let station = Station::new(STATION, PASSWORD, false);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HuntingAndPecking);
     let (mut commit, len) = station.commit_body(None);
     commit[0] = 20;
     let output = access_point.receive(
@@ -308,7 +292,7 @@ fn a_commit_of_another_group_is_refused_with_its_group() {
 fn a_reflected_commit_is_dropped() {
     let mut access_point = responder();
     let mut random = Counter(9);
-    let station = Station::new(STATION, PASSWORD, false);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HuntingAndPecking);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
@@ -340,7 +324,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
             &mut random,
         );
     }
-    let station = Station::new(STATION, PASSWORD, false);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HuntingAndPecking);
     let (commit, len) = station.commit_body(None);
     let output = access_point.receive(
         frame(STATION, 1, 0, &commit[..len]),
@@ -364,7 +348,7 @@ fn a_full_responder_refuses_a_new_station_and_forgets_a_removed_one() {
 fn maximal_queued_commit_count_still_requests_an_anti_clogging_token() {
     let mut access_point = responder();
     let mut random = Counter(0);
-    let station = Station::new(STATION, PASSWORD, true);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HashToElement);
     let (commit, len) = station.commit_body(None);
     access_point.receive(
         frame(STATION, 1, station.status(), &commit[..len]),
@@ -411,7 +395,7 @@ fn missing_confirm_and_accept_keys_return_the_session_fault_without_advancing_it
 #[test]
 fn an_unreset_committed_step_returns_observations_instead_of_panicking() {
     let access_point = responder();
-    let station = Station::new(STATION, PASSWORD, true);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HashToElement);
     let mut session = Session::new(STATION);
     session.phase = ApSaePhase::Committed;
     let fault = session.fault();
@@ -420,8 +404,8 @@ fn an_unreset_committed_step_returns_observations_instead_of_panicking() {
         &access_point.credential,
         &mut session,
         station.commit.values(),
-        true,
-        false,
+        SaePwe::HashToElement,
+        OwnCommit::Redraw,
         &mut Counter(0),
     );
     assert_eq!(output.result, ApSaeResult::Fault(fault));
@@ -442,8 +426,8 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
         &access_point.credential,
         &mut session,
         peer_commit,
-        true,
-        false,
+        SaePwe::HashToElement,
+        OwnCommit::Redraw,
         &mut Counter(0),
     );
     let replies: std::vec::Vec<_> = output.replies().collect();
@@ -461,16 +445,16 @@ fn processing_failure_keeps_both_the_commit_and_failure_reply_in_order() {
 
 #[test]
 fn a_commit_curve_fault_retains_peer_and_stage_without_replies_or_phase_advance() {
-    let station = Station::new(STATION, PASSWORD, true);
+    let station = Station::new(STATION, PASSWORD, SaePwe::HashToElement);
     let mut session = Session::new(STATION);
     let output = commit_step_with(
         &mut session,
         station.commit.values(),
-        true,
-        false,
-        |peer, h2e| {
+        SaePwe::HashToElement,
+        OwnCommit::Redraw,
+        |peer, pwe| {
             assert_eq!(peer, STATION);
-            assert!(h2e);
+            assert_eq!(pwe, SaePwe::HashToElement);
             Err(SaeError::Crypto)
         },
     );

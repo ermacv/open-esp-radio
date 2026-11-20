@@ -120,22 +120,17 @@ fn reports_the_advertised_management_frame_protection() {
     assert_eq!(required.akm(), Akm::PskSha256);
     assert_eq!(
         required.management_frame_protection(),
-        ManagementFrameProtection {
-            capable: true,
-            required: true
-        }
+        ManagementProtection::Required
+    );
+    let capable = validate_rsn_element(&rsn(4, 2, 1 << 7)).unwrap();
+    assert_eq!(
+        capable.management_frame_protection(),
+        ManagementProtection::Capable
     );
     let none = validate_rsn_element(&rsn(4, 2, 0)).unwrap();
-    assert!(!none.management_frame_protection().capable);
-    assert!(
-        !none
-            .management_frame_protection()
-            .negotiated(required.management_frame_protection())
-    );
-    assert!(
-        required
-            .management_frame_protection()
-            .negotiated(required.management_frame_protection())
+    assert_eq!(
+        none.management_frame_protection(),
+        ManagementProtection::Disabled
     );
 }
 
