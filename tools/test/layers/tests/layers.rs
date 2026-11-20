@@ -734,30 +734,6 @@ fn the_ieee802154_boundary_rejects_the_indirect_knowledge_path() {
     assert!(forbidden_paths(&graph, "unrelated", ieee802154_execution).is_empty());
 }
 
-/// The shared RF owner consumes client contracts, never the chip adapters of
-/// the protocols, including optional, target-specific and transitive normal
-/// dependencies.
-#[test]
-fn radio_systems_do_not_reach_protocol_drivers() {
-    let graph = workspace_dependency_graph();
-    let roles = workspace_roles();
-    let services = roles
-        .iter()
-        .filter(|(_, role)| **role == Role::Service)
-        .map(|(name, _)| name.as_str())
-        .collect::<Vec<_>>();
-    assert!(
-        !services.is_empty(),
-        "the radio system has the service role"
-    );
-    for owner in services {
-        let violations = forbidden_paths(&graph, owner, |name| {
-            roles.get(name) == Some(&Role::ChipAdapter)
-        });
-        assert!(violations.is_empty(), "{owner}: {violations:?}");
-    }
-}
-
 #[test]
 fn radio_system_boundary_rejects_optional_target_and_transitive_driver_paths() {
     let manifest: toml::Value = toml::from_str(
@@ -947,15 +923,10 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/family/drivers/pmu", Role::HardwareDriver),
     ("chips/esp32s31/radio/phy", Role::HardwareDriver),
     ("chips/esp32s31/drivers/aes", Role::HardwareDriver),
-    ("chips/esp32s31/radio/bluetooth/backend", Role::ChipAdapter),
-    ("chips/esp32s31/radio/ieee80211/backend", Role::ChipAdapter),
-    ("chips/esp32s31/radio/ieee802154/backend", Role::ChipAdapter),
     // docs/repository-layout.md: "Wi-Fi upper-MAC and the family policy
     // select each attempt's rate and protection" places this family policy
     // above the backend with the cores.
     ("chips/family/radio/ieee80211/policy", Role::CoreSidePolicy),
-    ("chips/esp32s31/radio/client", Role::ServiceClient),
-    ("chips/esp32s31/radio/system", Role::Service),
     (
         "chips/family/platform/interrupt-table",
         Role::PlatformContract,
@@ -969,7 +940,6 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/platform/bootstrap", Role::Image),
     ("chips/esp32s31/platform/layout", Role::Platform),
     ("chips/esp32s31/platform/runtime", Role::Composition),
-    ("chips/esp32s31/radio/ieee80211/station", Role::Facade),
     ("oer", Role::Sdk),
     ("chips/family/app", Role::Sdk),
     ("chips/esp32s31/app", Role::Sdk),
@@ -977,18 +947,13 @@ const ROLES: &[(&str, Role)] = &[
     ("protocols/hil/agent", Role::HilAgent),
     ("hil/agent", Role::HilSdkAgent),
     ("hil/images/aes", Role::HilImage),
-    ("hil/images/wifi-station", Role::HilImage),
-    ("hil/images/wifi-access-point", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/load", Role::HilBinding),
     ("hil/services/sdk-station", Role::HilBinding),
-    ("hil/services/wifi-station", Role::HilBinding),
     ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
     ("hil/scenarios/sdk-station", Role::Tool),
-    ("hil/scenarios/wifi-station", Role::Tool),
-    ("hil/scenarios/wifi-load", Role::Tool),
     ("hil/scenarios/wifi-access-point", Role::Tool),
 ];
 
@@ -1358,13 +1323,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             "chips/family/radio/ieee80211/policy",
             Some(Role::CoreSidePolicy),
         ),
-        (
-            "chips/esp32s31/radio/ieee80211/backend",
-            Some(Role::ChipAdapter),
-        ),
-        ("chips/esp32s31/radio/system", Some(Role::Service)),
         ("chips/esp32s31/platform/runtime", Some(Role::Composition)),
-        ("chips/esp32s31/radio/ieee80211/station", Some(Role::Facade)),
         // A new chip package has no role until it is listed, whatever its
         // directory says.
         ("chips/esp32s31/new/driver", None),
@@ -2814,7 +2773,6 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         ("protocols/bluetooth/le/model", true),
         ("portable/cooperate", true),
         ("portable/embassy/net", true),
-        ("chips/esp32s31/radio/bluetooth/backend", true),
         ("hil/probes/esp32s31-radio-root", true),
         ("tools/lab/fixture-helpers", true),
     ] {
@@ -3299,11 +3257,6 @@ const OUTSIDE_THE_ROLES: &[Deviation] = &[
         "radio/coex merges into the HAL (#848)",
     ),
     (
-        "chips/esp32s31/radio/ieee802154/backend",
-        "portable/mmio",
-        "IEEE 802.15.4 lifecycle out of the HAL (#848)",
-    ),
-    (
         "chips/esp32s31/pac",
         "chips/family/drivers/regi2c",
         "analog-I2C model types out of the family driver (#848)",
@@ -3738,13 +3691,13 @@ fn an_image_on_the_application_entry_takes_nothing_the_entry_places() {
 fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     let members = [
         member(
-            "hil/images/wifi-station",
+            "hil/images/aes",
             "image",
             Built::Executable,
             &["oer", "oer-chips-esp32s31-platform-runtime"],
         ),
         member(
-            "hil/images/aes",
+            "hil/probes/esp32s31-boot-smoke",
             "hand-built",
             Built::Executable,
             &["oer-chips-esp32s31-platform-runtime"],
@@ -3760,7 +3713,7 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
     assert_eq!(
         outside_the_entry(&members),
         BTreeSet::from([(
-            "hil/images/wifi-station".to_owned(),
+            "hil/images/aes".to_owned(),
             "chips/esp32s31/platform/runtime".to_owned(),
         )])
     );
@@ -3864,37 +3817,16 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1
             &[],
         ),
         member(
-            "chips/esp32s31/radio/ieee80211/backend",
-            "oer-chips-esp32s31-radio-ieee80211-backend",
-            Built::Library,
-            &[
-                "oer-protocols-ieee80211-runtime",
-                "oer-chips-esp32s31-radio-phy",
-            ],
-        ),
-        member(
             "protocols/ieee80211/runtime",
             "oer-protocols-ieee80211-runtime",
             Built::Library,
             &[],
         ),
         member(
-            "chips/esp32s31/radio/ieee80211/station",
-            "oer-chips-esp32s31-radio-ieee80211-station",
-            Built::Library,
-            &[
-                "oer-protocols-ieee80211-runtime",
-                "oer-chips-esp32s31-radio-ieee80211-backend",
-            ],
-        ),
-        member(
             "hil/images/aes",
             "oer-firmware-hil-esp32s31",
             Built::Executable,
-            &[
-                "oer-chips-esp32s31-radio-ieee80211-station",
-                "oer-chips-esp32s31-hal",
-            ],
+            &["oer-chips-esp32s31-hal"],
         ),
         // A package without a listed role is the completeness rule's failure,
         // not an allowed edge.
@@ -3910,12 +3842,7 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1
         forbidden_edges(&members, outside_its_role),
         BTreeSet::from([
             edge("chips/esp32s31/hal", "chips/esp32s31/radio/phy"),
-            edge(
-                "chips/esp32s31/radio/ieee80211/backend",
-                "protocols/ieee80211/runtime"
-            ),
             edge("hil/images/aes", "chips/esp32s31/hal"),
-            edge("hil/images/aes", "chips/esp32s31/radio/ieee80211/station"),
         ])
     );
 }
@@ -4898,11 +4825,6 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
         "stays: the receive walker's host model, behind `cfg(any(test, feature = \"test-support\"))`",
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
-        2,
-        "stays: the hardware model, behind `test` or host `test-support`",
-    ),
-    (
         "chips/esp32s31/platform/layout/src/lib.rs",
         3,
         "stays: the layout crate's host half, behind the `build` feature its build scripts take",
@@ -5084,11 +5006,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         SAMPLED_BIT,
     ),
     ("BankControl::fault_acknowledged", SAMPLED_BIT),
-    ("BluetoothBackend::admits", RADIO_SYSTEM),
-    (
-        "BluetoothBackend::is_stopped",
-        "predicate: the backend stopped",
-    ),
     (
         "BluetoothSchedulerCancellationControl::observe_status_0208",
         SAMPLED_BIT,
@@ -5122,8 +5039,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "Capability::supported",
         "predicate: a capability is supported",
     ),
-    ("CcmpKeyHardware::ccmp_entry_is_valid", SAMPLED_BIT),
-    ("ClientBackend::admits", RADIO_SYSTEM),
     ("ClockUpdate::update_pending", SAMPLED_BIT),
     ("Control::btbb_held", SAMPLED_BIT),
     ("Control::commands_ready", SAMPLED_BIT),
@@ -5144,7 +5059,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ),
     ("Count::on", "predicate: the switchable diagnostics are on"),
     ("CounterLatch::valid", SAMPLED_BIT),
-    ("Device::is_running", P2),
     (
         "Diagnostics::on",
         "predicate: the switchable diagnostics are on",
@@ -5168,11 +5082,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "predicate: whether the port ended the frame",
     ),
     ("FrameSource::register", PHASE_C),
-    ("Hooks::observing", "predicate: the trace observes"),
-    (
-        "Hooks::recycled_probe_pending",
-        "predicate: a probe is pending (trace hooks)",
-    ),
     ("Ieee802154LowLevel::cca_busy", SAMPLED_BIT),
     ("Ieee802154LowLevel::etm_channel_enabled", SAMPLED_BIT),
     ("Ieee802154LowLevel::is_current_rx_frame", SAMPLED_BIT),
@@ -5187,10 +5096,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Local::register", PHASE_C),
     (
         "MacColdHandshakeHardware::sample_cold_handshake_ready",
-        SAMPLED_BIT,
-    ),
-    (
-        "MacRuntimeLowRateHardware::phy_low_rate_enabled",
         SAMPLED_BIT,
     ),
     (
@@ -5253,11 +5158,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Produce::current", PHASE_C),
     ("Produce::register", PHASE_C),
     ("PsramCommandRegisters::busy", SAMPLED_BIT),
-    ("RadioController::can_prepare", RADIO_SYSTEM),
-    (
-        "RadioController::is_retired",
-        "predicate: the controller retired",
-    ),
     ("Registers::mode1_reset", SAMPLED_BIT),
     ("Registers::mode1_software", SAMPLED_BIT),
     ("Registers::rtc_wake_pending", SAMPLED_BIT),
@@ -6157,38 +6057,7 @@ fn remover_name(file: &str) -> &'static str {
 /// S1: places claimed at run time in the entry and the facade (`try_take`,
 /// `try_init`, `try_uninit`, an option's `take()` answered by a refusal), by
 /// file with their count. The list only shrinks.
-const CLAIMS: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/app/src/lib.rs", 1, BY_P2),
-    ("chips/esp32s31/app/src/observed.rs", 3, BY_P2),
-    ("chips/esp32s31/app/src/wifi.rs", 7, BY_P2),
-    ("chips/esp32s31/app/src/wifi/access_point.rs", 1, BY_P2),
-    ("chips/esp32s31/app/src/wifi/network.rs", 1, BY_P2),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
-        1,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/chip.rs",
-        1,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/dma.rs",
-        9,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/lib.rs",
-        1,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
-        5,
-        BY_P2,
-    ),
-];
+const CLAIMS: &[(&str, usize, &str)] = &[("chips/esp32s31/app/src/lib.rs", 1, BY_P2)];
 /// S3: error types that name the caller's state (an enum named `…Error`,
 /// `…Refused`, `…Refusal`, `…Failure`, `…Fault` or `…Unavailable` with a
 /// variant `Already…`, `Not…` of a state, `Running`, `Stopped`, `Closed`,
@@ -6196,7 +6065,6 @@ const CLAIMS: &[(&str, usize, &str)] = &[
 /// only shrinks.
 const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/lib.rs", 1, BY_P2),
-    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
     ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_NONE),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/controller_time.rs",
@@ -6228,26 +6096,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_PHY),
     ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 1, BY_PHY),
     ("chips/esp32s31/hal/src/system/cores.rs", 2, BY_NONE),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/interrupt/gate.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/frontier/state.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
-        1,
-        BY_P2,
-    ),
     (
         "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
         5,
@@ -6369,21 +6217,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
 /// count of failure variants. The list only shrinks.
 const STATUS_FAILURES: &[(&str, usize, &str)] = &[
     (
-        "chips/esp32s31/radio/bluetooth/backend/src/controller_time.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/radio.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
         5,
         BY_PHY,
@@ -6494,7 +6327,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
 /// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`), by file with their
 /// count. The list only shrinks; each site is read by the inventory.
 const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/app/src/wifi.rs", 1, BY_P2),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
         1,
@@ -6514,41 +6346,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/platform/runtime/src/exception.rs",
         1,
         BY_NONE,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs",
-        3,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
-        2,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/chip.rs",
-        3,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station.rs",
-        1,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/supply.rs",
-        1,
-        BY_P2,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
@@ -6586,7 +6383,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
 /// `Quarantin…`, `ResetRequired…`, `Unfinished…`), mentions by file. The
 /// list only shrinks.
 const KEPT_OUT: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/access.rs",
         7,
@@ -6644,172 +6440,12 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 3, BY_PHY),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port.rs",
-        4,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
-        13,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/mailbox.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/port/owned.rs",
-        6,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/roles.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/client/src/bluetooth.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/client/src/lib.rs",
-        14,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/client/src/poison.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/client/src/poison/diagnostic_path.rs",
-        6,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/epoch.rs",
-        7,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/prefix.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs",
-        4,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/lifecycle.rs",
-        5,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs",
-        18,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/test_support.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs",
-        7,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/control.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
-        9,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/lib.rs",
-        4,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
-        6,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station.rs",
-        8,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee802154/backend/src/engine.rs",
-        8,
-        BY_NONE,
-    ),
     ("chips/esp32s31/radio/phy/src/concurrent.rs", 22, BY_PHY),
     ("chips/esp32s31/radio/phy/src/diagnostic_path.rs", 1, BY_PHY),
     (
         "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
         9,
         BY_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/system/src/actor_core.rs",
-        13,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/system/src/bluetooth.rs",
-        5,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/system/src/esp32s31.rs",
-        43,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/system/src/esp32s31/bluetooth.rs",
-        31,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/system/src/lib.rs",
-        35,
-        BY_RADIO_SYSTEM,
     ),
     ("chips/family/platform/executor/src/executor.rs", 2, BY_NONE),
     ("chips/family/platform/executor/src/fault.rs", 5, BY_NONE),
@@ -6903,8 +6539,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/console.rs", 1, BY_P2),
     ("chips/esp32s31/app/src/cpu.rs", 1, BY_P2),
     ("chips/esp32s31/app/src/lib.rs", 2, BY_P2),
-    ("chips/esp32s31/app/src/wifi/network.rs", 1, BY_P2),
-    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
     ("chips/esp32s31/hal/src/peripherals/aes.rs", 1, BY_NONE),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
@@ -6921,11 +6555,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
         1,
         BY_NONE,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/observation.rs",
-        1,
-        BY_P2,
     ),
     ("chips/esp32s31/radio/phy/src/lib.rs", 1, BY_PHY),
     ("chips/esp32s31/radio/phy/src/target_port.rs", 1, BY_PHY),
@@ -7265,46 +6894,11 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_NONE,
     ),
     (
-        "chips/esp32s31/radio/bluetooth/backend/src/controller_time.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/bluetooth/backend/src/modem_lp_timer_queue.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/prefix.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/metadata.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/phy/src/analog/frequency.rs",
         25,
         BY_PHY,
     ),
     ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 3, BY_PHY),
-    (
-        "chips/esp32s31/radio/system/src/observation.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
         1,
@@ -8395,21 +7989,7 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/esp32s31/drivers/aes", 2, 0, BY_FAMILY),
     ("chips/esp32s31/hal", 43, 15, BY_IMAGES),
     ("chips/esp32s31/platform/runtime", 0, 2, BY_PLATFORM),
-    (
-        "chips/esp32s31/radio/bluetooth/backend",
-        4,
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    ("chips/esp32s31/radio/client", 0, 1, BY_RADIO_SYSTEM),
-    (
-        "chips/esp32s31/radio/ieee802154/backend",
-        0,
-        4,
-        BY_IEEE802154,
-    ),
     ("chips/esp32s31/radio/phy", 38, 5, BY_PHY),
-    ("chips/esp32s31/radio/system", 2, 3, BY_RADIO_SYSTEM),
     ("chips/family/boot", 5, 2, BY_FAMILY),
     ("chips/family/drivers/pmu", 2, 0, BY_FAMILY),
     ("chips/family/drivers/usb-serial-jtag", 2, 0, BY_FAMILY),
@@ -8423,10 +8003,8 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/radio/ieee802154/values", 6, 9, BY_IEEE802154),
     ("chips/family/radio/phy", 2, 1, BY_PHY),
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
-    ("examples/wifi-station", 0, 2, BY_HIL),
     ("hil/probes/esp32s31-aes-timing", 0, 1, BY_HIL),
     ("hil/probes/esp32s31-facts", 1, 48, BY_HIL),
-    ("hil/probes/esp32s31-rx-chain", 0, 1, BY_HIL),
     ("hil/scenarios/wifi-access-point", 0, 1, BY_HIL),
     ("hil/services/load", 5, 0, BY_HIL),
     ("protocols/bluetooth/hci", 2, 4, BY_RADIO_SYSTEM),
@@ -8822,16 +8400,6 @@ fn k0_print() {
 /// `file::Enum::Variant` with the number of flags. It misses a flag behind
 /// a type alias (`type Flag = bool`). The list only shrinks.
 const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/observation.rs::RateClass::Ht",
-        2,
-        BY_P2,
-    ),
     ("chips/family/app/src/observe/link.rs::Rate::Ht", 2, BY_NONE),
     (
         "protocols/ieee80211/contracts/port/src/contract.rs::MacRxMetadata",
@@ -8882,11 +8450,6 @@ const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
 /// shrinks.
 const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[
     (
-        "chips/esp32s31/radio/ieee80211/station/src/observation.rs::of",
-        1,
-        BY_P2,
-    ),
-    (
         "chips/family/radio/ieee80211/policy/src/classification.rs::apply_wmm_admission",
         1,
         BY_P3,
@@ -8910,207 +8473,10 @@ const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[
 /// through a method of the field's own type that takes `&mut self` (an
 /// `Option` wrapped in a newtype). The list only shrinks.
 const OPTION_SLOTS: &[(&str, &str)] = &[
-    (
-        "chips/esp32s31/app/src/lib.rs::Boot.access_point_device",
-        BY_P2,
-    ),
     ("chips/esp32s31/app/src/lib.rs::Boot.app_alarm", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Boot.boot_id", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Boot.device", BY_P2),
     ("chips/esp32s31/app/src/lib.rs::Boot.entropy", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Boot.observe", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Boot.radio", BY_P2),
     ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_P2),
     ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Boot.urgent", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::GroupBoot.observe", BY_P2),
-    (
-        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.access_point",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.device",
-        BY_P2,
-    ),
-    ("chips/esp32s31/app/src/lib.rs::Handed.access_point", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Handed.device", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Pending.access_point", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Pending.datapath", BY_P2),
-    ("chips/esp32s31/app/src/lib.rs::Pending.station", BY_P2),
-    ("chips/esp32s31/app/src/observed.rs::Sampler.ended", BY_P2),
-    ("chips/esp32s31/app/src/wifi.rs::Device.network", BY_P2),
-    (
-        "chips/esp32s31/app/src/wifi/access_point.rs::AccessPoint.end",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.block_ack",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.completion",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.format",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.interface",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.named",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.access_point_tsf",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.active_reads",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he_bss",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.tbtt",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs::IrqPublication.receive",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/model.rs::MacInterruptModel.fatal_assertion_raw",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/local_time.rs::MacTimeline.last",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/rate/low.rs::MacLowRateSession.hardware",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/pool.rs::NetworkRxFrame.times",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeAmpduTxConfig.trigger_based",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeTriggerBasedTxConfig.runtime_handoff_window_micros",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::TxSlot.home",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_publication_snapshot",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_reservation",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.dma",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.storage",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx_cost.rs::TxCost.ppdu_micros",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.active",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.last_outcome",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxParked.last_outcome",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxReport.completion",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.immediate",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.pending",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion.last_after_doorbell",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion.next_after_doorbell",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxStallSnapshot.hardware",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxStallSnapshot.mac",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::Receiver.full_since",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::RecycledProbe.wait",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.full_since",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_close_started",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_mask_started",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_settle",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_stop_deadline",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/chip.rs::Config.target",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/radio.rs::Platform.power",
-        BY_P2,
-    ),
     (
         "chips/family/app/src/observe/connect.rs::Connect.ended",
         BY_NONE,

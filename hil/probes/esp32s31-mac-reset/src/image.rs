@@ -37,7 +37,6 @@ use oer_chips_esp32s31_hal::{
 };
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
-use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
 use oer_chips_esp32s31_radio_phy::{
     NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
     PhyTxTargetPowerProfile, RomShortDelay,
@@ -143,7 +142,7 @@ pub struct SessionParts {
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts, lp: LpClock<RcSlow>) = session_task;
+        session(parts: SessionParts) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
@@ -234,9 +233,6 @@ fn main(
             let _owners = failure;
             oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
         });
-    let Some(lp) = LpClock::<RcSlow>::claim() else {
-        fail(name!("claim"; 32));
-    };
     let pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
     let timer = runtime_system_timer;
     let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
@@ -284,7 +280,7 @@ fn main(
         station,
         ap,
     };
-    if RadioTasks::session(&radio_executor, parts, lp).is_err() {
+    if RadioTasks::session(&radio_executor, parts).is_err() {
         fail(name!("session-task"; 32));
     }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
@@ -380,12 +376,6 @@ enum Kind {
     /// Cell E's sender: one case's protected frames and how they ended.
     #[cfg(feature = "ccmp")]
     CcmpSent = 16,
-    /// Cell F's sender: one aggregate size's ends.
-    #[cfg(feature = "ampdu")]
-    AmpduSent = 17,
-    /// Cell F's sender: the Block Ack's bit of each subframe, 32 to a word.
-    #[cfg(feature = "ampdu")]
-    AmpduAcked = 18,
     /// `tasks/184` A: the foreign words at one point of one repetition.
     #[cfg(feature = "foreign")]
     Foreign = 19,
@@ -565,8 +555,6 @@ macro_rules! apart {
         core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
     }};
 }
-#[cfg(feature = "ampdu")]
-mod ampdu;
 #[cfg(feature = "amsdu")]
 mod amsdu;
 #[cfg(feature = "ccmp")]
@@ -601,24 +589,24 @@ type SessionRun = impl core::future::Future<Output = ()>;
 static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<SessionRun>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
 #[define_opaque(SessionRun)]
-fn session_future(parts: SessionParts, lp: LpClock<RcSlow>) -> SessionRun {
+fn session_future(parts: SessionParts) -> SessionRun {
     async move {
         let Some(journal) = JOURNAL.try_take() else {
             return;
         };
         journal.used = 0;
-        if let Err((phase, index)) = apart!(session(parts, &lp, journal)) {
+        if let Err((phase, index)) = apart!(session(parts, journal)) {
             journal.record(Kind::Failed, &[phase, index]);
         }
         let _ = DONE.install(journal);
     }
 }
 
-async fn session_task(parts: SessionParts, lp: LpClock<RcSlow>) {
+async fn session_task(parts: SessionParts) {
     let Some(place) = SESSION.try_take() else {
         return;
     };
-    place.future(|| session_future(parts, lp)).await;
+    place.future(|| session_future(parts)).await;
 }
 
 /// The phases a failure names.
@@ -786,11 +774,7 @@ async fn cold(
 }
 
 /// Bring Wi-Fi up in `Esp32s31Radio`'s order, then the series.
-async fn session(
-    parts: SessionParts,
-    _lp: &LpClock<RcSlow>,
-    journal: &mut Journal,
-) -> Result<(), Failure> {
+async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failure> {
     let SessionParts {
         radio,
         clocks,

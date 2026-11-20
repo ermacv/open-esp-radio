@@ -99,17 +99,8 @@ pub struct Hart1Parts {
     irq: FromCpu1Irq,
     wake: Hart1WakeToken,
     alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,
-    #[cfg(feature = "observe")]
-    sampler: Sampler1,
     handed: super::Handed,
 }
-
-/// Hart 1's PC sampler's timer and table entry, which hart 1 binds.
-#[cfg(feature = "observe")]
-pub(crate) type Sampler1 = (
-    oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Parts,
-    super::Sampler1Token,
-);
 
 /// What hart 0 launches hart 1 with.
 pub(crate) struct Launch {
@@ -119,8 +110,6 @@ pub(crate) struct Launch {
     pub(crate) irq: FromCpu1Irq,
     pub(crate) wake: Hart1WakeToken,
     pub(crate) alarm: Hart1AlarmToken,
-    #[cfg(feature = "observe")]
-    pub(crate) sampler: Sampler1,
 }
 
 /// Grant hart 1's executor comparator 2, launch hart 1 with `handed`
@@ -152,8 +141,6 @@ pub(crate) fn launch(
             irq: launch.irq,
             wake: launch.wake,
             alarm,
-            #[cfg(feature = "observe")]
-            sampler: launch.sampler,
             handed,
         },
     )
@@ -182,11 +169,8 @@ pub fn hart1_main<H: GroupStarted>(
         irq,
         wake,
         alarm,
-        #[cfg(feature = "observe")]
-        sampler,
         handed,
     } = parts;
-    #[cfg_attr(not(feature = "observe"), allow(unused_mut))]
     let mut group = GroupBoot::new();
     let mut adopted = handoff
         .adopt(InterruptTable)
@@ -196,11 +180,6 @@ pub fn hart1_main<H: GroupStarted>(
         alarm
             .bind(hart, router)
             .unwrap_or_else(|failure| failure.reset());
-        #[cfg(feature = "observe")]
-        {
-            let (timer, token) = sampler;
-            group.observe = Some(super::observed::hart1(timer, router, token));
-        }
     }
     // Hart 1's counters are made here, on the hart they count.
     let handed = handed.into_peripherals(super::cpu::Cpu1::new());

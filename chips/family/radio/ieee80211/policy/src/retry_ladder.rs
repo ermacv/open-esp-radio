@@ -183,6 +183,28 @@ mod tests {
     }
 
     #[test]
+    fn the_he_mcs9_ladder_leaves_he_for_ofdm_6m_after_four_failures() {
+        let mcs9 = |fec| {
+            HeRate::new(
+                HeMcs::new(9).unwrap(),
+                SpatialStreams::ONE,
+                PpduBandwidth::Mhz20,
+                HeGiLtf::Ltf2xGi1600Ns,
+                fec,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
+            )
+            .unwrap()
+        };
+        for fec in [FecCoding::Bcc, FecCoding::Ldpc] {
+            assert_eq!(
+                EspressifRetryLadder.rate(PhyRate::He(mcs9(fec)), 4),
+                Some(PhyRate::Legacy(LegacyRate::Ofdm6M)),
+                "{fec:?}: the record's third stage is 802.11g 6 Mb/s"
+            );
+        }
+    }
+
+    #[test]
     fn every_supported_starting_mcs_uses_its_own_record() {
         for index in 0..=31 {
             for short in [false, true] {

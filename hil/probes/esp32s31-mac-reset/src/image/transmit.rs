@@ -52,14 +52,8 @@ const ABANDONED: usize = 100;
 #[cfg(not(feature = "amsdu"))]
 const SLOTS: usize = 2 * ABANDONED + 2;
 /// Case C abandons no chain: the ordinary frames' slot and one spare.
-#[cfg(all(feature = "amsdu", not(feature = "ampdu")))]
+#[cfg(feature = "amsdu")]
 const SLOTS: usize = 2;
-/// Cell F: an aggregate's eight subframes, then the ordinary frames' slot.
-#[cfg(all(feature = "ampdu", not(feature = "b6")))]
-pub(super) const SLOTS: usize = 9;
-/// B6: an aggregate's 32 subframes, then the ordinary frames' slot.
-#[cfg(feature = "b6")]
-pub(super) const SLOTS: usize = 33;
 /// The ordinary frames' slot.
 pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.

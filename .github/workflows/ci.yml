@@ -65,7 +65,6 @@ jobs:
           cargo test --locked -p oer-chips-esp32s31-radio-phy --features radio-health
           cargo clippy --locked -p oer-chips-esp32s31-radio-phy --features radio-health --all-targets
           cargo test --locked -p oer-protocols-ieee80211-core-roles-sta
-          cargo test --locked -p oer-chips-esp32s31-radio-ieee80211-backend
           cargo test --locked -p oer-portable-time --features serde
           cargo test --locked -p oer-portable-time --features schema
           cargo test --locked -p oer-chips-family-platform-executor --features installations --lib --test installations
@@ -171,15 +170,17 @@ jobs:
         run: |
           cargo fw build esp32s31-boot-smoke
           cargo fw build esp32s31-radio-root
-          cargo fw build wifi-station
-          OER_WIFI_STATION_PROFILE="$PWD/examples/wifi-station/profiles/open-ci.toml" \
-            cargo fw build wifi-station --features station
       - name: HIL image builds
-        # Every image the HIL scenarios share, with the linked image's checks.
+        # Every HIL image the workspace builds, with the linked image's checks;
+        # one outside the workspace (its `exclude`) is not built.
         run: |
-          for image in hil/images/*/; do
-            cargo fw build "hil-$(basename "$image")"
-          done
+          meta=$(cargo metadata --format-version 1 --no-deps --locked)
+          images=$(jq -r '.packages[]
+            | select(.manifest_path | test("/hil/images/[^/]+/Cargo.toml$"))
+            | .manifest_path | split("/") | .[-2]' <<<"$meta")
+          while read -r image; do
+            cargo fw build "hil-$image"
+          done <<<"$images"
       - name: Probe images
         # Compile every probe, including board self-checks, without vendor pins.
         # Discover packages from the workspace so new probes join this check.
@@ -194,8 +195,7 @@ jobs:
       - name: Image reports
         # The text and JSON reports beside each image's ELFs (stack bounds,
         # unresolved sites, reachability, panics, sizes), also when a later
-        # build fails, so a hole's site is read from the run. The configured
-        # wifi-station's reports replace the unconfigured one's.
+        # build fails, so a hole's site is read from the run.
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
