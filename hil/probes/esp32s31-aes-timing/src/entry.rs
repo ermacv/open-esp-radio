@@ -624,14 +624,11 @@ impl<'a> Dma<'a> {
         }
     }
 
-    /// Load `key` and the encryption or decryption mode.
-    fn key(&mut self, key: &Aes128Key, encrypt: bool) {
+    /// Load `key` and the encryption mode: every case of the probe
+    /// encrypts.
+    fn key(&mut self, key: &Aes128Key) {
         self.aes.write_key(&key_words(key));
-        if encrypt {
-            self.aes.encrypt128();
-        } else {
-            self.aes.decrypt128();
-        }
+        self.aes.encrypt128();
     }
 
     /// One transfer of `data` in place through the AES in `mode`.
@@ -827,7 +824,7 @@ fn ccm_passes_case(engine: &mut Dma<'_>, body: usize) -> (Stats, [u8; 8]) {
             *byte = index as u8;
         }
         let start = oer_portable_riscv::cycle32();
-        engine.key(&Aes128Key::copy_from(&KEY), true);
+        engine.key(&Aes128Key::copy_from(&KEY));
         mic = ccm_seal_passes(
             engine,
             &CCM_NONCE,
@@ -849,7 +846,7 @@ fn cmac_passes_case(engine: &mut Dma<'_>, length: usize) -> (Stats, Block) {
     let mut tag = [0; 16];
     for _ in 0..runs(length) {
         let start = oer_portable_riscv::cycle32();
-        engine.key(&Aes128Key::copy_from(&KEY), true);
+        engine.key(&Aes128Key::copy_from(&KEY));
         tag = cmac_passes(engine, frame.get(..length).unwrap_or(&[]));
         stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
     }

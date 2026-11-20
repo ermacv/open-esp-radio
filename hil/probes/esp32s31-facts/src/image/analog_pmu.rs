@@ -57,16 +57,31 @@ fn verify_dac(s: &mut Session<'_>, value: u8) -> bool {
     observed.is_some_and(|byte| field.extract(byte) == value)
 }
 
-fn lane(s: &mut Session<'_>, lanes: u32, value: bool) {
+/// Set the opaque lane bits of `lanes`: bit 23 for lane 1, bit 9 for lane 2.
+fn raise_lanes(s: &mut Session<'_>, lanes: u32) {
     // Distinct fresh-read RMWs retain the vendor bit23 then bit9 order.
     if lanes == 1 || lanes == 3 {
         s.sar.radio.lp_tsens.modify_clk_conf(|w| {
-            w.set_bit_23_opaque(value);
+            w.set_bit_23_opaque(true);
         });
     }
     if lanes == 2 || lanes == 3 {
         s.sar.radio.lp_tsens.modify_clk_conf(|w| {
-            w.set_bit_9_opaque(value);
+            w.set_bit_9_opaque(true);
+        });
+    }
+}
+
+/// Clear the opaque lane bits of `lanes`, in the same order.
+fn lower_lanes(s: &mut Session<'_>, lanes: u32) {
+    if lanes == 1 || lanes == 3 {
+        s.sar.radio.lp_tsens.modify_clk_conf(|w| {
+            w.set_bit_23_opaque(false);
+        });
+    }
+    if lanes == 2 || lanes == 3 {
+        s.sar.radio.lp_tsens.modify_clk_conf(|w| {
+            w.set_bit_9_opaque(false);
         });
     }
 }
@@ -100,7 +115,7 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
     s.sar.radio.lp_tsens.modify_clk_conf(|w| {
         w.set_clk_en(true);
     });
-    lane(s, lanes, true);
+    raise_lanes(s, lanes);
     s.sar.radio.lp_tsens.modify_ctrl(|w| {
         w.set_power_up(pac::tsens::ctrl::PowerUp::Enabled)
             .set_power_up_force(true)
@@ -127,9 +142,9 @@ fn sample(s: &Session<'_>, tag: u32, start: u32) {
 fn injection_at(s: &mut Session<'_>, lanes: u32, pattern: u32, us: u32, start: u32) {
     if (us == 20 && pattern != 0) || (us == 70 && pattern == 3) || (us == 520 && pattern == 4) {
         let before = oer_portable_riscv::cycle32();
-        lane(s, lanes, true);
+        raise_lanes(s, lanes);
         if pattern == 2 {
-            lane(s, lanes, false);
+            lower_lanes(s, lanes);
         }
         emit(
             0x31c0,
@@ -140,7 +155,14 @@ fn injection_at(s: &mut Session<'_>, lanes: u32, pattern: u32, us: u32, start: u
     }
 }
 
-fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) -> bool {
+/// A step's lane writes during its samples: the lanes and their pattern.
+#[derive(Clone, Copy)]
+struct Injection {
+    lanes: u32,
+    pattern: u32,
+}
+
+fn step(s: &mut Session<'_>, value: u8, injection: Option<Injection>) -> bool {
     let Some(start) = dac(s, value) else {
         emit(0x31ee, 4, value.into(), 0);
         return false;
@@ -150,15 +172,15 @@ fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) 
     for us in [0, 1, 2, 5, 10, 20] {
         s.sar.until(start, us);
         sample(s, tag, start);
-        if inject {
+        if let Some(Injection { lanes, pattern }) = injection {
             injection_at(s, lanes, pattern, us, start);
         }
     }
-    let end = if inject { 530 } else { 500 };
+    let end = if injection.is_some() { 530 } else { 500 };
     for us in (30..=end).step_by(10) {
         s.sar.until(start, us);
         sample(s, tag, start);
-        if inject {
+        if let Some(Injection { lanes, pattern }) = injection {
             injection_at(s, lanes, pattern, us, start);
         }
     }
@@ -167,8 +189,8 @@ fn step(s: &mut Session<'_>, value: u8, lanes: u32, pattern: u32, inject: bool) 
 
 fn cold(s: &mut Session<'_>, lanes: u32) {
     emit(0x31a0, lanes, 0, 0);
-    if prepare(s, lanes) && step(s, 11, 0, 0, false) {
-        step(s, 15, 0, 0, false);
+    if prepare(s, lanes) && step(s, 11, None) {
+        step(s, 15, None);
     }
     state(s, 0x31ff);
 }
@@ -189,8 +211,17 @@ pub(super) fn cold_pair(s: &mut Session<'_>) {
 /// Patterns: no write, one, one/zero, repeat at +50 us, repeat at +500 us.
 pub(super) fn injection<const LANES: u32, const PATTERN: u32>(s: &mut Session<'_>) {
     emit(0x31b0, LANES, PATTERN, 0);
-    if prepare(s, 0) && step(s, 11, LANES, PATTERN, true) {
-        step(s, 15, 0, 0, false);
+    if prepare(s, 0)
+        && step(
+            s,
+            11,
+            Some(Injection {
+                lanes: LANES,
+                pattern: PATTERN,
+            }),
+        )
+    {
+        step(s, 15, None);
     }
     state(s, 0x31ff);
 }
