@@ -31,7 +31,6 @@ pub use self::{
         },
         last_rx_buffer::MacColdLastRxBufferHardware,
         prepare::MacColdPrepareHardware,
-        rx_buffer::MacColdRxBufferHardware,
         rx_policy::MacColdRxPolicyHardware,
         txrx::MacColdTxRxHardware,
     },
@@ -101,6 +100,19 @@ impl MacBlockReset {
     }
 }
 
+/// The proof of one completed cold preparation (`initialize_wifi_mac`): what
+/// the MAC core's opening takes (`WifiMacHal::open_core`), once. A failed
+/// preparation gives none, so the core opens only after a preparation.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacPrepared;
+/// let _made = MacPrepared { _private: () };
+/// ```
+#[must_use = "the MAC core's opening takes it"]
+pub struct MacPrepared {
+    pub(crate) _private: (),
+}
+
 /// The proof that the MAC block's reset followed a stop: the walker's edge,
 /// then the MAC's stop request and its hold. Only
 /// [`RadioDomain::reset_stopped_wifi_mac_block`] makes one, beside the
@@ -166,7 +178,6 @@ pub async fn initialize_wifi_mac<
         + MacColdHeHardware
         + MacColdHandshakeHardware
         + MacColdLastRxBufferHardware
-        + MacColdRxBufferHardware
         + MacColdRxPolicyHardware
         + MacColdTxRxHardware
         + MacInterfaceAddressHardware
@@ -179,7 +190,7 @@ pub async fn initialize_wifi_mac<
     mmio: &mut M,
     timer: &T,
     config: MacColdStartConfig,
-) -> Result<MacColdStartOutcome, MacColdStartError> {
+) -> Result<(MacColdStartOutcome, MacPrepared), MacColdStartError> {
     // The vendor lifecycle's `wifi_reset_mac()` after `wifi_clock_enable()`
     // is the radio system's (`RadioDomain::reset_wifi_mac_block`, which
     // `reset` proves): only it writes the shared reset word. A reset under a
@@ -202,8 +213,8 @@ pub async fn initialize_wifi_mac<
     // Complete four-queue direct/leaf transaction from `hal_init`.
     mmio.initialize_cold_receive_policy();
 
-    // `mac_rxbuf_init`, with descriptor publication left to the ring owner.
-    mmio.initialize_rx_buffer_prefix();
+    // `mac_rxbuf_init`'s prefix is the receive ring's cold publication's,
+    // before its one BASE (`RxRing::publish_cold`).
 
     mmio.initialize_he_prefix();
     // Complete hal_init_tx_pwr queries all 43 calibrated PHY pairs before its
@@ -251,5 +262,5 @@ pub async fn initialize_wifi_mac<
     // when the sniffer subsequently disables address filtering.
     program_cold_receive_addresses(mmio, config.station_address, config.access_point_address);
 
-    Ok(outcome)
+    Ok((outcome, MacPrepared { _private: () }))
 }

@@ -1,6 +1,6 @@
 //! Case C's frames (`tasks/154`, with `159`'s provenance series): one layout
-//! for the sender (`esp32s31-mac-reset --features amsdu`) and the receiver
-//! (`esp32s31-rx-chain --features laps,amsdu`, which includes this file).
+//! for the sender (`esp32s31-mac-reset`) and the receiver
+//! (`esp32s31-rx-ring`, which includes this file).
 //!
 //! Every frame carries its counter, the case in the top four bits and the
 //! round below:
@@ -14,7 +14,7 @@
 //!    its frame.
 
 /// The rounds the sender sends, one frame of each case a round.
-pub const ROUNDS: u32 = 2_600;
+pub const ROUNDS: u32 = 12_000;
 /// The QoS Data header: Frame Control, Duration, three addresses, Sequence
 /// Control, QoS Control (IEEE 802.11-2020 9.3.2.1).
 pub const QOS_HEADER: usize = 26;

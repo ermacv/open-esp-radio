@@ -64,12 +64,11 @@ fn start_session() -> u32 {
             }
         }
     };
-    let Ok((powered, power)) =
-        WifiCold::from_partition(partitions.wifi).power_up(&mut radio, &clocks)
-    else {
+    let (cold, _walker) = WifiCold::from_partition(partitions.wifi);
+    let Ok((powered, power)) = cold.power_up(&mut radio, &clocks) else {
         return 2;
     };
-    let Ok(clocked) = powered.enable_clocks(&mut radio, &clocks) else {
+    let Ok((clocked, _first)) = powered.enable_clocks(&mut radio, &clocks) else {
         return 3;
     };
     let (wifi, clocks_on) = clocked.into_running();

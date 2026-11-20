@@ -12,14 +12,13 @@
     clippy::indexing_slicing
 )]
 
-//! The Wi-Fi MAC's block reset (`RST_WIFIMAC`) mid-run, a second run after
-//! it, the key table across it, and how long an ordinary stop takes, over
-//! the radio domain the probe holds itself (`tasks/084`). See the README.
+//! Case C's sender (`tasks/154`, `159`, cell E of `161`): frames to the
+//! peer it learns, on the receive ring's atoms over the radio domain the
+//! probe holds itself. See the README.
 
-#[cfg(any(test, feature = "amsdu"))]
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "the receiver's half is esp32s31-rx-chain's")
+    allow(dead_code, reason = "the receiver's half is esp32s31-rx-ring's")
 )]
 mod case_c;
 #[cfg(target_arch = "riscv32")]
@@ -28,6 +27,8 @@ mod diagnostic;
 mod image;
 #[cfg(target_arch = "riscv32")]
 mod phy_pilot;
+#[cfg(target_arch = "riscv32")]
+mod radio;
 #[cfg(target_arch = "riscv32")]
 mod usb;
 #[cfg(target_arch = "riscv32")]

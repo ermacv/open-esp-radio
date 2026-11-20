@@ -190,7 +190,7 @@ fn channel_custody_records_channel_or_retune_on_unpolled_and_pending_drop() {
                 .split::<CountingBackend, _>((), seat.claim().unwrap())
                 .expect("identity capacity");
             let epoch = radio.begin_registration_for_host_test().epoch();
-            let mut wifi = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
+            let mut wifi = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
             let mut platform = ();
             let channel = wifi.channel_transaction(&mut platform, radio.detach(operation));
             let clock: VirtualClock = VirtualClock::new();

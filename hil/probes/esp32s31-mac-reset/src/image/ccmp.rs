@@ -65,7 +65,7 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
             frames.power,
             TIMEOUT,
         )?;
-        await_completion(access, ordinary, 0).await?;
+        await_completion(access, ordinary).await?;
     }
     mark(97);
     let association = CcmpAssociation::new(Spp::NotNegotiated);
@@ -99,7 +99,7 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
                 frame.get(offset).copied().unwrap_or(0)
             })?;
             start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
-            let ended = await_completion(access, ordinary, 0).await?;
+            let ended = await_completion(access, ordinary).await?;
             if let Some(cell) = ends.get_mut(at).and_then(|row| {
                 row.get_mut(match ended.status {
                     0 => 0,

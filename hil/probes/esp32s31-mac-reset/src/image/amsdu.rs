@@ -53,7 +53,7 @@ async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), F
                 byte(case, station, peer, counter, offset)
             })?;
             start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
-            let ended = await_completion(access, ordinary, 0).await?;
+            let ended = await_completion(access, ordinary).await?;
             let at = CASES.iter().position(|each| *each == case);
             if let Some(cell) = at
                 .and_then(|at| ends.get_mut(at))

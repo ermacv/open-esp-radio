@@ -6,7 +6,7 @@ rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish.workspace = true
-description = "The Wi-Fi MAC block reset mid-run and how long a stop takes, over the radio domain the probe holds"
+description = "Case C's sender: A-MSDU and provenance frames (or cell E's protected ones) to the peer it learns, on the receive ring's atoms over the radio domain it holds"
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
@@ -42,26 +42,9 @@ oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
 [features]
-# Part two's transmit series (`tasks/144` A) in place of part one's.
-transmit = []
-# Part two's receiver (`tasks/158`, A2): listens and acknowledges the
-# transmitting probe's frames to its station, counting them.
-receiver = []
-# Part A on a quiet air (`tasks/168`): the medium observed with the peer
-# silent only, since nothing else transmits.
-quiet = ["transmit"]
-# Case C's sender (`tasks/154`, `159`): A-MSDU cases and the provenance
-# series to the receiving rx-chain probe, in place of part two's A.
-amsdu = ["transmit"]
 # Cell E of `tasks/161`: case C's QoS cases protected under CCMP, sealed in
 # software, in place of case C's rounds.
-ccmp = ["amsdu"]
-# Part A of `tasks/184`: the three words inside `WIFI_MAC` that are the
-# PHY's and the shared radio's, read before an `RST_WIFIMAC` pulse, after
-# it and after the cold preparation again, ten times, on a 40 MHz channel;
-# then (`tasks/185`) with the PHY's channel and I2C TX-rate writes made
-# again after the preparation, before the pulse.
-foreign = []
+ccmp = []
 
 [lints]
 workspace = true
