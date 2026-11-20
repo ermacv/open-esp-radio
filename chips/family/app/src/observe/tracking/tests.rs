@@ -107,3 +107,40 @@ fn the_extreme_temperatures_of_the_type_round_trip() {
         "the longest saturates"
     );
 }
+
+#[test]
+fn a_tick_with_one_branch_counts_in_that_branch_s_word_and_no_other() {
+    // The sample's branch counts, in the order the sample lists them.
+    fn counts(sample: &TrackingSample) -> [u32; 7] {
+        [
+            sample.inhibited,
+            sample.rfpll_corrected,
+            sample.wifi_i2c_changed,
+            sample.wifi_tx_power,
+            sample.bluetooth_ieee802154_tx_power,
+            sample.calibration_common,
+            sample.calibration_transmit,
+        ]
+    }
+    let expected = |branch: Branch| -> [u32; 7] {
+        let at = match branch {
+            Branch::Inhibited => 0,
+            Branch::RfpllCorrected => 1,
+            Branch::WifiI2cChanged => 2,
+            Branch::WifiTxPower => 3,
+            Branch::BluetoothIeee802154TxPower => 4,
+            Branch::CalibrationCommon => 5,
+            Branch::CalibrationTransmit => 6,
+        };
+        let mut words = [0; 7];
+        words[at] = 1;
+        words
+    };
+    for branch in Branch::ALL {
+        let counter = TrackingCounter::new();
+        counter.observe(tracked(20, 10, Branches::NONE.with(branch)), 1);
+        let sample = counter.sample(1).unwrap();
+        assert_eq!(sample.ticks, 1, "{branch:?}");
+        assert_eq!(counts(&sample), expected(branch), "{branch:?}");
+    }
+}

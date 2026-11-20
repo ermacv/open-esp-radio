@@ -234,3 +234,23 @@ fn a_pass_counts_its_gap_only_after_a_turn_ended() {
     // The wait after the second turn counts it idle, with its cycles.
     assert_eq!(profile.idle, [1, 60]);
 }
+
+#[test]
+fn a_pass_reported_while_a_later_turn_runs_leaves_no_gap() {
+    let counter = ProfileCounter::new();
+    let mut tally = ProfileTally::new();
+    tally.began(&counter, 0);
+    tally.ended(&counter, 10);
+    tally.yielded();
+    // The gap after the first turn: from 10 to 100, as it yielded.
+    tally.began(&counter, 100);
+    // A pass reported while this turn runs, which had a turn before it.
+    tally.yielded();
+    tally.ended(&counter, 150);
+    // Its pass was never told after it ended: no second gap.
+    tally.began(&counter, 200);
+    let profile = counter.read();
+    assert_eq!(profile.gaps[Gap::Yielded as usize], [1, 90]);
+    assert_eq!(profile.gaps[Gap::Ready as usize], [0, 0]);
+    assert_eq!(profile.gaps[Gap::Pending as usize], [0, 0]);
+}
