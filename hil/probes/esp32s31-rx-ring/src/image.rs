@@ -1,6 +1,6 @@
 //! The receive ring's probe: Wi-Fi brought up over the radio domain the
 //! probe holds (`radio`), the ring started by the path table, then four
-//! cases over case C's frames from the sender (`esp32s31-mac-reset`):
+//! cases over case C's frames from the sender (`esp32s31-case-c-sender`):
 //!
 //! - R1, singles: each lent for a spare, checked by its payload;
 //! - R2, chains: copied in place, checked by payload and length, their

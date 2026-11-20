@@ -16,25 +16,25 @@
 //! radio domain the probe holds, case C's frames from the sender served by
 //! the product's ring. See the README.
 
-#[path = "../../esp32s31-mac-reset/src/case_c.rs"]
+#[path = "../../esp32s31-case-c-sender/src/case_c.rs"]
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "the sender's half is esp32s31-mac-reset's")
+    allow(dead_code, reason = "the sender's half is esp32s31-case-c-sender's")
 )]
 mod case_c;
 #[cfg(target_arch = "riscv32")]
-#[path = "../../esp32s31-mac-reset/src/diagnostic.rs"]
+#[path = "../../esp32s31-case-c-sender/src/diagnostic.rs"]
 mod diagnostic;
 #[cfg(target_arch = "riscv32")]
 mod image;
 #[cfg(target_arch = "riscv32")]
-#[path = "../../esp32s31-mac-reset/src/phy_pilot.rs"]
+#[path = "../../esp32s31-case-c-sender/src/phy_pilot.rs"]
 mod phy_pilot;
 #[cfg(target_arch = "riscv32")]
-#[path = "../../esp32s31-mac-reset/src/radio.rs"]
+#[path = "../../esp32s31-case-c-sender/src/radio.rs"]
 mod radio;
 #[cfg(target_arch = "riscv32")]
-#[path = "../../esp32s31-mac-reset/src/usb.rs"]
+#[path = "../../esp32s31-case-c-sender/src/usb.rs"]
 mod usb;
 #[cfg(target_arch = "riscv32")]
 use image::*;

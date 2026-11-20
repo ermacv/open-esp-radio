@@ -1,5 +1,5 @@
 [package]
-name = "oer-hil-probes-esp32s31-mac-reset"
+name = "oer-hil-probes-esp32s31-case-c-sender"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -4,7 +4,7 @@
 (`radio::ieee80211::dma::receive`) on the product's path, from the root's
 claim, over the radio domain it holds (`tasks/277`, `281`). The bring-up and
 the ring's start and stop are the path table's, in `src/radio.rs` of the
-sender (`esp32s31-mac-reset`), which this probe includes.
+sender (`esp32s31-case-c-sender`), which this probe includes.
 
 The ring:
 - 16 descriptors and R, in an arena of 32 buffers of 256 octets with the
@@ -52,7 +52,7 @@ Build both images before the lease, from one commit:
 
 ```console
 cargo fw build esp32s31-rx-ring --diagnostic
-cargo fw build esp32s31-mac-reset --diagnostic
+cargo fw build esp32s31-case-c-sender --diagnostic
 ```
 
 Three boards under one lease: s31-a receives, s31-b sends, and c5-a
@@ -63,7 +63,7 @@ cargo stand --owner wifi lease --board s31-a --board s31-b --board c5-a --air ex
   cargo stand board send c5-a --timeout 30s SYNC "MODE 13 20 6m" &&
   { cargo fw run esp32s31-rx-ring --board s31-a --timeout 300s > rx.log &
     until grep -q "MARK 6" rx.log; do sleep 0.1; done
-    cargo fw run esp32s31-mac-reset --board s31-b --timeout 400s > tx.log &
+    cargo fw run esp32s31-case-c-sender --board s31-b --timeout 400s > tx.log &
     until grep -q "MARK 70" tx.log; do sleep 0.1; done
     cargo stand board send c5-a --timeout 30s "TX 300 10000 512 <s31-b> <s31-a> <s31-a> 0"
     wait; }'

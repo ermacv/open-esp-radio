@@ -1,6 +1,6 @@
 # Case C's sender
 
-`oer-hil-probes-esp32s31-mac-reset` sends case C's frames (`tasks/154`,
+`oer-hil-probes-esp32s31-case-c-sender` sends case C's frames (`tasks/154`,
 `159`): in rounds, one frame of each case a round, each awaited:
 
 1. QoS Data, A-MSDU Present, two short subframes;
@@ -48,7 +48,7 @@ unless a failure was recorded.
 
 ## Running
 
-Build with `cargo fw build esp32s31-mac-reset --diagnostic` before the
+Build with `cargo fw build esp32s31-case-c-sender --diagnostic` before the
 lease. The injector (`tools/lab/peers/esp32c5-wifi-injector`) teaches the
 sender its peer: frames to the sender's station from the receiver's address
 (`tasks/167`). The receiver is `esp32s31-rx-ring`; see its README for the

@@ -1,5 +1,5 @@
 //! Case C's frames (`tasks/154`, with `159`'s provenance series): one layout
-//! for the sender (`esp32s31-mac-reset`) and the receiver
+//! for the sender (`esp32s31-case-c-sender`) and the receiver
 //! (`esp32s31-rx-ring`, which includes this file).
 //!
 //! Every frame carries its counter, the case in the top four bits and the
