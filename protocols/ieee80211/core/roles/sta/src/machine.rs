@@ -152,8 +152,10 @@ mod group_keys;
 mod management;
 mod tx_block_ack;
 use crate::power_save::{NullOutcome, PowerSaveDecision, PowerSaveView};
+use block_ack::SendRoom;
 pub use block_ack::{
-    BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck, RxBlockAckReply,
+    BlockAckAdmission, BlockAckReplyRefusal, BlockAckReplyResult, PendingRxBlockAck,
+    RxBlockAckReply,
 };
 use commands::Commands;
 pub use commands::{
@@ -1947,13 +1949,22 @@ fn tx_agreements<'c, T: StaTypes, K>(
     let tx = tx.as_mut()?;
     if connected.tx_block_ack == TxAgreements::Unstarted {
         connected.tx_block_ack = TxAgreements::Started;
-        tx.associate(
-            connected.qos
-                && connected.peer.associated.phy.format()
-                    != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-        );
+        tx.associate(block_ack_admission(connected));
     }
     Some(tx)
+}
+
+/// Whether `connected`'s association admits Block Ack agreements: a QoS
+/// association of an HT or HE format.
+fn block_ack_admission<T: StaTypes, K>(connected: &Connected<T, K>) -> BlockAckAdmission {
+    if connected.qos
+        && connected.peer.associated.phy.format()
+            != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt
+    {
+        BlockAckAdmission::Admitted
+    } else {
+        BlockAckAdmission::Refused
+    }
 }
 
 /// Hand a received Block Ack action to the transmit agreements, or keep it
@@ -3397,22 +3408,32 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     .and_then(|rsn| rsn.management.as_ref())
                     .and_then(|management| {
                         management.deadline(
-                            connected.transmission != Transmission::Free
+                            if connected.transmission != Transmission::Free
                                 || self.out.holds(CONNECTED_PLACE)
                                 || !(self.absence.is_none()
                                     && !connected.power.asleep()
-                                    && self.keys.keyed()),
+                                    && self.keys.keyed())
+                            {
+                                SendRoom::Blocked
+                            } else {
+                                SendRoom::Free
+                            },
                         )
                     });
-                let can_send = (connected.transmission == Transmission::Free)
+                let room = if (connected.transmission == Transmission::Free)
                     && data_link_up(connected, self.absence.as_ref(), &self.keys)
-                    && !self.out.holds(CONNECTED_PLACE);
+                    && !self.out.holds(CONNECTED_PLACE)
+                {
+                    SendRoom::Free
+                } else {
+                    SendRoom::Blocked
+                };
                 let tx_block_ack = self
                     .config
                     .tx_block_ack
                     .as_ref()
                     .filter(|_| connected.tx_block_ack == TxAgreements::Started)
-                    .and_then(|tx| tx.deadline(can_send));
+                    .and_then(|tx| tx.deadline(room));
                 crate::time::earliest(crate::time::earliest(background, management), tx_block_ack)
             }
             _ => None,
@@ -5723,9 +5744,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 epoch,
                 connected.bssid,
                 action,
-                connected.qos
-                    && connected.peer.associated.phy.format()
-                        != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                block_ack_admission(connected),
             );
             return (
                 Change::Keep,
@@ -5841,15 +5860,20 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let can_send = (connected.transmission == Transmission::Free)
+        let room = if (connected.transmission == Transmission::Free)
             && data_link_up(connected, self.absence.as_ref(), &(*self.keys))
-            && !self.out.holds(CONNECTED_PLACE);
+            && !self.out.holds(CONNECTED_PLACE)
+        {
+            SendRoom::Free
+        } else {
+            SendRoom::Blocked
+        };
         // An ADDBA Request whose number the link's holder told goes first;
         // one that waits for it owes nothing else of the agreements.
         let fresh = match connected.sequence {
             TidSequence::Unasked => None,
             TidSequence::Asked(_) => return None,
-            TidSequence::Fresh(_) if !can_send => return None,
+            TidSequence::Fresh(_) if room == SendRoom::Blocked => return None,
             TidSequence::Fresh(tid) => {
                 connected.sequence = TidSequence::Unasked;
                 Some(tid)
@@ -5872,7 +5896,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }
         let owed = match fresh {
             Some(tid) => TxBlockAckOwed::Negotiate { tid: tid.value() },
-            None => tx.poll(now, can_send)?,
+            None => tx.poll(now, room)?,
         };
         let body = match owed {
             TxBlockAckOwed::Request { tid, start } => {

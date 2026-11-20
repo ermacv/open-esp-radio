@@ -8,7 +8,23 @@ pub struct PendingRxBlockAck {
     epoch: LinkEpoch,
     bssid: Bssid,
     action: BlockAckAction,
-    supported: bool,
+    admission: BlockAckAdmission,
+}
+
+/// Whether an association admits Block Ack agreements: a QoS association
+/// of an HT or HE format does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockAckAdmission {
+    Admitted,
+    Refused,
+}
+
+/// Whether the connected station has room to send now: no control
+/// transmission of its own is out, and it is home, awake and keyed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SendRoom {
+    Free,
+    Blocked,
 }
 
 impl PendingRxBlockAck {
@@ -16,13 +32,13 @@ impl PendingRxBlockAck {
         epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
-        supported: bool,
+        admission: BlockAckAdmission,
     ) -> Self {
         Self {
             epoch,
             bssid,
             action,
-            supported,
+            admission,
         }
     }
     /// A request of the association `epoch`, for a host test that plays the
@@ -32,17 +48,17 @@ impl PendingRxBlockAck {
         epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
-        supported: bool,
+        admission: BlockAckAdmission,
     ) -> Self {
         Self {
             epoch,
             bssid,
             action,
-            supported,
+            admission,
         }
     }
-    pub const fn supported(&self) -> bool {
-        self.supported
+    pub const fn admission(&self) -> BlockAckAdmission {
+        self.admission
     }
     pub const fn action(&self) -> BlockAckAction {
         self.action

@@ -12,6 +12,8 @@
 //! whose attempts ran out, is offered no more in that association.
 
 use oer_portable_time::{Duration, Instant};
+
+use super::block_ack::{BlockAckAdmission, SendRoom};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{
     DialogTokenSequence, OperationalTxBlockAck, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckConfig,
     TxBlockAckOriginator, TxBlockAckOriginatorConfig, TxBlockAckOriginatorError,
@@ -81,7 +83,7 @@ pub struct StaTxBlockAck {
     /// The last head the data plane named for each TID's BlockAckReq.
     heads: [Option<oer_protocols_ieee80211_wire::sequence::SequenceNumber>; TX_BLOCK_ACK_MAX_TIDS],
     /// The current association admits agreements: an HT access point of a QoS BSS.
-    admitted: bool,
+    admitted: BlockAckAdmission,
     /// The earliest instant the agreements' timing (a response deadline, an
     /// inactivity end) may change, so [`Self::poll`] scans it only then;
     /// `None` while none is set. Every change that may set an earlier one
@@ -149,7 +151,7 @@ impl StaTxBlockAck {
             delba: 0,
             request: [None; TX_BLOCK_ACK_MAX_TIDS],
             heads: [None; TX_BLOCK_ACK_MAX_TIDS],
-            admitted: false,
+            admitted: BlockAckAdmission::Refused,
             timing: None,
             pending: None,
             changed: false,
@@ -159,7 +161,7 @@ impl StaTxBlockAck {
     /// A new association: every agreement of the previous one is gone with
     /// it, and none is owed a DELBA. `admitted` is whether this one admits
     /// agreements.
-    pub(crate) fn associate(&mut self, admitted: bool) {
+    pub(crate) fn associate(&mut self, admitted: BlockAckAdmission) {
         self.originator.stop_all();
         self.traffic = [None; TX_BLOCK_ACK_MAX_TIDS];
         self.delba = 0;
@@ -213,7 +215,9 @@ impl StaTxBlockAck {
         tid: u8,
         head: oer_protocols_ieee80211_wire::sequence::SequenceNumber,
     ) {
-        if !self.admitted || self.originator.operational(tid).is_none() {
+        if (self.admitted == BlockAckAdmission::Refused)
+            || self.originator.operational(tid).is_none()
+        {
             return;
         }
         if let (Some(request), Some(last)) = (
@@ -249,7 +253,7 @@ impl StaTxBlockAck {
     /// Data of `tid` came at `now`: an idle TID negotiates, a live one stays
     /// active. Whether that changed what [`Self::poll`] owes or when.
     pub(crate) fn traffic(&mut self, tid: u8, now: Instant) -> bool {
-        if !self.admitted {
+        if self.admitted == BlockAckAdmission::Refused {
             return false;
         }
         let Some(last) = self.traffic.get_mut(usize::from(tid)) else {
@@ -293,7 +297,7 @@ impl StaTxBlockAck {
 
     /// The operational agreement of `tid`.
     pub(crate) fn operational(&self, tid: u8) -> Option<OperationalTxBlockAck> {
-        if !self.admitted {
+        if self.admitted == BlockAckAdmission::Refused {
             return None;
         }
         self.originator.operational(tid)
@@ -302,9 +306,8 @@ impl StaTxBlockAck {
     /// Advance the agreements' timing to `now`: overdue responses end their
     /// negotiations, idle agreements end and owe a DELBA. Then what is owed:
     /// a DELBA first, then a due negotiation, which takes one of its
-    /// attempts. `can_send` is false while the station has no transmission
-    /// to give; nothing is taken then.
-    pub(crate) fn poll(&mut self, now: Instant, can_send: bool) -> Option<TxBlockAckOwed> {
+    /// attempts. While the station has no `room` to send nothing is taken.
+    pub(crate) fn poll(&mut self, now: Instant, room: SendRoom) -> Option<TxBlockAckOwed> {
         if self.timing.is_some_and(|at| now >= at) {
             self.changed = true;
             // At most one expiry per agreement.
@@ -323,7 +326,7 @@ impl StaTxBlockAck {
             }
             self.retime();
         }
-        if !can_send {
+        if room == SendRoom::Blocked {
             return None;
         }
         for tid in ALL_TIDS {
@@ -423,10 +426,10 @@ impl StaTxBlockAck {
     }
 
     /// The earliest instant the agreements need [`Self::poll`]: a response
-    /// deadline, an agreement's inactivity end, and while `can_send` a due
-    /// negotiation or an owed DELBA.
-    pub(crate) fn deadline(&self, can_send: bool) -> Option<Instant> {
-        let due = if !can_send {
+    /// deadline, an agreement's inactivity end, and while there is `room`
+    /// to send a due negotiation or an owed DELBA.
+    pub(crate) fn deadline(&self, room: SendRoom) -> Option<Instant> {
+        let due = if room == SendRoom::Blocked {
             None
         } else if self.delba != 0 || self.request.iter().any(Option::is_some) {
             Some(Instant::EPOCH)
