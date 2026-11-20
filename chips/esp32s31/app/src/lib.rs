@@ -267,24 +267,6 @@ pub struct GroupPeripherals {
     pub cpu: cpu::Cpu1,
 }
 
-/// What the boot hands the group, on its way to the group's hart: nothing
-/// of its own; the group's hart adds its counters.
-pub(crate) struct Handed {}
-
-impl Handed {
-    /// The group's peripherals, on the hart the group runs on.
-    #[cfg(not(feature = "group"))]
-    fn into_peripherals(self) -> GroupPeripherals {
-        GroupPeripherals {}
-    }
-
-    /// The group's peripherals on hart 1, with its counters `cpu`.
-    #[cfg(feature = "group")]
-    pub(crate) fn into_peripherals(self, cpu: cpu::Cpu1) -> GroupPeripherals {
-        GroupPeripherals { cpu }
-    }
-}
-
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
 /// ends with. Both run where the second
@@ -303,8 +285,6 @@ impl GroupBoot {
         Self { net: NoNet }
     }
 }
-
-impl<N> GroupBoot<N> {}
 
 impl<N: NetTask> GroupBoot<N> {
     /// End the group: run the future `future` builds beside its IP
@@ -625,10 +605,9 @@ pub fn start<S: Started, H: GroupStarted>(
     let (mut setup, app) = boot(peripherals, setup)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
-    let handed = Handed {};
     // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
-    let (net, second) = hart1(handed.into_peripherals(), GroupBoot::new())
+    let (net, second) = hart1(GroupPeripherals {}, GroupBoot::new())
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     #[cfg(feature = "group")]
@@ -688,7 +667,6 @@ pub fn start<S: Started, H: GroupStarted>(
                 wake: interrupts.hart1_wake,
                 alarm: interrupts.hart1_alarm,
             },
-            handed,
         )
     };
     let Boot { adopted, .. } = setup;
