@@ -4630,7 +4630,7 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 1027, RX_RING_ATOMS),
+    ("radio/ieee80211/dma/receive.rs", 1028, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),

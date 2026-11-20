@@ -904,8 +904,9 @@ where
 
     /// The control word of each of the chain's descriptors but its last, in
     /// the chain's order, as the walker left it: an observation for the
-    /// record of what a continuation's `LENGTH` holds (`tasks/267`); the
-    /// view decides nothing by it.
+    /// record of what a continuation's `LENGTH` holds
+    /// (`HW_RX_CHAIN_CONTINUATION_WORD_20261120`); the view decides nothing
+    /// by it.
     pub fn continuation_words(&self) -> impl Iterator<Item = WifiRxDmaDescriptorControl> + '_ {
         self.descriptors
             .0

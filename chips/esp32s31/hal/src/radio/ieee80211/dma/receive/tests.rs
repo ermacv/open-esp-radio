@@ -625,6 +625,24 @@ fn the_standing_names_the_cursor_and_the_tail_as_read() {
     assert!(!moving.unchanged, "the cursor moved between the reads");
 }
 
+brand!(standing_completed);
+#[test]
+fn the_standing_names_a_completed_tail_with_next_zero() {
+    // The second recorded state of a stall: the walker wrote the tail and
+    // stopped there, NEXT zero.
+    use super::NextAt;
+    let mut bench = bench::<standing_completed::Rx>();
+    bench.complete(RING - 1, 40, true);
+    bench.cursor(Some(RING - 1), None);
+    bench.cursor(Some(RING - 1), None);
+    let seen = bench.ring.standing();
+    assert_eq!(seen.last, Some(RING - 1));
+    assert_eq!(seen.next, NextAt::Zero);
+    assert_eq!(seen.tail, RING - 1);
+    assert!(seen.tail_done, "the tail's word reads RX_DONE");
+    assert!(seen.unchanged);
+}
+
 brand!(continuation_words);
 #[test]
 fn a_chain_shows_its_continuations_words_as_the_walker_left_them() {
