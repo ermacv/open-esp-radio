@@ -8,7 +8,7 @@
 
 use core::cell::Cell;
 
-use oer_portable_time::settle::{Settle, SettleLimit, Unsettled, settle};
+use oer_portable_time::settle::{Settle, SettleLimit, Unsettled, hold, settle};
 use oer_portable_time::{Clock, Duration, Instant};
 
 /// A clock that advances one microsecond at every read.
@@ -135,4 +135,19 @@ fn an_interrupt_after_a_failed_attempt_still_gets_a_final_attempt() {
         None
     });
     assert_eq!((result, attempts), (Err(Unsettled), 2));
+}
+
+#[test]
+fn a_hold_returns_once_its_whole_length_has_passed() {
+    let clock = Stepping(Cell::new(100));
+    hold(Settle::new(limit(20), &clock));
+    let after = clock.now();
+    assert!(
+        after.saturating_duration_since(Instant::from_micros(100)) >= Duration::from_micros(20),
+        "returned at {after:?}, before the hold's length"
+    );
+    assert!(
+        after.saturating_duration_since(Instant::from_micros(100)) <= Duration::from_micros(24),
+        "held past its length and the reads around it: {after:?}"
+    );
 }

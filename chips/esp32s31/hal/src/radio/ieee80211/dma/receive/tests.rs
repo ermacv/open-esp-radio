@@ -14,15 +14,21 @@ use std::vec;
 use std::vec::Vec;
 
 use core::cell::Cell;
+use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, ArenaPlace, Brand, Handle, PlacedStatic};
 use oer_portable_memory::zeroed::ZeroedStatic;
 use oer_portable_time::{Clock, Instant};
 use oer_portable_time_virtual::VirtualClock;
 
-use super::{Reload, RingAnomaly, RxDescriptors, RxRing, Unit, Walker};
+use super::{
+    Reload, RingAnomaly, RxDescriptors, RxRing, RxRingParts, RxTable, Unit, Walker, WalkerEnabled,
+    WalkerStart,
+};
 use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor};
 use crate::radio::ieee80211::dma::descriptor::rx_landed_word;
 use crate::radio::ieee80211::dma::space::{HOST_ARENA_BASE, HostDma};
+use crate::radio::ieee80211::init::MacStopReset;
+use crate::radio::ieee80211::mac::MacCoreOpen;
 use crate::system::memory::dma_static::Placed;
 
 /// The walker's registers as the ring uses them: what it was told, and the
@@ -30,6 +36,7 @@ use crate::system::memory::dma_static::Placed;
 #[derive(Default)]
 pub(crate) struct ModelWalker {
     base: Option<u32>,
+    prefix: bool,
     window: bool,
     enabled: bool,
     rings: usize,
@@ -46,6 +53,9 @@ impl Walker for ModelWalker {
         }
         self.cursor
     }
+    fn initialize_prefix(&mut self) {
+        self.prefix = true;
+    }
     fn configure_window(&mut self) {
         self.window = true;
     }
@@ -54,6 +64,9 @@ impl Walker for ModelWalker {
     }
     fn enable(&mut self) {
         self.enabled = true;
+    }
+    fn disable(&mut self) {
+        self.enabled = false;
     }
     fn ring(&mut self) {
         self.rings += 1;
@@ -122,12 +135,21 @@ macro_rules! brand {
     };
 }
 
+type Ring<B> = RxRing<B, BYTES, RING, ModelWalker>;
+
 /// The ring over its own brand, built cold, with the spares the arena has
-/// beyond the ring and R, and the first byte of the arena's place.
+/// beyond the ring and R, the walker's start and the first byte of the
+/// arena's place.
 struct Bench<B: Brand<Window = DmaWindow> + 'static> {
-    ring: &'static mut RxRing<B, BYTES, RING, ModelWalker>,
+    ring: Occupied<'static, Ring<B>>,
+    start: Option<WalkerStart>,
     spares: Vec<Handle<B>>,
     place: *mut u8,
+}
+
+/// The core opened, as `WifiMacHal::open_core` gives it.
+fn core_open() -> MacCoreOpen {
+    MacCoreOpen { _private: () }
 }
 
 fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>() -> Bench<B> {
@@ -137,20 +159,19 @@ fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>
     let reserved = fresh.pop().unwrap();
     let ring: [Handle<B>; RING] = fresh.try_into().ok().unwrap();
     let table: &'static mut RxDescriptors<RING> = Box::leak(Box::new(bytemuck::Zeroable::zeroed()));
-    let place: &'static mut MaybeUninit<RxRing<B, BYTES, RING, ModelWalker>> =
-        Box::leak(Box::new(MaybeUninit::uninit()));
-    let ring = RxRing::publish_cold::<HostDma>(
-        place,
-        Placed::host(table),
-        ModelWalker::default(),
+    let table = RxTable::place::<HostDma>(Placed::host(table)).ok().unwrap();
+    let place: &'static mut MaybeUninit<Ring<B>> = Box::leak(Box::new(MaybeUninit::uninit()));
+    let parts = RxRingParts {
+        table,
+        walker: ModelWalker::default(),
         arena,
         ring,
         reserved,
-    )
-    .ok()
-    .unwrap();
+    };
+    let (ring, start) = RxRing::publish_cold(place, parts, core_open());
     Bench {
         ring,
+        start: Some(start),
         spares,
         place: B::place().first_byte(),
     }
@@ -159,12 +180,18 @@ fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>
 impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
     /// Descriptor `index`'s DMA address (R's at `RING`).
     fn descriptor_address(&self, index: usize) -> u32 {
-        self.ring.base + 12 * index as u32
+        self.ring.table.base + 12 * index as u32
+    }
+
+    /// The walker started, once.
+    fn enable(&mut self) -> WalkerEnabled {
+        let start = self.start.take().unwrap();
+        self.ring.enable_walker(start)
     }
 
     /// The walker completes descriptor `index` with `length` bytes.
     fn complete(&self, index: usize, length: u32, terminal: bool) {
-        self.ring.descriptors.ring[index].write_word0(rx_landed_word(
+        self.ring.table.descriptors.ring[index].write_word0(rx_landed_word(
             SIZE as u32,
             length,
             terminal,
@@ -212,7 +239,7 @@ fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
     let bench = bench::<cold::Rx>();
     let ring = &bench.ring;
     for index in 0..RING {
-        let descriptor = &ring.descriptors.ring[index];
+        let descriptor = &ring.table.descriptors.ring[index];
         assert_eq!(
             descriptor.word0(),
             bench.arm_word(),
@@ -229,9 +256,9 @@ fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
         };
         assert_eq!(descriptor.next_address(), next, "descriptor {index}'s link");
     }
-    assert_eq!(ring.descriptors.reserved.word0(), bench.arm_word());
+    assert_eq!(ring.table.descriptors.reserved.word0(), bench.arm_word());
     assert_eq!(
-        ring.descriptors.reserved.next_address(),
+        ring.table.descriptors.reserved.next_address(),
         bench.descriptor_address(0)
     );
     assert_eq!(
@@ -248,7 +275,7 @@ brand!(single);
 #[test]
 fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once() {
     let mut bench = bench::<single::Rx>();
-    bench.ring.enable_walker();
+    let _enabled = bench.enable();
     let frame: Vec<u8> = (0..50).collect();
     bench.write_buffer(0, &[0xaa; 64]);
     let mut unit = vec![0xaa; 64];
@@ -281,7 +308,7 @@ fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once()
         [0xaa; 64],
         "its header below"
     );
-    let descriptor = &ring.descriptors.ring[0];
+    let descriptor = &ring.table.descriptors.ring[0];
     assert_eq!(descriptor.word0(), bench.arm_word());
     assert_eq!(
         descriptor.buffer_address(),
@@ -290,7 +317,7 @@ fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once()
     );
     assert_eq!(descriptor.next_address(), 0, "the new tail");
     assert_eq!(
-        ring.descriptors.ring[RING - 1].next_address(),
+        ring.table.descriptors.ring[RING - 1].next_address(),
         bench.descriptor_address(0)
     );
     assert_eq!(ring.walker.rings, 1, "one doorbell");
@@ -386,7 +413,7 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
     bench.complete(2, 40, true);
     bench.cursor(Some(2), Some(3));
     let expected: Vec<u8> = [first, second, third].concat();
-    let table: &'static RxDescriptors<RING> = bench.ring.descriptors;
+    let table: &'static RxDescriptors<RING> = bench.ring.table.descriptors;
     let clock: VirtualClock = VirtualClock::new();
     let copied = bench
         .ring
@@ -411,7 +438,7 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
     assert_eq!(copied, expected, "the frame's bytes, in order");
     assert_eq!(copied.len(), (SIZE - 64) + SIZE + 40);
     for index in 0..3 {
-        let descriptor = &bench.ring.descriptors.ring[index];
+        let descriptor = &bench.ring.table.descriptors.ring[index];
         assert_eq!(descriptor.word0(), bench.arm_word());
         assert_eq!(
             descriptor.buffer_address(),
@@ -420,20 +447,20 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
         );
     }
     assert_eq!(
-        bench.ring.descriptors.ring[0].next_address(),
+        bench.ring.table.descriptors.ring[0].next_address(),
         bench.descriptor_address(1)
     );
     assert_eq!(
-        bench.ring.descriptors.ring[1].next_address(),
+        bench.ring.table.descriptors.ring[1].next_address(),
         bench.descriptor_address(2)
     );
     assert_eq!(
-        bench.ring.descriptors.ring[2].next_address(),
+        bench.ring.table.descriptors.ring[2].next_address(),
         0,
         "the new tail"
     );
     assert_eq!(
-        bench.ring.descriptors.ring[RING - 1].next_address(),
+        bench.ring.table.descriptors.ring[RING - 1].next_address(),
         bench.descriptor_address(0)
     );
     assert_eq!(bench.ring.walker.rings, 1);
@@ -462,7 +489,7 @@ fn a_length_past_the_buffer_or_below_the_floor_stops_the_view_as_an_anomaly() {
     ] {
         bench.complete(0, length, true);
         bench.cursor(Some(0), Some(1));
-        let word = bench.ring.descriptors.ring[0].word0();
+        let word = bench.ring.table.descriptors.ring[0].word0();
         let clock: VirtualClock = VirtualClock::new();
         let served = lend_first(&mut bench, &clock);
         assert!(
@@ -471,7 +498,7 @@ fn a_length_past_the_buffer_or_below_the_floor_stops_the_view_as_an_anomaly() {
         );
         assert_eq!(bench.ring.walker.rings, 0, "{case}: nothing re-armed");
         assert_eq!(
-            bench.ring.descriptors.ring[0].word0(),
+            bench.ring.table.descriptors.ring[0].word0(),
             word,
             "{case}: the descriptor as the walker left it"
         );
@@ -514,8 +541,67 @@ fn a_doorbell_the_walker_does_not_accept_is_an_anomaly_with_the_unit_lent() {
     );
     assert_eq!(bench.ring.walker.rings, 1, "rung once, never accepted");
     assert_eq!(
-        bench.ring.descriptors.ring[RING - 1].next_address(),
+        bench.ring.table.descriptors.ring[RING - 1].next_address(),
         bench.descriptor_address(0),
         "linked"
     );
+}
+
+brand!(turn);
+#[test]
+fn a_stopped_ring_s_release_gives_every_buffer_back_and_publishes_again() {
+    let mut bench = bench::<turn::Rx>();
+    assert!(bench.ring.walker.prefix, "the prefix before the first BASE");
+    let enabled = bench.enable();
+    assert!(bench.ring.walker.enabled);
+    // One exchange: descriptor 0 now holds the last spare, buffer 7.
+    bench.complete(0, 80, true);
+    bench.cursor(Some(0), Some(1));
+    let spare = bench.spares.pop().unwrap();
+    let clock: VirtualClock = VirtualClock::new();
+    let lent = bench
+        .ring
+        .serve(&clock, |view| match view.next_unit() {
+            Some(Unit::Single(unit)) => Some(unit.lend(spare)),
+            _ => None,
+        })
+        .ok()
+        .flatten()
+        .unwrap();
+    let edge = bench.ring.stop_walker(enabled);
+    assert!(!bench.ring.walker.enabled, "the walker's edge");
+    let crate::radio::ieee80211::dma::receive::WalkerEdge { .. } = edge;
+    let Bench { ring, spares, .. } = bench;
+    let (parts, place) = RxRing::release(ring, MacStopReset { _private: () });
+    assert_eq!(
+        parts
+            .ring
+            .iter()
+            .map(|handle| handle.span().len())
+            .collect::<Vec<_>>(),
+        [SIZE - 64; RING],
+        "every handle the whole buffer above the floor"
+    );
+    assert_eq!(parts.reserved.span().len(), SIZE - 64);
+    assert_eq!(
+        spares.len() + 1 + RING + 1,
+        COUNT,
+        "the lent unit is out, every other buffer back"
+    );
+    drop(lent);
+    let (again, _start) = RxRing::publish_cold(place, parts, core_open());
+    let buffers: Vec<u32> = again
+        .table
+        .descriptors
+        .ring
+        .iter()
+        .map(|descriptor| descriptor.buffer_address())
+        .collect();
+    assert_eq!(
+        buffers,
+        [7, 1, 2, 3].map(|buffer| ARENA_BASE + (buffer * SIZE) as u32),
+        "the second publication arms the buffers the release gave back"
+    );
+    assert_eq!(again.start.get(), 0, "a cold start from the head");
+    assert!(!again.walker.enabled, "the walker is started apart");
 }

@@ -101,6 +101,22 @@ impl MacBlockReset {
     }
 }
 
+/// The proof that the MAC block's reset followed a stop: the walker's edge,
+/// then the MAC's stop request and its hold. Only
+/// [`RadioDomain::reset_stopped_wifi_mac_block`] makes one, beside the
+/// block's [`MacBlockReset`]; the receive ring's release takes it.
+///
+/// [`RadioDomain::reset_stopped_wifi_mac_block`]: crate::radio::domain::RadioDomain::reset_stopped_wifi_mac_block
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::init::MacStopReset;
+/// let _made = MacStopReset { _private: () };
+/// ```
+#[must_use = "the receive ring's release takes it"]
+pub struct MacStopReset {
+    pub(crate) _private: (),
+}
+
 /// Platform entropy used by the on-chip branch of `hal_he_set_mac_delay`.
 ///
 /// The vendor OS adapter obtains this from its `_random` callback. Keeping it

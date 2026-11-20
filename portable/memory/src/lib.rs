@@ -38,6 +38,8 @@
 //! [`arena`] gives the custody of buffers the hardware reads or writes: a
 //! handle the CPU holds, lent to the hardware and given back only by a
 //! release proof.
+//! [`Occupied`] is a place that holds a value, the handle that says so; its
+//! vacating gives the value and the empty place back.
 //! [`StaticPlace`] reserves static backing for short-lived values and pinned
 //! futures without extending their input loans.
 
@@ -58,6 +60,7 @@ mod handler_cell;
 mod indexed_custody;
 mod init_in_place;
 mod link;
+mod occupied;
 mod once_value;
 mod pinned_tx;
 mod request_slot;
@@ -98,6 +101,7 @@ pub use indexed_custody::{CustodyDomain, Drained, IndexedCustody, Quarantine, Re
 #[doc(hidden)]
 pub use init_in_place::__InitField;
 pub use link::{LinkSlot, NamePart, SlotKind, SlotName, TraceClockSlot};
+pub use occupied::Occupied;
 /// The local notify of a queue end: the default of every queue's notifies.
 pub use oer_portable_waker::AtomicWaker;
 pub use once_value::OnceValue;

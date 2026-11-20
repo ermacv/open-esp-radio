@@ -246,12 +246,28 @@ and retention contracts.
   the brand names its own place and returned set; that expansion is counted as
   `portable/memory`'s and builds in a crate that forbids `unsafe`, where a
   hand-written `unsafe impl Brand` does not (`tests/ui/arena_under_forbid.rs`);
-The HAL's receive ring (`radio::ieee80211::dma::receive`) makes two release
-proofs: `Released::assume` when a completed single unit is exchanged for a
-spare (`HW_RX_REBIND_BEFORE_LAST_20261118`, `HW_RX_REBIND_AT_LAST_20261118`),
-and `Quiet::assume` while a completed chain is copied in place, before its
-buffers are re-armed (`HW_RX_CHAIN_LAPS_20261117`). Both lie at or before the
-`LAST` the walker reported at the service's start.
+The HAL's receive ring (`radio::ieee80211::dma::receive`) makes three
+release proofs:
+
+- `Released::assume` when a completed single unit is exchanged for a spare
+  (`HW_RX_REBIND_BEFORE_LAST_20261118`, `HW_RX_REBIND_AT_LAST_20261118`);
+- `Quiet::assume` while a completed chain is copied in place, before its
+  buffers are re-armed (`HW_RX_CHAIN_LAPS_20261117`). This one and the first
+  lie at or before the `LAST` the walker reported at the service's start;
+- `Released::assume` for every buffer at the ring's release, which takes the
+  proof of the MAC block's reset after a stop (`MacStopReset`). Only the radio
+  domain's reset after a stop makes it, from the MAC's stop request, which
+  takes the walker's edge, which takes the walker's one start of a
+  publication (`HW_RST_WIFIMAC_AFTER_STOP_PORT_ORDER_20261119`,
+  `HW_RST_WIFIMAC_AFTER_STOP_REQUEST_20261119`,
+  `HW_RST_WIFIMAC_RUNNING_RX_20261119`).
+
+`oer-portable-memory::Occupied` is a place that holds a value, the handle a
+filling of `&mut MaybeUninit<T>` gives: three sites, its two dereferences
+and the read of `vacate`, which gives the value and the empty place back.
+The handle's unique borrow of its place is the proof that the place holds
+the value; it has no `Drop`, so a handle let go leaves its value in place.
+The receive ring is published into one and released out of it.
 
 - `unsafe trait PlacedStatic`. The HAL's placed static (`DmaStatic`, made
   only by `dma_static!`) implements it in its own home, the placement

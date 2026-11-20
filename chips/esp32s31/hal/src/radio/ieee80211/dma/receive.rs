@@ -37,6 +37,7 @@
 
 use core::mem::{MaybeUninit, replace};
 
+use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, Brand, Handle, Lent, Quiet, Released, Span};
 use oer_portable_time::{
     Clock, Duration,
@@ -47,6 +48,8 @@ use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor, WifiRxDmaDescriptor
 use crate::radio::ieee80211::dma::descriptor::{RxDescriptor, cursor_ring_index, rx_armed_word};
 use crate::radio::ieee80211::dma::ring_index::RingIndex;
 use crate::radio::ieee80211::dma::space::DmaSpace;
+use crate::radio::ieee80211::init::MacStopReset;
+use crate::radio::ieee80211::mac::MacCoreOpen;
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters};
 use crate::system::memory::dma_address::PlacementProjection;
 use crate::system::memory::dma_static::Placed;
@@ -82,12 +85,16 @@ pub trait Walker: sealed::Sealed {
     /// `RX_LAST_DESCRIPTOR` then `RX_NEXT_DESCRIPTOR`, each read after the
     /// one before, then a device fence: their low address bits.
     fn cursor(&mut self) -> (u32, u32);
+    /// The walker's buffer configuration, before the first BASE.
+    fn initialize_prefix(&mut self);
     /// Select the descriptors' address window.
     fn configure_window(&mut self);
     /// Publish `RX_DESCRIPTOR_BASE`.
     fn write_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>);
     /// Start the walker.
     fn enable(&mut self);
+    /// Clear the walker's enable: its edge.
+    fn disable(&mut self);
     /// Ring the append/reload doorbell.
     fn ring(&mut self);
     /// Whether the walker accepted the doorbell.
@@ -115,6 +122,10 @@ impl<M: MacPlacement> Walker for WifiRxDmaRegisters<M> {
         (last, next)
     }
 
+    fn initialize_prefix(&mut self) {
+        self.initialize_mac_rx_buffer_prefix();
+    }
+
     fn configure_window(&mut self) {
         self.configure_mac_rx_descriptor_window();
     }
@@ -125,6 +136,10 @@ impl<M: MacPlacement> Walker for WifiRxDmaRegisters<M> {
 
     fn enable(&mut self) {
         self.publish_mac_rx_walker_enable();
+    }
+
+    fn disable(&mut self) {
+        self.clear_mac_rx_walker_enable();
     }
 
     fn ring(&mut self) {
@@ -165,18 +180,123 @@ pub enum RingAnomaly {
     DoorbellPending,
 }
 
-/// Why a cold publication was refused: the table has no DMA address in the
-/// space. Nothing was written to the walker.
+/// Why a table was not placed: it has no DMA address in the space.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Unplaced;
 
-/// A cold publication refused, with every owner it was given.
-pub struct PublishRefused<B: Brand, const N: usize, W> {
-    pub reason: Unplaced,
-    pub table: Placed<RxDescriptors<N>>,
+/// A ring's descriptor table, placed once: the descriptors and the DMA
+/// address of each, R's included. Every publication of the ring reuses it.
+pub struct RxTable<const N: usize> {
+    descriptors: &'static RxDescriptors<N>,
+    /// Each ring descriptor's own address.
+    links: [DmaRef<WifiRxDmaDescriptor>; N],
+    /// The ring's first descriptor's address, R's link.
+    head: DmaRef<WifiRxDmaDescriptor>,
+    /// R's address, the walker's BASE.
+    reserved: DmaRef<WifiRxDmaDescriptor>,
+    /// The ring's first address, which the walker's cursor reads against.
+    base: u32,
+}
+
+impl<const N: usize> RxTable<N> {
+    /// Project the placed table in the space `S`, once.
+    ///
+    /// # Errors
+    ///
+    /// [`Unplaced`] when it has no DMA address there: the placement comes back
+    /// whole, and nothing was written.
+    pub fn place<S: DmaSpace>(
+        table: Placed<RxDescriptors<N>>,
+    ) -> Result<Self, (Unplaced, Placed<RxDescriptors<N>>)> {
+        let projected = PlacementProjection::try_with::<S, _, _>(table, |table, projection| {
+            let addresses = projection.table(
+                table
+                    .ring
+                    .iter()
+                    .chain(core::iter::once(&table.reserved))
+                    .map(RxDescriptor::layout),
+            )?;
+            let mut links = [addresses.first(); N];
+            for (link, descriptor) in links.iter_mut().zip(&table.ring) {
+                *link = projection.link(descriptor.layout())?;
+            }
+            let reserved = projection.link(table.reserved.layout())?;
+            Ok((links, addresses.first(), reserved, addresses.base()))
+        });
+        match projected {
+            Ok((descriptors, (links, head, reserved, base))) => Ok(Self {
+                descriptors,
+                links,
+                head,
+                reserved,
+                base,
+            }),
+            Err((_, table)) => Err((Unplaced, table)),
+        }
+    }
+}
+
+/// What a ring is made of while it is not published: its table, the
+/// walker's registers, its arena and every buffer's handle. The port holds
+/// it between a release and the next publication.
+pub struct RxRingParts<B: Brand, const BYTES: usize, const N: usize, W> {
+    pub table: RxTable<N>,
     pub walker: W,
+    pub arena: Arena<B, BYTES>,
     pub ring: [Handle<B>; N],
     pub reserved: Handle<B>,
+}
+
+/// The one start a publication gives: [`RxRing::enable_walker`] takes it.
+///
+/// Only a publication makes one:
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::WalkerStart;
+/// let _made = WalkerStart { _private: () };
+/// ```
+///
+/// and it starts the walker once:
+///
+/// ```compile_fail,E0382
+/// use oer_chips_esp32s31_hal::layouts::DmaWindow;
+/// use oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::{RxRing, Walker, WalkerStart};
+/// use oer_portable_memory::arena::Brand;
+/// fn twice<B: Brand<Window = DmaWindow>, const BYTES: usize, const N: usize, W: Walker>(
+///     ring: &mut RxRing<B, BYTES, N, W>,
+///     start: WalkerStart,
+/// ) {
+///     let _first = ring.enable_walker(start);
+///     let _second = ring.enable_walker(start);
+/// }
+/// ```
+#[must_use = "the walker of a published ring starts with it"]
+pub struct WalkerStart {
+    _private: (),
+}
+
+/// The walker started on a published ring: what the MAC's receive release
+/// borrows and the walker's edge takes.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::WalkerEnabled;
+/// let _made = WalkerEnabled { _private: () };
+/// ```
+#[must_use = "the walker's edge takes it"]
+pub struct WalkerEnabled {
+    _private: (),
+}
+
+/// The walker's edge made: its enable cleared and ordered. The MAC's stop
+/// request takes it.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::WalkerEdge;
+/// let _made = WalkerEdge { _private: () };
+/// ```
+#[must_use = "the MAC's stop request takes it"]
+pub struct WalkerEdge {
+    pub(crate) _private: (),
 }
 
 /// The accepted tail: the descriptor whose link is zero.
@@ -191,14 +311,10 @@ pub struct RxRing<B, const BYTES: usize, const N: usize, W>
 where
     B: Brand<Window = DmaWindow>,
 {
-    descriptors: &'static RxDescriptors<N>,
-    /// Each ring descriptor's own address.
-    links: [DmaRef<WifiRxDmaDescriptor>; N],
-    /// The ring's first address, which the walker's cursor reads against.
-    base: u32,
+    table: RxTable<N>,
     arena: Arena<B, BYTES>,
     slots: [Lent<B>; N],
-    _reserved: Lent<B>,
+    reserved: Lent<B>,
     walker: W,
     /// The oldest descriptor not yet consumed, in the ring's order.
     start: RingIndex<N>,
@@ -230,68 +346,37 @@ where
         panic!("a receive buffer's floor is the unit's header")
     };
 
-    /// The cold publication, built in its place: every descriptor armed with
-    /// one of `ring`'s buffers and linked to the next, the last one's link
-    /// zero; R armed with `reserved` and linked to the head; the window
-    /// selected and BASE = R. The walker is not started
-    /// ([`Self::enable_walker`]).
-    ///
-    /// # Errors
-    ///
-    /// [`Unplaced`] when the table has no DMA address in the space `S`: every
-    /// owner comes back, and nothing was published.
-    #[allow(
-        clippy::result_large_err,
-        reason = "a refusal returns every owner it was given"
-    )]
-    pub fn publish_cold<S: DmaSpace>(
+    /// The cold publication, built in its place: the walker's buffer
+    /// configuration; every descriptor armed with one of the parts' buffers
+    /// and linked to the next, the last one's link zero; R armed with its
+    /// buffer and linked to the head; the window selected and BASE = R. It
+    /// takes the MAC core opened with its runtime stop held
+    /// (`WifiMacHal::open_core`), before the one BASE. The walker is not
+    /// started: the start it gives does ([`Self::enable_walker`]).
+    pub fn publish_cold(
         place: &mut MaybeUninit<Self>,
-        table: Placed<RxDescriptors<N>>,
-        mut walker: W,
-        arena: Arena<B, BYTES>,
-        ring: [Handle<B>; N],
-        reserved: Handle<B>,
-    ) -> Result<&mut Self, PublishRefused<B, N, W>> {
+        parts: RxRingParts<B, BYTES, N, W>,
+        core: MacCoreOpen,
+    ) -> (Occupied<'_, Self>, WalkerStart) {
         let () = Self::HEADER;
-        // Every descriptor's address and R's, each from the placement's own
-        // projection: an address it cannot give is the refusal, and the
-        // placement comes back whole.
-        let projected = PlacementProjection::try_with::<S, _, _>(table, |table, projection| {
-            let addresses = projection.table(
-                table
-                    .ring
-                    .iter()
-                    .chain(core::iter::once(&table.reserved))
-                    .map(RxDescriptor::layout),
-            )?;
-            let mut links = [addresses.first(); N];
-            for (link, descriptor) in links.iter_mut().zip(&table.ring) {
-                *link = projection.link(descriptor.layout())?;
-            }
-            let r = projection.link(table.reserved.layout())?;
-            Ok((links, r, addresses.first(), addresses.base()))
-        });
-        let (descriptors, (links, r, head, base)) = match projected {
-            Ok(projected) => projected,
-            Err((_, table)) => {
-                return Err(PublishRefused {
-                    reason: Unplaced,
-                    table,
-                    walker,
-                    ring,
-                    reserved,
-                });
-            }
-        };
-        let descriptors: &'static RxDescriptors<N> = descriptors;
+        let MacCoreOpen { .. } = core;
+        let RxRingParts {
+            table,
+            mut walker,
+            arena,
+            ring,
+            reserved,
+        } = parts;
+        let descriptors = table.descriptors;
         // The accepted tail is the ring's last descriptor (`N >= 2`).
         let last = descriptors
             .ring
             .iter()
             .fold(&descriptors.reserved, |_, descriptor| descriptor);
+        walker.initialize_prefix();
         walker.configure_window();
         let mut descriptor = descriptors.ring.iter();
-        let mut next = links.iter().skip(1);
+        let mut next = table.links.iter().skip(1);
         let slots = ring.map(|handle| {
             let (lent, buffer) = arena.lend(handle);
             if let Some(descriptor) = descriptor.next() {
@@ -302,29 +387,91 @@ where
         let (reserved, buffer) = arena.lend(reserved);
         descriptors
             .reserved
-            .publish_owned(Self::ARMED, buffer, Some(head));
+            .publish_owned(Self::ARMED, buffer, Some(table.head));
         walker.fence();
-        walker.write_base(r);
+        walker.write_base(table.reserved);
         walker.fence();
-        Ok(place.write(Self {
-            descriptors,
-            links,
-            base,
-            arena,
-            slots,
-            _reserved: reserved,
-            walker,
-            start: Self::HEAD,
-            tail: Tail {
-                index: Self::LAST,
-                descriptor: last,
+        let ring = Occupied::fill(
+            place,
+            Self {
+                table,
+                arena,
+                slots,
+                reserved,
+                walker,
+                start: Self::HEAD,
+                tail: Tail {
+                    index: Self::LAST,
+                    descriptor: last,
+                },
             },
-        }))
+        );
+        (ring, WalkerStart { _private: () })
     }
 
-    /// Start the walker on the published ring.
-    pub fn enable_walker(&mut self) {
+    /// Start the walker on the published ring, once a publication.
+    pub fn enable_walker(&mut self, start: WalkerStart) -> WalkerEnabled {
+        let WalkerStart { _private: () } = start;
+        self.walker.fence();
         self.walker.enable();
+        self.walker.fence();
+        WalkerEnabled { _private: () }
+    }
+
+    /// The walker's edge: its enable cleared, then ordered
+    /// (`HW_WIFIMAC_STOP_WALKER_FIRST_20261119`: the edge before the MAC's
+    /// stop request). Nothing is read back.
+    pub fn stop_walker(&mut self, enabled: WalkerEnabled) -> WalkerEdge {
+        let WalkerEnabled { _private: () } = enabled;
+        self.walker.disable();
+        self.walker.fence();
+        WalkerEdge { _private: () }
+    }
+
+    /// The ring's release after the MAC block's reset: every buffer's handle
+    /// back with the table, the walker's registers and the arena, and the
+    /// place, empty. The handles' spans are the whole buffer above the floor.
+    pub fn release<'p>(
+        ring: Occupied<'p, Self>,
+        reset: MacStopReset,
+    ) -> (RxRingParts<B, BYTES, N, W>, &'p mut MaybeUninit<Self>) {
+        let MacStopReset { .. } = reset;
+        let (ring, place) = ring.vacate();
+        let RxRing {
+            table,
+            arena,
+            slots,
+            reserved,
+            walker,
+            ..
+        } = ring;
+        let release = |lent: Lent<B>| {
+            #[allow(
+                unsafe_code,
+                reason = "the receive ring's release proof: the block's reset"
+            )]
+            // SAFETY: `reset` is made only by the radio domain's reset of the
+            // MAC block after a stop (`reset_stopped_wifi_mac_block`), which
+            // takes the MAC's stop request, which takes the walker's edge,
+            // which takes the walker's one start of a publication: the reset
+            // followed this ring's edge and stop request. The ring holds the
+            // walker's registers, so no other ring was published meanwhile.
+            // After such a reset no buffer or descriptor changed
+            // (`HW_RST_WIFIMAC_AFTER_STOP_PORT_ORDER_20261119`,
+            // `HW_RST_WIFIMAC_AFTER_STOP_REQUEST_20261119`,
+            // `HW_RST_WIFIMAC_RUNNING_RX_20261119`): the walker writes none
+            // of these buffers again.
+            let released = unsafe { Released::assume(lent, Span::FULL) };
+            arena.reclaim(released)
+        };
+        let parts = RxRingParts {
+            table,
+            walker,
+            arena,
+            ring: slots.map(release),
+            reserved: release(reserved),
+        };
+        (parts, place)
     }
 
     /// Serve the completed units: `f` gets the view, in the ring's order up
@@ -344,7 +491,7 @@ where
         f: impl FnOnce(&mut Completed<'_, B, BYTES, N, W>) -> R,
     ) -> Result<R, (RingAnomaly, R)> {
         let (last, next) = self.walker.cursor();
-        let remaining = self.completed(cursor_ring_index(last, self.base, N), next == 0);
+        let remaining = self.completed(cursor_ring_index(last, self.table.base, N), next == 0);
         let mut view = Completed {
             ring: self,
             remaining,
@@ -385,7 +532,7 @@ where
     /// the walker settled with NEXT zero and LAST short of the tail.
     fn ring_doorbell<C: Clock + ?Sized>(&mut self, within: Settle<'_, C>) -> Result<(), Unsettled> {
         let tail = self.tail.index.get();
-        let base = self.base;
+        let base = self.table.base;
         let walker = &mut self.walker;
         walker.fence();
         walker.ring();
@@ -503,8 +650,9 @@ where
             return None;
         }
         let RxRing {
-            descriptors,
-            links,
+            table: RxTable {
+                descriptors, links, ..
+            },
             arena,
             slots,
             walker,
@@ -530,7 +678,7 @@ where
         let a = descriptors_a.len().min(count);
         let (run_a, _) = descriptors_a.split_at_checked(a)?;
         let (run_b, _) = descriptors_b.split_at_checked(count - a)?;
-        let (links_b, links_a) = links.split_at_checked(head.get())?;
+        let (_, links_a) = links.split_at_checked(head.get())?;
         let (slots_b, slots_a) = slots.split_at_mut_checked(head.get())?;
         let (slots_a, _) = slots_a.split_at_mut_checked(a)?;
         let (slots_b, _) = slots_b.split_at_mut_checked(count - a)?;

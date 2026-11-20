@@ -93,3 +93,10 @@ pub fn settle<C: Clock + ?Sized, T>(
         }
     }
 }
+
+/// Wait out a settle's whole limit: the hold of a named length, an attempt
+/// that never yields. It returns once the limit has passed on the settle's
+/// clock.
+pub fn hold<C: Clock + ?Sized>(length: Settle<'_, C>) {
+    let Err(Unsettled) = settle(length, || None::<core::convert::Infallible>);
+}

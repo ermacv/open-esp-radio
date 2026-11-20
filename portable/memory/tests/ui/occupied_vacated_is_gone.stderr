@@ -1,0 +1,22 @@
+error[E0382]: borrow of moved value: `occupied`
+ --> tests/ui/occupied_vacated_is_gone.rs:9:14
+  |
+6 |     let occupied = Occupied::fill(place, 7);
+  |         -------- move occurs because `occupied` has type `oer_portable_memory::Occupied<'_, u32>`, which does not implement the `Copy` trait
+7 |     let (value, _) = occupied.vacate();
+  |                               -------- `occupied` moved due to this method call
+8 |     #[cfg(all())]
+9 |     let _ = *occupied; // ui-error: E0382
+  |              ^^^^^^^^ value borrowed here after move
+  |
+note: `oer_portable_memory::Occupied::<'p, T>::vacate` takes ownership of the receiver `self`, which moves `occupied`
+ --> src/occupied.rs
+  |
+  |     pub fn vacate(self) -> (T, &'p mut MaybeUninit<T>) {
+  |                   ^^^^
+  = note: borrow occurs due to deref coercion to `u32`
+note: deref defined here
+ --> src/occupied.rs
+  |
+  |     type Target = T;
+  |     ^^^^^^^^^^^
