@@ -517,6 +517,8 @@ fn an_accept_list_holds_at_most_the_capabilities_entries() {
         Supported::<Two, _>::new(list(3)).err(),
         Some(Unplaced::BeyondCapacity)
     );
+    assert!(super::Capability::<Two>::supported(&list(2)));
+    assert!(!super::Capability::<Two>::supported(&list(3)));
     assert!(Supported::<Peripheral, _>::new(list(0)).is_ok());
     assert_eq!(
         Supported::<Peripheral, _>::new(list(1)).err(),
