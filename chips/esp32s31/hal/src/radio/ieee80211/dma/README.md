@@ -94,6 +94,16 @@ reset under a running MAC cannot be written. A stop ends in the block's
 reset; the next start is cold, from the preparation, with the stop's
 `MacBlockReset`.
 
+On the stand (`esp32s31-rx-ring`): 50 stops in this order each ended with
+every handle back and receive alive after the next cold start
+(`HW_RX_RING_STOP_RELEASE_RESTART_20261120`); chains of 3 to 7 descriptors
+were copied in place with every byte as sent
+(`HW_RX_RING_CHAINS_COPIED_IN_PLACE_20261120`); a chain's continuation is
+left with `OWNER` set, no `RX_DONE` and `LENGTH` equal to `SIZE`
+(`HW_RX_CHAIN_CONTINUATION_WORD_20261120`), so the ring reads no length of
+a continuation and takes its bytes as `SIZE`. The records are in
+[`hw-rx-radio.toml`](../../../../../registers/evidence/hw-rx-radio.toml).
+
 ## Source and test boundary
 
 SOURCE: `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES` in
