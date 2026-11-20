@@ -29,6 +29,7 @@ use crate::types::{
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
 use oer_portable_memory::PreparedTxDma;
+use oer_portable_time::{Duration, settle::SettleLimit};
 
 use crate::radio::ieee80211::registers::{WifiRadioRegisters, WifiRxDmaRegisters};
 
@@ -181,6 +182,40 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 }
 
+/// How long the MAC's stop request is held before the block's reset.
+///
+/// SOURCE: complete pinned `libpp.a[hal_mac.o]::hal_mac_deinit`, its wait
+/// after the stop request; run 230/3a (the vendor's order: the walker's
+/// edge, the stop request and 20 µs, then `RST_WIFIMAC`).
+pub const MAC_STOP_HOLD: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
+    Some(limit) => limit,
+    None => panic!("the stop's hold is a valid settle"),
+};
+
+/// The MAC core clocked with its runtime stop held: what the receive ring's
+/// cold publication takes before its one BASE.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::mac::MacCoreOpen;
+/// let _made = MacCoreOpen { _private: () };
+/// ```
+#[must_use = "the receive ring's cold publication takes it"]
+pub struct MacCoreOpen {
+    pub(crate) _private: (),
+}
+
+/// The MAC's stop request made and held for [`MAC_STOP_HOLD`], after the
+/// walker's edge: what the radio domain's reset after a stop takes.
+///
+/// ```compile_fail,E0451
+/// use oer_chips_esp32s31_hal::radio::ieee80211::mac::StopRequested;
+/// let _made = StopRequested { _private: () };
+/// ```
+#[must_use = "the block's reset after a stop takes it"]
+pub struct StopRequested {
+    pub(crate) _private: (),
+}
+
 /// Closed HAL authority for reviewed runtime Wi-Fi MAC transactions.
 ///
 /// It borrows the Wi-Fi MAC registers alone and exposes neither them nor
@@ -201,6 +236,40 @@ impl<'registers> WifiMacHal<'registers> {
 
     fn pac_mut(&mut self) -> &mut WifiRadioRegisters {
         &mut self.registers
+    }
+
+    /// Clock the MAC core with its runtime stop held, before the receive
+    /// ring's cold publication writes BASE.
+    pub fn open_core(&mut self) -> MacCoreOpen {
+        self.pac_mut().prepare_mac_runtime();
+        MacCoreOpen { _private: () }
+    }
+
+    /// Release the MAC's receive with the walker started on a published
+    /// ring.
+    pub fn start_receive(
+        &mut self,
+        _walker: &crate::radio::ieee80211::dma::receive::WalkerEnabled,
+    ) {
+        let _ = self.restart_after_channel_switch();
+    }
+
+    /// The MAC's stop request after the walker's edge, held for
+    /// [`MAC_STOP_HOLD`] on `clock`. Nothing is read: no activity field
+    /// decides the stop.
+    pub fn request_stop<C: oer_portable_time::Clock + ?Sized>(
+        &mut self,
+        edge: crate::radio::ieee80211::dma::receive::WalkerEdge,
+        clock: &C,
+    ) -> StopRequested {
+        let crate::radio::ieee80211::dma::receive::WalkerEdge { .. } = edge;
+        self.pac_mut().request_mac_channel_stop_without_power_save();
+        oer_portable_riscv::fence();
+        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
+            MAC_STOP_HOLD,
+            clock,
+        ));
+        StopRequested { _private: () }
     }
 
     /// Open common gates with runtime stop held, after descriptor memory and

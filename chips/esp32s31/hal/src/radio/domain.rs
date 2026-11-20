@@ -1059,6 +1059,22 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         reset_wifi_mac_block(self.registers_mut(), cbw)
     }
 
+    /// Reset the Wi-Fi MAC's block after its member's stop: the walker's
+    /// edge, then the MAC's stop request and its hold, which `stop` proves.
+    /// The same pulse and write-back as [`Self::reset_wifi_mac_block`]; the
+    /// answer adds the proof the receive ring's release takes.
+    pub fn reset_stopped_wifi_mac_block(
+        &mut self,
+        _clocks: &crate::radio::ieee80211::client::WifiClocksOn,
+        stop: crate::radio::ieee80211::mac::StopRequested,
+        cbw: u8,
+    ) -> (
+        crate::radio::ieee80211::init::MacBlockReset,
+        crate::radio::ieee80211::init::MacStopReset,
+    ) {
+        reset_stopped_wifi_mac_block(self.registers_mut(), stop, cbw)
+    }
+
     /// Read the three words inside the `WIFI_MAC` block that this domain
     /// owns, without effect, for a probe's observation of the block's reset.
     pub fn foreign_wifi_mac_words(&self) -> crate::radio::modem::ForeignWifiMacWords {
@@ -1103,6 +1119,24 @@ pub(crate) fn reset_wifi_mac_block(
     port.set_wifi_mac_reset(false);
     port.write_back_wifi_mac_foreign_words(cbw);
     crate::radio::ieee80211::init::MacBlockReset::after_pulse()
+}
+
+/// Register transaction of [`RadioDomain::reset_stopped_wifi_mac_block`]:
+/// the stop's proof taken, the same pulse and write-back, the release's proof
+/// beside the block's.
+pub(crate) fn reset_stopped_wifi_mac_block(
+    port: &mut impl MacBlockResetPort,
+    stop: crate::radio::ieee80211::mac::StopRequested,
+    cbw: u8,
+) -> (
+    crate::radio::ieee80211::init::MacBlockReset,
+    crate::radio::ieee80211::init::MacStopReset,
+) {
+    let crate::radio::ieee80211::mac::StopRequested { _private: () } = stop;
+    (
+        reset_wifi_mac_block(port, cbw),
+        crate::radio::ieee80211::init::MacStopReset { _private: () },
+    )
 }
 
 /// Register transaction of [`RadioDomain::select_bluetooth_low_power_clock`].

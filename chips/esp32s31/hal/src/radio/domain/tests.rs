@@ -320,3 +320,33 @@ fn the_mac_block_reset_pulses_before_it_writes_back() {
         [Write::Reset(true), Write::Reset(false), Write::WriteBack(3)]
     );
 }
+
+/// The reset after a stop is the same pulse and write-back, made once for
+/// the stop request it takes, with the release's proof beside the block's.
+#[test]
+fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
+    #[derive(Debug, PartialEq)]
+    enum Write {
+        Reset(bool),
+        WriteBack(u8),
+    }
+    struct Port(std::vec::Vec<Write>);
+    impl super::MacBlockResetPort for Port {
+        fn set_wifi_mac_reset(&mut self, asserted: bool) {
+            self.0.push(Write::Reset(asserted));
+        }
+        fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
+            self.0.push(Write::WriteBack(cbw));
+        }
+    }
+    let mut port = Port(std::vec::Vec::new());
+    let stop = crate::radio::ieee80211::mac::StopRequested { _private: () };
+    let (
+        crate::radio::ieee80211::init::MacBlockReset { .. },
+        crate::radio::ieee80211::init::MacStopReset { .. },
+    ) = super::reset_stopped_wifi_mac_block(&mut port, stop, 1);
+    assert_eq!(
+        port.0,
+        [Write::Reset(true), Write::Reset(false), Write::WriteBack(1)]
+    );
+}
