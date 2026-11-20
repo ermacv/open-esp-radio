@@ -134,7 +134,7 @@ device library), `HilBinding` (the dictionary beside one facade or one
 test-only service) and `HilImage`, an application of the entry (`Sdk`) with
 the HIL agent on the entry (`HilSdkAgent`), the bindings and the agent. HAL files whose production code waits are a per-file list in the
 layer tests that only shrinks, and so are the HAL's files and directories
-that decide (the Wi-Fi DMA's machines, the Bluetooth engine, the PHY's
+that decide (the Wi-Fi DMA's machines, the PHY's
 calibration machines and temperature resource, the domain's transactions),
 by their lines ([HAL](../chips/esp32s31/hal/README.md)).
 
@@ -147,7 +147,9 @@ transmit queues) and `arbiter`, the security transforms and handshakes in
 model), which no product package depends on. Bluetooth LE has wire formats, a
 backend port, synchronous LL/controller cores, an executor-independent
 runtime and a reference model. IEEE 802.15.4 has `wire`, `port`, the `mac`
-core and a separate host reference `model`. A backend depends on its
+core and a separate host reference `model`. Both are kept as sources outside
+the build, but for Bluetooth's `hci`, which the stand's fixture helpers use
+([repository layout](repository-layout.md)). A backend depends on its
 protocol's port, wire formats, protocol contracts and implemented `cipher`
 only. A protocol contract (`protocols/<protocol>/contracts/*`) owns what a
 protocol installs and a backend programs, apart from the codecs and the
@@ -288,12 +290,12 @@ existing local entries.
 | `oer-chips-family-drivers-efuse` | `chips/family/drivers/efuse` |
 | `oer-chips-family-facts` | `chips/family/facts` |
 | `oer-chips-family-radio-ieee80211-policy` | `chips/family/radio/ieee80211/policy` |
-| `oer-chips-family-radio-ieee802154-engine` | `chips/family/radio/ieee802154/engine` |
-| `oer-chips-family-radio-ieee802154-values` | `chips/family/radio/ieee802154/values` |
+| `oer-chips-family-radio-ieee802154-engine` | `chips/family/radio/ieee802154/engine` (kept as sources, not built) |
+| `oer-chips-family-radio-ieee802154-values` | `chips/family/radio/ieee802154/values` (kept as sources, not built) |
 | `oer-chips-family-radio-modem-clock` | `chips/family/radio/modem-clock` |
 | `oer-chips-family-radio-power` | `chips/family/radio/power` |
 | `oer-chips-family-radio-phy` | `chips/family/radio/phy` |
-| `oer-chips-family-radio-bluetooth-ports` | `chips/family/radio/bluetooth/ports` |
+| `oer-chips-family-radio-bluetooth-ports` | `chips/family/radio/bluetooth/ports` (kept as sources, not built) |
 
 The console `oer-chips-family-drivers-usb-serial-jtag` depends transitively on mmio
 through `oer-chips-family-platform-interrupt-table`, which owns platform interrupt
@@ -1355,7 +1357,7 @@ its model and conformance case.
   (`core/datapath`) fills and publishes the arenas, settles their ends and
   charges what an attempt cost on the air.
 - **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`,
-  kept as sources and not built).
+  the HAL's `radio/bluetooth`, kept as sources and not built but for `hci`).
   Wire formats carry no protocol state or clock domain. The port owns radio
   vocabulary and the shared DTM window calculation; backends autonomously
   progress the admitted test with the Core Part F interval grid and 5 ms RX
@@ -1422,8 +1424,8 @@ its model and conformance case.
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver
-  `chips/esp32s31/radio/ieee802154/backend`, kept as sources and not
-  built). The S31 driver implements the family
+  `chips/esp32s31/radio/ieee802154/backend`, the engine and the HAL's
+  `radio/ieee802154`, kept as sources and not built). The S31 driver implements the family
   engine's LL contract over HAL's owned polling transactions and retains the
   engine with its placed DMA storage through detach/rebind. The family owner's
   borrowed `service` returns `Fault` with the complete source observation and
