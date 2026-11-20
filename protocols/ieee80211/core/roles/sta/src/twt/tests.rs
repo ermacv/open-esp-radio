@@ -385,3 +385,67 @@ fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
         );
     }
 }
+
+/// A transmission of an earlier generation of the flow ends nothing: the
+/// setup and the teardown in flight wait for their own.
+#[test]
+fn a_stale_generation_ends_neither_the_setup_nor_the_teardown_in_flight() {
+    use oer_portable_time::Clock as _;
+    use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
+    let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
+    let mut requester = IndividualTwtRequester::new(CONFIG);
+    let flow = proposal(IndividualTwtImplicit::Implicit)
+        .parameters
+        .flow_id();
+    idle_flow(&mut requester, flow)
+        .queue_setup(proposal(IndividualTwtImplicit::Implicit), clock.now())
+        .unwrap();
+    let IndividualTwtService::Transmit(setup) = requester.service(clock.now()).unwrap() else {
+        panic!("queued setup transmits");
+    };
+    for outcome in [MpduOutcome::Acknowledged, MpduOutcome::Unacknowledged] {
+        let stale = IndividualTwtTransmission {
+            generation: setup.generation.wrapping_add(1),
+            ..setup
+        };
+        assert_eq!(
+            requester.complete_transmission(stale, outcome, clock.now()),
+            Err(IndividualTwtRequesterError::StaleTransmission)
+        );
+        assert!(matches!(
+            requester.flow(flow),
+            IndividualTwtFlowAccess::Transmitting(_)
+        ));
+    }
+    requester
+        .complete_transmission(setup, MpduOutcome::Acknowledged, clock.now())
+        .unwrap();
+    let IndividualTwtFlowAccess::TeardownReady(teardown) = requester.flow(flow) else {
+        panic!("completed transmission permits teardown");
+    };
+    teardown.queue_teardown(clock.now());
+    let IndividualTwtService::Transmit(down) = requester.service(clock.now()).unwrap() else {
+        panic!("queued teardown transmits");
+    };
+    for outcome in [MpduOutcome::Acknowledged, MpduOutcome::Unacknowledged] {
+        let stale = IndividualTwtTransmission {
+            generation: down.generation.wrapping_add(1),
+            ..down
+        };
+        assert_eq!(
+            requester.complete_transmission(stale, outcome, clock.now()),
+            Err(IndividualTwtRequesterError::StaleTransmission)
+        );
+        assert!(matches!(
+            requester.flow(flow),
+            IndividualTwtFlowAccess::Transmitting(_)
+        ));
+    }
+    requester
+        .complete_transmission(down, MpduOutcome::Acknowledged, clock.now())
+        .unwrap();
+    assert!(matches!(
+        requester.flow(flow),
+        IndividualTwtFlowAccess::Idle(_)
+    ));
+}

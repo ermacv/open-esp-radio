@@ -5652,3 +5652,39 @@ mod repeated_message3;
 mod restart;
 mod sae;
 mod transmit;
+
+/// A Block Ack agreement needs a QoS association of an HT or HE format:
+/// neither alone admits one.
+#[test]
+fn block_ack_agreements_need_both_qos_and_an_ht_format() {
+    use oer_protocols_ieee80211_contracts_port::Width;
+    use oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy;
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let State::Connected(connected) = &mut world.station.state else {
+            panic!("connected")
+        };
+        let ht = NegotiatedPhy::Ht {
+            width: Width::Mhz20,
+        }
+        .mode();
+        for (qos, phy, expected) in [
+            (true, ht, BlockAckAdmission::Admitted),
+            (false, ht, BlockAckAdmission::Refused),
+            (
+                true,
+                NegotiatedPhy::NonHt.mode(),
+                BlockAckAdmission::Refused,
+            ),
+            (
+                false,
+                NegotiatedPhy::NonHt.mode(),
+                BlockAckAdmission::Refused,
+            ),
+        ] {
+            connected.qos = qos;
+            connected.peer.associated.phy = phy;
+            assert_eq!(super::block_ack_admission(connected), expected);
+        }
+    });
+}
