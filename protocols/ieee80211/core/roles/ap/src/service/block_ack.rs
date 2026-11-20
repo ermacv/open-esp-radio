@@ -22,7 +22,8 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             return Ok(false);
         }
         let peer = self.checked_peer_mut(peer)?;
-        if peer.phase != ApPeerPhase::Authorized || peer.ht.is_none() || !peer.qos_supported {
+        if peer.phase != ApPeerPhase::Authorized || peer.ht.is_none() || peer.qos == PeerQos::NonQos
+        {
             return Ok(false);
         }
         peer.tx_block_ack.queue_initial(retry);

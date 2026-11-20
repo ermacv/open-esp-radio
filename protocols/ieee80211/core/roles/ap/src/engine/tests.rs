@@ -537,7 +537,13 @@ mod handshake {
         associate(&mut engine);
         let (message1, context) = engine.begin_wpa2(PEER).unwrap().into_parts();
         let replay1 = message1.key_frame().unwrap().replay_counter();
-        engine.eapol_sent(context, true, at(10)).unwrap();
+        engine
+            .eapol_sent(
+                context,
+                oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+                at(10),
+            )
+            .unwrap();
         let group = group_key();
 
         // A verified Message 2 asks for the key first and holds Message 3.
@@ -559,7 +565,13 @@ mod handshake {
         engine.pairwise_installed(PEER).unwrap();
         let (message3, context) = message3.into_parts();
         let replay3 = message3.key_frame().unwrap().replay_counter();
-        engine.eapol_sent(context, true, at(12)).unwrap();
+        engine
+            .eapol_sent(
+                context,
+                oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+                at(12),
+            )
+            .unwrap();
 
         // The repeated Message 2 of the same PTK installs nothing again.
         assert!(!matches!(

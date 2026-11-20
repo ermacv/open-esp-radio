@@ -3,6 +3,9 @@
 use core::fmt;
 use oer_portable_crypto::rfc3394::KeyWrapError;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_wire::channel::ChannelWidth;
+use oer_protocols_ieee80211_wire::data::PeerQos;
+use oer_protocols_ieee80211_wire::phy::DsssPreamble;
 use oer_protocols_ieee80211_wire::security::rsn::RSN_PMKID_LEN;
 use oer_protocols_ieee80211_wire::security::spp::SppScope;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -310,13 +313,30 @@ pub struct ApPeerClose {
     pub maximum_legacy_rate_500kbps: u8,
 }
 
+/// Whether a buffered release's token is out: a peer's, or the BSS's group
+/// release.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BufferedRelease {
+    Idle,
+    InFlight,
+}
+
+/// How a buffered frame the caller held ended: transmitted, or returned to
+/// its queue, where it stays advertised.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BufferedEnd {
+    Delivered,
+    Returned,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApAssociationCapabilities {
     pub maximum_legacy_rate_500kbps: u8,
-    /// Capability Information Short Preamble of the Association Request.
-    pub short_preamble: bool,
+    /// The shortest DSSS preamble the peer receives, from the Capability
+    /// Information of its Association Request.
+    pub preamble: DsssPreamble,
     pub ht: Option<HtPeerCapabilities>,
-    pub qos_supported: bool,
+    pub qos: PeerQos,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -477,9 +497,9 @@ struct ApPeer {
     wpa2_retry: RsnRetry,
     wpa2_retry_alarm: Option<RsnRetryAlarm>,
     maximum_legacy_rate_500kbps: u8,
-    short_preamble: bool,
+    preamble: DsssPreamble,
     ht: Option<HtPeerCapabilities>,
-    qos_supported: bool,
+    qos: PeerQos,
     /// Independent QoS sequence spaces for this receiver's TIDs. TX BlockAck
     /// and receiver reorder state are peer+TID agreements; sharing these
     /// counters across AP clients creates artificial holes whenever the
@@ -488,7 +508,7 @@ struct ApPeer {
     tx_block_ack: TxBlockAckOriginator<1>,
     power_state: ApPeerPowerState,
     buffered_unicast_frames: u16,
-    buffered_release_in_flight: bool,
+    buffered_release: BufferedRelease,
     last_activity: oer_portable_time::Instant,
     deadline: oer_portable_time::Instant,
 }
@@ -603,14 +623,14 @@ impl ApPeer {
             association_epoch: self.association_epoch,
             phase: self.phase,
             maximum_legacy_rate_500kbps: self.maximum_legacy_rate_500kbps,
-            short_preamble: self.short_preamble,
+            preamble: self.preamble,
             ht: self.ht,
-            qos_supported: self.qos_supported,
+            qos: self.qos,
             tx_block_ack: self.tx_block_ack.operational(AP_TX_BLOCK_ACK_TID),
             tx_block_ack_generation: self.tx_block_ack.generation(AP_TX_BLOCK_ACK_TID),
             power_state: self.power_state,
             buffered_unicast_frames: self.buffered_unicast_frames,
-            buffered_release_in_flight: self.buffered_release_in_flight,
+            buffered_release: self.buffered_release,
             last_activity: self.last_activity,
             deadline: self.deadline,
         }
@@ -635,14 +655,14 @@ impl ApPeer {
             // Authentication precedes rate negotiation. Keep the universally
             // compatible 1-Mbit/s value until Association succeeds.
             maximum_legacy_rate_500kbps: 2,
-            short_preamble: false,
+            preamble: DsssPreamble::Long,
             ht: None,
-            qos_supported: false,
+            qos: PeerQos::NonQos,
             qos_sequences: [SequenceCounter::new(SequenceNumber::ZERO); 8],
             tx_block_ack: new_ap_tx_block_ack()?,
             power_state: ApPeerPowerState::Active,
             buffered_unicast_frames: 0,
-            buffered_release_in_flight: false,
+            buffered_release: BufferedRelease::Idle,
             last_activity: now,
             deadline: now.saturating_add(AP_ASSOCIATION_DEADLINE),
         })
@@ -729,16 +749,16 @@ pub struct ApPeerStatus {
     pub association_epoch: u32,
     pub phase: ApPeerPhase,
     pub maximum_legacy_rate_500kbps: u8,
-    pub short_preamble: bool,
+    pub preamble: DsssPreamble,
     pub ht: Option<HtPeerCapabilities>,
-    pub qos_supported: bool,
+    pub qos: PeerQos,
     pub tx_block_ack: Option<OperationalTxBlockAck>,
     /// Generation of the peer's TX Block Ack session; with an operational
     /// `tx_block_ack` it identifies that exact agreement.
     pub tx_block_ack_generation: u32,
     pub power_state: ApPeerPowerState,
     pub buffered_unicast_frames: u16,
-    pub buffered_release_in_flight: bool,
+    pub buffered_release: BufferedRelease,
     pub last_activity: oer_portable_time::Instant,
     pub deadline: oer_portable_time::Instant,
 }
@@ -789,7 +809,7 @@ pub struct AccessPointService<'peers, S: SppScope> {
     authorized_count: u8,
     buffered_group_frames: u16,
     buffered_group_release_generation: u32,
-    buffered_group_release_in_flight: bool,
+    buffered_group_release: BufferedRelease,
     operational_tx_block_ack: bool,
 }
 
@@ -936,7 +956,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             authorized_count: 0,
             buffered_group_frames: 0,
             buffered_group_release_generation: 0,
-            buffered_group_release_in_flight: false,
+            buffered_group_release: BufferedRelease::Idle,
             operational_tx_block_ack: false,
         })
     }
@@ -1000,7 +1020,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// mixed mode; otherwise a 20-MHz-only HT peer of a 40-MHz BSS selects
     /// 20-MHz protection. Overlapping legacy BSS detection (Nonmember mode) is
     /// not observed by this service. Authenticated peers are not members.
-    pub fn bss_protection(&self, forty_mhz_bss: bool) -> ApBssProtection {
+    pub fn bss_protection(&self, width: ChannelWidth) -> ApBssProtection {
         let mut non_erp_present = false;
         let mut barker_preamble = false;
         let mut non_ht_present = false;
@@ -1012,7 +1032,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         {
             let non_erp = peer.maximum_legacy_rate_500kbps <= 22;
             non_erp_present |= non_erp;
-            barker_preamble |= non_erp && !peer.short_preamble;
+            barker_preamble |= non_erp && peer.preamble == DsssPreamble::Long;
             match peer.ht {
                 None => non_ht_present = true,
                 Some(ht) => {
@@ -1023,7 +1043,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         }
         let mode = if non_ht_present {
             HtProtectionMode::NonHtMixed
-        } else if forty_mhz_bss && twenty_mhz_only {
+        } else if width.bandwidth_mhz() == 40 && twenty_mhz_only {
             HtProtectionMode::TwentyMhz
         } else {
             HtProtectionMode::None

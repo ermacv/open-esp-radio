@@ -4,6 +4,7 @@
 use super::*;
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
+use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 use oer_protocols_ieee80211_wire::security::{SppCapability, SppError, rsn::rsnx_capabilities};
 
 /// Why an association cannot use the advertised RSN profile.
@@ -173,7 +174,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     pub fn observe_wpa2_transmit(
         &mut self,
         context: ApEapolTxContext,
-        acknowledged: bool,
+        outcome: MpduOutcome,
         now: oer_portable_time::Instant,
     ) -> Result<ApEapolTxCompletion, ApWpa2Error> {
         let inactive_timeout = self.inactive_timeout.duration();
@@ -210,7 +211,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             let mut alarm = existing.wpa2_retry.arm(transmit.message, now)?;
             // hostapd extends only the acknowledged initial M1 window. M3
             // retains the short first timeout, then uses the subsequent one.
-            if acknowledged
+            if outcome == MpduOutcome::Acknowledged
                 && transmit.message
                     == oer_protocols_ieee80211_core_security_rsn::state::RsnTxMessage::PairwiseMessage1
             {

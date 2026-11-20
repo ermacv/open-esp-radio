@@ -108,7 +108,11 @@ fn begin(
         .unwrap();
     let (_message1, message1_context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
     service
-        .observe_wpa2_transmit(message1_context, true, at(10))
+        .observe_wpa2_transmit(
+            message1_context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            at(10),
+        )
         .unwrap();
 }
 
@@ -125,7 +129,11 @@ fn first_message3(
     };
     let (message3, message3_context) = message3.into_parts();
     assert_eq!(
-        service.observe_wpa2_transmit(message3_context, true, at(20)),
+        service.observe_wpa2_transmit(
+            message3_context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            at(20)
+        ),
         Ok(ApEapolTxCompletion::WindowArmed)
     );
     message3
@@ -145,7 +153,11 @@ fn retried_message3(
     let (retry, retry_context) = retry.into_parts();
     assert!(retry.retransmission());
     assert_eq!(
-        service.observe_wpa2_transmit(retry_context, true, at(200_000)),
+        service.observe_wpa2_transmit(
+            retry_context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            at(200_000)
+        ),
         Ok(ApEapolTxCompletion::WindowRetained)
     );
     retry

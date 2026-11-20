@@ -155,22 +155,22 @@ fn corrupt_mic(frame: OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
 fn ht_capabilities() -> ApAssociationCapabilities {
     ApAssociationCapabilities {
         maximum_legacy_rate_500kbps: 108,
-        short_preamble: true,
+        preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
         ht: ht_peer_capabilities(&ht_capability_ie(
             TEST_HT_CAPABILITIES,
             oer_protocols_ieee80211_wire::channel::Channel::from_ghz2_4_channel(
                 Ghz2_4Channel::mhz20(6).unwrap(),
             ),
         )),
-        qos_supported: true,
+        qos: oer_protocols_ieee80211_wire::data::PeerQos::Qos,
     }
 }
 
 const LEGACY_CAPABILITIES: ApAssociationCapabilities = ApAssociationCapabilities {
     maximum_legacy_rate_500kbps: 108,
-    short_preamble: true,
+    preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
     ht: None,
-    qos_supported: false,
+    qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
 };
 
 fn service(
@@ -374,7 +374,7 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         "an old queue owner must not bind to the reused AID and MAC"
     );
     assert_eq!(
-        service.complete_buffered_unicast_release(release, false),
+        service.complete_buffered_unicast_release(release, crate::BufferedEnd::Returned),
         Err(ApServiceError::AssociationIdMismatch),
         "an affine release from the old epoch must fail closed"
     );
@@ -747,9 +747,9 @@ fn association_rejects_a_peer_without_a_common_legacy_rate() {
                 association_security(&WPA2_RSN),
                 ApAssociationCapabilities {
                     maximum_legacy_rate_500kbps: 0,
-                    short_preamble: true,
+                    preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Short,
                     ht: None,
-                    qos_supported: false,
+                    qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
                 },
                 [7; 32],
                 9,
@@ -799,7 +799,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     service
         .observe_wpa2_transmit(
             message1_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(10),
         )
         .unwrap();
@@ -891,7 +891,7 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(2_000_000),
         )
         .unwrap();
@@ -1213,7 +1213,11 @@ fn exhausted_pairwise_update_count_closes_the_peer() {
         .unwrap();
     let (_message1, context) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(0))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(0),
+        )
         .unwrap();
 
     for deadline in [1_000_000, 2_000_000, 3_000_000] {
@@ -1727,7 +1731,10 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
     service
         .authenticate_open(OTHER, oer_portable_time::Instant::from_micros(0))
         .unwrap();
-    assert_eq!(service.bss_protection(true), ApBssProtection::default());
+    assert_eq!(
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above),
+        ApBssProtection::default()
+    );
 
     // A 20-MHz-only, non-greenfield HT peer in a 40-MHz BSS.
     service
@@ -1746,7 +1753,7 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         non_greenfield_present: true,
     };
     assert_eq!(
-        service.bss_protection(true),
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above),
         ApBssProtection {
             non_erp_present: false,
             erp: ErpProtection::NONE,
@@ -1754,7 +1761,10 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         }
     );
     assert_eq!(
-        service.bss_protection(false).ht.mode,
+        service
+            .bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20)
+            .ht
+            .mode,
         HtProtectionMode::None
     );
 
@@ -1766,14 +1776,15 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
             open,
             ApAssociationCapabilities {
                 maximum_legacy_rate_500kbps: 22,
-                short_preamble: false,
+                preamble: oer_protocols_ieee80211_wire::phy::DsssPreamble::Long,
                 ht: None,
-                qos_supported: false,
+                qos: oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
             },
             oer_portable_time::Instant::from_micros(3),
         )
         .unwrap();
-    let mixed = service.bss_protection(true);
+    let mixed =
+        service.bss_protection(oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz40Above);
     assert!(mixed.non_erp_present);
     assert_eq!(
         mixed.erp,
@@ -1903,7 +1914,11 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     let message1 = service.begin_wpa2_frame::<512>(PEER).unwrap();
     let (_frame, context) = message1.into_parts();
     service
-        .observe_wpa2_transmit(context, true, oer_portable_time::Instant::from_micros(2))
+        .observe_wpa2_transmit(
+            context,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            oer_portable_time::Instant::from_micros(2),
+        )
         .unwrap();
 
     let ptk = Pmk::from_bytes(SAE_PMK).derive_ptk(
@@ -1955,7 +1970,7 @@ fn a_wpa3_handshake_uses_the_sae_pmk_and_delivers_the_igtk() {
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(3),
         )
         .unwrap();
@@ -2310,7 +2325,7 @@ fn the_bss_owns_one_monotonic_bip_frontier_and_refuses_invalid_group_frames() {
     service
         .observe_wpa2_transmit(
             message3_context,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(10),
         )
         .unwrap();

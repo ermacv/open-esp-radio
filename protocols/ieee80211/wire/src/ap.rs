@@ -477,11 +477,13 @@ pub enum ApManagementRequest<'a> {
         maximum_legacy_rate_500kbps: u8,
         /// Complete one-stream HT receive facts supplied by the peer.
         ht_capabilities: Option<HtPeerCapabilities>,
-        /// The peer supplied WMM information or HT, both of which imply QoS
-        /// data framing for this profile.
-        qos_supported: bool,
-        /// Capability Information Short Preamble.
-        short_preamble: bool,
+        /// A QoS STA: the peer supplied WMM information or HT, both of which
+        /// imply QoS data framing for this profile.
+        qos: crate::data::PeerQos,
+        /// The shortest DSSS preamble the peer receives: short when its
+        /// Capability Information sets Short Preamble (IEEE Std
+        /// 802.11-2020, 9.4.1.4).
+        preamble: crate::phy::DsssPreamble,
     },
     Disassociation {
         peer: [u8; 6],
@@ -662,11 +664,20 @@ pub fn parse_ap_management_request<'a>(
                 ),
                 maximum_legacy_rate_500kbps: maximum_ap_legacy_rate(profile, information_elements),
                 ht_capabilities,
-                qos_supported: ht_capabilities.is_some() || supports_wmm(information_elements),
-                short_preamble: crate::management::CapabilityInformation::from_bytes(
+                qos: if ht_capabilities.is_some() || supports_wmm(information_elements) {
+                    crate::data::PeerQos::Qos
+                } else {
+                    crate::data::PeerQos::NonQos
+                },
+                preamble: if crate::management::CapabilityInformation::from_bytes(
                     capabilities.to_le_bytes(),
                 )
-                .short_preamble(),
+                .short_preamble()
+                {
+                    crate::phy::DsssPreamble::Short
+                } else {
+                    crate::phy::DsssPreamble::Long
+                },
             })
         }
         10 | 12 => {

@@ -21,10 +21,12 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_security_rsn::{
     OwnedEapolFrame, RsnInterface, frames::RsnTxFrame,
 };
+use oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome;
 use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::{CcmpRxReplayEpoch, InstalledCcmpTxKey},
     receive::{AdmittedData, Integrity, RxDropReason},
 };
+use oer_protocols_ieee80211_wire::data::PeerQos;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, IndividualAddress},
@@ -570,8 +572,8 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 security,
                 maximum_legacy_rate_500kbps,
                 ht_capabilities,
-                qos_supported,
-                short_preamble,
+                qos,
+                preamble,
             } => {
                 let Some(status) = self.service.peer_status(peer) else {
                     return Ok(ApReceived::Nothing);
@@ -591,9 +593,9 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 } else {
                     let capabilities = ApAssociationCapabilities {
                         maximum_legacy_rate_500kbps,
-                        short_preamble,
+                        preamble,
                         ht: ht_capabilities,
-                        qos_supported,
+                        qos,
                     };
                     let action = if self.protects() {
                         let Some(nonce) = nonce else {
@@ -626,9 +628,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                     (status, association_id.unwrap_or(0), after)
                 };
                 let sequence = self.service.next_management_sequence();
-                let protection = self
-                    .service
-                    .bss_protection(self.channel.bandwidth_mhz() == 40);
+                let protection = self.service.bss_protection(self.channel.width());
                 let len = write_ht_association_response_frame_for_security(
                     &self.advertisement,
                     output,
@@ -827,11 +827,10 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
     pub fn eapol_sent(
         &mut self,
         context: crate::service::ApEapolTxContext,
-        acknowledged: bool,
+        outcome: MpduOutcome,
         now: Instant,
     ) -> Result<(), ApEngineError> {
-        self.service
-            .observe_wpa2_transmit(context, acknowledged, now)?;
+        self.service.observe_wpa2_transmit(context, outcome, now)?;
         Ok(())
     }
 
@@ -977,7 +976,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         if status.phase != ApPeerPhase::Authorized {
             return None;
         }
-        let tid = if status.qos_supported {
+        let tid = if status.qos == PeerQos::Qos {
             priority
         } else {
             WmmUserPriority::UP0
@@ -1011,7 +1010,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
     ) -> Result<Option<ApMsduPlan>, ApEngineError> {
         let group = AddressFlags::from_bytes([destination[0]]).group();
         let (qos, kind) = if group {
-            (false, ApFrameKind::Group)
+            (PeerQos::NonQos, ApFrameKind::Group)
         } else {
             let Some(status) = self
                 .service
@@ -1021,7 +1020,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 return Ok(None);
             };
             (
-                status.qos_supported,
+                status.qos,
                 ApFrameKind::Pairwise {
                     peer: destination,
                     rate: oer_protocols_ieee80211_wire::phy::PhyRate::Legacy(legacy_rate(
@@ -1032,7 +1031,10 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         };
         // A QoS peer's frame goes under its TID, numbered in that TID's
         // space; any other frame as best effort, in the shared space.
-        let tid = if qos { tid } else { WmmUserPriority::UP0 };
+        let tid = match qos {
+            PeerQos::Qos => tid,
+            PeerQos::NonQos => WmmUserPriority::UP0,
+        };
         let plan = ApMsduPlan {
             peer: destination,
             source,
@@ -1090,7 +1092,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         }
         // Every check passed: the number is drawn, then the prefix encoded
         // apart, so nothing of the region changes before it is whole.
-        let sequence = if plan.qos {
+        let sequence = if plan.qos == PeerQos::Qos {
             self.service
                 .next_qos_sequence(plan.peer, plan.tid.value())
                 .ok_or(ApServiceError::UnknownPeer)?
@@ -1139,7 +1141,7 @@ pub struct ApMsduPlan {
     peer: [u8; 6],
     source: [u8; 6],
     ether_type: u16,
-    qos: bool,
+    qos: PeerQos,
     tid: WmmUserPriority,
     kind: ApFrameKind,
     prefix_len: usize,
@@ -1172,11 +1174,7 @@ impl ApMsduPlan {
             peer: self.peer,
             sequence_number,
             user_priority: self.tid.value(),
-            peer_qos: if self.qos {
-                oer_protocols_ieee80211_wire::data::PeerQos::Qos
-            } else {
-                oer_protocols_ieee80211_wire::data::PeerQos::NonQos
-            },
+            peer_qos: self.qos,
             more_data: oer_protocols_ieee80211_wire::data::MoreData::Clear,
             msdu: MsduHeader {
                 destination: self.peer,
