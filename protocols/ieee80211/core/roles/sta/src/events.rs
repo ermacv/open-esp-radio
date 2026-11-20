@@ -133,15 +133,28 @@ impl ConnectStep {
     ];
 }
 
+/// Which frame a scan heard.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanFrame {
+    Beacon,
+    ProbeResponse,
+}
+
+/// Whose a heard frame is: its receiver address is this station's, or
+/// another's and the station overheard it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Addressing {
+    ToUs,
+    Overheard,
+}
+
 /// One beacon or probe response a scan heard.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ScanHeard {
     /// It names the connect's network.
     pub own: bool,
-    /// A probe response, not a beacon.
-    pub probe_response: bool,
-    /// Addressed to this station, not overheard.
-    pub to_us: bool,
+    pub frame: ScanFrame,
+    pub addressing: Addressing,
     /// Its received level in dBm, when the receiver reported one.
     pub rssi: Option<i8>,
 }

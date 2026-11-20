@@ -716,8 +716,8 @@ fn the_negotiation_takes_the_admitted_format_first_then_the_width() {
     let n = ht_access_point(None);
     let h = ht_access_point(Some(ChannelWidth::Mhz20));
     let w = ht_access_point(Some(ChannelWidth::Mhz40Below));
-    let eh = he(h.clone());
-    let ew = he(w.clone());
+    let eh = he(h);
+    let ew = he(w);
     let non_ht = Some((scanned, NegotiatedPhy::NonHt));
     let ht20 = Some((
         scanned,
@@ -738,10 +738,11 @@ fn the_negotiation_takes_the_admitted_format_first_then_the_width() {
             he_ul_mu_power: power().ul_mu_power,
         },
     ));
-    let rows: [(
+    type Row = (
         StaPhyRequest<WideCaps>,
         [Option<(SupportedChannel<WideCaps>, NegotiatedPhy)>; 5],
-    ); 8] = [
+    );
+    let rows: [Row; 8] = [
         (
             request(PHY_NON_HT, Width::Mhz20),
             [non_ht, non_ht, non_ht, non_ht, non_ht],

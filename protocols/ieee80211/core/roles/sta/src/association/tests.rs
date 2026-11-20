@@ -1,5 +1,3 @@
-use super::*;
-
 mod associated_peer {
     use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
 
@@ -10,7 +8,7 @@ mod associated_peer {
         station::AssociationResponse,
     };
 
-    use super::super::{PhyMode, StaAssociatedPeer, StaAssociatedPeerError};
+    use super::super::{StaAssociatedPeer, StaAssociatedPeerError};
 
     const HE20_MCS9_CAPABILITY: [u8; 24] = [
         255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d, 0xc0, 0x1f,

@@ -1,6 +1,7 @@
 use super::*;
 use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
 use oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType;
+use oer_protocols_ieee80211_wire::twt::IndividualTwtImplicit;
 
 const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig::new(
     oer_portable_time::Duration::from_micros(1_000),
@@ -12,12 +13,12 @@ const CONFIG: IndividualTwtRequesterConfig = match IndividualTwtRequesterConfig:
     Err(_) => panic!("valid requester config"),
 };
 
-fn parameters(implicit: bool) -> IndividualTwtParameterSet {
+fn parameters(implicit: IndividualTwtImplicit) -> IndividualTwtParameterSet {
     IndividualTwtParameterSet {
         request: oer_protocols_ieee80211_wire::twt::TwtRequestFields::from_bytes([0; 2])
             .with_requesting_sta(true)
             .with_setup_command(IndividualTwtSetupCommand::Request.field())
-            .with_implicit(implicit)
+            .with_implicit(implicit == IndividualTwtImplicit::Implicit)
             .with_flow_id(IndividualTwtFlowId::new(2).unwrap().field()),
         target_wake_time_tsf: 10_000,
         nominal_minimum_wake_duration: 1,
@@ -26,7 +27,7 @@ fn parameters(implicit: bool) -> IndividualTwtParameterSet {
     }
 }
 
-fn proposal(implicit: bool) -> IndividualTwtProposal {
+fn proposal(implicit: IndividualTwtImplicit) -> IndividualTwtProposal {
     IndividualTwtProposal {
         control: TwtControlFields::REQUEST,
         parameters: parameters(implicit),
@@ -37,9 +38,17 @@ fn proposal(implicit: bool) -> IndividualTwtProposal {
 fn generation_exhaustion_never_reissues_a_stale_identity() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
     requester.generation = u32::MAX;
-    idle_flow(&mut requester, proposal(true).parameters.flow_id())
-        .queue_setup(proposal(true), oer_portable_time::Instant::from_micros(0))
-        .unwrap();
+    idle_flow(
+        &mut requester,
+        proposal(IndividualTwtImplicit::Implicit)
+            .parameters
+            .flow_id(),
+    )
+    .queue_setup(
+        proposal(IndividualTwtImplicit::Implicit),
+        oer_portable_time::Instant::from_micros(0),
+    )
+    .unwrap();
 
     assert_eq!(
         requester.service(oer_portable_time::Instant::from_micros(0)),
@@ -58,7 +67,7 @@ fn generation_exhaustion_never_reissues_a_stale_identity() {
 #[test]
 fn explicit_proposal_reports_the_exact_information_frontier() {
     assert_eq!(
-        proposal(false).validate(),
+        proposal(IndividualTwtImplicit::Explicit).validate(),
         Err(
             IndividualTwtRequesterError::ExplicitTwtInformationUnsupported(
                 IndividualTwtInformationFrontier {
@@ -74,9 +83,17 @@ fn explicit_proposal_reports_the_exact_information_frontier() {
 #[test]
 fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     let mut requester = IndividualTwtRequester::new(CONFIG);
-    idle_flow(&mut requester, proposal(true).parameters.flow_id())
-        .queue_setup(proposal(true), oer_portable_time::Instant::from_micros(0))
-        .unwrap();
+    idle_flow(
+        &mut requester,
+        proposal(IndividualTwtImplicit::Implicit)
+            .parameters
+            .flow_id(),
+    )
+    .queue_setup(
+        proposal(IndividualTwtImplicit::Implicit),
+        oer_portable_time::Instant::from_micros(0),
+    )
+    .unwrap();
     let IndividualTwtService::Transmit(transmission) = requester
         .service(oer_portable_time::Instant::from_micros(0))
         .unwrap()
@@ -86,12 +103,12 @@ fn peer_accepted_explicit_agreement_is_torn_down_not_installed() {
     requester
         .complete_transmission(
             transmission,
-            true,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
             oer_portable_time::Instant::from_micros(10),
         )
         .unwrap();
 
-    let mut response_parameters = parameters(false);
+    let mut response_parameters = parameters(IndividualTwtImplicit::Explicit);
     response_parameters.request = response_parameters
         .request
         .with_requesting_sta(false)
@@ -131,10 +148,10 @@ fn agreement(flow: u8, target: u64, interval: u64, duration: u64) -> IndividualT
     IndividualTwtAgreement {
         flow_id: IndividualTwtFlowId::new(flow).unwrap(),
         control: TwtControlFields::REQUEST,
-        trigger: false,
-        implicit: true,
+        trigger: oer_protocols_ieee80211_wire::twt::IndividualTwtTrigger::NonTriggerEnabled,
+        implicit: IndividualTwtImplicit::Implicit,
         flow_type: IndividualTwtFlowType::Announced,
-        protection: false,
+        protection: oer_protocols_ieee80211_wire::twt::IndividualTwtProtection::Unprotected,
         target_wake_time: TsfInstant::from_micros(target),
         wake_interval: TsfDuration::from_micros(interval),
         wake_duration: TsfDuration::from_micros(duration),
@@ -255,9 +272,11 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
     use oer_portable_time::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
-    let flow = proposal(true).parameters.flow_id();
+    let flow = proposal(IndividualTwtImplicit::Implicit)
+        .parameters
+        .flow_id();
     idle_flow(&mut requester, flow)
-        .queue_setup(proposal(true), clock.now())
+        .queue_setup(proposal(IndividualTwtImplicit::Implicit), clock.now())
         .unwrap();
     assert!(matches!(
         requester.flow(flow),
@@ -275,7 +294,11 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
         .advance(oer_portable_time::Duration::from_micros(10))
         .unwrap();
     requester
-        .complete_transmission(transmission, true, clock.now())
+        .complete_transmission(
+            transmission,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            clock.now(),
+        )
         .unwrap();
     let IndividualTwtFlowAccess::TeardownReady(teardown) = requester.flow(flow) else {
         panic!("completed transmission permits teardown");
@@ -287,7 +310,11 @@ fn queue_authority_follows_the_selected_flow_through_transmission() {
     };
     assert_eq!(transmission.kind, IndividualTwtTxKind::Teardown);
     requester
-        .complete_transmission(transmission, true, clock.now())
+        .complete_transmission(
+            transmission,
+            oer_protocols_ieee80211_core_upper_mac::rate_control::MpduOutcome::Acknowledged,
+            clock.now(),
+        )
         .unwrap();
     assert!(matches!(
         requester.flow(flow),
@@ -300,7 +327,7 @@ fn a_foreign_proposal_does_not_mutate_either_flow() {
     use oer_portable_time::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
     let mut requester = IndividualTwtRequester::new(CONFIG);
-    let proposal = proposal(true);
+    let proposal = proposal(IndividualTwtImplicit::Implicit);
     let selected = IndividualTwtFlowId::new(1).unwrap();
     assert_eq!(
         idle_flow(&mut requester, selected).queue_setup(proposal, clock.now()),
@@ -320,15 +347,17 @@ fn a_foreign_proposal_does_not_mutate_either_flow() {
 fn every_previous_nontransmitting_occupied_phase_still_permits_teardown() {
     use oer_portable_time::Clock as _;
     let clock = oer_portable_time_virtual::VirtualClock::<1>::new();
-    let flow = proposal(true).parameters.flow_id();
+    let flow = proposal(IndividualTwtImplicit::Implicit)
+        .parameters
+        .flow_id();
     for phase in [
         FlowPhase::SetupQueued {
-            proposal: proposal(true),
+            proposal: proposal(IndividualTwtImplicit::Implicit),
             attempts_remaining: 2,
             ready_at: clock.now(),
         },
         FlowPhase::AwaitingResponse {
-            proposal: proposal(true),
+            proposal: proposal(IndividualTwtImplicit::Implicit),
             dialog_token: 1,
             generation: 1,
             attempts_remaining: 1,

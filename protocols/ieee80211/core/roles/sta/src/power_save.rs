@@ -119,15 +119,13 @@ impl PowerSaveView {
 mod tests {
     use super::*;
 
-    fn tim(unicast_buffered: bool) -> Option<StaTimObservation> {
+    use oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic;
+
+    fn tim(unicast: BufferedTraffic) -> Option<StaTimObservation> {
         Some(StaTimObservation {
             dtim_count: 0,
             dtim_period: 1,
-            unicast: if unicast_buffered {
-                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
-            } else {
-                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
-            },
+            unicast,
             group: oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear,
         })
     }
@@ -138,12 +136,21 @@ mod tests {
         view.null_sent(StaPowerManagement::PowerSave, NullOutcome::Delivered);
         view.null_sent(StaPowerManagement::Active, NullOutcome::Unconfirmed);
         // The access point buffers for the station: send PM=0 again.
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::SendActive);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::SendActive
+        );
         // A TIM without the station's bit says nothing.
-        assert_eq!(view.beacon(tim(false)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Clear)),
+            PowerSaveDecision::Keep
+        );
         // Delivered at last: the two sides agree.
         view.null_sent(StaPowerManagement::Active, NullOutcome::Delivered);
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 
     #[test]
@@ -151,7 +158,10 @@ mod tests {
         let mut view = PowerSaveView::Awake;
         view.null_sent(StaPowerManagement::PowerSave, NullOutcome::Unconfirmed);
         assert!(view.asleep());
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 
     #[test]
@@ -159,6 +169,9 @@ mod tests {
         let mut view = PowerSaveView::Awake;
         view.null_sent(StaPowerManagement::Active, NullOutcome::Unconfirmed);
         assert_eq!(view, PowerSaveView::Awake);
-        assert_eq!(view.beacon(tim(true)), PowerSaveDecision::Keep);
+        assert_eq!(
+            view.beacon(tim(BufferedTraffic::Buffered)),
+            PowerSaveDecision::Keep
+        );
     }
 }

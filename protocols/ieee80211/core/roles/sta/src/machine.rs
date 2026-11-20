@@ -4868,13 +4868,17 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     .as_ref()
                     .map_or(&[][..], |profile| profile.ssid.as_slice());
                 let subtype = management.subtype();
-                let to_us = management.header().receiver() == self.config.address.get();
+                let addressing = if management.header().receiver() == self.config.address.get() {
+                    crate::events::Addressing::ToUs
+                } else {
+                    crate::events::Addressing::Overheard
+                };
                 let observation =
                     observe_scan(&mut (*self.scan), now, management, &meta, Some(ssid));
                 report_scan(events, observation);
                 report(events, || StaEvent::ScanHeard {
                     at: now,
-                    heard: crate::receive::scan_heard(subtype, to_us, &meta, observation),
+                    heard: crate::receive::scan_heard(subtype, addressing, &meta, observation),
                 });
                 Change::Keep
             }

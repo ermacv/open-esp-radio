@@ -1595,8 +1595,8 @@ fn a_connect_reports_each_step_and_what_its_scan_heard() {
                 now,
                 crate::events::ScanHeard {
                     own: true,
-                    probe_response: false,
-                    to_us: false,
+                    frame: crate::events::ScanFrame::Beacon,
+                    addressing: crate::events::Addressing::Overheard,
                     rssi: Some(-40),
                 }
             ))
@@ -1647,11 +1647,14 @@ fn a_probe_response_addressed_to_the_station_is_reported_as_such() {
         response[4..10].copy_from_slice(&LOCAL);
         let _ = world.deliver(at(13), &response, meta());
         let heard = world.losses.heard.map(|(_, heard)| heard).unwrap();
-        assert!(heard.probe_response && heard.to_us && heard.own);
+        assert_eq!(heard.frame, crate::events::ScanFrame::ProbeResponse);
+        assert_eq!(heard.addressing, crate::events::Addressing::ToUs);
+        assert!(heard.own);
         response[4..10].copy_from_slice(&[0x02; 6]);
         let _ = world.deliver(at(14), &response, meta());
         let heard = world.losses.heard.map(|(_, heard)| heard).unwrap();
-        assert!(heard.probe_response && !heard.to_us);
+        assert_eq!(heard.frame, crate::events::ScanFrame::ProbeResponse);
+        assert_eq!(heard.addressing, crate::events::Addressing::Overheard);
     });
 }
 
@@ -5310,7 +5313,7 @@ fn downlink_amsdu(subframes: &[([u8; 6], u16, &[u8])]) -> Vec<u8> {
     frame.extend_from_slice(&[0x80, 0]);
     for (index, (destination, ether_type, payload)) in subframes.iter().enumerate() {
         if index != 0 {
-            while (frame.len() - 26) % 4 != 0 {
+            while !(frame.len() - 26).is_multiple_of(4) {
                 frame.push(0);
             }
         }
