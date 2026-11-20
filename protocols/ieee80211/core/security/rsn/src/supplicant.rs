@@ -25,7 +25,6 @@ use crate::{
     keys::RsnKeyInstall,
     state::{RsnStaAction, RsnStaPhase, RsnStaState, RsnStateError, RsnTransmit},
 };
-use core::convert::Infallible;
 use oer_portable_crypto::{
     Aes128Key, KeyUnwrapError, KeyUnwrapRequest,
     block::{Aes128Engine, BlockError},
@@ -905,18 +904,23 @@ impl RsnStaSupplicant {
             }
             RsnStaAction::Transmit(transmit) => Ok(self.build_transmit(transmit, engine)?),
             RsnStaAction::VerifyMessage3Mic { ticket, frame } => {
-                let verified = frame.key_frame()?.check_mic(self.ptk()?, engine);
-                match self
-                    .state
-                    .complete_message3_mic(ticket, frame, verified)
-                    .map_err(RsnStaSupplicantError::State)?
-                {
-                    Ok(action) => self.resolve_message3(action, engine),
-                    Err(MicFailure::Mismatch) => {
-                        Err(RsnStaSupplicantError::InvalidMessage3Mic.into())
+                match frame.key_frame()?.check_mic(self.ptk()?, engine) {
+                    Ok(()) => {
+                        let action = self
+                            .state
+                            .complete_message3_mic(ticket, frame)
+                            .map_err(RsnStaSupplicantError::State)?;
+                        self.resolve_message3(action, engine)
                     }
-                    Err(MicFailure::Engine(error)) => {
-                        Err(RsnStaSupplicantError::Engine(error).into())
+                    Err(failure) => {
+                        self.state
+                            .fail_message3_mic(ticket, frame)
+                            .map_err(RsnStaSupplicantError::State)?;
+                        Err(match failure {
+                            MicFailure::Mismatch => RsnStaSupplicantError::InvalidMessage3Mic,
+                            MicFailure::Engine(error) => RsnStaSupplicantError::Engine(error),
+                        }
+                        .into())
                     }
                 }
             }
@@ -943,26 +947,18 @@ impl RsnStaSupplicant {
         let unwrapped = match unwrapped {
             Ok(unwrapped) => unwrapped,
             Err(error) => {
-                return Err(
-                    match self
-                        .state
-                        .complete_key_data::<N, _>(ticket, frame, Err(error))
-                        .map_err(RsnStaSupplicantError::State)?
-                    {
-                        Err(error) => error.into_sta(),
-                        Ok(_) => RsnStaSupplicantError::UnexpectedAction.into(),
-                    },
-                );
+                self.state
+                    .fail_key_data(ticket, frame)
+                    .map_err(RsnStaSupplicantError::State)?;
+                return Err(error.into_sta());
             }
         };
-        let (ticket, frame) = match self
+        let RsnStaAction::InstallKeys { ticket, frame } = self
             .state
-            .complete_key_data::<N, Infallible>(ticket, frame, Ok(()))
+            .complete_key_data(ticket, frame)
             .map_err(RsnStaSupplicantError::State)?
-        {
-            Ok(RsnStaAction::InstallKeys { ticket, frame }) => (ticket, frame),
-            Ok(_) => return Err(RsnStaSupplicantError::UnexpectedAction.into()),
-            Err(never) => match never {},
+        else {
+            return Err(RsnStaSupplicantError::UnexpectedAction.into());
         };
         Ok(self.prepare_key_install(ticket, frame, Some(unwrapped.as_bytes()))?)
     }
@@ -988,12 +984,11 @@ impl RsnStaSupplicant {
     ) -> Result<RsnStaReady<N>, RsnStaSupplicantError> {
         match self
             .state
-            .complete_key_install::<N, Infallible>(request.ticket, Ok(()))
+            .complete_key_install::<N>(request.ticket)
             .map_err(RsnStaSupplicantError::State)?
         {
-            Ok(RsnStaAction::Transmit(transmit)) => self.build_transmit(transmit, engine),
-            Ok(_) => Err(RsnStaSupplicantError::UnexpectedAction),
-            Err(never) => match never {},
+            RsnStaAction::Transmit(transmit) => self.build_transmit(transmit, engine),
+            _ => Err(RsnStaSupplicantError::UnexpectedAction),
         }
     }
 
@@ -1037,16 +1032,10 @@ impl RsnStaSupplicant {
         ) {
             Ok(keys) => keys,
             Err(error) => {
-                return Err(
-                    match self
-                        .state
-                        .complete_key_install::<N, _>(ticket, Err(error))
-                        .map_err(RsnStaSupplicantError::State)?
-                    {
-                        Err(error) => RsnStaSupplicantError::Frame(error),
-                        Ok(_) => RsnStaSupplicantError::UnexpectedAction,
-                    },
-                );
+                self.state
+                    .fail_key_install(ticket)
+                    .map_err(RsnStaSupplicantError::State)?;
+                return Err(RsnStaSupplicantError::Frame(error));
             }
         };
         let retry = self.completed_message3.is_some();

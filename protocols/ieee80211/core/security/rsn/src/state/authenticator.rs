@@ -3,6 +3,10 @@
 use super::*;
 use crate::AkmKeys;
 
+/// The handshake failed: its peer is deauthenticated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RsnDeauthenticatePeer;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RsnApPhase {
     AwaitingMessage2,
@@ -378,41 +382,41 @@ impl RsnApState {
         Ok(RsnApAction::VerifyMessage2Mic { ticket, message2 })
     }
 
-    /// The check of Message 2's MIC ended with `verified`. A failure
-    /// returns the peer to Message 2 and comes back as the inner error.
-    pub fn complete_message2_mic<const N: usize, F>(
+    /// Message 2's MIC verified: Message 3 is prepared next.
+    pub fn complete_message2_mic<const N: usize>(
         &mut self,
         ticket: RsnTicket,
         message2: OwnedEapolFrame<N>,
-        verified: Result<(), F>,
-    ) -> Result<Result<RsnApAction<N>, F>, RsnStateError> {
+    ) -> Result<RsnApAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnApPhase::VerifyingMessage2)?;
         self.validate_retained_message2(&message2)?;
-        if let Err(failure) = verified {
-            // SNonce and M2 replay are peer input until the MIC authenticates
-            // them. A spoofed M2 must not poison this peer's M1 transaction.
-            self.supplicant_nonce = [0; RSN_NONCE_LEN];
-            self.phase = RsnApPhase::AwaitingMessage2;
-            return Ok(Err(failure));
-        }
         self.phase = RsnApPhase::PreparingMessage3;
         let ticket = self.issue_ticket();
-        Ok(Ok(RsnApAction::PrepareMessage3 { ticket }))
+        Ok(RsnApAction::PrepareMessage3 { ticket })
     }
 
-    /// Message 3's preparation ended with `prepared`. A failure fails the
-    /// handshake (the peer is deauthenticated) and comes back as the inner
-    /// error.
-    pub fn complete_message3_preparation<const N: usize, F>(
+    /// Message 2's MIC did not verify: the peer is awaited at Message 2
+    /// again, and its SNonce is forgotten.
+    pub fn fail_message2_mic<const N: usize>(
         &mut self,
         ticket: RsnTicket,
-        prepared: Result<(), F>,
-    ) -> Result<Result<RsnApAction<N>, F>, RsnStateError> {
+        message2: OwnedEapolFrame<N>,
+    ) -> Result<(), RsnStateError> {
+        self.check_completion(ticket, RsnApPhase::VerifyingMessage2)?;
+        self.validate_retained_message2(&message2)?;
+        // SNonce and M2 replay are peer input until the MIC authenticates
+        // them. A spoofed M2 must not poison this peer's M1 transaction.
+        self.supplicant_nonce = [0; RSN_NONCE_LEN];
+        self.phase = RsnApPhase::AwaitingMessage2;
+        Ok(())
+    }
+
+    /// Message 3 is prepared: it goes under the next replay counter.
+    pub fn complete_message3_preparation<const N: usize>(
+        &mut self,
+        ticket: RsnTicket,
+    ) -> Result<RsnApAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnApPhase::PreparingMessage3)?;
-        if let Err(failure) = prepared {
-            self.phase = RsnApPhase::Failed;
-            return Ok(Err(failure));
-        }
         let replay_counter = self
             .last_counter
             .checked_add(1)
@@ -420,32 +424,50 @@ impl RsnApState {
         self.last_counter = replay_counter;
         self.latest_built = None;
         self.phase = RsnApPhase::AwaitingMessage4;
-        Ok(Ok(RsnApAction::Transmit(RsnTransmit {
+        Ok(RsnApAction::Transmit(RsnTransmit {
             message: RsnTxMessage::PairwiseMessage3,
             replay_counter,
             retransmission: false,
-        })))
+        }))
     }
 
-    /// The check of Message 4's MIC ended with `verified`. A failure
-    /// returns the peer to Message 4 and comes back as the inner error.
-    pub fn complete_message4_mic<const N: usize, F>(
+    /// Message 3 could not be prepared: the handshake fails and the peer
+    /// is deauthenticated.
+    pub fn fail_message3_preparation(
+        &mut self,
+        ticket: RsnTicket,
+    ) -> Result<RsnDeauthenticatePeer, RsnStateError> {
+        self.check_completion(ticket, RsnApPhase::PreparingMessage3)?;
+        self.phase = RsnApPhase::Failed;
+        Ok(RsnDeauthenticatePeer)
+    }
+
+    /// Message 4's MIC verified: the peer is authorized.
+    pub fn complete_message4_mic<const N: usize>(
         &mut self,
         ticket: RsnTicket,
         message4: OwnedEapolFrame<N>,
-        verified: Result<(), F>,
-    ) -> Result<Result<RsnApAction<N>, F>, RsnStateError> {
+    ) -> Result<RsnApAction<N>, RsnStateError> {
         self.check_completion(ticket, RsnApPhase::VerifyingMessage4)?;
         self.validate_retained_message4(&message4)?;
-        if let Err(failure) = verified {
-            // Retain the installed-candidate PTK and M3 response window. A
-            // forged M4 can then be ignored while a valid retry still
-            // authorizes exactly this handshake.
-            self.phase = RsnApPhase::AwaitingMessage4;
-            return Ok(Err(failure));
-        }
         self.phase = RsnApPhase::Authorized;
-        Ok(Ok(RsnApAction::AuthorizePeer))
+        Ok(RsnApAction::AuthorizePeer)
+    }
+
+    /// Message 4's MIC did not verify: the peer is awaited at Message 4
+    /// again.
+    pub fn fail_message4_mic<const N: usize>(
+        &mut self,
+        ticket: RsnTicket,
+        message4: OwnedEapolFrame<N>,
+    ) -> Result<(), RsnStateError> {
+        self.check_completion(ticket, RsnApPhase::VerifyingMessage4)?;
+        self.validate_retained_message4(&message4)?;
+        // Retain the installed-candidate PTK and M3 response window. A
+        // forged M4 can then be ignored while a valid retry still
+        // authorizes exactly this handshake.
+        self.phase = RsnApPhase::AwaitingMessage4;
+        Ok(())
     }
 
     const fn ptk_context(&self) -> PtkContext {

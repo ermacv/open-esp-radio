@@ -404,3 +404,44 @@ fn a_message1_that_failed_to_build_is_not_awaited() {
         RsnAuthenticatorStep::PrepareMessage3(_)
     ));
 }
+
+/// `frame` with one bit of its MIC flipped.
+fn forged(frame: &OwnedEapolFrame<512>) -> OwnedEapolFrame<512> {
+    let mut bytes = [0; 512];
+    let len = frame.as_bytes().len();
+    bytes[..len].copy_from_slice(frame.as_bytes());
+    bytes[81] ^= 1;
+    OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, &bytes[..len]).unwrap()
+}
+
+#[test]
+fn a_forged_message2_prepares_no_message3_and_the_real_one_still_does() {
+    let mut authenticator = authenticator(&STATION_RSN);
+    let genuine = message2(&STATION_RSN, &ptk());
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), forged(&genuine), &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::None)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::AwaitingMessage2);
+    assert!(authenticator.pending_ptk().is_none());
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), genuine, &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::PrepareMessage3(_))
+    ));
+}
+
+#[test]
+fn a_forged_message4_authorizes_nobody_and_the_real_one_still_does() {
+    let mut authenticator = awaiting_message4();
+    let genuine = signed_message4(REPLAY + 1);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), forged(&genuine), &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::None)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::AwaitingMessage4);
+    assert!(matches!(
+        authenticator.on_frame(&pmk(), genuine, &mut SoftwareAes128),
+        Ok(RsnAuthenticatorStep::Authorized)
+    ));
+    assert_eq!(authenticator.phase(), RsnApPhase::Authorized);
+}

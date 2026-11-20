@@ -17,19 +17,17 @@ use crate::MicFailure;
 use crate::{
     AssociationSecurityBinding, OwnedEapolFrame, Pmk, Ptk, PtkContext,
     frames::{RsnFrameError, RsnPlainKeyData, RsnTxFrame, build_ap_action_frame},
-    state::{RsnApAction, RsnApPhase, RsnApState, RsnStateError, RsnTicket, RsnTransmit},
+    state::{
+        RsnApAction, RsnApPhase, RsnApState, RsnDeauthenticatePeer, RsnStateError, RsnTicket,
+        RsnTransmit,
+    },
 };
-use core::convert::Infallible;
 use oer_portable_crypto::{
     block::{Aes128Engine, BlockError},
     rfc3394::KeyWrapError,
 };
 use oer_protocols_ieee80211_core_security_cipher::aes::software_aes128_key_wrap;
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
-
-/// Message 2's security elements are not the association's.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct SecurityIesMismatch;
 
 /// Why the authenticator refused a step.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -187,16 +185,20 @@ impl RsnAuthenticator {
                         .ok_or(RsnAuthenticatorError::MissingPairwiseKey)?;
                     message4.key_frame()?.check_mic(ptk, engine)
                 };
-                match self
-                    .state
-                    .complete_message4_mic(ticket, message4, verified)?
-                {
-                    Ok(RsnApAction::AuthorizePeer) => Ok(RsnAuthenticatorStep::Authorized),
-                    Ok(_) => Err(RsnAuthenticatorError::UnexpectedAction),
-                    // A forged Message 4 is ignored; a valid retry still
-                    // authorizes the handshake.
-                    Err(MicFailure::Mismatch) => Ok(RsnAuthenticatorStep::None),
-                    Err(MicFailure::Engine(error)) => Err(RsnAuthenticatorError::Engine(error)),
+                match verified {
+                    Ok(()) => match self.state.complete_message4_mic(ticket, message4)? {
+                        RsnApAction::AuthorizePeer => Ok(RsnAuthenticatorStep::Authorized),
+                        _ => Err(RsnAuthenticatorError::UnexpectedAction),
+                    },
+                    Err(failure) => {
+                        self.state.fail_message4_mic(ticket, message4)?;
+                        match failure {
+                            // A forged Message 4 is ignored; a valid retry
+                            // still authorizes the handshake.
+                            MicFailure::Mismatch => Ok(RsnAuthenticatorStep::None),
+                            MicFailure::Engine(error) => Err(RsnAuthenticatorError::Engine(error)),
+                        }
+                    }
                 }
             }
             RsnApAction::DeauthenticatePeer => Ok(RsnAuthenticatorStep::Deauthenticate),
@@ -237,26 +239,23 @@ impl RsnAuthenticator {
                 .association_security_binding
                 .as_ref()
                 .is_some_and(|binding| binding.matches(pmk, key_frame.key_data()));
-        let ticket = match self
-            .state
-            .complete_message2_mic(ticket, message2, verified)?
-        {
-            Ok(RsnApAction::PrepareMessage3 { ticket }) => ticket,
-            Ok(_) => return Err(RsnAuthenticatorError::UnexpectedAction),
-            // A spoofed Message 2 is ignored; the peer may send it again.
-            Err(MicFailure::Mismatch) => return Ok(RsnAuthenticatorStep::None),
-            Err(MicFailure::Engine(error)) => return Err(RsnAuthenticatorError::Engine(error)),
+        if let Err(failure) = verified {
+            self.state.fail_message2_mic(ticket, message2)?;
+            return match failure {
+                // A spoofed Message 2 is ignored; the peer may send it again.
+                MicFailure::Mismatch => Ok(RsnAuthenticatorStep::None),
+                MicFailure::Engine(error) => Err(RsnAuthenticatorError::Engine(error)),
+            };
+        }
+        let ticket = match self.state.complete_message2_mic(ticket, message2)? {
+            RsnApAction::PrepareMessage3 { ticket } => ticket,
+            _ => return Err(RsnAuthenticatorError::UnexpectedAction),
         };
         if !association_security_ies_match {
             // The authenticated Message 2 names other security elements than
             // the association: the handshake fails and the peer goes.
-            return match self
-                .state
-                .complete_message3_preparation::<N, _>(ticket, Err(SecurityIesMismatch))?
-            {
-                Err(SecurityIesMismatch) => Ok(RsnAuthenticatorStep::Deauthenticate),
-                Ok(_) => Err(RsnAuthenticatorError::UnexpectedAction),
-            };
+            let RsnDeauthenticatePeer = self.state.fail_message3_preparation(ticket)?;
+            return Ok(RsnAuthenticatorStep::Deauthenticate);
         }
         Ok(RsnAuthenticatorStep::PrepareMessage3(
             RsnMessage3Preparation { ticket, ptk },
@@ -280,24 +279,14 @@ impl RsnAuthenticator {
             Ok(wrapped) => wrapped,
             Err(error) => {
                 // The handshake fails with the wrap's error.
-                return Err(
-                    match self
-                        .state
-                        .complete_message3_preparation::<N, _>(ticket, Err(error))?
-                    {
-                        Err(error) => RsnAuthenticatorError::KeyWrap(error),
-                        Ok(_) => RsnAuthenticatorError::UnexpectedAction,
-                    },
-                );
+                let RsnDeauthenticatePeer = self.state.fail_message3_preparation(ticket)?;
+                return Err(RsnAuthenticatorError::KeyWrap(error));
             }
         };
-        let transmit = match self
-            .state
-            .complete_message3_preparation::<N, Infallible>(ticket, Ok(()))?
-        {
-            Ok(RsnApAction::Transmit(transmit)) => transmit,
-            Ok(_) => return Err(RsnAuthenticatorError::UnexpectedAction),
-            Err(never) => match never {},
+        let RsnApAction::Transmit(transmit) =
+            self.state.complete_message3_preparation::<N>(ticket)?
+        else {
+            return Err(RsnAuthenticatorError::UnexpectedAction);
         };
         let frame = build_ap_action_frame(
             &self.state,
