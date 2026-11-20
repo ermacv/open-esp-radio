@@ -18,17 +18,17 @@ use std::collections::VecDeque;
 use core::task::{Context, Waker};
 
 use oer_protocols_bluetooth_le_contracts_port::{
-    AcceptList, AdvEvent, AdvPlace, Advertiser, AdvertisingData, AdvertisingEvent,
+    AcceptEntries, AcceptList, AdvEvent, AdvPlace, Advertiser, AdvertisingData, AdvertisingEvent,
     AdvertisingEventKind, AdvertisingFilterPolicy, AdvertisingReception, AdvertisingSet,
     ChannelSpacing, ConnEvent, ConnPlace, Connection, ConnectionEvent, ConnectionEventKind,
     ConnectionEventTiming, ConnectionPriority, ConnectionSetup, Cut, EventEnd, EventPlace,
     Executed, Facts, Install, LeCapabilities, LeConnectionCapabilities, LeInstant, LeLimits, LePhy,
     LePhys, LePort, LeRadioCapabilities, LeRounds, LeWindow, LegacyAdvertisingTypes,
     LinkAcknowledgement, PduHandle, PduLen, PortKey, PortPools, Published, RadioDuration,
-    RadioTiming, Received, Rest, Retired, RoleRef, RoleRights, Round, RoundSeal, ScanEvent,
-    ScanPlace, ScanWindow, Scanner, ScannerSetup, StartPoll, Starting, StopFrom, StopPoll,
-    StopRight, Stopped, Stopping, Supported, Test, TestEvent, TestPlace, TestWindow, TxEnd,
-    TxPlace, TxPower, dtm::DtmTest,
+    RadioTiming, Received, Rest, Retired, RoleRef, RoleRights, RoundSeal, ScanEvent, ScanPlace,
+    ScanWindow, Scanner, ScannerSetup, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped,
+    Stopping, Supported, Test, TestEvent, TestPlace, TestWindow, TxEnd, TxPlace, TxPower,
+    dtm::DtmTest,
 };
 use oer_protocols_bluetooth_le_wire::{
     AccessAddress, AdvertisingChannels, AdvertisingPdu, CrcInit, DataChannel, DataPduKind,
@@ -64,6 +64,7 @@ impl LeCapabilities for Caps {
             connection_events: 2,
             transmit_places: 1,
             receive_nodes: 2,
+            accept_list: 2,
         },
         ..LeRadioCapabilities::NONE
     };
@@ -269,7 +270,12 @@ impl<'id> LePort<'id, 1, 0, 1, 2, 1, 2, 0> for Idle<'id> {
         self.key.close_test(role, home)
     }
 
-    fn write_accept_list(&mut self, _: &mut AcceptList<'id>, _: &[LeDeviceAddress]) {}
+    fn write_accept_list(
+        &mut self,
+        _: &mut AcceptList<'id>,
+        _: &Supported<Caps, AcceptEntries<'_>>,
+    ) {
+    }
 
     fn publish_advertising(
         &mut self,
@@ -317,10 +323,6 @@ impl<'id> LePort<'id, 1, 0, 1, 2, 1, 2, 0> for Idle<'id> {
 
     fn submit(&mut self, place: TxPlace<'id>) {
         self.chain.push_back(place);
-    }
-
-    fn round(&mut self) -> Round<'_, 'id, Self> {
-        Round::open(self)
     }
 
     fn alarm(&mut self, _: Option<LeInstant>) {}
@@ -471,7 +473,7 @@ fn a_connection_runs_from_the_install_to_the_release() {
                 scanners,
                 connections: [place],
                 tests,
-                accept_list,
+                mut accept_list,
             } = roles;
             let link = Supported::new(ConnectionSetup {
                 access_address: AccessAddress([1, 2, 3, 4]),
@@ -543,6 +545,9 @@ fn a_connection_runs_from_the_install_to_the_release() {
             };
             assert_eq!(port.receptions.len(), 2, "both nodes went back");
 
+            let listed = [OWN];
+            let entries = Supported::new(AcceptEntries::new(&listed)).unwrap();
+            port.write_accept_list(&mut accept_list, &entries);
             port.withdraw(RoleRef::Connection(&role));
             let [first, second]: [ConnEvent<'_>; 2] = homes.try_into().ok().unwrap();
             let place = port.close_connection(role, [first, second], [tx]);

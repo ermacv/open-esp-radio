@@ -4,10 +4,11 @@
 use core::marker::PhantomData;
 
 use crate::{
-    AdvertisingData, AdvertisingEvent, AdvertisingFilterPolicy, AdvertisingReception,
-    AdvertisingSet, ConnectionEvent, ConnectionEventTiming, ConnectionSetup, LeCapabilities,
-    LeConnectionCapabilities, LeInstant, LeWindow, OutsideEpoch, RadioDuration, RadioTiming,
-    ScanFilterPolicy, ScanType, ScanWindow, ScannerSetup, TestWindow, TxPower, dtm::DtmTest,
+    AcceptEntries, AdvertisingData, AdvertisingEvent, AdvertisingFilterPolicy,
+    AdvertisingReception, AdvertisingSet, ConnectionEvent, ConnectionEventTiming, ConnectionSetup,
+    LeCapabilities, LeConnectionCapabilities, LeInstant, LeWindow, OutsideEpoch, RadioDuration,
+    RadioTiming, ScanFilterPolicy, ScanType, ScanWindow, ScannerSetup, TestWindow, TxPower,
+    dtm::DtmTest,
 };
 use oer_protocols_bluetooth_le_wire::advertising_header::{
     AdvertisingPduType, LegacyAdvertisingPduPrefix,
@@ -99,8 +100,8 @@ impl<K: LeCapabilities, T: Untimed<K>> Supported<K, T> {
     ///
     /// [`Unplaced::Unsupported`]: the capabilities exclude the value.
     pub fn new(value: T) -> Result<Self, Unplaced> {
-        if !value.supported() {
-            return Err(Unplaced::Unsupported);
+        if let Some(refusal) = value.refusal() {
+            return Err(refusal);
         }
         Ok(Self {
             value,
@@ -155,6 +156,8 @@ pub enum Unplaced {
     BeyondHorizon,
     /// A reservation lies outside the radio epoch.
     OutsideEpoch,
+    /// More entries than the capabilities hold.
+    BeyondCapacity,
 }
 
 impl From<OutsideEpoch> for Unplaced {
@@ -167,6 +170,15 @@ impl From<OutsideEpoch> for Unplaced {
 pub trait Capability<K: LeCapabilities> {
     /// Whether `K` serve this value.
     fn supported(&self) -> bool;
+
+    /// Why `K` do not serve this value, if they do not.
+    fn refusal(&self) -> Option<Unplaced> {
+        if self.supported() {
+            None
+        } else {
+            Some(Unplaced::Unsupported)
+        }
+    }
 }
 
 /// A value that occupies no air, built with [`Supported::new`].
@@ -194,6 +206,22 @@ impl<K: LeCapabilities> Connections<K> {
         Some(connection) => connection,
         None => panic!("a connection's value needs capabilities that serve connections"),
     };
+}
+
+impl<K: LeCapabilities> Untimed<K> for AcceptEntries<'_> {}
+
+impl<K: LeCapabilities> Capability<K> for AcceptEntries<'_> {
+    fn supported(&self) -> bool {
+        Capability::<K>::refusal(self).is_none()
+    }
+
+    fn refusal(&self) -> Option<Unplaced> {
+        if self.get().len() > K::CAPS.limits.accept_list {
+            Some(Unplaced::BeyondCapacity)
+        } else {
+            None
+        }
+    }
 }
 
 impl<K: LeCapabilities> Untimed<K> for TxPower {}

@@ -46,6 +46,7 @@ portable/embassy/{net, time}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, wire}/
 protocols/bluetooth/le/contracts/port/
+protocols/bluetooth/le/testing/model/
 protocols/bridges/ieee80211-ethernet/
 protocols/hil/{agent, protocol}/
 protocols/ieee80211/{runtime, wire}/

@@ -132,6 +132,9 @@ pub struct LeLimits {
     pub transmit_places: usize,
     /// Receive nodes a connection and of each shared chain.
     pub receive_nodes: usize,
+    /// Entries of the filter accept list. A scanner and an advertiser need
+    /// none: a list of none filters every device out.
+    pub accept_list: usize,
 }
 
 impl LeLimits {
@@ -142,6 +145,7 @@ impl LeLimits {
         connection_events: 0,
         transmit_places: 0,
         receive_nodes: 0,
+        accept_list: 0,
     };
 }
 

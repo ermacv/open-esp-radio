@@ -62,11 +62,11 @@ pub use port::{
     StopPoll, TxEnd,
 };
 pub use request::{
-    AboveCeiling, AdvertisingData, AdvertisingEvent, AdvertisingEventKind, AdvertisingFilterPolicy,
-    AdvertisingReception, AdvertisingSet, ChannelSpacing, ConnectionAllowances, ConnectionEvent,
-    ConnectionEventKind, ConnectionEventTiming, ConnectionPriority, ConnectionSetup, LeBand,
-    LeTxCeiling, Operation, OutsideEpoch, RadioTiming, ScanFilterPolicy, ScanType, ScanWindow,
-    ScannerSetup, TestPhy, TestWindow, TxPower,
+    AboveCeiling, AcceptEntries, AdvertisingData, AdvertisingEvent, AdvertisingEventKind,
+    AdvertisingFilterPolicy, AdvertisingReception, AdvertisingSet, ChannelSpacing,
+    ConnectionAllowances, ConnectionEvent, ConnectionEventKind, ConnectionEventTiming,
+    ConnectionPriority, ConnectionSetup, LeBand, LeTxCeiling, Operation, OutsideEpoch, RadioTiming,
+    ScanFilterPolicy, ScanType, ScanWindow, ScannerSetup, TestPhy, TestWindow, TxPower,
 };
 pub use rights::{
     AcceptList, AdvEvent, AdvPlace, Advertiser, ConnEvent, ConnPlace, Connection, EventPlace,

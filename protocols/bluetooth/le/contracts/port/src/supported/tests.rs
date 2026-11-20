@@ -495,3 +495,33 @@ fn no_power_is_supported_without_a_radio() {
         Err(Unplaced::Unsupported)
     );
 }
+
+#[test]
+fn an_accept_list_holds_at_most_the_capabilities_entries() {
+    /// [`Peripheral`] with a list of two.
+    enum Two {}
+    impl LeCapabilities for Two {
+        const CAPS: LeRadioCapabilities = LeRadioCapabilities {
+            filter_accept_list: true,
+            limits: LeLimits {
+                accept_list: 2,
+                ..LeLimits::NONE
+            },
+            ..Peripheral::CAPS
+        };
+    }
+    let entries = [OWN; 3];
+    let list = |count| crate::AcceptEntries::new(&entries[..count]);
+    assert!(Supported::<Two, _>::new(list(2)).is_ok());
+    assert_eq!(
+        Supported::<Two, _>::new(list(3)).err(),
+        Some(Unplaced::BeyondCapacity)
+    );
+    assert!(super::Capability::<Two>::supported(&list(2)));
+    assert!(!super::Capability::<Two>::supported(&list(3)));
+    assert!(Supported::<Peripheral, _>::new(list(0)).is_ok());
+    assert_eq!(
+        Supported::<Peripheral, _>::new(list(1)).err(),
+        Some(Unplaced::BeyondCapacity)
+    );
+}
