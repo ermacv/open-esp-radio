@@ -281,3 +281,38 @@ fn cobs_decoding_restores_a_block_past_one_code_and_refuses_an_empty_frame() {
     assert_eq!(encoded[..raw.len()], raw);
     assert_eq!(decode_cobs_in_place(&mut []), None);
 }
+
+/// An overflowing frame yields nothing, and the delimiter that ends its
+/// discard opens no frame: text after it is ignored until the next frame's
+/// own delimiter, and exactly that good frame decodes.
+#[test]
+fn an_overflowing_frame_then_a_good_one_decodes_exactly_the_good_one() {
+    let expected = command(4);
+    let mut encoder = FrameEncoder::new();
+    let frame = encoder.encode(&expected).unwrap();
+    assert_eq!(frame.first(), Some(&0), "a frame starts with its delimiter");
+
+    const TEXT: &[u8] = b"text between frames";
+    const NOISE: usize = MAX_COBS_FRAME_BYTES + 4;
+    let mut input = [0x55_u8; 2 + NOISE + TEXT.len() + MAX_WIRE_FRAME_BYTES];
+    input[0] = 0;
+    input[1 + NOISE] = 0;
+    let text = 2 + NOISE;
+    input[text..text + TEXT.len()].copy_from_slice(TEXT);
+    let good = text + TEXT.len();
+    input[good..good + frame.len()].copy_from_slice(frame);
+
+    let mut decoder = FrameDecoder::new();
+    let mut results = 0;
+    let mut observed = None;
+    decoder.feed(WireKind::Command, &input[..good + frame.len()], |result| {
+        results += 1;
+        observed = result
+            .ok()
+            .and_then(|frame| frame.decode::<RequestReset>().map(Result::unwrap));
+    });
+    assert_eq!(results, 1, "only the good frame ends a frame");
+    assert_eq!(observed, Some(expected));
+    assert_eq!(decoder.counters().overflows, 1);
+    assert_eq!(decoder.counters().frames, 1);
+}
