@@ -2089,7 +2089,7 @@ fn a_null_encoding_failure_leaves_once() {
         let State::Connected(connected) = &mut world.station.state else {
             panic!()
         };
-        connected.wake = true;
+        connected.wake = super::Owing::Owed;
         world.run(at(40));
         assert!(!world.station.is_connected());
         assert_eq!(
@@ -2137,7 +2137,7 @@ fn a_frame_of_the_previous_connection_holds_its_place_until_its_end_which_change
         let State::Connected(connected) = &mut world.station.state else {
             unreachable!()
         };
-        connected.wake = true;
+        connected.wake = super::Owing::Owed;
         // The old Null holds the connected station's place.
         assert!(poll!(world, at(82)).is_none());
         assert!(!world.station.is_current(&old.tag));
@@ -2157,7 +2157,7 @@ fn a_frame_of_the_previous_connection_holds_its_place_until_its_end_which_change
             unreachable!()
         };
         assert!(
-            connected.sending && connected.waking,
+            connected.transmission == super::Transmission::Waking,
             "the new Null is outstanding"
         );
         world.input(
@@ -2170,7 +2170,7 @@ fn a_frame_of_the_previous_connection_holds_its_place_until_its_end_which_change
         let State::Connected(connected) = &world.station.state else {
             unreachable!()
         };
-        assert!(!connected.sending && !connected.waking);
+        assert_eq!(connected.transmission, super::Transmission::Free);
     });
 }
 

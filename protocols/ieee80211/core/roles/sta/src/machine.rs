@@ -1538,16 +1538,19 @@ impl<T: StaTypes, K> State<T, K> {
                 .confirmation
                 .is_none()
                 .then_some(UpstreamFact::Connected(new.channel)),
-            edca: false,
-            exchange: false,
+            edca: Owing::Clear,
+            exchange: Owing::Clear,
             power: PowerSaveView::Awake,
-            wake: false,
-            sending: false,
-            waking: false,
+            wake: Owing::Clear,
+            transmission: Transmission::Free,
             background: None,
-            connected_notice: new.confirmation.is_none(),
+            connected_notice: if new.confirmation.is_none() {
+                Owing::Owed
+            } else {
+                Owing::Clear
+            },
             block_ack: None,
-            tx_block_ack: false,
+            tx_block_ack: TxAgreements::Unstarted,
             rsn: None,
         });
     }
@@ -1829,27 +1832,51 @@ struct Connected<T: StaTypes, K> {
     report: Option<UpstreamFact<K>>,
     /// The access point's beacons announced another EDCA set, already in
     /// `peer`, which the interface has yet to take.
-    edca: bool,
+    edca: Owing,
     /// The primary lease to exchange after the port moved.
-    exchange: bool,
+    exchange: Owing,
     /// What the access point knows of the station's power state.
     power: PowerSaveView,
     /// A Null with PM=0 the station owes its access point.
-    wake: bool,
+    wake: Owing,
     /// Admission: at most one connected control transmission at a time.
-    sending: bool,
-    /// A PM=0 transition is outstanding; beacons need not request another.
-    waking: bool,
+    transmission: Transmission,
     /// The background scan, if one runs.
     background: Option<Background>,
     /// The application has yet to hear the station connected.
-    connected_notice: bool,
+    connected_notice: Owing,
     /// Parsed management to hand to the service before the next RX input.
     block_ack: Option<oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction>,
-    /// The transmit Block Ack originator started this association.
-    tx_block_ack: bool,
+    /// Whether the transmit Block Ack originator started this association.
+    tx_block_ack: TxAgreements,
     /// The supplicant of a protected link and its group key's handshake.
     rsn: Option<ConnectedRsn>,
+}
+
+/// Whether the connected station still owes something: a notice, an
+/// exchange or a frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Owing {
+    Owed,
+    Clear,
+}
+
+/// The connected station's one control transmission at a time: none, one,
+/// or a Null with PM=0, whose outstanding transition beacons need not
+/// request again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Transmission {
+    Free,
+    Busy,
+    Waking,
+}
+
+/// Whether the transmit Block Ack originator started the association's
+/// agreements.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxAgreements {
+    Unstarted,
+    Started,
 }
 
 /// What the connected station's transmission in flight is for.
@@ -1900,8 +1927,8 @@ fn tx_agreements<'c, T: StaTypes, K>(
     connected: &mut Connected<T, K>,
 ) -> Option<&'c mut StaTxBlockAck> {
     let tx = tx.as_mut()?;
-    if !connected.tx_block_ack {
-        connected.tx_block_ack = true;
+    if connected.tx_block_ack == TxAgreements::Unstarted {
+        connected.tx_block_ack = TxAgreements::Started;
         tx.associate(
             connected.qos
                 && connected.peer.associated.phy.format()
@@ -1990,7 +2017,9 @@ fn agreement_change<T: StaTypes, K>(
     connected: &Connected<T, K>,
     told: &mut [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
 ) -> Option<LinkAction> {
-    let tx = tx.as_mut().filter(|_| connected.tx_block_ack)?;
+    let tx = tx
+        .as_mut()
+        .filter(|_| connected.tx_block_ack == TxAgreements::Started)?;
     if !tx.changed() {
         return None;
     }
@@ -3334,21 +3363,21 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
                     .and_then(|rsn| rsn.management.as_ref())
                     .and_then(|management| {
                         management.deadline(
-                            connected.sending
+                            connected.transmission != Transmission::Free
                                 || self.out.holds(CONNECTED_PLACE)
                                 || !(self.absence.is_none()
                                     && !connected.power.asleep()
                                     && self.keys.keyed()),
                         )
                     });
-                let can_send = !connected.sending
+                let can_send = (connected.transmission == Transmission::Free)
                     && data_link_up(connected, self.absence.as_ref(), &self.keys)
                     && !self.out.holds(CONNECTED_PLACE);
                 let tx_block_ack = self
                     .config
                     .tx_block_ack
                     .as_ref()
-                    .filter(|_| connected.tx_block_ack)
+                    .filter(|_| connected.tx_block_ack == TxAgreements::Started)
                     .and_then(|tx| tx.deadline(can_send));
                 crate::time::earliest(crate::time::earliest(background, management), tx_block_ack)
             }
@@ -3980,7 +4009,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     && connected.confirmation.is_none()
                 {
                     connected.channel = channel;
-                    connected.exchange = true;
+                    connected.exchange = Owing::Owed;
                 }
                 Change::Keep
             }
@@ -4270,7 +4299,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     && matches!(completion, TxOutcome::Ended(SingleEnd::Delivered { .. }))
                 {
                     connected.confirmation = None;
-                    connected.connected_notice = true;
+                    connected.connected_notice = Owing::Owed;
                     connected.report = Some(UpstreamFact::Connected(connected.channel));
                 }
                 change
@@ -4349,10 +4378,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             _ => None,
         };
         if let Some((sending, outcome)) = sent {
-            connected.sending = false;
+            connected.transmission = Transmission::Free;
             match sending {
                 Sending::Wake => {
-                    connected.waking = false;
                     connected
                         .power
                         .null_sent(StaPowerManagement::Active, outcome);
@@ -5121,12 +5149,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 && edca != connected.peer.associated.edca
             {
                 connected.peer.associated.edca = edca;
-                connected.edca = true;
+                connected.edca = Owing::Owed;
             }
             if connected.power.beacon(beacon.observation.tim) == PowerSaveDecision::SendActive
-                && !connected.waking
+                && connected.transmission != Transmission::Waking
             {
-                connected.wake = true;
+                connected.wake = Owing::Owed;
             }
         }
         Change::Keep
@@ -5637,8 +5665,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 ActionProgress::Action(Owed::BlockAck(request)),
             );
         }
-        if connected.connected_notice {
-            connected.connected_notice = false;
+        if connected.connected_notice == Owing::Owed {
+            connected.connected_notice = Owing::Clear;
             let notice = StaNotice::Connected {
                 bssid: connected.bssid,
                 channel: connected.channel.channel().number(),
@@ -5649,7 +5677,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         if let Some(fact) = connected.report.take() {
             return (Change::Keep, ActionProgress::Action(Owed::Upstream(fact)));
         }
-        if core::mem::take(&mut connected.edca)
+        if core::mem::replace(&mut connected.edca, Owing::Clear) == Owing::Owed
             && let Some(edca) = SupportedEdca::new(
                 oer_protocols_ieee80211_contracts_port::EdcaParameterSet::from_wmm(
                     connected.peer.associated.edca,
@@ -5658,10 +5686,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             return (Change::Keep, ActionProgress::Action(Owed::SetEdca(edca)));
         }
-        if connected.exchange {
+        if connected.exchange == Owing::Owed {
             match core::mem::replace(&mut (*self.lease), Held::None) {
                 Held::Lease(lease) => {
-                    connected.exchange = false;
+                    connected.exchange = Owing::Clear;
                     return (Change::Keep, ActionProgress::Action(Owed::Exchange(lease)));
                 }
                 held => (*self.lease) = held,
@@ -5692,7 +5720,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // nothing: the connected link's every turn ends here, its action's
         // place untouched.
         if connected.background.is_none()
-            && !(connected.wake && !connected.power.asleep() && !connected.sending)
+            && !(connected.wake == Owing::Owed
+                && !connected.power.asleep()
+                && (connected.transmission == Transmission::Free))
         {
             return (Change::Keep, ActionProgress::Wait);
         }
@@ -5710,7 +5740,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         now: Instant,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
+        if connected.transmission != Transmission::Free
+            || !self.link_up(&connected.power, &(*self.keys))
+        {
             return None;
         }
         let management = connected.rsn.as_mut()?.management.as_mut()?;
@@ -5724,7 +5756,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         ) {
             Ok(transmit) => {
                 management.submitted(query);
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 Some(Ok(Owed::TransmitProtected(transmit)))
             }
             Err(Unsent::Out) => None,
@@ -5742,7 +5774,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        let can_send = !connected.sending
+        let can_send = (connected.transmission == Transmission::Free)
             && data_link_up(connected, self.absence.as_ref(), &(*self.keys))
             && !self.out.holds(CONNECTED_PLACE);
         // An ADDBA Request whose number the link's holder told goes first;
@@ -5822,7 +5854,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             protected,
         ) {
             Ok(transmit) => {
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 if let (Body::Delba(tid, _), Some(tx)) = (&body, self.config.tx_block_ack.as_mut())
                 {
                     tx.delba_sent(*tid);
@@ -5879,7 +5911,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             tx.request_sent(tid);
         }
         report(events, || StaEvent::BlockAckRequestSent);
-        connected.sending = true;
+        connected.transmission = Transmission::Busy;
         // The port encodes a BlockAckReq: nothing of it is in the buffer.
         self.out.take(purpose);
         Some(Ok(Owed::Transmit(Encoded {
@@ -5904,7 +5936,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         connected: &mut Connected<T, K>,
         purpose: TxPurpose,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
-        if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
+        if connected.transmission != Transmission::Free
+            || !self.link_up(&connected.power, &(*self.keys))
+        {
             return None;
         }
         let rsn = connected.rsn.as_mut()?;
@@ -5916,7 +5950,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         match self.encode_eapol_response(connected.bssid, qos, admission, message, purpose) {
             Ok(owed) => {
                 rsn.message4 = DuplicateMessage4::AwaitSent;
-                connected.sending = true;
+                connected.transmission = Transmission::Busy;
                 Some(Ok(owed))
             }
             Err(unsent) => unsent.disconnect_reason().map(Err),
@@ -6101,7 +6135,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     }
                 }
                 Rekey::Send(message)
-                    if !connected.sending && self.link_up(&connected.power, &(*self.keys)) =>
+                    if (connected.transmission == Transmission::Free)
+                        && self.link_up(&connected.power, &(*self.keys)) =>
                 {
                     let message_kind = match message.frame.key_frame() {
                         Ok(frame) => frame.message(),
@@ -6123,7 +6158,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                         }
                     ) {
                         Ok(owed) => {
-                            connected.sending = true;
+                            connected.transmission = Transmission::Busy;
                             (Rekey::AwaitSent, Some(owed))
                         }
                         Err(unsent) => match unsent.disconnect_reason() {
@@ -6199,7 +6234,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     }
                     _ => step,
                 },
-                BackgroundStep::NeedSleep if !connected.sending => {
+                BackgroundStep::NeedSleep if (connected.transmission == Transmission::Free) => {
                     power = Some((StaPowerManagement::PowerSave, Sending::Sleep));
                     BackgroundStep::AwaitSleep
                 }
@@ -6213,8 +6248,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     owed = self.configure(StationReceive::OtherBssManagement);
                     BackgroundStep::AwaitConfigured
                 }
-                BackgroundStep::NeedProbe if !connected.sending => {
-                    owed = self.probe(&mut connected.sending)?;
+                BackgroundStep::NeedProbe if (connected.transmission == Transmission::Free) => {
+                    owed = self.probe(&mut connected.transmission)?;
                     if owed.is_some() {
                         BackgroundStep::Listen
                     } else {
@@ -6225,12 +6260,14 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     owed = self.configure(bss_rules(bssid, Rules::<K>::MEMBER));
                     BackgroundStep::AwaitHome
                 }
-                BackgroundStep::NeedWake if !connected.sending => {
+                BackgroundStep::NeedWake if (connected.transmission == Transmission::Free) => {
                     power = Some((StaPowerManagement::Active, Sending::Wake));
                     BackgroundStep::AwaitWake
                 }
-                BackgroundStep::HomeProbe { until } if !connected.sending => {
-                    owed = self.probe(&mut connected.sending)?;
+                BackgroundStep::HomeProbe { until }
+                    if (connected.transmission == Transmission::Free) =>
+                {
+                    owed = self.probe(&mut connected.transmission)?;
                     if owed.is_some() {
                         BackgroundStep::HomeListen { until }
                     } else {
@@ -6245,16 +6282,22 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
                 step => step,
             };
-        } else if connected.wake && !connected.power.asleep() && !connected.sending {
+        } else if connected.wake == Owing::Owed
+            && !connected.power.asleep()
+            && (connected.transmission == Transmission::Free)
+        {
             // The access point buffers for an awake station: PM=0 again.
-            connected.wake = false;
+            connected.wake = Owing::Clear;
             power = Some((StaPowerManagement::Active, Sending::Wake));
         }
         if let Some((power_management, sending)) = power {
             match self.encode_null(bssid, power_management) {
                 Ok(transmit) => {
-                    connected.sending = true;
-                    connected.waking = sending == Sending::Wake;
+                    connected.transmission = if sending == Sending::Wake {
+                        Transmission::Waking
+                    } else {
+                        Transmission::Busy
+                    };
                     owed = Some(Owed::Transmit(transmit));
                 }
                 // Its purpose's frame is still out: the step waits for its end.
@@ -6266,7 +6309,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             step => step,
                         };
                     } else {
-                        connected.wake = true;
+                        connected.wake = Owing::Owed;
                     }
                 }
                 Err(Unsent::Encode) => return Err(StaDisconnectReason::Encode),
@@ -6281,11 +6324,11 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     /// A Probe Request of the background scan, marked in flight.
     fn probe(
         &mut self,
-        sending: &mut bool,
+        transmission: &mut Transmission,
     ) -> Result<Option<Owed<'id, T, K>>, StaDisconnectReason> {
         match self.encode_probe(TxPurpose::Connected(Sending::Probe)) {
             Ok(transmit) => {
-                *sending = true;
+                *transmission = Transmission::Busy;
                 Ok(Some(Owed::Transmit(transmit)))
             }
             Err(Unsent::Out) => Ok(None),

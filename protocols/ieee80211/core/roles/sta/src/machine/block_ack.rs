@@ -189,7 +189,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         if connected.bssid != reply.bssid {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
-        if connected.sending {
+        if connected.transmission != super::Transmission::Free {
             return Err((reply, BlockAckReplyRefusal::Busy));
         }
         let protected = connected
@@ -224,7 +224,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if let State::Connected(connected) = &mut self.state {
-            connected.sending = true;
+            connected.transmission = super::Transmission::Busy;
         }
         let under_key = protected && matches!(encoded.number, crate::link::FrameNumber::Open);
         let transmit = self.hand_out(encoded);
