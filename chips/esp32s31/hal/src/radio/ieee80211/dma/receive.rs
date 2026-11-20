@@ -159,6 +159,30 @@ impl<M: MacPlacement> Walker for WifiRxDmaRegisters<M> {
     }
 }
 
+/// Where the walker's NEXT points.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NextAt {
+    /// NEXT zero.
+    Zero,
+    /// A descriptor of the ring.
+    Ring(usize),
+    /// Another address (R's among them).
+    Elsewhere,
+}
+
+/// What [`RxRing::standing`] read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Standing {
+    /// LAST's ring index, `None` outside the ring.
+    pub last: Option<usize>,
+    pub next: NextAt,
+    /// The accepted tail's index and whether its descriptor is completed.
+    pub tail: usize,
+    pub tail_done: bool,
+    /// The cursor read the same before and after the tail's word.
+    pub unchanged: bool,
+}
+
 /// The doorbell's state: still pending, or accepted by the walker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Reload {
@@ -472,6 +496,29 @@ where
             reserved: release(reserved),
         };
         (parts, place)
+    }
+
+    /// Where the walker stands: its cursor, the accepted tail's word, then
+    /// its cursor again; an observation for a probe's record of a stall,
+    /// which the ring decides nothing by.
+    pub fn standing(&mut self) -> Standing {
+        let base = self.table.base;
+        let (last, next) = self.walker.cursor();
+        let tail = self.tail.descriptor.word0();
+        let again = self.walker.cursor();
+        Standing {
+            last: cursor_ring_index(last, base, N),
+            next: match next {
+                0 => NextAt::Zero,
+                next => match cursor_ring_index(next, base, N) {
+                    Some(index) => NextAt::Ring(index),
+                    None => NextAt::Elsewhere,
+                },
+            },
+            tail: self.tail.index.get(),
+            tail_done: tail.rx_done(),
+            unchanged: again == (last, next),
+        }
     }
 
     /// Serve the completed units: `f` gets the view, in the ring's order up
@@ -850,6 +897,24 @@ where
     B: Brand<Window = DmaWindow>,
     W: Walker,
 {
+    /// The chain's descriptors, its last one's included.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
+    /// The control word of each of the chain's descriptors but its last, in
+    /// the chain's order, as the walker left it: an observation for the
+    /// record of what a continuation's `LENGTH` holds (`tasks/267`); the
+    /// view decides nothing by it.
+    pub fn continuation_words(&self) -> impl Iterator<Item = WifiRxDmaDescriptorControl> + '_ {
+        self.descriptors
+            .0
+            .iter()
+            .chain(self.descriptors.1)
+            .take(self.count.saturating_sub(1))
+            .map(RxDescriptor::word0)
+    }
+
     /// The chain's frame copied out by `f` through its reader; its buffers
     /// re-armed in place, in order, and linked behind the tail after `f`
     /// returns. Its descriptors' links to each other are the walker's own

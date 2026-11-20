@@ -48,7 +48,7 @@ unless a failure was recorded.
 
 ## Running
 
-Build with `cargo fw probe oer-hil-probes-esp32s31-mac-reset` before the
+Build with `cargo fw build esp32s31-mac-reset --diagnostic` before the
 lease. The injector (`tools/lab/peers/esp32c5-wifi-injector`) teaches the
 sender its peer: frames to the sender's station from the receiver's address
 (`tasks/167`). The receiver is `esp32s31-rx-ring`; see its README for the
