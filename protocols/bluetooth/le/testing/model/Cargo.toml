@@ -1,0 +1,21 @@
+[package]
+name = "oer-protocols-bluetooth-le-testing-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A host model of hardware behind the Bluetooth LE port's contract: the conformance suite's subject"
+readme = "README.md"
+
+[dependencies]
+oer-protocols-bluetooth-le-contracts-port = { path = "../../contracts/port" }
+oer-protocols-bluetooth-le-wire = { path = "../../wire" }
+oer-protocols-radio-port = { path = "../../../../radio/port" }
+oer-portable-time = { path = "../../../../../portable/time" }
+
+[dev-dependencies]
+oer-protocols-radio-regulatory = { path = "../../../../radio/regulatory", features = ["test-support"] }
+
+[lints]
+workspace = true
