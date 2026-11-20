@@ -17,7 +17,7 @@
 //! tasks and applies the record-and-reset policy on the image's behalf.
 //!
 //! - `AesEngine` (`esp32s31`): the AES accelerator as one synchronous
-//!   AES-128 engine, owned by the image or by the Wi-Fi station;
+//!   AES-128 engine, owned by the image;
 //! - [`channel`]: a typed channel between the application's future and the
 //!   group's;
 //! - `cpu` (`esp32s31`): each hart's cycle, instruction and cache counters
@@ -29,11 +29,9 @@ pub use oer_chips_family_app::channel;
 pub mod print;
 
 /// What the library observes of its own work, for an image that measures
-/// it: the family's counters and the chip's readers.
+/// it: the family's counters.
 #[cfg(feature = "observe")]
 pub mod observe {
-    #[cfg(all(feature = "esp32s31", target_arch = "riscv32"))]
-    pub use oer_chips_esp32s31_app::observed::*;
     pub use oer_chips_family_app::observe::*;
 }
 

@@ -12,13 +12,12 @@ const IMPLEMENTATION: [&str; 3] = [
     "oer-tools-lab-router",
 ];
 /// The service's clients.
-const CLIENTS: [&str; 6] = [
+const CLIENTS: [&str; 5] = [
     "oer-tools-lab-client",
     "oer-tools-hil-harness",
     "oer-tools-hil-cli",
     "oer-tools-image-cli",
     "oer-tools-lab-cli",
-    "oer-hil-scenarios-wifi-load",
 ];
 
 /// Every package of `Cargo.lock` with the names of its dependencies.

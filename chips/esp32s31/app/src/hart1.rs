@@ -3,8 +3,7 @@
 //! Hart 0 ends its boot, grants hart 1's executor system timer comparator 2
 //! and launches hart 1 through the image's mailbox
 //! (`secondary_entry!` in `entry!`), handing it its software line, its
-//! executor's wake and alarm and what the boot handed the group
-//! ([`Hart1Parts`]). Hart 1 makes its own interrupt context, routes its
+//! executor's wake and alarm ([`Hart1Parts`]). Hart 1 makes its own interrupt context, routes its
 //! alarm, calls the image's `boot1` and reports it booted; hart 0 waits for
 //! that report before it enables its own interrupts, so both boots end
 //! before any executor runs. Hart 1 then runs its thread-mode executor
@@ -12,7 +11,7 @@
 //!
 //! No waker crosses harts: each future that waits on the other hart waits
 //! on its own executor's signal, which the other hart raises
-//! ([`APPLICATION`], [`SECOND`], and the station's in `wifi`).
+//! ([`APPLICATION`], [`SECOND`]).
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -92,24 +91,13 @@ const _: () = {
 };
 
 /// What hart 1 takes at its launch: its software line and its executor's
-/// wake, its executor's timer grant and what the boot handed the second
-/// boot. Not an API.
+/// wake and its executor's timer grant. Not an API.
 pub struct Hart1Parts {
     line: FromCpu1,
     irq: FromCpu1Irq,
     wake: Hart1WakeToken,
     alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,
-    #[cfg(feature = "observe")]
-    sampler: Sampler1,
-    handed: super::Handed,
 }
-
-/// Hart 1's PC sampler's timer and table entry, which hart 1 binds.
-#[cfg(feature = "observe")]
-pub(crate) type Sampler1 = (
-    oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Parts,
-    super::Sampler1Token,
-);
 
 /// What hart 0 launches hart 1 with.
 pub(crate) struct Launch {
@@ -119,18 +107,15 @@ pub(crate) struct Launch {
     pub(crate) irq: FromCpu1Irq,
     pub(crate) wake: Hart1WakeToken,
     pub(crate) alarm: Hart1AlarmToken,
-    #[cfg(feature = "observe")]
-    pub(crate) sampler: Sampler1,
 }
 
-/// Grant hart 1's executor comparator 2, launch hart 1 with `handed`
-/// through `mailbox` and wait until its group ended. Every failure
+/// Grant hart 1's executor comparator 2, launch hart 1 through `mailbox`
+/// and wait until its group ended. Every failure
 /// records and resets.
 pub(crate) fn launch(
     mailbox: &'static Mailbox<Hart1Grant, Hart1Parts>,
     timers: (TimeDriverReady<Esp32s31>, SystimerAlarm2),
     launch: Launch,
-    handed: super::Handed,
 ) -> Running<Port, 1> {
     let (mut ready, comparator) = timers;
     let alarm = oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>(
@@ -152,9 +137,6 @@ pub(crate) fn launch(
             irq: launch.irq,
             wake: launch.wake,
             alarm,
-            #[cfg(feature = "observe")]
-            sampler: launch.sampler,
-            handed,
         },
     )
     .unwrap_or_else(|failure| failure.reset());
@@ -182,12 +164,8 @@ pub fn hart1_main<H: GroupStarted>(
         irq,
         wake,
         alarm,
-        #[cfg(feature = "observe")]
-        sampler,
-        handed,
     } = parts;
-    #[cfg_attr(not(feature = "observe"), allow(unused_mut))]
-    let mut group = GroupBoot::new();
+    let group = GroupBoot::new();
     let mut adopted = handoff
         .adopt(InterruptTable)
         .unwrap_or_else(|error| fail(error.name()));
@@ -196,15 +174,12 @@ pub fn hart1_main<H: GroupStarted>(
         alarm
             .bind(hart, router)
             .unwrap_or_else(|failure| failure.reset());
-        #[cfg(feature = "observe")]
-        {
-            let (timer, token) = sampler;
-            group.observe = Some(super::observed::hart1(timer, router, token));
-        }
     }
     // Hart 1's counters are made here, on the hart they count.
-    let handed = handed.into_peripherals(super::cpu::Cpu1::new());
-    let (net, second) = boot1(handed, group)
+    let peripherals = GroupPeripherals {
+        cpu: super::cpu::Cpu1::new(),
+    };
+    let (net, second) = boot1(peripherals, group)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     BOOTED.store(true, Ordering::Release);
@@ -221,6 +196,6 @@ pub fn hart1_main<H: GroupStarted>(
     observed_root!(second, Group);
     let roots = (Root::new(net.as_mut()), Root::new(second.as_mut()));
     match executor
-        .run::<Hart1Tasks, _, _, _, 1, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
+        .run::<Hart1Tasks, _, _, _, 1, _, _>(&hart, &mut router, wake, irq, (), roots, |_| {})
         .unwrap_or_else(|failure| failure.reset()) {}
 }

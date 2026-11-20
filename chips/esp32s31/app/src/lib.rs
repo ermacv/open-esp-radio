@@ -19,9 +19,8 @@
 //! chip facts: each entry's line, its context's level and its hart.
 //!
 //! The application executor runs in thread mode on hart 0; the library's
-//! service tasks ([`SdkTasks`]) and the image's tasks share it. The radio
-//! executor runs only when a Wi-Fi station starts. An entry no driver binds
-//! routes no source.
+//! service tasks ([`SdkTasks`]) and the image's tasks share it. An entry no
+//! driver binds routes no source.
 
 use oer_chips_esp32s31_hal::{
     peripherals::{
@@ -39,8 +38,6 @@ use oer_chips_family_platform_runtime::{Adopted, Handoff};
 use oer_portable_embassy_time::EmbassyClock;
 
 // The family's shared parts keep their paths in this crate.
-#[cfg(feature = "observe")]
-use oer_chips_family_app::observe;
 use oer_chips_family_app::{boot, channel};
 
 pub use oer_chips_esp32s31_platform_runtime::Esp32s31;
@@ -48,49 +45,20 @@ pub use oer_chips_esp32s31_platform_runtime::Esp32s31;
 /// Time on the executors' clock: timers, timeouts, instants.
 pub use embassy_time as time;
 
-/// `$future`, pinned in place for the statement that awaits it and
-/// observed as the library's part `$part` (`observe`).
-#[cfg(feature = "observe")]
-macro_rules! observed {
-    ($part:ident, $future:expr) => {
-        $crate::observed::Polled::library(
-            $crate::observe::parts::LibraryPart::$part,
-            core::pin::pin!($future),
-        )
-    };
-}
 /// `$future` itself.
-#[cfg(not(feature = "observe"))]
 macro_rules! observed {
     ($part:ident, $future:expr) => {
         $future
     };
 }
 
-/// Shadow the pinned root `$root` with itself observed as the library's
-/// part `$part` (`observe`).
-#[cfg(feature = "observe")]
-macro_rules! observed_root {
-    ($root:ident, $part:ident) => {
-        let mut $root = core::pin::pin!($crate::observed::Polled::library(
-            $crate::observe::parts::LibraryPart::$part,
-            $root.as_mut(),
-        ));
-    };
-}
 /// Nothing.
-#[cfg(not(feature = "observe"))]
 macro_rules! observed_root {
     ($root:ident, $part:ident) => {};
 }
 
 pub mod cpu;
-#[cfg(feature = "observe")]
-pub mod observed;
-#[cfg(feature = "observe")]
-use observed::executor_observer;
 /// The observer of executor `SLOT`: none without `observe`.
-#[cfg(not(feature = "observe"))]
 #[cfg_attr(
     not(oer_trace),
     allow(
@@ -104,12 +72,6 @@ const fn executor_observer<const SLOT: usize>() -> oer_portable_trace::Noop {
 
 mod aes;
 pub use aes::AesEngine;
-
-#[cfg(feature = "wifi")]
-mod pilot;
-/// The Wi-Fi roles and their network.
-#[cfg(feature = "wifi")]
-pub mod wifi;
 
 #[cfg(feature = "console")]
 mod console;
@@ -143,17 +105,6 @@ oer_chips_family_platform_executor::tasks! {
         @observer: executor_observer::<0>();
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        #[cfg(feature = "station")]
-        /// The Wi-Fi station's lifecycle.
-        station(launch: wifi::StationStart) = wifi::serve_station;
-        #[cfg(feature = "station")]
-        /// The Wi-Fi datapath actor, which owns the radio, beside the
-        /// station's lifecycle.
-        datapath(datapath: wifi::Datapath) = wifi::datapath;
-        #[cfg(feature = "access-point")]
-        /// The Wi-Fi access point's runner, which owns the radio while it
-        /// serves; its network runs in the group.
-        access_point(launch: wifi::ApStart) = wifi::serve_access_point;
     }
 }
 
@@ -163,11 +114,8 @@ oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime:
 /// The peripherals an application may take, each once.
 pub struct Peripherals {
     /// The AES accelerator: [`AesPeripheral::engine`] makes it the image's
-    /// synchronous AES engine, or [`wifi::Station::start`] takes it.
+    /// synchronous AES engine.
     pub aes: AesPeripheral,
-    /// The radio: [`wifi::Station::start`] takes it.
-    #[cfg(feature = "wifi")]
-    pub wifi: wifi::WifiPeripheral,
     /// The USB Serial/JTAG console: [`Console::open`] takes it.
     #[cfg(feature = "console")]
     pub console: ConsolePeripheral,
@@ -184,36 +132,21 @@ pub struct AesPeripheral(pub(crate) AesParts);
 /// boot function runs, before any executor.
 pub struct Boot {
     adopted: Adopted<InterruptController, InterruptTable>,
-    pub(crate) pending: Pending,
     /// The system timer, until a driver installs it or the boot ends.
     timer: Option<SystemTimer>,
     app_alarm: Option<AppAlarmToken>,
-    #[cfg(feature = "wifi")]
-    radio: Option<wifi::RadioBoot>,
-    /// The doorbell's urgent source, once a station started.
-    #[cfg(feature = "wifi")]
-    urgent: Option<wifi::Urgent>,
-    /// The entropy source, until a station takes it or the boot ends.
+    /// The entropy source, until the boot ends.
     pub(crate) entropy: Option<EntropyRegisters>,
-    /// The boot's identity, once a station drew it.
+    /// The boot's identity, once drawn.
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
-    /// The station's network device, for the group.
-    #[cfg(feature = "station")]
-    pub(crate) device: Option<wifi::Device>,
-    /// The access point's network device, for the group.
-    #[cfg(feature = "access-point")]
-    pub(crate) access_point_device: Option<wifi::Device>,
     /// The time driver's authority and the comparator for hart 1's
-    /// executor, once a station installed the time driver.
+    /// executor, once the time driver is installed.
     #[cfg(feature = "group")]
     pub(crate) timers: Option<(
         oer_chips_family_platform_executor::TimeDriverReady<Esp32s31>,
         oer_chips_esp32s31_hal::peripherals::system_timer::SystimerAlarm2,
     )>,
-    /// What only the boot hart observes, until the boot takes it.
-    #[cfg(feature = "observe")]
-    observe: Option<observed::Hart0>,
 }
 
 /// No network: the group started none.
@@ -279,19 +212,6 @@ pub(crate) fn draw_boot_id(
     Ok(crate::boot::identity(bytes))
 }
 
-/// Service tasks a boot step prepared, started with the executor.
-#[derive(Default)]
-pub(crate) struct Pending {
-    #[cfg(feature = "station")]
-    pub(crate) station: Option<wifi::StationStart>,
-    /// The Wi-Fi datapath actor, started beside the station.
-    #[cfg(feature = "station")]
-    pub(crate) datapath: Option<wifi::Datapath>,
-    /// The Wi-Fi access point's runner.
-    #[cfg(feature = "access-point")]
-    pub(crate) access_point: Option<wifi::ApStart>,
-}
-
 impl Boot {
     /// End the boot: run the future `app` builds on hart 0 beside the
     /// library's service tasks once the executor starts. The library calls
@@ -340,99 +260,29 @@ where
     }
 }
 
-/// What the group owns: each role's network device when the boot started
-/// that role, and with `group` hart 1's counters.
+/// What the group owns: with `group`, hart 1's counters.
 pub struct GroupPeripherals {
-    /// The station's network device, which [`wifi::Network::start`] takes.
-    #[cfg(feature = "station")]
-    pub device: Option<wifi::Device>,
-    /// The access point's network device, which [`wifi::Network::start`]
-    /// takes.
-    #[cfg(feature = "access-point")]
-    pub access_point: Option<wifi::Device>,
     /// Hart 1's cycle and instruction counters ([`cpu::Cpu1`]).
     #[cfg(feature = "group")]
     pub cpu: cpu::Cpu1,
 }
 
-/// What the boot hands the group, on its way to the group's hart: each
-/// role's network device. The group's hart adds its own counters.
-pub(crate) struct Handed {
-    #[cfg(feature = "station")]
-    device: Option<wifi::Device>,
-    #[cfg(feature = "access-point")]
-    access_point: Option<wifi::Device>,
-}
-
-impl Handed {
-    /// The group's peripherals, on the hart the group runs on.
-    #[cfg(not(feature = "group"))]
-    fn into_peripherals(self) -> GroupPeripherals {
-        GroupPeripherals {
-            #[cfg(feature = "station")]
-            device: self.device,
-            #[cfg(feature = "access-point")]
-            access_point: self.access_point,
-        }
-    }
-
-    /// The group's peripherals on hart 1, with its counters `cpu`.
-    #[cfg(feature = "group")]
-    pub(crate) fn into_peripherals(self, cpu: cpu::Cpu1) -> GroupPeripherals {
-        GroupPeripherals {
-            #[cfg(feature = "station")]
-            device: self.device,
-            #[cfg(feature = "access-point")]
-            access_point: self.access_point,
-            cpu,
-        }
-    }
-}
-
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
-/// ends with beside the networks it started. Both run where the second
+/// ends with. Both run where the second
 /// boot runs: on hart 0, the application's executor, or with the `group`
 /// feature on hart 1's own executor, which hart 1 runs alone.
 ///
-/// `N` is the networks the group started, each over storage the image
-/// lent: [`NoNet`] until `wifi::Network::start` consumes the context and
-/// returns it with that network beside the ones before.
+/// `N` is the networks the group started: [`NoNet`], since no network
+/// role is built.
 pub struct GroupBoot<N = NoNet> {
     net: N,
-    /// What hart 1 observes only there, bound at its start.
-    #[cfg(all(feature = "observe", feature = "group"))]
-    observe: Option<observed::Hart1>,
 }
 
 impl GroupBoot {
     /// The group's context before its networks.
     pub(crate) const fn new() -> Self {
-        Self {
-            net: NoNet,
-            #[cfg(all(feature = "observe", feature = "group"))]
-            observe: None,
-        }
-    }
-}
-
-impl<N> GroupBoot<N> {
-    /// The same context with `net` beside the networks it started.
-    #[cfg(feature = "wifi")]
-    pub(crate) fn with_net<M>(self, net: M) -> GroupBoot<(N, M)> {
-        GroupBoot {
-            net: (self.net, net),
-            #[cfg(all(feature = "observe", feature = "group"))]
-            observe: self.observe,
-        }
-    }
-}
-
-#[cfg(all(feature = "observe", feature = "group"))]
-impl<N> GroupBoot<N> {
-    /// What hart 1 observes only there, once: its PC sampler.
-    pub fn observe(&mut self) -> Option<observed::Hart1> {
-        self.observe.take()
+        Self { net: NoNet }
     }
 }
 
@@ -561,8 +411,7 @@ impl<A: Send, B: Send, const N: usize> Channel<A, B, N> {
 }
 
 /// The group of an image that declares none: it drops what the boot
-/// handed it (a station's device tells the station that no network takes
-/// its frames) and runs nothing.
+/// handed it and runs nothing.
 #[doc(hidden)]
 pub fn no_group(_handed: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     Ok(boot.run(core::future::pending::<AppResult>))
@@ -641,39 +490,6 @@ pub enum Error {
     /// The console could not take the USB Serial/JTAG block.
     #[cfg(feature = "console")]
     Console,
-    /// The station's configuration was refused.
-    #[cfg(feature = "wifi")]
-    WifiConfig(wifi::ConfigError),
-    /// A network profile was refused.
-    #[cfg(feature = "station")]
-    WifiProfile(wifi::ProfileError),
-    /// The group asked for a role's device, and the boot started no such
-    /// role.
-    #[cfg(feature = "wifi")]
-    NoDevice,
-    /// The network core refused its start.
-    #[cfg(feature = "wifi")]
-    Network(wifi::NetworkError),
-    /// The image named every one of its observed parts.
-    #[cfg(feature = "observe")]
-    ImageParts,
-    /// The boot took what the boot hart observes before.
-    #[cfg(feature = "observe")]
-    ObserveTaken,
-}
-
-#[cfg(feature = "wifi")]
-impl From<wifi::ConfigError> for Error {
-    fn from(error: wifi::ConfigError) -> Self {
-        Self::WifiConfig(error)
-    }
-}
-
-#[cfg(feature = "station")]
-impl From<wifi::ProfileError> for Error {
-    fn from(error: wifi::ProfileError) -> Self {
-        Self::WifiProfile(error)
-    }
 }
 
 impl Error {
@@ -688,18 +504,6 @@ impl Error {
             Self::Channel(_) => oer_portable_diagnostics::name!("sdk-channel"; 32),
             #[cfg(feature = "console")]
             Self::Console => oer_portable_diagnostics::name!("sdk-console"; 32),
-            #[cfg(feature = "wifi")]
-            Self::WifiConfig(_) => oer_portable_diagnostics::name!("sdk-wifi-config"; 32),
-            #[cfg(feature = "station")]
-            Self::WifiProfile(_) => oer_portable_diagnostics::name!("sdk-wifi-profile"; 32),
-            #[cfg(feature = "wifi")]
-            Self::NoDevice => oer_portable_diagnostics::name!("sdk-no-device"; 32),
-            #[cfg(feature = "wifi")]
-            Self::Network(_) => oer_portable_diagnostics::name!("sdk-network"; 32),
-            #[cfg(feature = "observe")]
-            Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
-            #[cfg(feature = "observe")]
-            Self::ObserveTaken => oer_portable_diagnostics::name!("sdk-observe-taken"; 32),
         }
     }
 }
@@ -766,19 +570,7 @@ pub fn start<S: Started, H: GroupStarted>(
                     hart1: hardware.hart1,
                     #[cfg(feature = "group")]
                     causes,
-                    #[cfg(feature = "observe")]
-                    timg1_alarm: hardware.timg1_alarm,
-                    #[cfg(all(feature = "observe", feature = "group"))]
-                    timg1_timer1: hardware.timg1_timer1,
                     cache_counters: hardware.cache_counters,
-                    #[cfg(feature = "wifi")]
-                    wifi: wifi::WifiPeripheral {
-                        radio: hardware.radio,
-                        clocks: hardware.clocks,
-                        timg0_alarm: hardware.timg0_alarm,
-                        interrupts: hardware.wifi_interrupts,
-                        efuse: hardware.efuse,
-                    },
                 }
             },
         ) {
@@ -790,25 +582,10 @@ pub fn start<S: Started, H: GroupStarted>(
         fail(Error::InterruptTaken.name());
     };
     let software: SoftwareInterrupts = hardware.software;
-    #[cfg_attr(not(feature = "observe"), allow(unused_mut))]
-    let mut setup = Boot {
+    let setup = Boot {
         adopted,
-        pending: Pending::default(),
         timer: Some(hardware.system_timer),
         app_alarm: Some(interrupts.alarm),
-        #[cfg(feature = "wifi")]
-        radio: Some(wifi::RadioBoot {
-            line2: software.line2,
-            irq2: software.irq2,
-            line3: software.line3,
-            irq3: software.irq3,
-            radio_alarm: interrupts.radio_alarm,
-            phy: interrupts.phy,
-            radio: interrupts.radio,
-            wifi: interrupts.wifi,
-        }),
-        #[cfg(feature = "wifi")]
-        urgent: None,
         entropy: Some(hardware.entropy),
         boot_id: None,
         evidence: Evidence {
@@ -816,24 +593,11 @@ pub fn start<S: Started, H: GroupStarted>(
             previous_panic: previous,
             previous_exception,
         },
-        #[cfg(feature = "station")]
-        device: None,
-        #[cfg(feature = "access-point")]
-        access_point_device: None,
         #[cfg(feature = "group")]
         timers: None,
-        #[cfg(feature = "observe")]
-        observe: None,
     };
-    #[cfg(feature = "observe")]
-    {
-        let hart0 = observed::hart0(hardware.timg1_alarm, &mut setup, interrupts.sampler);
-        setup.observe = Some(hart0);
-    }
     let peripherals = Peripherals {
         aes: AesPeripheral(hardware.aes),
-        #[cfg(feature = "wifi")]
-        wifi: hardware.wifi,
         #[cfg(feature = "console")]
         console: ConsolePeripheral(interrupts.console_usb),
         cpu: cpu::Cpu0::new(hardware.cache_counters),
@@ -841,15 +605,9 @@ pub fn start<S: Started, H: GroupStarted>(
     let (mut setup, app) = boot(peripherals, setup)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
-    let handed = Handed {
-        #[cfg(feature = "station")]
-        device: setup.device.take(),
-        #[cfg(feature = "access-point")]
-        access_point: setup.access_point_device.take(),
-    };
     // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
-    let (net, second) = hart1(handed.into_peripherals(), GroupBoot::new())
+    let (net, second) = hart1(GroupPeripherals {}, GroupBoot::new())
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     #[cfg(feature = "group")]
@@ -873,8 +631,7 @@ pub fn start<S: Started, H: GroupStarted>(
         #[cfg(not(feature = "group"))]
         let _ = ready;
     }
-    // A station drew the identity with the entropy source it took; otherwise
-    // the timer is installed now, and the read gap has a clock.
+    // The timer is installed now, and the read gap has a clock.
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
@@ -909,17 +666,10 @@ pub fn start<S: Started, H: GroupStarted>(
                 irq: software.irq1,
                 wake: interrupts.hart1_wake,
                 alarm: interrupts.hart1_alarm,
-                #[cfg(feature = "observe")]
-                sampler: (hardware.timg1_timer1, interrupts.sampler1),
             },
-            handed,
         )
     };
-    #[cfg(feature = "wifi")]
-    let urgent = setup.urgent.take();
-    let Boot {
-        adopted, pending, ..
-    } = setup;
+    let Boot { adopted, .. } = setup;
     let executor = Executor::<Esp32s31, 0>::new(software.line0);
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(enabled) => enabled,
@@ -927,7 +677,6 @@ pub fn start<S: Started, H: GroupStarted>(
     };
     let starts = Starts {
         watchdog: hardware.watchdog,
-        pending,
     };
     // The image's futures stay in this frame, which never returns: the
     // executor polls them as its tasks after the library's.
@@ -954,22 +703,6 @@ pub fn start<S: Started, H: GroupStarted>(
     );
     #[cfg(feature = "group")]
     let roots = oer_chips_family_platform_executor::Root::new(app.as_mut());
-    #[cfg(feature = "wifi")]
-    if let Some(urgent) = urgent {
-        match executor
-            .run(
-                &hart,
-                &mut router,
-                interrupts.wake,
-                software.irq0,
-                urgent,
-                roots,
-                |spawner| {
-                    starts.spawn(spawner);
-                },
-            )
-            .unwrap_or_else(|failure| failure.reset()) {}
-    }
     match executor
         .run(
             &hart,
@@ -988,36 +721,12 @@ pub fn start<S: Started, H: GroupStarted>(
 /// The library's tasks the executor starts.
 struct Starts {
     watchdog: ArmedRtcWatchdog<RwdtRegisters>,
-    pending: Pending,
 }
 
 impl Starts {
-    // An AP start refused by the executor drops its network endpoint and
-    // notifies the producer. Keep that cleanup separate from the datapath's:
-    // merging their Waker tails loses the operation's debug scope and the
-    // image can no longer prove its supported waker targets.
-    #[cfg(feature = "access-point")]
-    #[inline(never)]
-    fn spawn_access_point(library: &Spawner<SdkTasks>, start: wifi::ApStart) -> bool {
-        SdkTasks::access_point(library, start).is_ok()
-    }
-
     fn spawn(self, library: &Spawner<SdkTasks>) {
-        let Self { watchdog, pending } = self;
+        let Self { watchdog } = self;
         let started = SdkTasks::watchdog(library, watchdog).is_ok();
-        #[cfg(feature = "station")]
-        let started = started
-            && pending
-                .datapath
-                .is_none_or(|datapath| SdkTasks::datapath(library, datapath).is_ok())
-            && pending
-                .station
-                .is_none_or(|start| SdkTasks::station(library, start).is_ok());
-        #[cfg(feature = "access-point")]
-        let started = started
-            && pending
-                .access_point
-                .is_none_or(|start| Self::spawn_access_point(library, start));
         if !started {
             fail(Error::AlreadyStarted.name());
         }
@@ -1036,13 +745,7 @@ struct Owned {
     hart1: oer_chips_esp32s31_hal::system::cores::LaunchPermit,
     #[cfg(feature = "group")]
     causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
-    #[cfg(feature = "observe")]
-    timg1_alarm: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
-    #[cfg(all(feature = "observe", feature = "group"))]
-    timg1_timer1: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Parts,
     cache_counters: oer_chips_esp32s31_hal::peripherals::cache_counters::CacheCounters,
-    #[cfg(feature = "wifi")]
-    wifi: wifi::WifiPeripheral,
 }
 
 /// Where hart 1 takes its parts: the mailbox `entry!` declares with the

@@ -13,13 +13,9 @@
 //! API alone: [`open_probe_session_init`] takes the reset root once and the
 //! later entries borrow the session's owners ([`session`]).
 
-use oer_chips_esp32s31_radio_ieee80211_backend::mac::ap_tsf::AccessPointTsf;
-use oer_protocols_ieee80211_contracts_port::backend::RetryCounters;
-
 mod calibration_leaves;
 mod coex;
 mod est_freq;
-mod retry;
 mod session;
 
 /// A vendor argument outside the reviewed domain, or a session that did not
@@ -201,57 +197,6 @@ oer_tools_probe_macros::probe! {
 }
 
 oer_tools_probe_macros::probe! {
-    /// The role-neutral suffix of vendor `wifi_set_rx_policy(0)`: the exact
-    /// production operation that disables both receive contexts after the
-    /// cold transaction published the interface addresses.
-    pub fn open_wifi_sta_ap_trace_disable_all_role_receive(_policy: u32) -> u32 {
-        session::with(|session| {
-            oer_chips_esp32s31_radio_ieee80211_backend::mac::sta_ap_registers::disable_all_role_receive_registers(
-                &mut session.wifi.wifi_mac_hal(),
-            );
-            1
-        })
-        .unwrap_or(0)
-    }
-}
-
-oer_tools_probe_macros::probe! {
-    /// ABI projection around the exact production normal-rate selector.
-    ///
-    /// The vendor entry receives a pointer-rich descriptor and stores the chosen
-    /// rate at byte `0x0c`. The wrapper performs only that ABI projection; rate
-    /// selection is owned by the compiled production function. Zero reports
-    /// a descriptor write; a nonzero [`retry::RetryProbeStatus`] reports why
-    /// input or a selected stage was refused, leaving the descriptor unwritten.
-    pub fn open_libpp_tx_retry_trace_rc_get_rate(
-        _rate_context: u32,
-        descriptor_address: u32,
-        initial_rate: u32,
-    ) -> u32 {
-        let descriptor = descriptor_address as *mut u8;
-        // SAFETY: every comparison case supplies a writable descriptor object
-        // covering the vendor counter and selected-rate bytes.
-        let counters = unsafe {
-            RetryCounters {
-                mpdu: descriptor.add(5).read(),
-                short: descriptor.add(6).read(),
-                long: descriptor.add(7).read(),
-            }
-        };
-        let selected = match retry::select(
-            initial_rate, counters,
-            &oer_chips_family_radio_ieee80211_policy::retry_ladder::EspressifRetryLadder,
-        ) {
-            Ok(selected) => selected,
-            Err(refusal) => return refusal.status() as u32,
-        };
-        // SAFETY: the same descriptor object covers the selected-rate byte.
-        unsafe { descriptor.add(0x0c).write(selected.code()) };
-        retry::RetryProbeStatus::Selected as u32
-    }
-}
-
-oer_tools_probe_macros::probe! {
     pub fn open_libpp_crypto_trace_hal_crypto_enable(interface: u32, _algorithm: u32, _management: u32, spp: u32) {
         let interface = match interface {
             0 => oer_chips_esp32s31_hal::types::MacInterface::Station,
@@ -302,24 +247,6 @@ oer_tools_probe_macros::probe! {
                     .wifi
                     .wifi_mac_hal()
                     .program_interface_bssid(interface, *address)
-            });
-        }
-    }
-}
-
-oer_tools_probe_macros::probe! {
-    pub fn open_libpp_ap_tsf_trace_hal_disable_softap_tsf() {
-        let _ = session::with(|session| {
-            AccessPointTsf::new(0).stop(&mut session.wifi.wifi_mac_hal())
-        });
-    }
-}
-
-oer_tools_probe_macros::probe! {
-    pub fn open_libpp_ap_tsf_start_trace_hal_mac_tsf_reset(selector: u32) {
-        if selector == 0 {
-            let _ = session::with(|session| {
-                AccessPointTsf::new(0).restart(&mut session.wifi.wifi_mac_hal())
             });
         }
     }

@@ -53,11 +53,6 @@ const KNOWN_INSTRUMENTATION_FEATURES: &[Deviation] = &[
         "PHY observations move to the observer (#848, instrumentation PHY stage)",
     ),
     (
-        "chips/esp32s31/app",
-        "observe",
-        "the application entry's observation, which `oer`'s `observe` selects for an image built with `oer_trace`",
-    ),
-    (
         "chips/family/app",
         "observe",
         "the application entry's observation counters, which `oer`'s `observe` selects",

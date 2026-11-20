@@ -12,24 +12,15 @@ description = "The Espressif family's application entry: peripherals, drivers an
 ## The ESP32-S31 implementation. Exactly one chip feature is selected; the
 ## image pipeline selects it from the board, never the image's manifest.
 esp32s31 = ["dep:oer-chips-esp32s31-app"]
-## The Wi-Fi station (`wifi::Station`) and its network (`wifi::Network`).
-station = ["oer-chips-esp32s31-app?/station"]
-## The Wi-Fi access point (`wifi::AccessPoint`), a WPA2-Personal BSS on the
-## radio the station would take, and its network. Neither role implies the
-## other; with both, one holds the radio at a time.
-access-point = ["oer-chips-esp32s31-app?/access-point"]
 ## The USB Serial/JTAG console as the application's byte stream.
 console = ["oer-chips-esp32s31-app?/console"]
 ## The task group (`entry!(main, group = setup)`), with the networks it
 ## starts, on its own hart where the chip has a second core. Without it a
-## task group runs on the application's executor, beside the roles'
-## runners: both are product placements.
+## task group runs on the application's executor: both are product
+## placements.
 group = ["oer-chips-esp32s31-app?/group"]
-## What the library observes of its own work (`observe`): the executors'
-## CPU, named parts' polls, the station's, the network's and the PHY
-## tracking's counts, and on the boot hart its counters and a PC sampler on
-## TIMG1. The image declares `instrumentation = ["trace"]`.
-observe = ["oer-chips-family-app/observe", "oer-chips-esp32s31-app?/observe"]
+## The family library's observation counters (`observe`).
+observe = ["oer-chips-family-app/observe"]
 
 [dependencies]
 oer-chips-family-app = { path = "../chips/family/app" }

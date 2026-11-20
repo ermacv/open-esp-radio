@@ -1374,14 +1374,10 @@ dependencies = [
 name = "oer-chips-esp32s31-app"
 version = "0.1.0"
 dependencies = [
- "embassy-futures",
  "embassy-time",
- "heapless",
  "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-ieee80211-station",
- "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-app",
  "oer-chips-family-boot",
  "oer-chips-family-facts",
@@ -1390,21 +1386,10 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
- "oer-portable-events",
- "oer-portable-memory",
  "oer-portable-riscv",
  "oer-portable-time",
  "oer-portable-trace",
  "oer-portable-waker",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-core-security-cipher",
- "oer-protocols-ieee80211-core-upper-mac",
- "oer-protocols-ieee80211-runtime",
- "oer-protocols-network-core",
- "oer-protocols-network-port",
- "oer-protocols-network-runtime",
- "oer-protocols-network-wire",
- "static_cell",
 ]
 
 [[package]]
@@ -1527,143 +1512,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-chips-esp32s31-radio-bluetooth-backend"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "critical-section",
- "embassy-futures",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-radio-bluetooth-ports",
- "oer-portable-memory",
- "oer-portable-sync",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-waker",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-bluetooth-le-wire",
- "oer-protocols-radio-port",
- "oer-tools-test-ui-cases",
- "tempfile",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-client"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-radio-coex",
- "oer-portable-diagnostics",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-regulatory",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-ieee80211-backend"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "heapless",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee80211-policy",
- "oer-portable-events",
- "oer-portable-memory",
- "oer-portable-sync",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-trace",
- "oer-portable-trace-recorder",
- "oer-portable-waker",
- "oer-portable-wire",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-contracts-security",
- "oer-protocols-ieee80211-core-upper-mac",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
- "pin-project",
- "subtle",
- "tempfile",
- "zeroize",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-ieee80211-station"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "embassy-futures",
- "heapless",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-platform-board",
- "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-ieee80211-backend",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-esp32s31-radio-system",
- "oer-chips-family-platform-executor",
- "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee80211-policy",
- "oer-chips-family-radio-power",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-events",
- "oer-portable-memory",
- "oer-portable-sync",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-trace",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-core-arbiter",
- "oer-protocols-ieee80211-core-roles-ap",
- "oer-protocols-ieee80211-core-roles-sta",
- "oer-protocols-ieee80211-core-security-rsn",
- "oer-protocols-ieee80211-core-upper-mac",
- "oer-protocols-ieee80211-runtime",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-network-core",
- "oer-protocols-network-port",
- "oer-protocols-network-runtime",
- "oer-protocols-network-wire",
- "oer-protocols-radio-port",
- "oer-protocols-radio-regulatory",
- "static_cell",
- "zeroize",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-ieee802154-backend"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-knowledge",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee802154-engine",
- "oer-chips-family-radio-ieee802154-values",
- "oer-portable-mmio",
- "oer-protocols-ieee802154-port",
- "oer-protocols-radio-regulatory",
- "oer-tools-test-ui-cases",
- "tempfile",
-]
-
-[[package]]
 name = "oer-chips-esp32s31-radio-phy"
 version = "0.1.0"
 dependencies = [
@@ -1676,28 +1524,6 @@ dependencies = [
  "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
- "pin-project-lite",
-]
-
-[[package]]
-name = "oer-chips-esp32s31-radio-system"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-family-radio-coex",
- "oer-portable-cooperate",
- "oer-portable-diagnostics",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-trace",
- "oer-protocols-bluetooth-le-port",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-regulatory",
  "pin-project-lite",
 ]
 
@@ -1875,7 +1701,6 @@ dependencies = [
 name = "oer-chips-family-radio-ieee80211-policy"
 version = "0.1.0"
 dependencies = [
- "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-portable-time",
  "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-port",
@@ -1934,17 +1759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-examples-wifi-station"
-version = "0.1.0"
-dependencies = [
- "oer",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-radio-regulatory",
- "static_cell",
- "toml",
-]
-
-[[package]]
 name = "oer-hil-agent"
 version = "0.1.0"
 dependencies = [
@@ -1969,48 +1783,6 @@ dependencies = [
  "oer-hil-services-aes",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
- "postcard",
- "static_cell",
-]
-
-[[package]]
-name = "oer-hil-images-wifi-access-point"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "heapless",
- "oer",
- "oer-hil-agent",
- "oer-hil-services-wifi-access-point",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "postcard",
- "static_cell",
-]
-
-[[package]]
-name = "oer-hil-images-wifi-station"
-version = "0.1.0"
-dependencies = [
- "embassy-futures",
- "heapless",
- "oer",
- "oer-hil-agent",
- "oer-hil-services-fault",
- "oer-hil-services-load",
- "oer-hil-services-sdk-station",
- "oer-hil-services-wifi-station",
- "oer-portable-events",
- "oer-portable-memory",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-portable-trace",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "oer-protocols-network-core",
- "oer-protocols-network-port",
- "oer-protocols-network-runtime",
- "oer-protocols-network-wire",
  "postcard",
  "static_cell",
 ]
@@ -2117,8 +1889,6 @@ dependencies = [
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-drivers-usb-serial-jtag",
  "oer-chips-family-platform-executor",
@@ -2182,13 +1952,11 @@ dependencies = [
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-ieee80211-backend",
  "oer-chips-esp32s31-radio-phy",
  "oer-chips-family-boot",
  "oer-chips-family-platform-executor",
  "oer-chips-family-platform-runtime",
  "oer-chips-family-radio-coex",
- "oer-chips-family-radio-ieee80211-policy",
  "oer-chips-family-radio-phy",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
@@ -2231,37 +1999,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-probes-esp32s31-rx-chain"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "embedded-io-async",
- "heapless",
- "oer-chips-esp32s31-hal",
- "oer-chips-esp32s31-platform-board",
- "oer-chips-esp32s31-platform-layout",
- "oer-chips-esp32s31-platform-runtime",
- "oer-chips-esp32s31-radio-client",
- "oer-chips-esp32s31-radio-ieee80211-backend",
- "oer-chips-esp32s31-radio-phy",
- "oer-chips-esp32s31-radio-system",
- "oer-chips-family-drivers-usb-serial-jtag",
- "oer-chips-family-platform-executor",
- "oer-chips-family-platform-interrupt-table",
- "oer-chips-family-platform-runtime",
- "oer-portable-diagnostics",
- "oer-portable-embassy-time",
- "oer-portable-memory",
- "oer-portable-riscv",
- "oer-portable-time",
- "oer-portable-trace",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-wire",
- "oer-protocols-radio-regulatory",
- "static_cell",
-]
-
-[[package]]
 name = "oer-hil-scenarios-aes"
 version = "0.1.0"
 dependencies = [
@@ -2292,43 +2029,6 @@ version = "0.1.0"
 dependencies = [
  "heapless",
  "oer-hil-services-wifi-access-point",
- "oer-protocols-hil-agent",
- "oer-tools-hil-harness",
- "oer-tools-lab-model",
- "serde_json",
-]
-
-[[package]]
-name = "oer-hil-scenarios-wifi-load"
-version = "0.1.0"
-dependencies = [
- "clap",
- "heapless",
- "oer-hil-services-load",
- "oer-hil-services-wifi-station",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-protocols-hil-agent",
- "oer-tools-analysis-elf",
- "oer-tools-hil-harness",
- "oer-tools-image-build",
- "oer-tools-image-checks",
- "oer-tools-image-esp-idf",
- "oer-tools-lab-arbiter",
- "oer-tools-lab-client",
- "oer-tools-lab-model",
- "oer-tools-os-process",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "oer-hil-scenarios-wifi-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-hil-services-fault",
- "oer-hil-services-wifi-station",
  "oer-protocols-hil-agent",
  "oer-tools-hil-harness",
  "oer-tools-lab-model",
@@ -2391,20 +2091,6 @@ dependencies = [
  "heapless",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-hil-services-wifi-station"
-version = "0.1.0"
-dependencies = [
- "heapless",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "oer-protocols-ieee80211-runtime",
- "oer-protocols-network-port",
  "postcard",
  "postcard-schema",
  "serde",

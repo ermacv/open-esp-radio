@@ -873,7 +873,8 @@ its answer back. Its state (`IDLE`, `POSTED`, `WORKING`, `ANSWERED`) admits
 exactly one accessor to each payload place. In `ByValue` mode a Release store
 hands the place over and the other side's Acquire CAS takes it; the client
 posts only with the slot's one `Poster`, which the answer returns. The
-radio-system client uses this mode and has no unsafe code of its own.
+radio-system client (sources outside the build) uses this mode and has no
+unsafe code of its own.
 `InPlace` mode holds the whole exchange in its request place and stores no wakers. Its
 unique server endpoint lends `&mut Req` only in `WORKING` and publishes
 `ANSWERED` after that borrow ends. Its unique client observes `ANSWERED`

@@ -203,8 +203,8 @@ is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
 drops. A failed engine retains its owner and refuses further keys with a
-typed error. Its one owner is the Wi-Fi station, the image that takes it
-from the library (`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
+typed error. Its one owner is the image that takes it from the library
+(`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
 operation borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
 so no operation outlives the call and no AES service, client or async
 operation exists.
@@ -399,18 +399,19 @@ run its own executor.
 P*n* names level *n* of the 8 the CLIC offers. Each context's level, and each
 entry's line and hart, come from `[interrupt-layout]` in the chip's facts;
 the application's grid is `app_wake` P1, `radio_executor` P2, `keeper` P3,
-`radio` P4 and `profile` P5 (the PC samplers, above every other level). A
-probe image declares its own contexts.
+`radio` P4 and `profile` P5. In the built tree the application entry's table
+has entries at P1 only; P2 to P5 are levels of the grid with no entry of the
+entry's. A probe image declares its own contexts and entries (the level-wake
+probe has one at each of P1 to P4).
 
 | Context | Runs | Rule |
 | --- | --- | --- |
-| P5 (`profile`) | the PC sampler of each hart, while a session runs | above every other level, so that it sees what it interrupts |
-| P4 (`radio`), boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the radio executor's SYSTIMER alarm; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
-| P3 (`keeper`), boot hart | a level task, in an image whose table declares one: the level's one task, on a software line of its own | runs to its end on each entry; strict code as a hardware handler; no entry with a source on its level and hart |
-| P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
-| P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
-| P1 / thread, boot hart | role bodies, network stack, application | tasks of one executor never preempt each other and share no lock: they talk only in single-producer queues of that executor |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the group's networks and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
+| P5 (`profile`) | no entry in a built image | above every other level, so that what samples there sees what it interrupts |
+| P4 (`radio`), boot hart | no entry of the application entry's; a probe's hardware handler (the level-wake probe's, above its level task) | a radio's interrupt handler only latches status and posts events |
+| P3 (`keeper`), boot hart | a level task, in an image whose table declares one (the level-wake probe's): the level's one task, on a software line of its own | runs to its end on each entry; strict code as a hardware handler; no entry with a source on its level and hart |
+| P2 (`radio_executor`), boot hart | no entry of the application entry's; a probe's interrupt-mode executor (the level-wake probe's, on `FROM_CPU2`) | cooperative admission between hardware atoms; long waits use timers |
+| P1 / thread, boot hart | the application executor's wake (line 40) and alarm (line 41), and the console (line 42, `console`): the library's service tasks and the application | tasks of one executor never preempt each other and share no lock: they talk only in single-producer queues of that executor |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the group's networks and the image's future, on alarm 2 | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-portable-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each
@@ -682,7 +683,7 @@ probe image declares its own contexts.
   Compiler `panic_const_async_fn_resumed` sites have a separate row outside
   the budgets and target of 0, based on the executor's runtime `DONE` check
   (not a type guarantee) and `.await` never polling a completed child again.
-- The boot-smoke, radio-root and wifi-station images write diagnostic
+- The boot-smoke and radio-root images write diagnostic
   bytes directly, without `core::fmt` writer or argument dispatch. Host and
   test renderers may format values.
   Panic capture keeps static messages through `PanicMessage::as_str()`;
@@ -1163,6 +1164,12 @@ transaction custody, including the existing fault ABI.
 
 ## Radio system
 
+No built image owns the radio but probes, each holding the HAL's radio
+domain itself. The radio system and its client contract
+(`chips/esp32s31/radio/{system, client}`) are sources outside the build,
+awaiting deletion at their successor; the rest of this section describes
+those sources.
+
 One actor on the P2 executor owns the shared RF front-end: PHY registration,
 calibration and tracking, channel retune, modem clocks, coexistence timers
 and sleep. Clients reach it through per-client cells; PHY membership is a
@@ -1297,7 +1304,9 @@ its model and conformance case.
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
-- The Wi-Fi port is two traits of one owner, the task that holds it: the
+- The Wi-Fi port is two traits of one owner, the task that holds it (the
+  contract; its S31 backend, `chips/esp32s31/radio/ieee80211/backend`, is a
+  source outside the build, awaiting deletion at its successor): the
   radio's life (`RadioPort`: start, retune, stop, retire, release) and the
   data path (`DataPort`: arenas, singles, commands, the gate; `ReceivePort`:
   receive as a round). It is the owner of its hardware in the sense of
@@ -1345,7 +1354,8 @@ its model and conformance case.
   and `drive` carries its steps out on the port. The engine
   (`core/datapath`) fills and publishes the arenas, settles their ends and
   charges what an attempt cost on the air.
-- **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`).
+- **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`,
+  kept as sources and not built).
   Wire formats carry no protocol state or clock domain. The port owns radio
   vocabulary and the shared DTM window calculation; backends autonomously
   progress the admitted test with the Core Part F interval grid and 5 ms RX
@@ -1412,7 +1422,8 @@ its model and conformance case.
   production has no enabled CTE interrupt consumer. These sequential reads
   neither prove producer shutdown nor name opaque causes.
 - **IEEE 802.15.4** (`protocols/ieee802154`, driver
-  `chips/esp32s31/radio/ieee802154/backend`). The S31 driver implements the family
+  `chips/esp32s31/radio/ieee802154/backend`, kept as sources and not
+  built). The S31 driver implements the family
   engine's LL contract over HAL's owned polling transactions and retains the
   engine with its placed DMA storage through detach/rebind. The family owner's
   borrowed `service` returns `Fault` with the complete source observation and
@@ -1544,10 +1555,10 @@ main stages. The counters, where each is counted and the cost while off are
 in [the runtime's README](../protocols/network/runtime/README.md#diagnostics).
 Only an observing image (`oer::observe`) carries them: its network
 service counts through them, the network's task their one writer, and the
-image switches, resets and reads them, as the `hil-wifi-station` image does
-for its load service. Every other network image's service has `()`, which
-leaves no code, so the remaining cost while off is the observing image's
-alone.
+image switches, resets and reads them. No built image carries them: the one
+that did, `hil-wifi-station` for its load service, is outside the build.
+Every other network image's service has `()`, which leaves no code, so the
+remaining cost while off is the observing image's alone.
 
 - Diagnostics are off by default.
 - Off, the core reads no clock and updates no diagnostic counter; the cost

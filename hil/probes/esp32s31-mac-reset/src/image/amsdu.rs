@@ -3,10 +3,10 @@
 //! [`case_c`](crate::case_c)'s cases a round, each awaited, in the round's
 //! drawn order; counted per case and per the frame before it.
 use super::transmit::{Descriptor, Frames};
-#[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+#[cfg(not(feature = "ccmp"))]
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
-#[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+#[cfg(not(feature = "ccmp"))]
 use crate::case_c::{CASES, ROUNDS, before_index, byte, order};
 
 /// What case C borrows from part two's series.
@@ -25,18 +25,14 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
     {
         super::ccmp::series(parts, access).await
     }
-    #[cfg(all(feature = "ampdu", not(feature = "ccmp")))]
-    {
-        super::ampdu::series(parts, access).await
-    }
-    #[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+    #[cfg(not(feature = "ccmp"))]
     {
         rounds(parts, access).await
     }
 }
 
 /// Case C's rounds.
-#[cfg(not(any(feature = "ccmp", feature = "ampdu")))]
+#[cfg(not(feature = "ccmp"))]
 async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
         frames,

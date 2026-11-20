@@ -64,6 +64,6 @@ link layer above the port decides how long each event may last.
   machine that consumes ports, `*Hardware` a chip or family register seam
   below a port.
 
-Shared-PHY work (calibration, tracking, retune) belongs to the radio-system
-actor ([architecture](architecture.md#radio-system)); it is not a lifecycle
-operation of a port.
+Shared-PHY work (calibration, tracking, retune) is not a lifecycle operation
+of a port. In the sources outside the build it belongs to the radio-system
+actor ([architecture](architecture.md#radio-system)); no built image has one.
