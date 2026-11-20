@@ -1293,7 +1293,7 @@ its model and conformance case.
   publishes no frontend or ordinary join. No missing resource is replaced with
   an empty or newly minted owner.
 - Reference models are backends and use the port's conformance cases.
-  Wi-Fi and IEEE 802.15.4 models live in their protocol's
+  Wi-Fi, Bluetooth LE and IEEE 802.15.4 models live in their protocol's
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
@@ -1334,7 +1334,8 @@ its model and conformance case.
   from the mint or the port's `PortKey`; a role's right and its places name
   their instance by index. The installation's geometry is the trait's const
   generics, checked against the capabilities at build. No call returns an
-  error. No backend implements it yet.
+  error. The host model (`le/testing/model`) implements it; no chip backend
+  does yet.
 - No radio-system token crosses a port; PHY membership stays inside the
   backend.
 
@@ -1357,7 +1358,8 @@ its model and conformance case.
   is the boundary between a chip's port and the cores ([radio
   ports](#radio-ports)) with its vocabulary: the clock domain, the request
   values of every role checked against the capabilities, and the Core Part F
-  DTM window arithmetic. No backend implements it yet.
+  DTM window arithmetic. Its host model (`le/testing/model`) is the
+  conformance suite's subject; no chip backend implements it yet.
   Public backend identity is an explicit wire value with named
   canonical/air byte order; the driver depends on neither LL nor HCI.
   The backend does not parse air PDUs: wire codecs, LL decisions and role

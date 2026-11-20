@@ -3,7 +3,8 @@
 `oer-protocols-bluetooth-le-contracts-port` is the boundary between a chip's
 Bluetooth LE port and the sans-IO cores above it: the installation machine,
 the controller with its roles and its plan of the air, and the ACL engine.
-No backend implements it yet. No hardware, PHY membership, SRAM addresses or
+The host model `oer-protocols-bluetooth-le-testing-model` implements it; no
+chip backend does yet. No hardware, PHY membership, SRAM addresses or
 HAL proofs appear in it.
 
 ## The port
