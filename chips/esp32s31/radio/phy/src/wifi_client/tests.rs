@@ -38,7 +38,7 @@ fn registered() -> (
     }
     (
         radio,
-        WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi)),
+        WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0),
     )
 }
 
@@ -75,7 +75,7 @@ fn an_unregistered_domain_admits_no_wifi_client() {
             oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity::for_host_test(),
         )
         .expect("identity capacity");
-    let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi));
+    let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let domain = &mut radio;
     let _ = clocked;
     assert!(matches!(
