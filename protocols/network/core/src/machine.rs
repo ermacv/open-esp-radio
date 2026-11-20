@@ -668,7 +668,7 @@ pub struct LendTo {
 }
 
 /// How a socket takes what it receives.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Mode {
     /// Copied into blocks.
     Copy,
@@ -676,6 +676,21 @@ enum Mode {
     Lend,
     /// Nothing: it only sends.
     SendOnly,
+}
+
+/// Whether the port's taken work had its frame written in the port's slot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FrameWritten {
+    Written,
+    /// The port said it took the work without a written frame.
+    Missing,
+}
+
+/// Whether a socket is open, and how its datagrams are received.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Opened {
+    Closed,
+    Open(Mode),
 }
 
 /// A refused datagram with its block.
@@ -787,11 +802,8 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     serial: u64,
     /// The bound port; a socket being closed keeps its slot, not its port.
     port: Option<u16>,
-    open: bool,
-    /// It only sends: a datagram for its port is dropped before any block.
-    send_only: bool,
-    /// Its datagrams are lent in the port's own buffers, not copied.
-    lends: bool,
+    /// Open, and how its datagrams are received, or closed.
+    opened: Opened,
     dscp: Dscp,
     /// What its received data counts toward.
     group: Group<B>,
@@ -810,9 +822,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
         Self {
             serial: 0,
             port: None,
-            open: false,
-            send_only: false,
-            lends: false,
+            opened: Opened::Closed,
             dscp: BEST_EFFORT,
             group: Group::shared(),
             places: Places::new(),
@@ -822,7 +832,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
     }
 
     fn in_use(&self) -> bool {
-        self.open || !self.places.idle()
+        matches!(self.opened, Opened::Open(_)) || !self.places.idle()
     }
 
     /// Whether running work here goes through `address`.
@@ -1155,9 +1165,7 @@ impl<
         let index = index_byte;
         socket.serial = serial;
         socket.port = Some(port);
-        socket.open = true;
-        socket.send_only = matches!(mode, Mode::SendOnly);
-        socket.lends = matches!(mode, Mode::Lend);
+        socket.opened = Opened::Open(mode);
         socket.dscp = dscp;
         socket.group = group;
         // A new socket's port and marking: nothing an earlier one prepared.
@@ -1255,7 +1263,7 @@ impl<
         let open = self
             .sockets
             .get(usize::from(socket.index))
-            .filter(|open| open.serial == socket.serial && open.open)
+            .filter(|open| open.serial == socket.serial && matches!(open.opened, Opened::Open(_)))
             .ok_or(SendRefusal::Stale)?;
         let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
         let ipv4 = usable.ok_or(SendRefusal::NoAddress)?;
@@ -1548,11 +1556,11 @@ impl<
         let serial = self.next_serial();
         let open = self
             .socket_mut(socket.index, socket.serial)
-            .filter(|open| open.open)
+            .filter(|open| matches!(open.opened, Opened::Open(_)))
             .ok_or(StaleSocket)?;
-        open.open = false;
+        let was = core::mem::replace(&mut open.opened, Opened::Closed);
         open.port = None;
-        if core::mem::replace(&mut open.lends, false) {
+        if was == Opened::Open(Mode::Lend) {
             pool.loans().revoke(usize::from(socket.index));
         }
         while let Some(datagram) = open.received.pop_front() {
@@ -1635,9 +1643,14 @@ impl<
         let for_us = self
             .ipv4
             .is_some_and(|ipv4| packet.target_protocol == ipv4.address());
+        let target = if for_us {
+            crate::neighbor::ArpTarget::Us
+        } else {
+            crate::neighbor::ArpTarget::Other
+        };
         if self
             .neighbors
-            .learn(now, packet.sender_protocol, packet.sender_hardware, for_us)
+            .learn(now, packet.sender_protocol, packet.sender_hardware, target)
         {
             self.neighbors_moved();
         }
@@ -1736,18 +1749,18 @@ impl<
         if !ours {
             return None;
         }
-        let found = (0_u8..)
-            .zip(self.sockets.iter_mut())
-            .find(|(_, socket)| socket.open && socket.port == Some(port));
+        let found = (0_u8..).zip(self.sockets.iter_mut()).find(|(_, socket)| {
+            matches!(socket.opened, Opened::Open(_)) && socket.port == Some(port)
+        });
         let Some((index, socket)) = found else {
             report(events, || NetEvent::NoSocket);
             return None;
         };
-        if socket.send_only {
+        if socket.opened == Opened::Open(Mode::SendOnly) {
             report(events, || NetEvent::SendOnly);
             return None;
         }
-        if socket.lends {
+        if socket.opened == Opened::Open(Mode::Lend) {
             match holding {
                 Holding::Lendable => {
                     // `data` lies inside `payload`, which the parse sliced.
@@ -2600,7 +2613,7 @@ impl<
         &mut self,
         now: Instant,
         grant: Grant<B>,
-        written: bool,
+        frame: FrameWritten,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
     ) -> Option<(WorkId, T)> {
         match grant.work {
@@ -2624,10 +2637,9 @@ impl<
             } => {
                 self.cursor = usize::from(socket).wrapping_add(1);
                 self.identification = self.identification.wrapping_add(1);
-                let outcome = if written {
-                    Outcome::Accepted
-                } else {
-                    Outcome::Unknown
+                let outcome = match frame {
+                    FrameWritten::Written => Outcome::Accepted,
+                    FrameWritten::Missing => Outcome::Unknown,
                 };
                 let places = self
                     .sockets
@@ -2635,7 +2647,9 @@ impl<
                     .map(|open| &mut open.places)
                     .filter(|places| places.of(place, serial).is_some());
                 let (released, given) = match places {
-                    Some(places) if written => places.end_given(place, outcome, pool),
+                    Some(places) if frame == FrameWritten::Written => {
+                        places.end_given(place, outcome, pool)
+                    }
                     Some(places) => (places.end(place, outcome, pool), None),
                     None => (false, None),
                 };

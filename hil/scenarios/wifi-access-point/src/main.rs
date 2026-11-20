@@ -257,9 +257,15 @@ fn associate(cx: &mut Cx<'_>) -> Result<(), Failure> {
         .wait()
         .map_err(|error| Failure::Incomplete(format!("the fixture's client: {error}")))?;
     written?;
-    check_incomplete(exited.success(), "the fixture prepared its station")?;
+    if !exited.success() {
+        return Err(Failure::Incomplete(
+            "the fixture prepared its station".into(),
+        ));
+    }
     let enabled = supplicant(&["enable_network", "0"])?;
-    check_incomplete(enabled.trim() == "OK", format!("enable_network: {enabled}"))?;
+    if enabled.trim() != "OK" {
+        return Err(Failure::Incomplete(format!("enable_network: {enabled}")));
+    }
     let started = Instant::now();
     let state = loop {
         let state = supplicant(&["status"])?;
@@ -362,14 +368,6 @@ fn stop(cx: &mut Cx<'_>) -> Result<(), Failure> {
     )
 }
 
-fn check_incomplete(condition: bool, what: impl Into<String>) -> Result<(), Failure> {
-    if condition {
-        Ok(())
-    } else {
-        Err(Failure::Incomplete(what.into()))
-    }
-}
-
 /// One command of the fixture's private supplicant: its output.
 fn supplicant(arguments: &[&str]) -> Result<String, Failure> {
     let output = Command::new("wpa_cli")
@@ -378,10 +376,12 @@ fn supplicant(arguments: &[&str]) -> Result<String, Failure> {
         .stdin(Stdio::null())
         .output()
         .map_err(|error| Failure::Incomplete(format!("wpa_cli: {error}")))?;
-    check_incomplete(
-        output.status.success(),
-        format!("wpa_cli {arguments:?} exited {}", output.status),
-    )?;
+    if !output.status.success() {
+        return Err(Failure::Incomplete(format!(
+            "wpa_cli {arguments:?} exited {}",
+            output.status
+        )));
+    }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 

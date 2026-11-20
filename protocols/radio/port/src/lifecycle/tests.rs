@@ -17,11 +17,10 @@ struct Model {
     disables: Cell<usize>,
     finishes: Cell<usize>,
     abandons: Cell<usize>,
-    refuse: bool,
-    poison: bool,
-    stopped: bool,
-    stall: bool,
-    late: bool,
+    enable: Enable,
+    answer: Answer,
+    run: Run,
+    abandon: AbandonTime,
     /// Disable drains nothing until its deadline.
     stall_disable: Cell<bool>,
     clock: Rc<VirtualClock<4>>,
@@ -100,7 +99,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Backend<Id> {
         Id: 's,
     {
         assert_eq!(self.model.context.get(), 2);
-        if self.model.stall {
+        if self.model.run == Run::Stalls {
             pending::<()>().await;
         }
         retire.requested().await
@@ -124,13 +123,13 @@ impl<Id: SlotIdentity> MockCleanup<Id> for Backend<Id> {
     {
         assert_eq!(self.model.context.get(), 2);
         self.model.abandons.set(self.model.abandons.get() + 1);
-        if self.model.late {
+        if self.model.abandon == AbandonTime::Late {
             self.model
                 .clock
                 .advance(Duration::from_micros(20))
                 .expect("bounded fixture advance");
         }
-        if self.model.stopped {
+        if self.model.answer == Answer::Stopped {
             Abandon::Stopped(q.stopped())
         } else {
             Abandon::Unconfirmed(q)
@@ -223,12 +222,10 @@ impl<Id: SlotIdentity> PortBackend<Id> for Backend<Id> {
     {
         assert_eq!(view.model.context.get(), 1);
         view.model.enables.set(view.model.enables.get() + 1);
-        if view.model.poison {
-            Err(Poisoned { cause: 7 })
-        } else if view.model.refuse {
-            Ok(Err(()))
-        } else {
-            Ok(Ok(()))
+        match view.model.enable {
+            Enable::Poisons => Err(Poisoned { cause: 7 }),
+            Enable::Refuses => Ok(Err(())),
+            Enable::Accepts => Ok(Ok(())),
         }
     }
     async fn disable<'a, 'p, S>(
@@ -387,18 +384,46 @@ impl<Id: SlotIdentity> PortBody<Id, Backend<Id>> for Body {
         }
     }
 }
-fn model(refuse: bool, poison: bool, stopped: bool, stall: bool, late: bool) -> Model {
+/// How the model's enable answers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Enable {
+    Accepts,
+    Refuses,
+    Poisons,
+}
+
+/// What the model's owner answers an abandon with.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Answer {
+    Stopped,
+    Unconfirmed,
+}
+
+/// Whether the model's run returns when retired or never does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Run {
+    Retires,
+    Stalls,
+}
+
+/// Whether the model's abandon answers before or after the stop's deadline.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AbandonTime {
+    OnTime,
+    Late,
+}
+
+fn model(enable: Enable, answer: Answer, run: Run, abandon: AbandonTime) -> Model {
     Model {
         context: Cell::new(2),
         enables: Cell::new(0),
         disables: Cell::new(0),
         finishes: Cell::new(0),
         abandons: Cell::new(0),
-        refuse,
-        poison,
-        stopped,
-        stall,
-        late,
+        enable,
+        answer,
+        run,
+        abandon,
         stall_disable: Cell::new(false),
         clock: Rc::new(VirtualClock::starting_at(Instant::EPOCH)),
     }
@@ -416,25 +441,59 @@ fn finish<F: Future>(f: F) -> F::Output {
 
 #[test]
 fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome() {
-    for (body, refuse, poison, stopped, late) in [
-        (Body::Normal, false, false, true, false),
-        (Body::Normal, true, false, true, false),
-        (Body::Normal, false, true, true, false),
-        (Body::FailStop, false, false, true, false),
-        (Body::FailStop, false, false, false, false),
-        (Body::FailStop, false, false, true, true),
-        (Body::DroppedOwner, false, false, true, false),
+    for (body, enable, answer, abandon) in [
+        (
+            Body::Normal,
+            Enable::Accepts,
+            Answer::Stopped,
+            AbandonTime::OnTime,
+        ),
+        (
+            Body::Normal,
+            Enable::Refuses,
+            Answer::Stopped,
+            AbandonTime::OnTime,
+        ),
+        (
+            Body::Normal,
+            Enable::Poisons,
+            Answer::Stopped,
+            AbandonTime::OnTime,
+        ),
+        (
+            Body::FailStop,
+            Enable::Accepts,
+            Answer::Stopped,
+            AbandonTime::OnTime,
+        ),
+        (
+            Body::FailStop,
+            Enable::Accepts,
+            Answer::Unconfirmed,
+            AbandonTime::OnTime,
+        ),
+        (
+            Body::FailStop,
+            Enable::Accepts,
+            Answer::Stopped,
+            AbandonTime::Late,
+        ),
+        (
+            Body::DroppedOwner,
+            Enable::Accepts,
+            Answer::Stopped,
+            AbandonTime::OnTime,
+        ),
         (
             Body::StopBy(Instant::EPOCH.saturating_add(Duration::from_secs(1))),
-            false,
-            false,
-            true,
-            false,
+            Enable::Accepts,
+            Answer::Stopped,
+            AbandonTime::OnTime,
         ),
     ] {
-        let m = Rc::new(model(refuse, poison, stopped, false, late));
+        let m = Rc::new(model(enable, answer, Run::Retires, abandon));
         let dropped = matches!(body, Body::DroppedOwner);
-        let normal = matches!(body, Body::Normal | Body::StopBy(_)) && !refuse && !poison;
+        let normal = matches!(body, Body::Normal | Body::StopBy(_)) && enable == Enable::Accepts;
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
             let backend = Backend {
@@ -480,7 +539,7 @@ fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome()
                     assert_eq!(output, 42);
                     assert_eq!(
                         matches!(outcome.outcome(), Abandon::Stopped(_)),
-                        stopped && !late
+                        answer == Answer::Stopped && abandon == AbandonTime::OnTime
                     );
                 }
                 PortEnd::Abandoned { outcome, .. } => {
@@ -498,7 +557,12 @@ fn frontend_supervisor_owns_no_p2_state_and_returns_join_or_typed_stop_outcome()
 #[test]
 fn cancelling_run_port_before_or_after_first_poll_only_requests_p2_cleanup() {
     for poll_p1 in [false, true] {
-        let model = Rc::new(model(false, false, true, false, false));
+        let model = Rc::new(model(
+            Enable::Accepts,
+            Answer::Stopped,
+            Run::Retires,
+            AbandonTime::OnTime,
+        ));
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
             let backend = Backend {
@@ -535,7 +599,12 @@ fn cancelling_run_port_before_or_after_first_poll_only_requests_p2_cleanup() {
 
 #[test]
 fn ordinary_retirement_expiry_preserves_output_and_never_issues_joined() {
-    let model = Rc::new(model(false, false, true, true, false));
+    let model = Rc::new(model(
+        Enable::Accepts,
+        Answer::Stopped,
+        Run::Stalls,
+        AbandonTime::OnTime,
+    ));
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let backend = Backend {
@@ -641,7 +710,12 @@ fn stopped_by(
 
 #[test]
 fn a_stop_deadline_passed_before_disable_publishes_deadline_without_starting_it() {
-    let model = Rc::new(model(false, false, true, false, false));
+    let model = Rc::new(model(
+        Enable::Accepts,
+        Answer::Stopped,
+        Run::Retires,
+        AbandonTime::OnTime,
+    ));
     let (joined, cause) = stopped_by(&model, Body::StopBy(Instant::EPOCH), None);
     assert!(!joined);
     assert_eq!(cause, Some(LifecycleError::Deadline), "not Cancelled");
@@ -663,7 +737,12 @@ fn a_stop_deadline_passed_before_disable_publishes_deadline_without_starting_it(
 
 #[test]
 fn a_stop_deadline_during_disable_publishes_deadline_and_issues_no_disabled_owner() {
-    let model = Rc::new(model(false, false, true, false, false));
+    let model = Rc::new(model(
+        Enable::Accepts,
+        Answer::Stopped,
+        Run::Retires,
+        AbandonTime::OnTime,
+    ));
     model.stall_disable.set(true);
     let deadline = Instant::EPOCH.saturating_add(Duration::from_micros(5));
     let (joined, cause) = stopped_by(
@@ -683,7 +762,12 @@ fn a_join_answer_after_the_stop_deadline_issues_no_joined() {
     // P2 never answers the uninstall in time; the stop's deadline, earlier
     // than the backend's own bound, ends the wait, and a ready answer after
     // it cannot produce Joined.
-    let model = Rc::new(model(false, false, true, true, false));
+    let model = Rc::new(model(
+        Enable::Accepts,
+        Answer::Stopped,
+        Run::Stalls,
+        AbandonTime::OnTime,
+    ));
     let deadline = Instant::EPOCH.saturating_add(Duration::from_micros(3));
     let (joined, cause) = stopped_by(
         &model,
@@ -700,7 +784,12 @@ fn a_join_answer_after_the_stop_deadline_issues_no_joined() {
 #[test]
 fn a_late_quarantine_answer_after_the_stop_deadline_proves_no_stop() {
     // The P2 cleanup answers only past the deadline: it stays unconfirmed.
-    let model = Rc::new(model(false, false, true, false, true));
+    let model = Rc::new(model(
+        Enable::Accepts,
+        Answer::Stopped,
+        Run::Retires,
+        AbandonTime::Late,
+    ));
     let (joined, cause) = stopped_by(&model, Body::StopBy(Instant::EPOCH), None);
     assert!(!joined);
     assert_eq!(cause, Some(LifecycleError::Deadline));

@@ -45,12 +45,20 @@ mod tests {
     };
     use embedded_io_async::{ErrorKind, ErrorType, Write};
 
+    /// The one operation a transport is made to fail.
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    enum Fails {
+        #[default]
+        Nothing,
+        Write,
+        Flush,
+    }
+
     #[derive(Default)]
     struct BufferedTransport {
         pending: heapless::Vec<u8, 256>,
         delivered: heapless::Vec<u8, 256>,
-        fail_write: bool,
-        fail_flush: bool,
+        fails: Fails,
         flushed: bool,
     }
 
@@ -60,7 +68,7 @@ mod tests {
 
     impl Write for BufferedTransport {
         async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-            if self.fail_write {
+            if self.fails == Fails::Write {
                 return Err(ErrorKind::BrokenPipe);
             }
             let count = bytes.len().min(17);
@@ -70,7 +78,7 @@ mod tests {
 
         async fn flush(&mut self) -> Result<(), Self::Error> {
             self.flushed = true;
-            if self.fail_flush {
+            if self.fails == Fails::Flush {
                 return Err(ErrorKind::NotConnected);
             }
             core::mem::swap(&mut self.pending, &mut self.delivered);
@@ -145,7 +153,7 @@ mod tests {
     #[test]
     fn write_and_flush_failures_cannot_report_delivery() {
         let mut transport = BufferedTransport {
-            fail_write: true,
+            fails: Fails::Write,
             ..Default::default()
         };
         assert_eq!(
@@ -153,8 +161,7 @@ mod tests {
             Err(WriteFrameError::Transport(ErrorKind::BrokenPipe))
         );
         assert!(!transport.flushed);
-        transport.fail_write = false;
-        transport.fail_flush = true;
+        transport.fails = Fails::Flush;
         assert_eq!(
             ready(write_frame(&mut transport, &[1; 64])),
             Err(WriteFrameError::Transport(ErrorKind::NotConnected))

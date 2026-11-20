@@ -2,6 +2,7 @@
 //! each frame once, nothing lost at a refusal, and every owner home after a
 //! stop or a cancelled run.
 
+use crate::tests::Room;
 use core::cell::Cell;
 use core::future::poll_fn;
 
@@ -80,7 +81,7 @@ fn plan_bench_on<B: 'static, D: crate::Diagnostics>(
     let memory = Box::leak(Box::new([[0; SIZE]; PLAN_BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, PLAN_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service =
@@ -122,7 +123,7 @@ async fn queue_four_each<B>(
     let [a, b] = sockets;
     let first = plan_send(a, b"first").await;
     assert_eq!(result_of(first).await, Sent::Ended(Outcome::Accepted));
-    open_port(wire, true);
+    open_port(wire, Room::Full);
     let mut observers = Vec::new();
     for round in 0..4 {
         observers.push(plan_send(a, &[b'a', b'0' + round]).await);
@@ -137,7 +138,7 @@ async fn queue_four_each<B>(
 fn take_then_fill(wire: &WirePort, count: usize) {
     let mut wire = wire.0.borrow_mut();
     wire.accepts = Some(count);
-    wire.full = false;
+    wire.switches.off(WireSwitch::Full);
     wire.wake();
 }
 
@@ -186,7 +187,7 @@ fn a_refusal_in_the_middle_of_a_turn_loses_nothing() {
             .find(|turn| turn.contains(&Step::Accepted))
             .unwrap();
         assert_eq!(publishing, expected, "five frames, then the refusal");
-        open_port(&wire, false);
+        open_port(&wire, Room::Free);
         let mut results = Vec::new();
         for observer in observers {
             results.push(result_of(observer).await);
@@ -323,7 +324,7 @@ fn one_turn_sends_its_budget_in_turn() {
     let drive = async {
         let observers = queue_four_each(&mut sockets, &wire).await;
         let mark = policy.0.borrow().len();
-        open_port(&wire, false);
+        open_port(&wire, Room::Free);
         settle().await;
         let sent = datagrams(&wire.0.borrow());
         assert_eq!(sent.len(), 9);

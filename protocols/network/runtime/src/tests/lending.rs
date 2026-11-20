@@ -94,7 +94,7 @@ fn lending_diagnosed<B: 'static, D: crate::Diagnostics>(
     let wire = WirePort::default();
     {
         let mut state = wire.0.borrow_mut();
-        state.answers = true;
+        state.switches.on(super::WireSwitch::Answers);
         state.holding = Some(Holding::Lendable);
     }
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());

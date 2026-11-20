@@ -244,7 +244,7 @@ fn datagram_of(frame: &[u8]) -> (Vec<u8>, bool) {
 fn a_filler_run_the_buffer_holds_is_kept_and_not_written_again() {
     world!(|stack| {
         knows_peer(stack);
-        stack.port_mut().keeps_buffer = true;
+        stack.port_mut().faults.inject(PortFault::KeepsBuffer);
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let run = Held {
             at: 42 + 28,
@@ -288,7 +288,7 @@ fn a_filler_run_the_buffer_holds_is_kept_and_not_written_again() {
 fn a_longer_frame_writes_past_the_run_and_another_frame_ends_it() {
     world!(|stack| {
         knows_peer(stack);
-        stack.port_mut().keeps_buffer = true;
+        stack.port_mut().faults.inject(PortFault::KeepsBuffer);
         let local = stack.open_local(6000, best_effort()).unwrap();
         let channel = stack.open(5000, best_effort()).unwrap();
         let short = stack.declare(at(1), &local, peer(), 40, 15).unwrap();
@@ -363,7 +363,7 @@ fn a_refusal_before_the_fill_never_calls_it_and_the_work_stays() {
     world!(|stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let work = stack.declare(at(0), &socket, broadcast(), 8, 19).unwrap();
-        stack.port_mut().full = true;
+        stack.port_mut().faults.inject(PortFault::Full);
         let calls = Cell::new(0);
         assert_eq!(
             produce_next(stack, at(0), writes(&calls)),
@@ -371,7 +371,7 @@ fn a_refusal_before_the_fill_never_calls_it_and_the_work_stays() {
         );
         assert_eq!(calls.get(), 0);
         assert_eq!(end_of(stack, &socket.ends()), None, "it stays");
-        stack.port_mut().full = false;
+        stack.port_mut().faults.clear(PortFault::Full);
         let given = produce_next(stack, at(0), writes(&calls)).unwrap();
         assert_eq!(calls.get(), 1, "one fill");
         assert_eq!(given, Some((work, 19)));
@@ -423,7 +423,7 @@ fn a_yes_after_a_declined_fill_is_unknown_and_the_port_s_fault() {
     world!(|stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let work = stack.declare(at(0), &socket, broadcast(), 8, 22).unwrap();
-        stack.port_mut().careless = true;
+        stack.port_mut().faults.inject(PortFault::Careless);
         let calls = Cell::new(0);
         assert_eq!(
             produce_next(stack, at(0), declines(&calls)),
@@ -444,7 +444,7 @@ fn a_port_refusal_after_a_declined_fill_ends_it_declined_and_is_the_port_s_fault
     world!(|stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let work = stack.declare(at(0), &socket, broadcast(), 8, 23).unwrap();
-        stack.port_mut().misreports = true;
+        stack.port_mut().faults.inject(PortFault::Misreports);
         let calls = Cell::new(0);
         assert_eq!(
             produce_next(stack, at(0), declines(&calls)),
@@ -657,9 +657,9 @@ fn the_neighbor_counter_moves_on_every_release_of_protection() {
         // A final refusal of the port.
         let block = filled(stack.pool(), b"x");
         let command = stack.send(at(1), &channel, peer(), block).unwrap();
-        stack.port_mut().rejects = true;
+        stack.port_mut().faults.inject(PortFault::Rejects);
         assert!(send_next(stack, at(1)).is_err());
-        stack.port_mut().rejects = false;
+        stack.port_mut().faults.clear(PortFault::Rejects);
         moved(stack, "a reject");
         let _ = stack.take_result(command);
         // An eviction.

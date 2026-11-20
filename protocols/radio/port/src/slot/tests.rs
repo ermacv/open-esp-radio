@@ -24,7 +24,7 @@ struct Model {
     run_address: Cell<*const Owner>,
     finishing_address: Cell<*const Owner>,
     stall_stop: Cell<bool>,
-    stopped: bool,
+    answer: Answer,
 }
 
 struct Owner(Rc<Model>);
@@ -117,7 +117,7 @@ impl<Id: SlotIdentity> MockCleanup<Id> for Owner {
         );
         assert_eq!(self.0.frontend_loans.get(), 0, "end P1 before P2 cleanup");
         self.0.abandons.set(self.0.abandons.get() + 1);
-        if self.0.stopped {
+        if self.0.answer == Answer::Stopped {
             Abandon::Stopped(authority.stopped())
         } else {
             Abandon::Unconfirmed(authority)
@@ -157,7 +157,14 @@ async fn run_p2<'s, Id: SlotIdentity + 's, S: MockCleanup<Id> + 's>(
     }
 }
 
-fn model(stopped: bool) -> Rc<Model> {
+/// What the model's owner answers an abandon with.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Answer {
+    Stopped,
+    Unconfirmed,
+}
+
+fn model(answer: Answer) -> Rc<Model> {
     Rc::new(Model {
         executor: Cell::new(Executor::P2),
         abandons: Cell::new(0),
@@ -169,7 +176,7 @@ fn model(stopped: bool) -> Rc<Model> {
         run_address: Cell::new(core::ptr::null()),
         finishing_address: Cell::new(core::ptr::null()),
         stall_stop: Cell::new(false),
-        stopped,
+        answer,
     })
 }
 
@@ -213,7 +220,7 @@ fn body_loan_preserves_all_capacity_indices_paths_and_waiter_domains() {
 
 #[test]
 fn ending_a_quarantined_model_world_consumes_its_slot_without_reissuing_identity() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, registration) = slot
@@ -320,7 +327,7 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
             assert_eq!(device.0.executor.get(), Executor::P2);
         }
     }
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -357,9 +364,9 @@ fn joined_retains_stopped_hardware_in_the_slot_until_p2_reinstallation_or_world_
 
 #[test]
 fn cancelled_p1_future_never_owns_or_destroys_the_registered_p2_side() {
-    for stopped in [true, false] {
+    for answer in [Answer::Stopped, Answer::Unconfirmed] {
         for poll_p1 in [true, false] {
-            let model = model(stopped);
+            let model = model(answer);
             finish(with_local_slot(async |claim| {
                 let mut slot = claim.place();
                 let (frontend, mut p2) = slot
@@ -383,7 +390,10 @@ fn cancelled_p1_future_never_owns_or_destroys_the_registered_p2_side() {
                 let mut p2 = MockRegistration::new(p2);
                 assert!(p2.cleanup());
                 let outcome = signals.take_answer().expect("single P2 response");
-                assert_eq!(matches!(outcome, Abandon::Stopped(_)), stopped);
+                assert_eq!(
+                    matches!(outcome, Abandon::Stopped(_)),
+                    answer == Answer::Stopped
+                );
                 assert!(!p2.cleanup());
                 assert!(signals.take_answer().is_none());
                 drop(p2);
@@ -401,7 +411,7 @@ fn cancelled_p1_future_never_owns_or_destroys_the_registered_p2_side() {
 
 #[test]
 fn destroying_registration_without_another_poll_cleans_up_once_on_p2() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -421,7 +431,7 @@ fn destroying_registration_without_another_poll_cleans_up_once_on_p2() {
 
 #[test]
 fn ordinary_join_follows_p2_destruction_and_is_the_only_reinstall_authority() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, mut p2) = slot
@@ -465,7 +475,7 @@ fn ordinary_join_follows_p2_destruction_and_is_the_only_reinstall_authority() {
 
 #[test]
 fn retire_consumes_joined_returns_the_vacant_owner_once_and_ends_registration() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -490,7 +500,7 @@ fn retire_consumes_joined_returns_the_vacant_owner_once_and_ends_registration() 
 
 #[test]
 fn late_stopped_proof_never_turns_quarantine_into_joined() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, mut p2) = slot
@@ -510,7 +520,7 @@ fn late_stopped_proof_never_turns_quarantine_into_joined() {
 
 #[test]
 fn cancelling_the_join_after_p2_finishes_still_withholds_reuse() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -528,7 +538,7 @@ fn cancelling_the_join_after_p2_finishes_still_withholds_reuse() {
 
 #[test]
 fn cancelling_join_during_a_pending_p2_stop_ends_the_loan_before_cleanup() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     model.stall_stop.set(true);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -558,7 +568,7 @@ fn cancelling_join_during_a_pending_p2_stop_ends_the_loan_before_cleanup() {
 #[test]
 fn destroying_p2_task_during_stop_keeps_the_slot_owner_and_cleans_up_on_p2() {
     for poll_stop in [true, false] {
-        let model = model(false);
+        let model = model(Answer::Unconfirmed);
         model.stall_stop.set(true);
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
@@ -587,7 +597,7 @@ fn repeated_and_parallel_local_scopes_share_no_declaration_latch() {
         for _ in 0..4 {
             threads.spawn(|| {
                 for _ in 0..32 {
-                    let model = model(true);
+                    let model = model(Answer::Stopped);
                     finish(with_local_slot(async |claim| {
                         let mut slot = claim.place();
                         let (frontend, p2) = slot
@@ -609,7 +619,7 @@ fn repeated_and_parallel_local_scopes_share_no_declaration_latch() {
 #[test]
 fn local_runner_joins_after_the_inner_frontend_future_is_cancelled() {
     for poll_inner in [true, false] {
-        let model = model(false);
+        let model = model(Answer::Unconfirmed);
         let cancel = Cell::new(!poll_inner);
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
@@ -665,7 +675,7 @@ fn local_runner_joins_after_the_inner_frontend_future_is_cancelled() {
 
 #[test]
 fn local_runner_publishes_join_only_after_p2_finishes() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let scope = crate::LocalExecution.scope(
@@ -700,7 +710,7 @@ fn dropping_outer_scope_ends_the_body_before_p2_cleanup_even_before_first_poll()
         }
     }
     for poll_outer in [false, true] {
-        let model = model(false);
+        let model = model(Answer::Unconfirmed);
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place();
             model.frontend_loans.set(1);
@@ -734,7 +744,7 @@ fn dropping_outer_scope_ends_the_body_before_p2_cleanup_even_before_first_poll()
 
 #[test]
 fn returning_after_forgetting_the_frontend_cannot_leave_p2_registered() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let scope = crate::LocalExecution.scope(
@@ -757,7 +767,7 @@ fn returning_after_forgetting_the_frontend_cannot_leave_p2_registered() {
 
 #[test]
 fn completion_cannot_publish_join_before_the_old_p2_future_is_removed() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -780,7 +790,7 @@ fn completion_cannot_publish_join_before_the_old_p2_future_is_removed() {
 
 #[test]
 fn a_lost_unregistration_completion_never_issues_joined() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, p2) = slot
@@ -805,7 +815,7 @@ fn a_lost_unregistration_completion_never_issues_joined() {
 fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
     use oer_portable_time::{Instant, Timer};
 
-    let model = model(true);
+    let model = model(Answer::Stopped);
     let clock = oer_portable_time_virtual::VirtualClock::<4>::starting_at(Instant::EPOCH);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
@@ -842,7 +852,7 @@ fn a_late_p2_answer_cannot_upgrade_the_supervisors_expired_result() {
 
 #[test]
 fn a_claim_activates_preinitialized_backing_without_moving_its_owner() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut backing = VacantPortSlot::vacant();
         let slot = claim.place_in(&mut backing);

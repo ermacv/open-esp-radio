@@ -80,6 +80,13 @@ pub(crate) struct Neighbors<const N: usize> {
     known: u32,
 }
 
+/// Whom an ARP packet was for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ArpTarget {
+    Us,
+    Other,
+}
+
 impl<const N: usize> Neighbors<N> {
     pub(crate) const fn new() -> Self {
         Self {
@@ -263,15 +270,15 @@ impl<const N: usize> Neighbors<N> {
         false
     }
 
-    /// Note `address` at `hardware`. An entry is made only when `make`: RFC
-    /// 826 merges what it knows, and adds only when the packet was for us.
+    /// Note `address` at `hardware`. RFC 826 merges what it knows, and adds
+    /// an entry only when the packet was for us ([`ArpTarget::Us`]).
     /// Whether an entry took it.
     pub(crate) fn learn(
         &mut self,
         now: Instant,
         address: [u8; 4],
         hardware: [u8; 6],
-        make: bool,
+        target: ArpTarget,
     ) -> bool {
         let known = Entry::Known {
             address,
@@ -286,10 +293,12 @@ impl<const N: usize> Neighbors<N> {
         });
         let entry = match held {
             Some(entry) => entry,
-            None if make => match self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
-                Some(entry) => entry,
-                None => return false,
-            },
+            None if target == ArpTarget::Us => {
+                match self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
+                    Some(entry) => entry,
+                    None => return false,
+                }
+            }
             None => return false,
         };
         *entry = known;
@@ -438,14 +447,14 @@ mod tests {
     #[test]
     fn a_finding_never_holds_again_once_the_count_is_exhausted() {
         let mut table = Neighbors::<2>::new();
-        assert!(table.learn(at(0), PEER, FIRST, true));
+        assert!(table.learn(at(0), PEER, FIRST, ArpTarget::Us));
         table.known = 0;
         let found = table.find(at(1), PEER).unwrap();
         assert!(table.holds_still(&found.holds(), at(1)));
         table.known = EXHAUSTED - 1;
-        assert!(table.learn(at(1), PEER, MOVED, true));
+        assert!(table.learn(at(1), PEER, MOVED, ArpTarget::Us));
         assert!(
-            table.learn(at(1), PEER, MOVED, true),
+            table.learn(at(1), PEER, MOVED, ArpTarget::Us),
             "a write past the end"
         );
         assert!(
@@ -462,7 +471,7 @@ mod tests {
     fn at_the_end_of_the_count_nothing_found_holds() {
         let mut table = Neighbors::<2>::new();
         table.known = EXHAUSTED;
-        assert!(table.learn(at(0), PEER, FIRST, true));
+        assert!(table.learn(at(0), PEER, FIRST, ArpTarget::Us));
         let found = table.find(at(1), PEER).unwrap();
         assert_eq!(found.hardware, FIRST);
         assert!(!table.holds_still(&found.holds(), at(1)));

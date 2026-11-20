@@ -1,9 +1,15 @@
 use super::*;
 
+/// The one initialization step the owner is made to fail.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Fails {
+    Split,
+    Lend,
+}
+
 struct Initializing {
     owner: Owner,
-    split_failure: bool,
-    lend_failure: bool,
+    fails: Fails,
 }
 impl<Id: SlotIdentity> SlotOwner<Id> for Initializing {
     type Pools = ();
@@ -22,7 +28,7 @@ impl<Id: SlotIdentity> SlotOwner<Id> for Initializing {
         Id: 's;
     fn prepare_queues(&mut self, q: &mut Self::Queues, mint: crate::Mint<'static, (), Id>) {
         mint.into_pools();
-        *q = (self.split_failure, self.lend_failure);
+        *q = (self.fails == Fails::Split, self.fails == Fails::Lend);
     }
     fn split<'s>(q: &'s mut Self::Queues, _: SlotWakes<'s, Id>) -> Result<(bool, ()), SlotInitError>
     where
@@ -103,14 +109,13 @@ impl<Id: SlotIdentity> SlotBody<Id, Initializing> for UnreachableBody {
 
 #[test]
 fn split_failure_returns_its_cause_and_retains_p2_cleanup_without_publishing_endpoints() {
-    let observed = model(true);
+    let observed = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         {
             let Err(error) = slot.register(Initializing {
                 owner: Owner(observed.clone()),
-                split_failure: true,
-                lend_failure: false,
+                fails: Fails::Split,
             }) else {
                 panic!("split must refuse")
             };
@@ -138,14 +143,13 @@ fn split_failure_returns_its_cause_and_retains_p2_cleanup_without_publishing_end
 
 #[test]
 fn lend_failure_returns_its_cause_and_quarantines_before_calling_the_body_or_driver() {
-    let observed = model(true);
+    let observed = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let registered = slot
             .register(Initializing {
                 owner: Owner(observed.clone()),
-                split_failure: false,
-                lend_failure: true,
+                fails: Fails::Lend,
             })
             .unwrap();
         let result = crate::LocalExecution

@@ -260,7 +260,7 @@ fn a_reply_the_port_refuses_waits_and_retirement_brings_its_block_home() {
     world!(|stack| {
         knows_peer(stack);
         assert!(ask(stack, at(0), &echo(1, b"ping")).is_empty());
-        stack.port_mut().full = true;
+        stack.port_mut().faults.inject(PortFault::Full);
         let demand = stack.poll_demand(at(0)).unwrap();
         assert!(
             stack

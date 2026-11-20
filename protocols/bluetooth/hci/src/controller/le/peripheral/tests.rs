@@ -210,7 +210,11 @@ fn encryption_events_roundtrip_through_bt_hci() {
     assert_eq!(decoded.random_number, [1, 2, 3, 4, 5, 6, 7, 8]);
     assert_eq!(decoded.encrypted_diversifier, 0x1234);
 
-    let changed = LeEncryptionChangeEvent::new(Status::SUCCESS, ConnHandle::new(0x0abc), true);
+    let changed = LeEncryptionChangeEvent::new(
+        Status::SUCCESS,
+        ConnHandle::new(0x0abc),
+        super::Encryption::On,
+    );
     let Event::EncryptionChangeV1(decoded) =
         Event::from_hci_bytes_complete(changed.as_bytes()).unwrap()
     else {

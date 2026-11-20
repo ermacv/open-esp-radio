@@ -19,7 +19,7 @@ fn invalid_owner_storage_is_returned_without_a_panic_or_replacement() {
 
 #[test]
 fn missing_invocation_returns_its_observation_and_only_the_owner_guard_cleans_up() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, mut raw) = slot.register(Owner(model.clone())).unwrap();
@@ -50,7 +50,7 @@ fn missing_invocation_returns_its_observation_and_only_the_owner_guard_cleans_up
 
 #[test]
 fn missing_finish_invocation_preserves_the_registered_owner() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place::<Owner>();
         *slot.owner = Some(Stored::Registered(Owner(model.clone())));
@@ -70,7 +70,7 @@ fn missing_finish_invocation_preserves_the_registered_owner() {
 
 #[test]
 fn inconsistent_reinstall_returns_the_input_and_join_without_moving_an_active_owner() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     for active in [false, true] {
         finish(with_local_slot(async |claim| {
             let mut slot = claim.place::<Owner>();
@@ -121,7 +121,7 @@ fn inconsistent_reinstall_returns_the_input_and_join_without_moving_an_active_ow
 
 #[test]
 fn raw_registration_drop_reports_cancellation_without_calling_hardware_policy() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, raw) = slot.register(Owner(model.clone())).unwrap();
@@ -141,7 +141,7 @@ fn unexpected_join_in_a_failure_wait_retains_the_observed_state() {
     signals.state.store(JOINED, Ordering::Relaxed);
     let join = SlotJoin::<LocalId<'_>> {
         signals: &signals,
-        ordinary: false,
+        kind: JoinKind::Abandoned,
         armed: true,
         identity: PhantomData,
     };
@@ -158,7 +158,7 @@ fn unexpected_join_in_a_failure_wait_retains_the_observed_state() {
 
 #[test]
 fn a_completed_local_runner_is_fused_instead_of_panicking_on_an_empty_output() {
-    let model = model(true);
+    let model = model(Answer::Stopped);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let mut runner = pin!(crate::LocalExecution.scope(
@@ -201,7 +201,7 @@ fn lifecycle_failure_transport_preserves_all_source_observations() {
 
 #[test]
 fn missing_registered_owner_keeps_the_original_driver_fault_through_owner_notification() {
-    let model = model(false);
+    let model = model(Answer::Unconfirmed);
     finish(with_local_slot(async |claim| {
         let mut slot = claim.place();
         let (frontend, mut raw) = slot.register(Owner(model.clone())).unwrap();

@@ -407,19 +407,27 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     };
     use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 
+    /// Where the split transport is: its first write not taken yet, a half
+    /// taken and the gate shut, or the gate opened.
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum Step {
+        Whole,
+        Split,
+        Open,
+    }
+
     struct SplitTx<'a> {
         host: Host,
         gate: &'a Signal<NoopRawMutex, ()>,
-        split: bool,
-        open: bool,
+        step: Step,
     }
     impl embedded_io_async::ErrorType for SplitTx<'_> {
         type Error = core::convert::Infallible;
     }
     impl Write for SplitTx<'_> {
         async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-            if !self.split {
-                self.split = true;
+            if self.step == Step::Whole {
+                self.step = Step::Split;
                 let count = bytes.len() / 2;
                 self.host
                     .from_device
@@ -427,9 +435,9 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
                     .extend_from_slice(&bytes[..count]);
                 return Ok(count);
             }
-            if !self.open {
+            if self.step == Step::Split {
                 self.gate.wait().await;
-                self.open = true;
+                self.step = Step::Open;
             }
             self.host.from_device.borrow_mut().extend_from_slice(bytes);
             Ok(bytes.len())
@@ -448,8 +456,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     let mut tx = SplitTx {
         host: host.clone(),
         gate: &gate,
-        split: false,
-        open: false,
+        step: Step::Whole,
     };
     let mut writing = core::pin::pin!(console.write_message(&mut tx, &message, &Chip));
     let mut written = core::pin::pin!(console.written(sequence));

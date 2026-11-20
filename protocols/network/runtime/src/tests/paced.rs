@@ -80,7 +80,7 @@ fn paced<B: 'static>(bursts: &[usize]) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) 
     let memory = Box::leak(Box::new([[0; SIZE]; PACED_BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, PACED_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -145,7 +145,9 @@ fn never_dry<B: 'static>(per_batch: usize) {
     assert_eq!(sent, BATCHES * per_batch);
     assert!((sent..=sent + RESERVE_AHEAD).contains(&asked_blocks));
     assert!(
-        turns_ended.iter().all(|end| end.blocks_free),
+        turns_ended
+            .iter()
+            .all(|end| end.blocks == crate::Blocks::Free),
         "the pool never ran out"
     );
     // Only the first send, before any request, finds none ready: no batch

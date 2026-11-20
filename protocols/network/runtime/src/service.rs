@@ -19,7 +19,7 @@ use oer_protocols_network_wire::ip::Dscp;
 
 use crate::diagnostics::{Diagnostics, Stage, Tally};
 use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
-use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
+use crate::observation::{Blocks, Credits, LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
 use crate::socket::{
     Answer, Inbound, LateSocket, LendingLanes, LendingSocket, LentEnd, Request, Sent, ServiceEnd,
@@ -56,17 +56,19 @@ impl AfterUnsent {
     };
 }
 
-/// What a turn did.
-#[derive(Clone, Copy, Debug)]
-struct Turned {
-    /// It left work no wake names: a budget spent, notices untold, a block
-    /// evicted, a producer's hold or budget freed, a refused publication of
-    /// the address.
-    again: bool,
-    /// Only frames are left: a budget of intake or publication spent, or
-    /// a flow left out after a declining fill. The next turn may take only
-    /// the frames ([`Turn::Packets`]).
-    packets: bool,
+/// What a turn left for the next.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Turned {
+    /// Nothing a wake does not name: the service waits.
+    Wait,
+    /// Work no wake names: a budget spent, notices untold, a block evicted,
+    /// a producer's hold or budget freed, a refused publication of the
+    /// address. The next turn is a full one.
+    Full,
+    /// Only frames: a budget of intake or publication spent, or a flow left
+    /// out after a declining fill. The next turn may take only the frames
+    /// ([`Turn::Packets`]).
+    Packets,
 }
 
 /// Which steps a turn takes.
@@ -82,12 +84,13 @@ enum Turn {
 }
 
 /// What one batch of returns did.
-#[derive(Clone, Copy, Debug)]
-struct Returned {
-    /// Something came back.
-    any: bool,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Returned {
+    Nothing,
+    /// Something came back, and no socket waits for a block that came home.
+    Taken,
     /// A block came home while a socket waits for one.
-    work: bool,
+    Work,
 }
 
 /// The lane that stops a service: whoever holds its sender asks once.
@@ -294,12 +297,20 @@ struct Bound<
     /// matched here by place and generation.
     commands: [Option<(CommandId<B>, u8)>; CREDITS],
     closing: Option<CommandId<B>>,
-    /// A received datagram waits for room in the lane.
-    blocked: bool,
+    /// Whether its received datagrams flow to its lane.
+    delivery: Delivery,
     /// What this socket's reserved blocks count toward.
     group: Group<B>,
+}
+
+/// Whether a bound socket's received datagrams flow to its lane.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Delivery {
+    Flowing,
+    /// A received datagram waits for room in the lane.
+    Blocked,
     /// The socket was dropped and its lanes are drained.
-    abandoned: bool,
+    Abandoned,
 }
 
 /// The network's task. `L` is its local producer: `()` for none, at no
@@ -716,9 +727,12 @@ impl<
                     .wrapping_add(u32::try_from(credits).unwrap_or(u32::MAX));
             });
         }
-        Returned {
-            any: any || came,
-            work: came && bound.iter().flatten().any(Bound::waiting),
+        if came && bound.iter().flatten().any(Bound::waiting) {
+            Returned::Work
+        } else if any || came {
+            Returned::Taken
+        } else {
+            Returned::Nothing
         }
     }
 
@@ -764,8 +778,7 @@ impl<
             open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
             closing: None,
-            blocked: false,
-            abandoned: false,
+            delivery: Delivery::Flowing,
         });
         Ok(socket)
     }
@@ -825,8 +838,7 @@ impl<
             open: Some(Open { id, reserving: 0 }),
             commands: [const { None }; CREDITS],
             closing: None,
-            blocked: false,
-            abandoned: false,
+            delivery: Delivery::Flowing,
         });
         Ok(socket)
     }
@@ -859,13 +871,13 @@ impl<
                 Turn::Full
             };
             let turned = self.turn(now, kind, events);
-            only_frames = turned.packets;
+            only_frames = turned == Turned::Packets;
             if let Some(broken) = self.owner.broken() {
                 self.ended = Some(match broken {
                     Broken::Contract => EndCause::PortContract,
                     Broken::Fault => EndCause::PortFault,
                 });
-            } else if turned.again {
+            } else if turned != Turned::Wait {
                 // The turn left work no wake will name: the next turn
                 // takes it, once the executor had its turn.
                 report(events, || ServiceEvent::Yielded);
@@ -972,9 +984,12 @@ impl<
         self.turn_ended(events);
         tally.stage(Stage::Settle, &mut self.diagnostics);
         tally.end(&mut self.diagnostics);
-        Turned {
-            again: again || packets,
-            packets: packets && !again,
+        if again {
+            Turned::Full
+        } else if packets {
+            Turned::Packets
+        } else {
+            Turned::Wait
         }
     }
 
@@ -1024,7 +1039,7 @@ impl<
             .bound
             .iter_mut()
             .flatten()
-            .filter(|bound| !bound.abandoned)
+            .filter(|bound| bound.delivery != Delivery::Abandoned)
             .find(|bound| {
                 bound
                     .open
@@ -1064,17 +1079,26 @@ impl<
     /// Tell `events` what was free when the turn ended.
     fn turn_ended(&mut self, events: &mut impl EventSink<ServiceEvent>) {
         seen(events, || {
-            let blocks_free = self.owner.pool().free() != 0;
+            let blocks = if self.owner.pool().free() != 0 {
+                Blocks::Free
+            } else {
+                Blocks::Exhausted
+            };
             let credits_free = self
                 .bound
                 .iter()
                 .flatten()
-                .filter(|bound| bound.open.is_some() && !bound.abandoned)
+                .filter(|bound| bound.open.is_some() && bound.delivery != Delivery::Abandoned)
                 .all(|bound| bound.end.credits.any_free());
             let loans = self.owner.pool().loans().outstanding();
+            let credits = if credits_free {
+                Credits::Free
+            } else {
+                Credits::Exhausted
+            };
             Some(ServiceEvent::TurnEnded(TurnEnd {
-                blocks_free,
-                credits_free,
+                blocks,
+                credits,
                 loans,
             }))
         });
@@ -1399,8 +1423,9 @@ impl<
                 let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted, &mut tally);
                 tally.stage(Stage::Waiting, diagnostics);
                 tally.end(diagnostics);
-                report(events, || ServiceEvent::Returned { work: taken.work });
-                ready |= taken.work;
+                let work = taken == Returned::Work;
+                report(events, || ServiceEvent::Returned { work });
+                ready |= work;
             }
             report(events, || ServiceEvent::Waited { ready });
             if ready {
@@ -1442,7 +1467,7 @@ impl<
         // The lease leaves with the core: the watch ends here, as it would
         // at a drop.
         drop(this.watch.take());
-        while this.take_returns(&mut Tally::off()).any {}
+        while this.take_returns(&mut Tally::off()) != Returned::Nothing {}
         let adopted = this.adopted;
         let returns = this.returns;
         let mut retired = this.owner.retire();
@@ -1538,8 +1563,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             self.closing = owner.close(id).ok();
         }
         inbound.drain(owner.pool());
-        self.blocked = false;
-        self.abandoned = true;
+        self.delivery = Delivery::Abandoned;
     }
 
     /// Hand results and datagrams back; whether any went.
@@ -1593,7 +1617,9 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             moved = true;
             self.ended(tag, sent);
         }
-        self.blocked = false;
+        if self.delivery == Delivery::Blocked {
+            self.delivery = Delivery::Flowing;
+        }
         if let Some(Open { id: socket, .. }) = &self.open {
             while let Some(permit) = self.end.datagrams.try_reserve() {
                 let Ok(Some(datagram)) = owner.receive(socket) else {
@@ -1602,7 +1628,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
                 permit.send(datagram);
                 moved = true;
             }
-            self.blocked = true;
+            self.delivery = Delivery::Blocked;
         }
         moved
     }
@@ -1610,10 +1636,10 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
     /// Whether a lane has something for the turn; `cx` hears the next.
     fn poll_lanes(&mut self, cx: &mut Context<'_>) -> bool {
         let mut ready = pin!(self.end.requests.ready()).poll(cx).is_ready();
-        if !self.abandoned {
+        if self.delivery != Delivery::Abandoned {
             ready |= pin!(self.end.abandon.ready()).poll(cx).is_ready();
         }
-        if self.blocked {
+        if self.delivery == Delivery::Blocked {
             ready |= pin!(self.end.datagrams.ready()).poll(cx).is_ready();
         }
         ready
@@ -1634,9 +1660,10 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             end,
             lent,
             mut commands,
-            abandoned,
+            delivery,
             ..
         } = self;
+        let abandoned = delivery == Delivery::Abandoned;
         for (command, tag) in commands.iter_mut().filter_map(Option::take) {
             let sent = match retired.results.take(command) {
                 CommandState::Finished(outcome) => Sent::Ended(outcome),

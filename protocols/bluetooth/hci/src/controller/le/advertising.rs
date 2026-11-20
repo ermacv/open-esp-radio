@@ -98,25 +98,27 @@ pub enum LeLegacyAdvertisingRole {
 /// Non-empty HCI primary-channel selection with reserved bits rejected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LeLegacyAdvertisingPrimaryChannels {
-    channel_37: bool,
-    channel_38: bool,
-    channel_39: bool,
+    /// The channel map's bits: 0 channel 37, 1 channel 38, 2 channel 39
+    /// (Core v6.0, Vol 4, Part E, 7.8.5).
+    map: u8,
 }
 
 impl LeLegacyAdvertisingPrimaryChannels {
+    const ALL: Self = Self { map: 0b111 };
+
     /// Whether primary advertising channel 37 is selected.
     pub const fn channel_37(self) -> bool {
-        self.channel_37
+        self.map & 0b001 != 0
     }
 
     /// Whether primary advertising channel 38 is selected.
     pub const fn channel_38(self) -> bool {
-        self.channel_38
+        self.map & 0b010 != 0
     }
 
     /// Whether primary advertising channel 39 is selected.
     pub const fn channel_39(self) -> bool {
-        self.channel_39
+        self.map & 0b100 != 0
     }
 }
 
@@ -463,11 +465,7 @@ impl LeLegacyAdvertisingConfiguration {
                     maximum_units_625_us: LEGACY_ADVERTISING_INTERVAL_DEFAULT,
                 },
                 own_address_kind: LeLegacyAdvertisingOwnAddressKind::Public,
-                channels: LeLegacyAdvertisingPrimaryChannels {
-                    channel_37: true,
-                    channel_38: true,
-                    channel_39: true,
-                },
+                channels: LeLegacyAdvertisingPrimaryChannels::ALL,
                 peer: LeLegacyAdvertisingPeer {
                     random: false,
                     address: [0; 6],
@@ -732,9 +730,9 @@ impl LeLegacyAdvertisingCommand {
             },
             own_address_kind,
             channels: LeLegacyAdvertisingPrimaryChannels {
-                channel_37: adv_channel_map.is_channel_37_enabled(),
-                channel_38: adv_channel_map.is_channel_38_enabled(),
-                channel_39: adv_channel_map.is_channel_39_enabled(),
+                map: u8::from(adv_channel_map.is_channel_37_enabled())
+                    | u8::from(adv_channel_map.is_channel_38_enabled()) << 1
+                    | u8::from(adv_channel_map.is_channel_39_enabled()) << 2,
             },
             peer,
         }))

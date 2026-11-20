@@ -74,11 +74,42 @@ fn lent_from(storage: Lent) -> Incoming {
     )
 }
 
+/// A switch of the tests' device: a copy that fails, a link change pending.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DeviceSwitch {
+    BadCopy,
+    LinkChanged,
+}
+
+impl crate::tests::Switch for DeviceSwitch {
+    fn bit(self) -> u16 {
+        match self {
+            Self::BadCopy => 1 << 0,
+            Self::LinkChanged => 1 << 1,
+        }
+    }
+}
+
+/// A switch of the tests' transmit half: its queue full, its link down.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TransmitSwitch {
+    Full,
+    Down,
+}
+
+impl crate::tests::Switch for TransmitSwitch {
+    fn bit(self) -> u16 {
+        match self {
+            Self::Full => 1 << 0,
+            Self::Down => 1 << 1,
+        }
+    }
+}
+
 #[derive(Default)]
 struct Device {
     incoming: VecDeque<Incoming>,
-    bad_copy: bool,
-    link_changed: bool,
+    switches: crate::tests::Switches<DeviceSwitch>,
 }
 
 impl NetDevice for Device {
@@ -90,7 +121,7 @@ impl NetDevice for Device {
         }
     }
     fn poll_link(&mut self, _: &mut Context<'_>) -> Poll<LinkSnapshot> {
-        if core::mem::take(&mut self.link_changed) {
+        if self.switches.take(DeviceSwitch::LinkChanged) {
             Poll::Ready(self.link())
         } else {
             Poll::Pending
@@ -114,7 +145,7 @@ impl NetDevice for Device {
         (): (),
         read: impl FnOnce(EthernetFrameView<'_>) -> R,
     ) -> Result<R, FrameLengthError> {
-        if self.bad_copy {
+        if self.switches.has(DeviceSwitch::BadCopy) {
             return Err(FrameLengthError::MissingCopy);
         }
         Ok(read(EthernetFrameView {
@@ -133,10 +164,7 @@ struct Transmit {
     sent: Vec<Vec<u8>>,
     free: usize,
     room: usize,
-    /// The device's queue has no room.
-    full: bool,
-    /// The link is down.
-    down: bool,
+    switches: crate::tests::Switches<TransmitSwitch>,
     flushes: u32,
     room_polls: u32,
     /// Times the port asked for what the device returned.
@@ -166,10 +194,10 @@ impl OwnedTransmit for Transmit {
         meta: FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<PortRefusal, E>> {
-        if self.down {
+        if self.switches.has(TransmitSwitch::Down) {
             return Err(Unpublished::Port(PortRefusal::LinkDown));
         }
-        if self.free == 0 || self.full {
+        if self.free == 0 || self.switches.has(TransmitSwitch::Full) {
             return Err(Unpublished::Port(PortRefusal::NoRoom));
         }
         if meta.length > self.room {
@@ -198,7 +226,7 @@ impl OwnedTransmit for Transmit {
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
         self.take_back();
         self.room_polls += 1;
-        if self.free == 0 || self.full {
+        if self.free == 0 || self.switches.has(TransmitSwitch::Full) {
             Poll::Pending
         } else {
             Poll::Ready(())
@@ -319,7 +347,7 @@ fn a_kept_lent_frame_is_the_reader_s_until_it_drops_and_a_copy_stays_the_device_
 #[test]
 fn a_frame_the_device_cannot_show_is_counted() {
     let mut port = port();
-    port.device.bad_copy = true;
+    port.device.switches.on(DeviceSwitch::BadCopy);
     port.device.incoming.push_back(Incoming::Copied);
     assert!(matches!(
         port.take_frame(|_, _| panic!("unreadable")),
@@ -345,7 +373,7 @@ fn no_room_refuses_before_the_frame_is_written() {
     let refused = port.publish(meta(4), unreachable_fill("no buffer to write"));
     assert_eq!(refused, Err(Unpublished::Port(PortRefusal::NoRoom)));
     let mut port = self::port();
-    port.transmit.full = true;
+    port.transmit.switches.on(TransmitSwitch::Full);
     let refused = port.publish(meta(4), unreachable_fill("no room"));
     assert_eq!(refused, Err(Unpublished::Port(PortRefusal::NoRoom)));
 }
@@ -391,11 +419,11 @@ fn an_idle_port_takes_back_the_memory_the_device_returned() {
 #[test]
 fn room_wakes_only_a_frame_that_met_none() {
     let mut port = port();
-    port.transmit.full = true;
+    port.transmit.switches.on(TransmitSwitch::Full);
     assert!(port.publish(meta(4), octets).is_err());
     assert!(!ready_at_once(&mut port), "still no room");
     assert_eq!(port.transmit.room_polls, 1, "it asked");
-    port.transmit.full = false;
+    port.transmit.switches.off(TransmitSwitch::Full);
     assert!(ready_at_once(&mut port));
     port.publish(meta(4), octets).unwrap();
     assert!(!ready_at_once(&mut port), "that frame went");
@@ -420,7 +448,7 @@ fn a_received_frame_and_a_link_change_wake_at_once() {
     port.device.incoming.push_back(lent(b"in"));
     assert!(ready_at_once(&mut port));
     port.device.incoming.clear();
-    port.device.link_changed = true;
+    port.device.switches.on(DeviceSwitch::LinkChanged);
     assert!(ready_at_once(&mut port));
     assert!(!ready_at_once(&mut port));
 }
@@ -428,7 +456,7 @@ fn a_received_frame_and_a_link_change_wake_at_once() {
 #[test]
 fn a_down_link_with_room_wakes_nobody_until_it_changes() {
     let mut port = port();
-    port.transmit.down = true;
+    port.transmit.switches.on(TransmitSwitch::Down);
     assert_eq!(
         port.publish(meta(4), octets),
         Err(Unpublished::Port(PortRefusal::LinkDown))
@@ -438,7 +466,7 @@ fn a_down_link_with_room_wakes_nobody_until_it_changes() {
         port.transmit.room_polls, 1,
         "asked for returned memory only"
     );
-    port.device.link_changed = true;
+    port.device.switches.on(DeviceSwitch::LinkChanged);
     assert!(ready_at_once(&mut port));
 }
 
@@ -478,12 +506,12 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
     }
     port.device.incoming.push_back(Incoming::Copied);
     port.transmit.returned = 2;
-    port.transmit.full = true;
+    port.transmit.switches.on(TransmitSwitch::Full);
     assert!(
         port.publish(meta(4), octets).is_err(),
         "a frame waits for room"
     );
-    port.transmit.full = false;
+    port.transmit.switches.off(TransmitSwitch::Full);
     port.give_back();
     assert!(
         !ready_at_once(&mut port),

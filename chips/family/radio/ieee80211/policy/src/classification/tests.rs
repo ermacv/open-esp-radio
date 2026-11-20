@@ -49,12 +49,21 @@ fn network_priority_uses_only_the_recovered_three_bits() {
 
 #[test]
 fn wmm_downgrade_graph_is_finite_and_exact() {
-    assert_eq!(apply_wmm_admission(7, [false; 3]), 7);
-    assert_eq!(apply_wmm_admission(7, [true, false, false]), 5);
-    assert_eq!(apply_wmm_admission(7, [true, true, false]), 0);
-    assert_eq!(apply_wmm_admission(7, [true, true, true]), 1);
-    assert_eq!(apply_wmm_admission(2, [true; 3]), 2);
-    assert_eq!(apply_wmm_admission(8, [false; 3]), 7);
+    assert_eq!(apply_wmm_admission(7, [Admission::Free; 3]), 7);
+    assert_eq!(
+        apply_wmm_admission(7, [Admission::Required, Admission::Free, Admission::Free]),
+        5
+    );
+    assert_eq!(
+        apply_wmm_admission(
+            7,
+            [Admission::Required, Admission::Required, Admission::Free]
+        ),
+        0
+    );
+    assert_eq!(apply_wmm_admission(7, [Admission::Required; 3]), 1);
+    assert_eq!(apply_wmm_admission(2, [Admission::Required; 3]), 2);
+    assert_eq!(apply_wmm_admission(8, [Admission::Free; 3]), 7);
 }
 
 #[test]

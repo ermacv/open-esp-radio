@@ -369,7 +369,7 @@ impl<
             if let Some(received) = self.take() {
                 return Ok(received);
             }
-            if self.socket.closed {
+            if self.socket.life == super::Life::Closed {
                 return Err(SocketClosed);
             }
             let Some(inbound) = &mut self.socket.inbound else {

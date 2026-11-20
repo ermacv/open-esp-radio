@@ -58,9 +58,83 @@ const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 const OUR_IP: [u8; 4] = [192, 0, 2, 1];
 const PEER_IP: [u8; 4] = [192, 0, 2, 2];
 
+/// A set of a fake's named switches, each on or off.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Switches<F> {
+    bits: u16,
+    kind: core::marker::PhantomData<F>,
+}
+
+/// A fake's switch: its bit in [`Switches`].
+pub(crate) trait Switch: Copy {
+    fn bit(self) -> u16;
+}
+
+impl<F> Default for Switches<F> {
+    fn default() -> Self {
+        Self {
+            bits: 0,
+            kind: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<F: Switch> Switches<F> {
+    pub(crate) fn on(&mut self, switch: F) {
+        self.bits |= switch.bit();
+    }
+
+    pub(crate) fn off(&mut self, switch: F) {
+        self.bits &= !switch.bit();
+    }
+
+    pub(crate) fn has(&self, switch: F) -> bool {
+        self.bits & switch.bit() != 0
+    }
+
+    /// Whether `switch` was on; it is off after.
+    pub(crate) fn take(&mut self, switch: F) -> bool {
+        let was = self.has(switch);
+        self.off(switch);
+        was
+    }
+}
+
+/// Whether a fake's port or queue has room.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Room {
+    Free,
+    Full,
+}
+
+/// A switch of the tests' wire: full, answering ARP, contradicting, rejecting, losing buffers; and an observation, the last frame refused for room.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WireSwitch {
+    Full,
+    Answers,
+    Contradicts,
+    Rejects,
+    Loses,
+    Refused,
+}
+
+impl crate::tests::Switch for WireSwitch {
+    fn bit(self) -> u16 {
+        match self {
+            Self::Full => 1 << 0,
+            Self::Answers => 1 << 1,
+            Self::Contradicts => 1 << 2,
+            Self::Rejects => 1 << 3,
+            Self::Loses => 1 << 4,
+            Self::Refused => 1 << 5,
+        }
+    }
+}
+
 /// The wire between the stack and the test, which plays the peer.
 #[derive(Default)]
 struct Wire {
+    switches: crate::tests::Switches<WireSwitch>,
     /// Calls a scenario counts: frames and notices taken, empty or not, and registrations.
     takes: u64,
     empty_takes: u64,
@@ -69,15 +143,6 @@ struct Wire {
     registers: u64,
     incoming: VecDeque<Vec<u8>>,
     sent: Vec<Vec<u8>>,
-    full: bool,
-    /// The peer answers ARP.
-    answers: bool,
-    /// The port says it took a frame it never filled.
-    contradicts: bool,
-    /// The port refuses every frame for good.
-    rejects: bool,
-    /// The port loses the buffer of every frame written.
-    loses: bool,
     /// The next frames the port refuses for good.
     rejections: usize,
     /// The port gives less room than a frame needs.
@@ -89,8 +154,6 @@ struct Wire {
     /// Ended frames, by ticket.
     ended: VecDeque<u32>,
     waker: Option<Waker>,
-    /// The last frame was refused for room.
-    refused: bool,
     /// Frames refused for room.
     refusals: usize,
     /// Frames the port takes before it is full; `None` for no such bound.
@@ -179,19 +242,23 @@ impl FramePort for WirePort {
     ) -> Result<u32, Unpublished<Refused, E>> {
         let length = meta.length;
         let mut wire = self.0.borrow_mut();
-        wire.refused = wire.full;
-        if wire.full {
+        if wire.switches.has(WireSwitch::Full) {
+            wire.switches.on(WireSwitch::Refused);
+        } else {
+            wire.switches.off(WireSwitch::Refused);
+        }
+        if wire.switches.has(WireSwitch::Full) {
             wire.refusals += 1;
             return Err(Unpublished::Port(Refused::Room));
         }
-        if wire.rejects {
+        if wire.switches.has(WireSwitch::Rejects) {
             return Err(Unpublished::Port(Refused::Final));
         }
         if wire.rejections > 0 {
             wire.rejections -= 1;
             return Err(Unpublished::Port(Refused::Final));
         }
-        if wire.contradicts {
+        if wire.switches.has(WireSwitch::Contradicts) {
             return Ok(0);
         }
         let mut frame = std::vec![0; wire.room.unwrap_or(length)];
@@ -202,11 +269,15 @@ impl FramePort for WirePort {
                 AfterFailedFill::Yes => Ok(0),
             };
         }
-        if wire.loses {
+        if wire.switches.has(WireSwitch::Loses) {
             // Written, then lost with its buffer: it never went.
             return Err(Unpublished::Port(Refused::Lost));
         }
-        let reply = wire.answers.then(|| answer_of(&frame)).flatten();
+        let reply = wire
+            .switches
+            .has(WireSwitch::Answers)
+            .then(|| answer_of(&frame))
+            .flatten();
         wire.sent.push(frame);
         wire.incoming.extend(reply);
         wire.tickets += 1;
@@ -214,7 +285,7 @@ impl FramePort for WirePort {
             *accepts -= 1;
             if *accepts == 0 {
                 wire.accepts = None;
-                wire.full = true;
+                wire.switches.on(WireSwitch::Full);
             }
         }
         Ok(wire.tickets)
@@ -270,7 +341,9 @@ impl FrameSource for WirePort {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
         wire.registers += 1;
-        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
+        !wire.incoming.is_empty()
+            || !wire.ended.is_empty()
+            || (wire.switches.has(WireSwitch::Refused) && !wire.switches.has(WireSwitch::Full))
     }
 }
 
@@ -461,7 +534,7 @@ fn bench<B: 'static>() -> Bench<B> {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     bench_on(owner, wire)
@@ -605,9 +678,12 @@ async fn settle() {
     }
 }
 
-fn open_port(wire: &WirePort, full: bool) {
+fn open_port(wire: &WirePort, room: Room) {
     let mut wire = wire.0.borrow_mut();
-    wire.full = full;
+    match room {
+        Room::Full => wire.switches.on(WireSwitch::Full),
+        Room::Free => wire.switches.off(WireSwitch::Full),
+    }
     wire.wake();
 }
 
@@ -688,11 +764,11 @@ fn a_received_datagram_reaches_the_socket_and_its_block_returns() {
 fn a_port_with_no_room_keeps_the_datagram_until_it_wakes_the_service() {
     brand!(Net);
     let (_, _, sent) = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let observer = send(socket, b"late").await;
         settle().await;
         assert!(wire.0.borrow().sent.is_empty());
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         result_of(observer).await
     });
     assert_eq!(sent, Sent::Ended(Outcome::Accepted));
@@ -702,7 +778,7 @@ fn a_port_with_no_room_keeps_the_datagram_until_it_wakes_the_service() {
 fn a_wait_for_a_result_may_be_cancelled_and_begun_again() {
     brand!(Net);
     let _ended = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let mut observer = send(socket, b"wait").await;
         {
             let mut waiting = pin!(observer.finished());
@@ -710,7 +786,7 @@ fn a_wait_for_a_result_may_be_cancelled_and_begun_again() {
             assert!(waiting.as_mut().poll(&mut cx).is_pending());
         }
         let observer = observer.take().err().unwrap();
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
     });
 }
@@ -719,7 +795,7 @@ fn a_wait_for_a_result_may_be_cancelled_and_begun_again() {
 fn a_result_wakes_its_observer_and_needs_no_socket() {
     brand!(Net);
     let _ended = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let mut observer = send(socket, b"apart").await;
         let (count, waker) = counter();
         {
@@ -731,7 +807,7 @@ fn a_result_wakes_its_observer_and_needs_no_socket() {
                     .is_pending()
             );
         }
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         settle().await;
         assert_eq!(count.0.load(Ordering::SeqCst), 1);
         assert_eq!(observer.take().ok(), Some(Sent::Ended(Outcome::Accepted)));
@@ -757,12 +833,12 @@ fn two_commands_on_one_credit_keep_their_own_results() {
 fn an_end_reaches_its_own_observer_when_its_tag_is_not_its_place() {
     brand!(Net);
     let _ended = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         // Tag 0 in place 0, tag 1 in place 1.
         let first = send(socket, b"first").await;
         let second = send(socket, b"second").await;
         settle().await;
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         // Both places free, the first first; only tag 1 frees, as its result
         // is read.
         assert_eq!(result_of(second).await, Sent::Ended(Outcome::Accepted));
@@ -792,7 +868,7 @@ fn a_dropped_observer_frees_its_credit_once_the_command_ended() {
 fn a_dropped_observer_of_a_running_command_keeps_its_credit() {
     brand!(Net);
     let _ended = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         for _ in 0..CREDITS {
             drop(send(socket, b"held").await);
         }
@@ -805,7 +881,7 @@ fn a_dropped_observer_of_a_running_command_keeps_its_credit() {
             let mut waiting = pin!(socket.credit());
             let mut cx = Context::from_waker(&waker);
             assert!(waiting.as_mut().poll(&mut cx).is_pending());
-            open_port(wire, false);
+            open_port(wire, Room::Free);
             settle().await;
             assert!(count.0.load(Ordering::SeqCst) >= 1, "its end wakes credit");
             assert_eq!(waiting.as_mut().poll(&mut cx), Poll::Ready(Ok(())));
@@ -896,7 +972,7 @@ fn a_datagram_the_core_refuses_ends_with_that_reason() {
 fn time_ends_a_neighbor_that_never_answers() {
     brand!(Net);
     let bench = bench::<Net>();
-    bench.wire.0.borrow_mut().answers = false;
+    bench.wire.0.borrow_mut().switches.off(WireSwitch::Answers);
     let (_, _, sent) = run(bench, async |socket, _| send_one(socket, b"nobody").await);
     assert_eq!(sent, Sent::Ended(Outcome::Unreachable));
 }
@@ -924,13 +1000,13 @@ fn a_stop_publishes_nothing_more_and_each_result_arrives_after_it() {
         run(bench::<Net>(), async |socket, wire| {
             let mut known = send(socket, b"known").await;
             known.finished().await;
-            open_port(wire, true);
+            open_port(wire, Room::Full);
             let running = send(socket, b"unsent").await;
             let held = socket.reserve().await.unwrap();
             settle().await;
             (known, running, held)
         });
-    open_port(&ended.retired.port.clone(), false);
+    open_port(&ended.retired.port.clone(), Room::Free);
     assert_eq!(
         datagrams(&ended.retired.port.0.borrow()),
         [b"known".to_vec()],
@@ -959,7 +1035,7 @@ fn a_stop_wakes_a_service_with_nothing_to_do() {
 fn a_stop_wakes_a_waiting_observer_and_a_waiting_credit() {
     brand!(Net);
     let (_, _, ((count, _), (credits, _))) = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let mut first = send(socket, b"one").await;
         let mut second = send(socket, b"two").await;
         settle().await;
@@ -1029,7 +1105,7 @@ fn a_port_that_contradicts_itself_ends_the_service_with_that_cause() {
             send_one(socket, b"resolved").await,
             Sent::Ended(Outcome::Accepted)
         );
-        wire.0.borrow_mut().contradicts = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Contradicts);
         let (one, two) = (fill(socket, b"one").await, fill(socket, b"two").await);
         let mut first = socket.send(peer(), one).ok().unwrap();
         let second = socket.send(peer(), two).ok().unwrap();
@@ -1044,7 +1120,15 @@ fn a_port_that_contradicts_itself_ends_the_service_with_that_cause() {
     assert_eq!(ended.cause, EndCause::PortContract);
     assert_eq!(first.take().ok(), Some(Sent::Ended(Outcome::Unknown)));
     assert_eq!(second.take().ok(), Some(Sent::Ended(Outcome::Retired)));
-    assert!(ended.retired.port.0.borrow().contradicts);
+    assert!(
+        ended
+            .retired
+            .port
+            .0
+            .borrow()
+            .switches
+            .has(WireSwitch::Contradicts)
+    );
     returned(&mut ended, &mut socket);
 }
 
@@ -1052,7 +1136,7 @@ fn a_port_that_contradicts_itself_ends_the_service_with_that_cause() {
 fn a_dropped_socket_ends_its_commands_and_returns_its_blocks() {
     brand!(Net);
     let (mut ended, (seen, unseen, held)) = run_owning(bench::<Net>(), async |mut socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let seen = send(&mut socket, b"seen").await;
         arrive(wire, 1);
         while socket.received() == 0 {
@@ -1067,7 +1151,7 @@ fn a_dropped_socket_ends_its_commands_and_returns_its_blocks() {
         }
         drop(socket);
         let (seen, unseen) = (result_of(seen).await, result_of(unseen).await);
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         settle().await;
         (seen, unseen, held)
     });
@@ -1087,7 +1171,7 @@ fn a_dropped_socket_ends_its_commands_and_returns_its_blocks() {
 fn a_dropped_idle_socket_wakes_the_service() {
     brand!(Net);
     let (_, sent) = run_owning(bench::<Net>(), async |mut socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let observer = send(&mut socket, b"held").await;
         settle().await;
         drop(socket);
@@ -1197,7 +1281,7 @@ fn a_refused_bind_changes_nothing_and_the_storage_serves_again() {
     let (pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let owner: NetworkOwner<'static, Net, SIZE, 2, CREDITS, RECEIVED, 2, BLOCKS, WirePort> =
         NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -1438,7 +1522,7 @@ fn a_service_end_ends_a_full_lane_wait<B: 'static>(end: impl FnOnce(TestService<
         let mut run = pin!(service.run(clock, &mut events));
         blocks_by_hand(&mut socket, &mut run, BLOCKS)
     };
-    wire.0.borrow_mut().full = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Full);
     let first = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
     let second = socket.send(peer(), blocks.pop().unwrap()).ok().unwrap();
     socket.release(blocks.pop().unwrap()).ok().unwrap();
@@ -1579,7 +1663,7 @@ fn pair<B: 'static>(
     let (pool, brand) = claim::<B, SIZE, 2>(storage_of_blocks).unwrap();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service = Service::new(owner, memory, stopping);
@@ -1691,7 +1775,7 @@ fn pressure_takes_the_oldest_and_leaves_the_younger() {
     let mut events = ();
     let cx = &mut Context::from_waker(Waker::noop());
     let drive = async {
-        wire.0.borrow_mut().full = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Full);
         let older = first.reserve().await.unwrap();
         let older = first.send(peer(), older).ok().unwrap();
         settle().await;
@@ -1729,7 +1813,7 @@ fn a_group_evicts_nothing_of_its_own_for_itself() {
     let mut events = ();
     let cx = &mut Context::from_waker(Waker::noop());
     let drive = async {
-        wire.0.borrow_mut().full = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Full);
         let blocks = [
             first.reserve().await.unwrap(),
             first.reserve().await.unwrap(),
@@ -1757,7 +1841,7 @@ fn pressure_spares_a_group_that_holds_less_however_old_its_work() {
     let (pool, brand) = claim::<Net, SIZE, 3>(memory).unwrap();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().full = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Full);
     let owner: NetworkOwner<'static, Net, SIZE, 3, CREDITS, RECEIVED, 2, 3, WirePort> =
         NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
@@ -1989,7 +2073,7 @@ fn before_the_service<B: 'static>(held: usize) -> BeforeTheService<B> {
     let blocks = (0..held).map(|_| pool.take_as(absent).unwrap()).collect();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().full = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Full);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let evict = MemoryPolicy {
@@ -2463,9 +2547,9 @@ fn a_frame_the_port_rejects_for_good_ends_and_the_service_goes_on() {
     brand!(Net);
     let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
         send_one(socket, b"resolved").await;
-        wire.0.borrow_mut().rejects = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Rejects);
         let rejected = send_one(socket, b"never").await;
-        wire.0.borrow_mut().rejects = false;
+        wire.0.borrow_mut().switches.off(WireSwitch::Rejects);
         assert_eq!(
             send_one(socket, b"after").await,
             Sent::Ended(Outcome::Accepted)
@@ -2483,7 +2567,7 @@ fn a_final_refusal_passes_the_turn_to_the_next_socket() {
     let (pool, brand) = claim::<Net, SIZE, 4>(memory).unwrap();
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service: TestPair<Net, 4> = Service::new(owner, MemoryPolicy::KEEP, stopping);
@@ -2681,7 +2765,7 @@ fn a_datagram_is_taken_without_waiting_once_it_is_here() {
 fn a_neighbor_request_the_port_rejects_ends_the_datagram_at_once() {
     brand!(Net);
     let (ended, _, sent) = run(bench::<Net>(), async |socket, wire| {
-        wire.0.borrow_mut().rejects = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Rejects);
         send_one(socket, b"never").await
     });
     assert_eq!(sent, Sent::Ended(Outcome::Rejected));
@@ -2718,12 +2802,12 @@ fn a_new_service_starts_on_what_a_stopped_one_handed_on() {
 fn a_refused_frame_stays_ready_and_goes_when_the_port_has_room() {
     brand!(Net);
     let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
-        open_port(wire, true);
+        open_port(wire, Room::Full);
         let observer = send(socket, b"late").await;
         settle().await;
         assert!(wire.0.borrow().refusals >= 1);
         assert!(wire.0.borrow().sent.is_empty());
-        open_port(wire, false);
+        open_port(wire, Room::Free);
         assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
         assert_eq!(datagrams(&wire.0.borrow()), [b"late".to_vec()]);
     });
@@ -2752,7 +2836,7 @@ fn a_frame_of_unknown_end_is_not_a_refusal() {
     brand!(Net);
     let (ended, _, ()) = run(bench::<Net>(), async |socket, wire| {
         send_one(socket, b"resolved").await;
-        wire.0.borrow_mut().contradicts = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Contradicts);
         let observer = send(socket, b"unknown").await;
         assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Unknown));
         settle().await;
@@ -2836,7 +2920,7 @@ fn a_port_that_loses_a_written_buffer_ends_the_service_with_its_fault() {
     let (mut ended, mut socket, (sent, sent_before)) = run(bench::<Net>(), async |socket, wire| {
         send_one(socket, b"resolved").await;
         let before = wire.0.borrow().sent.len();
-        wire.0.borrow_mut().loses = true;
+        wire.0.borrow_mut().switches.on(WireSwitch::Loses);
         let sent = send_one(socket, b"lost").await;
         while !socket.closed() {
             yield_now().await;
@@ -2900,7 +2984,7 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
-    wire.0.borrow_mut().answers = true;
+    wire.0.borrow_mut().switches.on(WireSwitch::Answers);
     let interface = Interface::dhcp(LOCAL, 1500, 3).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let mut bench = bench_on(owner, wire);

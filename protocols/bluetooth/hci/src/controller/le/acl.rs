@@ -26,7 +26,31 @@ pub const LE_HOST_COMPLETED_PACKETS_ERROR_EVENT_CAPACITY: usize = 6;
 pub struct LeControllerToHostAclProfile {
     maximum_payload: usize,
     total_packets: Option<u16>,
-    flow_controlled: bool,
+    flow: AclFlowControl,
+}
+
+/// Whether the Host flow-controls Controller-to-Host ACL delivery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AclFlowControl {
+    Controlled,
+    Uncontrolled,
+}
+
+/// Where an LL fragment lies in its HCI ACL packet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Fragment {
+    /// The first fragment of a packet, flushable.
+    First,
+    /// A continuing fragment.
+    Continuing,
+}
+
+/// How the radio ended a fragment's transmission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Completion {
+    Acknowledged,
+    /// Not acknowledged: the same fragment is sent again.
+    NotAcknowledged,
 }
 
 impl LeControllerToHostAclProfile {
@@ -34,12 +58,12 @@ impl LeControllerToHostAclProfile {
     pub const fn new(
         maximum_payload: usize,
         total_packets: Option<u16>,
-        flow_controlled: bool,
+        flow: AclFlowControl,
     ) -> Self {
         Self {
             maximum_payload,
             total_packets,
-            flow_controlled,
+            flow,
         }
     }
 
@@ -55,7 +79,7 @@ impl LeControllerToHostAclProfile {
 
     /// Whether ACL flow control is enabled for Controller-to-Host delivery.
     pub const fn is_flow_controlled(self) -> bool {
-        self.flow_controlled
+        matches!(self.flow, AclFlowControl::Controlled)
     }
 }
 
@@ -199,17 +223,16 @@ impl LeControllerAclPacket {
     }
 
     /// Copy one nonempty LL fragment received on the connection `handle`.
-    pub fn copy_from_ll(handle: ConnHandle, continuing: bool, payload: &[u8]) -> Option<Self> {
+    pub fn copy_from_ll(handle: ConnHandle, fragment: Fragment, payload: &[u8]) -> Option<Self> {
         if handle.raw() > 0x0eff
             || payload.is_empty()
             || payload.len() > LE_ACL_DATA_PACKET_CAPACITY
         {
             return None;
         }
-        let boundary = if continuing {
-            AclPacketBoundary::Continuing
-        } else {
-            AclPacketBoundary::FirstFlushable
+        let boundary = match fragment {
+            Fragment::Continuing => AclPacketBoundary::Continuing,
+            Fragment::First => AclPacketBoundary::FirstFlushable,
         };
         let encoded_handle = handle.into_inner() | ((boundary as u16) << 12);
         let payload_length = payload.len() as u16;
@@ -245,7 +268,12 @@ impl LeControllerAclPacket {
         let handle = self.handle();
         let continuing =
             offset != 0 || ((encoded_handle >> 12) & 0x03) == AclPacketBoundary::Continuing as u16;
-        Self::copy_from_ll(handle, continuing, fragment)
+        let position = if continuing {
+            Fragment::Continuing
+        } else {
+            Fragment::First
+        };
+        Self::copy_from_ll(handle, position, fragment)
     }
 
     /// ACL payload length excluding the four-byte HCI header.
@@ -368,9 +396,12 @@ impl LeHostAclPacket {
         Ok(())
     }
 
-    /// Apply a radio completion; `false` retains the same fragment for retransmission.
-    pub fn observe_fragment_completion(&mut self, acknowledged: bool) {
-        if acknowledged && let Some(end) = self.in_flight_end.take() {
+    /// Apply a radio completion; [`Completion::NotAcknowledged`] retains the
+    /// same fragment for retransmission.
+    pub fn observe_fragment_completion(&mut self, completion: Completion) {
+        if completion == Completion::Acknowledged
+            && let Some(end) = self.in_flight_end.take()
+        {
             self.acknowledged = u16::from(end.get());
         }
     }
@@ -459,9 +490,9 @@ mod tests {
             Err(HciBuildError::AclFragmentInFlight { end: 27 })
         );
         assert_eq!(owned, before);
-        owned.observe_fragment_completion(false);
+        owned.observe_fragment_completion(Completion::NotAcknowledged);
         assert_eq!(owned, before);
-        owned.observe_fragment_completion(true);
+        owned.observe_fragment_completion(Completion::Acknowledged);
         let before = owned.clone();
         assert_eq!(
             owned.fragment_enqueued(34),
@@ -477,7 +508,7 @@ mod tests {
             &data[27..]
         );
         owned.fragment_enqueued(33).unwrap();
-        owned.observe_fragment_completion(true);
+        owned.observe_fragment_completion(Completion::Acknowledged);
         assert!(owned.is_complete());
         assert_eq!(
             owned.fragment_enqueued(1),
@@ -506,9 +537,13 @@ mod tests {
     #[test]
     fn controller_acl_rejects_a_forged_out_of_domain_handle_before_fragmentation() {
         for handle in [0x0f00, 0x0fff, u16::MAX] {
-            assert!(LeControllerAclPacket::copy_from_ll(ConnHandle(handle), false, &[1]).is_none());
+            assert!(
+                LeControllerAclPacket::copy_from_ll(ConnHandle(handle), Fragment::First, &[1])
+                    .is_none()
+            );
         }
-        let owned = LeControllerAclPacket::copy_from_ll(ConnHandle(0x0eff), false, &[1]).unwrap();
+        let owned =
+            LeControllerAclPacket::copy_from_ll(ConnHandle(0x0eff), Fragment::First, &[1]).unwrap();
         assert_eq!(owned.handle(), ConnHandle(0x0eff));
         assert_eq!(owned.next_host_fragment(0, 1), Some(owned));
     }
@@ -516,7 +551,8 @@ mod tests {
     #[test]
     fn controller_acl_fragment_bounds_preserve_the_entire_admitted_payload() {
         let data = [0x5a; LE_ACL_DATA_PACKET_CAPACITY];
-        let owned = LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), false, &data).unwrap();
+        let owned = LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::First, &data)
+            .unwrap();
         assert_eq!(owned.payload_length(), data.len());
         assert_eq!(owned.as_bytes().len(), LE_CONTROLLER_ACL_PACKET_CAPACITY);
         assert_eq!(owned.next_host_fragment(0, usize::MAX), Some(owned));
@@ -529,7 +565,8 @@ mod tests {
             1
         );
         assert!(
-            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), false, &[0; 252]).is_none()
+            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::First, &[0; 252])
+                .is_none()
         );
     }
 
@@ -556,21 +593,21 @@ mod tests {
         assert!(!first.is_continuing());
         assert_eq!(first.payload(), &data[..27]);
         packet.fragment_enqueued(first.payload().len()).unwrap();
-        packet.observe_fragment_completion(false);
+        packet.observe_fragment_completion(Completion::NotAcknowledged);
         assert!(packet.next_fragment(27).is_none());
-        packet.observe_fragment_completion(true);
+        packet.observe_fragment_completion(Completion::Acknowledged);
 
         let second = packet.next_fragment(27).unwrap();
         assert!(second.is_continuing());
         assert_eq!(second.payload(), &data[27..54]);
         packet.fragment_enqueued(second.payload().len()).unwrap();
-        packet.observe_fragment_completion(true);
+        packet.observe_fragment_completion(Completion::Acknowledged);
 
         let last = packet.next_fragment(27).unwrap();
         assert!(last.is_continuing());
         assert_eq!(last.payload(), &data[54..]);
         packet.fragment_enqueued(last.payload().len()).unwrap();
-        packet.observe_fragment_completion(true);
+        packet.observe_fragment_completion(Completion::Acknowledged);
         assert!(packet.is_complete());
         assert!(packet.next_fragment(27).is_none());
     }
@@ -587,7 +624,7 @@ mod tests {
         let first = packet.next_fragment(27).unwrap();
         assert!(first.is_continuing());
         packet.fragment_enqueued(27).unwrap();
-        packet.observe_fragment_completion(true);
+        packet.observe_fragment_completion(Completion::Acknowledged);
         assert!(packet.next_fragment(27).unwrap().is_continuing());
     }
 
@@ -637,12 +674,12 @@ mod tests {
     fn controller_acl_packet_preserves_ll_boundary_and_payload() {
         use bt_hci::ControllerToHostPacket;
 
-        for (continuing, expected) in [
-            (false, AclPacketBoundary::FirstFlushable),
-            (true, AclPacketBoundary::Continuing),
+        for (position, expected) in [
+            (Fragment::First, AclPacketBoundary::FirstFlushable),
+            (Fragment::Continuing, AclPacketBoundary::Continuing),
         ] {
             let owned =
-                LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), continuing, &[1, 2, 3])
+                LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), position, &[1, 2, 3])
                     .unwrap();
             let (decoded, remaining) = ControllerToHostPacket::from_hci_bytes_with_kind(
                 PacketKind::AclData,
@@ -657,16 +694,21 @@ mod tests {
             assert_eq!(packet.boundary_flag(), expected);
             assert_eq!(packet.data(), [1, 2, 3]);
         }
-        assert!(LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), false, &[]).is_none());
+        assert!(
+            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), Fragment::First, &[]).is_none()
+        );
     }
 
     #[test]
     fn controller_acl_packet_fragments_to_the_host_buffer_boundary() {
         use bt_hci::ControllerToHostPacket;
 
-        let owned =
-            LeControllerAclPacket::copy_from_ll(ConnHandle::new(1), false, &[1, 2, 3, 4, 5])
-                .unwrap();
+        let owned = LeControllerAclPacket::copy_from_ll(
+            ConnHandle::new(1),
+            Fragment::First,
+            &[1, 2, 3, 4, 5],
+        )
+        .unwrap();
         for (offset, expected_boundary, expected_data) in [
             (0, AclPacketBoundary::FirstFlushable, &[1, 2][..]),
             (2, AclPacketBoundary::Continuing, &[3, 4][..]),

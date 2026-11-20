@@ -73,7 +73,17 @@ pub const fn user_priority(protocol: u16, ipv4_tos: Option<u8>, ipv6_prefix: Opt
     }
 }
 
-pub const fn apply_wmm_admission(mut priority: u32, admission_required: [bool; 3]) -> u32 {
+/// Whether an access category requires admission control (the AP's ACM bit,
+/// IEEE 802.11-2020 9.4.2.28).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Admission {
+    Free,
+    Required,
+}
+
+/// The priority a frame of `priority` goes out at, given which of voice,
+/// video and best effort require admission control.
+pub const fn apply_wmm_admission(mut priority: u32, admission: [Admission; 3]) -> u32 {
     let mut access_category = match priority {
         0 | 3 => 2,
         1 | 2 => return priority,
@@ -84,21 +94,21 @@ pub const fn apply_wmm_admission(mut priority: u32, admission_required: [bool; 3
     // Exact transition pairs reconstructed from pinned
     // libnet80211.a[ieee80211_output.o]. A transition always increases the
     // access-category index and category 3 is terminal.
-    let [voice, video, best_effort] = admission_required;
+    let [voice, video, best_effort] = admission;
     if access_category == 0 {
-        if !voice {
+        if matches!(voice, Admission::Free) {
             return priority;
         }
         priority = 5;
         access_category = 1;
     }
     if access_category == 1 {
-        if !video {
+        if matches!(video, Admission::Free) {
             return priority;
         }
         priority = 0;
     }
-    if !best_effort {
+    if matches!(best_effort, Admission::Free) {
         return priority;
     }
     1

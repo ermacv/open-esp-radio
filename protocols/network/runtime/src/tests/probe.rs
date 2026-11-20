@@ -25,15 +25,22 @@ pub(super) struct Probed {
 #[derive(Clone, Debug, Default)]
 pub(super) struct Probe(pub(super) Rc<RefCell<Probed>>);
 
+/// Whether the tests' probe counts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProbeSwitch {
+    On,
+    Off,
+}
+
 impl Probe {
     pub(super) fn on() -> Self {
         let probe = Self::default();
-        probe.switch(true);
+        probe.switch(crate::tests::probe::ProbeSwitch::On);
         probe
     }
 
-    pub(super) fn switch(&self, on: bool) {
-        self.0.borrow_mut().on = on;
+    pub(super) fn switch(&self, to: crate::tests::probe::ProbeSwitch) {
+        self.0.borrow_mut().on = to == crate::tests::probe::ProbeSwitch::On;
     }
 
     pub(super) fn total(&self) -> Diagnosis {
