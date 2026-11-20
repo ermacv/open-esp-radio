@@ -1137,8 +1137,11 @@ impl<
     fn round_held(&self, _: &RoundSeal, handle: &PduHandle<'id>) -> Received<'_> {
         match self.nodes.get(usize::from(handle.node())) {
             Some(Node::Held(reception)) => Self::view(reception),
-            // A handle is made only by `round_take`, which holds its node:
-            // no port of this model reaches this arm (`unheld_reads`).
+            // The port makes a handle (`round_take`) and keeps its node
+            // held, so a handle to a node without a PDU is the port's own
+            // inconsistency, never a caller's: no right of a caller reaches
+            // this arm. The model counts it (`unheld_reads`) and its run of
+            // the conformance suite asserts the count stays zero.
             _ => {
                 self.unheld.set(self.unheld.get().saturating_add(1));
                 Received {

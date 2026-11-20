@@ -330,8 +330,12 @@ impl<'id> Gave<'id> {
 /// Whether a round's reader takes the receptions it reads.
 #[derive(Clone, Copy, PartialEq)]
 enum Take {
+    /// Read and take every reception.
     All,
+    /// Read every reception, take none.
     None,
+    /// Read no reception.
+    Unread,
 }
 
 /// The suite's view of a harness.
@@ -434,7 +438,9 @@ impl<
         while let Some(mut ended) = round.ended() {
             let end = ended.end();
             let mut payloads = Vec::new();
-            while let Some(pdu) = ended.received() {
+            while take != Take::Unread
+                && let Some(pdu) = ended.received()
+            {
                 payloads.push(pdu.view().payload.to_vec());
                 if take == Take::All {
                     gave.held.push(pdu.take());
@@ -997,36 +1003,40 @@ pub fn the_chain_leaves_in_the_order_submitted<
     for byte in 0..3 {
         run.submit(tx.remove(0), byte);
     }
-    let mut ended = Vec::new();
-    for peer in [
-        central(&[], Ack::Withhold),
-        Peer::Central {
-            heard: Heard::Lost,
-            ack: Ack::Acknowledge,
-            sends: Vec::new(),
-        },
-        central(&[], Ack::Acknowledge),
-        central(&[], Ack::Withhold),
-        central(&[], Ack::Acknowledge),
-        central(&[], Ack::Acknowledge),
+    let lost = Peer::Central {
+        heard: Heard::Lost,
+        ack: Ack::Acknowledge,
+        sends: Vec::new(),
+    };
+    let none: Vec<(TxEnd, u8, u8)> = Vec::new();
+    let sent = |slot| std::vec![(TxEnd::Transmitted, 0, slot)];
+    for (peer, expected, chained) in [
+        (central(&[], Ack::Withhold), none.clone(), 3),
+        (lost.clone(), none.clone(), 3),
+        (central(&[], Ack::Acknowledge), sent(0), 2),
+        (central(&[], Ack::Withhold), none.clone(), 2),
+        (lost, none.clone(), 2),
+        (central(&[], Ack::Acknowledge), sent(1), 1),
+        (central(&[], Ack::Acknowledge), sent(2), 0),
+        (central(&[], Ack::Acknowledge), none.clone(), 0),
     ] {
-        run.h.peer(Role::Connection, 0, peer);
+        run.h.peer(Role::Connection, 0, peer.clone());
         run.publish_link(events.remove(0), 2_000);
         run.advance(10_000);
         let gave = run.round(Take::None);
-        ended.extend(gave.tx());
+        assert_eq!(
+            gave.tx(),
+            expected,
+            "an event ends the chain's head only when its central acknowledges it ({peer:?})"
+        );
         events.extend(conn_places(gave.places));
         tx.extend(gave.transmitted.into_iter().map(|(_, p)| p));
+        assert_eq!(
+            tx.len(),
+            T - chained,
+            "the chain is as it was after {peer:?}"
+        );
     }
-    assert_eq!(
-        ended,
-        [
-            (TxEnd::Transmitted, 0, 0),
-            (TxEnd::Transmitted, 0, 1),
-            (TxEnd::Transmitted, 0, 2)
-        ],
-        "in the order submitted, once each, only when acknowledged"
-    );
     run.close_link(link, events, tx);
     run.stop();
     run.retire();
@@ -1070,6 +1080,36 @@ pub fn a_received_pdu_is_in_one_place<
         events.extend(conn_places(gave.places));
         (ends, gave.held)
     };
+    // Receptions read and not taken, and receptions not read, are back by
+    // the close of their round: twice the chain's nodes, each event's PDU
+    // finds a node.
+    for (byte, take) in (0..2 * R)
+        .map(|byte| (byte, Take::None))
+        .chain((0..2 * R).map(|byte| (byte, Take::Unread)))
+    {
+        let byte = u8::try_from(byte).unwrap();
+        let (ends, taken) = one_event(
+            &mut run,
+            &mut events,
+            central(&data(&[byte]), Ack::Withhold),
+            take,
+        );
+        assert!(taken.is_empty());
+        if take == Take::None {
+            assert_eq!(ends[0].2, [std::vec![byte]], "a node was free for it");
+        }
+    }
+    let (ends, _) = one_event(
+        &mut run,
+        &mut events,
+        central(&data(&[0x77]), Ack::Withhold),
+        Take::None,
+    );
+    assert_eq!(
+        ends[0].2,
+        [std::vec![0x77]],
+        "unread receptions went back at their close"
+    );
     // Fill every node, each PDU read in its event's round and held.
     let mut held = Vec::new();
     for byte in 0..R {
@@ -1135,8 +1175,15 @@ pub fn a_received_pdu_is_in_one_place<
     }
     // Held across a stop: read and released after it.
     run.stop();
+    let mut expected: Vec<Vec<u8>> = (0..R - 1)
+        .map(|byte| std::vec![u8::try_from(byte).unwrap()])
+        .collect();
+    expected.push(std::vec![0xee]);
     let read = run.release(held);
-    assert_eq!(read.len(), R, "every held PDU read after the stop");
+    assert_eq!(
+        read, expected,
+        "every held PDU read in place after the stop"
+    );
     run.start();
     let rest = run.round(Take::None);
     events.extend(conn_places(rest.places));
@@ -1224,10 +1271,16 @@ pub fn a_stop_ends_everything<
 ) {
     assert!(C >= 1 && E >= 2 && T >= 1, "the property runs a connection");
     let mut run = Run::new(harness, rights);
-    // From a start in progress.
+    // From a start in progress: the state is as before the start.
+    let before = run.h.state();
     let starting = run.starting();
     run.stop_from(StopFrom::Starting(starting));
     assert!(run.round(Take::None).ends.is_empty());
+    assert_eq!(
+        run.h.state(),
+        before,
+        "a stop of a start in progress ends it"
+    );
     for anomaly in [None].into_iter().chain((0..run.h.anomalies()).map(Some)) {
         run.start();
         let (link, events, tx) = run.open_link(0);
@@ -1337,6 +1390,33 @@ pub fn a_second_run_is_as_the_first<
         StartPoll::Pending(_) | StartPoll::Running(_) => panic!("the start fails"),
     }
     assert_eq!(run.h.state(), before, "a failed start leaves the state");
+    for anomaly in 0..run.h.anomalies() {
+        run.h.fail_next_start(StartFailure::Bound);
+        let starting = run.starting();
+        run.h.raise(anomaly);
+        match run.h.port().poll_start(starting, &mut cx()) {
+            StartPoll::Stopped(stopped, failure) => {
+                assert_eq!(failure, StartFailure::Bound);
+                run.places.stopped = Some(stopped);
+            }
+            StartPoll::Pending(_) | StartPoll::Running(_) => panic!("the start fails"),
+        }
+        assert_eq!(
+            run.facts(),
+            Facts::default(),
+            "a failed start takes down anomaly {anomaly}"
+        );
+        assert_eq!(
+            run.h.state(),
+            before,
+            "a failed start takes everything down"
+        );
+        assert_eq!(
+            each(&mut run),
+            first,
+            "a run after a failed start with anomaly {anomaly}"
+        );
+    }
     assert_eq!(
         each(&mut run),
         first,
