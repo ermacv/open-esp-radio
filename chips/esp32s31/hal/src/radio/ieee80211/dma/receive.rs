@@ -31,8 +31,7 @@
 //! A unit's slots and descriptors are looked up once, where the view finds
 //! it, and carried by reference: nothing after that looks anything up. A
 //! length the walker must not write (a single unit's outside the floor and
-//! the buffer, a chain's continuation not full, its last one empty or past
-//! the buffer) and a doorbell the walker does not accept are the
+//! the buffer, a chain's last one empty or past the buffer) and a doorbell the walker does not accept are the
 //! hardware's anomalies ([`RingAnomaly`]): the view stops at the first, and
 //! `serve` returns it to the keeper, which raises the one indication.
 
@@ -158,9 +157,8 @@ pub enum Reload {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RingAnomaly {
     /// A completed descriptor's `LENGTH` the walker must not write: a
-    /// single unit's outside `[FLOOR, SIZE]`, a chain's continuation not
-    /// `SIZE`, its last one zero or past `SIZE`. The unit is neither lent
-    /// nor copied; its control word.
+    /// single unit's outside `[FLOOR, SIZE]`, a chain's last one zero or
+    /// past `SIZE`. The unit is neither lent nor copied; its control word.
     Length { word: WifiRxDmaDescriptorControl },
     /// The doorbell still pending past [`RELOAD_SETTLE`]: what was re-armed
     /// is linked, the walker did not take it.
@@ -517,7 +515,11 @@ where
         let head = *start;
         let descriptors: &'static [RxDescriptor; N] = &descriptors.ring;
         // The run from `head`, wrapping once: `a` from `head` to the ring's
-        // end, `b` from its start.
+        // end, `b` from its start. A continuation's `LENGTH` is not read: its
+        // bytes are `SIZE` (`HW_RX_CHAIN_LAPS_20261117`), and no record names
+        // what the walker leaves in that field.
+        // A `RingIndex<N>` is below `N`, so `split_at_checked` at it never
+        // fails; the language cannot see that, and its `None` is not a case.
         let (descriptors_b, descriptors_a) = descriptors.split_at_checked(head.get())?;
         let count = descriptors_a
             .iter()
@@ -567,14 +569,6 @@ where
                 linker,
             })
         } else {
-            let full = run_a
-                .iter()
-                .chain(run_b)
-                .take(count - 1)
-                .find(|descriptor| usize::from(descriptor.word0().length()) != B::SIZE);
-            if let Some(short) = full {
-                return stop(short.word0());
-            }
             let last_bytes = match (length, Span::new(B::FLOOR, 0)) {
                 (0, _) | (_, None) => return stop(word),
                 (length, Some(empty)) if length <= B::FLOOR => LastBytes::Floor(length, empty),

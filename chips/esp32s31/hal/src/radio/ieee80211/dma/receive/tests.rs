@@ -479,21 +479,24 @@ fn a_length_past_the_buffer_or_below_the_floor_stops_the_view_as_an_anomaly() {
     }
 }
 
-brand!(short_chain);
+brand!(continuation);
 #[test]
-fn a_chain_s_short_continuation_is_an_anomaly() {
-    let mut bench = bench::<short_chain::Rx>();
+fn a_chain_s_continuation_length_field_is_not_read() {
+    let mut bench = bench::<continuation::Rx>();
     bench.complete(0, 100, false);
     bench.complete(1, 40, true);
     bench.cursor(Some(1), Some(2));
-    let word = bench.ring.descriptors.ring[0].word0();
     let clock: VirtualClock = VirtualClock::new();
     let served = bench.ring.serve(&clock, |view| match view.next_unit() {
         Some(Unit::Chain(chain)) => Some(chain.copy_in_place(|frame| frame.len())),
         _ => None,
     });
-    assert!(matches!(served, Err((RingAnomaly::Length { word: seen }, None)) if seen == word));
-    assert_eq!(bench.ring.walker.rings, 0);
+    assert!(
+        matches!(served, Ok(Some(len)) if len == SIZE - continuation::Rx::FLOOR + 40),
+        "the continuation's bytes are SIZE whatever its field holds"
+    );
+    assert_eq!(bench.ring.walker.rings, 1);
+    assert_eq!(bench.ring.start.get(), 2);
 }
 
 brand!(stuck);
