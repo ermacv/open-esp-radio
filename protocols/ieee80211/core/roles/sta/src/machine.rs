@@ -163,7 +163,10 @@ pub use commands::{
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
 pub use group_keys::StaGroupPlace;
-use group_keys::{GroupKeys, Installed as InstalledGroup, Replay as GroupReplay};
+use group_keys::{
+    GroupArrival, GroupKeys, GroupRemoval, GroupRole, Installed as InstalledGroup,
+    Replay as GroupReplay,
+};
 use management::{ManagementEvent, ManagementProtection};
 use tx_block_ack::TxBlockAckOwed;
 pub use tx_block_ack::{StaTxBlockAck, StaTxBlockAckPolicy, StaTxBlockAckPolicyError};
@@ -1309,13 +1312,15 @@ impl Keys {
     fn group_installed(
         &mut self,
         pending: PendingGroupKey,
-        current: bool,
+        role: GroupRole,
         replay: Option<&mut CcmpRxReplayEpoch>,
-        selected: bool,
+        arrival: GroupArrival,
     ) {
         let mut pending = pending;
         // A link's holder switched the lane already, the station otherwise.
-        if current && let Some(replay) = replay {
+        if role == GroupRole::Current
+            && let Some(replay) = replay
+        {
             pending.activate(replay);
         }
         let PendingGroupKey {
@@ -1340,22 +1345,21 @@ impl Keys {
             material,
             replay,
         };
-        if selected {
-            self.groups.restore(entry, current);
-        } else {
-            self.groups.install(entry, current);
+        match arrival {
+            GroupArrival::Selected => self.groups.restore(entry, role),
+            GroupArrival::Installed => self.groups.install(entry, role),
         }
     }
 
     /// An installed group key to remove, while no group operation is out.
-    fn take_group_key(&mut self, retiring: bool) -> Option<InstalledGroup> {
+    fn take_group_key(&mut self, removal: GroupRemoval) -> Option<InstalledGroup> {
         if !matches!(self.group, GroupOperation::Idle) {
             return None;
         }
-        if retiring {
-            self.groups.take_retiring()
-        } else {
-            self.groups.take_any()
+        match removal {
+            #[cfg(test)]
+            GroupRemoval::Retiring => self.groups.take_retiring(),
+            GroupRemoval::Any => self.groups.take_any(),
         }
     }
 
@@ -3701,7 +3705,12 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     GroupOperation::Select(pending) => {
                         // The selected installation stays, not current.
                         let epoch = pending.install.epoch;
-                        (*self.keys).group_installed(pending.install, false, None, true);
+                        (*self.keys).group_installed(
+                            pending.install,
+                            GroupRole::Other,
+                            None,
+                            GroupArrival::Selected,
+                        );
                         epoch
                     }
                     GroupOperation::Remove(pending) => {
@@ -3724,14 +3733,32 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 match core::mem::replace(&mut self.keys.group, GroupOperation::Idle) {
                     GroupOperation::Idle => {}
                     GroupOperation::Install(pending) => {
-                        self.group_transition(state, pending, None, false, events);
+                        self.group_transition(
+                            state,
+                            pending,
+                            None,
+                            GroupArrival::Installed,
+                            events,
+                        );
                     }
                     GroupOperation::Replace(pending) => {
                         let retired = pending.retired_lane();
-                        self.group_transition(state, pending.install, retired, false, events);
+                        self.group_transition(
+                            state,
+                            pending.install,
+                            retired,
+                            GroupArrival::Installed,
+                            events,
+                        );
                     }
                     GroupOperation::Select(pending) => {
-                        self.group_transition(state, pending.install, None, true, events);
+                        self.group_transition(
+                            state,
+                            pending.install,
+                            None,
+                            GroupArrival::Selected,
+                            events,
+                        );
                     }
                     GroupOperation::Remove(pending) => self.group_removed(state, pending, events),
                 }
@@ -3827,10 +3854,15 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         state: &mut State<T, K>,
         pending: PendingGroupKey,
         retired: Option<GroupKeyId>,
-        selected: bool,
+        arrival: GroupArrival,
         events: &mut impl EventSink<StaEvent>,
     ) {
         let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
+        let role = if current {
+            GroupRole::Current
+        } else {
+            GroupRole::Other
+        };
         // While the link's holder keeps the replay check, it applied the
         // end to it already.
         let replay = if current { active_replay(state) } else { None };
@@ -3840,7 +3872,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             replay.remove_group(old);
         }
-        (*self.keys).group_installed(pending, current, replay, selected);
+        (*self.keys).group_installed(pending, role, replay, arrival);
         if current {
             self.group_installed(state, events);
         }
@@ -5290,7 +5322,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     fn owe_reclaim(&mut self, reclaim: Reclaim) -> ActionStep<'id, T, K> {
         match reclaim {
             Reclaim::Keys => {
-                if let Some(removal) = self.group_removal(false) {
+                if let Some(removal) = self.group_removal(GroupRemoval::Any) {
                     (
                         Change::Reclaiming(Reclaim::Keys),
                         ActionProgress::Action(removal),
@@ -5347,7 +5379,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 return (Change::Keep, ActionProgress::Transition);
             }
             LeaveStep::RemoveKeys(deauthentication) => {
-                if let Some(removal) = self.group_removal(false) {
+                if let Some(removal) = self.group_removal(GroupRemoval::Any) {
                     Some(removal)
                 } else if let Some(owed) = self.pairwise_removal() {
                     Some(owed)
@@ -6069,14 +6101,14 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         }))
     }
 
-    fn group_removal(&mut self, retiring: bool) -> Option<Owed<'id, T, K>> {
+    fn group_removal(&mut self, removal: GroupRemoval) -> Option<Owed<'id, T, K>> {
         let InstalledGroup {
             place,
             key_id,
             material,
             replay,
             ..
-        } = self.keys.take_group_key(retiring)?;
+        } = self.keys.take_group_key(removal)?;
         self.keys.group = GroupOperation::Remove(PendingGroupRemoval {
             place,
             key_id,

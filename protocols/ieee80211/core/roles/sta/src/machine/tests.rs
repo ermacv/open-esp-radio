@@ -3374,11 +3374,11 @@ fn one_group_removal_runs_at_a_time_and_the_table_clears_after_each_ends() {
                     .unwrap(),
                 ),
             },
-            true,
+            group_keys::GroupRole::Current,
         );
     }
     let remove = |keys: &mut Keys| {
-        let entry = keys.take_group_key(false).unwrap();
+        let entry = keys.take_group_key(group_keys::GroupRemoval::Any).unwrap();
         keys.group = GroupOperation::Remove(PendingGroupRemoval {
             place: entry.place,
             key_id: entry.key_id,
@@ -3394,7 +3394,7 @@ fn one_group_removal_runs_at_a_time_and_the_table_clears_after_each_ends() {
     };
     let place = remove(&mut keys);
     // The second removal waits for the first one's end.
-    assert!(keys.take_group_key(false).is_none());
+    assert!(keys.take_group_key(group_keys::GroupRemoval::Any).is_none());
     assert!(!keys.clear());
     ended(&mut keys, place);
     let place = remove(&mut keys);
@@ -4604,9 +4604,14 @@ fn pending_group_material_is_redacted_and_moves_into_the_installed_record() {
     let printed = std::format!("{pending:?}");
     assert!(printed.contains("Ccmp128Key(..)"));
     assert!(!printed.contains("173"));
-    keys.group_installed(pending, true, None, false);
+    keys.group_installed(
+        pending,
+        group_keys::GroupRole::Current,
+        None,
+        group_keys::GroupArrival::Installed,
+    );
     assert!(keys.groups.same_material(id, material.as_bytes()));
-    let entry = keys.take_group_key(false).unwrap();
+    let entry = keys.take_group_key(group_keys::GroupRemoval::Any).unwrap();
     assert!(!keys.groups.same_material(id, material.as_bytes()));
     keys.groups.release(entry.place, &mut ());
     assert!(keys.clear());
@@ -4718,7 +4723,12 @@ fn take_group_removal<'id>(
     transmitted(record!(world), transmit, true);
     world.end_transmissions(now);
     assert!(poll!(world, now).is_none(), "GM2 retains old installations");
-    let Some(Owed::RemoveGroup(place)) = world.station.transition().0.group_removal(true) else {
+    let Some(Owed::RemoveGroup(place)) = world
+        .station
+        .transition()
+        .0
+        .group_removal(group_keys::GroupRemoval::Retiring)
+    else {
         panic!("the table gives a non-current installation for removal");
     };
     place
