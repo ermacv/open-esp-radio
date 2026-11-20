@@ -86,14 +86,14 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
         world.completed.clear();
         world.frames.clear();
         world.take();
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world
             .command(at(50), 401, StaCommand::BackgroundScan)
             .unwrap();
         world.run(at(50));
         assert_eq!(world.take(), [Seen::Configure("bss+scan")]);
         let late = Instant::from_micros(u64::MAX - 1);
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.input(late, StaInput::Configured);
         world.run(late);
         assert_eq!(world.take(), [Seen::Configure("bss")]);
@@ -102,9 +102,9 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
             "cleanup still owns the accepted request"
         );
         assert!(world.station.poll_deadline().is_none());
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.input(late, StaInput::Configured);
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(late);
         assert_scan_overflow(&mut world, late);
     });
@@ -129,7 +129,7 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
         let Some(StaAction::Transmit(transmit)) = poll!(world, deadline) else {
             panic!()
         };
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         world.frames.clear();
         world.take();
         world.end_transmissions(late);

@@ -33,7 +33,7 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         assert!(notice.is_none());
         world.arbiter = arbiter;
         world.take();
-        world.hold_group_removals = true;
+        world.switches.on(Switch::HoldGroupRemovals);
         world.run(at(50));
         assert!(world.station.is_reclaiming());
         assert!(world.link.is_none());
@@ -47,7 +47,7 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         ));
         let input = world.pending_removals.pop().unwrap();
         world.input(at(52), input);
-        world.hold_group_removals = false;
+        world.switches.off(Switch::HoldGroupRemovals);
         world.run(at(52));
         assert!(!world.station.is_reclaiming());
         assert!(world.station.keys.clear());
@@ -98,7 +98,7 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
 fn a_frame_out_at_a_finish_holds_its_place_across_the_restart_until_its_end() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world.hold_transmissions = true;
+        world.switches.on(Switch::HoldTransmissions);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         assert_eq!(world.losses.built, 1);
@@ -120,7 +120,7 @@ fn a_frame_out_at_a_finish_holds_its_place_across_the_restart_until_its_end() {
         assert_eq!(world.submitted.len(), 1);
         assert_ne!(world.submitted[0].epoch(), old.epoch());
         assert!(world.station.out.holds(TxPurpose::Probe));
-        world.hold_transmissions = false;
+        world.switches.off(Switch::HoldTransmissions);
         world.run(at(52));
         assert!(world.submitted.is_empty());
         assert!(!world.station.out.holds(TxPurpose::Probe));
@@ -150,17 +150,20 @@ fn a_restart_reclaims_through_removals_that_expired() {
 fn a_restart_sets_receive_off_only_after_the_last_runs_configuration_ended() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
-        assert!(world.configuring, "the scan's configuration is out");
+        assert!(
+            world.switches.has(Switch::Configuring),
+            "the scan's configuration is out"
+        );
         let mut world = restarted(world);
         world.take();
         // The world refuses a second configuration while one is out.
         world.run(at(50));
         assert!(world.station.is_reclaiming());
         assert_eq!(world.take(), []);
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(at(51));
         assert_eq!(world.take(), [Seen::Configure("off")]);
         assert!(!world.station.is_reclaiming());

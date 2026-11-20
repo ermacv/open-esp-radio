@@ -62,7 +62,7 @@ fn the_handed_over_link_s_header_is_qos_data_exactly_on_a_qos_bss() {
 fn a_protected_link_is_held_until_its_keys_are_confirmed() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
-        world.hold_transmissions = true;
+        world.switches.on(Switch::HoldTransmissions);
         world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
         // Connected, Message 4 in flight: the link is the holder's, held.
         assert!(!world.station.is_connected());
@@ -71,7 +71,7 @@ fn a_protected_link_is_held_until_its_keys_are_confirmed() {
         assert_eq!(link.carriage(), crate::link::Carriage::Held);
         assert!(link.key().is_some(), "the link took the PTK");
         assert!(world.station.keys.keyed());
-        world.hold_transmissions = false;
+        world.switches.off(Switch::HoldTransmissions);
         world.end_transmissions(at(34));
         world.run(at(34));
         assert!(world.station.is_connected());
@@ -198,7 +198,7 @@ fn only_the_terminal_through_the_link_switches_a_group_keys_replay_lane() {
                 GroupKeyId::new(2).unwrap().key_id(),
             )
         };
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         assert_eq!(world.pending_installs.len(), 1);
         // The station holds no replay check of its own while it lends it.

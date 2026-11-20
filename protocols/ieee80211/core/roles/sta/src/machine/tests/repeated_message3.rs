@@ -41,7 +41,7 @@ fn deferred_m3_responds_only_to_the_latest_counter_after_the_current_m4_terminal
                     } else {
                         wpa2_associated::<2>(mint)
                     };
-                    world.hold_transmissions = true;
+                    world.switches.on(Switch::HoldTransmissions);
                     world.receive(at(50), &retry_message3(&ptk, 3, 0x99));
                     assert_eq!(world.submitted.len(), 1);
                     let before = world.frames.len();
@@ -67,7 +67,7 @@ fn deferred_m3_responds_only_to_the_latest_counter_after_the_current_m4_terminal
                             .iter()
                             .all(|event| !matches!(event, Seen::InstallPairwise(_)))
                     );
-                    world.hold_transmissions = false;
+                    world.switches.off(Switch::HoldTransmissions);
                     world.run(at(53));
                     assert!(world.station.is_connected());
                 });
@@ -82,7 +82,7 @@ fn deferred_gm1_responds_only_to_the_latest_counter_after_the_current_gm2_termin
         for outcome in exchange_terminals() {
             installed(|mint| {
                 let (mut world, ptk) = wpa2_connected::<2>(mint);
-                world.hold_transmissions = true;
+                world.switches.on(Switch::HoldTransmissions);
                 world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
                 let before = world.frames.len();
                 for counter in counters {
@@ -96,7 +96,7 @@ fn deferred_gm1_responds_only_to_the_latest_counter_after_the_current_gm2_termin
                     response_counters(&world, before),
                     [*counters.last().unwrap()]
                 );
-                world.hold_transmissions = false;
+                world.switches.off(Switch::HoldTransmissions);
                 world.run(at(53));
                 assert!(world.station.is_connected());
             });
@@ -110,7 +110,7 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
         for outcome in exchange_terminals() {
             installed(|mint| {
                 let (mut world, ptk) = wpa2_connected::<2>(mint);
-                world.hold_transmissions = true;
+                world.switches.on(Switch::HoldTransmissions);
                 world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
                 let before = world.frames.len();
                 if group_first {
@@ -131,7 +131,7 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
                 world.run(at(53));
                 assert_eq!(response_counters(&world, before), [4, 5]);
                 assert_eq!(security_drops(&world), 0);
-                world.hold_transmissions = false;
+                world.switches.off(Switch::HoldTransmissions);
                 world.run(at(54));
                 assert!(world.station.is_connected());
                 assert!(world.station.poll_deadline().is_none());
@@ -157,7 +157,7 @@ fn invalid_mic_and_non_increasing_counters_never_replace_a_deferred_frame() {
                 } else {
                     wpa2_connected::<2>(mint)
                 };
-                world.hold_transmissions = true;
+                world.switches.on(Switch::HoldTransmissions);
                 world.receive(at(50), &retry_message3(&ptk, 3, 0x99));
                 let before = world.frames.len();
                 let candidate = |counter| {
@@ -218,7 +218,7 @@ fn connected_deferral_has_no_station_timeout_and_waits_for_the_port_terminal() {
     for group in [false, true] {
         installed(|mint| {
             let (mut world, ptk) = wpa2_connected::<2>(mint);
-            world.hold_transmissions = true;
+            world.switches.on(Switch::HoldTransmissions);
             world.receive(at(50), &retry_message3(&ptk, 3, 0x99));
             if group {
                 world.receive_verified(at(51), &group_message1(&ptk, 4, 2));
@@ -253,7 +253,7 @@ fn original_d4_deadline_with_a_deferred_m3_fails_once_even_if_the_old_m4_later_d
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
         let deadline = world.station.poll_deadline().unwrap();
-        world.hold_transmissions = true;
+        world.switches.on(Switch::HoldTransmissions);
         world.receive(at(50), &retry_message3(&ptk, 3, 0x99));
         for counter in [4, 5] {
             world.receive(at(51), &retry_message3(&ptk, counter, 0x99));
@@ -261,7 +261,7 @@ fn original_d4_deadline_with_a_deferred_m3_fails_once_even_if_the_old_m4_later_d
         }
         let before = world.frames.len();
         world.input(deadline, StaInput::Tick);
-        world.hold_transmissions = false;
+        world.switches.off(Switch::HoldTransmissions);
         world.run(deadline);
         for _ in 0..2 {
             world.input(deadline, StaInput::Tick);
@@ -306,7 +306,7 @@ fn disabled_returns_both_deferred_frame_owners_at_finish() {
             } else {
                 wpa2_connected::<2>(mint)
             };
-            world.hold_transmissions = true;
+            world.switches.on(Switch::HoldTransmissions);
             world.receive(at(50), &retry_message3(&ptk, 3, 0x99));
             world.receive(at(51), &retry_message3(&ptk, 4, 0x99));
             world.receive_verified(at(51), &group_message1(&ptk, 5, 2));
@@ -566,7 +566,7 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
     for rx in [true, false] {
         installed(|mint| {
             let (mut world, ptk) = wpa2_connected::<2>(mint);
-            world.hold_transmissions = true;
+            world.switches.on(Switch::HoldTransmissions);
             world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
             world.receive(at(51), &retry_message3(&ptk, 4, 0x99));
             world.take();
@@ -603,7 +603,7 @@ fn damaged_deferred_eapol_disconnects_on_both_rx_and_tx_terminal_paths() {
             } else {
                 world.outcomes.push_back((ended(End::Delivered), true));
             }
-            world.hold_transmissions = false;
+            world.switches.off(Switch::HoldTransmissions);
             world.end_transmissions(at(52));
             world.run(at(52));
             assert!(!world.station.is_connected());

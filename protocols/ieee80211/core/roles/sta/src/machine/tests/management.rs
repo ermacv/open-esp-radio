@@ -342,7 +342,7 @@ fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
             world.station.is_connected(),
             "same IGTK did not reset IPN 5"
         );
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(43), &rekey(&ptk, 4, 0x44, 0x66));
         assert!(!world.pending_installs.is_empty());
         world.receive(at(44), &wire(GROUP_DEAUTH_NEW_KEY));
@@ -350,7 +350,7 @@ fn same_igtk_rekey_keeps_its_ipn_and_a_new_igtk_activates_at_the_terminal() {
             world.station.is_connected(),
             "new IGTK not active before terminal"
         );
-        world.hold_key_installs = false;
+        world.switches.off(Switch::HoldKeyInstalls);
         for input in world.pending_installs.drain(..).collect::<Vec<_>>() {
             world.input(at(45), input);
         }
@@ -421,13 +421,13 @@ fn query_timeout_and_local_leave_keep_the_pairwise_key_until_protected_tx_return
                     panic!("protected Deauthentication");
                 };
                 assert_eq!(transmit.number, crate::link::FrameNumber::Open);
-                transmitted(record!(world), transmit, true);
+                transmitted(record!(world), transmit, Sealing::Pairwise);
                 assert_eq!(world.frames.last().unwrap()[..2], [0xc0, 0x40]);
                 assert!(world.station.keys.keyed());
                 assert!(poll!(world, now).is_none());
                 match outcome {
                     Some(outcome) => world.outcomes.push_back((outcome, true)),
-                    None => world.unsend_next = true,
+                    None => world.switches.on(Switch::UnsendNext),
                 }
                 world.end_transmissions(now);
                 world.run(now);
@@ -460,7 +460,7 @@ fn a_protected_deauthentication_after_the_links_return_draws_the_keys_next_packe
             .allocate()
             .unwrap()
             .value();
-        world.hold_transmissions = true;
+        world.switches.on(Switch::HoldTransmissions);
         world.command(at(50), 8, StaCommand::Disconnect).unwrap();
         world.run(at(50));
         // The link came back, and the engine's key with it: the station's
@@ -470,7 +470,7 @@ fn a_protected_deauthentication_after_the_links_return_draws_the_keys_next_packe
         assert_eq!(world.packet_numbers.last(), Some(&(data + 1)));
         assert!(world.station.keys.keyed());
         // Once the frame ends, the group keys go, then the pairwise key.
-        world.hold_transmissions = false;
+        world.switches.off(Switch::HoldTransmissions);
         world.end_transmissions(at(51));
         world.run(at(51));
         assert!(!world.station.keys.keyed());

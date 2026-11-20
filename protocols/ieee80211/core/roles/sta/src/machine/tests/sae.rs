@@ -3,19 +3,27 @@ use oer_protocols_ieee80211_core_security_rsn::{
     Ptk, PtkContext, frames::RsnTxFrame, sae::SaeKeys,
 };
 use oer_protocols_ieee80211_wire::sae::SaeCommitValues;
+use oer_protocols_ieee80211_wire::security::SaePwe;
 use oer_protocols_ieee80211_wire::security::rsn::{Akm, RsnElement};
 use std::vec;
 
-fn advertised(transition: bool, h2e: bool) -> Vec<u8> {
+/// Whether a WPA3 network also admits WPA2's PSK: its transition mode.
+#[derive(Clone, Copy, PartialEq)]
+enum Transition {
+    SaeOnly,
+    WithPsk,
+}
+
+fn advertised(transition: Transition, pwe: SaePwe) -> Vec<u8> {
     let mut beacon = wpa2_beacon().to_vec();
     beacon[74] = 8;
     beacon[75] |= 0x80;
-    if transition {
+    if transition == Transition::WithPsk {
         beacon[56] += 4;
         beacon[69] = 2;
         beacon.splice(75..75, [0, 0x0f, 0xac, 2]);
     }
-    if h2e {
+    if pwe == SaePwe::HashToElement {
         beacon.extend_from_slice(&[244, 1, 0x20]);
     }
     beacon
@@ -76,41 +84,29 @@ fn peer_authentication(transaction: u16, status: u16, body: &[u8]) -> Vec<u8> {
     wire
 }
 
-fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
+fn commit(world: &mut World<'_>, pwe: SaePwe, now: u32) -> SaeKeys {
     let commit_wire = world.frames.last().unwrap();
     let (status, body) = outgoing_authentication(commit_wire, 3, 1);
-    assert_eq!(status, if h2e { 126 } else { 0 });
-    let station = SaeCommitValues::parse(
-        body,
-        if h2e {
-            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-        } else {
-            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-        },
-    )
-    .unwrap();
-    let element = if h2e {
-        SaePasswordToken::derive(SSID, b"password", None)
+    assert_eq!(
+        status,
+        match pwe {
+            SaePwe::HashToElement => 126,
+            SaePwe::HuntingAndPecking => 0,
+        }
+    );
+    let station = SaeCommitValues::parse(body, pwe).unwrap();
+    let element = match pwe {
+        SaePwe::HashToElement => SaePasswordToken::derive(SSID, b"password", None)
             .unwrap()
-            .password_element(BSSID, LOCAL)
-    } else {
-        SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
+            .password_element(BSSID, LOCAL),
+        SaePwe::HuntingAndPecking => {
+            SaePasswordElement::hunting_and_pecking(b"password", BSSID, LOCAL).unwrap()
+        }
     };
     let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
     let mut body = [0; oer_protocols_ieee80211_wire::sae::SAE_COMMIT_LEN];
-    let length = peer
-        .values()
-        .encode(
-            None,
-            if h2e {
-                oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
-            } else {
-                oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
-            },
-            &mut body,
-        )
-        .unwrap();
+    let length = peer.values().encode(None, pwe, &mut body).unwrap();
     world.receive(at(now), &peer_authentication(1, status, &body[..length]));
     let (status, confirm) = outgoing_authentication(world.frames.last().unwrap(), 3, 2);
     assert_eq!(status, 0);
@@ -118,8 +114,8 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     keys
 }
 
-fn authenticate(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
-    let keys = commit(world, h2e, now);
+fn authenticate(world: &mut World<'_>, pwe: SaePwe, now: u32) -> SaeKeys {
+    let keys = commit(world, pwe, now);
     world.receive(
         at(now + 1),
         &peer_authentication(2, 0, &keys.own_confirm(1)),
@@ -209,10 +205,15 @@ fn finish_handshake(
 
 #[test]
 fn review_sae_selection_transmits_a_wire_commit() {
-    for transition in [false, true] {
+    for transition in [Transition::SaeOnly, Transition::WithPsk] {
         installed(|mint| {
             let mut world = World::with_security(mint, 3, personal());
-            begin(&mut world, &advertised(transition, false), 0, 91);
+            begin(
+                &mut world,
+                &advertised(transition, SaePwe::HuntingAndPecking),
+                0,
+                91,
+            );
             let (_, body) = outgoing_authentication(world.frames.last().unwrap(), 3, 1);
             assert!(
                 SaeCommitValues::parse(
@@ -227,13 +228,13 @@ fn review_sae_selection_transmits_a_wire_commit() {
 
 #[test]
 fn wire_peer_connects_sae_only_transition_and_resumes_pmksa() {
-    for transition in [false, true] {
-        for h2e in [false, true] {
+    for transition in [Transition::SaeOnly, Transition::WithPsk] {
+        for pwe in [SaePwe::HuntingAndPecking, SaePwe::HashToElement] {
             installed(|mint| {
                 let mut world = World::with_security(mint, 3, personal());
-                let beacon = advertised(transition, h2e);
+                let beacon = advertised(transition, pwe);
                 begin(&mut world, &beacon, 0, 91);
-                let keys = authenticate(&mut world, h2e, 30);
+                let keys = authenticate(&mut world, pwe, 30);
                 let association = association_rsn(&world);
                 let rsn = RsnElement::parse(&association).unwrap();
                 assert!(rsn.akm_suites().contains([0, 0x0f, 0xac, 8]));
@@ -276,9 +277,9 @@ fn wire_peer_connects_psk_only_using_the_provisioned_pmk() {
 fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
     installed(|mint| {
         let mut world = World::with_security(mint, 3, personal());
-        let beacon = advertised(true, false);
+        let beacon = advertised(Transition::WithPsk, SaePwe::HuntingAndPecking);
         begin(&mut world, &beacon, 0, 91);
-        let keys = commit(&mut world, false, 30);
+        let keys = commit(&mut world, SaePwe::HuntingAndPecking, 30);
         let mut confirm = keys.own_confirm(1);
         confirm[2] ^= 1;
         world.receive(at(31), &peer_authentication(2, 0, &confirm));
@@ -310,7 +311,12 @@ fn invalid_confirm_returns_credits_and_never_caches_the_pmk() {
 fn anti_clogging_response_waits_for_the_commit_out_without_extending_the_deadline() {
     installed(|mint| {
         let mut world = World::with_security(mint, 3, personal());
-        begin(&mut world, &advertised(true, false), 0, 91);
+        begin(
+            &mut world,
+            &advertised(Transition::WithPsk, SaePwe::HuntingAndPecking),
+            0,
+            91,
+        );
         let first_commit = world.frames.last().unwrap().clone();
         let deadline = world.station.poll_deadline().unwrap();
         // An SAE frame is still out: its purpose's place is taken.

@@ -301,8 +301,66 @@ impl EventSink<StaEvent> for Losses {
     }
 }
 
+/// One of the test world's independent switches: the port's holds and
+/// what the world owes.
+#[derive(Clone, Copy, Debug)]
+enum Switch {
+    /// Let RX run while the current TX still owns its terminal resources.
+    HoldTransmissions,
+    /// A receive configuration the port has yet to confirm.
+    Configuring,
+    /// The configurations wait for the test's confirmation.
+    HoldConfigured,
+    HoldKeyInstalls,
+    HoldGroupRemovals,
+    /// The link's return waits for the test.
+    HoldLinkReturn,
+    /// The station asked for its link back while the return is held.
+    ReturnOwed,
+    /// The next frame does not go: the service refuses it.
+    UnsendNext,
+}
+
+/// The switches that are on.
+#[derive(Clone, Copy, Debug, Default)]
+struct Switches(u8);
+
+impl Switches {
+    const fn bit(switch: Switch) -> u8 {
+        1 << switch as u8
+    }
+
+    fn on(&mut self, switch: Switch) {
+        self.0 |= Self::bit(switch);
+    }
+
+    fn off(&mut self, switch: Switch) {
+        self.0 &= !Self::bit(switch);
+    }
+
+    const fn has(&self, switch: Switch) -> bool {
+        self.0 & Self::bit(switch) != 0
+    }
+
+    /// Whether `switch` was on; it is off after.
+    fn take(&mut self, switch: Switch) -> bool {
+        let was = self.has(switch);
+        self.off(switch);
+        was
+    }
+
+    /// Whether `switch` was on; it is on after.
+    fn raise(&mut self, switch: Switch) -> bool {
+        let was = self.has(switch);
+        self.on(switch);
+        was
+    }
+}
+
 /// The loop the thin service runs, with the test as the port.
 struct World<'id, const G: usize = 2> {
+    /// The port's holds and the world's owed steps (see [`Switch`]).
+    switches: Switches,
     station: Station<'id, Types<'id>, Caps, Callbacks>,
     /// What the station's calls reported.
     losses: Losses,
@@ -313,23 +371,11 @@ struct World<'id, const G: usize = 2> {
     command_credits: CommandCredits<'id>,
     /// The transmissions in flight, which the port ends in order.
     submitted: Vec<StaTxTag>,
-    /// Let RX run while the current TX still owns its terminal resources.
-    hold_transmissions: bool,
-    /// A receive configuration the port has yet to confirm.
-    configuring: bool,
-    /// The configurations wait for the test's confirmation.
-    hold_configured: bool,
-    hold_key_installs: bool,
     pending_installs: Vec<StaInput<'id, Types<'id>, Caps>>,
-    hold_group_removals: bool,
     /// The port's ends of key installations, replacements and selections.
     install_outcome: StaKeyOutcome,
     /// The port's ends of key removals.
     removal_outcome: StaKeyOutcome,
-    /// The link's return waits for the test.
-    hold_link_return: bool,
-    /// The station asked for its link back while the return is held.
-    return_owed: bool,
     pending_removals: Vec<StaInput<'id, Types<'id>, Caps>>,
     /// The outcomes of the next transmissions; delivered once none is
     /// queued.
@@ -340,8 +386,6 @@ struct World<'id, const G: usize = 2> {
     eapol: Vec<(bool, bool)>,
     /// Every frame the station sent, in its buffer.
     frames: Vec<Vec<u8>>,
-    /// The next frame does not go: the service refuses it.
-    unsend_next: bool,
     /// The frames sent before the station said it associated, and its peer.
     associated: Option<(usize, Peer<RxMeta>)>,
     /// The signal of the frames the world delivers.
@@ -497,22 +541,15 @@ impl<'id> World<'id> {
             seen: Vec::new(),
             completed: Vec::new(),
             submitted: Vec::new(),
-            configuring: false,
-            hold_configured: false,
-            hold_key_installs: false,
             pending_installs: Vec::new(),
-            hold_group_removals: false,
             install_outcome: StaKeyOutcome::Done,
             removal_outcome: StaKeyOutcome::Done,
-            hold_link_return: false,
-            return_owed: false,
+            switches: Switches::default(),
             pending_removals: Vec::new(),
             outcomes: std::collections::VecDeque::new(),
-            hold_transmissions: false,
             deauthentications: Vec::new(),
             eapol: Vec::new(),
             frames: Vec::new(),
-            unsend_next: false,
             associated: None,
             rssi: i8::MIN,
             link: None,
@@ -642,11 +679,18 @@ macro_rules! record {
     };
 }
 
+/// Whether a frame the station sent goes under its pairwise key.
+#[derive(Clone, Copy, PartialEq)]
+enum Sealing {
+    Pairwise,
+    Open,
+}
+
 /// One frame the station sent: the world records it and holds its tag
 /// until its end.
-fn transmitted(record: Record<'_>, mut transmit: StaTransmit<'_, Caps>, keyed: bool) {
+fn transmitted(record: Record<'_>, mut transmit: StaTransmit<'_, Caps>, sealing: Sealing) {
     // The link's holder numbers the link's frames as it submits them.
-    let keyed = keyed
+    let keyed = sealing == Sealing::Pairwise
         || matches!(
             transmit.number,
             crate::link::FrameNumber::Link {
@@ -804,10 +848,10 @@ impl<'id, const G: usize> World<'id, G> {
                                 .unwrap();
                             match action {
                                 StaAction::Transmit(transmit) => {
-                                    transmitted(record!(self), transmit, false)
+                                    transmitted(record!(self), transmit, Sealing::Open)
                                 }
                                 StaAction::TransmitProtected(transmit) => {
-                                    transmitted(record!(self), transmit, true)
+                                    transmitted(record!(self), transmit, Sealing::Pairwise)
                                 }
                                 _ => panic!("a Block Ack response is a control transmission"),
                             }
@@ -835,7 +879,7 @@ impl<'id, const G: usize> World<'id, G> {
                     StaAction::RemoveGroupKey { place } => {
                         self.seen.push(Seen::RemoveKey);
                         let removed = StaInput::GroupKeyEnded { place, outcome: self.removal_outcome };
-                        if self.hold_group_removals {
+                        if self.switches.has(Switch::HoldGroupRemovals) {
                             self.pending_removals.push(removed);
                         } else {
                             self.input(now, removed);
@@ -869,15 +913,15 @@ impl<'id, const G: usize> World<'id, G> {
                             }
                             StationReceive::Bss { .. } => "bss+scan",
                         }));
-                        assert!(!core::mem::replace(&mut self.configuring, true));
+                        assert!(!self.switches.raise(Switch::Configuring));
                     }
                     StaAction::Transmit(transmit) => {
-                        transmitted(record!(self), transmit, false)
+                        transmitted(record!(self), transmit, Sealing::Open)
                     }
                     // A frame under the key goes as any other; the world's
                     // engine numbers it.
                     StaAction::TransmitProtected(transmit) => {
-                        transmitted(record!(self), transmit, true)
+                        transmitted(record!(self), transmit, Sealing::Pairwise)
                     }
                     StaAction::Notify(notice) => self.seen.push(Seen::Notify(notice)),
                     StaAction::CommandCompleted(terminal) => {
@@ -920,12 +964,13 @@ impl<'id, const G: usize> World<'id, G> {
                     }
                 }
             }
-            if !self.hold_configured && core::mem::take(&mut self.configuring) {
+            if !self.switches.has(Switch::HoldConfigured) && self.switches.take(Switch::Configuring)
+            {
                 self.station
                     .input(now, StaInput::Configured, &mut self.losses);
                 acted = true;
             }
-            if !self.hold_transmissions && !self.submitted.is_empty() {
+            if !self.switches.has(Switch::HoldTransmissions) && !self.submitted.is_empty() {
                 self.end_transmissions(now);
                 acted = true;
             }
@@ -941,7 +986,7 @@ impl<'id, const G: usize> World<'id, G> {
     }
 
     fn installed(&mut self, now: Instant, input: StaInput<'id, Types<'id>, Caps>) {
-        if self.hold_key_installs {
+        if self.switches.has(Switch::HoldKeyInstalls) {
             self.pending_installs.push(input);
         } else {
             self.input(now, input);
@@ -979,7 +1024,9 @@ impl<'id, const G: usize> World<'id, G> {
             crate::link::LinkAction::Agreement { tid, window } => {
                 let _ = self.link.as_mut().unwrap().agreement(tid, window);
             }
-            crate::link::LinkAction::Return if self.hold_link_return => self.return_owed = true,
+            crate::link::LinkAction::Return if self.switches.has(Switch::HoldLinkReturn) => {
+                self.switches.on(Switch::ReturnOwed)
+            }
             crate::link::LinkAction::Return => {
                 let link = self.link.take().expect("the station lent its link");
                 let (link, key) = link.into_return();
@@ -1079,7 +1126,7 @@ impl<'id, const G: usize> World<'id, G> {
     fn end_transmissions(&mut self, now: Instant) {
         for tag in self.submitted.drain(..).collect::<Vec<_>>() {
             // The service did not send it: it ends refused.
-            if core::mem::take(&mut self.unsend_next) {
+            if self.switches.take(Switch::UnsendNext) {
                 self.station.input(
                     now,
                     StaInput::FrameEnded {
@@ -1436,11 +1483,11 @@ fn a_scan_listens_its_dwell_from_the_ready_receiver_and_moves_on() {
 fn a_delayed_receiver_starts_the_window_when_it_is_ready() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         assert_eq!(world.station.poll_deadline(), None);
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(at(4));
         assert_eq!(world.station.poll_deadline(), Some(at(14)));
     });
@@ -1450,10 +1497,10 @@ fn a_delayed_receiver_starts_the_window_when_it_is_ready() {
 fn a_window_over_before_the_next_poll_builds_no_probe() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
-        assert!(core::mem::take(&mut world.configuring), "the scan's rules");
+        assert!(world.switches.take(Switch::Configuring), "the scan's rules");
         world
             .station
             .input(at(1), StaInput::Configured, &mut world.losses);
@@ -1485,7 +1532,7 @@ fn a_probe_reports_what_its_end_says_of_the_air() {
             let mut world = World::new(mint, 3);
             match outcome {
                 Some(outcome) => world.outcomes.push_back((outcome, true)),
-                None => world.unsend_next = true,
+                None => world.switches.on(Switch::UnsendNext),
             }
             world.command(at(0), 1, StaCommand::Connect).unwrap();
             world.run(at(0));
@@ -1532,7 +1579,7 @@ fn a_probe_reports_what_its_end_says_of_the_air() {
 fn the_lease_ends_a_window_it_cannot_hold() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         let lease_end = world.arbiter.poll_deadline().expect("the lease ends");
@@ -1540,7 +1587,7 @@ fn the_lease_ends_a_window_it_cannot_hold() {
         let ready = lease_end
             .checked_sub(Duration::from_millis(1))
             .expect("the lease ends after the epoch");
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(ready);
         world.take();
         assert_eq!(world.advance(), lease_end);
@@ -2230,11 +2277,11 @@ fn a_connected_station_scans_in_an_absence_announced_with_nulls() {
         );
         // The dwell ends: the network's rules again, and the scan ends only
         // once the port confirmed them.
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         let now = world.advance();
         assert_eq!(world.take(), [Seen::Configure("bss")]);
         assert!(world.station.commands.poll().is_none());
-        world.hold_configured = false;
+        world.switches.off(Switch::HoldConfigured);
         world.run(now);
         assert!(world.take().is_empty());
         assert_eq!(
@@ -2275,7 +2322,7 @@ fn an_unsent_sleep_null_is_undelivered_and_the_station_stays() {
         let mut world = connected_world(mint);
         // The service cannot send the Null (no rate of its plan on the
         // channel): the station hears it as undelivered.
-        world.unsend_next = true;
+        world.switches.on(Switch::UnsendNext);
         world
             .command(at(40), 3, StaCommand::BackgroundScan)
             .unwrap();
@@ -2663,7 +2710,7 @@ fn m4_refused_before_admission_never_completes_the_handshake() {
                 .unwrap()
                 .authenticate(&ptk, &mut SoftwareAes128)
                 .unwrap();
-        world.unsend_next = true;
+        world.switches.on(Switch::UnsendNext);
         world.receive(at(33), &eapol_frame(message3.as_bytes()));
         let seen = world.take();
         assert!(!world.station.is_connected());
@@ -2993,7 +3040,7 @@ fn identical_gtk_material_keeps_its_installation_and_replay_frontier() {
 fn old_rx_between_replacement_and_its_terminal_cannot_advance_the_successor_epoch() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<1>(mint);
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(50), &group_message1(&ptk, 3, 1));
         assert_eq!(world.pending_installs.len(), 1);
         let replay = world.link.as_mut().unwrap().replay_mut().unwrap();
@@ -3258,7 +3305,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
                     .unwrap()
                     .authenticate(&ptk, &mut SoftwareAes128)
                     .unwrap();
-            world.hold_key_installs = true;
+            world.switches.on(Switch::HoldKeyInstalls);
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             assert_eq!(world.pending_installs.len(), 1);
             if group_pending {
@@ -3308,7 +3355,7 @@ fn stale_handshake_installations_return_the_association_only_after_all_keys() {
 fn a_rekey_installed_after_disconnect_is_removed_without_group_message_2() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         let eapol = world.eapol.len();
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         assert_eq!(world.pending_installs.len(), 1);
@@ -3336,7 +3383,7 @@ fn a_rekey_installed_after_disconnect_is_removed_without_group_message_2() {
 fn a_replacement_terminal_after_disconnect_returns_its_slot_through_removal() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<1>(mint);
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         assert_eq!(world.pending_installs.len(), 1);
         let responses = world.eapol.len();
@@ -3409,20 +3456,20 @@ fn one_group_removal_runs_at_a_time_and_the_table_clears_after_each_ends() {
 fn old_configuration_response_frees_the_configuration_without_completing_leave() {
     installed(|mint| {
         let mut world = World::new(mint, 2);
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         world.command(at(0), 1, StaCommand::Connect).unwrap();
         world.run(at(0));
         // The scan's rules are being set.
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.command(at(1), 2, StaCommand::Disconnect).unwrap();
         world.run(at(1));
-        assert!(!world.configuring);
+        assert!(!world.switches.has(Switch::Configuring));
         assert!(!world.seen.contains(&Seen::Configure("off")));
         world.input(at(2), StaInput::Configured);
         world.run(at(2));
         assert!(world.seen.contains(&Seen::Configure("off")));
         assert!(matches!(world.station.state, State::Leave(_)));
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         world.input(at(3), StaInput::Configured);
         world.run(at(3));
         assert!(matches!(world.station.state, State::Idle));
@@ -3505,7 +3552,7 @@ fn deauthentication_goes_while_a_frame_of_another_purpose_is_out() {
             panic!("a Deauthentication has its own place beside the Null's");
         };
         assert!(matches!(transmit.tag.purpose, TxPurpose::Deauthentication));
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         world.submitted.push(null.tag);
         world.run(at(51));
         assert!(world.take().contains(&Seen::Notify(StaNotice::Disconnected(
@@ -3623,9 +3670,9 @@ fn irrelevant_management_while_authentication_waits_for_its_frame_preserves_join
         world.run(at(0));
         world.advance();
         world.receive(at(13), &beacon());
-        world.hold_configured = true;
+        world.switches.on(Switch::HoldConfigured);
         let now = world.advance();
-        assert!(core::mem::take(&mut world.configuring));
+        assert!(world.switches.take(Switch::Configuring));
         // An authentication frame is still out.
         world
             .station
@@ -3663,7 +3710,7 @@ fn irrelevant_management_while_authentication_waits_for_its_frame_preserves_join
         let Some(StaAction::Transmit(transmit)) = poll!(world, now) else {
             panic!("the frame's end must continue the unsent authentication attempt");
         };
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         assert_eq!(world.station.sequence, after_one_attempt);
         world.end_transmissions(now);
     });
@@ -3785,7 +3832,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 let Some(StaAction::Transmit(tx)) = poll!(world, at(32)) else {
                     panic!("M2")
                 };
-                transmitted(record!(world), tx, false);
+                transmitted(record!(world), tx, Sealing::Open);
             }
             if point >= 2 {
                 world.end_transmissions(at(32));
@@ -3856,7 +3903,7 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 let Some(StaAction::Transmit(tx)) = poll!(world, at(33)) else {
                     panic!("M4")
                 };
-                transmitted(record!(world), tx, false);
+                transmitted(record!(world), tx, Sealing::Open);
             }
             assert_eq!(
                 world.station.poll_deadline(),
@@ -4257,7 +4304,7 @@ fn connected_duplicate_m3_answers_without_reinstalling_or_resetting_replay() {
 fn duplicate_m3_waits_for_the_connected_frame_out_and_coalesces_across_group_key_installation() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         // A frame of the connected station is still out.
         world.station.out.take(CONNECTED_PLACE);
@@ -4276,7 +4323,7 @@ fn duplicate_m3_waits_for_the_connected_frame_out_and_coalesces_across_group_key
             transmit.tag.purpose,
             TxPurpose::Connected(Sending::DuplicateMessage4)
         );
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         // The same authenticated request while its response is in flight
         // cannot displace the group response or grow a queue.
         world
@@ -4291,7 +4338,7 @@ fn duplicate_m3_waits_for_the_connected_frame_out_and_coalesces_across_group_key
             transmit.tag.purpose,
             TxPurpose::Connected(Sending::GroupResponse)
         );
-        transmitted(record!(world), transmit, true);
+        transmitted(record!(world), transmit, Sealing::Pairwise);
         world.run(at(53));
         assert_eq!(world.frames.len(), before + 2);
         assert!(world.station.is_connected());
@@ -4302,7 +4349,7 @@ fn duplicate_m3_waits_for_the_connected_frame_out_and_coalesces_across_group_key
 fn duplicate_m3_survives_an_in_flight_group_response() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         let input = world.pending_installs.pop().unwrap();
         world.input(at(51), input);
@@ -4313,7 +4360,7 @@ fn duplicate_m3_survives_an_in_flight_group_response() {
             transmit.tag.purpose,
             TxPurpose::Connected(Sending::GroupResponse)
         );
-        transmitted(record!(world), transmit, true);
+        transmitted(record!(world), transmit, Sealing::Pairwise);
         let before = world.frames.len();
         world
             .deliver(at(51), &retry_message3(&ptk, 2, 0x99), meta())
@@ -4327,7 +4374,7 @@ fn duplicate_m3_survives_an_in_flight_group_response() {
             transmit.tag.purpose,
             TxPurpose::Connected(Sending::DuplicateMessage4)
         );
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         world.run(at(52));
         assert_eq!(world.frames.len(), before + 1);
         assert!(world.station.is_connected());
@@ -4644,7 +4691,7 @@ fn repeated_m3_selects_retained_material_and_restores_each_live_replay_frontier(
                 .check(CcmpRxProtection::Group, tid, header(500))
                 .unwrap();
         }
-        world.hold_key_installs = true;
+        world.switches.on(Switch::HoldKeyInstalls);
         world.outcomes.push_back((ended(End::AckTimeout), true));
         world.receive(at(34), &retry_message3(&ptk, 3, 0x55));
         assert_eq!(world.pending_installs.len(), 1);
@@ -4718,7 +4765,7 @@ fn take_group_removal<'id>(
     key_id: u8,
     now: Instant,
 ) -> StaGroupPlace {
-    world.hold_key_installs = true;
+    world.switches.on(Switch::HoldKeyInstalls);
     world.receive_verified(now, &group_message1(ptk, counter, key_id));
     assert_eq!(world.pending_installs.len(), 1);
     let input = world.pending_installs.pop().unwrap();
@@ -4726,7 +4773,7 @@ fn take_group_removal<'id>(
     let Some(StaAction::Transmit(transmit)) = poll!(world, now) else {
         panic!("the installed GTK owes group message 2");
     };
-    transmitted(record!(world), transmit, true);
+    transmitted(record!(world), transmit, Sealing::Pairwise);
     world.end_transmissions(now);
     assert!(poll!(world, now).is_none(), "GM2 retains old installations");
     let Some(Owed::RemoveGroup(place)) = world
@@ -4777,15 +4824,18 @@ fn restarted<'id, const G: usize>(mut world: World<'id, G>) -> World<'id, G> {
 fn the_pairwise_key_is_removed_only_after_the_link_came_back() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
-        world.hold_link_return = true;
+        world.switches.on(Switch::HoldLinkReturn);
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
-        assert!(world.return_owed, "the station asks for its link back");
+        assert!(
+            world.switches.has(Switch::ReturnOwed),
+            "the station asks for its link back"
+        );
         assert!(
             world.station.keys.keyed(),
             "the pairwise key stays while the link is out"
         );
-        world.hold_link_return = false;
+        world.switches.off(Switch::HoldLinkReturn);
         world.return_link();
         world.run(at(51));
         assert!(!world.station.keys.keyed());
@@ -4798,7 +4848,7 @@ fn the_pairwise_key_is_removed_only_after_the_link_came_back() {
 fn a_group_installation_that_expired_switches_no_lane_in_the_link() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
-        world.hold_link_return = true;
+        world.switches.on(Switch::HoldLinkReturn);
         world.install_outcome = StaKeyOutcome::Expired;
         world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
         world.run(at(50));
@@ -4900,7 +4950,7 @@ fn a_group_operation_waits_for_the_one_out_to_end() {
         let (mut world, ptk) = wpa2_connected::<2>(mint);
         // A retiring key's removal is out.
         let place = take_group_removal(&mut world, &ptk, 3, 2, at(50));
-        world.hold_key_installs = false;
+        world.switches.off(Switch::HoldKeyInstalls);
         world.take();
         world.receive_verified(at(51), &group_message1(&ptk, 4, 3));
         assert!(
@@ -4932,7 +4982,7 @@ fn a_group_operation_waits_for_the_one_out_to_end() {
 fn the_pairwise_key_is_removed_only_after_every_group_key() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
-        world.hold_group_removals = true;
+        world.switches.on(Switch::HoldGroupRemovals);
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
         while let Some(removal) = world.pending_removals.pop() {
@@ -5019,7 +5069,7 @@ fn freed_removal_places_are_reused_without_losing_installed_keys() {
             );
             // A subsequent installation reuses the freed place without
             // overwriting the still-current record.
-            a.hold_key_installs = false;
+            a.switches.off(Switch::HoldKeyInstalls);
             a.receive_verified(at(53), &group_message1(&ptk_a, 5, 0));
             a.command(at(54), 2, StaCommand::Disconnect).unwrap();
             a.run(at(54));
@@ -5055,7 +5105,13 @@ fn a_removal_issued_before_leave_frees_its_place_after_leave() {
 
 #[test]
 fn delivered_m4_retains_all_installed_groups_until_leave() {
-    fn exercise<const G: usize>(leave: bool) {
+    /// Whether the station leaves at the case's end.
+    #[derive(Clone, Copy, PartialEq)]
+    enum Finish {
+        Stay,
+        Leave,
+    }
+    fn exercise<const G: usize>(finish: Finish) {
         use oer_protocols_ieee80211_core_security_rsn::{PtkContext, frames::RsnTxFrame};
         use oer_protocols_ieee80211_wire::security::rsn::Akm;
         installed(|mint| {
@@ -5089,7 +5145,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
                 },
             );
             world.take();
-            world.hold_group_removals = true;
+            world.switches.on(Switch::HoldGroupRemovals);
             for index in 0..G {
                 if index + 1 < G {
                     world.outcomes.push_back((ended(End::AckTimeout), true));
@@ -5108,7 +5164,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
             assert!(matches!(world.station.keys.group, GroupOperation::Idle));
             assert_eq!(world.station.keys.free_group_places(), 0);
             assert_eq!(world.station.keys.groups.len(), G);
-            if leave {
+            if finish == Finish::Leave {
                 world.command(at(34), 2, StaCommand::Disconnect).unwrap();
                 world.run(at(34));
                 for completed in 1..=G {
@@ -5121,7 +5177,7 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
             }
             assert!(world.pending_removals.is_empty());
             assert!(matches!(world.station.keys.group, GroupOperation::Idle));
-            if leave {
+            if finish == Finish::Leave {
                 assert!(world.station.keys.clear());
                 assert!(matches!(world.station.state, State::Idle));
             } else {
@@ -5136,9 +5192,9 @@ fn delivered_m4_retains_all_installed_groups_until_leave() {
             }
         });
     }
-    for leave in [false, true] {
-        exercise::<3>(leave);
-        exercise::<4>(leave);
+    for finish in [Finish::Stay, Finish::Leave] {
+        exercise::<3>(finish);
+        exercise::<4>(finish);
     }
 }
 
@@ -5160,9 +5216,9 @@ fn a_retry_waits_for_the_previous_attempts_end_which_cannot_finish_it() {
             world.run(at(0));
             world.advance();
             world.receive(at(13), &beacon());
-            world.hold_configured = true;
+            world.switches.on(Switch::HoldConfigured);
             let now = world.advance();
-            assert!(core::mem::take(&mut world.configuring));
+            assert!(world.switches.take(Switch::Configuring));
             world.input(now, StaInput::Configured);
             let Some(StaAction::Transmit(first_auth)) = poll!(world, now) else {
                 panic!("first authentication");
@@ -5185,7 +5241,7 @@ fn a_retry_waits_for_the_previous_attempts_end_which_cannot_finish_it() {
             let Some(StaAction::Transmit(second_auth)) = poll!(world, now) else {
                 panic!("retry authentication");
             };
-            transmitted(record!(world), second_auth, false);
+            transmitted(record!(world), second_auth, Sealing::Open);
             assert!(
                 matches!(
                     &world.station.state,
@@ -5309,7 +5365,7 @@ fn the_pairwise_installation_names_the_associations_spp() {
                     .unwrap()
                     .authenticate(&ptk, &mut SoftwareAes128)
                     .unwrap();
-            world.hold_key_installs = true;
+            world.switches.on(Switch::HoldKeyInstalls);
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             assert_eq!(world.pending_installs.len(), 1, "GTK waits for the PTK");
             let installed = world.pending_installs.pop().unwrap();
@@ -5318,7 +5374,7 @@ fn the_pairwise_installation_names_the_associations_spp() {
                 StaInput::PairwiseKeyEnded(StaKeyOutcome::Done)
             ));
             assert_eq!(world.pairwise_spp, Some(expected));
-            world.hold_key_installs = false;
+            world.switches.off(Switch::HoldKeyInstalls);
             world.input(at(33), installed);
             world.run(at(33));
             assert!(world.station.is_connected());
@@ -5492,7 +5548,7 @@ fn a_key_exchange_message_among_data_is_an_input() {
 fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
     installed(|mint| {
         let (mut world, ptk) = wpa2_associated::<2>(mint);
-        world.hold_transmissions = true;
+        world.switches.on(Switch::HoldTransmissions);
         world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
         assert!(!world.station.is_connected());
         assert!(!world.submitted.is_empty());
@@ -5510,7 +5566,7 @@ fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
         );
         assert!(world.station.absence_place.is_some());
         assert!(!world.station.is_connected());
-        world.hold_transmissions = false;
+        world.switches.off(Switch::HoldTransmissions);
         world.end_transmissions(at(35));
         world.run(at(35));
         assert!(world.station.is_connected());

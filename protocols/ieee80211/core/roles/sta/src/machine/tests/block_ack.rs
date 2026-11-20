@@ -81,7 +81,7 @@ fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
         let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
             panic!("the same reply fits the restored buffer");
         };
-        transmitted(record!(world), transmit, false);
+        transmitted(record!(world), transmit, Sealing::Open);
         let clock = VirtualClock::<8>::starting_at(at(40));
         world.run(clock.now());
     });
