@@ -79,13 +79,6 @@ impl Spent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NoRoom;
 
-/// Whether a peer sleeps.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Sleep {
-    Awake,
-    Asleep,
-}
-
 /// Whether the air reports what a peer's frame cost.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Cost {
@@ -97,7 +90,6 @@ enum Cost {
 struct Peer {
     spec: PeerSpec,
     generation: u16,
-    sleep: Sleep,
     cost: Cost,
     spent: Spent,
 }
@@ -321,7 +313,6 @@ impl Medium {
                 .map(|spec| Peer {
                     spec: *spec,
                     generation: 0,
-                    sleep: Sleep::Awake,
                     cost: Cost::Known,
                     spent: Spent::default(),
                 })
@@ -383,11 +374,12 @@ impl Medium {
         Some(Instant::from_micros(flight.ends_at))
     }
 
-    /// A peer falls asleep or wakes.
-    pub fn set_asleep(&self, peer: usize, sleep: Sleep) {
+    /// A peer fell asleep or woke: the medium's version moves, so a
+    /// registration hears it. The model's air does not depend on sleep.
+    pub fn peer_changed(&self, peer: usize) {
         let mut state = self.0.borrow_mut();
-        if let Some(peer) = state.peers.get_mut(peer) {
-            peer.sleep = sleep;
+        if state.peers.get(peer).is_none() {
+            return;
         }
         state.version = state.version.wrapping_add(1);
         state.changed = true;

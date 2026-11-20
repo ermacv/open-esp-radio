@@ -946,7 +946,6 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/images/aes", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
-    ("hil/services/load", Role::HilBinding),
     ("hil/services/sdk-station", Role::HilBinding),
     ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
@@ -7548,7 +7547,6 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
     ("hil/probes/esp32s31-aes-timing", 0, 1, BY_HIL),
     ("hil/probes/esp32s31-facts", 1, 48, BY_HIL),
-    ("hil/services/load", 5, 0, BY_HIL),
 ];
 
 /// The thresholds a package reads: the tools' and the deferred packages'

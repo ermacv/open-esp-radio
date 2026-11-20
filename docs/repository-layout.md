@@ -78,7 +78,7 @@ hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
     esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
     esp32s31-register, esp32s31-rx-ring}/
 hil/scenarios/{aes, sdk-station, wifi-access-point}/
-hil/services/{aes, fault, load, sdk-station, wifi-access-point}/
+hil/services/{aes, fault, sdk-station, wifi-access-point}/
 ```
 
 The workspace's `exclude` names the packages that stay as sources and are
@@ -106,7 +106,7 @@ Awaiting deletion at their successor:
   (`chips/esp32s31/radio/{system, client}/`);
 - what stands on it: `examples/wifi-station/`,
   `hil/images/{wifi-station, wifi-access-point}/`,
-  `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/wifi-station/`.
+  `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/{load, wifi-station}/`.
 
 The station's acceptance suite
 (`protocols/network/testing/model/station-suite/`) is kept beside its package

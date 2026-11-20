@@ -28,7 +28,6 @@ members = [
     "tools/hil/harness",
     "hil/services/aes",
     "hil/services/fault",
-    "hil/services/load",
     "hil/services/sdk-station",
     "hil/services/wifi-access-point",
     "hil/agent",
@@ -160,6 +159,7 @@ members = [
 # Awaiting deletion at their successor: the old Wi-Fi path (its backend, the
 # station, the radio system and its client contract) and what stands on it.
 exclude = [
+    "hil/services/load",
     "protocols/bluetooth/le/cipher",
     "protocols/bluetooth/le/controller",
     "protocols/bluetooth/le/ll",
@@ -204,7 +204,6 @@ default-members = [
     "tools/hil/harness",
     "hil/services/aes",
     "hil/services/fault",
-    "hil/services/load",
     "hil/services/sdk-station",
     "hil/services/wifi-access-point",
     "hil/agent",

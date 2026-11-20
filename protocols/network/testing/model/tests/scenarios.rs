@@ -33,7 +33,7 @@ use oer_protocols_network_runtime::{
     EndCause, Ended, MemoryPolicy, Observer, Sent, Service, ServiceEvent, Socket, SocketLanes,
     StopLane,
 };
-use oer_protocols_network_testing_model::{Medium, PeerSpec, Sleep, Spent};
+use oer_protocols_network_testing_model::{Medium, PeerSpec, Spent};
 use oer_protocols_network_wire::ip::Dscp;
 
 #[path = "scenarios/work.rs"]
@@ -108,7 +108,8 @@ struct Flow {
 
 /// Something that happens at a time.
 enum At {
-    Sleep(usize, Sleep),
+    /// A peer falls asleep or wakes.
+    Sleep(usize),
     Refuse(u32),
     /// Keep what the medium has counted.
     Mark,
@@ -388,7 +389,7 @@ impl Scenario<'_> {
             .into_iter()
             .map(|(at, event)| {
                 let action: Box<dyn FnOnce() + '_> = match event {
-                    At::Sleep(peer, sleep) => Box::new(move || medium.set_asleep(peer, sleep)),
+                    At::Sleep(peer) => Box::new(move || medium.peer_changed(peer)),
                     At::Refuse(count) => Box::new(move || medium.refuse(count)),
                     At::Mark => Box::new(move || marks_ref.borrow_mut().push(medium.spent())),
                     At::Stop => Box::new(move || {
@@ -435,9 +436,9 @@ fn a_sleeping_peer_holds_only_its_own_credits_of_a_shared_pool() {
     let medium = medium(&peers);
     let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
     let script = vec![
-        (1_000, At::Sleep(1, Sleep::Asleep)),
+        (1_000, At::Sleep(1)),
         (SECOND, At::Mark),
-        (SECOND, At::Sleep(1, Sleep::Awake)),
+        (SECOND, At::Sleep(1)),
         (2 * SECOND, At::Mark),
         (2 * SECOND, At::Stop),
     ];
@@ -482,10 +483,10 @@ fn to_a_sleeper(peers: &[PeerSpec; 2], limit: usize) -> [Flow; 3] {
 /// The peer asleep for a second, and two marks around it, and a second after.
 fn a_second_asleep() -> Vec<(u64, At)> {
     vec![
-        (1_000, At::Sleep(0, Sleep::Asleep)),
+        (1_000, At::Sleep(0)),
         (100_000, At::Mark),
         (SECOND, At::Mark),
-        (SECOND, At::Sleep(0, Sleep::Awake)),
+        (SECOND, At::Sleep(0)),
         (2 * SECOND, At::Mark),
         (2 * SECOND, At::Stop),
     ]
