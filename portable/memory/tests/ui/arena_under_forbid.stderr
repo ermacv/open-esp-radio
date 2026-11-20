@@ -1,0 +1,16 @@
+error: implementation of an `unsafe` trait
+  --> tests/ui/arena_under_forbid.rs:44:5
+   |
+44 | /     unsafe impl Brand for Mine { // ui-error: implementation of an `unsafe` trait
+45 | |         type Window = Window;
+46 | |         const COUNT: usize = 4;
+47 | |         const SIZE: usize = 64;
+...  |
+56 | |     }
+   | |_____^
+   |
+note: the lint level is defined here
+  --> tests/ui/arena_under_forbid.rs:30:10
+   |
+30 | #[forbid(unsafe_code)]
+   |          ^^^^^^^^^^^

@@ -59,6 +59,46 @@ impl<T> DmaStatic<T> {
     }
 }
 
+/// The DMA address space of a claim: the field's own address on the chip,
+/// the host model's synthetic one on a host.
+#[cfg(target_arch = "riscv32")]
+type ClaimSpace = crate::radio::ieee80211::dma::space::ChipDma;
+#[cfg(not(target_arch = "riscv32"))]
+type ClaimSpace = crate::radio::ieee80211::dma::space::HostDma;
+
+#[allow(
+    unsafe_code,
+    reason = "the placement constructor's claim: a DMA static gives its value once, with its address"
+)]
+// SAFETY: `PlacedStatic` asks that `claim` give this static's value and no
+// other, at most once, with that value's address in its window for as long
+// as the value lives. The value is `take()`'s, which hands it out once
+// (`ZeroedStatic::try_take`); a second claim is `None`. A `DmaStatic` is made
+// only by `dma_static!` (`DmaStatic::placed` is `unsafe`), which puts it in a
+// `.dma.bss.<block>` section; the runtime linker script places that section
+// in `.dma.bss`, and its ASSERTs over the DMA window (the generated
+// `dma-window.x`) prove that every address in it lies in the window. A
+// static lives for the whole image, so the address stays the value's.
+unsafe impl<T> oer_portable_memory::arena::PlacedStatic<T> for DmaStatic<T>
+where
+    T: crate::layouts::DmaLayout<Window = crate::layouts::DmaWindow>,
+{
+    fn claim(&'static self) -> Option<(&'static mut T, crate::layouts::DmaRef<T>)> {
+        use crate::radio::ieee80211::dma::space::DmaSpace as _;
+        let value = self.take()?.into_inner();
+        let address = ClaimSpace::address(&*value, core::ptr::from_ref(&*value))?;
+        #[allow(
+            unsafe_code,
+            reason = "the placed source of the claimed value's address"
+        )]
+        // SAFETY: `address` is the claimed value's own, in the window by the
+        // placement above, aligned as its type; it stays reserved for the
+        // static's whole life.
+        let at = unsafe { crate::system::memory::dma_address::placed_link::<T>(address) }?;
+        Some((value, at))
+    }
+}
+
 /// Why [`Placed::bind_dma`] refused: the allocation's address in the space,
 /// or the caller's binding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -430,6 +470,25 @@ macro_rules! dma_static {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    // As above: the macros' placement is unsafe code in this crate only.
+    #[allow(unsafe_code, reason = "an arena's place over a DMA static")]
+    fn an_arena_over_a_dma_static_is_claimed_once() {
+        oer_portable_memory::arena! {
+            PlacementCheck: window crate::layouts::DmaWindow, count 1, size 64, floor 0,
+                placed by crate::dma_static as crate::system::memory::dma_static::DmaStatic
+                in ".dma.bss.placement_check";
+        }
+        type Check = oer_portable_memory::arena::Arena<PlacementCheck, 64>;
+        let (_arena, mut fresh) = Check::claim().expect("the first claim");
+        assert!(fresh.next().is_some(), "its one buffer, fresh");
+        assert!(fresh.next().is_none());
+        assert!(
+            Check::claim().is_none(),
+            "a second claim of the place is refused"
+        );
+    }
 
     #[test]
     fn a_placed_pair_splits_into_its_own_two_values() {

@@ -19,8 +19,9 @@
 //! fresh or returned handle, the whole buffer from the brand's floor. No span
 //! begins below the floor (`FLOOR`, 64 for receive: the metadata's fixed
 //! prefix and tail, which the hardware shares, never lie under a slice). What
-//! lies in front of a span's start is read by the HAL through its layouts'
-//! volatile accessors.
+//! lies below the floor of a held buffer is copied out by volatile reads
+//! ([`Arena::floor`]), and the HAL reads its fields from the copy through its
+//! generated layouts.
 //!
 //! A held buffer lent on to another task returns through a [`Returning`]:
 //! its destructor sets the buffer's bit in the brand's [`ReturnedSet`] with
@@ -227,9 +228,72 @@ impl<B: Brand, const BYTES: usize> Arena<B, BYTES> {
         }
     }
 
+    /// The bytes below the floor of a held buffer, which the hardware shares
+    /// (a receive unit's header, or a chain continuation's first bytes): a
+    /// view whose one operation copies them out. A lent buffer has no
+    /// handle, so the floor of memory the hardware owns cannot be asked for.
+    pub fn floor<'h>(&self, handle: &'h Handle<B>) -> Floor<'h, B, BYTES> {
+        Floor {
+            place: self.place,
+            index: handle.index,
+            handle: PhantomData,
+        }
+    }
+
+    /// `f` gets the `Handle` of a lent buffer the hardware does not touch
+    /// while `quiet` lives, by shared reference, for the call: its bytes and
+    /// its floor can be read, nothing can be written or moved. The `Lent`
+    /// stays where it is; nothing changes owner.
+    pub fn inspect<R>(&self, quiet: &Quiet<'_, B>, f: impl FnOnce(&Handle<B>) -> R) -> R {
+        let handle = Handle {
+            index: quiet.lent.index,
+            span: quiet.span,
+        };
+        f(&handle)
+    }
+
     fn cpu_start(&self, index: u16, span: Span<B>) -> *mut u8 {
         let offset = buffer_offset::<B>(index) as usize + usize::from(span.start);
         self.place.bytes.get().cast::<u8>().wrapping_add(offset)
+    }
+}
+
+/// The floor of one held buffer ([`Arena::floor`]), for as long as its
+/// handle is borrowed.
+pub struct Floor<'h, B: Brand, const BYTES: usize> {
+    place: &'static ArenaPlace<B, BYTES>,
+    index: u16,
+    handle: PhantomData<&'h Handle<B>>,
+}
+
+impl<B: Brand, const BYTES: usize> Floor<'_, B, BYTES> {
+    /// The `N = FLOOR` bytes below the floor, copied out by volatile reads:
+    /// no reference to them is made, so a write of the hardware in progress
+    /// (the receive header's late bytes) is no data race of a slice.
+    pub fn copy<const N: usize>(&self) -> [u8; N] {
+        const {
+            if N != B::FLOOR {
+                panic!("a floor's copy is the brand's floor")
+            }
+        };
+        let first = self
+            .place
+            .bytes
+            .get()
+            .cast::<u8>()
+            .wrapping_add(buffer_offset::<B>(self.index) as usize);
+        let mut copy = [0_u8; N];
+        for (offset, byte) in copy.iter_mut().enumerate() {
+            #[allow(unsafe_code, reason = "a held buffer's floor, copied out")]
+            // SAFETY: the buffer `index < COUNT` is held by the handle this
+            // view borrows (`Arena::floor`); a lent buffer has no handle. Its
+            // first `FLOOR < SIZE` bytes lie inside it, inside the place
+            // (`claim`'s geometry), which is `'static`. A volatile read makes
+            // no reference to the byte, which the hardware may still write.
+            let value = unsafe { core::ptr::read_volatile(first.wrapping_add(offset)) };
+            *byte = value;
+        }
+        copy
     }
 }
 
@@ -404,6 +468,29 @@ impl<B: Brand> Released<B> {
     }
 }
 
+/// A borrowed release: the claim that the hardware does not read or write
+/// one lent buffer while this lives, with the span of what it wrote there.
+/// Read through [`Arena::inspect`]; the buffer stays lent.
+pub struct Quiet<'q, B: Brand> {
+    lent: &'q Lent<B>,
+    span: Span<B>,
+}
+
+impl<'q, B: Brand> Quiet<'q, B> {
+    /// The borrowed release of `lent`, for as long as the borrow lives.
+    ///
+    /// # Safety
+    ///
+    /// The hardware neither reads nor writes `lent`'s buffer from the call
+    /// until the returned value is dropped, and `span` lies inside what it
+    /// wrote. The HAL atom that observed this calls it, citing its stand
+    /// record, as for [`Released::assume`].
+    #[allow(unsafe_code, reason = "the borrowed release proof's one constructor")]
+    pub const unsafe fn assume(lent: &'q Lent<B>, span: Span<B>) -> Self {
+        Self { lent, span }
+    }
+}
+
 /// The fresh handles of a new arena, each once, in index order.
 pub struct Fresh<B: Brand> {
     next: u16,
@@ -570,10 +657,11 @@ macro_rules! arena {
                     zeroed in $section;
             }
 
-            #[allow(unsafe_code, reason = "the macro's brand names its own place and set")]
             // SAFETY: the constants are those of `PLACE`'s type, and `PLACE`
             // and `RETURNED` are statics of this anonymous constant, which
-            // nothing outside it names.
+            // nothing outside it names. The impl is this macro's, audited
+            // here: it writes no `allow`, so it builds in a crate that
+            // forbids `unsafe` (`tests/ui/arena_under_forbid.rs`).
             unsafe impl $crate::arena::Brand for $name {
                 type Window = $window;
                 const COUNT: usize = $count;

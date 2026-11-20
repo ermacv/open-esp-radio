@@ -2080,6 +2080,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
+ "oer-portable-memory",
  "oer-portable-riscv",
  "oer-portable-time",
  "static_cell",

@@ -135,6 +135,18 @@ oer_chips_family_platform_runtime::placed_static! {
     /// the trials (the same; 0 when the trials did not end).
     static FIRST_VERIFY: AtomicU32 = AtomicU32::new(0), in critical_data "level_wake";
     static SECOND_VERIFY: AtomicU32 = AtomicU32::new(0), in critical_data "level_wake";
+    /// The fresh buffers of the arena claimed at boot.
+    static ARENA_BUFFERS: AtomicU32 = AtomicU32::new(0), in critical_data "level_wake";
+}
+
+oer_portable_memory::arena! {
+    /// One arena placed in the DMA window by the HAL's placed static, claimed
+    /// once at boot: the chip's placement of 5.1's arenas has its consumer
+    /// here until the receive ring's probe claims its own.
+    ArenaCheck: window oer_chips_esp32s31_hal::layouts::DmaWindow, count 2, size 64, floor 0,
+        placed by oer_chips_esp32s31_hal::dma_static
+        as oer_chips_esp32s31_hal::system::memory::dma_static::DmaStatic
+        in ".dma.bss.level_wake_arena";
 }
 
 /// `FROM_CPU3`, raised by the trials and by the task, lowered by the handler
@@ -186,6 +198,13 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
+    // The arena's place, claimed once: its buffers lie in the DMA window.
+    let Some((_arena, fresh)) =
+        oer_portable_memory::arena::Arena::<ArenaCheck, { 2 * 64 }>::claim()
+    else {
+        fail(oer_portable_diagnostics::name!("arena-claim"; 32));
+    };
+    ARENA_BUFFERS.store(fresh.count() as u32, Ordering::Relaxed);
     let raiser_line: &'static FromCpu3 = RAISER_LINE.init(software.line3);
     // Selection 2b: the pending byte stored pended before the bind, through
     // the line's handle with the hart's proof; the bind clears it.
@@ -441,6 +460,8 @@ async fn report() {
             .number(u64::from(first))
             .text(" entries-after-enable=")
             .number(u64::from(boot_entries))
+            .text(" arena-buffers=")
+            .number(u64::from(ARENA_BUFFERS.load(Ordering::Relaxed)))
             .end(),
     );
     for (index, selection) in SELECTIONS.iter().enumerate() {

@@ -4688,6 +4688,9 @@ fn hal_production_code_gains_no_waits_or_sequences() {
 
 /// The removal of the Wi-Fi DMA's machines from the HAL.
 const WIFI_DMA: &str = "Wi-Fi DMA ownership out of the HAL, with the Wi-Fi quarantines";
+/// The receive ring's atoms over 5.1's arena (5.4, PR 2a): the HAL's custody
+/// of the walker's buffers, which the old receive machines give way to.
+const RX_RING_ATOMS: &str = "the receive ring's atoms over the arena; the old receive machines leave with the walker's registers (5.4 PR 2b)";
 /// The removal of the PHY's calibration machines and temperature resource.
 const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 
@@ -4700,6 +4703,7 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
+    ("radio/ieee80211/dma/receive.rs", 814, RX_RING_ATOMS),
     ("radio/ieee80211/dma/rx_dma.rs", 527, WIFI_DMA),
     ("radio/ieee80211/dma/rx_dma/model.rs", 580, WIFI_DMA),
     ("radio/ieee80211/dma/rx_ring.rs", 3096, WIFI_DMA),
