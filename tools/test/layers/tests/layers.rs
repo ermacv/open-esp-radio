@@ -6468,9 +6468,8 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         2,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/coex/external.rs", 24, BY_R2),
     ("chips/esp32s31/hal/src/radio/coex/ports.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/coex/timer_bank.rs", 4, BY_R2),
+    ("chips/esp32s31/hal/src/radio/coex/timer_bank.rs", 2, BY_R2),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers.rs",
         1,
@@ -6496,7 +6495,7 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         2,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/modem/ops.rs", 19, BY_R2),
+    ("chips/esp32s31/hal/src/radio/modem/ops.rs", 16, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
     (
@@ -6555,12 +6554,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         3,
         BY_NONE,
     ),
-    ("chips/esp32s31/hal/src/radio/coex.rs", 1, BY_RADIO_SYSTEM),
-    (
-        "chips/esp32s31/hal/src/radio/coex/external.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
     (
         "chips/esp32s31/hal/src/radio/coex/ports.rs",
         1,
@@ -6607,18 +6600,8 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/hal/src/radio/modem/platform.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/modem/syscon.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/modem/values.rs",
-        14,
+        1,
         BY_RADIO_SYSTEM,
     ),
     (

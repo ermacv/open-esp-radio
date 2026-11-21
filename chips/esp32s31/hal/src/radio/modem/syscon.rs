@@ -14,10 +14,7 @@ use oer_chips_esp32s31_pac::modem_syscon::{
 };
 use oer_portable_mmio::Placement;
 
-use crate::{
-    radio::modem::values::{WifiBaseband40MhzState, WifiBasebandAgcUpdateMode},
-    radio::phy::RadioPhyRegisters,
-};
+use crate::radio::phy::RadioPhyRegisters;
 
 /// The eighteen PHY-calibration clock gates of `CLK_CONF1`, from one read,
 /// in the order [`restore_calibration_clocks`] writes them.
@@ -207,37 +204,12 @@ pub(crate) struct ModemSysconPowerBaseline {
 }
 
 impl ModemSysconPowerBaseline {
-    pub(super) const BIT_COUNT: u32 = 19;
     /// Every gate disabled: the baseline of a host test.
     #[cfg(any(test, feature = "test-support"))]
     pub(super) const DISABLED: Self = Self {
         phy_calibration_clocks: [false; 18],
         phy_i2c_160mhz: ClkI2cMstSel160m::Default,
     };
-
-    pub(super) fn bits(self) -> u32 {
-        let mut bits = 0;
-        let mut clock = 0;
-        while clock < self.phy_calibration_clocks.len() {
-            bits |= u32::from(self.phy_calibration_clocks[clock]) << clock;
-            clock += 1;
-        }
-        bits | (u32::from(matches!(self.phy_i2c_160mhz, ClkI2cMstSel160m::I2cMst160m))
-            << self.phy_calibration_clocks.len())
-    }
-
-    pub(super) fn from_bits(bits: u32) -> Self {
-        let mut phy_calibration_clocks = [false; 18];
-        let mut clock = 0;
-        while clock < phy_calibration_clocks.len() {
-            phy_calibration_clocks[clock] = bits & (1 << clock) != 0;
-            clock += 1;
-        }
-        Self {
-            phy_calibration_clocks,
-            phy_i2c_160mhz: ClkI2cMstSel160m::from_field(bits >> phy_calibration_clocks.len()),
-        }
-    }
 }
 
 /// Release state of the two private IEEE 802.15.4 MAC resets.
@@ -286,11 +258,8 @@ pub struct ModemSysconBluetoothObservation {
     pub controller_resets_released: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WifiBasebandAgcUpdate {
-    Initialization,
-    RegisterUpdatesEnabled,
-}
+/// The Wi-Fi baseband AGC update modes of `MODEM_SYSCON.WIFI_BB_CFG`.
+pub use oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque as WifiBasebandAgcUpdate;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BluetoothPhysicalClock {
@@ -611,20 +580,14 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     pub fn set_bss_cbw_40_digital(&mut self, enabled: bool) {
         let state = if enabled {
-            WifiBaseband40MhzState::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Enabled
         } else {
-            WifiBaseband40MhzState::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Disabled
         };
         super::ops::set_wifi_baseband_40mhz_state(&mut self.peripherals.modem_syscon_radio, state);
     }
 
     pub fn set_bb_agc_update_mode(&mut self, mode: WifiBasebandAgcUpdate) {
-        let mode = match mode {
-            WifiBasebandAgcUpdate::Initialization => WifiBasebandAgcUpdateMode::Initialization,
-            WifiBasebandAgcUpdate::RegisterUpdatesEnabled => {
-                WifiBasebandAgcUpdateMode::RegisterUpdatesEnabled
-            }
-        };
         super::ops::set_wifi_baseband_agc_update_mode(
             &mut self.peripherals.modem_syscon_radio,
             mode,

@@ -126,10 +126,10 @@ impl<'a, P: Placement> CoexTimerBankRegisters<'a, P> {
         pti: CoexTimerPtiValue,
     ) {
         self.modify_configuration(timer, |w| {
-            w.set_parameter_1(Bits::<2>::truncate(client.get()));
+            w.set_parameter_1(client.field());
         });
         self.modify_configuration(timer, |w| {
-            w.set_parameter_2(Bits::<4>::truncate(pti.get()));
+            w.set_parameter_2(pti.field());
         });
     }
     // SOURCE: BLOB_LIBCOEX_HW_TIMER. The vendor narrows both targets to 24 bits.
