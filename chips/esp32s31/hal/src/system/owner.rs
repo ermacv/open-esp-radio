@@ -8,8 +8,7 @@ use crate::{
     radio::ieee80211::{mac as wifi_mac, station_wake::StationWakeState},
     radio::phy::i2c::PhyAdcRate,
     types::{
-        MacInterruptEnableState, MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot,
-        MacPowerInterruptSnapshot,
+        MacInterruptMask, MacInterruptRawSnapshot, MacInterruptSnapshot, MacPowerInterruptSnapshot,
     },
 };
 
@@ -451,10 +450,6 @@ impl RadioAccess {
         self.registers.read_noise_floor_dbm()
     }
 
-    pub fn access_point_receive_policy_snapshot(&self) -> wifi_mac::MacApReceivePolicySnapshot {
-        self.registers.ap_receive_policy_snapshot()
-    }
-
     pub fn receive_statistics_snapshot(&self) -> wifi_mac::MacRxStatisticsSnapshot {
         self.registers.rx_statistics_snapshot()
     }
@@ -465,19 +460,6 @@ impl RadioAccess {
 
     pub fn coex_priority_snapshot(&self) -> wifi_mac::MacCoexPrioritySnapshot {
         self.registers.mac_coex_priority_snapshot()
-    }
-
-    /// Latch one indirect SoftAP receive-BA bank through the reviewed HAL
-    /// projection without exposing its PAC owner.
-    pub fn extra_softap_rx_block_ack_entry_snapshot(
-        &mut self,
-        index: u8,
-    ) -> Option<wifi_mac::ExtraSoftApRxBlockAckEntrySnapshot> {
-        let index = types::MacExtraSoftApRxBlockAckEntryIndex::new(u32::from(index))?;
-        Some(
-            self.wifi_mac_hal()
-                .extra_softap_rx_block_ack_entry_snapshot(index),
-        )
     }
 
     /// Sample one ordinary direct receive-BA bank without exposing its PAC
@@ -581,18 +563,6 @@ impl oer_portable_mmio::InterruptSource for MacInterruptRegisters {
 }
 
 impl MacInterruptRegisters {
-    /// Observe opaque station delivery lanes on this bank's existing owner.
-    pub fn mac_opaque_interrupt_enable(
-        &self,
-    ) -> crate::radio::ieee80211::registers::MacOpaqueInterruptEnables {
-        self.inner.mac_opaque_interrupt_enable()
-    }
-
-    /// Read the three RX delivery enables independently.
-    pub fn mac_rx_interrupt_enable(&self) -> crate::radio::ieee80211::registers::MacRxInterrupts {
-        self.inner.mac_rx_interrupt_enable()
-    }
-
     /// Change only RX delivery enables; preserve other lanes and acknowledge nothing.
     pub fn set_mac_rx_interrupt_enable(
         &mut self,
@@ -609,11 +579,6 @@ impl MacInterruptRegisters {
     /// Publish one reviewed MAC interrupt mask.
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         self.inner.publish_mac_interrupt_mask(event_mask);
-    }
-
-    /// Read the currently published MAC interrupt mask.
-    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
-        self.inner.mac_interrupt_enable()
     }
 
     pub fn mac_interrupt_status(&self) -> MacInterruptSnapshot {

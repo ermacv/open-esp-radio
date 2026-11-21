@@ -2,17 +2,7 @@
 
 use oer_portable_mmio::Bits;
 
-use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, byte, halfword};
-
-/// BSS-color collision state read by the complete blob debug decoder.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeColorCollisionSnapshot {
-    pub observed_color_bitmap: u64,
-    pub collision_threshold: u8,
-    pub timeout_seconds: u8,
-    pub color_bitmap_clear: bool,
-    pub bitmap_control_high: bool,
-}
+use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, halfword};
 
 /// Ordinary receive, completion and interface counters.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -237,25 +227,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// diagnostic register bank on every wake.
     pub fn mac_rx_buffer_full_count(&self) -> u16 {
         self.mac.wifi_mac_rx_statistics.read_buffer_full().count()
-    }
-
-    /// Read the recovered HE BSS-color collision state.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_color_collision`, size `0x64`, and its format strings.
-    pub fn he_color_collision_snapshot(&self) -> MacHeColorCollisionSnapshot {
-        let colors = &self.mac.wifi_mac_he_color_collision;
-        let control = self.mac.wifi_mac_he_init_prefix.read_rx_field_control();
-        let low = colors.read_bss_color_bitmap_low().value();
-        let high = colors.read_bss_color_bitmap_high().value();
-
-        MacHeColorCollisionSnapshot {
-            observed_color_bitmap: u64::from(low) | (u64::from(high) << 32),
-            collision_threshold: byte(control.collision_threshold()),
-            timeout_seconds: byte(control.timeout_seconds()),
-            color_bitmap_clear: control.color_bitmap_clear(),
-            bitmap_control_high: control.bitmap_control_high(),
-        }
     }
 
     /// Read every statistic decoded by the complete `dbg_read_rx_count`.

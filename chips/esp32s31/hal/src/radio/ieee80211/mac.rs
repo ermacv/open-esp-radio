@@ -7,11 +7,10 @@
 use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 pub use crate::types::{
-    ExtraSoftApRxBlockAckEntrySnapshot, MacApReceivePolicySnapshot, MacCoexPrioritySnapshot,
-    MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti, MacRoleReceivePolicy,
-    MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
-    MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
-    MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode, MacStaReceivePolicySnapshot,
+    MacCoexPrioritySnapshot, MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti,
+    MacRoleReceivePolicy, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta,
+    MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxPrimaryStatistics,
+    MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode,
     MacTxPowerTable, MacTxPtiCount, MacTxPtiProgram, MacTxQueueIndex, MacTxStatisticsSnapshot,
     RxBlockAckEntrySnapshot,
 };
@@ -345,12 +344,6 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac().read_noise_floor_dbm()
     }
 
-    /// Read the reviewed ROM low-rate enable status while the runtime MAC
-    /// register authority is exclusively borrowed.
-    pub fn phy_low_rate_enabled(&self) -> bool {
-        self.pac().phy_low_rate_enabled()
-    }
-
     /// Apply the complete three-RMW ROM low-rate gate transaction.
     pub fn configure_phy_low_rate(&mut self, enabled: bool) {
         self.pac_mut().configure_phy_low_rate(enabled);
@@ -443,14 +436,6 @@ impl<'registers> WifiMacHal<'registers> {
     /// This does not claim simultaneous runtime ownership or select a channel.
     pub fn configure_sta_ap_receive_plan(&mut self, plan: MacStaApReceivePlan) {
         self.pac_mut().apply_sta_ap_receive_plan(plan);
-    }
-
-    pub fn station_receive_policy_snapshot(&self) -> MacStaReceivePolicySnapshot {
-        self.pac().sta_receive_policy_snapshot()
-    }
-
-    pub fn access_point_receive_policy_snapshot(&self) -> MacApReceivePolicySnapshot {
-        self.pac().ap_receive_policy_snapshot()
     }
 
     pub fn receive_statistics_snapshot(&self) -> MacRxStatisticsSnapshot {
@@ -827,14 +812,6 @@ impl<'registers> WifiMacHal<'registers> {
     ) {
         self.pac_mut()
             .reset_extra_softap_rx_block_ack_window(index, starting_sequence, window);
-    }
-
-    pub fn extra_softap_rx_block_ack_entry_snapshot(
-        &mut self,
-        index: MacExtraSoftApRxBlockAckEntryIndex,
-    ) -> ExtraSoftApRxBlockAckEntrySnapshot {
-        self.pac_mut()
-            .extra_softap_rx_block_ack_entry_snapshot(index)
     }
 
     pub fn set_he_trigger_based_tid_enabled(&mut self, tid: MacHeTid, enabled: bool) {

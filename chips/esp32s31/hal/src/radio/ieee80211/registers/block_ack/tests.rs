@@ -13,9 +13,13 @@ use oer_chips_esp32s31_pac::wifi_mac::{
     tx_block_ack_transmitter_address_high_q7, tx_block_ack_transmitter_address_low_q7,
 };
 
+use super::{
+    block_ack_bitmap, extra_softap_index, select_extra_softap_entry, set_extra_softap_latch,
+};
 use crate::radio::ieee80211::registers::{
-    HostWords, MacExtraSoftApRxBlockAckEntryIndex, MacInterface, MacRxBlockAckEntryIndex,
-    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow,
+    HostWords, MacExtraSoftApRxBlockAckEntryIndex, MacInterface, MacPlacement,
+    MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow,
+    WifiRadioRegisters, byte, halfword,
 };
 
 const PEER: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
@@ -261,10 +265,7 @@ fn an_extra_softap_entry_is_staged_committed_and_read_back() {
             ),
         ]
     );
-    let snapshot = words
-        .owners()
-        .registers
-        .extra_softap_rx_block_ack_entry_snapshot(index);
+    let snapshot = extra_softap_rx_block_ack_entry_snapshot(&mut words.owners().registers, index);
     assert!(snapshot.enabled && snapshot.write_enabled && snapshot.valid);
     assert_eq!(snapshot.index, 6);
     assert_eq!(snapshot.tid, 5);
@@ -385,4 +386,76 @@ fn the_internal_tx_block_ack_result_joins_its_bitmap_halves() {
     let snapshot = owners.registers.internal_tx_block_ack_snapshot();
     assert_eq!(snapshot.bitmap(), 0x0123_4567_89ab_cdef);
     assert_eq!(snapshot.tid(), 0);
+}
+
+// Reads of what the writers left, from the register image: the HAL keeps
+// no read of what it wrote.
+
+/// Latched projection of one indirect extra-SoftAP receive BlockAck bank.
+///
+/// SOURCE: complete `libpp[hal_ampdu.o]::hal_debug_read_extra_softap_rx_ba` selects each logical index through
+/// control bits 5..9, asserts agreement-update bit nine, reads the control,
+/// peer, policy and starting-sequence staging words, then releases the latch.
+/// The two bitmap words are the adjacent raw staging words used by complete
+/// `hal_agreement_clr_extra_softap_rx_ba`; they remain raw observations rather
+/// than a claimed protocol interpretation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ExtraSoftApRxBlockAckEntrySnapshot {
+    enabled: bool,
+    index: u8,
+    tid: u8,
+    write_enabled: bool,
+    valid: bool,
+    control_unknown_clear: bool,
+    peer: [u8; 6],
+    interface: MacInterface,
+    window: u8,
+    starting_sequence: u16,
+    bitmap: u64,
+}
+
+/// Latch and sample one indirect extra-SoftAP agreement without changing
+/// its committed contents.
+fn extra_softap_rx_block_ack_entry_snapshot<M: MacPlacement>(
+    registers: &mut WifiRadioRegisters<M>,
+    hardware_index: MacExtraSoftApRxBlockAckEntryIndex,
+) -> ExtraSoftApRxBlockAckEntrySnapshot {
+    let block = &mut registers.mac.wifi_mac_block_ack;
+    select_extra_softap_entry(block, extra_softap_index(hardware_index));
+    set_extra_softap_latch(block, true);
+
+    // Preserve the complete vendor diagnostic read order before sampling
+    // the two adjacent staging words.
+    let control = block.read_extra_softap_rx_block_ack_control();
+    let peer_head = block
+        .read_extra_softap_rx_block_ack_peer_head()
+        .peer_address_head();
+    let peer_tail_and_policy = block.read_extra_softap_rx_block_ack_peer_tail_and_policy();
+    let starting_sequence = block
+        .read_extra_softap_rx_block_ack_start_sequence()
+        .sequence();
+    let _ = block.read_extra_softap_rx_block_ack_peer_head();
+    let _ = block.read_extra_softap_rx_block_ack_control();
+    let bitmap_low = block.read_extra_softap_rx_block_ack_bitmap_low().bitmap();
+    let bitmap_high = block.read_extra_softap_rx_block_ack_bitmap_high().bitmap();
+
+    set_extra_softap_latch(block, false);
+
+    let [h0, h1, h2, h3] = peer_head.to_le_bytes();
+    let [t0, t1] = peer_tail_and_policy.peer_address_tail().to_le_bytes();
+    ExtraSoftApRxBlockAckEntrySnapshot {
+        enabled: control.enable(),
+        index: byte(control.index()),
+        tid: byte(control.tid()),
+        write_enabled: control.write(),
+        valid: control.valid(),
+        control_unknown_clear: control.bits_1_4_opaque().get() == 0
+            && control.bits_10_11_opaque().get() == 0
+            && control.bits_16_29_opaque().get() == 0,
+        peer: [h0, h1, h2, h3, t0, t1],
+        interface: MacInterface::from(peer_tail_and_policy.interface()),
+        window: byte(peer_tail_and_policy.window()),
+        starting_sequence: halfword(starting_sequence),
+        bitmap: block_ack_bitmap(bitmap_low, bitmap_high),
+    }
 }

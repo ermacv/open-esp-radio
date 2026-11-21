@@ -7,7 +7,9 @@ use super::{
     ACCESS_POINT, COLD_RECEIVE_QUEUE_INTERFACES, MacRoleReceivePolicy, MacStaPolicyMode, SNIFFER,
     STATION, clear_cold_interface_address,
 };
-use crate::radio::ieee80211::registers::{HostWords, MacInterface};
+use crate::radio::ieee80211::registers::{
+    HostWords, MacInterface, MacPlacement, WifiRadioRegisters, byte,
+};
 
 const BSSID: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
 
@@ -92,7 +94,7 @@ fn station_policy_six_publishes_the_bssid_and_enables_its_checks() {
             bssid: BSSID,
             mode: MacStaPolicyMode::Mode1,
         });
-    let snapshot = owners.registers.sta_receive_policy_snapshot();
+    let snapshot = sta_receive_policy_snapshot(&owners.registers);
     assert_eq!(snapshot.bssid, BSSID);
     assert!(snapshot.bssid_address_check_enabled);
     assert!(!snapshot.interface_is_soft_ap);
@@ -104,7 +106,7 @@ fn station_policy_six_publishes_the_bssid_and_enables_its_checks() {
     owners
         .registers
         .apply_role_receive_policy(MacRoleReceivePolicy::StationDisabled);
-    let snapshot = owners.registers.sta_receive_policy_snapshot();
+    let snapshot = sta_receive_policy_snapshot(&owners.registers);
     assert_eq!(snapshot.bssid, BSSID, "the BSSID bank is retained");
     assert!(!snapshot.bssid_address_check_enabled && !snapshot.interface_rx_policy_enabled);
     let filter = owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION);
@@ -163,17 +165,17 @@ fn disabling_the_access_point_keeps_the_station_context() {
     owners
         .registers
         .apply_sta_policy_six(BSSID, MacStaPolicyMode::Mode1);
-    let station = owners.registers.sta_receive_policy_snapshot();
+    let station = sta_receive_policy_snapshot(&owners.registers);
     let station_filter = owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION);
     owners
         .registers
         .apply_role_receive_policy(MacRoleReceivePolicy::AccessPointDisabled);
-    assert_eq!(owners.registers.sta_receive_policy_snapshot(), station);
+    assert_eq!(sta_receive_policy_snapshot(&owners.registers), station);
     assert_eq!(
         owners.registers.mac.wifi_mac_rx_filter.read_policy(STATION),
         station_filter
     );
-    let ap = owners.registers.ap_receive_policy_snapshot();
+    let ap = ap_receive_policy_snapshot(&owners.registers);
     assert!(ap.interface_is_soft_ap);
     assert!(!ap.bssid_address_check_enabled && !ap.interface_rx_policy_enabled);
     let ap_filter = owners
@@ -201,4 +203,88 @@ fn closing_promiscuous_receive_restores_queue_three_filtering_and_auto_ack() {
     assert!(filter.receive_broadcast_check_bssid() && filter.receive_unicast_check_da());
     drop(owners);
     assert_eq!(before.changes(&after).len(), 1);
+}
+
+// Reads of what the writers left, from the register image: the HAL keeps
+// no read of what it wrote.
+
+/// Read-only associated-STA receive-policy evidence.
+///
+/// Only reviewed semantic fields cross the HAL boundary. Complete policy
+/// register images stay private because several bits are still
+/// undocumented and no production decision consumes them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MacStaReceivePolicySnapshot {
+    bssid: [u8; 6],
+    association_id: u16,
+    minimum_mpdu_start_spacing: u8,
+    bssid_address_check_enabled: bool,
+    interface_is_soft_ap: bool,
+    interface_rx_policy_enabled: bool,
+    beacon_filter_enabled: bool,
+    broadcast_wakeup_enabled: bool,
+    unicast_wakeup_enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MacApReceivePolicySnapshot {
+    bssid: [u8; 6],
+    bssid_address_check_enabled: bool,
+    interface_is_soft_ap: bool,
+    interface_rx_policy_enabled: bool,
+}
+
+fn ap_receive_policy_snapshot<M: MacPlacement>(
+    registers: &WifiRadioRegisters<M>,
+) -> MacApReceivePolicySnapshot {
+    let bssids = &registers.mac.wifi_mac_bssid_policy;
+    let bssid_high = bssids.read_bssid_high(ACCESS_POINT);
+    MacApReceivePolicySnapshot {
+        bssid: bssid(bssids, ACCESS_POINT),
+        bssid_address_check_enabled: bssid_high.address_check_enable(),
+        interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
+        interface_rx_policy_enabled: registers
+            .interface
+            .read_address_high(MacInterface::AccessPoint.index())
+            .rx_policy_enable(),
+    }
+}
+
+/// Snapshot every register frontier that can suppress associated-STA
+/// beacons while still admitting directed management traffic.
+fn sta_receive_policy_snapshot<M: MacPlacement>(
+    registers: &WifiRadioRegisters<M>,
+) -> MacStaReceivePolicySnapshot {
+    let bssids = &registers.mac.wifi_mac_bssid_policy;
+    let bssid_high = bssids.read_bssid_high(STATION);
+    let interface = registers
+        .interface
+        .read_address_high(MacInterface::Station.index());
+
+    let bssid = bssid(bssids, STATION);
+    let beacon_filter = registers
+        .mac
+        .wifi_mac_sta_beacon_filter
+        .read_sta_beacon_filter_control();
+    MacStaReceivePolicySnapshot {
+        bssid,
+        association_id: crate::radio::ieee80211::registers::halfword(bssid_high.association_id()),
+        minimum_mpdu_start_spacing: byte(bssid_high.minimum_mpdu_start_spacing()),
+        bssid_address_check_enabled: bssid_high.address_check_enable(),
+        interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
+        interface_rx_policy_enabled: interface.rx_policy_enable(),
+        beacon_filter_enabled: beacon_filter.beacon_filter_enable(),
+        broadcast_wakeup_enabled: beacon_filter.broadcast_wakeup_enable(),
+        unicast_wakeup_enabled: beacon_filter.unicast_wakeup_enable(),
+    }
+}
+
+/// The six BSSID bytes of one bank.
+fn bssid<P: oer_portable_mmio::Placement>(
+    bssids: &oer_chips_esp32s31_pac::wifi_mac::WifiMacBssidPolicy<P>,
+    bank: oer_portable_mmio::Index<4>,
+) -> [u8; 6] {
+    let [b0, b1, b2, b3] = bssids.read_bssid_low(bank).bytes_0_3().to_le_bytes();
+    let [b4, b5] = bssids.read_bssid_high(bank).bssid_high().to_le_bytes();
+    [b0, b1, b2, b3, b4, b5]
 }

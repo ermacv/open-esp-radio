@@ -1,10 +1,9 @@
-use crate::radio::ieee80211::registers::{
-    HostWords, MacInterruptMask, interrupt::MacInterruptEnableState,
-};
+use crate::radio::ieee80211::registers::{HostWords, MacInterruptMask};
+use oer_chips_esp32s31_pac::wifi_mac::WifiMacInterrupt;
+use oer_portable_mmio::Placement;
 
 #[test]
 fn opaque_enables_distinguish_unknown_images_without_writing_the_bank() {
-    use super::MacOpaqueInterruptEnables;
     let mut words = HostWords::filled(0);
     for selected in 0..16 {
         {
@@ -17,7 +16,7 @@ fn opaque_enables_distinguish_unknown_images_without_writing_the_bank() {
             });
         }
         let before = words.clone();
-        let observed = words.owners().mac_interrupt.mac_opaque_interrupt_enable();
+        let observed = opaque_interrupt_enable(&words.owners().mac_interrupt.mac);
         assert_eq!(
             observed,
             MacOpaqueInterruptEnables {
@@ -94,7 +93,7 @@ fn individual_rx_enables_preserve_unrelated_delivery_and_raw_observation() {
         .mac_interrupt
         .set_mac_rx_interrupt_enable(MacRxLane::Auxiliary24.set());
     assert_eq!(
-        owners.mac_interrupt.mac_rx_interrupt_enable(),
+        rx_interrupt_enable(&owners.mac_interrupt.mac),
         MacRxLane::Auxiliary24.set()
     );
     assert!(owners.mac_interrupt.mac.read_enable().tx_complete());
@@ -125,7 +124,7 @@ fn publishing_the_station_mask_writes_its_image_and_reads_back_as_station() {
         let enable = owners.mac_interrupt.mac.read_enable();
         assert!(enable.tx_complete() && !enable.tx_queue_collision());
         assert_eq!(
-            owners.mac_interrupt.mac_interrupt_enable(),
+            observe_mac_interrupt_enable(&owners.mac_interrupt.mac),
             MacInterruptEnableState::Station
         );
     }
@@ -159,7 +158,7 @@ fn masking_a_bank_writes_the_zero_enable_and_clears_nothing() {
         owners.mac_interrupt.mask_all_mac_interrupts();
         owners.power_interrupt.mask_all_power_interrupts();
         assert_eq!(
-            owners.mac_interrupt.mac_interrupt_enable(),
+            observe_mac_interrupt_enable(&owners.mac_interrupt.mac),
             MacInterruptEnableState::Disabled
         );
     }
@@ -228,7 +227,7 @@ fn the_rx_delivery_group_masks_and_unmasks_alone() {
     assert!(enable.tx_complete(), "TX stays live");
     owners.mac_interrupt.unmask_rx_delivery_interrupts();
     assert_eq!(
-        owners.mac_interrupt.mac_interrupt_enable(),
+        observe_mac_interrupt_enable(&owners.mac_interrupt.mac),
         MacInterruptEnableState::Station
     );
 }
@@ -340,7 +339,7 @@ fn fatal_raw_is_visible_while_status_and_delivery_are_masked() {
             .is_empty()
     );
     assert_eq!(
-        owners.mac_interrupt.mac_interrupt_enable(),
+        observe_mac_interrupt_enable(&owners.mac_interrupt.mac),
         MacInterruptEnableState::Disabled
     );
     assert!(
@@ -350,4 +349,94 @@ fn fatal_raw_is_visible_while_status_and_delivery_are_masked() {
             .fatal_assertion_raw()
             .is_some()
     );
+}
+
+// What the writers left in ENABLE, read from the register image: the HAL
+// keeps no read of what it wrote.
+
+/// Classified field-level readback of the MAC interrupt enable register.
+///
+/// Unknown images are retained as an explicit state instead of reconstructing
+/// a handwritten integer register image from the generated field accessors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacInterruptEnableState {
+    /// Every interrupt-enable field is clear.
+    Disabled,
+    /// Station primary mask with TX queue collision disabled.
+    Station,
+    /// A field combination outside the reviewed writable images.
+    Unknown,
+}
+
+/// Independently observed delivery enables whose physical causes remain opaque.
+/// These are values from one ENABLE read, with no acknowledgement authority.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct MacOpaqueInterruptEnables {
+    lane_6: bool,
+    lane_12: bool,
+    lane_13: bool,
+    lane_23: bool,
+}
+
+fn observe_mac_interrupt_enable<P: Placement>(
+    interrupt: &WifiMacInterrupt<P>,
+) -> MacInterruptEnableState {
+    let enable = interrupt.read_enable();
+    let fixed_clear = enable.bits_0_4_opaque().get() == 0
+        && !enable.tx_queue_collision()
+        && enable.bits_9_10_opaque().get() == 0
+        && !enable.sta_beacon_filter()
+        && enable.bits_16_18_opaque().get() == 0
+        && !enable.bit_20_opaque()
+        && !enable.bit_22_opaque()
+        && enable.bits_25_26_opaque().get() == 0
+        && enable.bits_29_31_opaque().get() == 0;
+    let station_fields = [
+        enable.rx_associated_auxiliary_5(),
+        enable.bit_6_opaque(),
+        enable.tx_complete(),
+        enable.watchdog(),
+        enable.bit_12_opaque(),
+        enable.bit_13_opaque(),
+        enable.rx_success(),
+        enable.tx_timeout(),
+        enable.fatal_assertion(),
+        enable.bit_23_opaque(),
+        enable.rx_associated_auxiliary_24(),
+        enable.wdev_timer_0(),
+        enable.wdev_timer_1(),
+    ];
+    if fixed_clear && station_fields.iter().all(|set| !set) {
+        MacInterruptEnableState::Disabled
+    } else if fixed_clear && station_fields.iter().all(|set| *set) {
+        MacInterruptEnableState::Station
+    } else {
+        MacInterruptEnableState::Unknown
+    }
+}
+
+fn opaque_interrupt_enable<P: Placement>(
+    interrupt: &WifiMacInterrupt<P>,
+) -> MacOpaqueInterruptEnables {
+    let value = interrupt.read_enable();
+    MacOpaqueInterruptEnables {
+        lane_6: value.bit_6_opaque(),
+        lane_12: value.bit_12_opaque(),
+        lane_13: value.bit_13_opaque(),
+        lane_23: value.bit_23_opaque(),
+    }
+}
+
+fn rx_interrupt_enable<P: Placement>(interrupt: &WifiMacInterrupt<P>) -> super::MacRxInterrupts {
+    use super::{MacRxInterrupts, MacRxLane};
+    let value = interrupt.read_enable();
+    MacRxInterrupts::of_bit(value.rx_associated_auxiliary_5(), MacRxLane::Auxiliary5)
+        .union(MacRxInterrupts::of_bit(
+            value.rx_success(),
+            MacRxLane::Success,
+        ))
+        .union(MacRxInterrupts::of_bit(
+            value.rx_associated_auxiliary_24(),
+            MacRxLane::Auxiliary24,
+        ))
 }

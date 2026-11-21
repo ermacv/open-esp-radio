@@ -521,8 +521,8 @@ pub mod tx;
 pub mod txrx_init;
 
 pub use block_ack::{
-    ExtraSoftApRxBlockAckEntrySnapshot, InternalTxBlockAckSnapshot, RxBlockAckEntrySnapshot,
-    TxBlockAckDiagnosticSnapshot, TxBlockAckPayload,
+    InternalTxBlockAckSnapshot, RxBlockAckEntrySnapshot, TxBlockAckDiagnosticSnapshot,
+    TxBlockAckPayload,
 };
 pub use coex::init::MacCoexPrioritySnapshot;
 pub use crypto::{MacCcmpKeyIdentity, MacKeyInstallOutcome, MacSppMode};
@@ -533,33 +533,26 @@ pub use he::{
     },
     init_suffix::{MAC_MINIMUM_TX_POWER_DBM, MacHeTxMpduLengthLink},
     ofdma::{
-        MacBeamformingAverageSnr, MacHeBeamformingConfigurationSnapshot,
-        MacHeBeamformingDiagnostics, MacHeBufferStatusSnapshot, MacHeCustomReceiveType,
-        MacHeEdcaQueueConfiguration, MacHeMuEdcaTimerSnapshot, MacHeQueueSchedulingSnapshot,
-        MacHeReceiveConfigurationSnapshot, MacHeRxPowerSaveSnapshot, MacHeTbLinkReservation,
-        MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTriggerQueueConfiguration,
-        MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot,
+        MacBeamformingAverageSnr, MacHeBeamformingDiagnostics, MacHeTbLinkReservation,
+        MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTriggerRxDiagnostics,
+        MacHeTriggerTxQueueSnapshot,
     },
     peer::{MacHeAssociation, MacHePeerConfig},
     tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},
 };
 pub use interrupt::{
-    ConnectedStaWithoutPowerSavePrepared, MacInterruptCause, MacInterruptEnableState,
-    MacInterruptEvents, MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptRegisters,
-    MacInterruptSideEvent, MacInterruptSnapshot, MacOpaqueInterruptEnables, MacPowerInterruptCause,
-    MacPowerInterruptObservation, MacPowerInterruptRegisters, MacPowerInterruptSnapshot,
-    MacRxInterrupts, MacRxLane,
+    ConnectedStaWithoutPowerSavePrepared, MacInterruptCause, MacInterruptEvents,
+    MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptRegisters, MacInterruptSideEvent,
+    MacInterruptSnapshot, MacPowerInterruptCause, MacPowerInterruptObservation,
+    MacPowerInterruptRegisters, MacPowerInterruptSnapshot, MacRxInterrupts, MacRxLane,
 };
 pub use rx::{
     dma::MacRxNextDescriptorObservation,
-    policy::{
-        MacApReceivePolicySnapshot, MacRoleReceivePolicy, MacStaApReceivePlan, MacStaPolicyMode,
-        MacStaReceivePolicySnapshot,
-    },
+    policy::{MacRoleReceivePolicy, MacStaApReceivePlan, MacStaPolicyMode},
     statistics::{
-        MacHeColorCollisionSnapshot, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta,
-        MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxPrimaryStatistics,
-        MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot,
+        MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
+        MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
+        MacRxStatisticsSnapshot,
     },
 };
 pub use tsf::StaTbttSchedule;
