@@ -34,6 +34,31 @@ pub use crate::radio::ieee80211::registers::{
     TxBlockAckPayload,
 };
 
+/// The generated names the HAL's public functions and fields take, under
+/// the HAL's own names where the PAC's are generic.
+pub use oer_chips_esp32s31_pac::{
+    wifi_bb_brx::dictionaries::LowRate as PhyLowRate,
+    wifi_mac::control::PowerSaveTxBlock as MacPowerSaveTxBlock,
+    wifi_mac::dictionaries::{
+        BfReportDcm as MacHeBeamformingReportDcm, BfReportErsu as MacHeBeamformingReportErsu,
+        ErsuAckRate as MacHeErsuAckRate, TriggerBasedTid as MacHeTriggerBasedTid,
+    },
+    wifi_mac::ersu_and_vht_control::{
+        AutoAckAllowErsu as MacHeAutoAckErsu, TbCareCcaAndNav as MacHeTbCareCcaAndNav,
+    },
+    wifi_mac::he_default_control::{
+        UlMuDataDisable as MacHeUplinkMultiUserDataDisable,
+        UlMuDisable as MacHeUplinkMultiUserDisable,
+    },
+    wifi_mac::he_su_signal_a1::GiLtf as MacHeGiLtf,
+    wifi_mac::length_control::RtsRate as MacRtsRate,
+    wifi_mac::multi_bssid_control::{
+        BssColorEnable as MacHeBssColorEnable, PartialBssColorEnable as MacHePartialBssColorEnable,
+    },
+    wifi_mac::plcp1::Rate as MacPlcpRate,
+    wifi_mac::pti::Txop as MacTxop,
+};
+
 pub use crate::radio::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
     RxDcoControlPrepareError, RxDcoControlRestoreError, TxDcPwdetLifecycleError,

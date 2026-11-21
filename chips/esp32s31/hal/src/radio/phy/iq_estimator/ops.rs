@@ -6,7 +6,7 @@ use oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle;
 use oer_portable_mmio::{Bits, Placement};
 
 /// Capture only the software fields this engine changes.
-pub fn capture_configuration<P: Placement>(
+pub(crate) fn capture_configuration<P: Placement>(
     estimator: &PhyIqEstimatorOracle<P>,
 ) -> super::Configuration {
     super::Configuration {
@@ -16,7 +16,7 @@ pub fn capture_configuration<P: Placement>(
 }
 
 /// Restore the named fields; unrelated and unassigned lanes retain their current values.
-pub fn restore_configuration<P: Placement>(
+pub(crate) fn restore_configuration<P: Placement>(
     estimator: &mut PhyIqEstimatorOracle<P>,
     saved: super::Configuration,
 ) {
@@ -45,7 +45,9 @@ pub fn restore_configuration<P: Placement>(
 
 /// SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR, BLOB_LIBPHY_PHY_CHECK_RX_SAT.
 /// Both observations are exposed without assigning an electrical identity to the pair.
-pub fn sample_indications<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> super::Indications {
+pub(crate) fn sample_indications<P: Placement>(
+    estimator: &PhyIqEstimatorOracle<P>,
+) -> super::Indications {
     let ready = estimator.read_estimator_ready_status().ready();
     let opaque_pair = estimator.read_word_08d0_opaque().bits_20_21_opaque().get() as u8;
     super::Indications { ready, opaque_pair }
@@ -56,7 +58,7 @@ pub fn sample_indications<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> 
 /// Complete `phy_iq_est_enable` performs three separate fresh-read RMW
 /// operations in this order. Bit 15 of `control` is discarded by the ROM
 /// shift and mask, as the fifteen-bit control window keeps it.
-pub fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, control: u16) {
+pub(crate) fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, control: u16) {
     // SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR, S31_ESP_PACS_SVD.
     estimator.modify_estimator_config(|w| {
         w.set_bits_26_27_opaque(Bits::constant::<0x1>());
@@ -72,7 +74,10 @@ pub fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, control:
 }
 
 /// Set or clear the first estimator-enable phase through one fresh RMW.
-pub fn set_start_enabled<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, enabled: bool) {
+pub(crate) fn set_start_enabled<P: Placement>(
+    estimator: &mut PhyIqEstimatorOracle<P>,
+    enabled: bool,
+) {
     estimator.modify_estimator_control(|w| {
         w.set_start_enable(if enabled {
             oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
@@ -83,7 +88,7 @@ pub fn set_start_enabled<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, 
 }
 
 /// Set or clear the second estimator-enable phase through one fresh RMW.
-pub fn set_measurement_enabled<P: Placement>(
+pub(crate) fn set_measurement_enabled<P: Placement>(
     estimator: &mut PhyIqEstimatorOracle<P>,
     enabled: bool,
 ) {
@@ -100,14 +105,16 @@ pub fn set_measurement_enabled<P: Placement>(
 ///
 /// Complete ROM `phy_iq_est_enable` returns immediately from a ready
 /// observation. Its activity read belongs only to the not-ready branch.
-pub fn sample_readiness<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> (bool, bool) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn sample_readiness<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> (bool, bool) {
     let ready = estimator.read_estimator_ready_status().ready();
     let activity = !ready && active(estimator);
     (ready, activity)
 }
 
 /// Read I, Q and power accumulators in complete `phy_dc_iq_est` order.
-pub fn read_dc_accumulators<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 3] {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn read_dc_accumulators<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 3] {
     let i = estimator.read_dc_i_accumulator().value().cast_signed();
     let q = estimator.read_dc_q_accumulator().value().cast_signed();
     let power = estimator.read_power_accumulator().value().cast_signed();
@@ -115,7 +122,8 @@ pub fn read_dc_accumulators<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -
 }
 
 /// Read the signed total-power accumulator exactly once.
-pub fn read_total_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> i32 {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn read_total_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> i32 {
     estimator.read_power_accumulator().value().cast_signed()
 }
 
@@ -124,7 +132,8 @@ pub fn read_total_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> i3
 /// The returned semantic order is sum-I, difference-I, difference-Q,
 /// sum-Q. The hardware reads remain sum-I, sum-Q, difference-Q,
 /// difference-I as proved by the complete rev0 ROM body.
-pub fn read_rxiq_mismatch<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 4] {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn read_rxiq_mismatch<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 4] {
     let sum_i = estimator.read_signal_power_sum_i().value().cast_signed();
     let sum_q = estimator.read_signal_power_sum_q().value().cast_signed();
     let difference_q = estimator
@@ -143,7 +152,8 @@ pub fn read_rxiq_mismatch<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> 
 /// Hardware reads remain sum-I, sum-Q, difference-I, difference-Q. The
 /// returned common semantic order is sum-I, difference-I, difference-Q,
 /// sum-Q.
-pub fn read_signal_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 4] {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn read_signal_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [i32; 4] {
     let sum_i = estimator.read_signal_power_sum_i().value().cast_signed();
     let sum_q = estimator.read_signal_power_sum_q().value().cast_signed();
     let difference_i = estimator
@@ -160,6 +170,7 @@ pub fn read_signal_power<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> [
 /// Sample the opaque indication pair once; its nonzero predicate is not busy.
 ///
 /// The bounded 100-sample policy remains in the upper PHY transition.
-pub fn active<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> bool {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn active<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> bool {
     estimator.read_word_08d0_opaque().bits_20_21_opaque().get() != 0
 }

@@ -448,7 +448,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_baseband_and_mac_reset(&mut self, reset: Reset) {
+    pub(crate) fn set_wifi_baseband_and_mac_reset(&mut self, reset: Reset) {
         super::ops::set_wifi_baseband_and_mac_reset(
             &mut self.peripherals.modem_syscon_clock_reset,
             reset,
@@ -456,7 +456,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_baseband_reset(&mut self, reset: Reset) {
+    pub(crate) fn set_wifi_baseband_reset(&mut self, reset: Reset) {
         super::ops::set_wifi_baseband_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
@@ -587,7 +587,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_mac_reset(&mut self, reset: Reset) {
+    pub(crate) fn set_wifi_mac_reset(&mut self, reset: Reset) {
         super::ops::set_wifi_mac_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
@@ -605,7 +605,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         )
     }
 
-    pub fn set_wifi_baseband_enabled(&mut self, enable: WifiEnable) {
+    pub(crate) fn set_wifi_baseband_enabled(&mut self, enable: WifiEnable) {
         super::ops::set_wifi_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
     }
 
@@ -631,7 +631,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         );
     }
 
-    pub fn set_mac_baseband_enabled(&mut self, enable: Bit28Opaque) {
+    pub(crate) fn set_mac_baseband_enabled(&mut self, enable: Bit28Opaque) {
         super::ops::set_mac_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
     }
 
@@ -639,16 +639,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         self.set_mac_baseband_enabled(Bit28Opaque::Enabled);
         self.set_wifi_baseband_enabled(WifiEnable::Disabled);
         self.set_wifi_baseband_enabled(WifiEnable::Enabled);
-    }
-
-    #[doc(hidden)]
-    pub fn set_ieee802154_mac_reset(&mut self, reset: Reset) {
-        super::ops::set_ieee802154_mac_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
-    }
-
-    #[doc(hidden)]
-    pub fn set_ieee802154_apb_reset(&mut self, reset: Reset) {
-        super::ops::set_ieee802154_apb_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
     #[doc(hidden)]

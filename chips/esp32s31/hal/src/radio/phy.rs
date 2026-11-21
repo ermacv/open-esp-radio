@@ -58,4 +58,5 @@ mod ops_tests;
 pub mod registers;
 pub use registers::RadioPhyRegisters;
 
+#[cfg(target_arch = "riscv32")]
 pub(crate) mod sequence;

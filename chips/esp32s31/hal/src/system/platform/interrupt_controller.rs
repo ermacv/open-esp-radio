@@ -593,8 +593,13 @@ pub struct InterruptController<
 pub type Hart1Controller = InterruptController<InterruptCore1, 1>;
 /// Hart 0's grant.
 pub type Hart0Grant = InterruptGrant<InterruptCore0, 0>;
-/// Hart 1's grant.
-pub type Hart1Grant = InterruptGrant<InterruptCore1, 1>;
+/// Hart 1's grant, over its bank's, its CLIC's and its pending bytes'
+/// placements.
+pub type Hart1Grant<
+    M = Fixed<{ instances::interrupt_core1::BASE }>,
+    K = Fixed<{ instances::clic::BASE }>,
+    G = &'static ClicPending<1>,
+> = InterruptGrant<InterruptCore1<M>, 1, K, G>;
 
 impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> Controller
     for InterruptController<B, H, C, P>

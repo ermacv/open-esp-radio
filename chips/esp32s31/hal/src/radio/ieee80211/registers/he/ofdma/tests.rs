@@ -49,6 +49,22 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
     assert!(seen.into_iter().all(core::convert::identity));
 }
 
+/// Each multi-TID range takes its capacity and refuses one entry more:
+/// the last range's 24 ends at the table's 120th entry.
+#[test]
+fn each_default_trigger_link_range_refuses_one_more_than_its_capacity() {
+    for (queue, capacity) in [32, 32, 32, 24].into_iter().enumerate() {
+        let queue = Index::new(queue).unwrap();
+        assert!(
+            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, queue, capacity).is_some()
+        );
+        assert_eq!(
+            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, queue, capacity + 1),
+            None
+        );
+    }
+}
+
 #[test]
 fn single_tid_trigger_link_ranges_match_the_blob_tables() {
     let expected = [(64, 18), (82, 18), (0, 64), (100, 18)];
@@ -213,7 +229,7 @@ fn a_tid_bit_and_the_obss_disable_are_published() {
     let mut owners = words.owners();
     owners.registers.set_he_trigger_based_tid_enabled(
         MacHeTid::new(6).expect("a TID"),
-        oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled,
+        crate::types::MacHeTriggerBasedTid::Enabled,
     );
     let snapshot = he_buffer_status_snapshot(&owners.registers);
     assert_eq!(
@@ -385,22 +401,14 @@ fn he_buffer_status_snapshot<M: MacPlacement>(
             control.valid_7(),
         ],
         trigger_based_tid_enabled: [
-            (control.trigger_based_tid_0_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_1_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_2_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_3_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_4_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_5_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_6_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
-            (control.trigger_based_tid_7_enabled()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_0_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_1_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_2_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_3_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_4_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_5_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_6_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
+            (control.trigger_based_tid_7_enabled() == crate::types::MacHeTriggerBasedTid::Enabled),
         ],
         ac_empty_software_tid: byte(control.ac_empty_software_tid()),
         ac_empty_uses_software_tid: control.ac_empty_use_software_tid(),
@@ -441,8 +449,9 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
 
     MacHeReceiveConfigurationSnapshot {
         bss_color: byte(multi.bss_color()),
-        bss_color_enabled: (multi.bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled),
-        partial_bss_color_enabled: (multi.partial_bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled),
+        bss_color_enabled: (multi.bss_color_enable() == crate::types::MacHeBssColorEnable::Enabled),
+        partial_bss_color_enabled: (multi.partial_bss_color_enable()
+            == crate::types::MacHePartialBssColorEnable::Enabled),
         bssid_select: byte(multi.bssid_select()),
         he_bssid_enabled: multi.he_bssid_enable(),
         multi_bssid_enabled: multi.multi_bssid_enable(),
@@ -455,10 +464,13 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
         bsr_update_enabled: options2.bsr_update_enable(),
         trigger_based_stop_option: options2.tb_stop_option(),
         trigger_response_scheduling_supported: options2.he_trs_support(),
-        uplink_mu_data_disabled: (options2.ul_mu_data_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled),
-        uplink_mu_disabled: (options2.ul_mu_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled),
+        uplink_mu_data_disabled: (options2.ul_mu_data_disable()
+            == crate::types::MacHeUplinkMultiUserDataDisable::Disabled),
+        uplink_mu_disabled: (options2.ul_mu_disable()
+            == crate::types::MacHeUplinkMultiUserDisable::Disabled),
         trigger_based_no_resource_continue_tx: options1.tb_no_resource_continue_tx(),
-        automatic_ack_allows_extended_range_su: (options1.auto_ack_allow_ersu() == oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed),
+        automatic_ack_allows_extended_range_su: (options1.auto_ack_allow_ersu()
+            == crate::types::MacHeAutoAckErsu::Allowed),
         he_response_ack: options1.he_response_ack(),
         nominal_packet_padding_duration: [
             byte(padding.bpsk_duration()),

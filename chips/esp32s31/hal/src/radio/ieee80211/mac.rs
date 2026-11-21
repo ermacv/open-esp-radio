@@ -164,9 +164,8 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn disable_phy_low_rate(&mut self) {
-        self.mac().configure_phy_low_rate(
-            oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Disabled,
-        );
+        self.mac()
+            .configure_phy_low_rate(crate::types::PhyLowRate::Disabled);
     }
 
     pub fn configure_open_promiscuous_receive(&mut self) {
@@ -346,10 +345,7 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Apply the complete three-RMW ROM low-rate gate transaction.
-    pub fn configure_phy_low_rate(
-        &mut self,
-        state: oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate,
-    ) {
+    pub fn configure_phy_low_rate(&mut self, state: crate::types::PhyLowRate) {
         self.pac_mut().configure_phy_low_rate(state);
     }
 
@@ -537,10 +533,7 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Block or unblock the TX queues for station power management.
-    pub fn set_power_save_tx_block(
-        &mut self,
-        block: oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock,
-    ) {
+    pub fn set_power_save_tx_block(&mut self, block: crate::types::MacPowerSaveTxBlock) {
         self.pac_mut().set_power_save_tx_block(block);
     }
 
@@ -567,8 +560,8 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn connect_he_bss(
         &mut self,
         color: crate::types::MacHeBssColor,
-        enabled: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable,
-        partial: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable,
+        enabled: crate::types::MacHeBssColorEnable,
+        partial: crate::types::MacHePartialBssColorEnable,
     ) {
         self.pac_mut().connect_he_bss(color, enabled, partial)
     }
@@ -600,10 +593,7 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Publish the matching reviewed ER-SU ACK-rate register image.
-    pub fn set_he_ersu_ack_rate_profile(
-        &mut self,
-        profile: oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate,
-    ) {
+    pub fn set_he_ersu_ack_rate_profile(&mut self, profile: crate::types::MacHeErsuAckRate) {
         self.pac_mut().set_he_ersu_ack_rate_profile(profile);
     }
 
@@ -828,7 +818,7 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn set_he_trigger_based_tid_enabled(
         &mut self,
         tid: MacHeTid,
-        state: oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid,
+        state: crate::types::MacHeTriggerBasedTid,
     ) {
         self.pac_mut().set_he_trigger_based_tid_enabled(tid, state);
     }

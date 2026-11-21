@@ -54,8 +54,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// fresh-read RMWs, preserved below.
     pub fn set_he_uplink_multi_user_disable(
         &mut self,
-        ul_mu_disabled: oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable,
-        ul_mu_data_disabled: oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable,
+        ul_mu_disabled: crate::types::MacHeUplinkMultiUserDisable,
+        ul_mu_data_disabled: crate::types::MacHeUplinkMultiUserDataDisable,
     ) {
         let control = &mut self.mac.wifi_mac_he_init_suffix;
         control.modify_he_default_control(|w| {

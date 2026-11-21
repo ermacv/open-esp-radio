@@ -6,6 +6,7 @@ use crate::{
     system::owner::{SharedPhyAccess, SharedPhyContext},
 };
 
+#[cfg(any(test, target_arch = "riscv32"))]
 pub mod ops;
 
 /// Apply one finite force-TX/RX phase around its caller-owned delay edge.

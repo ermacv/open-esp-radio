@@ -29,7 +29,9 @@ use oer_portable_mmio::{Bits, Fixed, Index, Placement};
 use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{
     peripherals::reset_cause::{ResetCause, ResetCauses},
-    system::platform::{InterruptGrant, PendingBytes, core_control::CoreControlRegisters},
+    system::platform::{
+        Hart1Grant, InterruptGrant, PendingBytes, core_control::CoreControlRegisters,
+    },
 };
 
 /// The runtime root's one-shot authority to start a secondary hart. Not
@@ -110,7 +112,7 @@ impl<M: Placement, K: Placement, G: PendingBytes<1>> Released<M, K, G> {
     /// Move the hart's interrupt grant out, once: `None` after. Only the
     /// hart can make a controller from it
     /// ([`InterruptGrant::into_controller`]).
-    pub fn take_interrupts(&mut self) -> Option<InterruptGrant<InterruptCore1<M>, 1, K, G>> {
+    pub fn take_interrupts(&mut self) -> Option<Hart1Grant<M, K, G>> {
         self.interrupts.take()
     }
 }

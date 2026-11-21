@@ -266,7 +266,7 @@ pub struct RadioPhyRegisters<P: RadioPlacement = ChipPlacement> {
 impl RadioPhyRegisters {
     /// Consume the generated ownership partitions of the PHY and the
     /// analog-I2C bus, with a copy of the MAC local-time read.
-    pub fn new(
+    pub(crate) fn new(
         parts: oer_chips_esp32s31_pac::ownership::RadioPhyPeripherals,
         analog_bus: oer_chips_esp32s31_pac::ownership::AnalogBusPeripherals,
         mac_local_time: crate::radio::ieee80211::registers::MacLocalTime,

@@ -4,7 +4,9 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{ClockRegisters, PhyPlacement};
+#[cfg(any(test, target_arch = "riscv32"))]
 use oer_chips_esp32s31_pac::fe::PhyMemory;
+#[cfg(any(test, target_arch = "riscv32"))]
 use oer_portable_mmio::{Bits, Index, Placement};
 
 /// Parameter-dependent first PBUS table word (`phy_set_pbus_mem`).
@@ -148,6 +150,7 @@ pub enum PhyMemoryError {
 /// The largest ten-bit PBUS-memory command.
 ///
 /// SOURCE: ROM_REV0_PHY_WRITE_PBUS_MEM.
+#[cfg(any(test, target_arch = "riscv32"))]
 const PBUS_MEMORY_COMMAND_MAXIMUM: u16 = 0x3ff;
 
 /// Restore one packed PBUS-memory group boundary without rewriting table
@@ -155,7 +158,8 @@ const PBUS_MEMORY_COMMAND_MAXIMUM: u16 = 0x3ff;
 ///
 /// SOURCE: ROM_REV0_PHY_WRITE_PBUS_MEM. Group `2k` takes the even pair and
 /// group `2k + 1` the odd pair of boundary word `k`.
-pub fn configure_pbus_memory_group_boundary<P: Placement>(
+#[cfg(any(test, target_arch = "riscv32"))]
+pub(crate) fn configure_pbus_memory_group_boundary<P: Placement>(
     memory: &mut PhyMemory<P>,
     boundary: PbusMemoryGroupBoundary,
 ) -> Result<(), PhyMemoryError> {
@@ -180,7 +184,8 @@ pub fn configure_pbus_memory_group_boundary<P: Placement>(
 ///
 /// SOURCE: ROM_REV0_PHY_WRITE_PBUS_MEM. The command's low byte is the memory
 /// index, its bits 8 and 9 the two command bits.
-pub fn program_pbus_memory_entry<P: Placement>(
+#[cfg(any(test, target_arch = "riscv32"))]
+pub(crate) fn program_pbus_memory_entry<P: Placement>(
     memory: &mut PhyMemory<P>,
     boundary: Option<PbusMemoryGroupBoundary>,
     data: u32,
@@ -220,7 +225,8 @@ pub fn configure_table_memory_base_index<P: PhyPlacement>(
 }
 
 /// Publish one TX-CFR entry and its complete set/clear commit pulse.
-pub fn program_tx_cfr_entry<P: Placement>(memory: &mut PhyMemory<P>, data: u32, index: u8) {
+#[cfg(any(test, target_arch = "riscv32"))]
+pub(crate) fn program_tx_cfr_entry<P: Placement>(memory: &mut PhyMemory<P>, data: u32, index: u8) {
     memory.write_data_0(|w| {
         w.set_value(data);
     });
@@ -241,7 +247,8 @@ pub fn program_tx_cfr_entry<P: Placement>(memory: &mut PhyMemory<P>, data: u32, 
 ///
 /// SOURCE: ROM_REV0_PHY_WRITE_GAIN_MEM. The final RMW clears the low command
 /// field, writes the index and sets gain-write.
-pub fn program_gain_memory_entry<P: Placement>(
+#[cfg(any(test, target_arch = "riscv32"))]
+pub(crate) fn program_gain_memory_entry<P: Placement>(
     memory: &mut PhyMemory<P>,
     entry: PhyGainMemoryEntry,
 ) {

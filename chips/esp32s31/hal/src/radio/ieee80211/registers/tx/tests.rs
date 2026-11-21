@@ -168,10 +168,7 @@ fn whole_word_publications_clear_every_other_field_while_updates_keep_them() {
     assert_eq!(length.bits_14_21_opaque(), 0);
     assert_eq!(length.ht20_txop_count().get(), 0);
     let pti = vectors.read_pti(bank);
-    assert_eq!(
-        pti.txop(),
-        oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None
-    );
+    assert_eq!(pti.txop(), crate::types::MacTxop::None);
     assert_eq!(pti.pti_0().get(), 6);
     // The HE queue control keeps every field but the trigger-based enable.
     let he = owners
@@ -495,7 +492,6 @@ fn a_chain_is_not_started_on_a_queue_prepared_for_another_since() {
 #[test]
 fn every_non_ht_rate_selects_the_models_rate_of_the_same_speed_and_preamble() {
     use MacDsssPreamble::{Long, Short};
-    use oer_chips_esp32s31_pac::wifi_mac::length_control::RtsRate;
     let table = [
         (
             MacLegacyRate::Dsss1M,

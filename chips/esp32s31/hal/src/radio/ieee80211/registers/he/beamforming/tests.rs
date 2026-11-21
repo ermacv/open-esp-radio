@@ -6,45 +6,42 @@ fn report_profile_matches_all_three_complete_trc_policy_outputs() {
         MacHeBeamformingReportProfile::from_hal_arguments(
             1,
             0x10,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled
+            crate::types::MacHeBeamformingReportDcm::Disabled,
+            crate::types::MacHeBeamformingReportErsu::Disabled
         ),
         Ok(MacHeBeamformingReportProfile {
             signal_mode: Bits::constant::<1>(),
             normalized_rate: Bits::constant::<0>(),
-            dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            extended_range_single_user:
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled,
+            dcm: crate::types::MacHeBeamformingReportDcm::Disabled,
+            extended_range_single_user: crate::types::MacHeBeamformingReportErsu::Disabled,
         })
     );
     assert_eq!(
         MacHeBeamformingReportProfile::from_hal_arguments(
             2,
             0x10,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled
+            crate::types::MacHeBeamformingReportDcm::Enabled,
+            crate::types::MacHeBeamformingReportErsu::Enabled
         ),
         Ok(MacHeBeamformingReportProfile {
             signal_mode: Bits::constant::<2>(),
             normalized_rate: Bits::constant::<0>(),
-            dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled,
-            extended_range_single_user:
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled,
+            dcm: crate::types::MacHeBeamformingReportDcm::Enabled,
+            extended_range_single_user: crate::types::MacHeBeamformingReportErsu::Enabled,
         })
     );
     assert_eq!(
         MacHeBeamformingReportProfile::from_hal_arguments(
             0,
             0x0b,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled
+            crate::types::MacHeBeamformingReportDcm::Disabled,
+            crate::types::MacHeBeamformingReportErsu::Disabled
         ),
         Ok(MacHeBeamformingReportProfile {
             signal_mode: Bits::constant::<0>(),
             normalized_rate: Bits::constant::<0x0b>(),
-            dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            extended_range_single_user:
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled,
+            dcm: crate::types::MacHeBeamformingReportDcm::Disabled,
+            extended_range_single_user: crate::types::MacHeBeamformingReportErsu::Disabled,
         })
     );
 }
@@ -55,8 +52,8 @@ fn report_profile_rejects_blob_wrap_and_field_truncation() {
         MacHeBeamformingReportProfile::from_hal_arguments(
             4,
             0x10,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled
+            crate::types::MacHeBeamformingReportDcm::Disabled,
+            crate::types::MacHeBeamformingReportErsu::Disabled
         ),
         Err(MacHeBeamformingReportProfileError::SignalMode(4))
     );
@@ -64,8 +61,8 @@ fn report_profile_rejects_blob_wrap_and_field_truncation() {
         MacHeBeamformingReportProfile::from_hal_arguments(
             1,
             0x0f,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled
+            crate::types::MacHeBeamformingReportDcm::Disabled,
+            crate::types::MacHeBeamformingReportErsu::Disabled
         ),
         Err(MacHeBeamformingReportProfileError::RateCode {
             signal_mode: 1,
@@ -76,8 +73,8 @@ fn report_profile_rejects_blob_wrap_and_field_truncation() {
         MacHeBeamformingReportProfile::from_hal_arguments(
             0,
             0x20,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled,
-            oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled
+            crate::types::MacHeBeamformingReportDcm::Disabled,
+            crate::types::MacHeBeamformingReportErsu::Disabled
         ),
         Err(MacHeBeamformingReportProfileError::RateCode {
             signal_mode: 0,
@@ -93,8 +90,8 @@ fn a_report_profile_reaches_all_three_selectors() {
     let profile = MacHeBeamformingReportProfile::from_hal_arguments(
         2,
         0x1c,
-        oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled,
-        oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled,
+        crate::types::MacHeBeamformingReportDcm::Enabled,
+        crate::types::MacHeBeamformingReportErsu::Disabled,
     )
     .expect("a recovered rate");
     owners.registers.set_he_beamforming_report_profile(profile);
@@ -107,26 +104,20 @@ fn a_report_profile_reaches_all_three_selectors() {
         (
             report.qam16_rate(),
             report.qam16_signal_mode(),
-            (report.qam16_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.qam16_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.qam16_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.qam16_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
         (
             report.qpsk_rate(),
             report.qpsk_signal_mode(),
-            (report.qpsk_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.qpsk_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.qpsk_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.qpsk_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
         (
             report.bpsk_rate(),
             report.bpsk_signal_mode(),
-            (report.bpsk_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.bpsk_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.bpsk_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.bpsk_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
     ] {
         assert_eq!(
@@ -140,9 +131,9 @@ fn a_report_profile_reaches_all_three_selectors() {
 fn an_ack_rate_profile_writes_its_byte_four_times() {
     let mut words = crate::radio::ieee80211::registers::HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.set_he_ersu_ack_rate_profile(
-        oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::ExtendedRange,
-    );
+    owners
+        .registers
+        .set_he_ersu_ack_rate_profile(crate::types::MacHeErsuAckRate::ExtendedRange);
     let ack = owners
         .registers
         .mac

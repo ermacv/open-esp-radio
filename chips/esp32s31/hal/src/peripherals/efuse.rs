@@ -15,7 +15,7 @@ pub struct EfuseRegisters<P: Placement = Fixed<{ instances::efuse::BASE }>>(Efus
 
 impl EfuseRegisters {
     /// Own the root's eFuse partition.
-    pub fn new(peripherals: EfusePeripherals) -> Self {
+    pub(crate) fn new(peripherals: EfusePeripherals) -> Self {
         Self(peripherals.efuse)
     }
 }

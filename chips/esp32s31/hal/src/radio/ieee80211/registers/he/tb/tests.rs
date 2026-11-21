@@ -7,8 +7,8 @@ fn the_uplink_multi_user_flags_are_two_independent_edges() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
     owners.registers.set_he_uplink_multi_user_disable(
-        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled,
-        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Enabled,
+        crate::types::MacHeUplinkMultiUserDisable::Disabled,
+        crate::types::MacHeUplinkMultiUserDataDisable::Enabled,
     );
     let control = owners
         .registers
@@ -16,14 +16,13 @@ fn the_uplink_multi_user_flags_are_two_independent_edges() {
         .wifi_mac_he_init_suffix
         .read_he_default_control();
     assert!(
-        (control.ul_mu_disable()
-            == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled)
+        (control.ul_mu_disable() == crate::types::MacHeUplinkMultiUserDisable::Disabled)
             && !(control.ul_mu_data_disable()
-                == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled)
+                == crate::types::MacHeUplinkMultiUserDataDisable::Disabled)
     );
     owners.registers.set_he_uplink_multi_user_disable(
-        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Enabled,
-        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled,
+        crate::types::MacHeUplinkMultiUserDisable::Enabled,
+        crate::types::MacHeUplinkMultiUserDataDisable::Disabled,
     );
     let control = owners
         .registers
@@ -31,10 +30,9 @@ fn the_uplink_multi_user_flags_are_two_independent_edges() {
         .wifi_mac_he_init_suffix
         .read_he_default_control();
     assert!(
-        !(control.ul_mu_disable()
-            == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled)
+        !(control.ul_mu_disable() == crate::types::MacHeUplinkMultiUserDisable::Disabled)
             && (control.ul_mu_data_disable()
-                == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled)
+                == crate::types::MacHeUplinkMultiUserDataDisable::Disabled)
     );
 }
 

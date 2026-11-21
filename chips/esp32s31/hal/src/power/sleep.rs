@@ -167,7 +167,7 @@ impl<P: Placement, Q: Placement, T: Placement> SleepRegisters<P, Q, T> {
 
 impl SleepRegisters {
     /// Own the root's sleep partition.
-    pub fn new(peripherals: SleepPeripherals) -> Self {
+    pub(crate) fn new(peripherals: SleepPeripherals) -> Self {
         let SleepPeripherals {
             pmu_sleep_state,
             pmu_sleep_control,

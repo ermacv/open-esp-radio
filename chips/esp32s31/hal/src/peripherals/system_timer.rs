@@ -116,7 +116,7 @@ pub struct SystemTimer {
 
 impl SystemTimer {
     /// Split the root's system timer partition.
-    pub fn new(peripherals: SystemTimerPeripherals) -> Self {
+    pub(crate) fn new(peripherals: SystemTimerPeripherals) -> Self {
         let SystemTimerPeripherals {
             systimer,
             systimer_counter,
@@ -195,7 +195,7 @@ impl<P: Placement> CounterLatch for SystimerCounter<P> {
 /// `components/esp_hal_systimer/esp32s31/include/hal/systimer_ll.h:24-89`
 /// (`systimer_ll_enable_bus_clock`, `systimer_ll_reset_register`,
 /// `systimer_ll_enable_clock`).
-pub fn open_clock<P: Placement>(clock: &mut HpSysClkrstSystimer<P>) {
+pub(crate) fn open_clock<P: Placement>(clock: &mut HpSysClkrstSystimer<P>) {
     clock.modify_systimer_ctrl0(|w| {
         w.set_reg_systimer_apb_clk_en(true);
     });

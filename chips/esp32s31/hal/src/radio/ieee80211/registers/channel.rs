@@ -1,8 +1,7 @@
 //! The MAC side of a PHY channel switch.
 
-use oer_chips_esp32s31_pac::{
-    modem_pwr::regdma_control::ActiveLink, wifi_mac::control::PowerSaveTxBlock,
-};
+use crate::types::MacPowerSaveTxBlock as PowerSaveTxBlock;
+use oer_chips_esp32s31_pac::modem_pwr::regdma_control::ActiveLink;
 
 use super::{MacPlacement, WifiRadioRegisters, byte};
 
