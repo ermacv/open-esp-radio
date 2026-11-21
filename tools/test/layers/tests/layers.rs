@@ -9062,8 +9062,8 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/radio/ieee80211/channel.rs",
         "dead_code",
-        4,
-        "unknown, to read",
+        3,
+        "the channel operations are built for the chip only; the host reads none of this",
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/client.rs",

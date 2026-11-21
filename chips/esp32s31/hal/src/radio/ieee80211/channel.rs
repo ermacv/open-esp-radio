@@ -9,14 +9,26 @@ use crate::{radio::ieee80211::registers::WifiRadioRegisters, radio::phy::RadioPh
 ///
 /// Dropping this value ends every borrow; no PAC owner or generic register
 /// accessor is exposed.
-#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+#[cfg_attr(
+    not(target_arch = "riscv32"),
+    expect(
+        dead_code,
+        reason = "the channel operations are built for the chip only; the host reads none of this"
+    )
+)]
 struct ChannelRegisters<'radio> {
     mac: &'radio mut WifiRadioRegisters,
     phy: &'radio mut RadioPhyRegisters,
     restore: &'radio mut PhyRouteState,
 }
 
-#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+#[cfg_attr(
+    not(target_arch = "riscv32"),
+    expect(
+        dead_code,
+        reason = "the channel operations are built for the chip only; the host reads none of this"
+    )
+)]
 impl ChannelRegisters<'_> {
     fn mac_mut(&mut self) -> &mut WifiRadioRegisters {
         &mut self.mac
@@ -74,9 +86,14 @@ impl<'a, B: crate::power::PlatformClockBackend, P, T> ChannelTransaction<'a, B, 
 }
 
 pub struct RadioChannelHal<'radio, P> {
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    #[cfg_attr(
+        not(target_arch = "riscv32"),
+        expect(
+            dead_code,
+            reason = "the channel operations are built for the chip only; the host reads none of this"
+        )
+    )]
     pub(crate) platform: &'radio mut P,
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
     registers: ChannelRegisters<'radio>,
 }
 
