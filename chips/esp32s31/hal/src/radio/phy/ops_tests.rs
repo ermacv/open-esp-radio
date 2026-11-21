@@ -1154,3 +1154,150 @@ fn a_frequency_memory_address_past_the_memory_does_not_exist() {
         255 + 255 * 7 + 6
     );
 }
+
+// The second halves of the operations this area split, each image the
+// base's old operation gave for the other value.
+
+golden!(
+    agc_disable,
+    AgcRegisters,
+    8223,
+    |b| {
+        agc::disable(&mut b);
+    },
+    [(0x00000000, &[(0x7030, 0x20000000)]), (0xffffffff, &[]),]
+);
+
+golden!(
+    agc_rf_rx_saturation_disable,
+    AgcRegisters,
+    8223,
+    |b| {
+        agc::disable_rf_rx_saturation(&mut b);
+    },
+    [
+        (0x00000000, &[(0x705c, 0x00000400), (0x7068, 0x00000404)]),
+        (0xffffffff, &[(0x705c, 0x2ef00400), (0x7068, 0x00000404)]),
+    ]
+);
+
+golden!(
+    agc_rx_11b_optimization_disable,
+    AgcRegisters,
+    8223,
+    |b| {
+        agc::disable_rx_11b_optimization(&mut b);
+    },
+    [
+        (
+            0x00000000,
+            &[
+                (0x7044, 0x003e1800),
+                (0x7104, 0x000001c8),
+                (0x7124, 0x00006004),
+                (0x8004, 0x00006000)
+            ]
+        ),
+        (
+            0xffffffff,
+            &[
+                (0x7044, 0xfffed8ff),
+                (0x7104, 0xffffffc8),
+                (0x7124, 0xffff63f4),
+                (0x8004, 0xffff6fff)
+            ]
+        ),
+    ]
+);
+
+golden!(
+    bb_calibration_tone_start,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::start_calibration_tone(&mut b, 0x155, 3);
+    },
+    [
+        (0x00000000, &[(0x041c, 0x0007f455), (0x0428, 0x00000001)]),
+        (
+            0xffffffff,
+            &[
+                (0x040c, 0xfffffffc),
+                (0x0410, 0x00000000),
+                (0x0414, 0x00000000),
+                (0x041c, 0xf007f455),
+                (0x0420, 0xf0000000),
+                (0x0428, 0xfffffff1)
+            ]
+        ),
+    ]
+);
+
+golden!(
+    bb_txiq_mismatch_second_inverted,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::configure_txiq_mismatch_power_second(&mut b, bb::TxIqMismatchPolarity::Inverted);
+    },
+    [
+        (0x00000000, &[(0x041c, 0x08000000)]),
+        (0xffffffff, &[(0x041c, 0xf8ffffff)]),
+    ]
+);
+
+golden!(
+    bb_txiq_mismatch_second_normal,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::configure_txiq_mismatch_power_second(&mut b, bb::TxIqMismatchPolarity::Normal);
+    },
+    [
+        (0x00000000, &[(0x041c, 0x01000000)]),
+        (0xffffffff, &[(0x041c, 0xf1ffffff)]),
+    ]
+);
+
+golden!(
+    bb_tx_iq_correction_begin,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::begin_tx_iq_correction(&mut b);
+    },
+    [
+        (0x00000000, &[(0x0c0c, 0x00002000)]),
+        (0xffffffff, &[(0x0c0c, 0xffffbfff)]),
+    ]
+);
+
+golden!(
+    bb_tx_iq_correction_end,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::end_tx_iq_correction(&mut b);
+    },
+    [(0x00000000, &[(0x0c0c, 0x00004000)]), (0xffffffff, &[]),]
+);
+
+golden!(
+    clock_calibration_clock_enable,
+    ClockRegisters,
+    7969,
+    |b| {
+        clk::enable_calibration_clock(&mut b);
+    },
+    [(0x00000000, &[(0x0800, 0x00000004)]), (0xffffffff, &[]),]
+);
+
+golden!(
+    clock_calibration_clock_disable,
+    ClockRegisters,
+    7969,
+    |b| {
+        clk::disable_calibration_clock(&mut b);
+    },
+    [(0x00000000, &[]), (0xffffffff, &[(0x0800, 0xfffffffb)]),]
+);
