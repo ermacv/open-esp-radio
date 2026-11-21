@@ -40,7 +40,7 @@ impl BrownoutRegisters {
 
 impl<P: Placement> Registers for BrownoutRegisters<P> {
     type Wait = Bits<10>;
-    type Address = analog_i2c::Address;
+    type Address = oer_chips_family_registers_analog_i2c::ByteAddress;
     fn configure_mode0(&mut self, _: Access<'_>, settings: Settings<Self::Wait>) {
         // brownout_ll_ana_reset_enable(false): take mode 1 into software
         // control, then disarm its reset.
