@@ -145618,6 +145618,43 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_I2C_MST_SEL_160M`.
         pub const CLK_I2C_MST_SEL_160M_MASK: u32 = 0x1000;
 
+        /// The declared values of the `CLK_I2C_MST_SEL_160M` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ClkI2cMstSel160m {
+            /// The reset value (default 1'b0): the 160 MHz input is not selected; no source names the input this leaves.
+            Default = 0x0,
+            /// The analog-I2C master takes its 160 MHz input, as regi2c_ctrl_ll_master_configure_clock selects it.
+            I2cMst160m = 0x1,
+        }
+
+        impl ClkI2cMstSel160m {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 12
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Default,
+                    _ => Self::I2cMst160m,
+                }
+            }
+        }
+
         /// Width of `BITS_13_20_OPAQUE` in bits.
         pub const BITS_13_20_OPAQUE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `BITS_13_20_OPAQUE`.
@@ -145739,8 +145776,8 @@ pub mod modem_syscon {
 
             /// Select the 160 MHz PHY-I2C-master source.
             #[inline]
-            pub const fn clk_i2c_mst_sel_160m(self) -> super::dictionaries::ClockGate {
-                super::dictionaries::ClockGate::from_field(self.0 >> 12)
+            pub const fn clk_i2c_mst_sel_160m(self) -> ClkI2cMstSel160m {
+                ClkI2cMstSel160m::from_field(self.0 >> 12)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -145852,8 +145889,8 @@ pub mod modem_syscon {
 
             /// Select the 160 MHz PHY-I2C-master source.
             #[inline]
-            pub const fn clk_i2c_mst_sel_160m(&self) -> super::dictionaries::ClockGate {
-                super::dictionaries::ClockGate::from_field(self.0 >> 12)
+            pub const fn clk_i2c_mst_sel_160m(&self) -> ClkI2cMstSel160m {
+                ClkI2cMstSel160m::from_field(self.0 >> 12)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -145965,10 +146002,7 @@ pub mod modem_syscon {
 
             /// Set `CLK_I2C_MST_SEL_160M`.
             #[inline]
-            pub fn set_clk_i2c_mst_sel_160m(
-                &mut self,
-                value: super::dictionaries::ClockGate,
-            ) -> &mut Self {
+            pub fn set_clk_i2c_mst_sel_160m(&mut self, value: ClkI2cMstSel160m) -> &mut Self {
                 self.0 = (self.0 & 0xffffefff) | (value.bits() << 12);
                 self
             }

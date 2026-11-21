@@ -104,7 +104,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_clk_fe_dac_en(true);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+        w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m);
     });
     s.sar
         .clocks

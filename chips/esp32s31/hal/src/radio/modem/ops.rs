@@ -56,14 +56,16 @@ pub(crate) fn select_phy_i2c_160mhz_source<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_i2c_mst_sel_160m(ClockGate::Enabled);
+        w.set_clk_i2c_mst_sel_160m(
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m,
+        );
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, ROM_REV0_PHY_I2C, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn restore_phy_i2c_160mhz_source<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ClockGate,
+    value: oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m,
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(value);

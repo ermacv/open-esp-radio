@@ -8,6 +8,7 @@
 
 use oer_chips_esp32s31_pac::modem_syscon::{
     ModemSysconClockReset,
+    clk_conf::ClkI2cMstSel160m,
     dictionaries::{ClockGate, Reset},
     wifi_bb_cfg::{Bit28Opaque, WifiEnable},
 };
@@ -202,7 +203,7 @@ pub struct ModemSysconPowerObservation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ModemSysconPowerBaseline {
     phy_calibration_clocks: [bool; 18],
-    phy_i2c_160mhz: ClockGate,
+    phy_i2c_160mhz: ClkI2cMstSel160m,
 }
 
 impl ModemSysconPowerBaseline {
@@ -210,7 +211,7 @@ impl ModemSysconPowerBaseline {
     /// Every gate disabled: the baseline of a host test.
     pub(super) const DISABLED: Self = Self {
         phy_calibration_clocks: [false; 18],
-        phy_i2c_160mhz: ClockGate::Disabled,
+        phy_i2c_160mhz: ClkI2cMstSel160m::Default,
     };
 
     pub(super) fn bits(self) -> u32 {
@@ -220,7 +221,7 @@ impl ModemSysconPowerBaseline {
             bits |= u32::from(self.phy_calibration_clocks[clock]) << clock;
             clock += 1;
         }
-        bits | (u32::from(matches!(self.phy_i2c_160mhz, ClockGate::Enabled))
+        bits | (u32::from(matches!(self.phy_i2c_160mhz, ClkI2cMstSel160m::I2cMst160m))
             << self.phy_calibration_clocks.len())
     }
 
@@ -233,7 +234,7 @@ impl ModemSysconPowerBaseline {
         }
         Self {
             phy_calibration_clocks,
-            phy_i2c_160mhz: ClockGate::from_field(bits >> phy_calibration_clocks.len()),
+            phy_i2c_160mhz: ClkI2cMstSel160m::from_field(bits >> phy_calibration_clocks.len()),
         }
     }
 }
@@ -574,7 +575,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                     .modem_syscon_clock_reset
                     .read_clk_conf()
                     .clk_i2c_mst_sel_160m(),
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+                ClkI2cMstSel160m::I2cMst160m
             ),
         }
     }

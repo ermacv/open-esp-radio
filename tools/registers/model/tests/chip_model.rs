@@ -1869,3 +1869,21 @@ fn a_dictionary_without_sources_is_refused() -> TestResult {
     assert!(matches!(error.kind, ErrorKind::InvalidSources), "{error}");
     Ok(())
 }
+
+#[test]
+fn a_dictionary_value_wider_than_the_dictionary_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "schema = 3\n",
+        &GATE.replace(
+            "{ name = \"OPEN\", value = 1,",
+            "{ name = \"OPEN\", value = 2,",
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    assert!(error.to_string().contains("OPEN"), "{error}");
+    assert!(error.entity.ends_with("GATE"), "{error}");
+    Ok(())
+}

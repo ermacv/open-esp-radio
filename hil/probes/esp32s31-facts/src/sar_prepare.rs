@@ -64,7 +64,7 @@ impl Sar {
                 && clocks.clk_fe_pwdet_adc_en()
                 && clocks.clk_fe_adc_en()
                 && clocks.clk_fe_dac_en(),
-            matches!(p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(), pac::modem_syscon::dictionaries::ClockGate::Enabled),
+            matches!(p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(), pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m),
         ];
         observations
             .into_iter()

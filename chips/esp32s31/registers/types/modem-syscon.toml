@@ -363,7 +363,7 @@ name = "CLK_I2C_MST_SEL_160M"
 bits = "12"
 class = "plain"
 description = "Select the 160 MHz PHY-I2C-master source."
-values = { dictionary = "CLOCK_GATE" }
+values = [{ name = "DEFAULT", value = 0x0, description = "The reset value (default 1'b0): the 160 MHz input is not selected; no source names the input this leaves.", sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_INCLUDE_MODEM_MODEM_SYSCON_REG_H"] }, { name = "I2C_MST_160M", value = 0x1, description = "The analog-I2C master takes its 160 MHz input, as regi2c_ctrl_ll_master_configure_clock selects it.", sources = ["ESP_IDF_4D59230D_S31_REGI2C_CTRL_LL_H_L68"] }]
 write-values-only = true
 
 [[registers.fields]]
