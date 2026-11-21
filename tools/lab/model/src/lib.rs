@@ -23,6 +23,19 @@
 //! `uhubctl`'s report ([`hubs`]) and the equipment reports ([`equipment`]).
 
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 pub mod convert;
 pub mod device_id;

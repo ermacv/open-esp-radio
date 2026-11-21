@@ -1,6 +1,12 @@
 //! A simulated device for the link's and its users' tests: it writes frames
 //! of its own boot and sequence and reads the host's requests.
 
+#![allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test support: a test may panic"
+)]
+
 use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,

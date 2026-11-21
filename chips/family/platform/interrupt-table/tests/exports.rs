@@ -79,7 +79,6 @@ dependencies = ["oer-chips-family-platform-interrupt-table", "oer-portable-memor
         );
     }
     let source = r#"#![forbid(unsafe_code)]
-#![deny(clippy::disallowed_methods)]
 oer_chips_family_platform_interrupt_table::__fake_parts!();
 oer_chips_family_platform_interrupt_table::__fake_controller!();
 pub fn on_timer(_: &mut TimerIrq) {}

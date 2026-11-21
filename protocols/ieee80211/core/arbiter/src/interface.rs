@@ -78,5 +78,4 @@ impl BoundVirtualInterface {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests;

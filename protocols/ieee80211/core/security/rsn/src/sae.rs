@@ -450,14 +450,6 @@ pub struct SaeComebackTokens {
     pending: [u16; 256],
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 impl SaeComebackTokens {
     pub const fn new() -> Self {
         Self {
@@ -543,14 +535,6 @@ impl Default for SaeComebackTokens {
     }
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn peer_element(element: &[u8; SAE_ELEMENT_LEN]) -> Option<AffinePoint> {
     let (x, y) = oer_protocols_ieee80211_wire::sae::element_coordinates(element)?;
     let x = FieldElement::from_bytes(&FieldBytes::from(*x));
@@ -622,14 +606,6 @@ impl SaeCommit {
     /// Process the peer's commit and derive KCK, PMK and PMKID with the
     /// keyseed salt of hunting and pecking or H2E without rejected groups:
     /// zeros.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn process(&self, peer: SaeCommitValues) -> Result<SaeKeys, SaeError> {
         let peer_scalar = scalar_from(&peer.scalar).ok_or(SaeError::InvalidScalar)?;
         if bool::from(peer_scalar.is_zero() | peer_scalar.ct_eq(&Scalar::ONE)) {

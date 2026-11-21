@@ -1,14 +1,6 @@
 //! Bounded reassembly slots and affine admission across replay validation.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use super::FragmentAdmissionEpoch;
 use crate::duplicate::RetrySubfield;

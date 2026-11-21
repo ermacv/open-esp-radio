@@ -1,7 +1,9 @@
+#![allow(clippy::disallowed_methods)]
 #![allow(
+    clippy::arithmetic_side_effects,
     clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
+    clippy::expect_used,
+    reason = "test code: a test may panic"
 )]
 
 //! The named settle on a stepping clock and on virtual time.
@@ -22,7 +24,6 @@ impl Clock for Stepping {
     }
 }
 
-#[expect(clippy::expect_used, reason = "a test helper outside a test function")]
 fn limit(micros: u64) -> SettleLimit {
     SettleLimit::new(Duration::from_micros(micros)).expect("a test limit is a valid settle limit")
 }

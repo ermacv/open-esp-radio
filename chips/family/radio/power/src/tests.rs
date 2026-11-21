@@ -1,9 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing
-)]
 use super::{domain::*, membership::*};
 use oer_portable_time::{Clock as _, Duration};
 use oer_portable_time_virtual::VirtualClock;

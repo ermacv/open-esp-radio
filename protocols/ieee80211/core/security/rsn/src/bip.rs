@@ -10,14 +10,6 @@
 //! reception), 9.4.2.54 (Management MIC element, six-octet IPN).
 //!
 //! Received frames reach [`BipReceiver::verify`]; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use crate::frames::{RSN_IGTK_LEN, RSN_IPN_LEN, RsnIgtk};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};

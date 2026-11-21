@@ -1,13 +1,17 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
 )]
 
 //! The USB Serial/JTAG console of Espressif chips, over the registers the

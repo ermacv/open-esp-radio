@@ -434,14 +434,6 @@ impl AssociationResponse {
     }
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_association_response(
     frame: &[u8],
     local: [u8; 6],
@@ -513,14 +505,6 @@ const TIMEOUT_INTERVAL_ELEMENT_ID: u8 = 56;
 /// Timeout Interval type of the association comeback time.
 const TIMEOUT_INTERVAL_ASSOCIATION_COMEBACK: u8 = 3;
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn copy_rates(access_point: &ScanRecord, output: &mut [u8]) {
     let rates = access_point
         .supported_rates_bytes()

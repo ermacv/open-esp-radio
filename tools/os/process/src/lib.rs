@@ -11,6 +11,20 @@
     reason = "host tool: the rule covers the code an image reaches"
 )]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 //! Direct subprocess arguments and owned command lifetimes, without a shell;
 //! the repository checkout a tool acts on, Git, live-process facts and the

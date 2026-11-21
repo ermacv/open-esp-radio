@@ -1,5 +1,4 @@
-#![allow(clippy::disallowed_macros)]
-
+#![allow(clippy::disallowed_macros, reason = "test code: a test may panic")]
 //! Inline const geometry must reject ordinary constructor calls at codegen,
 //! including constructors that are not used in a const initializer.
 use std::{fs, path::Path, process::Command};

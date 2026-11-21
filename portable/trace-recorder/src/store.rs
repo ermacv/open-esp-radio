@@ -583,11 +583,6 @@ impl SnapshotWriter<'_> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 mod format_tests {
     use super::*;
     use core::mem::{offset_of, size_of};

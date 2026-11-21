@@ -1,9 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros
-)]
-
 extern crate std;
 
 use core::cell::Cell;

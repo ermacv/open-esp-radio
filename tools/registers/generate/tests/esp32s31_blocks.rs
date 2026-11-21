@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 //! The ESP32-S31 chip root and its block types (`chips/esp32s31/registers/
 //! {chip.toml,types/,layouts/}`) load through the block-type loader with
 //! every evidence catalog beside them: the vendor blocks the import spec

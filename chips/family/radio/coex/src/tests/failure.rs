@@ -1,9 +1,3 @@
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
-)]
-
 use super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

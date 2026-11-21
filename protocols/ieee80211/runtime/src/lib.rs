@@ -3,16 +3,6 @@
 #![deny(
     clippy::let_underscore_must_use,
     clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
     clippy::struct_excessive_bools,
     clippy::fn_params_excessive_bools,
     clippy::wildcard_enum_match_arm

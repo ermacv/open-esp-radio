@@ -6,6 +6,7 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
+#![allow(clippy::unwrap_used, reason = "test code: a test may panic")]
 
 use std::{fs, process::Command};
 

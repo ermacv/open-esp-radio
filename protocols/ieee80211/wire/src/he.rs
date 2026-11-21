@@ -197,14 +197,6 @@ impl HeMuMimoSpatialConfiguration {
         self.encoding
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn nsts_for_user(self, user_index: u8) -> Option<u8> {
         if user_index >= self.user_count {
             return None;
@@ -212,14 +204,6 @@ impl HeMuMimoSpatialConfiguration {
         self.nsts.get(usize::from(user_index)).copied()
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn total_nsts(self) -> u8 {
         self.total_nsts
     }
@@ -548,14 +532,6 @@ pub enum HeMcsNssSupport {
 
 impl HeMcsNssSupport {
     /// The support the MCS/NSS `map` advertises for one spatial stream.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     const fn one_stream_from_map(map: u16) -> Self {
         match HeMcsMap::from_bytes(map.to_le_bytes()).nss1().get() {
             0 => Self::Mcs0To7,
@@ -612,14 +588,6 @@ pub enum HeDcmConstellation {
 }
 
 impl HeDcmConstellation {
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     const fn from_encoding(encoding: u8) -> Self {
         match HeMcsMap::from_bytes([encoding, 0]).nss1().get() {
             0 => Self::NotSupported,
@@ -914,14 +882,6 @@ pub enum HeElementError {
 
 /// The extension element `element`, split into its fixed `MINIMUM_LEN`-byte
 /// prefix (header included) and the optional bytes after it.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn validate_extension<const MINIMUM_LEN: usize>(
     element: &[u8],
     extension: u8,
@@ -946,14 +906,6 @@ fn validate_extension<const MINIMUM_LEN: usize>(
     Ok((prefix, tail))
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElementError> {
     let (element, _) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
@@ -969,14 +921,6 @@ pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElement
     })
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_he_operation(element: &[u8]) -> Result<HeOperation, HeElementError> {
     let (element, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
@@ -995,14 +939,6 @@ pub fn parse_he_operation(element: &[u8]) -> Result<HeOperation, HeElementError>
 /// libnet80211[ieee80211_he.o]::ieee80211_parse_heopr` bodies and their format strings. This function is
 /// deliberately pure; corresponding MMIO transforms are tracked separately
 /// by the hardware backend.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_he_peer_state(
     capability: &[u8],
     operation: &[u8],

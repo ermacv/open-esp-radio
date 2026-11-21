@@ -1,10 +1,13 @@
 #![allow(
     clippy::disallowed_methods,
-    clippy::disallowed_macros,
-    clippy::arithmetic_side_effects,
-    clippy::unwrap_used,
-    clippy::indexing_slicing,
     reason = "known-answer test: a malformed vector or a wrong answer fails it"
+)]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
 )]
 //! Independent CCMP known-answer tests; only vector facts are incorporated.
 //!

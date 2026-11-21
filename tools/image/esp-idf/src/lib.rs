@@ -17,6 +17,19 @@
 //! `idf-tools` are removed on its first build from the cache. Outputs land in `target/vendor-firmware/<chip>/<app>/` with a
 //! `build.json` recording the pins and the image digest.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::indexing_slicing,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

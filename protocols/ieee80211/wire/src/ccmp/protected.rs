@@ -7,14 +7,6 @@
 //! SPP A-MSDU negotiated the A-MSDU Present bit is not masked (12.5.3.3.3).
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use super::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError};
 use crate::frame::{DecodedHeader, FrameControlFields, QosControl};

@@ -8,6 +8,11 @@
     clippy::let_underscore_must_use,
     reason = "host tool: the rule covers the code an image reaches"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "test code: a test may panic"
+)]
 #[path = "support/stack_context.rs"]
 mod checked_stack;
 #[path = "support/cli.rs"]

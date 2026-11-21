@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::{Line, nominal_ticks, rate_hz};
 
 #[test]

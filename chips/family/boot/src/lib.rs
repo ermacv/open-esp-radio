@@ -2,18 +2,6 @@
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
 )]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 //! Espressif bootstrap sequences over a chip's typed register traits.
 //!
 //! Before an executor exists there is nothing to yield to: hardware
@@ -58,6 +46,15 @@
 //! under the command's boot wait.
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(test)]
 extern crate self as oer_chips_family_boot;

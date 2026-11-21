@@ -103,12 +103,6 @@ impl<const K: usize> Observer for AtomicCollector<K> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing
-)]
 mod tests {
     use super::*;
     use oer_portable_trace::{Channel, Domain, Kind};

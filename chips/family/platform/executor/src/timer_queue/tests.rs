@@ -1,8 +1,3 @@
-#![allow(
-    clippy::expect_used,
-    reason = "a test fails loudly on a broken expectation"
-)]
-
 extern crate std;
 
 use super::*;

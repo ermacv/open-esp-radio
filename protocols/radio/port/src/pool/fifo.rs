@@ -391,10 +391,4 @@ impl<'id, K, const PERMITS: usize, const SEATS: usize, Pool: PoolPath, Waiters: 
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    reason = "tests assert behavior and compare against standard-library arithmetic"
-)]
 mod tests;

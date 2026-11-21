@@ -1,5 +1,18 @@
 //! Finite root-owned client profile, DHCP hook and bounded DHCP/ping session.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 use oer_tools_lab_fixture::network_client::{
     Hook, Ipv4, Lease, Ping, Profile, SessionCommand, SessionState,

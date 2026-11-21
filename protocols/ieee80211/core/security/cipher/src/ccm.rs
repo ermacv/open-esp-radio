@@ -1,14 +1,6 @@
 //! CCMP-128 CCM: eight-byte MIC, thirteen-byte nonce, two-byte body length,
 //! over the caller's AES-128 engine (`oer_portable_crypto::ccm`). The temporal key is
 //! loaded for one frame and erased from the engine when the frame is done.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 use oer_portable_crypto::{Aes128Key, block::Aes128Engine, ccm::CcmError};
 use oer_protocols_ieee80211_wire::ccmp::protected::CcmpAad as Aad;
 

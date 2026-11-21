@@ -8,6 +8,13 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::arithmetic_side_effects,
+        reason = "R2 cleans a probe with the area it reads (tasks/323)"
+    )
+)]
 
 //! The negative check of watched peer requests on hardware. The boot hart's
 //! liveness supervisor watches one channel to hart 1. Once the stand arms

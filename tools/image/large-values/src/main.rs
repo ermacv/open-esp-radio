@@ -9,6 +9,11 @@
 )]
 #![feature(rustc_private)]
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 extern crate rustc_public;
 

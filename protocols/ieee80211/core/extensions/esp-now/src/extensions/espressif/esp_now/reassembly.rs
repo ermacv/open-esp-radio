@@ -69,7 +69,6 @@ impl<const N: usize> Default for EspNowV2Reassembly<N> {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests {
     use super::*;
     use oer_protocols_ieee80211_wire::extensions::espressif::esp_now::EspNowRandomValue;

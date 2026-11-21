@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, reason = "test code: a test may panic")]
 //! Each injected fault owns its own entry, allocation and counter. An
 //! occupied handler cell, which only the crate reaches, is its own test
 //! (`src/tests.rs`).

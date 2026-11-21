@@ -216,14 +216,6 @@ pub struct SaeAuthentication<'a> {
 
 /// Parse an SAE Authentication frame addressed to this station and BSSID;
 /// `None` for any other frame.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_sae_authentication(
     frame: &[u8],
     local: [u8; 6],
@@ -251,14 +243,6 @@ pub fn parse_sae_authentication(
 /// `None` means that the frame is valid input but belongs to another
 /// management exchange. This lets an RX loop ignore beacons and other peers
 /// without treating them as protocol errors.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_open_authentication_response(
     frame: &[u8],
     local: [u8; 6],
@@ -293,14 +277,6 @@ pub fn parse_open_authentication_response(
 /// (Disassociation) and `sta_recv_mgmt+0x8c6` (Deauthentication) read the reason code at
 /// management-body offset zero (`frame + 24`) and immediately call
 /// `ieee80211_sta_new_state(g_ic, 0, (reason << 8) | subtype)`.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_sta_disconnect(
     frame: &[u8],
     local: OwnAddress,

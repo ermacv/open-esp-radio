@@ -2,6 +2,10 @@
     clippy::let_underscore_must_use,
     reason = "host tool: the rule covers the code an image reaches"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 use oer_tools_analysis_riscv_model::{Ledger, WorkingMemory};
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use oer_tools_image_stack::*;

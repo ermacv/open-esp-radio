@@ -1,9 +1,9 @@
 //! Every slot a bank consumes stays obtainable from it.
 #![allow(
     clippy::disallowed_methods,
-    clippy::disallowed_macros,
     reason = "test: a no-op waker and assertions"
 )]
+#![allow(clippy::disallowed_macros, reason = "test code: a test may panic")]
 
 use core::{
     future::Future,

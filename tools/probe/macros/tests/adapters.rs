@@ -12,6 +12,10 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 use oer_tools_probe_macros::probe;
 
 fn with_owner<R>(call: impl FnOnce(&mut [u32; 2]) -> R) -> R {

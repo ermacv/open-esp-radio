@@ -4,14 +4,14 @@
 )]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
 )]
 //! The ESP32-S31 side of an image's platform over the Espressif staged
 //! runtime (`oer-chips-family-platform-runtime`) and executor

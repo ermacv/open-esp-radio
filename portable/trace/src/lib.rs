@@ -4,17 +4,14 @@
 )]
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Typed trace events, encoding, caller-owned record buffers and the
@@ -40,9 +37,4 @@ pub use observe::{Noop, Observer};
 pub use store::{Record, oldest_first};
 
 #[cfg(test)]
-#[allow(
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 mod tests;

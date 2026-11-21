@@ -1,3 +1,8 @@
+#![expect(
+    clippy::disallowed_macros,
+    clippy::expect_used,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+)]
 fn main() {
     let (facts, files) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");

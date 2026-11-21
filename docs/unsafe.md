@@ -44,18 +44,28 @@ it:
   only shrinks.
   The root also sets `suppress-restriction-lint-in-const = false`: a
   runtime-callable `const fn` is not a compile-time-only check.
-- A clean panic lint is denied at the crate root while `[lints]` retains
-  `workspace = true`. A non-test local `allow` or `expect` means the lint
-  is not clean, even when the host emits no diagnostic. New panic-lint
-  allowances belong only in tests. Remove existing non-test allowances as
-  the crate is cleaned, then move each clean lint to `deny`.
+- The panic lints (`unwrap_used`, `expect_used`, `panic`, `unreachable`,
+  `indexing_slicing`, `todo`, `unimplemented`, `arithmetic_side_effects`,
+  `disallowed_macros`) are denied in the workspace table for every package,
+  and no crate states them again. A package with sites left expects the
+  lint at its crate root, naming the step that removes them (a host tool:
+  that the ban covers the code an image reaches; code built only for the
+  chip, under `cfg_attr(target_arch = "riscv32", …)`); `SILENCED` counts
+  each. Tests may panic: Clippy's in-tests options cover `unwrap`,
+  `expect`, `panic!` and indexing in a test, and a crate root with unit
+  tests carries the one line
+  `cfg_attr(test, allow(clippy::disallowed_methods, clippy::disallowed_macros, clippy::unreachable, clippy::arithmetic_side_effects))`;
+  an integration test file whose helpers need it, and a test-support
+  module, allow at their top. `disallowed_methods` is otherwise allowed
+  only at a banned method's own home, with its reason, and never
+  expected; `SILENCED` counts every such attribute.
   `tools/test/layers/sans-io-lints.toml` is the canonical sans-IO catalogue:
   assertion macros (including `vendor_assert!`), panicking core methods and
-  `core::task::Waker::noop`. A sans-IO crate with explicit crate-root deny of
-  both `disallowed_methods` and `disallowed_macros` has a local `clippy.toml`
-  containing that entire catalogue, all common root bans and its existing
-  local entries. Layer tests enforce catalogue membership; they do not
-  replace Clippy or prove transitive absence of panics.
+  `core::task::Waker::noop`. Every sans-IO package (testing packages aside)
+  has a local `clippy.toml` containing that entire catalogue, all common
+  root bans and its existing local entries. Layer tests enforce catalogue
+  membership; they do not replace Clippy or prove transitive absence of
+  panics.
 
 Sans-IO code contains no `unsafe` and no runtime panic paths, including
 `panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug

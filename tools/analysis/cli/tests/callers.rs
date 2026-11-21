@@ -6,7 +6,12 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 #[allow(dead_code)]
 mod support;
 use oer_tools_analysis_blobray_application::in_process::Executable;

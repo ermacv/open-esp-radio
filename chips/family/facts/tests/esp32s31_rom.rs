@@ -1,3 +1,9 @@
+#![allow(
+    clippy::disallowed_macros,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test code: a test may panic"
+)]
 //! The ROM exports are exactly the foreign functions declared by our S31
 //! code: none, as stage two owns the whole internal SRAM. Generated PACs and vendor
 //! research facts are not ABI consumers, and a declaration of a symbol our

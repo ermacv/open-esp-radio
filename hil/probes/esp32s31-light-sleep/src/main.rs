@@ -1,6 +1,22 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::arithmetic_side_effects,
+        reason = "R2 cleans a probe with the area it reads (tasks/323)"
+    )
+)]
 
 //! PMU light sleep of the S31's HP system until an LP-timer target, with
 //! no domain powered down: whether the request wakes or is rejected, the

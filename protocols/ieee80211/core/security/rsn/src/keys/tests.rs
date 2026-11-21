@@ -1,9 +1,3 @@
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    clippy::unreachable
-)]
 use super::*;
 use oer_protocols_ieee80211_wire::eapol::GtkTx;
 

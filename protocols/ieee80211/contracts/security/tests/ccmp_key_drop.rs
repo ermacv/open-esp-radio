@@ -1,5 +1,5 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![allow(clippy::disallowed_macros, reason = "test assertions")]
+#![allow(clippy::disallowed_macros, reason = "test code: a test may panic")]
 
 use core::mem::MaybeUninit;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;

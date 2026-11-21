@@ -424,11 +424,6 @@ impl<const N: usize> Neighbors<N> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::unwrap_used,
-    reason = "tests assert on a table at its count's boundary"
-)]
 mod tests {
     use super::*;
 

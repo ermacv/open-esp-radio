@@ -17,6 +17,22 @@
     reason = "host tool: the rule covers the code an image reaches"
 )]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unreachable,
+    clippy::unwrap_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 use oer_tools_analysis_blobray_artifacts::{MemberCursor, inspect_source};
 use oer_tools_analysis_blobray_domain::*;

@@ -1,23 +1,3 @@
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-#![cfg_attr(
-    test,
-    allow(
-        clippy::disallowed_macros,
-        clippy::disallowed_methods,
-        clippy::arithmetic_side_effects
-    )
-)]
 //! Espressif eFuse values as pure logic over the fields the chip's eFuse
 //! controller presents in its read registers.
 //!
@@ -34,6 +14,15 @@
 //! these fields.
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(test)]
 extern crate std;

@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 //! Fixtures run only the pinned toolchain, in each test's own directory.
 use std::{collections::HashSet, path::Path, process::Command};
 

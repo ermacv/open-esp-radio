@@ -5,7 +5,11 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 //! The chip facts that two sources state: each pair is held equal by value,
 //! so the one that changes alone fails here.
 //!

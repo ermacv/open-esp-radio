@@ -13,6 +13,11 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "test code: a test may panic"
+)]
 use oer_tools_analysis_blobray_application::{
     in_process::Executable,
     library::{Assumptions, register_accesses},
@@ -41,7 +46,7 @@ fn partition(reads: &ReadUses, width: u8) {
     assert!(reads.unknown.iter().all(|limit| limit.bits != 0));
 }
 
-#[allow(clippy::expect_used)] // Fixture setup failures fail this compiler-driven test.
+// Fixture setup failures fail this compiler-driven test.
 fn fixture(contents: &str) -> Vec<u8> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let temp = tempfile::tempdir_in(root.join("target")).expect("fixture directory");

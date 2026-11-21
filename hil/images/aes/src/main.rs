@@ -1,6 +1,14 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
-#![deny(clippy::panic, clippy::todo, clippy::unimplemented)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 //! The HIL image of the radio-free scenarios: the `oer` AES
 //! service with the library's defaults, the HIL base module and the AES

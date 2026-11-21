@@ -120,14 +120,6 @@ struct ReceivedManagementHeader {
 /// fixed body that follows (the Authentication algorithm, transaction and
 /// status, or the Association Response capability, status and AID) and the
 /// rest; `None` when the frame is shorter than both.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u16; 3], &[u8])> {
     let mut reader = oer_portable_wire::Reader::new(frame);
     let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;

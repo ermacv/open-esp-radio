@@ -1,9 +1,3 @@
-#![allow(clippy::unwrap_used)]
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
-)]
 use super::*;
 use std::vec;
 #[path = "../../tests/support/adoption.rs"]

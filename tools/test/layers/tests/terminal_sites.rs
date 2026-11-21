@@ -6,6 +6,10 @@
     clippy::unreachable,
     reason = "integration-test helpers report malformed source and broken fixture invariants"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 
 use std::{
     collections::{BTreeMap, BTreeSet},

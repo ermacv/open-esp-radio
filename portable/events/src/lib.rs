@@ -1,16 +1,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Event sinks a caller lends an owner for one call.
@@ -87,9 +84,4 @@ pub fn report<E: Copy, S: EventSink<E> + ?Sized>(sink: &mut S, event: impl FnOnc
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
-)]
 mod tests;

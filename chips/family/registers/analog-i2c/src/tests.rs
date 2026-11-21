@@ -1,8 +1,6 @@
 //! The vocabulary's values: a field's bounds, extraction and insertion, and
 //! a route's read selection.
 
-#![allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
-
 use super::*;
 
 #[test]

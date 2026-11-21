@@ -12,12 +12,25 @@
 #![no_std]
 #![cfg_attr(test, feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![cfg_attr(not(test), deny(clippy::panic, clippy::expect_used))]
-#![deny(
-    clippy::unwrap_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+)]
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::indexing_slicing,
+        reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+    )
 )]
 
 //! Scheduler-free static task executor and time driver for Espressif

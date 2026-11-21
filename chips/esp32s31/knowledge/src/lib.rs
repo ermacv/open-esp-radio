@@ -2,27 +2,6 @@
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
 )]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-#![cfg_attr(
-    test,
-    allow(
-        clippy::disallowed_macros,
-        clippy::disallowed_methods,
-        clippy::arithmetic_side_effects,
-        clippy::unreachable
-    )
-)]
 //! ESP32-S31 chip knowledge: the tables and pure functions the HAL, the
 //! drivers and the host tools share, without hardware access.
 //!
@@ -34,6 +13,15 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 pub mod calibration_cache;
 

@@ -54,7 +54,6 @@ pub fn set(values: [u32; KNOBS]) {
 pub fn set(_values: [u32; KNOBS]) {}
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests {
     use super::*;
 

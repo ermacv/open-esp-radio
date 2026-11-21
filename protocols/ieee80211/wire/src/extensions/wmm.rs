@@ -4,14 +4,6 @@
 //! values and traffic classification live in `qos`; parsing does not admit TX.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use crate::qos::WmmAccessCategory;
 

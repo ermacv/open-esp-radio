@@ -28,6 +28,21 @@
 )]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unreachable,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 use core::fmt;
 

@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 use oer_tools_analysis_elf::{
     Elf,
     dwarf::{Symbolizer, load},

@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 //! Architectural instructions have one owner; entry/trap ABI assembly is separate.
 use std::path::{Path, PathBuf};
 

@@ -1,14 +1,5 @@
 //! Stateless BIP-CMAC-128 management-frame integrity transforms.
 
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-
 use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, BlockError},

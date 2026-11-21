@@ -95,10 +95,6 @@ impl Drop for Borrow<'_> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::panic,
-    reason = "tests exercise refused callbacks and unwinding"
-)]
 mod tests {
     extern crate std;
     use super::*;

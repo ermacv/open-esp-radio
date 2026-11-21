@@ -307,7 +307,6 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     );
 
     // Bypassing the once gate cannot replace a bound part or write a route.
-    #[allow(clippy::disallowed_methods, reason = "regression for a forged token")]
     let forged = TimerToken(crate::__private::Unique::new());
     let before = zero.controller.writes.len();
     let fault = zero.bind(forged, TimerIrq::default()).unwrap_err();
@@ -420,7 +419,6 @@ fn a_binding_whose_handler_cell_is_occupied_keeps_its_owners_and_writes_nothing(
     // A part another context installed in the entry's cell before it.
     let previous = std::boxed::Box::leak(std::boxed::Box::new(OccupiedIrq::default()));
     let _installed = OccupiedToken::PROOF.cell().install(previous).ok().unwrap();
-    #[allow(clippy::disallowed_methods, reason = "regression for an occupied cell")]
     let token = OccupiedToken(crate::__private::Unique::new());
     let before = router.controller.writes.len();
     let error = router.bind(token, OccupiedIrq::default()).unwrap_err();

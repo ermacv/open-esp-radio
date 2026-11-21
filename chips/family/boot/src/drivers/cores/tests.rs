@@ -1,9 +1,4 @@
 //! Recording ports test order and read bounds, independently of MMIO layout.
-#![allow(
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 
 use super::*;
 use core::cell::RefCell;

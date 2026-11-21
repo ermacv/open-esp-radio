@@ -3,6 +3,19 @@
 //! exist. With the `clap` feature, [`command_tree`] walks a clap parser.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::expect_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 use serde::{Deserialize, Serialize};
 

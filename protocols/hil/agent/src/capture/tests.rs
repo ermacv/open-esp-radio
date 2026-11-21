@@ -1,9 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::indexing_slicing
-)]
 use super::*;
 use collector::{Clock, Collector};
 use oer_portable_trace::{Channel, Domain, Event, Kind, Observer};

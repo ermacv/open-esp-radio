@@ -43,14 +43,6 @@ pub struct MonitorChannelSequence {
 }
 
 impl MonitorChannelSequence {
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn new(
         channels: &[Ghz2_4Channel],
         dwell_millis: NonZeroU16,
@@ -84,14 +76,6 @@ impl MonitorChannelSequence {
         })
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn channels(&self) -> &[Ghz2_4Channel] {
         self.channels
             .get(..usize::from(self.length))

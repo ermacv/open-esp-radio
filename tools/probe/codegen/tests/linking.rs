@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, reason = "test code: a test may panic")]
 //! Real RV32 archive extraction and fat-LTO acceptance, without private inputs.
 use oer_tools_probe_codegen::{Declaration, collect, validate_elf};
 use std::{path::Path, process::Command};

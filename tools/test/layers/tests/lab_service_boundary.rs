@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 //! The stand's clients reach its hardware only through the LAB service:
 //! `cargo fw`, `cargo hil`, `cargo stand`, the HIL harness and the HIL
 //! scenarios that read the service's answers build against

@@ -2,18 +2,6 @@
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
 )]
-#![deny(
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 //! Chip-neutral shared modem clock reference-count planner.
 //!
 //! Ported from ESP-IDF `7b9cc1ac79f865983f59bb8ff3ff43eb74ff1dbe`
@@ -52,6 +40,15 @@
 
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(test)]
 extern crate std;
@@ -856,5 +853,4 @@ pub fn execute_release<D: ModemClockDependency, E>(
 }
 
 #[cfg(test)]
-#[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests;

@@ -8,6 +8,19 @@
 //! the device raises an exception on request, records it and resets, and
 //! its next boot serves the record once.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "R3 cleans the cores and the contracts (tasks/323)"
+)]
 
 use std::{
     io::{Read as _, Write as _},

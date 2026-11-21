@@ -15,6 +15,22 @@
 #![cfg_attr(target_arch = "riscv32", no_std)]
 #![cfg(target_arch = "riscv32")]
 #![deny(clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::arithmetic_side_effects,
+        reason = "R2 cleans a probe with the area it reads (tasks/323)"
+    )
+)]
 
 //! Link-time probes for compiled vendor/Rust MMIO comparison.
 //!

@@ -1,9 +1,5 @@
 #![cfg(feature = "connected-tasks")]
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects
-)]
+#![allow(clippy::disallowed_methods)]
 use core::{
     future::pending,
     task::{Context, Poll, Waker},

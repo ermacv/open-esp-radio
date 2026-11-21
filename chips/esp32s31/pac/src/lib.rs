@@ -1,13 +1,3 @@
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
-)]
 //! The ESP32-S31 PAC: the exact hardware model generated from the chip's
 //! register model (`chips/esp32s31/registers/`) by `cargo registers
 //! generate`, and the root that takes every claimed part once.
@@ -131,6 +121,15 @@
 
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(test)]
 extern crate std;

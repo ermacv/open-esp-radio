@@ -1,13 +1,3 @@
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
-)]
 //! Espressif platform watchdog owners over a chip's typed watchdog registers.
 //!
 //! This platform crate owns hardware reset configuration and finite reset
@@ -68,6 +58,15 @@
 //! ```
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(test)]
 extern crate std;

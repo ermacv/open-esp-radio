@@ -1,12 +1,6 @@
 //! A fake latch over a counter that advances on every register access, with
 //! a hook that runs a preempting read at a chosen access.
 
-#![allow(
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
-
 use core::cell::Cell;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;

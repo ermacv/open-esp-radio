@@ -7,6 +7,12 @@
     )
 )]
 #![cfg(target_os = "linux")]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 #[allow(dead_code)]
 mod support;
 use object::{

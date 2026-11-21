@@ -5,14 +5,6 @@
 //! role-local consumers must still validate those semantics after routing.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use oer_protocols_ieee80211_wire::{
     address::AddressFlags,

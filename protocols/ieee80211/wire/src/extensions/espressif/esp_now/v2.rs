@@ -109,14 +109,6 @@ pub struct EspNowV2Elements<'payload> {
 impl<'payload> Iterator for EspNowV2Elements<'payload> {
     type Item = EspNowV2Element<'payload>;
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining_elements == 0 {
             return None;
@@ -279,14 +271,6 @@ impl<'payload> EspNowV2Action<'payload> {
     /// Reassemble into caller storage after checking capacity up front.
     ///
     /// On a capacity failure `output` is left unchanged.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn copy_payload(self, output: &mut [u8]) -> Result<usize, EspNowV2WireError> {
         let too_small = EspNowV2WireError::OutputTooSmall {
             required: self.payload_length,
@@ -358,14 +342,6 @@ impl<'payload> EspNowV2Action<'payload> {
 
     /// Parse one complete v2 Action body and validate every element before
     /// returning an iterator over any application bytes.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
         if input.len() > ESP_NOW_V2_MAX_ACTION_LEN {
             return Err(EspNowV2WireError::ActionBodyTooLong {
@@ -607,14 +583,6 @@ impl<'payload> EspNowV2Frame<'payload> {
     }
 
     /// Parse one complete unprotected, MAC-unfragmented v2 Action MPDU.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
         let mut reader = oer_portable_wire::Reader::new(input);
         let header = reader
