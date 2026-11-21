@@ -267,6 +267,9 @@ impl FieldPlan<'_> {
     }
 
     /// The field's value in `bits`, the register image, as its reader type.
+    /// An 8- or 16-bit field is masked to its width before its cast: the
+    /// value's range is the type's by construction, which the cast lints
+    /// see, and the compiler emits the same extraction.
     pub(super) fn read_expression(&self, bits: &str) -> String {
         if self.width == 1 {
             return format!("({bits} & 0x{:08x}) != 0", self.mask());
@@ -278,8 +281,8 @@ impl FieldPlan<'_> {
         };
         match self.width {
             32 => shifted,
-            8 => format!("{shifted} as u8"),
-            16 => format!("{shifted} as u16"),
+            8 => format!("({shifted} & 0xff) as u8"),
+            16 => format!("({shifted} & 0xffff) as u16"),
             _ => format!(
                 "oer_portable_mmio::Bits::truncate({})",
                 shifted.trim_start_matches('(').trim_end_matches(')')
@@ -1101,13 +1104,16 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
             if !field.family_first() {
                 continue;
             }
+            // A family's lanes are fields of one 32-bit word, so its index is
+            // below 32 and its low byte is the whole index: the shift widens
+            // that byte, losing nothing.
             if let Some(family) = &field.field.family {
                 let bits = field.write_bits_of("value");
                 let stem = field.family_stem();
                 let ones = field.ones();
                 let _ = writeln!(
                     output,
-                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
+                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
                     family.count,
                     field.write_type(None),
                     field.low,
@@ -1184,14 +1190,14 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
     if let Some(family) = &field.field.family {
         let expression = match field.width {
             1 => "(bits & 1) != 0".into(),
-            8 => "bits as u8".into(),
-            16 => "bits as u16".into(),
+            8 => "(bits & 0xff) as u8".into(),
+            16 => "(bits & 0xffff) as u16".into(),
             32 => "bits".into(),
             _ => "oer_portable_mmio::Bits::truncate(bits)".to_string(),
         };
         let _ = writeln!(
             output,
-            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get() as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
+            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
             field.method(),
             family.count,
             field.native(),
@@ -1412,8 +1418,8 @@ fn render_open_from(output: &mut String, field: &FieldPlan<'_>) {
         (Setter::Native, _) => {
             let body = match field.width {
                 1 => "value.bits() != 0".to_owned(),
-                8 => "value.bits() as u8".to_owned(),
-                16 => "value.bits() as u16".to_owned(),
+                8 => "(value.bits() & 0xff) as u8".to_owned(),
+                16 => "(value.bits() & 0xffff) as u16".to_owned(),
                 32 => "value.bits()".to_owned(),
                 _ => "oer_portable_mmio::Bits::truncate(value.bits())".to_owned(),
             };
