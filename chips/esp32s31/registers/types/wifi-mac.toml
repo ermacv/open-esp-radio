@@ -11445,12 +11445,14 @@ write-range = { min = 0x0, max = 0x3ff }
 name = "SOFTWARE_RTS"
 bits = "31"
 class = "plain"
+values = [{ name = "NONE", value = 0x0, description = "No hardware-generated RTS precedes the PPDU." }, { name = "REQUESTED", value = 0x1, description = "A hardware-generated RTS to the PPDU receiver precedes it." }]
 description = "Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts."
 
 [[registers.fields]]
 name = "SOFTWARE_CTS"
 bits = "30"
 class = "plain"
+values = [{ name = "NONE", value = 0x0, description = "No hardware-generated CTS precedes the PPDU." }, { name = "REQUESTED", value = 0x1, description = "A hardware-generated CTS addressed to this transmitter precedes the PPDU." }]
 description = "Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle."
 
 [[registers]]
@@ -13753,6 +13755,7 @@ description = "Complete libpp[hal_mac.o]::mac_tx_set_pti publishes the original 
 name = "TXOP"
 bits = "0"
 class = "plain"
+values = [{ name = "NONE", value = 0x0, description = "The PPDU holds no TXOP: descriptor word-zero bit 29 clear." }, { name = "HELD", value = 0x1, description = "The PPDU is sent within a TXOP: descriptor word-zero bit 29 set." }]
 description = "Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value."
 
 [[registers.fields]]

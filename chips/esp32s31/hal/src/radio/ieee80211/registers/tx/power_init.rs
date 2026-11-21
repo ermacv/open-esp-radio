@@ -245,75 +245,69 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // Complete hal_init_imrsp_power. Each tuple is
         // (format, encoded rate, table lookup rate). The blob replaces these
         // three fields through three separate RMWs for every command word.
-        const RESPONSE: [(u8, u8, u8); 10] = [
+        const RESPONSE: [(
+            oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode,
+            oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex,
+            u8,
+        ); 10] = [
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate00.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate00,
                 0,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate01.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate01,
                 0,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate05.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate05,
                 5,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0b.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0b,
                 11,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0a.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate0a,
                 10,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate09.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format0,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate09,
                 9,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate10.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate10,
                 16,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate11.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate11,
                 17,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12,
                 18,
             ),
             (
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2.bits() as u8,
-                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12.bits()
-                    as u8,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::SigMode::Format2,
+                oer_chips_esp32s31_pac::wifi_mac::immediate_response::RateIndex::Rate12,
                 18,
             ),
         ];
         for (word, (format, encoded_rate, lookup_rate)) in RESPONSE.into_iter().enumerate() {
             let response = element::<10>(word);
             init.modify_immediate_response(response, |w| {
-                w.set_sig_mode(bits(u32::from(format)));
+                w.set_sig_mode(format.into());
             });
             init.modify_immediate_response(response, |w| {
-                w.set_rate_index(bits(u32::from(encoded_rate)));
+                w.set_rate_index(encoded_rate.into());
             });
             init.modify_immediate_response(response, |w| {
                 w.set_power_index(index(lookup_rate));

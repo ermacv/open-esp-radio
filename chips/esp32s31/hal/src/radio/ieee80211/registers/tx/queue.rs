@@ -48,50 +48,23 @@ pub(crate) fn configure_protection<P: Placement>(
 ) {
     control.modify_protection(bank(queue), |writer| {
         writer
-            .set_software_cts(matches!(protection, MacTxProtection::CtsToSelf))
-            .set_software_rts(matches!(protection, MacTxProtection::RtsCts));
+            .set_software_cts(protection.software_cts())
+            .set_software_rts(protection.software_rts());
     });
 }
 
+/// Clear the queue's software RTS request, preserving CTS and spacing.
+///
+/// Complete `hal_he_set_tx_protection` with its enable argument zero: one
+/// fresh-read update of the request bit.
 #[inline(always)]
-fn set_software_rts<P: Placement>(
+pub(crate) fn clear_software_rts<P: Placement>(
     registers: &mut WifiMacTxQueueControl<P>,
     queue: MacTxQueueIndex,
-    enabled: bool,
 ) {
     registers.modify_protection(bank(queue), |writer| {
-        writer.set_software_rts(enabled);
+        writer.set_software_rts(oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None);
     });
-}
-
-/// Program the recovered RTS register edge without publishing a queue.
-///
-/// Complete `hal_he_set_tx_protection`: the software request preserves CTS
-/// and spacing. A supplied HE threshold replaces the threshold word after
-/// that RMW; `None` leaves it untouched, including its disabled state.
-/// The threshold is in bytes, converted from the HE duration threshold for
-/// the selected PHY by the vendor's `ic_get_he_rts_threshold_bytes`. It is
-/// not an RTS/CTS Duration/NAV value. The caller must own that conversion and
-/// the protected exchange before using this edge in an on-air transaction.
-#[inline(always)]
-pub(crate) fn configure_rts<P: Placement>(
-    control: &mut WifiMacTxQueueControl<P>,
-    vector: &mut WifiMacTxQueueVector<P>,
-    queue: MacTxQueueIndex,
-    enabled: bool,
-    threshold_bytes: Option<u16>,
-) {
-    set_software_rts(control, queue, enabled);
-    if let Some(threshold_bytes) = threshold_bytes {
-        // The vendor's store from zero (`publish_mac_tx_rts_threshold`):
-        // every declared field set, the disable bit zero.
-        vector.modify_he_rts_control(bank(queue), |writer| {
-            writer
-                .set_rts_threshold_bytes(threshold_bytes)
-                .set_rts_threshold_valid(true)
-                .set_he_rts_disabled(false);
-        });
-    }
 }
 
 /// Disable the HE threshold in logical queue order, retaining byte-threshold state.
@@ -287,9 +260,7 @@ pub(crate) fn configure_edca<P: Placement>(
         writer.set_contention_window(bits(u32::from(contention_window)));
     });
     registers.modify_config(bank, |writer| {
-        writer.set_interface(
-            oer_chips_esp32s31_pac::wifi_mac::config::Interface::from_field(interface.bits()),
-        );
+        writer.set_interface(interface.config());
     });
 }
 

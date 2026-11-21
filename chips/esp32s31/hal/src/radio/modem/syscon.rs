@@ -209,6 +209,7 @@ pub(crate) struct ModemSysconPowerBaseline {
 impl ModemSysconPowerBaseline {
     pub(super) const BIT_COUNT: u32 = 19;
     /// Every gate disabled: the baseline of a host test.
+    #[cfg(any(test, feature = "test-support"))]
     pub(super) const DISABLED: Self = Self {
         phy_calibration_clocks: [false; 18],
         phy_i2c_160mhz: ClkI2cMstSel160m::Default,

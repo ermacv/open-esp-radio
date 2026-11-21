@@ -168,7 +168,10 @@ fn whole_word_publications_clear_every_other_field_while_updates_keep_them() {
     assert_eq!(length.bits_14_21_opaque(), 0);
     assert_eq!(length.ht20_txop_count().get(), 0);
     let pti = vectors.read_pti(bank);
-    assert!(!pti.txop());
+    assert_eq!(
+        pti.txop(),
+        oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None
+    );
     assert_eq!(pti.pti_0().get(), 6);
     // The HE queue control keeps every field but the trigger-based enable.
     let he = owners
@@ -232,7 +235,8 @@ fn a_completion_is_read_from_the_alternate_result_after_a_trigger_based_send() {
         .registers
         .take_mac_tx_completion(MacTxQueueIndex::constant::<1>())
         .expect("every completion bit reads set");
-    assert!(completion.last_tx_was_trigger_based() && completion.trigger_flow());
+    assert_eq!(completion.last_transmission(), MacTxFlow::TriggerBased);
+    assert_eq!(completion.flow(), MacTxFlow::TriggerBased);
     assert_eq!(completion.status(), 0xf);
     assert_eq!(completion.detail(), 0xff);
     assert_eq!(completion.trigger_based_packet_count(), 0x7f);

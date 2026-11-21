@@ -294184,12 +294184,86 @@ pub mod wifi_mac {
         /// Positioned bits of `SOFTWARE_RTS`.
         pub const SOFTWARE_RTS_MASK: u32 = 0x80000000;
 
+        /// The declared values of the `SOFTWARE_RTS` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SoftwareRts {
+            /// No hardware-generated RTS precedes the PPDU.
+            None = 0x0,
+            /// A hardware-generated RTS to the PPDU receiver precedes it.
+            Requested = 0x1,
+        }
+
+        impl SoftwareRts {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Requested,
+                }
+            }
+        }
+
         /// Width of `SOFTWARE_CTS` in bits.
         pub const SOFTWARE_CTS_WIDTH: u32 = 1;
         /// Greatest unsigned image of `SOFTWARE_CTS`.
         pub const SOFTWARE_CTS_MAX: u32 = 0x1;
         /// Positioned bits of `SOFTWARE_CTS`.
         pub const SOFTWARE_CTS_MASK: u32 = 0x40000000;
+
+        /// The declared values of the `SOFTWARE_CTS` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SoftwareCts {
+            /// No hardware-generated CTS precedes the PPDU.
+            None = 0x0,
+            /// A hardware-generated CTS addressed to this transmitter precedes the PPDU.
+            Requested = 0x1,
+        }
+
+        impl SoftwareCts {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 30
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Requested,
+                }
+            }
+        }
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -294216,14 +294290,14 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts.
             #[inline]
-            pub const fn software_rts(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn software_rts(self) -> SoftwareRts {
+                SoftwareRts::from_field(self.0 >> 31)
             }
 
             /// Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle.
             #[inline]
-            pub const fn software_cts(self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn software_cts(self) -> SoftwareCts {
+                SoftwareCts::from_field(self.0 >> 30)
             }
         }
 
@@ -294251,14 +294325,14 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts.
             #[inline]
-            pub const fn software_rts(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn software_rts(&self) -> SoftwareRts {
+                SoftwareRts::from_field(self.0 >> 31)
             }
 
             /// Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle.
             #[inline]
-            pub const fn software_cts(&self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn software_cts(&self) -> SoftwareCts {
+                SoftwareCts::from_field(self.0 >> 30)
             }
 
             /// Set `MINIMUM_MPDU_LENGTH_CBW20`.
@@ -294293,15 +294367,15 @@ pub mod wifi_mac {
 
             /// Set `SOFTWARE_RTS`.
             #[inline]
-            pub fn set_software_rts(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_software_rts(&mut self, value: SoftwareRts) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
 
             /// Set `SOFTWARE_CTS`.
             #[inline]
-            pub fn set_software_cts(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+            pub fn set_software_cts(&mut self, value: SoftwareCts) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
         }
@@ -302572,6 +302646,43 @@ pub mod wifi_mac {
         /// Positioned bits of `TXOP`.
         pub const TXOP_MASK: u32 = 0x1;
 
+        /// The declared values of the `TXOP` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Txop {
+            /// The PPDU holds no TXOP: descriptor word-zero bit 29 clear.
+            None = 0x0,
+            /// The PPDU is sent within a TXOP: descriptor word-zero bit 29 set.
+            Held = 0x1,
+        }
+
+        impl Txop {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Held,
+                }
+            }
+        }
+
         /// Width of `PTI_0` in bits.
         pub const PTI_0_WIDTH: u32 = 4;
         /// Greatest unsigned image of `PTI_0`.
@@ -302614,8 +302725,8 @@ pub mod wifi_mac {
         impl R {
             /// Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value.
             #[inline]
-            pub const fn txop(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn txop(self) -> Txop {
+                Txop::from_field(self.0)
             }
 
             /// The `PTI_0` field.
@@ -302655,8 +302766,8 @@ pub mod wifi_mac {
         impl W {
             /// Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value.
             #[inline]
-            pub const fn txop(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn txop(&self) -> Txop {
+                Txop::from_field(self.0)
             }
 
             /// The `PTI_0` field.
@@ -302691,8 +302802,8 @@ pub mod wifi_mac {
 
             /// Set `TXOP`.
             #[inline]
-            pub fn set_txop(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_txop(&mut self, value: Txop) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 

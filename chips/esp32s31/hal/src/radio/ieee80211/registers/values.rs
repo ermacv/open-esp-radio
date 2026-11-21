@@ -42,6 +42,17 @@ impl MacInterface {
         }
     }
 
+    /// The interface's `CONFIG%s.INTERFACE` value.
+    pub const fn config(self) -> oer_chips_esp32s31_pac::wifi_mac::config::Interface {
+        use oer_chips_esp32s31_pac::wifi_mac::config::Interface;
+        match self {
+            Self::Station => Interface::Station,
+            Self::AccessPoint => Interface::AccessPoint,
+            Self::Context2 => Interface::Context2,
+            Self::Context3 => Interface::Context3,
+        }
+    }
+
     /// The two-bit field value of the interface.
     pub const fn field(
         self,

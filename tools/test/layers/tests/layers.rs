@@ -6426,22 +6426,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
-        74,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
-        20,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/queue.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/txrx_init.rs",
-        12,
+        3,
         BY_P3,
     ),
     (

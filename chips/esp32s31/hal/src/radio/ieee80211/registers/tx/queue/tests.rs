@@ -157,21 +157,42 @@ fn protection_replaces_both_software_requests() {
         MacTxProtection::RtsCts,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(protection.software_rts() && !protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+    );
     configure_protection(
         control,
         MacTxQueueIndex::constant::<2>(),
         MacTxProtection::CtsToSelf,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(!protection.software_rts() && protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::Requested
+    );
     configure_protection(
         control,
         MacTxQueueIndex::constant::<2>(),
         MacTxProtection::None,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(!protection.software_rts() && !protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+    );
 }
 
 #[test]
