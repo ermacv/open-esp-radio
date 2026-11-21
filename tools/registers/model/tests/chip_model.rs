@@ -1887,3 +1887,54 @@ fn a_dictionary_value_wider_than_the_dictionary_is_refused() -> TestResult {
     assert!(error.entity.ends_with("GATE"), "{error}");
     Ok(())
 }
+
+#[test]
+fn a_dictionary_naming_a_value_twice_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "schema = 3\n",
+        &GATE.replace(
+            "{ name = \"OPEN\", value = 1,",
+            "{ name = \"CLOSED\", value = 1,",
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    assert!(error.to_string().contains("CLOSED"), "{error}");
+    assert!(error.entity.ends_with("GATE"), "{error}");
+    Ok(())
+}
+
+#[test]
+fn two_dictionaries_of_one_name_in_a_type_are_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    let twice = format!("{GATE}{}", GATE.trim_start_matches("schema = 3\n"));
+    fixture.edit("types/timg.toml", "schema = 3\n", &twice)?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::Duplicate(ref what) if what == "dictionary GATE"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_dictionary_without_a_description_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "schema = 3\n",
+        &GATE.replace(
+            "description = \"A gate that is closed or open.\"",
+            "description = \" \"",
+        ),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(
+        matches!(error.kind, ErrorKind::MissingDescription),
+        "{error}"
+    );
+    assert!(error.entity.ends_with("GATE"), "{error}");
+    Ok(())
+}
