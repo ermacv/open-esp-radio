@@ -7,8 +7,6 @@ use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, el
 use oer_portable_mmio::Bits;
 
 const KEY_ENTRY_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
-const MAX_GROUP_KEY_ID: u8 =
-    oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LOGICAL_KEY_INDEX_MAX as u8;
 
 /// Hardware authentication of the QoS A-MSDU-present bit for one interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -430,7 +428,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise,
                 ),
             ),
-            MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => {
+            MacCcmpKeyIdentity::Group { key_id } => {
+                // The field's own bound: a wider identifier is refused.
                 let Ok(key_id) = Bits::new(u32::from(key_id)) else {
                     return MacKeyInstallOutcome::Rejected;
                 };
@@ -442,7 +441,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     key_id,
                 )
             }
-            MacCcmpKeyIdentity::Group { .. } => return MacKeyInstallOutcome::Rejected,
         };
         let position = index.get() as usize;
         let entry = key_entry(index);

@@ -1529,7 +1529,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_legacy_signal(plcp1.legacy_signal)
                     .set_rate(plcp1.rate.into())
                     .set_key_entry_index(plcp1.key_entry_index)
-                    .set_bssid_select(plcp1.interface.field())
+                    .set_bssid_select(super::values::interface_bssid_select(plcp1.interface))
                     .set_vector_format(plcp1.vector_format.into())
                     .set_high_control_28(false)
                     .set_cbw40(plcp1.cbw40)

@@ -273317,6 +273317,46 @@ pub mod wifi_mac {
                 (value.bits() & 0xff) as u8
             }
         }
+
+        /// A MAC interface selector: the hardware context a TX queue, a receive BlockAck agreement or a key belongs to. The address, BSSID, crypto, TX and receive BlockAck transactions share it.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_MAC_TX, BLOB_LIBCOEX_PTI_TABLE, BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK, BLOB_LIBPP_HAL_CRYPTO.
+        /// The declared values of the `INTERFACE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Interface {
+            /// The infrastructure-station context, traced from the vendor's station callers.
+            Station = 0x0,
+            /// The SoftAP context, traced from the vendor's access-point callers.
+            AccessPoint = 0x1,
+            /// The third selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.
+            Context2 = 0x2,
+            /// The fourth selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.
+            Context3 = 0x3,
+        }
+
+        impl Interface {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x3 {
+                    0x0 => Self::Station,
+                    0x1 => Self::AccessPoint,
+                    0x2 => Self::Context2,
+                    _ => Self::Context3,
+                }
+            }
+        }
     }
 
     /// The `BSSID_LOW%s` register.
@@ -278610,45 +278650,6 @@ pub mod wifi_mac {
         /// Positioned bits of `INTERFACE`.
         pub const INTERFACE_MASK: u32 = 0x30000;
 
-        /// The declared values of the `INTERFACE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Interface {
-            Station = 0x0,
-            AccessPoint = 0x1,
-            Context2 = 0x2,
-            Context3 = 0x3,
-        }
-
-        impl Interface {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 16
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x3 {
-                    0x0 => Self::Station,
-                    0x1 => Self::AccessPoint,
-                    0x2 => Self::Context2,
-                    _ => Self::Context3,
-                }
-            }
-        }
-
         /// Width of `WINDOW` in bits.
         pub const WINDOW_WIDTH: u32 = 7;
         /// Greatest unsigned image of `WINDOW`.
@@ -278676,8 +278677,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> Interface {
-                Interface::from_field(self.0 >> 16)
+            pub const fn interface(self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 16)
             }
 
             /// Seven-bit hardware receive BlockAck window. The normal vendor ordinary-STA activation path publishes 64.
@@ -278705,8 +278706,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> Interface {
-                Interface::from_field(self.0 >> 16)
+            pub const fn interface(&self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 16)
             }
 
             /// Seven-bit hardware receive BlockAck window. The normal vendor ordinary-STA activation path publishes 64.
@@ -278730,7 +278731,7 @@ pub mod wifi_mac {
 
             /// Set `INTERFACE`.
             #[inline]
-            pub fn set_interface(&mut self, value: Interface) -> &mut Self {
+            pub fn set_interface(&mut self, value: super::dictionaries::Interface) -> &mut Self {
                 self.0 = (self.0 & 0xfffcffff) | (value.bits() << 16);
                 self
             }
@@ -294298,45 +294299,6 @@ pub mod wifi_mac {
         /// Positioned bits of `INTERFACE`.
         pub const INTERFACE_MASK: u32 = 0xc00000;
 
-        /// The declared values of the `INTERFACE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Interface {
-            Station = 0x0,
-            AccessPoint = 0x1,
-            Context2 = 0x2,
-            Context3 = 0x3,
-        }
-
-        impl Interface {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 22
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x3 {
-                    0x0 => Self::Station,
-                    0x1 => Self::AccessPoint,
-                    0x2 => Self::Context2,
-                    _ => Self::Context3,
-                }
-            }
-        }
-
         /// Width of `AIFSN` in bits.
         pub const AIFSN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `AIFSN`.
@@ -294370,8 +294332,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> Interface {
-                Interface::from_field(self.0 >> 22)
+            pub const fn interface(self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 22)
             }
 
             /// The `AIFSN` field.
@@ -294405,8 +294367,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> Interface {
-                Interface::from_field(self.0 >> 22)
+            pub const fn interface(&self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 22)
             }
 
             /// The `AIFSN` field.
@@ -294440,7 +294402,7 @@ pub mod wifi_mac {
 
             /// Set `INTERFACE`.
             #[inline]
-            pub fn set_interface(&mut self, value: Interface) -> &mut Self {
+            pub fn set_interface(&mut self, value: super::dictionaries::Interface) -> &mut Self {
                 self.0 = (self.0 & 0xff3fffff) | (value.bits() << 22);
                 self
             }
@@ -298095,45 +298057,6 @@ pub mod wifi_mac {
         /// Positioned bits of `INTERFACE`.
         pub const INTERFACE_MASK: u32 = 0x30000;
 
-        /// The declared values of the `INTERFACE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Interface {
-            Station = 0x0,
-            AccessPoint = 0x1,
-            Context2 = 0x2,
-            Context3 = 0x3,
-        }
-
-        impl Interface {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 16
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x3 {
-                    0x0 => Self::Station,
-                    0x1 => Self::AccessPoint,
-                    0x2 => Self::Context2,
-                    _ => Self::Context3,
-                }
-            }
-        }
-
         /// Width of `WINDOW` in bits.
         pub const WINDOW_WIDTH: u32 = 7;
         /// Greatest unsigned image of `WINDOW`.
@@ -298161,8 +298084,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> Interface {
-                Interface::from_field(self.0 >> 16)
+            pub const fn interface(self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 16)
             }
 
             /// The `WINDOW` field.
@@ -298190,8 +298113,8 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> Interface {
-                Interface::from_field(self.0 >> 16)
+            pub const fn interface(&self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 16)
             }
 
             /// The `WINDOW` field.
@@ -298215,7 +298138,7 @@ pub mod wifi_mac {
 
             /// Set `INTERFACE`.
             #[inline]
-            pub fn set_interface(&mut self, value: Interface) -> &mut Self {
+            pub fn set_interface(&mut self, value: super::dictionaries::Interface) -> &mut Self {
                 self.0 = (self.0 & 0xfffcffff) | (value.bits() << 16);
                 self
             }
@@ -307524,45 +307447,6 @@ pub mod wifi_mac {
         /// Positioned bits of `INTERFACE`.
         pub const INTERFACE_MASK: u32 = 0x3000000;
 
-        /// The declared values of the `INTERFACE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Interface {
-            Station = 0x0,
-            AccessPoint = 0x1,
-            Context2 = 0x2,
-            Context3 = 0x3,
-        }
-
-        impl Interface {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 24
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x3 {
-                    0x0 => Self::Station,
-                    0x1 => Self::AccessPoint,
-                    0x2 => Self::Context2,
-                    _ => Self::Context3,
-                }
-            }
-        }
-
         /// Width of `GCMP_256_BIT_KEY` in bits.
         pub const GCMP_256_BIT_KEY_WIDTH: u32 = 1;
         /// Greatest unsigned image of `GCMP_256_BIT_KEY`.
@@ -307676,8 +307560,8 @@ pub mod wifi_mac {
 
             /// Interface the key belongs to: 0 station, 1 access point.
             #[inline]
-            pub const fn interface(self) -> Interface {
-                Interface::from_field(self.0 >> 24)
+            pub const fn interface(self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 24)
             }
 
             /// Project-assigned name. Set for API key type 9 (GCMP) when the supplied key length is exactly 32 bytes. This is not a general key-length flag for other ciphers.
@@ -307753,8 +307637,8 @@ pub mod wifi_mac {
 
             /// Interface the key belongs to: 0 station, 1 access point.
             #[inline]
-            pub const fn interface(&self) -> Interface {
-                Interface::from_field(self.0 >> 24)
+            pub const fn interface(&self) -> super::dictionaries::Interface {
+                super::dictionaries::Interface::from_field(self.0 >> 24)
             }
 
             /// Project-assigned name. Set for API key type 9 (GCMP) when the supplied key length is exactly 32 bytes. This is not a general key-length flag for other ciphers.
@@ -307818,7 +307702,7 @@ pub mod wifi_mac {
 
             /// Set `INTERFACE`.
             #[inline]
-            pub fn set_interface(&mut self, value: Interface) -> &mut Self {
+            pub fn set_interface(&mut self, value: super::dictionaries::Interface) -> &mut Self {
                 self.0 = (self.0 & 0xfcffffff) | (value.bits() << 24);
                 self
             }

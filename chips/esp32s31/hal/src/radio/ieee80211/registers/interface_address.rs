@@ -1,5 +1,6 @@
 //! The MAC receive-interface address pairs.
 
+use crate::radio::ieee80211::registers::interface_index;
 use oer_chips_esp32s31_pac::wifi_mac::WifiMacInterfaceAddress;
 use oer_portable_mmio::Placement;
 
@@ -20,7 +21,7 @@ fn program<P: Placement>(
     interface: MacInterface,
     address: [u8; 6],
 ) {
-    let index = interface.index();
+    let index = interface_index(interface);
     let [a0, a1, a2, a3, a4, a5] = address;
     block.modify_address_low(index, |w| {
         w.set_bytes_0_3(u32::from_le_bytes([a0, a1, a2, a3]));

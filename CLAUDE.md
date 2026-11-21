@@ -257,7 +257,9 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   register-array counts and block geometry come from generated constants.
   Sequence settings remain HAL constants with `SOURCE:`. An observed image
   without an established code meaning stays cited configuration, not a model
-  dictionary entry.
+  dictionary entry. The HAL publishes a generated name its API takes and
+  never writes it again: a HAL enum beside a generated one is narrower or
+  means something else, and has one translation.
 - **Air formats** use the `oer-portable-wire` field macro and its bounded
   cursor; each field names its clause of the standard. No hand-written masks
   or shifts.

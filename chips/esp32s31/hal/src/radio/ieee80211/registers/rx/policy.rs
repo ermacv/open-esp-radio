@@ -1,5 +1,6 @@
 //! Generated-PAC ownership for finite receive-policy transitions.
 
+use crate::radio::ieee80211::registers::interface_index;
 use oer_portable_mmio::{Index, Placement};
 
 use oer_chips_esp32s31_pac::wifi_mac::{WifiMacBssidPolicy, WifiMacInterfaceAddress};
@@ -24,7 +25,7 @@ fn clear_cold_interface_address<P: Placement>(
     interfaces: &mut WifiMacInterfaceAddress<P>,
     interface: MacInterface,
 ) {
-    interfaces.modify_address_high(interface.index(), |w| {
+    interfaces.modify_address_high(interface_index(interface), |w| {
         w.set_bytes_4_5(0);
     });
 }
@@ -148,7 +149,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn program_interface_bssid(&mut self, interface: MacInterface, bssid_address: [u8; 6]) {
         set_bssid(
             &mut self.mac.wifi_mac_bssid_policy,
-            interface.index(),
+            interface_index(interface),
             bssid_address,
         );
     }
@@ -290,7 +291,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_address_check_enable(true);
         });
         self.interface
-            .modify_address_high(MacInterface::Station.index(), |w| {
+            .modify_address_high(interface_index(MacInterface::Station), |w| {
                 w.set_rx_policy_enable(true);
             });
 
@@ -418,9 +419,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         bssids.modify_bssid_high(bank, |w| {
             w.set_address_check_enable(enabled);
         });
-        self.interface.modify_address_high(interface.index(), |w| {
-            w.set_rx_policy_enable(enabled);
-        });
+        self.interface
+            .modify_address_high(interface_index(interface), |w| {
+                w.set_rx_policy_enable(enabled);
+            });
     }
 
     /// `ic_set_rx_policy_ubssid_check(0, false)`.

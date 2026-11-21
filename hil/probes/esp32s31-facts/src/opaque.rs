@@ -217,9 +217,7 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
     });
     b.modify_rx_block_ack_entry_peer_tail_and_policy(i, |w| {
         w.set_peer_address_tail(0x0504)
-            .set_interface(
-                pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::Interface::from_field(0),
-            )
+            .set_interface(pac::wifi_mac::dictionaries::Interface::Station)
             .set_window(Bits::constant::<32>())
             .set_bits_25_31_opaque(Bits::constant::<0>());
     });
@@ -264,8 +262,10 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
         w.set_peer_address_head(0x03020102);
     });
     b.modify_extra_softap_rx_block_ack_peer_tail_and_policy(|w| {
-        w.set_peer_address_tail(0x0504).set_interface(pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::Interface::from_field(0))
-            .set_window(Bits::constant::<32>()).set_bits_25_31_opaque(Bits::constant::<0>());
+        w.set_peer_address_tail(0x0504)
+            .set_interface(pac::wifi_mac::dictionaries::Interface::Station)
+            .set_window(Bits::constant::<32>())
+            .set_bits_25_31_opaque(Bits::constant::<0>());
     });
     b.modify_extra_softap_rx_block_ack_start_sequence(|w| {
         w.set_sequence(Bits::constant::<0x123>());

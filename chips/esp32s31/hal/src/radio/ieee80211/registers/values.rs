@@ -4,92 +4,34 @@
 //! Each type admits only the values its operation's fields take; the
 //! operations turn them into the generated accessors' field values.
 
-/// Reviewed Wi-Fi MAC interface selector shared by address, BSSID, crypto, TX and ordinary receive-BlockAck transactions.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum MacInterface {
-    /// Infrastructure-station hardware context; traced from STA callers into interface and key-control fields.
-    Station,
-    /// SoftAP hardware context; traced from AP callers into interface and key-control fields.
-    AccessPoint,
-    /// Reviewed third hardware selector accepted by the complete EDCA and RX BlockAck leaves; its protocol-role semantics are not assigned.
-    Context2,
-    /// Reviewed fourth hardware selector accepted by the complete EDCA and RX BlockAck leaves; its protocol-role semantics are not assigned.
-    Context3,
-}
+/// The MAC interface selector: the model's `INTERFACE` dictionary, which
+/// every interface field of the MAC takes.
+pub use oer_chips_esp32s31_pac::wifi_mac::dictionaries::Interface as MacInterface;
 
-impl MacInterface {
-    /// The interface's element of the four-entry interface register arrays.
-    pub const fn index(
-        self,
-    ) -> oer_portable_mmio::Index<{ oer_chips_esp32s31_pac::wifi_mac::config::COUNT }> {
-        match self {
-            Self::Station => oer_portable_mmio::Index::constant::<0>(),
-            Self::AccessPoint => oer_portable_mmio::Index::constant::<1>(),
-            Self::Context2 => oer_portable_mmio::Index::constant::<2>(),
-            Self::Context3 => oer_portable_mmio::Index::constant::<3>(),
-        }
-    }
-
-    /// The interface's `CONFIG%s.INTERFACE` value.
-    pub const fn config(self) -> oer_chips_esp32s31_pac::wifi_mac::config::Interface {
-        use oer_chips_esp32s31_pac::wifi_mac::config::Interface;
-        match self {
-            Self::Station => Interface::Station,
-            Self::AccessPoint => Interface::AccessPoint,
-            Self::Context2 => Interface::Context2,
-            Self::Context3 => Interface::Context3,
-        }
-    }
-
-    /// The two-bit field value of the interface.
-    pub const fn field(
-        self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH }>
-    {
-        match self {
-            Self::Station => oer_portable_mmio::Bits::constant::<0>(),
-            Self::AccessPoint => oer_portable_mmio::Bits::constant::<1>(),
-            Self::Context2 => oer_portable_mmio::Bits::constant::<2>(),
-            Self::Context3 => oer_portable_mmio::Bits::constant::<3>(),
-        }
+/// The interface's selector in a TX queue's `PLCP1.BSSID_SELECT`, which the
+/// model leaves a number: the HAL writes the interface's own value there.
+pub(crate) const fn interface_bssid_select(
+    interface: MacInterface,
+) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::BSSID_SELECT_WIDTH }> {
+    match interface {
+        MacInterface::Station => oer_portable_mmio::Bits::constant::<0>(),
+        MacInterface::AccessPoint => oer_portable_mmio::Bits::constant::<1>(),
+        MacInterface::Context2 => oer_portable_mmio::Bits::constant::<2>(),
+        MacInterface::Context3 => oer_portable_mmio::Bits::constant::<3>(),
     }
 }
 
-/// The interface each of the MAC's interface fields reads as, and the
-/// field value of each interface: every value of the two bits is one.
-macro_rules! interface_of_field {
-    ($($register:ident),+) => {$(
-        impl From<oer_chips_esp32s31_pac::wifi_mac::$register::Interface> for MacInterface {
-            fn from(value: oer_chips_esp32s31_pac::wifi_mac::$register::Interface) -> Self {
-                use oer_chips_esp32s31_pac::wifi_mac::$register::Interface;
-                match value {
-                    Interface::Station => Self::Station,
-                    Interface::AccessPoint => Self::AccessPoint,
-                    Interface::Context2 => Self::Context2,
-                    Interface::Context3 => Self::Context3,
-                }
-            }
-        }
-
-        impl From<MacInterface> for oer_chips_esp32s31_pac::wifi_mac::$register::Interface {
-            fn from(value: MacInterface) -> Self {
-                match value {
-                    MacInterface::Station => Self::Station,
-                    MacInterface::AccessPoint => Self::AccessPoint,
-                    MacInterface::Context2 => Self::Context2,
-                    MacInterface::Context3 => Self::Context3,
-                }
-            }
-        }
-    )+};
+/// The interface's element of the four-entry interface register arrays.
+pub const fn interface_index(
+    interface: MacInterface,
+) -> oer_portable_mmio::Index<{ oer_chips_esp32s31_pac::wifi_mac::config::COUNT }> {
+    match interface {
+        MacInterface::Station => oer_portable_mmio::Index::constant::<0>(),
+        MacInterface::AccessPoint => oer_portable_mmio::Index::constant::<1>(),
+        MacInterface::Context2 => oer_portable_mmio::Index::constant::<2>(),
+        MacInterface::Context3 => oer_portable_mmio::Index::constant::<3>(),
+    }
 }
-
-interface_of_field!(
-    config,
-    rx_block_ack_entry_peer_tail_and_policy,
-    extra_softap_rx_block_ack_peer_tail_and_policy,
-    entry_peer_control
-);
 
 /// Reviewed writable images for the MAC interrupt-enable register.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
