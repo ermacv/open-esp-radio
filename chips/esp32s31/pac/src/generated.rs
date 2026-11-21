@@ -2008,6 +2008,14 @@ pub mod aes {
             }
         }
 
+        /// A named value of the `BLOCK_MODE` field, written as the field's value.
+        impl From<BlockMode> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: BlockMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -3950,6 +3958,14 @@ pub mod axi_dma {
             }
         }
 
+        /// A named value of the `PERI_IN_SEL_CH0` field, written as the field's value.
+        impl From<PeriInSelCh0> for oer_portable_mmio::Bits<6> {
+            #[inline]
+            fn from(value: PeriInSelCh0) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -4973,6 +4989,14 @@ pub mod axi_dma {
                     0x3f => Some(Self::None),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `PERI_OUT_SEL_CH0` field, written as the field's value.
+        impl From<PeriOutSelCh0> for oer_portable_mmio::Bits<6> {
+            #[inline]
+            fn from(value: PeriOutSelCh0) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -25234,6 +25258,14 @@ pub mod bt_mac {
             }
         }
 
+        /// A named value of the `VALUE` field, written as the field's value.
+        impl From<Value> for u32 {
+            #[inline]
+            fn from(value: Value) -> Self {
+                value.bits()
+            }
+        }
+
         /// The value written to the register.
         pub struct W(pub(super) u32);
 
@@ -25296,6 +25328,14 @@ pub mod bt_mac {
                     0x1 => Some(Self::Command1),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `COMMAND` field, written as the field's value.
+        impl From<Command> for u32 {
+            #[inline]
+            fn from(value: Command) -> Self {
+                value.bits()
             }
         }
 
@@ -25364,6 +25404,14 @@ pub mod bt_mac {
             }
         }
 
+        /// A named value of the `COMMAND` field, written as the field's value.
+        impl From<Command> for u32 {
+            #[inline]
+            fn from(value: Command) -> Self {
+                value.bits()
+            }
+        }
+
         /// The value written to the register.
         pub struct W(pub(super) u32);
 
@@ -25426,6 +25474,14 @@ pub mod bt_mac {
                     0x1 => Some(Self::Command1),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `COMMAND` field, written as the field's value.
+        impl From<Command> for u32 {
+            #[inline]
+            fn from(value: Command) -> Self {
+                value.bits()
             }
         }
 
@@ -58682,6 +58738,14 @@ pub mod coex {
             }
         }
 
+        /// A named value of the `PARAMETER_1` field, written as the field's value.
+        impl From<Parameter1> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: Parameter1) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `BITS_30_31_OPAQUE` in bits.
         pub const BITS_30_31_OPAQUE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `BITS_30_31_OPAQUE`.
@@ -59086,6 +59150,14 @@ pub mod coex {
                     0x2 => Some(Self::Follower),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `WORK_MODE` field, written as the field's value.
+        impl From<WorkMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: WorkMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -73375,6 +73447,14 @@ pub mod fe {
                     0x3 => Some(Self::Enabled),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `BITS_5_6_OPAQUE` field, written as the field's value.
+        impl From<Bits5_6Opaque> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: Bits5_6Opaque) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -103680,6 +103760,14 @@ pub mod hp_sys_clkrst {
             }
         }
 
+        /// A named value of the `REG_TIMERGRP0_T0_SRC_SEL` field, written as the field's value.
+        impl From<RegTimergrp0T0SrcSel> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: RegTimergrp0T0SrcSel) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `REG_TIMERGRP0_T0_CLK_EN` in bits.
         pub const REG_TIMERGRP0_T0_CLK_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `REG_TIMERGRP0_T0_CLK_EN`.
@@ -104109,6 +104197,14 @@ pub mod hp_sys_clkrst {
             }
         }
 
+        /// A named value of the `REG_TIMERGRP1_T0_SRC_SEL` field, written as the field's value.
+        impl From<RegTimergrp1T0SrcSel> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: RegTimergrp1T0SrcSel) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `REG_TIMERGRP1_T0_CLK_EN` in bits.
         pub const REG_TIMERGRP1_T0_CLK_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `REG_TIMERGRP1_T0_CLK_EN`.
@@ -104157,6 +104253,14 @@ pub mod hp_sys_clkrst {
                     0x2 => Some(Self::RefF80m),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `REG_TIMERGRP1_T1_SRC_SEL` field, written as the field's value.
+        impl From<RegTimergrp1T1SrcSel> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: RegTimergrp1T1SrcSel) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -112107,6 +112211,14 @@ pub mod i2c_ana_mst {
             }
         }
 
+        /// A named value of the `BBPLL_CAL_MODE` field, written as the field's value.
+        impl From<BbpllCalMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: BbpllCalMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `BITS_4_5_OPAQUE` in bits.
         pub const BITS_4_5_OPAQUE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `BITS_4_5_OPAQUE`.
@@ -112165,6 +112277,14 @@ pub mod i2c_ana_mst {
                     0x2 => Some(Self::RegisterMode),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `PHY_REGISTER_MODE` field, written as the field's value.
+        impl From<PhyRegisterMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: PhyRegisterMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -113726,6 +113846,14 @@ pub mod i2c_ana_mst_mem {
                     0x6d => Some(Self::DigReg),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `BLOCK` field, written as the field's value.
+        impl From<Block> for u8 {
+            #[inline]
+            fn from(value: Block) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -117611,6 +117739,14 @@ pub mod ieee802154 {
             }
         }
 
+        /// A named value of the `NOTIFY_IMAGE` field, written as the field's value.
+        impl From<NotifyImage> for u32 {
+            #[inline]
+            fn from(value: NotifyImage) -> Self {
+                value.bits()
+            }
+        }
+
         /// The value written to the register.
         pub struct W(pub(super) u32);
 
@@ -120800,6 +120936,14 @@ pub mod interrupt_core {
                     0x0 => Some(Self::Disconnected),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `MAP` field, written as the field's value.
+        impl From<Map> for oer_portable_mmio::Bits<6> {
+            #[inline]
+            fn from(value: Map) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -132306,6 +132450,14 @@ pub mod modem_etm {
             }
         }
 
+        /// A named value of the `ID` field, written as the field's value.
+        impl From<Id> for u32 {
+            #[inline]
+            fn from(value: Id) -> Self {
+                value.bits()
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -132414,6 +132566,14 @@ pub mod modem_etm {
                     0x14 => Some(Self::BlePhyTask14),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `ID` field, written as the field's value.
+        impl From<Id> for u32 {
+            #[inline]
+            fn from(value: Id) -> Self {
+                value.bits()
             }
         }
 
@@ -136806,6 +136966,14 @@ pub mod modem_pwr {
                     0x1 => Some(Self::SoftwarePending),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `LOW_BYTE` field, written as the field's value.
+        impl From<LowByte> for u8 {
+            #[inline]
+            fn from(value: LowByte) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -141918,6 +142086,14 @@ pub mod modem_pwr {
                     0x1 => Some(Self::RxBeacon),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `BITS_0_31_OPAQUE` field, written as the field's value.
+        impl From<Bits0_31Opaque> for u32 {
+            #[inline]
+            fn from(value: Bits0_31Opaque) -> Self {
+                value.bits()
             }
         }
 
@@ -168984,6 +169160,14 @@ pub mod rtc_wdt {
                     0x0 => Some(Self::Lock),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `WDT_WKEY` field, written as the field's value.
+        impl From<WdtWkey> for u32 {
+            #[inline]
+            fn from(value: WdtWkey) -> Self {
+                value.bits()
             }
         }
 
@@ -206844,6 +207028,14 @@ pub mod spi1_mem_c {
             }
         }
 
+        /// A named value of the `SPI_MEM_USR_COMMAND_VALUE` field, written as the field's value.
+        impl From<UsrCommandValue> for u16 {
+            #[inline]
+            fn from(value: UsrCommandValue) -> Self {
+                value.bits() as u16
+            }
+        }
+
         /// Width of `SPI_MEM_USR_COMMAND_BITLEN` in bits.
         pub const USR_COMMAND_BITLEN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `SPI_MEM_USR_COMMAND_BITLEN`.
@@ -236128,6 +236320,14 @@ pub mod spi_mem_s {
             }
         }
 
+        /// A named value of the `CACHE_SRAM_USR_RD_CMD_VALUE` field, written as the field's value.
+        impl From<CacheSramUsrRdCmdValue> for u16 {
+            #[inline]
+            fn from(value: CacheSramUsrRdCmdValue) -> Self {
+                value.bits() as u16
+            }
+        }
+
         /// Width of `CACHE_SRAM_USR_RD_CMD_BITLEN` in bits.
         pub const CACHE_SRAM_USR_RD_CMD_BITLEN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `CACHE_SRAM_USR_RD_CMD_BITLEN`.
@@ -236257,6 +236457,14 @@ pub mod spi_mem_s {
                     0x8080 => Some(Self::SyncWrite),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `CACHE_SRAM_USR_WR_CMD_VALUE` field, written as the field's value.
+        impl From<CacheSramUsrWrCmdValue> for u16 {
+            #[inline]
+            fn from(value: CacheSramUsrWrCmdValue) -> Self {
+                value.bits() as u16
             }
         }
 
@@ -273382,6 +273590,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `BSSID_SELECT` field, written as the field's value.
+        impl From<BssidSelect> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: BssidSelect) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `HE_BSSID_ENABLE` in bits.
         pub const HE_BSSID_ENABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `HE_BSSID_ENABLE`.
@@ -275150,6 +275366,14 @@ pub mod wifi_mac {
                     0x1 => Some(Self::Enabled),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `CSI_APPEND_ENABLE` field, written as the field's value.
+        impl From<CsiAppendEnable> for bool {
+            #[inline]
+            fn from(value: CsiAppendEnable) -> Self {
+                value.bits() != 0
             }
         }
 
@@ -281331,6 +281555,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_0` field, written as the field's value.
+        impl From<Rate0> for u8 {
+            #[inline]
+            fn from(value: Rate0) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_1` in bits.
         pub const RATE_1_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_1`.
@@ -281370,6 +281602,14 @@ pub mod wifi_mac {
                     0xa0 => Some(Self::ExtendedRange),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `RATE_1` field, written as the field's value.
+        impl From<Rate1> for u8 {
+            #[inline]
+            fn from(value: Rate1) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -281415,6 +281655,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_2` field, written as the field's value.
+        impl From<Rate2> for u8 {
+            #[inline]
+            fn from(value: Rate2) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_3` in bits.
         pub const RATE_3_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_3`.
@@ -281454,6 +281702,14 @@ pub mod wifi_mac {
                     0xa0 => Some(Self::ExtendedRange),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `RATE_3` field, written as the field's value.
+        impl From<Rate3> for u8 {
+            #[inline]
+            fn from(value: Rate3) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -281672,6 +281928,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_INDEX` field, written as the field's value.
+        impl From<RateIndex> for oer_portable_mmio::Bits<6> {
+            #[inline]
+            fn from(value: RateIndex) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `SIG_MODE` in bits.
         pub const SIG_MODE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `SIG_MODE`.
@@ -281711,6 +281975,14 @@ pub mod wifi_mac {
                     0x2 => Some(Self::Format2),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `SIG_MODE` field, written as the field's value.
+        impl From<SigMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: SigMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -282367,6 +282639,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `BPSK_RATE` field, written as the field's value.
+        impl From<BpskRate> for u8 {
+            #[inline]
+            fn from(value: BpskRate) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `QPSK_RATE` in bits.
         pub const QPSK_RATE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `QPSK_RATE`.
@@ -282407,6 +282687,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `QPSK_RATE` field, written as the field's value.
+        impl From<QpskRate> for u8 {
+            #[inline]
+            fn from(value: QpskRate) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `QAM16_RATE` in bits.
         pub const QAM16_RATE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `QAM16_RATE`.
@@ -282444,6 +282732,14 @@ pub mod wifi_mac {
                     0x9 => Some(Self::Ofdm24m),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `QAM16_RATE` field, written as the field's value.
+        impl From<Qam16Rate> for u8 {
+            #[inline]
+            fn from(value: Qam16Rate) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -282630,6 +282926,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_1M` field, written as the field's value.
+        impl From<Rate1m> for u8 {
+            #[inline]
+            fn from(value: Rate1m) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_2M` in bits.
         pub const RATE_2M_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_2M`.
@@ -282670,6 +282974,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_2M` field, written as the field's value.
+        impl From<Rate2m> for u8 {
+            #[inline]
+            fn from(value: Rate2m) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_2M_SHORT_PREAMBLE` in bits.
         pub const RATE_2M_SHORT_PREAMBLE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_2M_SHORT_PREAMBLE`.
@@ -282707,6 +283019,14 @@ pub mod wifi_mac {
                     0x5 => Some(Self::Dsss2mShort),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `RATE_2M_SHORT_PREAMBLE` field, written as the field's value.
+        impl From<Rate2mShortPreamble> for u8 {
+            #[inline]
+            fn from(value: Rate2mShortPreamble) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -283050,6 +283370,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `BPSK_RATE` field, written as the field's value.
+        impl From<BpskRate> for u8 {
+            #[inline]
+            fn from(value: BpskRate) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `QPSK_RATE` in bits.
         pub const QPSK_RATE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `QPSK_RATE`.
@@ -283090,6 +283418,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `QPSK_RATE` field, written as the field's value.
+        impl From<QpskRate> for u8 {
+            #[inline]
+            fn from(value: QpskRate) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `QAM16_RATE` in bits.
         pub const QAM16_RATE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `QAM16_RATE`.
@@ -283127,6 +283463,14 @@ pub mod wifi_mac {
                     0x9 => Some(Self::Ofdm24m),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `QAM16_RATE` field, written as the field's value.
+        impl From<Qam16Rate> for u8 {
+            #[inline]
+            fn from(value: Qam16Rate) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -283313,6 +283657,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_1M` field, written as the field's value.
+        impl From<Rate1m> for u8 {
+            #[inline]
+            fn from(value: Rate1m) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_2M` in bits.
         pub const RATE_2M_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_2M`.
@@ -283353,6 +283705,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE_2M` field, written as the field's value.
+        impl From<Rate2m> for u8 {
+            #[inline]
+            fn from(value: Rate2m) -> Self {
+                value.bits() as u8
+            }
+        }
+
         /// Width of `RATE_2M_SHORT_PREAMBLE` in bits.
         pub const RATE_2M_SHORT_PREAMBLE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_2M_SHORT_PREAMBLE`.
@@ -283390,6 +283750,14 @@ pub mod wifi_mac {
                     0x5 => Some(Self::Dsss2mShort),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `RATE_2M_SHORT_PREAMBLE` field, written as the field's value.
+        impl From<Rate2mShortPreamble> for u8 {
+            #[inline]
+            fn from(value: Rate2mShortPreamble) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -283678,6 +284046,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `BPSK_RATE` field, written as the field's value.
+        impl From<BpskRate> for oer_portable_mmio::Bits<5> {
+            #[inline]
+            fn from(value: BpskRate) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `BPSK_SIGNAL_MODE` in bits.
         pub const BPSK_SIGNAL_MODE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `BPSK_SIGNAL_MODE`.
@@ -283715,6 +284091,14 @@ pub mod wifi_mac {
                     0x1 => Some(Self::Mode1),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `BPSK_SIGNAL_MODE` field, written as the field's value.
+        impl From<BpskSignalMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: BpskSignalMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -283772,6 +284156,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `QPSK_RATE` field, written as the field's value.
+        impl From<QpskRate> for oer_portable_mmio::Bits<5> {
+            #[inline]
+            fn from(value: QpskRate) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `QPSK_SIGNAL_MODE` in bits.
         pub const QPSK_SIGNAL_MODE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `QPSK_SIGNAL_MODE`.
@@ -283809,6 +284201,14 @@ pub mod wifi_mac {
                     0x1 => Some(Self::Mode1),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `QPSK_SIGNAL_MODE` field, written as the field's value.
+        impl From<QpskSignalMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: QpskSignalMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -283866,6 +284266,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `QAM16_RATE` field, written as the field's value.
+        impl From<Qam16Rate> for oer_portable_mmio::Bits<5> {
+            #[inline]
+            fn from(value: Qam16Rate) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `QAM16_SIGNAL_MODE` in bits.
         pub const QAM16_SIGNAL_MODE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `QAM16_SIGNAL_MODE`.
@@ -283903,6 +284311,14 @@ pub mod wifi_mac {
                     0x1 => Some(Self::Mode1),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `QAM16_SIGNAL_MODE` field, written as the field's value.
+        impl From<Qam16SignalMode> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: Qam16SignalMode) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -290137,6 +290553,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `BSR_ACI_HIGH_COMPARISON_METHOD` field, written as the field's value.
+        impl From<BsrAciHighComparisonMethod> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: BsrAciHighComparisonMethod) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `PREAC_DISABLE_LOW_AC_TX_WHEN_EMPTY` in bits.
         pub const PREAC_DISABLE_LOW_AC_TX_WHEN_EMPTY_WIDTH: u32 = 1;
         /// Greatest unsigned image of `PREAC_DISABLE_LOW_AC_TX_WHEN_EMPTY`.
@@ -292320,6 +292744,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `TX_BLOCK_STOP_REQUEST_HIGH` field, written as the field's value.
+        impl From<TxBlockStopRequestHigh> for oer_portable_mmio::Bits<4> {
+            #[inline]
+            fn from(value: TxBlockStopRequestHigh) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `BITS_24_31_OPAQUE` in bits.
         pub const BITS_24_31_OPAQUE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `BITS_24_31_OPAQUE`.
@@ -293752,12 +294184,86 @@ pub mod wifi_mac {
         /// Positioned bits of `SOFTWARE_RTS`.
         pub const SOFTWARE_RTS_MASK: u32 = 0x80000000;
 
+        /// The declared values of the `SOFTWARE_RTS` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SoftwareRts {
+            /// No hardware-generated RTS precedes the PPDU.
+            None = 0x0,
+            /// A hardware-generated RTS to the PPDU receiver precedes it.
+            Requested = 0x1,
+        }
+
+        impl SoftwareRts {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Requested,
+                }
+            }
+        }
+
         /// Width of `SOFTWARE_CTS` in bits.
         pub const SOFTWARE_CTS_WIDTH: u32 = 1;
         /// Greatest unsigned image of `SOFTWARE_CTS`.
         pub const SOFTWARE_CTS_MAX: u32 = 0x1;
         /// Positioned bits of `SOFTWARE_CTS`.
         pub const SOFTWARE_CTS_MASK: u32 = 0x40000000;
+
+        /// The declared values of the `SOFTWARE_CTS` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SoftwareCts {
+            /// No hardware-generated CTS precedes the PPDU.
+            None = 0x0,
+            /// A hardware-generated CTS addressed to this transmitter precedes the PPDU.
+            Requested = 0x1,
+        }
+
+        impl SoftwareCts {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 30
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Requested,
+                }
+            }
+        }
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -293784,14 +294290,14 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts.
             #[inline]
-            pub const fn software_rts(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn software_rts(self) -> SoftwareRts {
+                SoftwareRts::from_field(self.0 >> 31)
             }
 
             /// Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle.
             #[inline]
-            pub const fn software_cts(self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn software_cts(self) -> SoftwareCts {
+                SoftwareCts::from_field(self.0 >> 30)
             }
         }
 
@@ -293819,14 +294325,14 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_txq_conf2 passes bit 31 as the SW_RTS format argument at sp+4; hal_he_set_tx_protection updates this bit from its enable argument. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated RTS to the data receiver followed by CTS, data and ACK/BlockAck, including control frames on both 20-MHz halves. Ordinary protected admission and the complete automatic NAV algorithm remain separate contracts.
             #[inline]
-            pub const fn software_rts(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn software_rts(&self) -> SoftwareRts {
+                SoftwareRts::from_field(self.0 >> 31)
             }
 
             /// Complete dbg_read_txq_conf2 passes bit 30 as the SW_CTS format argument at sp+8. Bounded HT40 MCS7 SGI diagnostics observe hardware-generated CTS addressed to the transmitter before unicast data, on both 20-MHz halves. This establishes the request in that profile; it does not qualify the full ordinary protected-publication lifecycle.
             #[inline]
-            pub const fn software_cts(&self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn software_cts(&self) -> SoftwareCts {
+                SoftwareCts::from_field(self.0 >> 30)
             }
 
             /// Set `MINIMUM_MPDU_LENGTH_CBW20`.
@@ -293861,15 +294367,15 @@ pub mod wifi_mac {
 
             /// Set `SOFTWARE_RTS`.
             #[inline]
-            pub fn set_software_rts(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_software_rts(&mut self, value: SoftwareRts) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
 
             /// Set `SOFTWARE_CTS`.
             #[inline]
-            pub fn set_software_cts(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+            pub fn set_software_cts(&mut self, value: SoftwareCts) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
         }
@@ -294174,6 +294680,14 @@ pub mod wifi_mac {
                     0x5 => Some(Self::HeAmpdu),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `PLCP_FORMAT` field, written as the field's value.
+        impl From<PlcpFormat> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: PlcpFormat) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -297364,6 +297878,14 @@ pub mod wifi_mac {
                     0x1f => Some(Self::AllDisabled),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `CLASS_DISABLE` field, written as the field's value.
+        impl From<ClassDisable> for oer_portable_mmio::Bits<5> {
+            #[inline]
+            fn from(value: ClassDisable) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -301709,6 +302231,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `RATE` field, written as the field's value.
+        impl From<Rate> for oer_portable_mmio::Bits<5> {
+            #[inline]
+            fn from(value: Rate) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `KEY_ENTRY_INDEX` in bits.
         pub const KEY_ENTRY_INDEX_WIDTH: u32 = 6;
         /// Greatest unsigned image of `KEY_ENTRY_INDEX`.
@@ -301764,6 +302294,14 @@ pub mod wifi_mac {
                     0x2 => Some(Self::He),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `VECTOR_FORMAT` field, written as the field's value.
+        impl From<VectorFormat> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: VectorFormat) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -302108,6 +302646,43 @@ pub mod wifi_mac {
         /// Positioned bits of `TXOP`.
         pub const TXOP_MASK: u32 = 0x1;
 
+        /// The declared values of the `TXOP` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Txop {
+            /// The PPDU holds no TXOP: descriptor word-zero bit 29 clear.
+            None = 0x0,
+            /// The PPDU is sent within a TXOP: descriptor word-zero bit 29 set.
+            Held = 0x1,
+        }
+
+        impl Txop {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::None,
+                    _ => Self::Held,
+                }
+            }
+        }
+
         /// Width of `PTI_0` in bits.
         pub const PTI_0_WIDTH: u32 = 4;
         /// Greatest unsigned image of `PTI_0`.
@@ -302150,8 +302725,8 @@ pub mod wifi_mac {
         impl R {
             /// Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value.
             #[inline]
-            pub const fn txop(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn txop(self) -> Txop {
+                Txop::from_field(self.0)
             }
 
             /// The `PTI_0` field.
@@ -302191,8 +302766,8 @@ pub mod wifi_mac {
         impl W {
             /// Complete libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu sets or clears this bit from descriptor word-zero bit 29 before libpp[hal_mac.o]::mac_tx_set_pti publishes the four coexistence lanes. The bit is independent of those lanes and must not retain the preceding queue transaction's value.
             #[inline]
-            pub const fn txop(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn txop(&self) -> Txop {
+                Txop::from_field(self.0)
             }
 
             /// The `PTI_0` field.
@@ -302227,8 +302802,8 @@ pub mod wifi_mac {
 
             /// Set `TXOP`.
             #[inline]
-            pub fn set_txop(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_txop(&mut self, value: Txop) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
@@ -302393,6 +302968,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `MCS` field, written as the field's value.
+        impl From<Mcs> for oer_portable_mmio::Bits<7> {
+            #[inline]
+            fn from(value: Mcs) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `CBW40` in bits.
         pub const CBW40_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CBW40`.
@@ -302472,6 +303055,14 @@ pub mod wifi_mac {
                     0x0 => Some(Self::None),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `STBC` field, written as the field's value.
+        impl From<Stbc> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: Stbc) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -303136,6 +303727,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `MCS` field, written as the field's value.
+        impl From<Mcs> for oer_portable_mmio::Bits<4> {
+            #[inline]
+            fn from(value: Mcs) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `DCM` in bits.
         pub const DCM_WIDTH: u32 = 1;
         /// Greatest unsigned image of `DCM`.
@@ -303201,6 +303800,14 @@ pub mod wifi_mac {
                     0x0 => Some(Self::Mhz20),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `BANDWIDTH` field, written as the field's value.
+        impl From<Bandwidth> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: Bandwidth) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -303287,6 +303894,14 @@ pub mod wifi_mac {
                     0x0 => Some(Self::OneStreamNoMidamble),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `NSTS_AND_MIDAMBLE_PERIODICITY` field, written as the field's value.
+        impl From<NstsAndMidamblePeriodicity> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: NstsAndMidamblePeriodicity) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -303901,6 +304516,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `LINK_INDEX` field, written as the field's value.
+        impl From<LinkIndex> for oer_portable_mmio::Bits<7> {
+            #[inline]
+            fn from(value: LinkIndex) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -304308,6 +304931,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `HT40_MCS` field, written as the field's value.
+        impl From<Ht40Mcs> for oer_portable_mmio::Bits<4> {
+            #[inline]
+            fn from(value: Ht40Mcs) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -304531,6 +305162,14 @@ pub mod wifi_mac {
                     0xf => Some(Self::Ofdm9m),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `RTS_RATE` field, written as the field's value.
+        impl From<RtsRate> for u8 {
+            #[inline]
+            fn from(value: RtsRate) -> Self {
+                value.bits() as u8
             }
         }
 
@@ -306731,6 +307370,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `NEXT_LINK` field, written as the field's value.
+        impl From<NextLink> for oer_portable_mmio::Bits<7> {
+            #[inline]
+            fn from(value: NextLink) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -306932,6 +307579,14 @@ pub mod wifi_mac {
             }
         }
 
+        /// A named value of the `ALGORITHM` field, written as the field's value.
+        impl From<Algorithm> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: Algorithm) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+
         /// Width of `DIRECTION` in bits.
         pub const DIRECTION_WIDTH: u32 = 3;
         /// Greatest unsigned image of `DIRECTION`.
@@ -306971,6 +307626,14 @@ pub mod wifi_mac {
                     0x6 => Some(Self::Group),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `DIRECTION` field, written as the field's value.
+        impl From<Direction> for oer_portable_mmio::Bits<3> {
+            #[inline]
+            fn from(value: Direction) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 
@@ -307073,6 +307736,14 @@ pub mod wifi_mac {
                     0x3 => Some(Self::WithoutFlag),
                     _ => None,
                 }
+            }
+        }
+
+        /// A named value of the `LOGICAL_KEY_INDEX` field, written as the field's value.
+        impl From<LogicalKeyIndex> for oer_portable_mmio::Bits<2> {
+            #[inline]
+            fn from(value: LogicalKeyIndex) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
             }
         }
 

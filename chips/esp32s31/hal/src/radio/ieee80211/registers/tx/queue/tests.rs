@@ -93,8 +93,8 @@ fn edca_publishes_three_fields_of_the_reversed_bank() {
         configure_edca(
             &mut owners.registers.mac.wifi_mac_tx_queue_control,
             MacTxQueueIndex::constant::<1>(),
-            0x7,
-            0x3ff,
+            oer_portable_mmio::Bits::constant::<0x7>(),
+            oer_portable_mmio::Bits::constant::<0x3ff>(),
             MacInterface::AccessPoint,
         );
     }
@@ -157,21 +157,42 @@ fn protection_replaces_both_software_requests() {
         MacTxProtection::RtsCts,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(protection.software_rts() && !protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+    );
     configure_protection(
         control,
         MacTxQueueIndex::constant::<2>(),
         MacTxProtection::CtsToSelf,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(!protection.software_rts() && protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::Requested
+    );
     configure_protection(
         control,
         MacTxQueueIndex::constant::<2>(),
         MacTxProtection::None,
     );
     let protection = control.read_protection(bank(MacTxQueueIndex::constant::<2>()));
-    assert!(!protection.software_rts() && !protection.software_cts());
+    assert_eq!(
+        protection.software_rts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None
+    );
+    assert_eq!(
+        protection.software_cts(),
+        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+    );
 }
 
 #[test]

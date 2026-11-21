@@ -1026,6 +1026,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         {
             render_range(output, field, min, max);
         }
+        render_open_from(output, field);
     }
     if template.readable() {
         output.push_str(
@@ -1394,6 +1395,47 @@ pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Res
     }
     output.push_str("}\n\n");
     Ok(())
+}
+
+/// A field with named values that stays open for writing (its setter takes
+/// the number or a bounded range) takes a name too: `From` of its enum into
+/// the setter's type, with no truncation, when every name lies in the range.
+fn render_open_from(output: &mut String, field: &FieldPlan<'_>) {
+    let Some(values) = field.values.as_ref().filter(|values| !values.shared) else {
+        return;
+    };
+    if field.field.family.is_some() || !field.setter() {
+        return;
+    }
+    let name = &values.name;
+    let (target, body) = match (field.setter, field.range) {
+        (Setter::Native, _) => {
+            let body = match field.width {
+                1 => "value.bits() != 0".to_owned(),
+                8 => "value.bits() as u8".to_owned(),
+                16 => "value.bits() as u16".to_owned(),
+                32 => "value.bits()".to_owned(),
+                _ => "oer_portable_mmio::Bits::truncate(value.bits())".to_owned(),
+            };
+            (field.native(), body)
+        }
+        (Setter::Range, Some((min, max)))
+            if values
+                .variants
+                .iter()
+                .all(|(_, value, _)| *value >= min && *value <= max) =>
+        {
+            (field.range_name(), "Self(value.bits())".to_owned())
+        }
+        _ => return,
+    };
+    let _ = writeln!(
+        output,
+        "/// A named value of the `{}` field, written as the field's value.\n\
+         impl From<{name}> for {target} {{\n\
+         #[inline]\nfn from(value: {name}) -> Self {{\n{body}\n}}\n}}\n",
+        field.field.name
+    );
 }
 
 fn render_range(output: &mut String, field: &FieldPlan<'_>, min: u32, max: u32) {

@@ -564,14 +564,15 @@ pub use rx::{
 };
 pub use tsf::StaTbttSchedule;
 pub use tx::{
-    MAC_TX_ABORT_SETTLE, MAC_TX_TIMEOUT_MAX, MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs,
-    MacHeRate, MacHeTxFormat, MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation,
+    MAC_TX_ABORT_SETTLE, MAC_TX_TIMEOUT_MAX, MacDsssPreamble, MacHeFecCoding, MacHeMcs, MacHeRate,
+    MacHeTxFormat, MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation,
     MacHtChannelWidth, MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate,
     MacHtTxFormat, MacHtTxParameters, MacHtTxProgram, MacLegacyRate, MacLegacyTxParameters,
     MacLegacyTxProgram, MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot, MacTxAbortCause,
     MacTxAbortOutcome, MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome,
-    MacTxDetachReason, MacTxPrepareFault, MacTxPrepareRefused, MacTxProtection, MacTxPtiProgram,
-    MacTxQueueAborted, MacTxQueueDetached, MacTxQueueReleased,
+    MacTxDetachReason, MacTxFlow, MacTxPrepareFault, MacTxPrepareRefused, MacTxProtection,
+    MacTxPtiProgram, MacTxQueueAborted, MacTxQueueDetached, MacTxQueueOwnership, MacTxQueuePending,
+    MacTxQueueReleased,
     power_init::{
         MAC_TX_POWER_RATE_COUNT, MacPartialRuPowerSelector, MacTxPowerIndex, MacTxPowerPair,
         MacTxPowerTable,

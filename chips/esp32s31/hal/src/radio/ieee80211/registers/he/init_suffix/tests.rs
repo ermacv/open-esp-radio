@@ -89,7 +89,14 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
             .mac
             .wifi_mac_tx_queue_control
             .read_protection(element(physical));
-        assert!(!protection.software_cts() && protection.software_rts());
+        assert_eq!(
+            protection.software_cts(),
+            oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+        );
+        assert_eq!(
+            protection.software_rts(),
+            oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested
+        );
     }
     let suffix = &registers.mac.wifi_mac_he_init_suffix;
     for physical in 0..8 {

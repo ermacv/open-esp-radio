@@ -9,12 +9,17 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 use core::marker::PhantomData;
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
-use oer_chips_esp32s31_pac::wifi_mac::{length_control::TxopListSelect, plcp1::Rate as PlcpRate};
+use oer_chips_esp32s31_pac::wifi_mac::{
+    control_n::PlcpFormat,
+    length_control::{RtsRate, TxopListSelect},
+    plcp1::{Rate as PlcpRate, VectorFormat},
+};
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
+use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,
-    WifiRadioRegisters, bits, byte, halfword,
+    WifiRadioRegisters, byte, halfword,
 };
 
 const DESCRIPTOR_ADDRESS_LOW_MASK: u32 = WifiDescriptorAddressLow::MAX;
@@ -55,11 +60,66 @@ pub struct MacOrdinaryTxQueueSnapshot {
     pub rx_end_count: u16,
     pub rx_fcs_error_count: u16,
     pub rx_abort_count: u16,
-    pub valid: bool,
-    pub enabled: bool,
-    pub completion_pending: bool,
-    pub timeout_pending: bool,
-    pub collision_pending: bool,
+    pub ownership: MacTxQueueOwnership,
+    pub pending: MacTxQueuePending,
+}
+
+/// The queue's `ENABLE` and `VALID` bits as observed: who holds the queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxQueueOwnership {
+    /// Neither bit: software holds the queue.
+    Idle,
+    /// `ENABLE` alone.
+    Enabled,
+    /// `VALID` alone.
+    Valid,
+    /// Both bits: the queue is published to the hardware.
+    Published,
+}
+
+impl MacTxQueueOwnership {
+    const fn observed(enabled: bool, valid: bool) -> Self {
+        match (enabled, valid) {
+            (false, false) => Self::Idle,
+            (true, false) => Self::Enabled,
+            (false, true) => Self::Valid,
+            (true, true) => Self::Published,
+        }
+    }
+}
+
+/// The queue's raised result events, each one independent of the others.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct MacTxQueuePending(u8);
+
+impl MacTxQueuePending {
+    const COMPLETION: u8 = 1;
+    const TIMEOUT: u8 = 1 << 1;
+    const COLLISION: u8 = 1 << 2;
+
+    /// The set of the raised events among the three.
+    const fn observed(completion: bool, timeout: bool, collision: bool) -> Self {
+        Self(
+            (if completion { Self::COMPLETION } else { 0 })
+                | (if timeout { Self::TIMEOUT } else { 0 })
+                | (if collision { Self::COLLISION } else { 0 }),
+        )
+    }
+
+    /// Whether the completion event is raised.
+    pub const fn completion(self) -> bool {
+        self.0 & Self::COMPLETION != 0
+    }
+
+    /// Whether the timeout event is raised.
+    pub const fn timeout(self) -> bool {
+        self.0 & Self::TIMEOUT != 0
+    }
+
+    /// Whether the collision event is raised.
+    pub const fn collision(self) -> bool {
+        self.0 & Self::COLLISION != 0
+    }
 }
 
 /// Closed argument projection of complete `hal_set_tx_pti`.
@@ -109,59 +169,117 @@ fn tx_descriptor_head_matches(
     descriptor_address_low == authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK
 }
 
-/// Reviewed ESP32-S31 selector for one non-HT transmit rate.
+/// The preamble of a DSSS or CCK PPDU, as `oer_protocols_ieee80211_wire`'s
+/// `DsssPreamble` names it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacDsssPreamble {
+    Long,
+    Short,
+}
+
+/// One non-HT transmit rate, with the variants of
+/// `oer_protocols_ieee80211_wire`'s `LegacyRate`.
 ///
-/// Hardware codes are selected from the generated PAC domain. Callers can
-/// decode observations without maintaining another hardware dictionary.
-/// The selector stores that code, so interrupt TX publication needs no encoder
-/// dispatch to obtain it.
+/// It feeds two fields: `PLCP1%s.RATE` (`plcp1::Rate`, which also holds the
+/// HT and HE rates) and `LENGTH_CONTROL%s.RTS_RATE` (`length_control::RtsRate`,
+/// the non-HT rates alone), with the same code in each.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-#[repr(u8)]
 pub enum MacLegacyRate {
     #[default]
-    Dsss1MLong = PlcpRate::Dsss1mLong.bits() as u8,
-    Dsss2MLong = PlcpRate::Dsss2mLong.bits() as u8,
-    Cck5M5Long = PlcpRate::Cck5m5Long.bits() as u8,
-    Cck11MLong = PlcpRate::Cck11mLong.bits() as u8,
-    Dsss2MShort = PlcpRate::Dsss2mShort.bits() as u8,
-    Cck5M5Short = PlcpRate::Cck5m5Short.bits() as u8,
-    Cck11MShort = PlcpRate::Cck11mShort.bits() as u8,
-    Ofdm48M = PlcpRate::Ofdm48m.bits() as u8,
-    Ofdm24M = PlcpRate::Ofdm24m.bits() as u8,
-    Ofdm12M = PlcpRate::Ofdm12m.bits() as u8,
-    Ofdm6M = PlcpRate::Ofdm6m.bits() as u8,
-    Ofdm54M = PlcpRate::Ofdm54m.bits() as u8,
-    Ofdm36M = PlcpRate::Ofdm36m.bits() as u8,
-    Ofdm18M = PlcpRate::Ofdm18m.bits() as u8,
-    Ofdm9M = PlcpRate::Ofdm9m.bits() as u8,
+    Dsss1M,
+    Dsss2M(MacDsssPreamble),
+    Cck5M5(MacDsssPreamble),
+    Cck11M(MacDsssPreamble),
+    Ofdm6M,
+    Ofdm9M,
+    Ofdm12M,
+    Ofdm18M,
+    Ofdm24M,
+    Ofdm36M,
+    Ofdm48M,
+    Ofdm54M,
 }
 
 impl MacLegacyRate {
-    /// The generated hardware code of this non-HT rate.
-    pub const fn code(self) -> u8 {
-        self as u8
+    /// The rate's `PLCP1%s.RATE` value.
+    pub const fn plcp_rate(self) -> PlcpRate {
+        use MacDsssPreamble::{Long, Short};
+        match self {
+            Self::Dsss1M => PlcpRate::Dsss1mLong,
+            Self::Dsss2M(Long) => PlcpRate::Dsss2mLong,
+            Self::Dsss2M(Short) => PlcpRate::Dsss2mShort,
+            Self::Cck5M5(Long) => PlcpRate::Cck5m5Long,
+            Self::Cck5M5(Short) => PlcpRate::Cck5m5Short,
+            Self::Cck11M(Long) => PlcpRate::Cck11mLong,
+            Self::Cck11M(Short) => PlcpRate::Cck11mShort,
+            Self::Ofdm6M => PlcpRate::Ofdm6m,
+            Self::Ofdm9M => PlcpRate::Ofdm9m,
+            Self::Ofdm12M => PlcpRate::Ofdm12m,
+            Self::Ofdm18M => PlcpRate::Ofdm18m,
+            Self::Ofdm24M => PlcpRate::Ofdm24m,
+            Self::Ofdm36M => PlcpRate::Ofdm36m,
+            Self::Ofdm48M => PlcpRate::Ofdm48m,
+            Self::Ofdm54M => PlcpRate::Ofdm54m,
+        }
     }
 
-    /// Decode a non-HT observation; unknown and HT codes are refused.
-    pub const fn from_code(code: u8) -> Option<Self> {
-        use oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate;
-        match Rate::from_bits(code as u32) {
-            Some(Rate::Dsss1mLong) => Some(Self::Dsss1MLong),
-            Some(Rate::Dsss2mLong) => Some(Self::Dsss2MLong),
-            Some(Rate::Cck5m5Long) => Some(Self::Cck5M5Long),
-            Some(Rate::Cck11mLong) => Some(Self::Cck11MLong),
-            Some(Rate::Dsss2mShort) => Some(Self::Dsss2MShort),
-            Some(Rate::Cck5m5Short) => Some(Self::Cck5M5Short),
-            Some(Rate::Cck11mShort) => Some(Self::Cck11MShort),
-            Some(Rate::Ofdm48m) => Some(Self::Ofdm48M),
-            Some(Rate::Ofdm24m) => Some(Self::Ofdm24M),
-            Some(Rate::Ofdm12m) => Some(Self::Ofdm12M),
-            Some(Rate::Ofdm6m) => Some(Self::Ofdm6M),
-            Some(Rate::Ofdm54m) => Some(Self::Ofdm54M),
-            Some(Rate::Ofdm36m) => Some(Self::Ofdm36M),
-            Some(Rate::Ofdm18m) => Some(Self::Ofdm18M),
-            Some(Rate::Ofdm9m) => Some(Self::Ofdm9M),
+    /// The rate's `LENGTH_CONTROL%s.RTS_RATE` value.
+    pub const fn rts_rate(self) -> RtsRate {
+        use MacDsssPreamble::{Long, Short};
+        match self {
+            Self::Dsss1M => RtsRate::Dsss1mLong,
+            Self::Dsss2M(Long) => RtsRate::Dsss2mLong,
+            Self::Dsss2M(Short) => RtsRate::Dsss2mShort,
+            Self::Cck5M5(Long) => RtsRate::Cck5m5Long,
+            Self::Cck5M5(Short) => RtsRate::Cck5m5Short,
+            Self::Cck11M(Long) => RtsRate::Cck11mLong,
+            Self::Cck11M(Short) => RtsRate::Cck11mShort,
+            Self::Ofdm6M => RtsRate::Ofdm6m,
+            Self::Ofdm9M => RtsRate::Ofdm9m,
+            Self::Ofdm12M => RtsRate::Ofdm12m,
+            Self::Ofdm18M => RtsRate::Ofdm18m,
+            Self::Ofdm24M => RtsRate::Ofdm24m,
+            Self::Ofdm36M => RtsRate::Ofdm36m,
+            Self::Ofdm48M => RtsRate::Ofdm48m,
+            Self::Ofdm54M => RtsRate::Ofdm54m,
+        }
+    }
+
+    /// The non-HT rate of a `PLCP1%s.RATE` value; an HT or HE rate has none.
+    pub const fn from_plcp_rate(rate: PlcpRate) -> Option<Self> {
+        use MacDsssPreamble::{Long, Short};
+        match rate {
+            PlcpRate::Dsss1mLong => Some(Self::Dsss1M),
+            PlcpRate::Dsss2mLong => Some(Self::Dsss2M(Long)),
+            PlcpRate::Dsss2mShort => Some(Self::Dsss2M(Short)),
+            PlcpRate::Cck5m5Long => Some(Self::Cck5M5(Long)),
+            PlcpRate::Cck5m5Short => Some(Self::Cck5M5(Short)),
+            PlcpRate::Cck11mLong => Some(Self::Cck11M(Long)),
+            PlcpRate::Cck11mShort => Some(Self::Cck11M(Short)),
+            PlcpRate::Ofdm6m => Some(Self::Ofdm6M),
+            PlcpRate::Ofdm9m => Some(Self::Ofdm9M),
+            PlcpRate::Ofdm12m => Some(Self::Ofdm12M),
+            PlcpRate::Ofdm18m => Some(Self::Ofdm18M),
+            PlcpRate::Ofdm24m => Some(Self::Ofdm24M),
+            PlcpRate::Ofdm36m => Some(Self::Ofdm36M),
+            PlcpRate::Ofdm48m => Some(Self::Ofdm48M),
+            PlcpRate::Ofdm54m => Some(Self::Ofdm54M),
             _ => None,
+        }
+    }
+
+    /// The rate's rate-control byte (`wifi_phy_rate_t`), which is its
+    /// `PLCP1%s.RATE` code: the number the backend's rate control and the
+    /// receive descriptors carry.
+    pub const fn code(self) -> u8 {
+        self.plcp_rate().bits() as u8
+    }
+
+    /// The non-HT rate of a rate-control byte; an unknown or HT code has none.
+    pub const fn from_code(code: u8) -> Option<Self> {
+        match PlcpRate::from_bits(code as u32) {
+            Some(rate) => Self::from_plcp_rate(rate),
+            None => None,
         }
     }
 }
@@ -177,6 +295,32 @@ pub enum MacTxProtection {
     None,
     CtsToSelf,
     RtsCts,
+}
+
+impl MacTxProtection {
+    /// The request's `PROTECTION%s.SOFTWARE_CTS` value.
+    pub(crate) const fn software_cts(
+        self,
+    ) -> oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts {
+        match self {
+            Self::CtsToSelf => oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::Requested,
+            Self::None | Self::RtsCts => {
+                oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None
+            }
+        }
+    }
+
+    /// The request's `PROTECTION%s.SOFTWARE_RTS` value.
+    pub(crate) const fn software_rts(
+        self,
+    ) -> oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts {
+        match self {
+            Self::RtsCts => oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested,
+            Self::None | Self::CtsToSelf => {
+                oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::None
+            }
+        }
+    }
 }
 
 /// Control frame associated with one queue publication.
@@ -217,17 +361,12 @@ pub enum MacLegacyTxResponse {
 }
 
 impl MacLegacyTxResponse {
-    const fn plcp_format(self) -> u8 {
+    const fn plcp_format(self) -> PlcpFormat {
         match self {
-            Self::None => {
-                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::NoResponse.bits() as u8
-            }
-            Self::Ack => {
-                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::AckResponse.bits() as u8
-            }
+            Self::None => oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::NoResponse,
+            Self::Ack => oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::AckResponse,
             Self::BlockAck => {
-                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse.bits()
-                    as u8
+                oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::BlockAckResponse
             }
         }
     }
@@ -261,6 +400,63 @@ pub struct MacLegacyTxParameters {
     pub hardware_key_selector: u8,
 }
 
+/// The queue's numbers of one program, each checked against its field's
+/// width once, when the program is made: the writers take them as they are.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct QueueFields {
+    timeout: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_WIDTH }>,
+    scheduler_priority:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_WIDTH }>,
+    packet_priority: Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_WIDTH }>,
+    priority_count: Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }>,
+    aifsn: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_WIDTH }>,
+    contention_window: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_WIDTH }>,
+    key_entry_index: Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::KEY_ENTRY_INDEX_WIDTH }>,
+}
+
+impl QueueFields {
+    /// The numbers as their fields; `None` if one is wider than its field.
+    const fn new(
+        timeout: u16,
+        scheduler_priority: u8,
+        packet_priority: u8,
+        priority_count: u16,
+        aifsn: u8,
+        contention_window: u16,
+        key_entry_index: u8,
+    ) -> Option<Self> {
+        let (
+            Ok(timeout),
+            Ok(scheduler_priority),
+            Ok(packet_priority),
+            Ok(priority_count),
+            Ok(aifsn),
+            Ok(contention_window),
+            Ok(key_entry_index),
+        ) = (
+            Bits::new(timeout as u32),
+            Bits::new(scheduler_priority as u32),
+            Bits::new(packet_priority as u32),
+            Bits::new(priority_count as u32),
+            Bits::new(aifsn as u32),
+            Bits::new(contention_window as u32),
+            Bits::new(key_entry_index as u32),
+        )
+        else {
+            return None;
+        };
+        Some(Self {
+            timeout,
+            scheduler_priority,
+            packet_priority,
+            priority_count,
+            aifsn,
+            contention_window,
+            key_entry_index,
+        })
+    }
+}
+
 /// HAL-owned register program for one bounded legacy PPDU.
 ///
 /// All register images are private. Higher layers can retain and inspect the
@@ -270,6 +466,8 @@ pub struct MacLegacyTxParameters {
 pub struct MacLegacyTxProgram {
     descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacLegacyTxParameters,
+    fields: QueueFields,
+    signal: Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::LEGACY_SIGNAL_WIDTH }>,
 }
 
 impl MacLegacyTxProgram {
@@ -288,25 +486,26 @@ impl MacLegacyTxProgram {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacLegacyTxParameters,
     ) -> Option<Self> {
-        if parameters.signal > 0x0fff
-            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
-            || u32::from(parameters.scheduler_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
-            || u32::from(parameters.packet_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
-            || u32::from(parameters.priority_count)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
-            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
-            || u32::from(parameters.contention_window)
-                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
-            || parameters.hardware_key_selector > 0x3f
-        {
+        let Some(fields) = QueueFields::new(
+            parameters.timeout,
+            parameters.scheduler_priority,
+            parameters.packet_priority,
+            parameters.priority_count,
+            parameters.aifsn,
+            parameters.contention_window,
+            parameters.hardware_key_selector,
+        ) else {
             return None;
-        }
+        };
+        let Ok(signal) = Bits::new(u32::from(parameters.signal)) else {
+            return None;
+        };
 
         Some(Self {
             descriptor_head: dma.descriptor_head(),
             parameters,
+            fields,
+            signal,
         })
     }
 
@@ -370,24 +569,41 @@ pub enum MacHtMcs {
 }
 
 impl MacHtMcs {
-    const fn index(self) -> u8 {
+    const fn signal_mcs(self) -> oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs {
         match self {
-            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs0.bits() as u8,
-            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs1.bits() as u8,
-            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs2.bits() as u8,
-            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs3.bits() as u8,
-            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs4.bits() as u8,
-            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs5.bits() as u8,
-            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs6.bits() as u8,
-            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs7.bits() as u8,
+            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs0,
+            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs1,
+            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs2,
+            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs3,
+            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs4,
+            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs5,
+            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs6,
+            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::ht_signal::Mcs::Mcs7,
+        }
+    }
+
+    /// The MCS's `DATA_LENGTH%s.HT40_MCS` value: the same index.
+    const fn ht40_mcs(self) -> oer_chips_esp32s31_pac::wifi_mac::data_length::Ht40Mcs {
+        use oer_chips_esp32s31_pac::wifi_mac::data_length::Ht40Mcs;
+        match self {
+            Self::Mcs0 => Ht40Mcs::Mcs0,
+            Self::Mcs1 => Ht40Mcs::Mcs1,
+            Self::Mcs2 => Ht40Mcs::Mcs2,
+            Self::Mcs3 => Ht40Mcs::Mcs3,
+            Self::Mcs4 => Ht40Mcs::Mcs4,
+            Self::Mcs5 => Ht40Mcs::Mcs5,
+            Self::Mcs6 => Ht40Mcs::Mcs6,
+            Self::Mcs7 => Ht40Mcs::Mcs7,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacHtGuardInterval {
-    Long800Ns,
-    Short400Ns,
+    /// The 800 ns guard interval.
+    Normal,
+    /// The short, 400 ns, guard interval.
+    Short,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -405,28 +621,19 @@ pub enum MacHtProtectionSpacing {
 }
 
 impl MacHtProtectionSpacing {
-    const fn register_value(self) -> u16 {
+    /// The spacing as the minimum-MPDU-length fields hold it.
+    const fn register_value(
+        self,
+    ) -> Bits<{ oer_chips_esp32s31_pac::wifi_mac::protection::MINIMUM_MPDU_LENGTH_CBW20_WIDTH }>
+    {
         match self {
-            Self::Density0To4 => 20,
-            Self::Density5 => 40,
-            Self::Density6 => 76,
-            Self::Density7 => 148,
+            Self::Density0To4 => Bits::constant::<20>(),
+            Self::Density5 => Bits::constant::<40>(),
+            Self::Density6 => Bits::constant::<76>(),
+            Self::Density7 => Bits::constant::<148>(),
         }
     }
 }
-
-// Every spacing fits its ten-bit field.
-const _: () = {
-    use MacHtProtectionSpacing::{Density0To4, Density5, Density6, Density7};
-    let spacings = [Density0To4, Density5, Density6, Density7];
-    let mut index = 0;
-    while index < spacings.len() {
-        if spacings[index].register_value() >= 1 << 10 {
-            panic!("an HT protection spacing exceeds its field");
-        }
-        index += 1;
-    }
-};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MacHtTxFormat {
@@ -443,55 +650,55 @@ pub struct MacHtRate {
 }
 
 impl MacHtRate {
-    const fn register_value(self) -> u8 {
+    const fn plcp_rate(self) -> PlcpRate {
         match (self.guard_interval, self.mcs) {
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs0) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs0.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs0) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs0
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs1) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs1.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs1) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs1
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs2) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs2.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs2) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs2
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs3) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs3.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs3) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs3
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs4) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs4.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs4) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs4
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs5) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs5.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs5) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs5
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs6) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs6.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs6) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs6
             }
-            (MacHtGuardInterval::Long800Ns, MacHtMcs::Mcs7) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs7.bits() as u8
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs7) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs7
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs0) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs0.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs0) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs0
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs1) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs1.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs1) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs1
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs2) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs2.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs2) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs2
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs3) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs3.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs3) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs3
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs4) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs4.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs4) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs4
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs5) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs5.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs5) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs5
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs6) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs6.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs6) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs6
             }
-            (MacHtGuardInterval::Short400Ns, MacHtMcs::Mcs7) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs7.bits() as u8
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs7) => {
+                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs7
             }
         }
     }
@@ -516,7 +723,7 @@ pub struct MacHtTxParameters {
     pub contention_window: u16,
     pub interface: MacInterface,
     pub hardware_key_selector: u8,
-    pub txop: bool,
+    pub txop: oer_chips_esp32s31_pac::wifi_mac::pti::Txop,
 }
 
 /// HAL-owned register program for one bounded HT PPDU.
@@ -528,6 +735,10 @@ pub struct MacHtTxParameters {
 pub struct MacHtTxProgram {
     descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacHtTxParameters,
+    fields: QueueFields,
+    length: Bits<{ oer_chips_esp32s31_pac::wifi_mac::data_length::HT40_LENGTH_WIDTH }>,
+    descriptor_count:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_WIDTH }>,
 }
 
 impl MacHtTxProgram {
@@ -551,30 +762,39 @@ impl MacHtTxProgram {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacHtTxParameters,
     ) -> Option<Self> {
+        let Some(fields) = QueueFields::new(
+            parameters.timeout,
+            parameters.scheduler_priority,
+            parameters.packet_priority,
+            parameters.priority_count,
+            parameters.aifsn,
+            parameters.contention_window,
+            parameters.hardware_key_selector,
+        ) else {
+            return None;
+        };
         if parameters.length == 0
             || parameters.descriptor_count == 0
             || u32::from(parameters.descriptor_count)
                 > oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_MAX
             || (matches!(parameters.format, MacHtTxFormat::SingleMpdu)
                 && parameters.descriptor_count != 1)
-            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
-            || u32::from(parameters.scheduler_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
-            || u32::from(parameters.packet_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
-            || u32::from(parameters.priority_count)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
-            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
-            || u32::from(parameters.contention_window)
-                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
-            || parameters.hardware_key_selector > 0x3f
         {
             return None;
         }
 
+        let (Ok(length), Ok(descriptor_count)) = (
+            Bits::new(parameters.length as u32),
+            Bits::new(parameters.descriptor_count as u32),
+        ) else {
+            return None;
+        };
         Some(Self {
             descriptor_head: dma.descriptor_head(),
             parameters,
+            fields,
+            length,
+            descriptor_count,
         })
     }
 }
@@ -594,45 +814,18 @@ pub enum MacHeMcs {
 }
 
 impl MacHeMcs {
-    const fn index(self) -> u8 {
+    const fn signal_mcs(self) -> oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs {
         match self {
-            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs0.bits() as u8,
-            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs1.bits() as u8,
-            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs2.bits() as u8,
-            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs3.bits() as u8,
-            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs4.bits() as u8,
-            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs5.bits() as u8,
-            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs6.bits() as u8,
-            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs7.bits() as u8,
-            Self::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs8.bits() as u8,
-            Self::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs9.bits() as u8,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacHeGuardIntervalAndLtf {
-    OneLtf800Ns,
-    TwoLtf800Ns,
-    TwoLtf1600Ns,
-    FourLtf3200Ns,
-}
-
-impl MacHeGuardIntervalAndLtf {
-    const fn register_value(self) -> oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf {
-        match self {
-            Self::OneLtf800Ns => {
-                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::OneLtf800ns
-            }
-            Self::TwoLtf800Ns => {
-                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf800ns
-            }
-            Self::TwoLtf1600Ns => {
-                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::TwoLtf1600ns
-            }
-            Self::FourLtf3200Ns => {
-                oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf::FourLtf3200ns
-            }
+            Self::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs0,
+            Self::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs1,
+            Self::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs2,
+            Self::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs3,
+            Self::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs4,
+            Self::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs5,
+            Self::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs6,
+            Self::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs7,
+            Self::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs8,
+            Self::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Mcs::Mcs9,
         }
     }
 }
@@ -646,24 +839,24 @@ pub enum MacHeFecCoding {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeRate {
     pub mcs: MacHeMcs,
-    pub guard_interval_and_ltf: MacHeGuardIntervalAndLtf,
+    pub guard_interval_and_ltf: oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf,
     pub fec_coding: MacHeFecCoding,
     pub dcm: bool,
 }
 
 impl MacHeRate {
-    const fn plcp_rate_field(self) -> u8 {
+    const fn plcp_rate(self) -> PlcpRate {
         match self.mcs {
-            MacHeMcs::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs0.bits() as u8,
-            MacHeMcs::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs1.bits() as u8,
-            MacHeMcs::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs2.bits() as u8,
-            MacHeMcs::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs3.bits() as u8,
-            MacHeMcs::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs4.bits() as u8,
-            MacHeMcs::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs5.bits() as u8,
-            MacHeMcs::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs6.bits() as u8,
-            MacHeMcs::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs7.bits() as u8,
-            MacHeMcs::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs8.bits() as u8,
-            MacHeMcs::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs9.bits() as u8,
+            MacHeMcs::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs0,
+            MacHeMcs::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs1,
+            MacHeMcs::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs2,
+            MacHeMcs::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs3,
+            MacHeMcs::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs4,
+            MacHeMcs::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs5,
+            MacHeMcs::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs6,
+            MacHeMcs::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs7,
+            MacHeMcs::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs8,
+            MacHeMcs::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs9,
         }
     }
 }
@@ -703,6 +896,13 @@ pub struct MacHeTxParameters {
 pub struct MacHeTxProgram {
     descriptor_head: DmaRef<WifiTxDmaDescriptor>,
     parameters: MacHeTxParameters,
+    fields: QueueFields,
+    descriptor_count:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::ht_descriptor_counts::DESCRIPTOR_COUNT_A_WIDTH }>,
+    bss_color: Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::BSS_COLOR_WIDTH }>,
+    spatial_reuse: Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::SPATIAL_REUSE_WIDTH }>,
+    protection_spacing:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::protection::MINIMUM_MPDU_LENGTH_CBW20_WIDTH }>,
 }
 
 impl MacHeTxProgram {
@@ -715,32 +915,61 @@ impl MacHeTxProgram {
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         parameters: MacHeTxParameters,
     ) -> Option<Self> {
+        let Some(fields) = QueueFields::new(
+            parameters.timeout,
+            parameters.scheduler_priority,
+            parameters.packet_priority,
+            parameters.priority_count,
+            parameters.aifsn,
+            parameters.contention_window,
+            parameters.hardware_key_selector,
+        ) else {
+            return None;
+        };
         if parameters.apep_length == 0
             || parameters.descriptor_count == 0
             || parameters.descriptor_count > 32
             || (matches!(parameters.format, MacHeTxFormat::Smpdu)
                 && parameters.descriptor_count != 1)
-            || parameters.bss_color > 0x3f
-            || parameters.spatial_reuse > 0x0f
-            || parameters.protection_spacing > 0x03ff
-            || u32::from(parameters.timeout) > oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX
-            || u32::from(parameters.scheduler_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::config::SCHEDULER_PRIORITY_MAX
-            || u32::from(parameters.packet_priority)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::PTI_0_MAX
-            || u32::from(parameters.priority_count)
-                > oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_MAX
-            || u32::from(parameters.aifsn) > oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_MAX
-            || u32::from(parameters.contention_window)
-                > oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_MAX
-            || parameters.hardware_key_selector > 0x3f
         {
             return None;
         }
+        let (Ok(descriptor_count), Ok(bss_color), Ok(spatial_reuse), Ok(protection_spacing)) = (
+            Bits::new(parameters.descriptor_count as u32),
+            Bits::new(parameters.bss_color as u32),
+            Bits::new(parameters.spatial_reuse as u32),
+            Bits::new(parameters.protection_spacing as u32),
+        ) else {
+            return None;
+        };
         Some(Self {
             descriptor_head: dma.descriptor_head(),
             parameters,
+            fields,
+            descriptor_count,
+            bss_color,
+            spatial_reuse,
+            protection_spacing,
         })
+    }
+}
+
+/// Whether a transmission was ordinary or part of a hardware Trigger-based
+/// flow.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MacTxFlow {
+    Ordinary,
+    TriggerBased,
+}
+
+impl MacTxFlow {
+    /// The flow an observed bit names.
+    const fn observed(trigger_based: bool) -> Self {
+        if trigger_based {
+            Self::TriggerBased
+        } else {
+            Self::Ordinary
+        }
     }
 }
 
@@ -754,9 +983,9 @@ pub struct MacTxCompletionObservation {
     /// `libpp[lmac.o]::lmacProcessTxComplete`. The HAL returns
     /// `QUEUE_STATE[31:24]` as one bitmap; the completion dispatcher selects
     /// the completed queue's bit.
-    trigger_flow: bool,
+    flow: MacTxFlow,
     trigger_based_packet_count: u8,
-    last_tx_was_trigger_based: bool,
+    last_transmission: MacTxFlow,
     secondary_trigger_based_packet_count: u8,
     ack_snr_encoded: u8,
 }
@@ -770,20 +999,19 @@ impl MacTxCompletionObservation {
         self.detail
     }
 
-    pub const fn trigger_flow(self) -> bool {
-        self.trigger_flow
-    }
-
-    pub const fn used_alternate(self) -> bool {
-        self.last_tx_was_trigger_based
+    /// Whether the queue completed within a hardware Trigger-based flow.
+    pub const fn flow(self) -> MacTxFlow {
+        self.flow
     }
 
     pub const fn trigger_based_packet_count(self) -> u8 {
         self.trigger_based_packet_count
     }
 
-    pub const fn last_tx_was_trigger_based(self) -> bool {
-        self.last_tx_was_trigger_based
+    /// Whether the last transmission was trigger-based: its result is then
+    /// the alternate result word's.
+    pub const fn last_transmission(self) -> MacTxFlow {
+        self.last_transmission
     }
 
     pub const fn secondary_trigger_based_packet_count(self) -> u8 {
@@ -800,17 +1028,17 @@ impl MacTxCompletionObservation {
         Self {
             status,
             detail,
-            trigger_flow: false,
+            flow: MacTxFlow::Ordinary,
             trigger_based_packet_count: 0,
-            last_tx_was_trigger_based: false,
+            last_transmission: MacTxFlow::Ordinary,
             secondary_trigger_based_packet_count: 0,
             ack_snr_encoded: 0,
         }
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub const fn with_trigger_flow_model(mut self, trigger_flow: bool) -> Self {
-        self.trigger_flow = trigger_flow;
+    pub const fn with_flow_model(mut self, flow: MacTxFlow) -> Self {
+        self.flow = flow;
         self
     }
 
@@ -818,11 +1046,11 @@ impl MacTxCompletionObservation {
     pub const fn with_trigger_packet_counts_model(
         mut self,
         primary: u8,
-        last_tx_was_trigger_based: bool,
+        last_transmission: MacTxFlow,
         secondary: u8,
     ) -> Self {
         self.trigger_based_packet_count = primary;
-        self.last_tx_was_trigger_based = last_tx_was_trigger_based;
+        self.last_transmission = last_transmission;
         self.secondary_trigger_based_packet_count = secondary;
         self
     }
@@ -1082,11 +1310,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             rx_end_count: rx.read_end().count(),
             rx_fcs_error_count: rx.read_fcs_error().count(),
             rx_abort_count: rx.read_abort().count(),
-            valid: control.valid(),
-            enabled: control.enable(),
-            completion_pending: queue::completion_pending(common, queue),
-            timeout_pending: queue::timeout_pending(common, queue),
-            collision_pending: queue::collision_pending(common, queue),
+            ownership: MacTxQueueOwnership::observed(control.enable(), control.valid()),
+            pending: MacTxQueuePending::observed(
+                queue::completion_pending(common, queue),
+                queue::timeout_pending(common, queue),
+                queue::collision_pending(common, queue),
+            ),
         }
     }
 
@@ -1094,23 +1323,23 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn set_tx_pti(&mut self, queue: MacTxQueueIndex, program: MacTxPtiProgram) {
         let bank = queue::bank(queue);
         self.mac.wifi_mac_tx_queue_control.modify_config(bank, |w| {
-            w.set_scheduler_priority(bits(program.scheduler_priority.get()));
+            w.set_scheduler_priority(program.scheduler_priority.field());
         });
         let vectors = &mut self.mac.wifi_mac_tx_queue_vector;
         vectors.modify_pti(bank, |w| {
-            w.set_pti_2(bits(program.pti_2.get()));
+            w.set_pti_2(program.pti_2.field());
         });
         vectors.modify_pti(bank, |w| {
-            w.set_pti_1(bits(program.pti_1.get()));
+            w.set_pti_1(program.pti_1.field());
         });
         vectors.modify_pti(bank, |w| {
-            w.set_pti_0(bits(program.pti_0.get()));
+            w.set_pti_0(program.pti_0.field());
         });
         vectors.modify_pti(bank, |w| {
-            w.set_pti_3(bits(program.pti_3.get()));
+            w.set_pti_3(program.pti_3.field());
         });
         vectors.modify_pti(bank, |w| {
-            w.set_count(bits(program.count.get()));
+            w.set_count(program.count.field());
         });
     }
 
@@ -1225,7 +1454,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     fn begin_mac_tx(
         &mut self,
         queue: MacTxQueueIndex,
-        timeout: u16,
+        timeout: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_WIDTH }>,
     ) -> Result<(), MacTxPrepareRefused> {
         let bank = queue::bank(queue);
         let control_bank = &mut self.mac.wifi_mac_tx_queue_control;
@@ -1234,7 +1463,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             return Err(MacTxPrepareRefused::QueueActive);
         }
         control_bank.modify_config(bank, |w| {
-            w.set_timeout(bits(u32::from(timeout)));
+            w.set_timeout(timeout);
         });
         Ok(())
     }
@@ -1250,15 +1479,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) -> Result<(), MacTxPrepareRefused> {
         let parameters = program.parameters;
 
-        self.begin_mac_tx(queue, parameters.timeout)?;
+        self.begin_mac_tx(queue, program.fields.timeout)?;
 
         self.program_legacy_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
-            parameters.aifsn,
-            parameters.contention_window,
+            program.fields.aifsn,
+            program.fields.contention_window,
             parameters.interface,
         );
         Ok(())
@@ -1275,27 +1504,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         queue: MacTxQueueIndex,
         descriptor_head: DmaRef<WifiTxDmaDescriptor>,
-        plcp_format: u8,
+        plcp_format: PlcpFormat,
     ) {
         self.mac
             .wifi_mac_tx_queue_control
             .modify_control_n(queue::bank(queue), |w| {
                 w.set_descriptor_address_low(descriptor_head)
-                    .set_bits_20_21_opaque(bits(2))
+                    .set_bits_20_21_opaque(Bits::constant::<2>())
                     .set_bit_22_opaque(true)
                     .set_bit_23_opaque(false)
-                    .set_plcp_format(bits(u32::from(plcp_format)))
-                    .set_bits_27_29_opaque(bits(0))
+                    .set_plcp_format(plcp_format.into())
+                    .set_bits_27_29_opaque(Bits::constant::<0>())
                     .set_valid(false)
                     .set_enable(false);
             });
-        queue::configure_rts(
-            &mut self.mac.wifi_mac_tx_queue_control,
-            &mut self.mac.wifi_mac_tx_queue_vector,
-            queue,
-            false,
-            None,
-        );
+        queue::clear_software_rts(&mut self.mac.wifi_mac_tx_queue_control, queue);
     }
 
     /// The PLCP1%s image, stored from zero (`publish_mac_tx_plcp1_fields`).
@@ -1303,14 +1526,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_plcp1(queue::bank(queue), |w| {
-                w.set_legacy_signal(bits(u32::from(plcp1.legacy_signal)))
-                    .set_rate(bits(u32::from(plcp1.rate)))
-                    .set_key_entry_index(bits(u32::from(plcp1.key_entry_index)))
+                w.set_legacy_signal(plcp1.legacy_signal)
+                    .set_rate(plcp1.rate.into())
+                    .set_key_entry_index(plcp1.key_entry_index)
                     .set_bssid_select(plcp1.interface.field())
-                    .set_vector_format(bits(u32::from(plcp1.vector_format)))
+                    .set_vector_format(plcp1.vector_format.into())
                     .set_high_control_28(false)
                     .set_cbw40(plcp1.cbw40)
-                    .set_high_control_31_30(bits(0));
+                    .set_high_control_31_30(Bits::constant::<0>());
             });
     }
 
@@ -1325,7 +1548,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     /// The parent's independent PTI-low edge.
-    fn set_txop(&mut self, queue: MacTxQueueIndex, txop: bool) {
+    fn set_txop(
+        &mut self,
+        queue: MacTxQueueIndex,
+        txop: oer_chips_esp32s31_pac::wifi_mac::pti::Txop,
+    ) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_pti(queue::bank(queue), |w| {
@@ -1336,7 +1563,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// LENGTH_CONTROL%s stored from zero
     /// (`publish_mac_tx_length_control_fields`): the TX/RX queue antenna
     /// enable, the control-frame rate and the HT20 EOF count.
-    fn publish_length_control(&mut self, queue: MacTxQueueIndex, rts_rate: u8, ht20_eof_count: u8) {
+    fn publish_length_control(
+        &mut self,
+        queue: MacTxQueueIndex,
+        rts_rate: RtsRate,
+        ht20_eof_count: Bits<
+            { oer_chips_esp32s31_pac::wifi_mac::length_control::HT20_EOF_COUNT_WIDTH },
+        >,
+    ) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_length_control(queue::bank(queue), |w| {
@@ -1346,12 +1580,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                     .set_tx_queue_antenna_last(false)
                     .set_tx_queue_antenna_value(false)
                     .set_tx_queue_antenna_enable(false)
-                    .set_rts_rate(rts_rate)
+                    .set_rts_rate(rts_rate.into())
                     .set_bits_14_21_opaque(0)
-                    .set_ht20_eof_count(bits(u32::from(ht20_eof_count)))
-                    .set_ht20_txop_count(bits(0))
+                    .set_ht20_eof_count(ht20_eof_count)
+                    .set_ht20_txop_count(Bits::constant::<0>())
                     .set_txop_list_select(TxopListSelect::List0)
-                    .set_bits_30_31_opaque(bits(0));
+                    .set_bits_30_31_opaque(Bits::constant::<0>());
             });
     }
 
@@ -1381,19 +1615,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// packet PTI, so these values must not be collapsed into one field.
     /// Each field is intentionally a separate fresh-read RMW and must not
     /// be coalesced.
-    fn publish_packet_pti(
-        &mut self,
-        queue: MacTxQueueIndex,
-        scheduler_priority: u8,
-        packet_priority: u8,
-        priority_count: u16,
-    ) {
+    fn publish_packet_pti(&mut self, queue: MacTxQueueIndex, fields: QueueFields) {
         let bank = queue::bank(queue);
         self.mac.wifi_mac_tx_queue_control.modify_config(bank, |w| {
-            w.set_scheduler_priority(bits(u32::from(scheduler_priority)));
+            w.set_scheduler_priority(fields.scheduler_priority);
         });
         let vectors = &mut self.mac.wifi_mac_tx_queue_vector;
-        let packet = bits::<4>(u32::from(packet_priority));
+        let packet = fields.packet_priority;
         vectors.modify_pti(bank, |w| {
             w.set_pti_2(packet);
         });
@@ -1407,7 +1635,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_pti_3(packet);
         });
         vectors.modify_pti(bank, |w| {
-            w.set_count(bits(u32::from(priority_count)));
+            w.set_count(fields.priority_count);
         });
     }
 
@@ -1431,34 +1659,32 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.publish_plcp1(
             queue,
             Plcp1 {
-                legacy_signal: parameters.signal,
-                rate: parameters.rate.code(),
-                key_entry_index: parameters.hardware_key_selector,
+                legacy_signal: program.signal,
+                rate: parameters.rate.plcp_rate(),
+                key_entry_index: program.fields.key_entry_index,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy.bits()
-                    as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Legacy,
                 cbw40: false,
             },
         );
         self.clear_trigger_based_enable(queue);
         // The parent's independent PTI-low edge; a legacy PPDU holds no TXOP.
-        self.set_txop(queue, false);
-        self.publish_length_control(queue, parameters.control.rate.code(), 1);
+        self.set_txop(queue, oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None);
+        self.publish_length_control(
+            queue,
+            parameters.control.rate.rts_rate(),
+            Bits::constant::<1>(),
+        );
         // `mac_tx_set_txop_q` of a queue without a granted TXOP slot: the
         // slot `lmacInitAc` leaves (and `lmacReleaseTxopQueue` restores)
         // clears the TXOP count through one fresh-read update.
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_length_control(queue::bank(queue), |w| {
-                w.set_ht20_txop_count(bits(0));
+                w.set_ht20_txop_count(Bits::constant::<0>());
             });
         self.publish_power(queue, parameters.data_power, 0, parameters.control);
-        self.publish_packet_pti(
-            queue,
-            parameters.scheduler_priority,
-            parameters.packet_priority,
-            parameters.priority_count,
-        );
+        self.publish_packet_pti(queue, program.fields);
     }
 
     /// Program one non-aggregate HT queue up to its final ENABLE|VALID edge.
@@ -1475,15 +1701,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         // SOURCE: complete hal_mac_tx_config_timeout, followed by the
         // libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu non-HE HT branch.
-        self.begin_mac_tx(queue, parameters.timeout)?;
+        self.begin_mac_tx(queue, program.fields.timeout)?;
 
         self.program_ht_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
-            parameters.aifsn,
-            parameters.contention_window,
+            program.fields.aifsn,
+            program.fields.contention_window,
             parameters.interface,
         );
         Ok(())
@@ -1510,23 +1736,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             program.descriptor_head,
             match parameters.format {
                 MacHtTxFormat::SingleMpdu => {
-                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu.bits()
-                        as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtSingleMpdu
                 }
                 MacHtTxFormat::Ampdu => {
-                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HtAmpdu
                 }
             },
         );
         self.publish_plcp1(
             queue,
             Plcp1 {
-                legacy_signal: 0,
-                rate: parameters.rate.register_value(),
-                key_entry_index: parameters.hardware_key_selector,
+                legacy_signal: Bits::constant::<0>(),
+                rate: parameters.rate.plcp_rate(),
+                key_entry_index: program.fields.key_entry_index,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht.bits()
-                    as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::Ht,
                 cbw40,
             },
         );
@@ -1543,23 +1767,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // spacing edges and the two length words.
         let vectors = &mut self.mac.wifi_mac_tx_queue_vector;
         vectors.modify_ht_signal(bank, |w| {
-            w.set_mcs(bits(u32::from(parameters.rate.mcs.index())))
+            w.set_mcs(parameters.rate.mcs.signal_mcs().into())
                 .set_cbw40(cbw40)
                 .set_length(parameters.length)
                 .set_smoothing(true)
                 .set_not_sounding(true)
                 .set_required_one(true)
                 .set_aggregation(matches!(parameters.format, MacHtTxFormat::Ampdu))
-                .set_stbc(bits(
-                    oer_chips_esp32s31_pac::wifi_mac::ht_signal::Stbc::None.bits(),
-                ))
+                .set_stbc(oer_chips_esp32s31_pac::wifi_mac::ht_signal::Stbc::None.into())
                 .set_fec_coding(false)
                 .set_short_gi(matches!(
                     parameters.rate.guard_interval,
-                    MacHtGuardInterval::Short400Ns
+                    MacHtGuardInterval::Short
                 ));
         });
-        let count = bits::<7>(u32::from(parameters.descriptor_count));
+        let count = program.descriptor_count;
         vectors.modify_ht_descriptor_counts(bank, |w| {
             w.set_descriptor_count_a(count);
         });
@@ -1570,7 +1792,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_descriptor_count_a_copy(count);
         });
 
-        let spacing = bits::<10>(u32::from(parameters.protection_spacing.register_value()));
+        let spacing = parameters.protection_spacing.register_value();
         let control_bank = &mut self.mac.wifi_mac_tx_queue_control;
         control_bank.modify_protection(bank, |w| {
             w.set_minimum_mpdu_length_cbw20(spacing);
@@ -1583,18 +1805,18 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
 
         let entry_class = match parameters.format {
-            MacHtTxFormat::SingleMpdu => 0,
-            MacHtTxFormat::Ampdu => 1,
+            MacHtTxFormat::SingleMpdu => Bits::constant::<0>(),
+            MacHtTxFormat::Ampdu => Bits::constant::<1>(),
         };
-        self.publish_length_control(queue, parameters.control.rate.code(), entry_class);
+        self.publish_length_control(queue, parameters.control.rate.rts_rate(), entry_class);
         // DATA_LENGTH%s stored from zero (`publish_mac_tx_data_length_fields`).
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_data_length(bank, |w| {
-                w.set_ht40_length(bits(u32::from(parameters.length)))
-                    .set_ht40_eof_count(bits(u32::from(entry_class)))
-                    .set_ht40_txop_count(bits(0))
-                    .set_ht40_mcs(bits(u32::from(parameters.rate.mcs.index())));
+                w.set_ht40_length(program.length)
+                    .set_ht40_eof_count(entry_class)
+                    .set_ht40_txop_count(Bits::constant::<0>())
+                    .set_ht40_mcs(parameters.rate.mcs.ht40_mcs().into());
             });
         self.publish_power(
             queue,
@@ -1602,12 +1824,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.data_power_alternate,
             parameters.control,
         );
-        self.publish_packet_pti(
-            queue,
-            parameters.scheduler_priority,
-            parameters.packet_priority,
-            parameters.priority_count,
-        );
+        self.publish_packet_pti(queue, program.fields);
     }
 
     /// Program one HE SU A-MPDU up to its final ENABLE|VALID edge.
@@ -1621,14 +1838,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) -> Result<(), MacTxPrepareRefused> {
         let parameters = program.parameters;
 
-        self.begin_mac_tx(queue, parameters.timeout)?;
+        self.begin_mac_tx(queue, program.fields.timeout)?;
         self.program_he_mac_tx_ppdu(queue, program);
 
         queue::configure_edca(
             &mut self.mac.wifi_mac_tx_queue_control,
             queue,
-            parameters.aifsn,
-            parameters.contention_window,
+            program.fields.aifsn,
+            program.fields.contention_window,
             parameters.interface,
         );
         Ok(())
@@ -1652,29 +1869,28 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             program.descriptor_head,
             match parameters.format {
                 MacHeTxFormat::Smpdu => {
-                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeSmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeSmpdu
                 }
                 MacHeTxFormat::Ampdu => {
-                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeAmpdu.bits() as u8
+                    oer_chips_esp32s31_pac::wifi_mac::control_n::PlcpFormat::HeAmpdu
                 }
             },
         );
         self.publish_plcp1(
             queue,
             Plcp1 {
-                legacy_signal: 0,
-                rate: parameters.rate.plcp_rate_field(),
-                key_entry_index: parameters.hardware_key_selector,
+                legacy_signal: Bits::constant::<0>(),
+                rate: parameters.rate.plcp_rate(),
+                key_entry_index: program.fields.key_entry_index,
                 interface: parameters.interface,
-                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He.bits()
-                    as u8,
+                vector_format: oer_chips_esp32s31_pac::wifi_mac::plcp1::VectorFormat::He,
                 cbw40: false,
             },
         );
         self.clear_trigger_based_enable(queue);
         // The parent's independent PTI-low edge; this SU profile holds no
         // TXOP.
-        self.set_txop(queue, false);
+        self.set_txop(queue, oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None);
 
         // SOURCE: complete libpp[hal_mac_tx.o]::mac_tx_set_hesig stores A1
         // then A2/length (each from zero, `publish_mac_tx_he_signal_a1_fields`
@@ -1685,15 +1901,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_format(true)
                 .set_beam_change(true)
                 .set_uplink(true)
-                .set_mcs(bits(u32::from(parameters.rate.mcs.index())))
+                .set_mcs(parameters.rate.mcs.signal_mcs().into())
                 .set_dcm(parameters.rate.dcm)
-                .set_bss_color(bits(u32::from(parameters.bss_color)))
+                .set_bss_color(program.bss_color)
                 .set_vector_required_14(true)
-                .set_spatial_reuse(bits(u32::from(parameters.spatial_reuse)))
-                .set_bandwidth(bits(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Bandwidth::Mhz20.bits()))
-                .set_gi_ltf(parameters.rate.guard_interval_and_ltf.register_value())
-                .set_nsts_and_midamble_periodicity(bits(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::NstsAndMidamblePeriodicity::OneStreamNoMidamble.bits()))
-                .set_vector_required_high(bits(0x3f));
+                .set_spatial_reuse(program.spatial_reuse)
+                .set_bandwidth(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::Bandwidth::Mhz20.into())
+                .set_gi_ltf(parameters.rate.guard_interval_and_ltf)
+                .set_nsts_and_midamble_periodicity(oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::NstsAndMidamblePeriodicity::OneStreamNoMidamble.into())
+                .set_vector_required_high(Bits::constant::<0x3f>());
         });
         vectors.modify_he_su_signal_a2_length(bank, |w| {
             w.set_control_required_0(true)
@@ -1705,7 +1921,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 // every ordinary vendor TX path clears those head bits, so an
                 // ordinary frame carries zero and bit 8. Their meaning is not
                 // established.
-                .set_bits_5_7_opaque(bits(0))
+                .set_bits_5_7_opaque(Bits::constant::<0>())
                 .set_control_required_8(true)
                 .set_descriptor_class_match(false)
                 .set_apep_length(parameters.apep_length)
@@ -1715,7 +1931,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // Unlike HT's three fresh-read edges, the HE leaf writes all three
         // descriptor counts as one register image, from zero
         // (`publish_mac_tx_he_descriptor_counts`).
-        let count = bits::<7>(u32::from(parameters.descriptor_count));
+        let count = program.descriptor_count;
         vectors.modify_ht_descriptor_counts(bank, |w| {
             w.set_descriptor_count_a(count)
                 .set_descriptor_count_b(count)
@@ -1725,19 +1941,25 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // SOURCE: complete libpp[hal_mac_tx.o]::mac_tx_set_hesig then replaces the three finite
         // channel-width minimum-MPDU lanes and clears software CTS in one
         // fresh-read update that keeps only software RTS.
-        let spacing = bits::<10>(u32::from(parameters.protection_spacing));
+        let spacing = program.protection_spacing;
         self.mac
             .wifi_mac_tx_queue_control
             .modify_protection(bank, |w| {
                 w.set_minimum_mpdu_length_cbw20(spacing)
                     .set_minimum_mpdu_length_cbw40(spacing)
                     .set_minimum_mpdu_length_cbw80(spacing)
-                    .set_software_cts(false);
+                    .set_software_cts(
+                        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None,
+                    );
             });
 
         // HE reaches mac_tx_set_len for LENGTH_CONTROL, but its flag-bit-31
         // branch intentionally skips the non-HE DATA_LENGTH register.
-        self.publish_length_control(queue, parameters.control.rate.code(), 1);
+        self.publish_length_control(
+            queue,
+            parameters.control.rate.rts_rate(),
+            Bits::constant::<1>(),
+        );
         // SOURCE: complete `libpp[hal_mac_tx.o]::hal_mac_tx_set_ppdu` calls complete
         // `libpp[hal_mac_ctl.o]::hal_he_set_htc` immediately after
         // `libpp[hal_mac_tx.o]::mac_tx_set_hesig`. That leaf always publishes the complete word,
@@ -1762,12 +1984,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             parameters.data_power_alternate,
             parameters.control,
         );
-        self.publish_packet_pti(
-            queue,
-            parameters.scheduler_priority,
-            parameters.packet_priority,
-            parameters.priority_count,
-        );
+        self.publish_packet_pti(queue, program.fields);
     }
 
     pub(crate) fn start_prepared_mac_tx(
@@ -1835,21 +2052,22 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
         let primary = completion.read_primary(bank);
         let alternate = completion.read_alternate(bank);
-        let (status, detail) = if last_tx_was_trigger_based {
+        let last_transmission = MacTxFlow::observed(last_tx_was_trigger_based);
+        let (status, detail) = if matches!(last_transmission, MacTxFlow::TriggerBased) {
             (byte(alternate.status()), alternate.detail())
         } else {
             (byte(primary.status()), primary.detail())
         };
         let common = &mut self.mac.wifi_mac_tx_common;
-        let trigger_flow = queue::queue_in_trigger_flow(common, queue);
+        let flow = MacTxFlow::observed(queue::queue_in_trigger_flow(common, queue));
         queue::acknowledge_completion(common, queue);
         oer_portable_riscv::fence();
         Some(MacTxCompletionObservation {
             status,
             detail,
-            trigger_flow,
+            flow,
             trigger_based_packet_count,
-            last_tx_was_trigger_based,
+            last_transmission,
             secondary_trigger_based_packet_count,
             ack_snr_encoded: primary.ack_snr_encoded(),
         })
@@ -1903,7 +2121,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         if cause == MacTxAbortCause::TimeoutEdge && !queue::timeout_pending(common, queue) {
             return MacTxAbortOutcome::NoEdge;
         }
-        let _ = queue::set_cca_force(common, 3);
+        let _ = queue::set_cca_force(common, Bits::constant::<3>());
         oer_portable_riscv::fence();
         // The vendor's fixed delay: the attempt yields once the limit has
         // passed, and a settle that ends unsettled has passed it too.
@@ -1917,7 +2135,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
         let was_valid = queue::queue_valid(queue_control, queue);
         queue::invalidate_queue(queue_control, queue);
-        let _ = queue::set_cca_force(common, 0);
+        let _ = queue::set_cca_force(common, Bits::constant::<0>());
         if was_valid {
             queue::disable_queue(queue_control, queue);
         }
@@ -1979,11 +2197,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 /// The fields of one PLCP1%s publication.
 #[derive(Clone, Copy)]
 struct Plcp1 {
-    legacy_signal: u16,
-    rate: u8,
-    key_entry_index: u8,
+    legacy_signal: Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::LEGACY_SIGNAL_WIDTH }>,
+    rate: PlcpRate,
+    key_entry_index: Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::KEY_ENTRY_INDEX_WIDTH }>,
     interface: MacInterface,
-    vector_format: u8,
+    vector_format: VectorFormat,
     cbw40: bool,
 }
 

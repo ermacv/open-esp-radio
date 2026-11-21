@@ -89,7 +89,7 @@ fn partial_ru_power_round_trips_and_keeps_adjacent_lanes() {
         }
         for (raw, power) in [(0, 1), (1, 0), (8, 2), (37, 3), (54, 4), (61, 5)] {
             assert_eq!(
-                registers.partial_ru_max_tx_power(selector(raw)).value(),
+                partial_ru_max_tx_power(registers, selector(raw)).value(),
                 power
             );
         }
@@ -151,4 +151,28 @@ fn cold_power_publication_fills_every_table_from_the_rate_powers() {
     assert_eq!(init.read_tb_ru_power_tail().power_index().get(), 36);
     // Three TB words, ten response words, three RU words and the tail.
     assert_eq!(before.changes(&memory).len(), 17);
+}
+
+/// The RU power a lane holds, read back from its register image.
+fn partial_ru_max_tx_power<M: MacPlacement>(
+    registers: &WifiRadioRegisters<M>,
+    selector: MacPartialRuPowerSelector,
+) -> MacTxPowerIndex {
+    let init = &registers.mac.wifi_mac_tx_power_init;
+    let value = match partial_ru_power_slot(selector) {
+        PartialRuPowerSlot::Packed { word, lane } => {
+            let register = init.read_tb_ru_power(element::<3>(word));
+            match lane {
+                0 => register.power_0(),
+                1 => register.power_1(),
+                2 => register.power_2(),
+                3 => register.power_3(),
+                4 => register.power_4(),
+                _ => unreachable!("a packed RU power lane is below five"),
+            }
+        }
+        PartialRuPowerSlot::Tail => init.read_tb_ru_power_tail().power_index(),
+    };
+    // Every field read above is exactly six bits wide.
+    MacTxPowerIndex(value)
 }

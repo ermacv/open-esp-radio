@@ -888,8 +888,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 minimum_mpdu_length_cbw20: halfword(queue.minimum_mpdu_length_cbw20()),
                 minimum_mpdu_length_cbw40: halfword(queue.minimum_mpdu_length_cbw40()),
                 minimum_mpdu_length_cbw80: halfword(queue.minimum_mpdu_length_cbw80()),
-                software_rts: queue.software_rts(),
-                software_cts: queue.software_cts(),
+                software_rts: matches!(
+                    queue.software_rts(),
+                    oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested
+                ),
+                software_cts: matches!(
+                    queue.software_cts(),
+                    oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::Requested
+                ),
             }
         });
         let mu_edca_timers = core::array::from_fn(|index| {

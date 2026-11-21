@@ -41,7 +41,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             self.mac
                 .wifi_mac_tx_queue_control
                 .modify_protection(element(physical), |w| {
-                    w.set_software_cts(false);
+                    w.set_software_cts(
+                        oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::None,
+                    );
                 });
         }
     }
