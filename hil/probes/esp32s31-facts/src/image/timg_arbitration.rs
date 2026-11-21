@@ -123,7 +123,7 @@ fn state(s: &Session<'_>, tag: u32) {
 }
 fn begin(s: &mut Session<'_>) -> bool {
     setup(s);
-    let wdt = &mut s.ble.watchdog;
+    let wdt = &mut s.watchdog;
     wdt.modify_wprotect(|w| {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Unlock.bits());
     });

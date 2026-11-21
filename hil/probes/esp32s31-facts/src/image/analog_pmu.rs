@@ -6,8 +6,8 @@ use super::{Bits, Index, Session, contain, emit, opaque, opaque_wave2, pac};
 fn begin(s: &mut Session<'_>) {
     oer_portable_riscv::disable_interrupts();
     contain(s);
-    // SOURCE: the existing facts-image BLE leaves retain/feed the ROM WDT.
-    let wdt = &mut s.ble.watchdog;
+    // Retain and feed the ROM's LP watchdog, as every bounded leaf does.
+    let wdt = &mut s.watchdog;
     wdt.modify_wprotect(|w| {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Unlock.bits());
     });

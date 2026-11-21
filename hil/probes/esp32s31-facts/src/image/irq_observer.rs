@@ -42,11 +42,11 @@ pub(super) fn control(s: &mut Session<'_>) -> bool {
     // setup contains hart1, parks every route and masks every CPU line.
     super::setup(s);
     // Retain and feed the ROM reset backstop once per bounded leaf.
-    s.ble.watchdog.modify_wprotect(|w| {
+    s.watchdog.modify_wprotect(|w| {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Unlock.bits());
     });
-    s.ble.watchdog.trigger_feed_feed();
-    s.ble.watchdog.modify_wprotect(|w| {
+    s.watchdog.trigger_feed_feed();
+    s.watchdog.modify_wprotect(|w| {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Lock.bits());
     });
     let mut valid = true;

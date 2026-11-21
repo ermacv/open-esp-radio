@@ -68,7 +68,7 @@ fn pack<const N: usize>(values: [bool; N]) -> u32 {
         .fold(0, |v, (i, b)| v | (u32::from(b) << i))
 }
 pub(super) fn feed(s: &mut Session<'_>) {
-    let wdt = &mut s.ble.watchdog;
+    let wdt = &mut s.watchdog;
     wdt.modify_wprotect(|w| {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Unlock.bits());
     });
