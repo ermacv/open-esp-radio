@@ -568,7 +568,7 @@ sources = ["SRC_DRIVER"]
 
 [[field-or-modifies]]
 name = "point_timer0_descriptor"
-fields = [{ field = "TIMER0.ADDR.ADDR", source-bit-offset = 0 }]
+field = "TIMER0.ADDR.ADDR"
 sources = ["SRC_DRIVER"]
 "#;
 
@@ -1064,8 +1064,8 @@ rejects!(
 rejects!(
     transaction_sources,
     [(
-        "source-bit-offset = 0 }]\nsources = [\"SRC_DRIVER\"]",
-        "source-bit-offset = 0 }]\nsources = []"
+        "field = \"TIMER0.ADDR.ADDR\"\nsources = [\"SRC_DRIVER\"]",
+        "field = \"TIMER0.ADDR.ADDR\"\nsources = []"
     )],
     ErrorKind::InvalidSources
 );
@@ -1102,28 +1102,12 @@ rejects!(
     ErrorKind::Pointer(_)
 );
 rejects!(
-    projections_of_one_register,
+    pointer_or_takes_one_field,
     [(
-        "fields = [{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }]",
-        "fields = [{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }, { field = \"TIMER0.ALARM_0.ALARM\", source-bit-offset = 0 }]"
+        "field = \"TIMER0.ADDR.ADDR\"",
+        "fields = [\"TIMER0.ADDR.ADDR\", \"TIMER0.ALARM_0.ALARM\"]"
     )],
-    ErrorKind::Transaction(_)
-);
-rejects!(
-    projection_input_bits,
-    [(
-        "{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }",
-        "{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 1 }"
-    )],
-    ErrorKind::Transaction(_)
-);
-rejects!(
-    pointer_or_takes_one_pointer_field,
-    [(
-        "{ field = \"TIMER0.ADDR.ADDR\", source-bit-offset = 0 }",
-        "{ field = \"TIMER0.CONFIG.DIV\", source-bit-offset = 0 }"
-    )],
-    ErrorKind::Pointer(_)
+    ErrorKind::Parse(_)
 );
 // Transactions: field classes.
 rejects!(
@@ -2402,5 +2386,34 @@ fn a_write_from_zero_names_its_whole_word_bits_and_a_step_is_whole() -> TestResu
         "{ register = \"ETM.CH2_EVENT\", value = 8, whole-word = true }",
     )])?;
     assert!(matches!(error.kind, ErrorKind::Parse(_)), "{error}");
+    Ok(())
+}
+
+/// A sequence step is a fixed write like an image: it sets no hardware
+/// pointer field from an integer.
+#[test]
+fn a_sequence_step_forges_no_pointer() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(
+        "\n[[fixed-register-sequences]]\nname = \"forge_pointer\"\nsteps = [{ register = \"TIMER0.ADDR\", value = 0xdeadbeef }]\nsources = [\"SRC_DRIVER\"]\n",
+    )?;
+    let error = fixture.rejection()?;
+    assert_eq!(error.entity, "forge_pointer");
+    assert!(matches!(error.kind, ErrorKind::Pointer(_)), "{error}");
+    Ok(())
+}
+
+/// A write from zero gives its fields the caller's value, not zero: a field
+/// whose named values lack zero is written, and only the word's other
+/// fields take the zero they must admit.
+#[test]
+fn a_write_from_zero_checks_zero_only_outside_its_fields() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timer.toml",
+        "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
+        "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"\nvalues = [{ name = \"ONE\", value = 1 }]\nwrite-values-only = true",
+    )?;
+    fixture.load()?;
     Ok(())
 }

@@ -282,15 +282,7 @@ pub struct SequenceStep {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct FieldOrModify {
     pub name: String,
-    pub fields: Vec<Projection>,
-    pub sources: Vec<String>,
-}
-
-/// One field of a modify, taken from the input at `source-bit-offset`.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct Projection {
-    /// `INSTANCE.REGISTER.FIELD`, all projections of one register.
+    /// `INSTANCE.REGISTER.FIELD`: a hardware pointer field.
     pub field: String,
-    pub source_bit_offset: u8,
+    pub sources: Vec<String>,
 }

@@ -2008,32 +2008,32 @@ sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_BX16_LIBPP_LAST_RX_IMAGES_202
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_1_pointer_a"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_1_CURRENT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_1_CURRENT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_1_pointer_b"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_1_NEXT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_1_NEXT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_2_pointer_a"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_2_CURRENT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_2_CURRENT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_2_pointer_b"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_2_NEXT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_2_NEXT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_3_pointer_a"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_3_CURRENT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_3_CURRENT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[field-or-modifies]]
 name = "or_bluetooth_memory_list_3_pointer_b"
-fields = [{ field = "BT_MAC.GLOBAL_RXLINK_3_NEXT.COMPRESSED_SRAM_POINTER", source-bit-offset = 0 }]
+field = "BT_MAC.GLOBAL_RXLINK_3_NEXT.COMPRESSED_SRAM_POINTER"
 sources = ["BLOB_LIBBLE_MMGMT_HW_LISTS"]
 
 [[unclaimed]]

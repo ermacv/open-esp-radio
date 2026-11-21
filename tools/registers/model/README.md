@@ -755,12 +755,12 @@ record of it. The kinds:
 | `zero-register-writes` (`register`) | a sourced zero publication to a `read-observed` word |
 | `fixed-register-images` | a `whole-word` image, an acknowledgement with its proof (`masks` or `consumed-event`), or a configuration of a readable hardware-updated word without a modify accessor |
 | `fixed-register-sequences` | each step's whole-word image, one method a step; the HAL orders them |
-| `field-or-modifies` (`fields`) | the vendor's OR of a typed reference's image into a fresh read of one pointer field |
+| `field-or-modifies` (`field`) | the vendor's OR of a typed reference's image into a fresh read of one pointer field |
 
 A record that would render nothing is refused, so none enters the file: a
 `zero-register-write` of a word that is not `read-observed` and a
-`field-or-modify` of anything but one pointer field from input bit zero
-fail to load; a write from zero without `whole-word-bits` and a sequence
+`field-or-modify` of a field that is not a hardware pointer fail to
+load; a write from zero without `whole-word-bits` and a sequence
 step that is not a whole-word image cannot be written; a fixed image of
 none of the forms above fails to render, which `cargo registers validate`
 runs. Names are unique `lower_snake_case` across all transactions; the

@@ -5,9 +5,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Context, Error, ErrorKind, Holder, Index, InterruptSnapshot, PartId, PolicyFile, Projection,
-    SequenceStep, Target, WholeWordBits, Word, field_mask, lower_snake, ownership::Coverage,
-    stored,
+    Context, Error, ErrorKind, Holder, Index, InterruptSnapshot, PartId, PolicyFile, SequenceStep,
+    Target, WholeWordBits, Word, field_mask, lower_snake, ownership::Coverage, stored,
 };
 use crate::chip_model::{ExpandedField, FieldClass};
 
@@ -95,14 +94,6 @@ fn read(class: FieldClass) -> bool {
 struct Lanes {
     any: u32,
     all: u32,
-}
-
-/// What a projected modify takes: its register, the bits it changes and
-/// whether it is a single projection from input bit zero.
-struct Projected {
-    target: Target,
-    mask: u32,
-    single: bool,
 }
 
 struct Checker<'a, 'm> {
@@ -961,17 +952,6 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 if mask & bits != 0 {
                     return Err(self.error(entity, ErrorKind::Duplicate(reference.clone())));
                 }
-                // A pointer field takes the image of a typed reference; an
-                // address field only its own full-register write.
-                let pointers = self.lanes(target);
-                if pointers.any & bits != 0 && pointers.all & bits != bits {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Pointer(format!(
-                            "{reference} is a pointer field of some elements only"
-                        )),
-                    ));
-                }
                 // The field's own type: its named values when it takes
                 // only those; no bounded integer type exists.
                 let word = self.word(entity, target)?;
@@ -1215,63 +1195,23 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         self.take(entity, &[owner], true)
     }
 
-    /// The projections' register and the bits they replace.
-    fn projections(&self, entity: &str, fields: &[Projection]) -> Result<Projected, Error> {
-        let mut register = None;
-        let mut mask = 0u32;
-        let mut single = false;
-        for projection in fields {
-            let (target, field) = self.field(entity, &projection.field)?;
-            self.same(entity, &mut register, target)?;
-            if mask & field_mask(field) != 0 {
-                return Err(self.error(entity, ErrorKind::Duplicate(projection.field.clone())));
-            }
-            let offset = u32::from(projection.source_bit_offset);
-            if offset.saturating_add(field.width) > 32 {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(format!(
-                        "{} takes input bits above bit 31",
-                        projection.field
-                    )),
-                ));
-            }
-            mask |= field_mask(field);
-            single = fields.len() == 1 && offset == 0;
-        }
-        let target = register.ok_or_else(|| self.error(entity, ErrorKind::EmptySelection))?;
-        Ok(Projected {
-            target,
-            mask,
-            single,
-        })
-    }
-
-    /// Whether `projected` is the one pointer field of every word it
-    /// reaches, from input bit zero: it takes a typed reference's image.
-    fn pointer_image(&self, projected: &Projected) -> bool {
-        projected.single && self.lanes(projected.target).all & projected.mask == projected.mask
-    }
-
     /// A field-or-modify ORs a typed reference's image into a fresh read
-    /// of one pointer field; any other OR of fields is a write the generic
-    /// accessors express.
+    /// of one pointer field; any other OR of a field is a write the
+    /// generic accessors express.
     fn modifies(&mut self) -> Result<(), Error> {
         let file = self.file;
         for modify in &file.field_or_modifies {
             let entity = modify.name.as_str();
             self.begin(entity, &modify.sources)?;
-            let projected = self.projections(entity, &modify.fields)?;
-            if !self.pointer_image(&projected) {
+            let (target, field) = self.field(entity, &modify.field)?;
+            let mask = field_mask(field);
+            if self.lanes(target).all & mask != mask {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Pointer(
-                        "a field-or-modify takes one pointer field of every word it reaches, from input bit zero"
-                            .to_owned(),
-                    ),
+                    ErrorKind::Pointer(format!("{} is no hardware pointer field", modify.field)),
                 ));
             }
-            self.modify(entity, projected.target, projected.mask)?;
+            self.modify(entity, target, mask)?;
         }
         Ok(())
     }

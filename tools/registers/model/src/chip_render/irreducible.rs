@@ -648,13 +648,7 @@ fn render_pointer_or(
     modify: &crate::chip_policy::FieldOrModify,
 ) -> Result<(), Error> {
     let entity = modify.name.as_str();
-    let [projection] = modify.fields.as_slice() else {
-        return Err(Error::new(
-            entity,
-            "it ORs an address into more than one field",
-        ));
-    };
-    let Some((register, name)) = projection.field.rsplit_once('.') else {
+    let Some((register, name)) = modify.field.rsplit_once('.') else {
         return Err(Error::new(entity, "it names no field"));
     };
     let target = element(entity, plan, owner, model, register)?;
@@ -667,7 +661,7 @@ fn render_pointer_or(
         .ok_or_else(|| {
             Error::new(
                 entity,
-                format!("{} is no pointer field a write sets", projection.field),
+                format!("{} is no pointer field a write sets", modify.field),
             )
         })?;
     if !target.template.modifiable() {

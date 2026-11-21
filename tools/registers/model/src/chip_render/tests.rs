@@ -1221,7 +1221,7 @@ fn with_trigger_word_and_pointer_or() -> std::vec::Vec<(&'static str, &'static s
         (
             "policy.toml",
             "[[fixed-register-sequences]]",
-            "[[field-or-modifies]]\nname = \"or_descriptor\"\nfields = [{ field = \"RADIO0.RAD_DESC.PTR\", source-bit-offset = 0 }]\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]",
+            "[[field-or-modifies]]\nname = \"or_descriptor\"\nfield = \"RADIO0.RAD_DESC.PTR\"\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]",
         ),
     ]);
     edits
