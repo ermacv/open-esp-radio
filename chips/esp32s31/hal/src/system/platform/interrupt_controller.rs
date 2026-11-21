@@ -204,7 +204,12 @@ impl InterruptBlocks {
             lines: clic_observer,
         });
         Self {
-            grant: InterruptGrant::new(interrupt_core0, clic, None, clic_pending),
+            grant: InterruptGrant::new(
+                Hart0Routes::new(interrupt_core0),
+                clic,
+                None,
+                HartPending::new(clic_pending),
+            ),
         }
     }
 }
@@ -293,8 +298,34 @@ pub fn fatal_view<R>(
         .map(|held| held.value)
 }
 
-/// A hart's route bank in the interrupt matrix: `INTERRUPT_CORE0` for hart
-/// 0, `INTERRUPT_CORE1` for hart 1. Sealed: only those banks are.
+/// Hart 0's route bank in the interrupt matrix, `INTERRUPT_CORE0`: the
+/// HAL's holder of the PAC's owner.
+pub struct Hart0Routes<M: Placement = Fixed<{ instances::interrupt_core0::BASE }>>(
+    InterruptCore0<M>,
+);
+
+/// Hart 1's route bank in the interrupt matrix, `INTERRUPT_CORE1`: the
+/// HAL's holder of the PAC's owner.
+pub struct Hart1Routes<M: Placement = Fixed<{ instances::interrupt_core1::BASE }>>(
+    InterruptCore1<M>,
+);
+
+impl<M: Placement> Hart0Routes<M> {
+    /// Hold the root's hart 0 bank.
+    pub(crate) const fn new(bank: InterruptCore0<M>) -> Self {
+        Self(bank)
+    }
+}
+
+impl<M: Placement> Hart1Routes<M> {
+    /// Hold the root's hart 1 bank.
+    pub(crate) const fn new(bank: InterruptCore1<M>) -> Self {
+        Self(bank)
+    }
+}
+
+/// A hart's route bank in the interrupt matrix: [`Hart0Routes`] for hart
+/// 0, [`Hart1Routes`] for hart 1. Sealed: only those banks are.
 pub trait RouteBank: sealed::Sealed {
     /// The hart whose routes the bank holds.
     const HART: u8;
@@ -313,37 +344,48 @@ pub trait RouteBank: sealed::Sealed {
 
 mod sealed {
     pub trait Sealed {}
-    impl<M: oer_portable_mmio::Placement> Sealed for super::InterruptCore0<M> {}
-    impl<M: oer_portable_mmio::Placement> Sealed for super::InterruptCore1<M> {}
+    impl<M: oer_portable_mmio::Placement> Sealed for super::Hart0Routes<M> {}
+    impl<M: oer_portable_mmio::Placement> Sealed for super::Hart1Routes<M> {}
 }
 
 macro_rules! route_bank {
-    ($bank:ident, $hart:literal) => {
-        impl<M: Placement> RouteBank for $bank<M> {
+    ($routes:ident, $bank:ident, $hart:literal) => {
+        impl<M: Placement> RouteBank for $routes<M> {
             const HART: u8 = $hart;
             fn read_route(
                 &self,
                 index: Index<{ interrupt_core::route::COUNT }>,
             ) -> interrupt_core::route::R {
-                $bank::read_route(self, index)
+                $bank::read_route(&self.0, index)
             }
             fn modify_route(
                 &mut self,
                 index: Index<{ interrupt_core::route::COUNT }>,
                 change: impl FnOnce(&mut interrupt_core::route::W),
             ) {
-                $bank::modify_route(self, index, change);
+                $bank::modify_route(&mut self.0, index, change);
             }
         }
     };
 }
 
-route_bank!(InterruptCore0, 0);
-route_bank!(InterruptCore1, 1);
+route_bank!(Hart0Routes, InterruptCore0, 0);
+route_bank!(Hart1Routes, InterruptCore1, 1);
 
-/// A hart's pending bytes, as its controller stores them: the hart's
-/// [`ClicPending`] in its static place, or a host test's owned over its
-/// memory. Sealed: only a hart's pending bytes are.
+/// Hart `H`'s CLIC pending bytes in their static place: the HAL's holder
+/// of the PAC's owner.
+pub struct HartPending<const H: u8>(&'static ClicPending<H>);
+
+impl<const H: u8> HartPending<H> {
+    /// Hold the hart's pending bytes in their static place.
+    pub(crate) const fn new(bytes: &'static ClicPending<H>) -> Self {
+        Self(bytes)
+    }
+}
+
+/// A hart's pending bytes, as its controller stores them: [`HartPending`]
+/// on the chip, or a host test's owned over its memory. Sealed: only a
+/// hart's pending bytes are.
 pub trait PendingBytes<const H: u8>: pending::Sealed {
     #[doc(hidden)]
     fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>);
@@ -351,17 +393,19 @@ pub trait PendingBytes<const H: u8>: pending::Sealed {
 
 mod pending {
     pub trait Sealed {}
-    impl<const H: u8, P: oer_portable_mmio::Placement> Sealed for &super::ClicPending<H, P> {}
+    impl<const H: u8> Sealed for super::HartPending<H> {}
+    #[cfg(test)]
     impl<const H: u8, P: oer_portable_mmio::Placement> Sealed for super::ClicPending<H, P> {}
 }
 
-impl<const H: u8, P: Placement> PendingBytes<H> for &ClicPending<H, P> {
+impl<const H: u8> PendingBytes<H> for HartPending<H> {
     #[inline(always)]
     fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>) {
-        self.clear_line(index, hart);
+        self.0.clear_line(index, hart);
     }
 }
 
+#[cfg(test)]
 impl<const H: u8, P: Placement> PendingBytes<H> for ClicPending<H, P> {
     #[inline(always)]
     fn clear(&self, index: Index<{ clic::ip::COUNT }>, hart: &OnHart<H>) {
@@ -378,7 +422,7 @@ pub struct InterruptGrant<
     B: RouteBank,
     const H: u8,
     C: Placement = Fixed<{ instances::clic::BASE }>,
-    P: PendingBytes<H> = &'static ClicPending<H>,
+    P: PendingBytes<H> = HartPending<H>,
 > {
     bank: B,
     lines: Clic<C>,
@@ -469,7 +513,7 @@ impl<B: RouteBank, const H: u8, C: Placement> InterruptGrant<B, H, C> {
     /// The hart's pend lines, over the pending bytes the grant holds for
     /// its controller.
     pub(crate) const fn pend_lines(&self) -> PendLines<'static, H> {
-        PendLines::new(self.pending)
+        PendLines::new(self.pending.0)
     }
 }
 
@@ -562,8 +606,8 @@ where
 }
 
 /// One hart's interrupt-matrix bank and that hart's own CLIC, the router's
-/// [`Controller`]: hart 0's by default ([`InterruptCore0`]), hart 1's over
-/// [`InterruptCore1`] ([`Hart1Controller`]). It holds the proof of its hart
+/// [`Controller`]: hart 0's by default ([`Hart0Routes`]), hart 1's over
+/// [`Hart1Routes`] ([`Hart1Controller`]). It holds the proof of its hart
 /// and stays on it (`!Send`).
 ///
 /// ```compile_fail
@@ -572,10 +616,10 @@ where
 /// ```
 #[must_use = "dropping the interrupt controller permanently loses the routes and lines"]
 pub struct InterruptController<
-    B: RouteBank = InterruptCore0,
+    B: RouteBank = Hart0Routes,
     const H: u8 = 0,
     C: Placement = Fixed<{ instances::clic::BASE }>,
-    P: PendingBytes<H> = &'static ClicPending<H>,
+    P: PendingBytes<H> = HartPending<H>,
 > {
     matrix: B,
     clic: Clic<C>,
@@ -590,16 +634,16 @@ pub struct InterruptController<
 }
 
 /// Hart 1's controller.
-pub type Hart1Controller = InterruptController<InterruptCore1, 1>;
+pub type Hart1Controller = InterruptController<Hart1Routes, 1>;
 /// Hart 0's grant.
-pub type Hart0Grant = InterruptGrant<InterruptCore0, 0>;
+pub type Hart0Grant = InterruptGrant<Hart0Routes, 0>;
 /// Hart 1's grant, over its bank's, its CLIC's and its pending bytes'
 /// placements.
 pub type Hart1Grant<
     M = Fixed<{ instances::interrupt_core1::BASE }>,
     K = Fixed<{ instances::clic::BASE }>,
-    G = &'static ClicPending<1>,
-> = InterruptGrant<InterruptCore1<M>, 1, K, G>;
+    G = HartPending<1>,
+> = InterruptGrant<Hart1Routes<M>, 1, K, G>;
 
 impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> Controller
     for InterruptController<B, H, C, P>

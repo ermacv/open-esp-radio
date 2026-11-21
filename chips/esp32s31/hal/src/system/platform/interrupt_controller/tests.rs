@@ -14,13 +14,12 @@ use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
 use oer_portable_riscv::OnHart;
 
 use super::{
-    InterruptController, InterruptGrant, InterruptView, Observer,
+    Hart0Routes, Hart1Routes, InterruptController, InterruptGrant, InterruptView, Observer,
     facts::{self, LEVEL_BITS, LINES},
 };
 
 /// Hart 0's controller over host memory.
-type Ours<'a> =
-    InterruptController<InterruptCore0<Host<'a>>, 0, Host<'a>, ClicPending<0, Host<'a>>>;
+type Ours<'a> = InterruptController<Hart0Routes<Host<'a>>, 0, Host<'a>, ClicPending<0, Host<'a>>>;
 
 /// Host memory of hart 0's bank, of the CLIC and of the controller's
 /// pending bytes: a host block borrows its memory alone, so the pending
@@ -43,9 +42,11 @@ impl Memory {
 
     fn controller(&mut self) -> Ours<'_> {
         InterruptGrant::new(
-            interrupt_core::interrupt_core0_host(&mut self.matrix)
-                .expect("the memory holds the bank")
-                .0,
+            Hart0Routes::new(
+                interrupt_core::interrupt_core0_host(&mut self.matrix)
+                    .expect("the memory holds the bank")
+                    .0,
+            ),
             clic::clic_host(&mut self.clic)
                 .expect("the memory holds the CLIC")
                 .0,
@@ -205,7 +206,7 @@ fn verification_rechecks_mnlbits_after_installation() {
         .0;
     let (clic, mut config) = clic::clic_host(&mut memory.clic).expect("CLIC");
     let controller = InterruptGrant::new(
-        matrix,
+        Hart0Routes::new(matrix),
         clic,
         None,
         ClicPending::<0, _>::host(&mut memory.pending).expect("pending bytes"),
@@ -566,7 +567,7 @@ fn each_banks_controller_names_its_own_hart() {
     // Only hart 1's proof builds hart 1's controller: another hart's does
     // not type-check (`tests/ui/interrupt_grant_is_one_per_hart.rs`).
     let controller = InterruptGrant::new(
-        interrupt_core::InterruptCore1::host(&mut bank).expect("hart 1's bank"),
+        Hart1Routes::new(interrupt_core::InterruptCore1::host(&mut bank).expect("hart 1's bank")),
         lines,
         Some(config),
         ClicPending::<1, _>::host(&mut pending_words).expect("pending bytes"),

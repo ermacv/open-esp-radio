@@ -11358,36 +11358,59 @@ fn is_type_name(word: &str) -> bool {
         && word.chars().any(|character| character.is_ascii_lowercase())
 }
 
-/// The names a `use` tree imports from a PAC crate, each with the name it
-/// takes in the file: `use oer_…_pac::a::{B, C as D};` gives `B` and `D`.
-fn pac_imports(tree: &[TokenTree], prefix: &[String], found: &mut Vec<String>) {
+/// What a plain `use` tree imports from a PAC crate, each under the name
+/// it takes in the file: types (`use oer_…_pac::a::{B, C as D};` gives `B`
+/// and `D`) and modules or the crate itself (`use oer_…_pac::wifi_mac;`,
+/// `use oer_…_pac as pac;`, `{self as a}`), a path through which reaches
+/// the PAC's names.
+#[derive(Default)]
+struct PacImports {
+    types: BTreeSet<String>,
+    roots: BTreeSet<String>,
+}
+
+fn pac_imports(tree: &[TokenTree], prefix: &[String], found: &mut PacImports) {
     let mut path = prefix.to_vec();
-    // Whether the segment just read is a type the walk recorded: an `as`
-    // renames that one, never a module.
-    let mut last_is_type = false;
+    let from_pac = |path: &[String]| path.first().is_some_and(|first| is_pac_root(first));
+    // The name the path just read takes, if the tree ends there.
+    let mut last: Option<String> = None;
     let mut index = 0;
+    let record =
+        |name: Option<String>, alias: Option<String>, path: &[String], found: &mut PacImports| {
+            let Some(name) = name else { return };
+            if !from_pac(path) {
+                return;
+            }
+            let taken = alias.unwrap_or_else(|| {
+                if name == "self" {
+                    path.iter().rev().nth(1).cloned().unwrap_or_default()
+                } else {
+                    name.clone()
+                }
+            });
+            if is_type_name(&name) {
+                found.types.insert(taken);
+            } else if !taken.is_empty() && taken != "_" {
+                found.roots.insert(taken);
+            }
+        };
     while let Some(token) = tree.get(index) {
         match token {
             TokenTree::Ident(word) if word == "as" => {
-                if let Some(TokenTree::Ident(alias)) = tree.get(index + 1)
-                    && last_is_type
-                {
-                    found.pop();
-                    found.push(alias.to_string());
-                }
-                last_is_type = false;
+                let alias = ident_at(tree, index + 1);
+                record(last.take(), alias, &path, found);
                 index += 2;
                 continue;
             }
             TokenTree::Ident(word) => {
                 path.push(word.to_string());
-                last_is_type = path.first().is_some_and(|first| is_pac_root(first))
-                    && is_type_name(&word.to_string());
-                if last_is_type {
-                    found.push(word.to_string());
-                }
+                last = Some(word.to_string());
+            }
+            TokenTree::Punct(punct) if punct.as_char() == ':' => {
+                last = None;
             }
             TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                last = None;
                 for part in split_commas(&group.stream()) {
                     pac_imports(&part, &path, found);
                 }
@@ -11396,16 +11419,22 @@ fn pac_imports(tree: &[TokenTree], prefix: &[String], found: &mut Vec<String>) {
         }
         index += 1;
     }
+    record(last, None, &path, found);
 }
 
-/// The generated names one stretch of a signature or a field's type spells:
-/// a path from a PAC crate ending in a type's name, or a name the file
-/// imports from a PAC with a plain `use`.
-fn pac_names_in(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut Vec<String>) {
+/// The generated names one stretch of tokens spells: a path from a PAC
+/// crate or from a module the file imports from one, ending in a type's
+/// name, or a type the file imports from a PAC with a plain `use`.
+fn pac_names_in(tokens: &[TokenTree], imported: &PacImports, found: &mut Vec<String>) {
     let mut index = 0;
     while let Some(token) = tokens.get(index) {
         match token {
-            TokenTree::Ident(word) if is_pac_root(&word.to_string()) => {
+            TokenTree::Ident(word)
+                if is_pac_root(&word.to_string())
+                    || (imported.roots.contains(&word.to_string())
+                        && punct_at(tokens, index + 1, ':')
+                        && punct_at(tokens, index + 2, ':')) =>
+            {
                 // Follow `::` segments to the path's last name.
                 let mut last = word.to_string();
                 let mut next = index + 1;
@@ -11422,7 +11451,7 @@ fn pac_names_in(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut V
                 index = next;
                 continue;
             }
-            TokenTree::Ident(word) if imported.contains(&word.to_string()) => {
+            TokenTree::Ident(word) if imported.types.contains(&word.to_string()) => {
                 found.push(word.to_string());
             }
             TokenTree::Group(group) => {
@@ -11438,89 +11467,246 @@ fn pac_names_in(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut V
     }
 }
 
-/// The generated names the public signatures and fields of one source
-/// spell: a `pub` function (not `pub(…)`) from its name to its body, and a
-/// `pub` field of a struct, each with the line it is on.
+/// Whether the brace group at `at` is an item's body: a const generic
+/// argument's braces follow `<`, `,` or `=` instead.
+fn is_body(tokens: &[TokenTree], at: usize) -> bool {
+    matches!(tokens.get(at), Some(TokenTree::Group(body)) if body.delimiter() == Delimiter::Brace)
+        && !at.checked_sub(1).is_some_and(|before| {
+            matches!(tokens.get(before), Some(TokenTree::Punct(punct)) if matches!(punct.as_char(), '<' | ',' | '='))
+        })
+}
+
+/// The tokens from `start` to the first `;` or body of this level.
+fn item_head(tokens: &[TokenTree], start: usize) -> Vec<TokenTree> {
+    let mut head = Vec::new();
+    let mut at = start;
+    while let Some(token) = tokens.get(at) {
+        if is_body(tokens, at) || matches!(token, TokenTree::Punct(end) if end.as_char() == ';') {
+            break;
+        }
+        head.push(token.clone());
+        at += 1;
+    }
+    head
+}
+
+/// The tokens from `start` to the next `,` of this level.
+fn to_comma(tokens: &[TokenTree], start: usize) -> Vec<TokenTree> {
+    tokens
+        .iter()
+        .skip(start)
+        .take_while(|token| !matches!(token, TokenTree::Punct(comma) if comma.as_char() == ','))
+        .cloned()
+        .collect()
+}
+
+/// The body after `start` at this level, if the item has one.
+fn item_body(tokens: &[TokenTree], start: usize) -> Option<Vec<TokenTree>> {
+    let at = start + item_head(tokens, start).len();
+    match tokens.get(at) {
+        Some(TokenTree::Group(body)) => Some(body.stream().into_iter().collect()),
+        _ => None,
+    }
+}
+
+/// A trait's or an implementation's items as callers see them: each
+/// signature, associated type and constant, never a default body.
+fn trait_items(body: &[TokenTree], imported: &PacImports, found: &mut Vec<String>) {
+    let mut index = 0;
+    while let Some(token) = body.get(index) {
+        if let TokenTree::Ident(word) = token
+            && matches!(word.to_string().as_str(), "fn" | "type" | "const")
+        {
+            let head = item_head(body, index);
+            pac_names_in(&head, imported, found);
+            index += head.len().max(1);
+            continue;
+        }
+        index += 1;
+    }
+}
+
+/// The generated names what one source makes public spells, each with the
+/// line it is on: a `pub` (not `pub(…)`) function's signature, a `pub`
+/// field (named or a tuple's), a `pub` const's or static's type, a `pub`
+/// type alias, a `pub` enum's variants, a `pub` struct's generics, a `pub`
+/// trait's items, and the associated types of a trait implementation
+/// (unless the trait is private to the file).
 fn unpublished_pac_names(source: &str) -> Vec<(usize, String)> {
     let Ok(stream) = source.parse::<TokenStream>() else {
         return vec![(0, "unparsed".to_owned())];
     };
-    let mut imported = Vec::new();
     let tokens = stream.into_iter().collect::<Vec<_>>();
-    for (index, token) in tokens.iter().enumerate() {
-        // A plain `use` imports; a `pub use` publishes, and is the door.
-        if let TokenTree::Ident(word) = token
-            && word == "use"
-            && !index
+    let mut imported = PacImports::default();
+    let mut private_traits = BTreeSet::new();
+    fn scan(
+        tokens: &[TokenTree],
+        imported: &mut PacImports,
+        private_traits: &mut BTreeSet<String>,
+    ) {
+        for (index, token) in tokens.iter().enumerate() {
+            let TokenTree::Ident(word) = token else {
+                if let TokenTree::Group(group) = token {
+                    scan(
+                        &group.stream().into_iter().collect::<Vec<_>>(),
+                        imported,
+                        private_traits,
+                    );
+                }
+                continue;
+            };
+            let after_pub = index
                 .checked_sub(1)
-                .is_some_and(|before| ident_at(&tokens, before).is_some_and(|w| w == "pub"))
-        {
-            let tree = tokens
-                .iter()
-                .skip(index + 1)
-                .take_while(|token| !matches!(token, TokenTree::Punct(end) if end.as_char() == ';'))
-                .cloned()
-                .collect::<Vec<_>>();
-            pac_imports(&tree, &[], &mut imported);
+                .is_some_and(|before| ident_at(tokens, before).is_some_and(|w| w == "pub"));
+            // A plain `use` imports; a `pub use` publishes, and is the door.
+            if word == "use" && !after_pub {
+                let tree = tokens
+                    .iter()
+                    .skip(index + 1)
+                    .take_while(
+                        |token| !matches!(token, TokenTree::Punct(end) if end.as_char() == ';'),
+                    )
+                    .cloned()
+                    .collect::<Vec<_>>();
+                pac_imports(&tree, &[], imported);
+            }
+            if word == "trait"
+                && !after_pub
+                && let Some(name) = ident_at(tokens, index + 1)
+            {
+                private_traits.insert(name);
+            }
         }
     }
-    let imported = imported.into_iter().collect::<BTreeSet<_>>();
+    scan(&tokens, &mut imported, &mut private_traits);
     let mut found = Vec::new();
-    fn walk(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut Vec<(usize, String)>) {
+    fn walk(
+        tokens: &[TokenTree],
+        imported: &PacImports,
+        private_traits: &BTreeSet<String>,
+        found: &mut Vec<(usize, String)>,
+    ) {
         let mut index = 0;
         while let Some(token) = tokens.get(index) {
+            let line = token.span().start().line;
+            let mut names = Vec::new();
             let public = matches!(token, TokenTree::Ident(word) if word == "pub")
                 && !matches!(tokens.get(index + 1), Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis);
             if public {
-                let line = token.span().start().line;
-                let mut names = Vec::new();
-                match tokens.get(index + 1) {
-                    Some(TokenTree::Ident(word)) if word == "fn" || word == "const" => {
-                        // The signature: to the body or the `;`.
-                        let signature = tokens
+                // Qualifiers before the item's keyword.
+                let mut at = index + 1;
+                while ident_at(tokens, at)
+                    .is_some_and(|word| matches!(word.as_str(), "unsafe" | "async" | "extern"))
+                    || matches!(tokens.get(at), Some(TokenTree::Literal(_)))
+                {
+                    at += 1;
+                }
+                match ident_at(tokens, at).as_deref() {
+                    Some("fn") => pac_names_in(&item_head(tokens, at), imported, &mut names),
+                    Some("const" | "static")
+                        if ident_at(tokens, at + 1).as_deref() == Some("fn") =>
+                    {
+                        pac_names_in(&item_head(tokens, at), imported, &mut names);
+                    }
+                    Some("const" | "static") => {
+                        // The type: from the `:` to the `=`.
+                        let ty = tokens
                             .iter()
-                            .skip(index + 1)
-                            .take_while(|token| {
-                                !matches!(token, TokenTree::Group(body) if body.delimiter() == Delimiter::Brace)
-                                    && !matches!(token, TokenTree::Punct(end) if end.as_char() == ';')
-                            })
+                            .skip(at)
+                            .take_while(|token| !matches!(token, TokenTree::Punct(eq) if eq.as_char() == '='))
                             .cloned()
                             .collect::<Vec<_>>();
-                        if signature
-                            .iter()
-                            .any(|token| matches!(token, TokenTree::Ident(word) if word == "fn"))
-                        {
-                            pac_names_in(&signature, imported, &mut names);
+                        pac_names_in(&ty, imported, &mut names);
+                    }
+                    Some("type") => pac_names_in(&item_head(tokens, at), imported, &mut names),
+                    Some("enum") => {
+                        pac_names_in(&item_head(tokens, at), imported, &mut names);
+                        if let Some(body) = item_body(tokens, at) {
+                            pac_names_in(&body, imported, &mut names);
                         }
                     }
-                    Some(TokenTree::Ident(_))
-                        if punct_at(tokens, index + 2, ':')
-                            && !punct_at(tokens, index + 3, ':') =>
-                    {
-                        // A field: its type, to the next `,` of this level.
-                        let field = tokens
+                    Some("struct" | "union") => {
+                        // Its generics; its fields as `pub` fields below.
+                        let head = item_head(tokens, at);
+                        let generics = head
                             .iter()
-                            .skip(index + 3)
-                            .take_while(|token| !matches!(token, TokenTree::Punct(comma) if comma.as_char() == ','))
+                            .take_while(|token| !matches!(token, TokenTree::Group(group) if group.delimiter() == Delimiter::Parenthesis))
                             .cloned()
                             .collect::<Vec<_>>();
-                        pac_names_in(&field, imported, &mut names);
+                        pac_names_in(&generics, imported, &mut names);
                     }
-                    _ => {}
+                    Some("trait") => {
+                        pac_names_in(&item_head(tokens, at), imported, &mut names);
+                        if let Some(body) = item_body(tokens, at) {
+                            trait_items(&body, imported, &mut names);
+                        }
+                    }
+                    Some("mod" | "use" | "impl" | "crate" | "self" | "super") | None => {}
+                    Some(_) if punct_at(tokens, at + 1, ':') && !punct_at(tokens, at + 2, ':') => {
+                        // A named field: its type, to the next `,`.
+                        pac_names_in(&to_comma(tokens, at + 2), imported, &mut names);
+                    }
+                    Some(_) => {
+                        // A tuple struct's field: its type, to the next `,`.
+                        pac_names_in(&to_comma(tokens, at), imported, &mut names);
+                    }
                 }
-                found.extend(names.into_iter().map(|name| (line, name)));
+                if matches!(tokens.get(at), Some(TokenTree::Group(_))) {
+                    // `pub (T)`-like tokens do not occur; a tuple field
+                    // starting with a group (`pub [u8; 4]`, `pub (A, B)`).
+                    pac_names_in(&to_comma(tokens, at), imported, &mut names);
+                }
             }
+            // A trait implementation's associated types are the trait's
+            // to every caller that names the trait.
+            if matches!(token, TokenTree::Ident(word) if word == "impl") {
+                let head = item_head(tokens, index);
+                let trait_name = head
+                    .iter()
+                    .position(|token| matches!(token, TokenTree::Ident(word) if word == "for"))
+                    .and_then(|for_at| {
+                        head.get(..for_at)?
+                            .iter()
+                            .rev()
+                            .find_map(|token| match token {
+                                TokenTree::Ident(word) if is_type_name(&word.to_string()) => {
+                                    Some(word.to_string())
+                                }
+                                _ => None,
+                            })
+                    });
+                if let Some(trait_name) = trait_name
+                    && !private_traits.contains(&trait_name)
+                    && let Some(body) = item_body(tokens, index)
+                {
+                    let mut at = 0;
+                    while let Some(item) = body.get(at) {
+                        if matches!(item, TokenTree::Ident(word) if word == "type") {
+                            let head = item_head(&body, at);
+                            let item_line = item.span().start().line;
+                            let mut types = Vec::new();
+                            pac_names_in(&head, imported, &mut types);
+                            found.extend(types.into_iter().map(|name| (item_line, name)));
+                            at += head.len().max(1);
+                            continue;
+                        }
+                        at += 1;
+                    }
+                }
+            }
+            found.extend(names.into_iter().map(|name| (line, name)));
             if let TokenTree::Group(group) = token {
                 walk(
                     &group.stream().into_iter().collect::<Vec<_>>(),
                     imported,
+                    private_traits,
                     found,
                 );
             }
             index += 1;
         }
     }
-    walk(&tokens, &imported, &mut found);
+    walk(&tokens, &imported, &private_traits, &mut found);
     found
 }
 
@@ -11595,6 +11781,91 @@ fn an_unpublished_generated_name_is_found_in_each_of_its_forms() {
         names("use oer_chips_esp32s31_pac::spi_mem_c as spi1; pub fn f(spi1: &mut [u32]) {}")
             .is_empty()
     );
+    // The nine forms through which a crate above sees a name.
+    let p = "oer_chips_esp32s31_pac";
+    for (form, source) in [
+        ("a path", format!("pub fn f(x: {p}::a::Name) {{}}")),
+        (
+            "a module imported from the PAC",
+            format!("use {p}::wifi_mac; pub fn f(x: wifi_mac::config::Name) {{}}"),
+        ),
+        (
+            "the PAC imported under another name",
+            format!("use {p} as pac; pub fn f(x: pac::a::Name) {{}}"),
+        ),
+        ("a type alias", format!("pub type T = {p}::a::Name;")),
+        (
+            "a type alias's default",
+            format!("pub type T<M = {p}::a::Name> = S<M, {{ {p}::a::BASE }}>;"),
+        ),
+        (
+            "an enum's variant",
+            format!("pub enum E {{ V({p}::a::Name), W }}"),
+        ),
+        (
+            "a struct's generic default",
+            format!("pub struct S<B = {p}::a::Name> {{ b: B }}"),
+        ),
+        (
+            "a tuple struct's pub field",
+            format!("pub struct S(pub {p}::a::Name);"),
+        ),
+        (
+            "a pub trait's method signature",
+            format!("pub trait T {{ fn f(&self, x: {p}::a::Name); }}"),
+        ),
+        (
+            "an implementation's associated type",
+            format!("impl Foreign for S {{ type A = {p}::a::Name; }}"),
+        ),
+        (
+            "a pub const's type",
+            format!("pub const C: {p}::a::Name = X;"),
+        ),
+        (
+            "a pub static's type",
+            format!("pub static C: {p}::a::Name = X;"),
+        ),
+        (
+            "a signature past a const generic argument",
+            format!("pub fn f(a: Bits<{{ W }}>, x: {p}::a::Name) {{}}"),
+        ),
+    ] {
+        assert_eq!(names(&source), ["Name"], "{form}: {source}");
+    }
+    // Not found: a tuple struct's private field, a private trait's
+    // implementation, a trait's default body, a const generic built from a
+    // PAC constant, an imported module's constant, and a `pub use`d module.
+    for (form, source) in [
+        (
+            "a private tuple field",
+            format!("pub struct S({p}::a::Name);"),
+        ),
+        (
+            "an implementation of a private trait",
+            format!("trait Mine {{ type A; }} impl Mine for S {{ type A = {p}::a::Name; }}"),
+        ),
+        (
+            "a trait's default body",
+            format!("pub trait T {{ fn f(&self) {{ let x: {p}::a::Name = y; }} }}"),
+        ),
+        (
+            "a placement over a PAC constant",
+            format!(
+                "use {p}::instances; impl Foreign for S {{ type A = Fixed<{{ instances::a::BASE }}>; }}"
+            ),
+        ),
+        (
+            "a published module",
+            format!("pub use {p}::wifi_mac; pub fn f(x: wifi_mac::config::Name) {{}}"),
+        ),
+        (
+            "a pub(crate) type alias",
+            format!("pub(crate) type T = {p}::a::Name;"),
+        ),
+    ] {
+        assert!(names(&source).is_empty(), "{form}: {source}");
+    }
     // Not found: a `pub(crate)` function, a width constant, a published
     // name, a private field, and a function body.
     assert!(

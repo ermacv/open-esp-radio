@@ -6,8 +6,9 @@
 
 pub use core_control::{CoreControlRegisters, Uart0ClockRegisters};
 pub use interrupt_controller::{
-    ForeignHart, Hart0Grant, Hart1Controller, Hart1Grant, InterruptBlocks, InterruptController,
-    InterruptGrant, LinePend, PendLines, PendingBytes, RouteBank,
+    ForeignHart, Hart0Grant, Hart0Routes, Hart1Controller, Hart1Grant, Hart1Routes, HartPending,
+    InterruptBlocks, InterruptController, InterruptGrant, LinePend, PendLines, PendingBytes,
+    RouteBank,
 };
 pub use port::Port;
 

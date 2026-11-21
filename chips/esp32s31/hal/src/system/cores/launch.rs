@@ -14,8 +14,7 @@
 use oer_chips_esp32s31_pac::{
     cache::CacheBusObserver,
     clic::{Clic, ClicObserver, ClicPending},
-    instances,
-    interrupt_core::{self, InterruptCore1},
+    instances, interrupt_core,
     lp_system_reg::LpWakeStub,
     ownership::SecondaryLaunchPeripherals,
 };
@@ -30,7 +29,8 @@ use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{
     peripherals::reset_cause::{ResetCause, ResetCauses},
     system::platform::{
-        Hart1Grant, InterruptGrant, PendingBytes, core_control::CoreControlRegisters,
+        Hart1Grant, Hart1Routes, HartPending, InterruptGrant, PendingBytes, RouteBank,
+        core_control::CoreControlRegisters,
     },
 };
 
@@ -42,9 +42,9 @@ pub struct LaunchPermit<
     L: Placement = Fixed<{ instances::lp_sys::BASE }>,
     C: Placement = Fixed<{ instances::cache::BASE }>,
     K: Placement = Fixed<{ instances::clic::BASE }>,
-    G: PendingBytes<1> = &'static ClicPending<1>,
+    G: PendingBytes<1> = HartPending<1>,
 > {
-    interrupts: InterruptGrant<InterruptCore1<M>, 1, K, G>,
+    interrupts: InterruptGrant<Hart1Routes<M>, 1, K, G>,
     wake_stub: LpWakeStub<L>,
     buses: CacheBusObserver<C>,
 }
@@ -65,10 +65,10 @@ impl LaunchPermit {
         } = peripherals;
         Self {
             interrupts: InterruptGrant::new(
-                interrupt_core1,
+                Hart1Routes::new(interrupt_core1),
                 clic,
                 Some(clic_observer),
-                clic_pending,
+                HartPending::new(clic_pending),
             ),
             wake_stub: lp_wake_stub,
             buses: cache_bus_observer,
@@ -88,11 +88,11 @@ impl LaunchPermit {
 pub struct Released<
     M: Placement = Fixed<{ instances::interrupt_core1::BASE }>,
     K: Placement = Fixed<{ instances::clic::BASE }>,
-    G: PendingBytes<1> = &'static ClicPending<1>,
+    G: PendingBytes<1> = HartPending<1>,
 > {
     hart: SecondaryHart,
     /// Unwritten since the release, until the hart's controller routes.
-    interrupts: Option<InterruptGrant<InterruptCore1<M>, 1, K, G>>,
+    interrupts: Option<InterruptGrant<Hart1Routes<M>, 1, K, G>>,
     disconnected: u16,
     first: Option<u16>,
 }
@@ -303,7 +303,7 @@ impl<'a>
         let (lines, config) = oer_chips_esp32s31_pac::clic::clic_host(clic)?;
         Ok(Self {
             interrupts: InterruptGrant::new(
-                InterruptCore1::host(routes)?,
+                Hart1Routes::new(interrupt_core::InterruptCore1::host(routes)?),
                 lines,
                 Some(config),
                 ClicPending::host(pending)?,
