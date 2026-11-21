@@ -487,3 +487,199 @@ fn a_chain_is_not_started_on_a_queue_prepared_for_another_since() {
     let started = control(&mut memory);
     assert!(started.enable() && started.valid());
 }
+
+/// Every non-HT rate of IEEE 802.11-2020 (clauses 15, 16 and 17: DSSS 1 and
+/// 2 Mb/s, CCK 5.5 and 11 Mb/s, each with its preamble, and the eight OFDM
+/// rates) against the value the register model names for it in
+/// `PLCP1%s.RATE` and in `LENGTH_CONTROL%s.RTS_RATE`.
+#[test]
+fn every_non_ht_rate_selects_the_models_rate_of_the_same_speed_and_preamble() {
+    use MacDsssPreamble::{Long, Short};
+    use oer_chips_esp32s31_pac::wifi_mac::length_control::RtsRate;
+    let table = [
+        (
+            MacLegacyRate::Dsss1M,
+            PlcpRate::Dsss1mLong,
+            RtsRate::Dsss1mLong,
+        ),
+        (
+            MacLegacyRate::Dsss2M(Long),
+            PlcpRate::Dsss2mLong,
+            RtsRate::Dsss2mLong,
+        ),
+        (
+            MacLegacyRate::Dsss2M(Short),
+            PlcpRate::Dsss2mShort,
+            RtsRate::Dsss2mShort,
+        ),
+        (
+            MacLegacyRate::Cck5M5(Long),
+            PlcpRate::Cck5m5Long,
+            RtsRate::Cck5m5Long,
+        ),
+        (
+            MacLegacyRate::Cck5M5(Short),
+            PlcpRate::Cck5m5Short,
+            RtsRate::Cck5m5Short,
+        ),
+        (
+            MacLegacyRate::Cck11M(Long),
+            PlcpRate::Cck11mLong,
+            RtsRate::Cck11mLong,
+        ),
+        (
+            MacLegacyRate::Cck11M(Short),
+            PlcpRate::Cck11mShort,
+            RtsRate::Cck11mShort,
+        ),
+        (MacLegacyRate::Ofdm6M, PlcpRate::Ofdm6m, RtsRate::Ofdm6m),
+        (MacLegacyRate::Ofdm9M, PlcpRate::Ofdm9m, RtsRate::Ofdm9m),
+        (MacLegacyRate::Ofdm12M, PlcpRate::Ofdm12m, RtsRate::Ofdm12m),
+        (MacLegacyRate::Ofdm18M, PlcpRate::Ofdm18m, RtsRate::Ofdm18m),
+        (MacLegacyRate::Ofdm24M, PlcpRate::Ofdm24m, RtsRate::Ofdm24m),
+        (MacLegacyRate::Ofdm36M, PlcpRate::Ofdm36m, RtsRate::Ofdm36m),
+        (MacLegacyRate::Ofdm48M, PlcpRate::Ofdm48m, RtsRate::Ofdm48m),
+        (MacLegacyRate::Ofdm54M, PlcpRate::Ofdm54m, RtsRate::Ofdm54m),
+    ];
+    for (rate, plcp, rts) in table {
+        assert_eq!(rate.plcp_rate(), plcp, "{rate:?}");
+        assert_eq!(rate.rts_rate(), rts, "{rate:?}");
+        assert_eq!(MacLegacyRate::from_plcp_rate(plcp), Some(rate), "{rate:?}");
+        assert_eq!(
+            MacLegacyRate::from_code(rate.code()),
+            Some(rate),
+            "{rate:?}"
+        );
+    }
+    // An HT rate is no non-HT rate.
+    assert_eq!(MacLegacyRate::from_plcp_rate(PlcpRate::HtLongMcs0), None);
+}
+
+/// Every single-stream HT MCS (IEEE 802.11-2020 19.5, MCS 0-7) with the
+/// normal (800 ns) and the short (400 ns) guard interval against the
+/// register model's `PLCP1%s.RATE` names, and the MCS index of HT-SIG and of
+/// the HT40 length word.
+#[test]
+fn every_ht_mcs_and_guard_interval_selects_the_models_ht_rate() {
+    use oer_chips_esp32s31_pac::wifi_mac::{data_length::Ht40Mcs, ht_signal::Mcs};
+    let table = [
+        (
+            MacHtMcs::Mcs0,
+            PlcpRate::HtLongMcs0,
+            PlcpRate::HtShortMcs0,
+            Mcs::Mcs0,
+            Ht40Mcs::Mcs0,
+        ),
+        (
+            MacHtMcs::Mcs1,
+            PlcpRate::HtLongMcs1,
+            PlcpRate::HtShortMcs1,
+            Mcs::Mcs1,
+            Ht40Mcs::Mcs1,
+        ),
+        (
+            MacHtMcs::Mcs2,
+            PlcpRate::HtLongMcs2,
+            PlcpRate::HtShortMcs2,
+            Mcs::Mcs2,
+            Ht40Mcs::Mcs2,
+        ),
+        (
+            MacHtMcs::Mcs3,
+            PlcpRate::HtLongMcs3,
+            PlcpRate::HtShortMcs3,
+            Mcs::Mcs3,
+            Ht40Mcs::Mcs3,
+        ),
+        (
+            MacHtMcs::Mcs4,
+            PlcpRate::HtLongMcs4,
+            PlcpRate::HtShortMcs4,
+            Mcs::Mcs4,
+            Ht40Mcs::Mcs4,
+        ),
+        (
+            MacHtMcs::Mcs5,
+            PlcpRate::HtLongMcs5,
+            PlcpRate::HtShortMcs5,
+            Mcs::Mcs5,
+            Ht40Mcs::Mcs5,
+        ),
+        (
+            MacHtMcs::Mcs6,
+            PlcpRate::HtLongMcs6,
+            PlcpRate::HtShortMcs6,
+            Mcs::Mcs6,
+            Ht40Mcs::Mcs6,
+        ),
+        (
+            MacHtMcs::Mcs7,
+            PlcpRate::HtLongMcs7,
+            PlcpRate::HtShortMcs7,
+            Mcs::Mcs7,
+            Ht40Mcs::Mcs7,
+        ),
+    ];
+    for (mcs, normal, short, signal, ht40) in table {
+        for channel_width in [MacHtChannelWidth::Mhz20, MacHtChannelWidth::Mhz40] {
+            let rate = |guard_interval| MacHtRate {
+                mcs,
+                guard_interval,
+                channel_width,
+            };
+            assert_eq!(
+                rate(MacHtGuardInterval::Normal).plcp_rate(),
+                normal,
+                "{mcs:?}"
+            );
+            assert_eq!(
+                rate(MacHtGuardInterval::Short).plcp_rate(),
+                short,
+                "{mcs:?}"
+            );
+        }
+        assert_eq!(mcs.signal_mcs(), signal, "{mcs:?}");
+        assert_eq!(mcs.ht40_mcs(), ht40, "{mcs:?}");
+    }
+}
+
+/// Every HE SU MCS this backend sends (IEEE 802.11ax-2021 27.5, MCS 0-9)
+/// against the register model's `PLCP1%s.RATE` names and HE-SIG-A's MCS,
+/// whatever the guard interval, coding and DCM.
+#[test]
+fn every_he_mcs_selects_the_models_he_rate() {
+    use oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::{GiLtf, Mcs};
+    let table = [
+        (MacHeMcs::Mcs0, PlcpRate::HeMcs0, Mcs::Mcs0),
+        (MacHeMcs::Mcs1, PlcpRate::HeMcs1, Mcs::Mcs1),
+        (MacHeMcs::Mcs2, PlcpRate::HeMcs2, Mcs::Mcs2),
+        (MacHeMcs::Mcs3, PlcpRate::HeMcs3, Mcs::Mcs3),
+        (MacHeMcs::Mcs4, PlcpRate::HeMcs4, Mcs::Mcs4),
+        (MacHeMcs::Mcs5, PlcpRate::HeMcs5, Mcs::Mcs5),
+        (MacHeMcs::Mcs6, PlcpRate::HeMcs6, Mcs::Mcs6),
+        (MacHeMcs::Mcs7, PlcpRate::HeMcs7, Mcs::Mcs7),
+        (MacHeMcs::Mcs8, PlcpRate::HeMcs8, Mcs::Mcs8),
+        (MacHeMcs::Mcs9, PlcpRate::HeMcs9, Mcs::Mcs9),
+    ];
+    for (mcs, plcp, signal) in table {
+        for guard_interval_and_ltf in [
+            GiLtf::OneLtf800ns,
+            GiLtf::TwoLtf800ns,
+            GiLtf::TwoLtf1600ns,
+            GiLtf::FourLtf3200ns,
+        ] {
+            for fec_coding in [MacHeFecCoding::Bcc, MacHeFecCoding::Ldpc] {
+                for dcm in [false, true] {
+                    let rate = MacHeRate {
+                        mcs,
+                        guard_interval_and_ltf,
+                        fec_coding,
+                        dcm,
+                    };
+                    assert_eq!(rate.plcp_rate(), plcp, "{mcs:?}");
+                }
+            }
+        }
+        assert_eq!(mcs.signal_mcs(), signal, "{mcs:?}");
+    }
+}
