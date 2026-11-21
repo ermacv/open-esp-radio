@@ -104,7 +104,7 @@ fn edca_publishes_three_fields_of_the_reversed_bank() {
     assert_eq!(config.aifsn().get(), 0x7);
     assert_eq!(config.contention_window().get(), 0x3ff);
     assert_eq!(
-        MacInterface::from_field(config.interface()),
+        MacInterface::from(config.interface()),
         MacInterface::AccessPoint
     );
     for other in [

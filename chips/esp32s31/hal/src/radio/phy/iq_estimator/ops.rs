@@ -27,8 +27,20 @@ pub fn restore_configuration<P: Placement>(
         w.set_bits_19_20_opaque(saved.control.bits_19_20_opaque())
             .set_bits_2_16_opaque(saved.control.bits_2_16_opaque());
     });
-    set_start_enabled(estimator, saved.control.start_enable());
-    set_measurement_enabled(estimator, saved.control.measurement_enable());
+    set_start_enabled(
+        estimator,
+        matches!(
+            saved.control.start_enable(),
+            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
+        ),
+    );
+    set_measurement_enabled(
+        estimator,
+        matches!(
+            saved.control.measurement_enable(),
+            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
+        ),
+    );
 }
 
 /// SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR, BLOB_LIBPHY_PHY_CHECK_RX_SAT.

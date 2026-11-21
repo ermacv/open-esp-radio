@@ -199,6 +199,32 @@ names are associated constants of the same value type. They do not create
 ambiguous read variants. `bits()` returns the field image; `register_bits()`
 positions that image in its register.
 
+Fields of one meaning share one value list: a type's top-level
+`[[dictionaries]]` entry has a `name`, a `description`, a `width`, its
+`values` and the `sources` that give its fields that one meaning, and a field
+refers to it with `values = { dictionary = "NAME" }` in place of its own
+list. Membership is the sources' statement, never equal names or numbers. A
+field names only a dictionary of its own type and has the dictionary's width;
+`values` is either a list or a dictionary, never both. The dictionary's enum
+lives in the type module's `dictionaries` and has no `register_bits()`: its
+fields lie at several positions.
+
+```toml
+[[dictionaries]]
+name = "RESET"
+description = "A modem block reset: the selected block's reset is released or asserted."
+width = 1
+values = [{ name = "RELEASED", value = 0, sources = ["SRC"] }, { name = "ASSERTED", value = 1, sources = ["SRC"] }]
+sources = ["SRC"]
+
+[[registers.fields]]
+name = "RST_WIFIMAC"
+bits = "9"
+class = "plain"
+values = { dictionary = "RESET" }
+write-values-only = true
+```
+
 Each register module exposes `<FIELD>_WIDTH`, `<FIELD>_MAX` and
 `<FIELD>_MASK`, as well as `COUNT` for repeated registers. Block geometry
 outside register fields is sourced explicitly in the type file:
@@ -929,7 +955,11 @@ register takes `index: oer_portable_mmio::Index<COUNT>` first. A field value is
 `oer_portable_mmio::Bits<WIDTH>` otherwise. A field limited to its `values` by
 `write-values-only`, or one whose `values` cover its width, takes its enum
 unless a narrower `write-range` bounds it: then it takes a bounded
-`<Field>Range`. A field with `values` has a `<field>_variant()` getter. A
+`<Field>Range`. A field whose `values` cover its width reads as its enum:
+its getter returns the name, and no getter returns its number. A field with a
+few named values reads as its number, and its `<field>_variant()` getter
+returns `Option` of the name. A reader that wants one fact writes
+`matches!`; no predicate getter is generated. A
 field with a `pointer` fact takes `oer_portable_memory::DmaRef<Layout>` of its target
 layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
 encoding (`member-offset` added, shifted, its width kept), and

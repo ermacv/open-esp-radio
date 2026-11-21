@@ -533,7 +533,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         observed_peer_head == peer_head
             && peer_tail_and_policy.peer_address_tail() == peer_tail
-            && peer_tail_and_policy.interface() == interface.field()
+            && MacInterface::from(peer_tail_and_policy.interface()) == interface
             && peer_tail_and_policy.window().get() == window.get()
             && peer_tail_and_policy.bits_25_31_opaque().get() == 0
             && observed_starting_sequence.get() == starting_sequence.get()
@@ -616,7 +616,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 && control.bits_10_11_opaque().get() == 0
                 && control.bits_16_29_opaque().get() == 0,
             peer: [h0, h1, h2, h3, t0, t1],
-            interface: MacInterface::from_field(peer_tail_and_policy.interface()),
+            interface: MacInterface::from(peer_tail_and_policy.interface()),
             window: byte(peer_tail_and_policy.window()),
             starting_sequence: halfword(starting_sequence),
             bitmap: block_ack_bitmap(bitmap_low, bitmap_high),
@@ -680,7 +680,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             control_unknown_clear: control.bits_1_11_opaque().get() == 0
                 && control.bits_16_29_opaque().get() == 0,
             peer: [h0, h1, h2, h3, t0, t1],
-            interface: MacInterface::from_field(peer_tail_and_policy.interface()),
+            interface: MacInterface::from(peer_tail_and_policy.interface()),
             window: byte(peer_tail_and_policy.window()),
             current_sequence: halfword(
                 block

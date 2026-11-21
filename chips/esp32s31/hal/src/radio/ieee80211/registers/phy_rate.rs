@@ -61,10 +61,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Read the complete ROM `phy_is_low_rate_enabled` status bit.
     pub fn phy_low_rate_enabled(&self) -> bool {
-        self.mac
+        matches!(self.mac
             .wifi_phy_rate_oracle_wifi_bb_brx
             .read_low_rate_primary_control()
-            .low_rate_enable_first()
+            .low_rate_enable_first(), oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled)
     }
 
     /// Read the current hardware noise floor as the signed byte used by MAC

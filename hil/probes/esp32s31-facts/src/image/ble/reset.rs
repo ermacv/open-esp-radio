@@ -15,23 +15,21 @@ fn state(s: &Session<'_>, tag: u32) {
         tag + 1,
         u32::from(b.timer.read_word_0024_opaque().low_byte()),
         u32::from(b.timer.read_word_002c_opaque().low_byte()),
-        u32::from(
-            s.sar
-                .radio
-                .modem_syscon_clock_reset
-                .read_modem_rst_conf()
-                .rst_ble_timer(),
-        ),
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .read_modem_rst_conf()
+            .rst_ble_timer()
+            .bits(),
     );
     emit(
         tag + 2,
-        u32::from(
-            s.sar
-                .radio
-                .modem_syscon_clock_reset
-                .read_clk_conf()
-                .clk_ble_timer_en(),
-        ),
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .read_clk_conf()
+            .clk_ble_timer_en()
+            .bits(),
         u32::from(
             s.sar
                 .clocks
@@ -81,7 +79,7 @@ fn lp_clocks_off(s: &mut Session<'_>) {
     // SOURCE: HAL restore_bluetooth_peripheral_clocks, BLE timer field;
     // chip-clock policy's already-sourced MODEM_PWR LP-timer gate.
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled);
+        w.set_clk_ble_timer_en(pac::modem_syscon::dictionaries::ClockGate::Disabled);
     });
     s.sar
         .clocks
@@ -96,7 +94,7 @@ fn lp_clocks_on(s: &mut Session<'_>) {
     // SOURCE: HAL restore_bluetooth_peripheral_clocks, BLE timer field;
     // chip-clock policy's already-sourced MODEM_PWR LP-timer gate.
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled);
+        w.set_clk_ble_timer_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar
         .clocks
@@ -147,7 +145,6 @@ impl Clocks {
 }
 
 fn reset(s: &mut Session<'_>, domains: Reset) {
-    use pac::modem_syscon::modem_rst_conf as r;
     // SOURCE: HAL modem/syscon.rs::reset_bluetooth_controller_domains.
     // Each RMW and the final device fence retain the production ordering.
     if domains == Reset::Controller {
@@ -155,87 +152,87 @@ fn reset(s: &mut Session<'_>, domains: Reset) {
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_btmac(r::RstBtmac::Asserted);
+                w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_btmac(r::RstBtmac::Released);
+                w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Released);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_btmac_apb(r::RstBtmacApb::Asserted);
+                w.set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_btmac_apb(r::RstBtmacApb::Released);
+                w.set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Released);
             });
     }
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_ble_timer(r::RstBleTimer::Asserted);
+            w.set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_ble_timer(r::RstBleTimer::Released);
+            w.set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Released);
         });
     if domains == Reset::Controller {
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_ecb(r::RstModemEcb::Asserted);
+                w.set_rst_modem_ecb(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_ccm(r::RstModemCcm::Asserted);
+                w.set_rst_modem_ccm(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_bah(r::RstModemBah::Asserted);
+                w.set_rst_modem_bah(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_sec(r::RstModemSec::Asserted);
+                w.set_rst_modem_sec(pac::modem_syscon::dictionaries::Reset::Asserted);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_ecb(r::RstModemEcb::Released);
+                w.set_rst_modem_ecb(pac::modem_syscon::dictionaries::Reset::Released);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_ccm(r::RstModemCcm::Released);
+                w.set_rst_modem_ccm(pac::modem_syscon::dictionaries::Reset::Released);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_bah(r::RstModemBah::Released);
+                w.set_rst_modem_bah(pac::modem_syscon::dictionaries::Reset::Released);
             });
         s.sar
             .radio
             .modem_syscon_clock_reset
             .modify_modem_rst_conf(|w| {
-                w.set_rst_modem_sec(r::RstModemSec::Released);
+                w.set_rst_modem_sec(pac::modem_syscon::dictionaries::Reset::Released);
             });
     }
     oer_portable_riscv::fence();

@@ -11,7 +11,8 @@ use oer_tools_registers_contracts::NameOrigin;
 use super::{
     Error, ErrorKind,
     source::{
-        Command, Field, FieldClass, Group, Register, ReviewOverride, Space, TYPE_SCHEMA, TypeFile,
+        Command, DeclaredValues, Field, FieldClass, Group, Register, ReviewOverride, Space,
+        TYPE_SCHEMA, TypeFile,
     },
 };
 use crate::{Position, ReviewAnnotation, opaque_position_name};
@@ -192,8 +193,10 @@ impl BlockType {
         let text = super::topology::resolve(&text, harts, path)?;
         let mut file: TypeFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
+        let context = Context { path, evidence };
+        resolve_dictionaries(context, &mut file)?;
         super::topology::fields(&mut file, path)?;
-        Self::check(Context { path, evidence }, path.to_owned(), file, budget)
+        Self::check(context, path.to_owned(), file, budget)
     }
 
     fn check(
@@ -289,6 +292,93 @@ impl BlockType {
             reviews,
         })
     }
+}
+
+/// Check the type's dictionaries and give every field its values: its own
+/// list, or the dictionary it names. A field never names a dictionary and
+/// lists values, names no dictionary the type lacks, and has the
+/// dictionary's width.
+fn resolve_dictionaries(context: Context<'_>, file: &mut TypeFile) -> Result<(), Error> {
+    let name = file.header.name.clone();
+    let mut dictionaries = BTreeMap::new();
+    for dictionary in &file.dictionaries {
+        let entity = format!("{name}.{}", dictionary.name);
+        let fail = |kind| context.error(&entity, kind);
+        check_name(&dictionary.name, false).map_err(fail)?;
+        if dictionary.description.trim().is_empty() {
+            return Err(fail(ErrorKind::MissingDescription));
+        }
+        context.sources(&entity, &dictionary.sources)?;
+        if dictionary.width == 0 || dictionary.width > 32 || dictionary.values.is_empty() {
+            return Err(fail(ErrorKind::Values(
+                "a dictionary has a width of 1 to 32 bits and values".to_owned(),
+            )));
+        }
+        let mut names = BTreeSet::new();
+        for value in &dictionary.values {
+            check_name(&value.name, false).map_err(fail)?;
+            if !names.insert(value.name.as_str()) || !fits(value.value, dictionary.width) {
+                return Err(fail(ErrorKind::Values(format!(
+                    "value {} is named twice or wider than the dictionary",
+                    value.name
+                ))));
+            }
+            context.sources(&entity, &value.sources)?;
+        }
+        if dictionaries
+            .insert(dictionary.name.clone(), dictionary)
+            .is_some()
+        {
+            return Err(fail(ErrorKind::Duplicate(format!(
+                "dictionary {}",
+                dictionary.name
+            ))));
+        }
+    }
+    let registers = file
+        .registers
+        .iter_mut()
+        .map(|register| (String::new(), register));
+    let grouped = file.groups.iter_mut().flat_map(|group| {
+        let prefix = format!("{}.", group.name);
+        group
+            .registers
+            .iter_mut()
+            .map(move |register| (prefix.clone(), register))
+    });
+    for (prefix, register) in registers.chain(grouped) {
+        for field in &mut register.fields {
+            let entity = format!("{name}.{prefix}{}.{}", register.name, field.name);
+            match &field.declared_values {
+                DeclaredValues::List(values) => field.values = values.clone(),
+                DeclaredValues::Dictionary(reference) => {
+                    let Some(dictionary) = dictionaries.get(&reference.dictionary) else {
+                        return Err(context.error(
+                            &entity,
+                            ErrorKind::Values(format!(
+                                "names no dictionary of the type: {}",
+                                reference.dictionary
+                            )),
+                        ));
+                    };
+                    let (_, field_width) =
+                        parse_bits(&field.bits).map_err(|kind| context.error(&entity, kind))?;
+                    if field_width != dictionary.width {
+                        return Err(context.error(
+                            &entity,
+                            ErrorKind::Values(format!(
+                                "is {field_width} bits wide; the dictionary {} is {}",
+                                dictionary.name, dictionary.width
+                            )),
+                        ));
+                    }
+                    field.values = dictionary.values.clone();
+                    field.dictionary = Some(dictionary.name.clone());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn register_width(space: Space, register: &Register) -> u32 {

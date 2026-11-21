@@ -74,7 +74,7 @@ fn reference(s: &Session<'_>) -> bool {
         .hp_sys_clkrst_boot_clock
         .read_soc_clk_sel()
         .reg_soc_clk_sel()
-        .get();
+        .bits();
     emit(
         0xe600,
         root,

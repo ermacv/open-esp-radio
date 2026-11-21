@@ -32,13 +32,25 @@ impl Configuration {
             configuration_code: self.config.bits_26_27_opaque().get() as u8,
             control_code: self.control.bits_19_20_opaque().get() as u8,
             window: self.control.bits_2_16_opaque().get() as u16,
-            start_enabled: self.control.start_enable(),
-            measurement_enabled: self.control.measurement_enable(),
+            start_enabled: matches!(
+                self.control.start_enable(),
+                oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
+            ),
+            measurement_enabled: matches!(
+                self.control.measurement_enable(),
+                oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
+            ),
         }
     }
     /// Whether either measurement phase was enabled at capture.
     pub fn enabled(&self) -> bool {
-        self.control.start_enable() || self.control.measurement_enable()
+        matches!(
+            self.control.start_enable(),
+            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
+        ) || matches!(
+            self.control.measurement_enable(),
+            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
+        )
     }
 }
 

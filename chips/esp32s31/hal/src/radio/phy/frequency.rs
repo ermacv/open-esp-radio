@@ -39,7 +39,10 @@ impl ReadConfiguration {
             address_low: self.control.memory_address_low().get() as u16,
             high_address_or_reset: self.control.memory_address_high(),
             read_mode: self.number.memory_read_mode().get() as u8,
-            hardware_disabled: self.control.hardware_frequency_disable(),
+            hardware_disabled: matches!(
+                self.control.hardware_frequency_disable(),
+                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
+            ),
         }
     }
 }

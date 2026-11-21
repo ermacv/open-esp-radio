@@ -87,7 +87,7 @@ pub(in crate::image) fn overflow_rate(s: &mut Session<'_>) {
             .hp_sys_clkrst_boot_clock
             .read_soc_clk_sel()
             .reg_soc_clk_sel()
-            .get(),
+            .bits(),
         u32::from(m.modem_clk_source_sel()),
         u32::from(m.modem_pll_clk_en()),
     );
@@ -196,13 +196,13 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Released);
         });
     oer_portable_riscv::fence();
     boundary(s, 0xa430);
@@ -210,13 +210,13 @@ pub(in crate::image) fn overflow_reset(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
+            w.set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released);
+            w.set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Released);
         });
     oer_portable_riscv::fence();
     boundary(s, 0xa450);

@@ -22,7 +22,7 @@ fn wait_cycles(cycles: u32) {
 /// SOURCE: HP clock model, pinned IDF clk_tree_defs.h (40 MHz XTAL).
 pub(super) fn xtal_cpu(s: &Session<'_>) -> bool {
     let c = &s.sar.boot.hp_sys_clkrst_boot_clock;
-    let root = c.read_soc_clk_sel().reg_soc_clk_sel().get();
+    let root = c.read_soc_clk_sel().reg_soc_clk_sel().bits();
     let div = c.read_cpu_freq_ctrl0();
     emit(
         0xa0,
@@ -72,11 +72,10 @@ pub(super) fn prepare(s: &mut Session<'_>) {
         .hp_sys_clkrst_radio
         .close_modem_pll_source_gate();
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        use pac::modem_syscon::clk_conf1::*;
-        w.set_clk_wifi_apb_en(ClkWifiApbEn::Enabled)
-            .set_clk_wifimac_en(ClkWifimacEn::Enabled)
-            .set_clk_bt_apb_en(ClkBtApbEn::Enabled)
-            .set_clk_btmac_en(ClkBtmacEn::Enabled)
+        w.set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifimac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_btmac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_fe_apb_en(true);
     });
     s.opaque.core_enable.modify_core_enable_control(|w| {
@@ -357,26 +356,25 @@ fn enable_baseband(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
+            w.set_rst_wifibb(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
+            w.set_rst_wifibb(pac::modem_syscon::dictionaries::Reset::Released);
         });
     // SOURCE: ROM open_fe_bb clocks; enable digital BB clocks only, RF stays off.
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        use pac::modem_syscon::clk_conf1::*;
-        w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
-            .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
-            .set_clk_wifibb_44m_en(ClkWifibb44mEn::Enabled)
-            .set_clk_wifibb_80m_en(ClkWifibb80mEn::Enabled)
-            .set_clk_wifibb_40x_en(ClkWifibb40xEn::Enabled)
-            .set_clk_wifibb_80x_en(ClkWifibb80xEn::Enabled)
-            .set_clk_wifibb_40x1_en(ClkWifibb40x1En::Enabled)
-            .set_clk_wifibb_80x1_en(ClkWifibb80x1En::Enabled)
-            .set_clk_wifibb_160x1_en(ClkWifibb160x1En::Enabled);
+        w.set_clk_wifibb_22m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_44m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_160x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_syscon_radio.modify_wifi_bb_cfg(|w| {
         w.set_bit_28_opaque(pac::modem_syscon::wifi_bb_cfg::Bit28Opaque::Enabled)
@@ -481,9 +479,9 @@ pub(super) fn temperature(s: &mut Session<'_>) {
                 | (u32::from(configured.bit_23_opaque()) << 1)
                 | (u32::from(configured.clk_en()) << 2),
             u32::from(control.clk_div()),
-            u32::from(control.power_up())
+            control.power_up().bits()
                 | (u32::from(control.power_up_force()) << 1)
-                | (u32::from(peripheral.lp_tsens_clk_en()) << 2)
+                | (peripheral.lp_tsens_clk_en().bits() << 2)
                 | (u32::from(peripheral.lp_tsens_rst_en()) << 3),
         );
         for repeat in 0..2 {
@@ -532,9 +530,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
     }
     s.sar.radio.lp_tsens.modify_ctrl(|w| {
         w.set_sample_en(old_ctrl.sample_en())
-            .set_power_up(pac::tsens::ctrl::PowerUp::from_field(u32::from(
-                old_ctrl.power_up(),
-            )))
+            .set_power_up(old_ctrl.power_up())
             .set_power_up_force(old_ctrl.power_up_force())
             .set_clk_div(old_ctrl.clk_div());
     });
@@ -545,7 +541,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
     });
     s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::from_field(
-            u32::from(old_peri.lp_tsens_clk_en()),
+            old_peri.lp_tsens_clk_en().bits(),
         ))
         .set_lp_tsens_rst_en(old_peri.lp_tsens_rst_en());
     });
@@ -601,27 +597,27 @@ fn lpcon_map(r: pac::modem_lpcon::clk_conf_power_st::R) -> u32 {
 }
 
 fn syscon_clocks(r: pac::modem_syscon::clk_conf1::R) -> u32 {
-    (u32::from(r.clk_wifibb_22m_en())
+    (r.clk_wifibb_22m_en().bits()
         << pac::modem_syscon::clk_conf1::CLK_WIFIBB_22M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_40m_en())
+        | (r.clk_wifibb_40m_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_40M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_44m_en())
+        | (r.clk_wifibb_44m_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_44M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_80m_en())
+        | (r.clk_wifibb_80m_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_80M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_40x_en())
+        | (r.clk_wifibb_40x_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_40X_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_80x_en())
+        | (r.clk_wifibb_80x_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_80X_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_40x1_en())
+        | (r.clk_wifibb_40x1_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_40X1_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_80x1_en())
+        | (r.clk_wifibb_80x1_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_80X1_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifibb_160x1_en())
+        | (r.clk_wifibb_160x1_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIBB_160X1_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifimac_en())
+        | (r.clk_wifimac_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFIMAC_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_wifi_apb_en())
+        | (r.clk_wifi_apb_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_WIFI_APB_EN_MASK.trailing_zeros())
         | (u32::from(r.clk_fe_20m_en())
             << pac::modem_syscon::clk_conf1::CLK_FE_20M_EN_MASK.trailing_zeros())
@@ -633,11 +629,11 @@ fn syscon_clocks(r: pac::modem_syscon::clk_conf1::R) -> u32 {
             << pac::modem_syscon::clk_conf1::CLK_FE_160M_EN_MASK.trailing_zeros())
         | (u32::from(r.clk_fe_apb_en())
             << pac::modem_syscon::clk_conf1::CLK_FE_APB_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_bt_apb_en())
+        | (r.clk_bt_apb_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_BT_APB_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_btbb_en())
+        | (r.clk_btbb_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_BTBB_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_btmac_en())
+        | (r.clk_btmac_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_BTMAC_EN_MASK.trailing_zeros())
         | (u32::from(r.clk_fe_pwdet_adc_en())
             << pac::modem_syscon::clk_conf1::CLK_FE_PWDET_ADC_EN_MASK.trailing_zeros())
@@ -650,9 +646,8 @@ fn syscon_clocks(r: pac::modem_syscon::clk_conf1::R) -> u32 {
 }
 
 fn syscon_reset(r: pac::modem_syscon::modem_rst_conf::R) -> u32 {
-    (u32::from(r.rst_wifibb())
-        << pac::modem_syscon::modem_rst_conf::RST_WIFIBB_MASK.trailing_zeros())
-        | (u32::from(r.rst_wifimac())
+    (r.rst_wifibb().bits() << pac::modem_syscon::modem_rst_conf::RST_WIFIBB_MASK.trailing_zeros())
+        | (r.rst_wifimac().bits()
             << pac::modem_syscon::modem_rst_conf::RST_WIFIMAC_MASK.trailing_zeros())
         | (u32::from(r.rst_fe_pwdet_adc())
             << pac::modem_syscon::modem_rst_conf::RST_FE_PWDET_ADC_MASK.trailing_zeros())
@@ -663,9 +658,9 @@ fn syscon_reset(r: pac::modem_syscon::modem_rst_conf::R) -> u32 {
         | (u32::from(r.rst_fe_ahb())
             << pac::modem_syscon::modem_rst_conf::RST_FE_AHB_MASK.trailing_zeros())
         | (u32::from(r.rst_fe()) << pac::modem_syscon::modem_rst_conf::RST_FE_MASK.trailing_zeros())
-        | (u32::from(r.rst_btmac_apb())
+        | (r.rst_btmac_apb().bits()
             << pac::modem_syscon::modem_rst_conf::RST_BTMAC_APB_MASK.trailing_zeros())
-        | (u32::from(r.rst_btmac())
+        | (r.rst_btmac().bits()
             << pac::modem_syscon::modem_rst_conf::RST_BTMAC_MASK.trailing_zeros())
         | (u32::from(r.rst_btbb_apb())
             << pac::modem_syscon::modem_rst_conf::RST_BTBB_APB_MASK.trailing_zeros())
@@ -677,19 +672,19 @@ fn syscon_reset(r: pac::modem_syscon::modem_rst_conf::R) -> u32 {
             << pac::modem_syscon::modem_rst_conf::RST_COEX_BTMAC_MASK.trailing_zeros())
         | (u32::from(r.rst_etm())
             << pac::modem_syscon::modem_rst_conf::RST_ETM_MASK.trailing_zeros())
-        | (u32::from(r.rst_zbmac_apb())
+        | (r.rst_zbmac_apb().bits()
             << pac::modem_syscon::modem_rst_conf::RST_ZBMAC_APB_MASK.trailing_zeros())
-        | (u32::from(r.rst_zbmac())
+        | (r.rst_zbmac().bits()
             << pac::modem_syscon::modem_rst_conf::RST_ZBMAC_MASK.trailing_zeros())
-        | (u32::from(r.rst_modem_ecb())
+        | (r.rst_modem_ecb().bits()
             << pac::modem_syscon::modem_rst_conf::RST_MODEM_ECB_MASK.trailing_zeros())
-        | (u32::from(r.rst_modem_ccm())
+        | (r.rst_modem_ccm().bits()
             << pac::modem_syscon::modem_rst_conf::RST_MODEM_CCM_MASK.trailing_zeros())
-        | (u32::from(r.rst_modem_bah())
+        | (r.rst_modem_bah().bits()
             << pac::modem_syscon::modem_rst_conf::RST_MODEM_BAH_MASK.trailing_zeros())
-        | (u32::from(r.rst_modem_sec())
+        | (r.rst_modem_sec().bits()
             << pac::modem_syscon::modem_rst_conf::RST_MODEM_SEC_MASK.trailing_zeros())
-        | (u32::from(r.rst_ble_timer())
+        | (r.rst_ble_timer().bits()
             << pac::modem_syscon::modem_rst_conf::RST_BLE_TIMER_MASK.trailing_zeros())
         | (u32::from(r.rst_data_dump())
             << pac::modem_syscon::modem_rst_conf::RST_DATA_DUMP_MASK.trailing_zeros())
@@ -713,7 +708,7 @@ fn ba_peer(r: pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::R) -> u32 
     (u32::from(r.peer_address_tail())
         << pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::PEER_ADDRESS_TAIL_MASK
             .trailing_zeros())
-        | (r.interface().get()
+        | (r.interface().bits()
             << pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::INTERFACE_MASK
                 .trailing_zeros())
         | (r.window().get()
@@ -747,7 +742,7 @@ fn extra_control(r: pac::wifi_mac::extra_softap_rx_block_ack_control::R) -> u32 
 
 fn extra_peer(r: pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::R) -> u32 {
     (u32::from(r.peer_address_tail()) << pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::PEER_ADDRESS_TAIL_MASK.trailing_zeros()) |
-(r.interface().get() << pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::INTERFACE_MASK.trailing_zeros()) |
+(r.interface().bits() << pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::INTERFACE_MASK.trailing_zeros()) |
 (r.window().get() << pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::WINDOW_MASK.trailing_zeros()) |
 (r.bits_25_31_opaque().get() << pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::BITS_25_31_OPAQUE_MASK.trailing_zeros())
 }

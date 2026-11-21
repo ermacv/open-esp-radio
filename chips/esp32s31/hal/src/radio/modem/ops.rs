@@ -1,47 +1,27 @@
 //! Register-local modem operations over the physical generated parts.
 #![forbid(unsafe_code)]
 use super::values::*;
+use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, Reset};
 use oer_portable_mmio::{Bits, Placement};
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_baseband_and_mac_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_wifibb(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted
-            }
-        });
-        w.set_rst_wifimac(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifimac::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifimac::Asserted
-            }
-        });
+        w.set_rst_wifibb(value);
+        w.set_rst_wifimac(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_baseband_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_wifibb(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted
-            }
-        });
+        w.set_rst_wifibb(value);
     });
 }
 
@@ -50,41 +30,21 @@ pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
-        );
-        w.set_clk_wifibb_40m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
-        );
-        w.set_clk_wifibb_44m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
-        );
-        w.set_clk_wifibb_80m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
-        );
-        w.set_clk_wifibb_40x_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
-        );
-        w.set_clk_wifibb_80x_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
-        );
-        w.set_clk_wifibb_40x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
-        );
-        w.set_clk_wifibb_80x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
-        );
-        w.set_clk_wifibb_160x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
-        );
-        w.set_clk_wifi_apb_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
-        );
+        w.set_clk_wifibb_22m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_44m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40x_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80x_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40x1_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80x1_en(ClockGate::Enabled);
+        w.set_clk_wifibb_160x1_en(ClockGate::Enabled);
+        w.set_clk_wifi_apb_en(ClockGate::Enabled);
         w.set_clk_fe_80m_en(true);
         w.set_clk_fe_160m_en(true);
         w.set_clk_fe_apb_en(true);
-        w.set_clk_bt_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
-        w.set_clk_btbb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
+        w.set_clk_bt_apb_en(ClockGate::Enabled);
+        w.set_clk_btbb_en(ClockGate::Enabled);
         w.set_clk_fe_pwdet_adc_en(true);
         w.set_clk_fe_adc_en(true);
         w.set_clk_fe_dac_en(true);
@@ -97,7 +57,7 @@ pub(crate) fn select_phy_i2c_160mhz_source<P: Placement>(
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled,
+            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m,
         );
     });
 }
@@ -105,17 +65,10 @@ pub(crate) fn select_phy_i2c_160mhz_source<P: Placement>(
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, ROM_REV0_PHY_I2C, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn restore_phy_i2c_160mhz_source<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_i2c_mst_sel_160m(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled
-            }
-        });
+        w.set_clk_i2c_mst_sel_160m(value);
     });
 }
 
@@ -124,56 +77,27 @@ pub(crate) fn enable_wifi_mac_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
-        );
-        w.set_clk_wifibb_40m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
-        );
-        w.set_clk_wifibb_44m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
-        );
-        w.set_clk_wifibb_80m_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
-        );
-        w.set_clk_wifibb_40x_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
-        );
-        w.set_clk_wifibb_80x_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
-        );
-        w.set_clk_wifibb_40x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
-        );
-        w.set_clk_wifibb_80x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
-        );
-        w.set_clk_wifibb_160x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
-        );
-        w.set_clk_wifimac_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled,
-        );
-        w.set_clk_wifi_apb_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
-        );
+        w.set_clk_wifibb_22m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_44m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80m_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40x_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80x_en(ClockGate::Enabled);
+        w.set_clk_wifibb_40x1_en(ClockGate::Enabled);
+        w.set_clk_wifibb_80x1_en(ClockGate::Enabled);
+        w.set_clk_wifibb_160x1_en(ClockGate::Enabled);
+        w.set_clk_wifimac_en(ClockGate::Enabled);
+        w.set_clk_wifi_apb_en(ClockGate::Enabled);
     });
 }
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_mac_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_wifimac(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifimac::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstWifimac::Asserted
-            }
-        });
+        w.set_rst_wifimac(value);
     });
 }
 
@@ -190,17 +114,10 @@ pub(crate) fn clear_cold_start_wifi_control<P: Placement>(
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
 pub(crate) fn set_wifi_baseband_enable<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
-    value: ModemSysconEnableState,
+    value: oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable,
 ) {
     registers.modify_wifi_bb_cfg(|w| {
-        w.set_wifi_enable(match value {
-            ModemSysconEnableState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
-            }
-            ModemSysconEnableState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
-            }
-        });
+        w.set_wifi_enable(value);
     });
 }
 
@@ -245,17 +162,10 @@ pub(crate) fn set_wifi_baseband_agc_update_mode<P: Placement>(
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
 pub(crate) fn set_mac_baseband_enable<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
-    value: ModemSysconEnableState,
+    value: oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bit28Opaque,
 ) {
     registers.modify_wifi_bb_cfg(|w| {
-        w.set_bit_28_opaque(match value {
-            ModemSysconEnableState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bit28Opaque::Disabled
-            }
-            ModemSysconEnableState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bit28Opaque::Enabled
-            }
-        });
+        w.set_bit_28_opaque(value);
     });
 }
 
@@ -318,9 +228,7 @@ pub(crate) fn enable_ieee802154_wifi_baseband_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_80x1_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
-        );
+        w.set_clk_wifibb_80x1_en(ClockGate::Enabled);
     });
 }
 
@@ -329,7 +237,7 @@ pub(crate) fn enable_ieee802154_etm_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_etm_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkEtmEn::Enabled);
+        w.set_clk_etm_en(ClockGate::Enabled);
     });
 }
 
@@ -338,7 +246,7 @@ pub(crate) fn enable_ieee802154_bluetooth_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_bt_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
+        w.set_clk_bt_apb_en(ClockGate::Enabled);
     });
 }
 
@@ -347,9 +255,7 @@ pub(crate) fn enable_ieee802154_modem_security_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_modem_sec_apb_en(
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled,
-        );
+        w.set_clk_modem_sec_apb_en(ClockGate::Enabled);
     });
 }
 
@@ -358,7 +264,7 @@ pub(crate) fn enable_ieee802154_common_baseband_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_btbb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
+        w.set_clk_btbb_en(ClockGate::Enabled);
     });
 }
 
@@ -367,7 +273,7 @@ pub(crate) fn enable_ieee802154_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_zb_apb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbApbEn::Enabled);
+        w.set_clk_zb_apb_en(ClockGate::Enabled);
     });
 }
 
@@ -376,41 +282,27 @@ pub(crate) fn enable_ieee802154_mac_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_zbmac_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbmacEn::Enabled);
+        w.set_clk_zbmac_en(ClockGate::Enabled);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_ieee802154_mac_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_zbmac(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstZbmac::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstZbmac::Asserted
-            }
-        });
+        w.set_rst_zbmac(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_ieee802154_apb_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_zbmac_apb(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstZbmacApb::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstZbmacApb::Asserted
-            }
-        });
+        w.set_rst_zbmac_apb(value);
     });
 }
 
@@ -431,150 +323,66 @@ pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_mac_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifimac_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifimacEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled
-            }
-        });
+        w.set_clk_wifimac_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_baseband_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled
-            }
-        });
-        w.set_clk_wifibb_40m_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled
-            }
-        });
-        w.set_clk_wifibb_80m_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled
-            }
-        });
-        w.set_clk_wifibb_40x_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled
-            }
-        });
-        w.set_clk_wifibb_80x_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled
-            }
-        });
-        w.set_clk_wifibb_40x1_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled
-            }
-        });
-        w.set_clk_wifibb_160x1_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled
-            }
-        });
+        w.set_clk_wifibb_22m_en(value);
+        w.set_clk_wifibb_40m_en(value);
+        w.set_clk_wifibb_80m_en(value);
+        w.set_clk_wifibb_40x_en(value);
+        w.set_clk_wifibb_80x_en(value);
+        w.set_clk_wifibb_40x1_en(value);
+        w.set_clk_wifibb_160x1_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifi_apb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled
-            }
-        });
+        w.set_clk_wifi_apb_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_wifi_baseband_44m_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_44m_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled
-            }
-        });
+        w.set_clk_wifibb_44m_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_ieee802154_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_zb_apb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbApbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbApbEn::Enabled
-            }
-        });
+        w.set_clk_zb_apb_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_modem_ieee802154_mac_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_zbmac_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbmacEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkZbmacEn::Enabled
-            }
-        });
+        w.set_clk_zbmac_en(value);
     });
 }
 
@@ -635,270 +443,144 @@ pub(crate) fn enable_modem_frontend_adc_clock<P: Placement>(
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_wifi_baseband_80x1_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_80x1_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled
-            }
-        });
+        w.set_clk_wifibb_80x1_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_etm_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_etm_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkEtmEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkEtmEn::Enabled
-            }
-        });
+        w.set_clk_etm_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_btmac_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtmacEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtmacEn::Enabled
-            }
-        });
+        w.set_clk_btmac_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_peripheral_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_modem_sec_ecb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled
-            }
-        });
-        w.set_clk_modem_sec_ccm_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Enabled
-            }
-        });
-        w.set_clk_modem_sec_bah_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Enabled
-            }
-        });
-        w.set_clk_modem_sec_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Enabled
-            }
-        });
-        w.set_clk_ble_timer_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
-            }
-        });
+        w.set_clk_modem_sec_ecb_en(value);
+        w.set_clk_modem_sec_ccm_en(value);
+        w.set_clk_modem_sec_bah_en(value);
+        w.set_clk_modem_sec_en(value);
+        w.set_clk_ble_timer_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_bt_apb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled
-            }
-        });
+        w.set_clk_bt_apb_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_security_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf(|w| {
-        w.set_clk_modem_sec_apb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecApbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled
-            }
-        });
+        w.set_clk_modem_sec_apb_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_baseband_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconClockGateState,
+    value: ClockGate,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_btbb_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled
-            }
-        });
+        w.set_clk_btbb_en(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBtmac::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted
-            }
-        });
+        w.set_rst_btmac(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_mac_apb_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_btmac_apb(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted
-            }
-        });
+        w.set_rst_btmac_apb(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_timer_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_ble_timer(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBleTimer::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted
-            }
-        });
+        w.set_rst_ble_timer(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_ecb_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ecb(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemEcb::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemEcb::Asserted
-            }
-        });
+        w.set_rst_modem_ecb(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_ccm_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_ccm(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemCcm::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemCcm::Asserted
-            }
-        });
+        w.set_rst_modem_ccm(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_bah_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_bah(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemBah::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemBah::Asserted
-            }
-        });
+        w.set_rst_modem_bah(value);
     });
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_bluetooth_modem_security_reset<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: ModemSysconResetState,
+    value: Reset,
 ) {
     registers.modify_modem_rst_conf(|w| {
-        w.set_rst_modem_sec(match value {
-            ModemSysconResetState::Released => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemSec::Released
-            }
-            ModemSysconResetState::Asserted => {
-                oer_chips_esp32s31_pac::modem_syscon::modem_rst_conf::RstModemSec::Asserted
-            }
-        });
+        w.set_rst_modem_sec(value);
     });
 }
 
@@ -916,17 +598,10 @@ pub(crate) fn enable_modem_register_bus_clock<P: Placement>(
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_ESP_PACS_SVD.
 pub(crate) fn restore_modem_register_bus_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
-    value: ModemSysconClockGateState,
+    value: oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn,
 ) {
     registers.modify_modem_ctrl0(|w| {
-        w.set_reg_modem_clk_en(match value {
-            ModemSysconClockGateState::Disabled => {
-                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled
-            }
-            ModemSysconClockGateState::Enabled => {
-                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
-            }
-        });
+        w.set_reg_modem_clk_en(value);
     });
 }
 

@@ -2187,3 +2187,98 @@ fn only_a_shared_part_s_byte_registers_are_observed_apart() {
         "{error}"
     );
 }
+
+#[test]
+fn a_field_whose_every_value_is_named_reads_as_its_name() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"",
+        "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"\n\
+         values = [{ name = \"OFF\", value = 0 }, { name = \"ON\", value = 1 }]",
+    )]);
+    // Complete: the getter returns the name; no number and no `_variant`.
+    assert!(
+        rust.contains("pub const fn enable(self) -> Enable {"),
+        "{rust}"
+    );
+    assert!(
+        !rust.contains("pub const fn enable(self) -> bool"),
+        "{rust}"
+    );
+    assert!(!rust.contains("enable_variant"), "{rust}");
+    // Partial: the number, and the name if it is one.
+    assert!(
+        rust.contains("pub const fn mode(self) -> oer_portable_mmio::Bits<2> {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub const fn mode_variant(self) -> Option<Mode> {"),
+        "{rust}"
+    );
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let mut memory = [0_u32; 0x40];
+    memory[0] = 1;
+    let (task, _irq) = radio::radio0_host(&mut memory).expect("memory holds the block");
+    println!("{:?}", task.read_config().enable());
+}
+"#,
+    );
+    assert_eq!(output.trim(), "On");
+}
+
+#[test]
+fn fields_of_one_dictionary_share_its_enum() {
+    let rust = rendered_with(&[
+        (
+            "types/radio.toml",
+            "schema = 3\n",
+            "schema = 3\n\n[[dictionaries]]\nname = \"LANE\"\n\
+             description = \"A lane that is shut or open.\"\nwidth = 1\n\
+             values = [{ name = \"SHUT\", value = 0, sources = [\"SRC_HEADER\"] }, \
+             { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+             sources = [\"SRC_HEADER\"]\n",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"RX\"\nbits = \"0\"\nclass = \"plain\"",
+            "name = \"RX\"\nbits = \"0\"\nclass = \"plain\"\nvalues = { dictionary = \"LANE\" }",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"TX\"\nbits = \"1\"\nclass = \"plain\"",
+            "name = \"TX\"\nbits = \"1\"\nclass = \"plain\"\nvalues = { dictionary = \"LANE\" }",
+        ),
+    ]);
+    assert_eq!(rust.matches("pub mod dictionaries {").count(), 1, "{rust}");
+    assert_eq!(rust.matches("pub enum Lane {").count(), 1, "{rust}");
+    // The fields have no enum of their own: both read and take the dictionary's.
+    assert!(!rust.contains("pub enum Rx {"), "{rust}");
+    assert!(!rust.contains("pub enum Tx {"), "{rust}");
+    assert!(
+        rust.contains("pub const fn rx(self) -> super::dictionaries::Lane {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub const fn tx(self) -> super::dictionaries::Lane {"),
+        "{rust}"
+    );
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let rx: fn(radio::enable::R) -> radio::dictionaries::Lane = radio::enable::R::rx;
+    let tx: fn(radio::enable::R) -> radio::dictionaries::Lane = radio::enable::R::tx;
+    let _ = (rx, tx);
+    let lanes = [
+        radio::dictionaries::Lane::from_field(0b10),
+        radio::dictionaries::Lane::from_field(0b10 >> 1),
+    ];
+    println!("{lanes:?}");
+}
+"#,
+    );
+    assert_eq!(output.trim(), "[Shut, Open]");
+}

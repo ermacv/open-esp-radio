@@ -56,7 +56,7 @@ pub(super) fn rate(s: &mut Session<'_>) {
 pub(super) fn rate_halved(s: &mut Session<'_>) {
     generic::systimer_open(s);
     let clocks = &s.sar.boot.hp_sys_clkrst_boot_clock;
-    let root = clocks.read_soc_clk_sel().reg_soc_clk_sel().get();
+    let root = clocks.read_soc_clk_sel().reg_soc_clk_sel().bits();
     let cpu = clocks.read_cpu_freq_ctrl0();
     let inherited = cpu.reg_cpu_clk_div_num();
     emit(

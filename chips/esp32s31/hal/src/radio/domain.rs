@@ -838,7 +838,11 @@ pub(crate) trait MacBlockResetPort {
 
 impl MacBlockResetPort for SharedRadioRegisters {
     fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        self.radio_phy_mut().set_wifi_mac_reset(asserted);
+        self.radio_phy_mut().set_wifi_mac_reset(if asserted {
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted
+        } else {
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        });
     }
     fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
         SharedRadioRegisters::write_back_wifi_mac_foreign_words(self, cbw);

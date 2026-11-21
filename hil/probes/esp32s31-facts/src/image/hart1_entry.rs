@@ -175,7 +175,7 @@ fn cross(clic: &mut pac::clic::Clic, pending: &pac::clic::ClicPending<1>) {
 
 /// A line's enable (bit 0) and trigger (bits 1 to 2).
 fn line_state(clic: &pac::clic::Clic, i: Index<{ pac::clic::ip::COUNT }>) -> u32 {
-    u32::from(clic.read_ie(i).ie()) | clic.read_attr(i).trig().get() << 1
+    u32::from(clic.read_ie(i).ie()) | clic.read_attr(i).trig().bits() << 1
 }
 
 /// Leave the line disabled and positive-edge, the one trigger whose pending
@@ -218,7 +218,7 @@ fn snapshot(clic: &pac::clic::Clic, observer: &pac::clic::ClicObserver) {
                     | (u32::from(clic.read_ip(i).ip()) << 16)
                     | (u32::from(clic.read_ie(i).ie()) << 17)
                     | (u32::from(attributes.shv()) << 18)
-                    | (attributes.trig().get() << 19),
+                    | (attributes.trig().bits() << 19),
             );
         }
     }

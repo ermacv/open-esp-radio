@@ -54,13 +54,13 @@ fn digital_setup(s: &mut Session<'_>) {
     // only: no front-end ADC/DAC, analog calibration or radio operation.
     s.sar.radio.hp_sys_clkrst_radio.open_modem_pll_source_gate();
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_80x1_en(pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled);
+        w.set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Enabled)
-            .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled)
-            .set_clk_modem_sec_ecb_en(pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled)
-            .set_clk_modem_sec_ccm_en(pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Enabled);
+        w.set_clk_etm_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_modem_sec_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_modem_sec_ecb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_modem_sec_ccm_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     // SOURCE: production Bluetooth controller reset domains. No shared BTBB
     // reset is needed; hart 1 remains contained and no client is running.
@@ -68,27 +68,27 @@ fn digital_setup(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released)
-                .set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Asserted);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Released)
+                .set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac_apb(pac::modem_syscon::modem_rst_conf::RstBtmacApb::Released)
-                .set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted);
+            w.set_rst_btmac_apb(pac::modem_syscon::dictionaries::Reset::Released)
+                .set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
+            w.set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Released);
         });
     oer_portable_riscv::fence();
     let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
@@ -98,13 +98,13 @@ fn digital_setup(s: &mut Session<'_>) {
         0x9000,
         u32::from(m.modem_clk_source_sel()),
         u32::from(m.modem_pll_clk_en()),
-        u32::from(c.clk_wifibb_80x1_en()),
+        c.clk_wifibb_80x1_en().bits(),
     );
     emit(
         0x9001,
-        u32::from(r.rst_btmac()),
-        u32::from(r.rst_btmac_apb()),
-        u32::from(r.rst_ble_timer()),
+        r.rst_btmac().bits(),
+        r.rst_btmac_apb().bits(),
+        r.rst_ble_timer().bits(),
     );
     // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS positional prefix, and
     // libbtdm_common[7.o] r_sym_bt_aGdrujd2MUAzWYH75baR+c0..de.

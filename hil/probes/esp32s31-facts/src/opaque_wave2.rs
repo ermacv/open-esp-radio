@@ -73,8 +73,8 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_modem_xtal_clk_en(true);
     });
     for reset in [
-        pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted,
-        pac::modem_syscon::modem_rst_conf::RstWifibb::Released,
+        pac::modem_syscon::dictionaries::Reset::Asserted,
+        pac::modem_syscon::dictionaries::Reset::Released,
     ] {
         s.sar
             .radio
@@ -84,19 +84,18 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             });
     }
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        use pac::modem_syscon::clk_conf1::*;
-        w.set_clk_wifibb_22m_en(ClkWifibb22mEn::Enabled)
-            .set_clk_wifibb_40m_en(ClkWifibb40mEn::Enabled)
-            .set_clk_wifibb_44m_en(ClkWifibb44mEn::Enabled)
-            .set_clk_wifibb_80m_en(ClkWifibb80mEn::Enabled)
-            .set_clk_wifibb_40x_en(ClkWifibb40xEn::Enabled)
-            .set_clk_wifibb_80x_en(ClkWifibb80xEn::Enabled)
-            .set_clk_wifibb_40x1_en(ClkWifibb40x1En::Enabled)
-            .set_clk_wifibb_80x1_en(ClkWifibb80x1En::Enabled)
-            .set_clk_wifibb_160x1_en(ClkWifibb160x1En::Enabled)
-            .set_clk_wifi_apb_en(ClkWifiApbEn::Enabled)
-            .set_clk_bt_apb_en(ClkBtApbEn::Enabled)
-            .set_clk_btbb_en(ClkBtbbEn::Enabled)
+        w.set_clk_wifibb_22m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_44m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_40x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_160x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_btbb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_fe_80m_en(true)
             .set_clk_fe_160m_en(true)
             .set_clk_fe_apb_en(true)
@@ -105,7 +104,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_clk_fe_dac_en(true);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled);
+        w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m);
     });
     s.sar
         .clocks
@@ -407,13 +406,12 @@ pub(super) fn i2c(s: &mut Session<'_>) {
     );
     emit(
         0x142,
-        u32::from(
-            s.sar
-                .radio
-                .modem_syscon_clock_reset
-                .read_clk_conf()
-                .clk_i2c_mst_sel_160m(),
-        ),
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .read_clk_conf()
+            .clk_i2c_mst_sel_160m()
+            .bits(),
         u32::from(
             s.sar
                 .clocks

@@ -61,7 +61,10 @@ impl TxIqToneControlFields {
             selector_high: control.selector_high(),
             low_reserved_clear_opaque: control.bits_8_9_opaque(),
             negated_step_or_attenuation: control.negated_step_or_attenuation(),
-            tone_enable_or_arm: control.tone_enable_or_arm(),
+            tone_enable_or_arm: matches!(
+                control.tone_enable_or_arm(),
+                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+            ),
             txiq_mismatch_mode_opaque: control.bits_19_21_opaque(),
             middle_reserved_clear_opaque: control.bits_22_23_opaque(),
             txiq_polarity_image: control.txiq_polarity_image(),

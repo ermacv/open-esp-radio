@@ -28,7 +28,7 @@ fn state(s: &Session<'_>, tag: u32) {
         tag,
         s.sar.radio.lp_tsens.read_ctrl().record_word(),
         s.sar.radio.lp_tsens.read_clk_conf().record_word(),
-        u32::from(lp.lp_tsens_clk_en())
+        lp.lp_tsens_clk_en().bits()
             | (u32::from(lp.lp_tsens_rst_en()) << 1)
             | (u32::from(power.xpd_perif_i2c()) << 2)
             | (u32::from(power.rstb_perif_i2c()) << 3),
@@ -330,11 +330,7 @@ pub(super) fn registers(s: &mut Session<'_>) {
         w.set_channel_index(old.channel_index())
             .set_memory_address_low(old.memory_address_low())
             .set_memory_address_high(old.memory_address_high())
-            .set_hardware_frequency_disable(
-                pac::fe::frequency_control::HardwareFrequencyDisable::from_field(u32::from(
-                    old.hardware_frequency_disable(),
-                )),
-            )
+            .set_hardware_frequency_disable(old.hardware_frequency_disable())
             .set_channel_switch_pulse(old.channel_switch_pulse())
             .set_memory_write_pulse(old.memory_write_pulse());
     });

@@ -66,8 +66,14 @@ fn estimator_restoration_returns_saved_fields_and_enable_state() {
         estimator.read_estimator_control().bits_2_16_opaque().get(),
         123
     );
-    assert!(!estimator.read_estimator_control().start_enable());
-    assert!(!estimator.read_estimator_control().measurement_enable());
+    assert!(matches!(
+        estimator.read_estimator_control().start_enable(),
+        oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Disabled
+    ));
+    assert!(matches!(
+        estimator.read_estimator_control().measurement_enable(),
+        oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Disabled
+    ));
 }
 
 #[test]
@@ -95,7 +101,10 @@ fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers
     assert_eq!(control.channel_index(), 17);
     assert_eq!(control.memory_address_low().get(), 0);
     assert!(!control.memory_address_high());
-    assert!(!control.hardware_frequency_disable());
+    assert!(matches!(
+        control.hardware_frequency_disable(),
+        oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
+    ));
     assert!(!control.memory_write_pulse());
     assert!(!control.channel_switch_pulse());
     assert_eq!(

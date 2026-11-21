@@ -13,10 +13,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{
-    radio::modem::values::{ModemSysconClockGateState, ModemSysconResetState},
-    radio::phy::RadioPhyRegisters,
-};
+use crate::radio::phy::RadioPhyRegisters;
 
 /// One modem clock device whose gate the PAC drives.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,11 +41,11 @@ pub enum ModemClockDevice {
     Ieee802154Mac,
 }
 
-const fn gate(enable: bool) -> ModemSysconClockGateState {
+const fn gate(enable: bool) -> oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate {
     if enable {
-        ModemSysconClockGateState::Enabled
+        oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
     } else {
-        ModemSysconClockGateState::Disabled
+        oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Disabled
     }
 }
 
@@ -160,9 +157,9 @@ impl<P: oer_portable_mmio::Placement> BasebandClockPort for BasebandClock<'_, P>
         super::ops::set_wifi_baseband_reset(
             self.0,
             if asserted {
-                ModemSysconResetState::Asserted
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted
             } else {
-                ModemSysconResetState::Released
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
             },
         );
     }

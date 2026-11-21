@@ -21,11 +21,15 @@ fn low_rate_path_switches_all_three_edges() {
         let owners = memory.owners();
         assert!(owners.registers.phy_low_rate_enabled());
         let rate = &owners.registers.mac.wifi_phy_rate_oracle_wifi_bb_brx;
-        assert!(
+        assert_eq!(
             rate.read_low_rate_primary_control()
-                .low_rate_enable_second()
+                .low_rate_enable_second(),
+            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableSecond::Enabled
         );
-        assert!(rate.read_low_rate_secondary_control().low_rate_enable());
+        assert_eq!(
+            rate.read_low_rate_secondary_control().low_rate_enable(),
+            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_secondary_control::LowRateEnable::Enabled
+        );
     }
     let enabled = memory.clone();
     memory.owners().registers.configure_phy_low_rate(false);
