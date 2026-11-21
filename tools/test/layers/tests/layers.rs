@@ -5906,7 +5906,10 @@ fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
             .is_some_and(|before| punct_at(tokens, before, ':'));
     let helper = word == "bits" && !before_dot && !after_fn;
     // The analog vocabulary's field door of the same kind.
-    let field = word == "insert_truncated" && before_dot;
+    let after_path = at
+        .checked_sub(1)
+        .is_some_and(|before| punct_at(tokens, before, ':'));
+    let field = word == "insert_truncated" && (before_dot || after_path);
     ((truncate || helper || field) && called).then_some(word)
 }
 
@@ -11339,6 +11342,10 @@ fn a_truncation_is_found_in_each_of_its_forms() {
     };
     assert_eq!(count("w.set_x(Bits::truncate(value));"), 1);
     assert_eq!(count("let byte = FIELD.insert_truncated(byte, value);"), 1);
+    assert_eq!(
+        count("let byte = AnalogField::insert_truncated(FIELD, byte, value);"),
+        1
+    );
     assert_eq!(
         count("pub const fn insert_truncated(self, byte: u8) -> u8 { 0 }"),
         0

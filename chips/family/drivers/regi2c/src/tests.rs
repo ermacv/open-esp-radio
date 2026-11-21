@@ -506,3 +506,31 @@ fn a_configuration_field_write_refuses_the_read_of_another_byte() {
     );
     assert_eq!(transition.action(), Action::Read { address: 1 });
 }
+
+#[test]
+fn a_parallel_pair_waits_for_host_0_then_host_1_before_the_next_pair() {
+    let mut transition = ParallelTransition::new(|index: usize| (index < 2).then_some(index));
+    let mut actions = Vec::new();
+    loop {
+        let action = transition.action();
+        actions.push(action);
+        if action == ParallelAction::Complete {
+            break;
+        }
+        transition.advance().expect("a successor index");
+    }
+    assert_eq!(
+        actions,
+        [
+            ParallelAction::SelectParallelMap,
+            ParallelAction::StartPair(0),
+            ParallelAction::AwaitIdle(Host::Host0),
+            ParallelAction::AwaitIdle(Host::Host1),
+            ParallelAction::StartPair(1),
+            ParallelAction::AwaitIdle(Host::Host0),
+            ParallelAction::AwaitIdle(Host::Host1),
+            ParallelAction::RestoreMap,
+            ParallelAction::Complete,
+        ]
+    );
+}

@@ -13,4 +13,4 @@ so the crate sits below the PAC and depends on nothing. The bus driver
 
 `AnalogField::insert_truncated` keeps only the low field bits of a byte
 input, as `Bits::truncate` does for a register field; the layer test
-counts its calls (`TRUNCATIONS`), which R2's area PRs remove.
+counts its calls (`TRUNCATIONS`).
