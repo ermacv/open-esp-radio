@@ -50,8 +50,13 @@ const fn tsf_words(value: u64) -> (u32, u32) {
 }
 
 /// TSF bits 35:10 of a station TSF, the station TBTT target's field value.
-const fn tsf_bits_35_10(value: u64) -> u32 {
-    ((value >> 10) as u32) & oer_chips_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_MAX
+/// TSF bits 35:10 of `value`: the target word compares only these, so the
+/// vendor keeps them and drops the bits above (BLOB_LIBPP_HAL_TSF).
+const fn tsf_bits_35_10(
+    value: u64,
+) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::modem_pwr::target::TSF_BITS_35_10_WIDTH }> {
+    let [b0, b1, b2, b3, _, _, _, _] = (value >> 10).to_le_bytes();
+    oer_portable_mmio::Bits::truncate(u32::from_le_bytes([b0, b1, b2, b3]))
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
@@ -163,7 +168,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // bits 31:26 and replaces TSF bits 35:10 (BLOB_LIBPP_HAL_TSF).
         let target = tsf_bits_35_10(schedule.first_tbtt_tsf);
         self.mac.wifi_mac_sta_tbtt_target.modify_target(|w| {
-            w.set_tsf_bits_35_10(bits(target));
+            w.set_tsf_bits_35_10(target);
         });
         self.mac.wifi_mac_tsf_load.modify_tsf_load_control(|w| {
             w.set_load_station_tbtt_target(true);

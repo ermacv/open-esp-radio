@@ -2345,3 +2345,49 @@ fn an_eight_or_sixteen_bit_field_is_masked_to_its_width_before_its_cast() {
     assert!(!rust.contains("(self.0 >> 16) as u8"), "{rust}");
     assert!(!rust.contains("self.0 as u16"), "{rust}");
 }
+
+#[test]
+fn an_open_dictionary_converts_into_its_fields_native_setter_type() {
+    let rust = rendered_with(&[
+        (
+            "types/radio.toml",
+            "schema = 3\n",
+            "schema = 3\n\n[[dictionaries]]\nname = \"RATE\"\n\
+             description = \"A rate byte with two named values.\"\nwidth = 8\n\
+             values = [{ name = \"ORDINARY\", value = 0x80, sources = [\"SRC_HEADER\"] }, \
+             { name = \"EXTENDED\", value = 0xa0, sources = [\"SRC_HEADER\"] }]\n\
+             sources = [\"SRC_HEADER\"]\n",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"",
+            "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"\nvalues = { dictionary = \"RATE\" }",
+        ),
+    ]);
+    assert!(rust.contains("impl From<Rate> for u8 {"), "{rust}");
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let rate: u8 = radio::dictionaries::Rate::Extended.into();
+    println!("{rate}");
+}
+"#,
+    );
+    assert_eq!(output.trim(), "160");
+}
+
+#[test]
+fn a_complete_dictionary_has_no_conversion_into_a_number() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "schema = 3\n",
+        "schema = 3\n\n[[dictionaries]]\nname = \"LANE\"\n\
+         description = \"A lane that is shut or open.\"\nwidth = 1\n\
+         values = [{ name = \"SHUT\", value = 0, sources = [\"SRC_HEADER\"] }, \
+         { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+         sources = [\"SRC_HEADER\"]\n",
+    )]);
+    assert!(rust.contains("pub enum Lane {"), "{rust}");
+    assert!(!rust.contains("impl From<Lane> for"), "{rust}");
+}

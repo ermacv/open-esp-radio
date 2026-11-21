@@ -112,16 +112,6 @@ members! {
 /// A set of RX-associated lanes of the MAC interrupt bank.
 pub type MacRxInterrupts = Set<MacRxLane>;
 
-/// Independently observed delivery enables whose physical causes remain opaque.
-/// These are values from one ENABLE read, with no acknowledgement authority.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct MacOpaqueInterruptEnables {
-    pub lane_6: bool,
-    pub lane_12: bool,
-    pub lane_13: bool,
-    pub lane_23: bool,
-}
-
 impl MacInterruptSnapshot {
     /// Complete sampled diagnostic value; grants no acknowledgement authority.
     pub const fn bits(&self) -> u32 {
@@ -334,20 +324,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 }
 
-/// Classified field-level readback of the MAC interrupt enable register.
-///
-/// Unknown images are retained as an explicit state instead of reconstructing
-/// a handwritten integer register image from the generated field accessors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacInterruptEnableState {
-    /// Every interrupt-enable field is clear.
-    Disabled,
-    /// Station primary mask with TX queue collision disabled.
-    Station,
-    /// A field combination outside the reviewed writable images.
-    Unknown,
-}
-
 /// Publish the whole MAC interrupt enable image of `event_mask` in one
 /// read-modify-write that sets every field: the vendor's whole-word store.
 ///
@@ -410,43 +386,6 @@ fn mask_mac_power_interrupts<P: Placement>(power: &mut WifiMacPowerInterrupt<P>)
             .set_beacon_miss(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
             .set_bits_20_31_opaque(Bits::constant::<0>());
     });
-}
-
-fn observe_mac_interrupt_enable<P: Placement>(
-    interrupt: &WifiMacInterrupt<P>,
-) -> MacInterruptEnableState {
-    let enable = interrupt.read_enable();
-    let fixed_clear = enable.bits_0_4_opaque().get() == 0
-        && !enable.tx_queue_collision()
-        && enable.bits_9_10_opaque().get() == 0
-        && !enable.sta_beacon_filter()
-        && enable.bits_16_18_opaque().get() == 0
-        && !enable.bit_20_opaque()
-        && !enable.bit_22_opaque()
-        && enable.bits_25_26_opaque().get() == 0
-        && enable.bits_29_31_opaque().get() == 0;
-    let station_fields = [
-        enable.rx_associated_auxiliary_5(),
-        enable.bit_6_opaque(),
-        enable.tx_complete(),
-        enable.watchdog(),
-        enable.bit_12_opaque(),
-        enable.bit_13_opaque(),
-        enable.rx_success(),
-        enable.tx_timeout(),
-        enable.fatal_assertion(),
-        enable.bit_23_opaque(),
-        enable.rx_associated_auxiliary_24(),
-        enable.wdev_timer_0(),
-        enable.wdev_timer_1(),
-    ];
-    if fixed_clear && station_fields.iter().all(|set| !set) {
-        MacInterruptEnableState::Disabled
-    } else if fixed_clear && station_fields.iter().all(|set| *set) {
-        MacInterruptEnableState::Station
-    } else {
-        MacInterruptEnableState::Unknown
-    }
 }
 
 /// The WDEVPWR interrupt bank: its enable, status and clear words.
@@ -554,34 +493,6 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     pub fn publish_mac_interrupt_mask(&mut self, event_mask: MacInterruptMask) {
         publish_mac_interrupt_mask(&mut self.mac, event_mask);
         oer_portable_riscv::fence();
-    }
-
-    /// Read the currently published MAC interrupt mask.
-    pub fn mac_interrupt_enable(&self) -> MacInterruptEnableState {
-        observe_mac_interrupt_enable(&self.mac)
-    }
-
-    /// Read each RX delivery-enable lane independently.
-    pub fn mac_rx_interrupt_enable(&self) -> MacRxInterrupts {
-        let value = self.mac.read_enable();
-        Set::of_bit(value.rx_associated_auxiliary_5(), MacRxLane::Auxiliary5)
-            .union(Set::of_bit(value.rx_success(), MacRxLane::Success))
-            .union(Set::of_bit(
-                value.rx_associated_auxiliary_24(),
-                MacRxLane::Auxiliary24,
-            ))
-    }
-
-    /// Observe the four opaque station delivery lanes independently, including
-    /// combinations outside the reviewed station and disabled images.
-    pub fn mac_opaque_interrupt_enable(&self) -> MacOpaqueInterruptEnables {
-        let value = self.mac.read_enable();
-        MacOpaqueInterruptEnables {
-            lane_6: value.bit_6_opaque(),
-            lane_12: value.bit_12_opaque(),
-            lane_13: value.bit_13_opaque(),
-            lane_23: value.bit_23_opaque(),
-        }
     }
 
     /// Change only the selected RX delivery lanes, preserving every other lane.

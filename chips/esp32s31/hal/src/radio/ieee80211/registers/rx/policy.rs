@@ -4,7 +4,7 @@ use oer_portable_mmio::{Index, Placement};
 
 use oer_chips_esp32s31_pac::wifi_mac::{WifiMacBssidPolicy, WifiMacInterfaceAddress};
 
-use crate::radio::ieee80211::registers::{MacInterface, MacPlacement, WifiRadioRegisters, byte};
+use crate::radio::ieee80211::registers::{MacInterface, MacPlacement, WifiRadioRegisters};
 
 /// The interface context of each receive queue in the cold policy: queues
 /// zero to two are also the first three interface contexts; queue three has
@@ -27,32 +27,6 @@ fn clear_cold_interface_address<P: Placement>(
     interfaces.modify_address_high(interface.index(), |w| {
         w.set_bytes_4_5(0);
     });
-}
-
-/// Read-only associated-STA receive-policy evidence.
-///
-/// Only reviewed semantic fields cross the HAL boundary. Complete policy
-/// register images stay private because several bits are still
-/// undocumented and no production decision consumes them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacStaReceivePolicySnapshot {
-    pub bssid: [u8; 6],
-    pub association_id: u16,
-    pub minimum_mpdu_start_spacing: u8,
-    pub bssid_address_check_enabled: bool,
-    pub interface_is_soft_ap: bool,
-    pub interface_rx_policy_enabled: bool,
-    pub beacon_filter_enabled: bool,
-    pub broadcast_wakeup_enabled: bool,
-    pub unicast_wakeup_enabled: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacApReceivePolicySnapshot {
-    pub bssid: [u8; 6],
-    pub bssid_address_check_enabled: bool,
-    pub interface_is_soft_ap: bool,
-    pub interface_rx_policy_enabled: bool,
 }
 
 /// Closed register plan for simultaneous same-channel STA and SoftAP receive
@@ -167,13 +141,6 @@ fn set_bssid<P: Placement>(bssids: &mut WifiMacBssidPolicy<P>, bank: Index<4>, b
     });
 }
 
-/// The six BSSID bytes of one bank.
-fn bssid<P: Placement>(bssids: &WifiMacBssidPolicy<P>, bank: Index<4>) -> [u8; 6] {
-    let [b0, b1, b2, b3] = bssids.read_bssid_low(bank).bytes_0_3().to_le_bytes();
-    let [b4, b5] = bssids.read_bssid_high(bank).bssid_high().to_le_bytes();
-    [b0, b1, b2, b3, b4, b5]
-}
-
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Publish one interface BSSID through the complete four-edge vendor leaf.
     ///
@@ -184,49 +151,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             interface.index(),
             bssid_address,
         );
-    }
-
-    pub fn ap_receive_policy_snapshot(&self) -> MacApReceivePolicySnapshot {
-        let bssids = &self.mac.wifi_mac_bssid_policy;
-        let bssid_high = bssids.read_bssid_high(ACCESS_POINT);
-        MacApReceivePolicySnapshot {
-            bssid: bssid(bssids, ACCESS_POINT),
-            bssid_address_check_enabled: bssid_high.address_check_enable(),
-            interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
-            interface_rx_policy_enabled: self
-                .interface
-                .read_address_high(MacInterface::AccessPoint.index())
-                .rx_policy_enable(),
-        }
-    }
-
-    /// Snapshot every register frontier that can suppress associated-STA
-    /// beacons while still admitting directed management traffic.
-    pub fn sta_receive_policy_snapshot(&self) -> MacStaReceivePolicySnapshot {
-        let bssids = &self.mac.wifi_mac_bssid_policy;
-        let bssid_high = bssids.read_bssid_high(STATION);
-        let interface = self
-            .interface
-            .read_address_high(MacInterface::Station.index());
-
-        let bssid = bssid(bssids, STATION);
-        let beacon_filter = self
-            .mac
-            .wifi_mac_sta_beacon_filter
-            .read_sta_beacon_filter_control();
-        MacStaReceivePolicySnapshot {
-            bssid,
-            association_id: crate::radio::ieee80211::registers::halfword(
-                bssid_high.association_id(),
-            ),
-            minimum_mpdu_start_spacing: byte(bssid_high.minimum_mpdu_start_spacing()),
-            bssid_address_check_enabled: bssid_high.address_check_enable(),
-            interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
-            interface_rx_policy_enabled: interface.rx_policy_enable(),
-            beacon_filter_enabled: beacon_filter.beacon_filter_enable(),
-            broadcast_wakeup_enabled: beacon_filter.broadcast_wakeup_enable(),
-            unicast_wakeup_enabled: beacon_filter.unicast_wakeup_enable(),
-        }
     }
 
     /// Apply the complete four-queue cold policy transaction from `hal_init`.

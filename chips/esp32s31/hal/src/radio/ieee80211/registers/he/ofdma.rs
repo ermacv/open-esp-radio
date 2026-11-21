@@ -12,33 +12,65 @@ use crate::radio::ieee80211::registers::{
 /// Keeping this as a bounded newtype means array and MMIO indexing cannot
 /// receive an arbitrary `u8`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeTid(u8);
+pub struct MacHeTid(Bits<{ oer_chips_esp32s31_pac::wifi_mac::queue_control::TID_WIDTH }>);
 
 impl MacHeTid {
     pub const COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::hardware_bsr::COUNT;
 
     pub const fn new(value: u8) -> Option<Self> {
-        if value < Self::COUNT as u8 {
-            Some(Self(value))
-        } else {
-            None
+        if value >= Self::COUNT as u8 {
+            return None;
+        }
+        match Bits::new(value as u32) {
+            Ok(field) => Some(Self(field)),
+            Err(_) => None,
         }
     }
 
     pub const fn value(self) -> u8 {
+        // Below `COUNT`: the low byte is the whole value.
+        self.0.get().to_le_bytes()[0]
+    }
+
+    /// The TID as the queue control's field.
+    pub const fn field(
+        self,
+    ) -> Bits<{ oer_chips_esp32s31_pac::wifi_mac::queue_control::TID_WIDTH }> {
         self.0
     }
 
     const fn mask(self) -> u8 {
-        1 << self.0
+        1 << self.value()
     }
 }
 
-/// Configured maximum number of TIDs eligible for HE trigger-based TX.
-///
-/// SOURCE: complete `libpp[if_hecfg.o]::wifi_he_get_hetb_tid_bitmap` and its four-byte table. The enum is the
-/// Rust-owned replacement for `g_wifi_menuconfig + 0x5c`; callers cannot
-/// manufacture the blob's invalid configuration values.
+/// One MPDU length of a Trigger-based queue: non-zero, within the
+/// fourteen-bit length of its link entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MacHeMpduLength(
+    Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_scratch::MPDU_LENGTH_WIDTH }>,
+);
+
+impl MacHeMpduLength {
+    /// A length the link entry holds, or none for zero or a wider one.
+    pub const fn new(length: u16) -> Option<Self> {
+        if length == 0 {
+            return None;
+        }
+        match Bits::new(length as u32) {
+            Ok(field) => Some(Self(field)),
+            Err(_) => None,
+        }
+    }
+
+    /// The length as its link entry's field.
+    pub const fn field(
+        self,
+    ) -> Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_scratch::MPDU_LENGTH_WIDTH }> {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum MacHeTbTidLimit {
@@ -144,7 +176,6 @@ impl MacHeTbLinkReservation {
 pub enum MacHeTbProgramError {
     TidNotEligible,
     LengthCountMismatch,
-    InvalidMpduLength,
     QueuedBytesTooLarge,
 }
 
@@ -170,19 +201,6 @@ pub struct MacHeTriggerTxQueueSnapshot {
     /// This second sample is taken after the validity publication edge.
     pub queued_msdu_bytes: u32,
     pub queue_valid: bool,
-}
-
-/// One non-latched view of all hardware-visible HE Buffer Status Reports.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeBufferStatusSnapshot {
-    pub hardware: [u32; MacHeTid::COUNT],
-    pub software: [u32; MacHeTid::COUNT],
-    pub valid: [bool; MacHeTid::COUNT],
-    pub trigger_based_tid_enabled: [bool; MacHeTid::COUNT],
-    pub ac_empty_software_tid: u8,
-    pub ac_empty_uses_software_tid: bool,
-    pub basic_special_bsr_sequence: bool,
-    pub tid_limit_zero_bsr_sequence: bool,
 }
 
 /// Key fields from the last HE Trigger receive calculation.
@@ -239,81 +257,6 @@ pub struct MacHeBeamformingDiagnostics {
     pub feedback_status: bool,
 }
 
-/// WDEVTXQ_CONF1 fields for one of the eight reverse-addressed logical queues.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeTriggerQueueConfiguration {
-    pub tid: u8,
-    pub trigger_based_enabled: bool,
-    pub mu_edca_timer_select: u8,
-    pub mpdu_length_link_address: u8,
-    pub minimum_tx_power: u8,
-}
-
-/// WDEVTXQ_CONF2 fields for one of the four ordinary EDCA queues.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeEdcaQueueConfiguration {
-    pub minimum_mpdu_length_cbw20: u16,
-    pub minimum_mpdu_length_cbw40: u16,
-    pub minimum_mpdu_length_cbw80: u16,
-    pub software_rts: bool,
-    pub software_cts: bool,
-}
-
-/// One MU-EDCA timer decoded in the blob's eight-TU units.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeMuEdcaTimerSnapshot {
-    pub timer_8tu: u8,
-    pub enabled: bool,
-    pub reset: bool,
-    pub current_count_8tu: u8,
-    pub reached: bool,
-    pub aifs: u8,
-}
-
-/// Fixed-allocation snapshot of all recovered HE queue scheduling fields.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeQueueSchedulingSnapshot {
-    pub trigger_queues: [MacHeTriggerQueueConfiguration; 8],
-    pub edca_queues: [MacHeEdcaQueueConfiguration; 4],
-    pub mu_edca_timers: [MacHeMuEdcaTimerSnapshot; 4],
-}
-
-/// Receive power-save fields decoded by `dbg_read_rx_misc`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeRxPowerSaveSnapshot {
-    pub threshold: u16,
-    pub enabled: bool,
-    pub stop_rf: bool,
-    pub ready: bool,
-    pub front_end_frequency_hop_time: u8,
-    pub phy_signal_delay: u8,
-    pub intra_bss_color_check_enabled: bool,
-    pub intra_ppdu_enabled: bool,
-    pub vht_txop_address_check_enabled: bool,
-    pub vht_txop_enabled: bool,
-}
-
-/// One custom receive frame-type matcher and its automatic-ACK selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeCustomReceiveType {
-    pub enabled: bool,
-    pub value: u8,
-    pub ack_index: u8,
-}
-
-/// Receive beamforming state decoded from `WDEVBEAMFORMCONF`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeBeamformingConfigurationSnapshot {
-    pub memory_write_enabled: bool,
-    pub bfrp_time: u8,
-    pub ndp_time: u8,
-    pub hardware_sequence_select: u8,
-    pub hardware_sequence_enabled: bool,
-    pub he_beam_enabled: bool,
-    pub non_trigger_based_ru_select: bool,
-    pub ru_select: bool,
-}
-
 /// Stream-zero average SNR captured by the beamforming-report hardware.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacBeamformingAverageSnr {
@@ -335,38 +278,6 @@ impl MacBeamformingAverageSnr {
                     .bits() as u8,
         }
     }
-}
-
-/// Allocation-free view of the HE/RX policy words decoded by
-/// `dbg_read_rx_misc`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeReceiveConfigurationSnapshot {
-    pub bss_color: u8,
-    pub bss_color_enabled: bool,
-    pub partial_bss_color_enabled: bool,
-    pub bssid_select: u8,
-    pub he_bssid_enabled: bool,
-    pub multi_bssid_enabled: bool,
-    pub multi_bssid_mask: u8,
-    pub co_hosted_enabled: bool,
-    pub default_packet_extension_duration: u8,
-    pub mpdu_length_offset: u16,
-    pub nfrp_buffer_threshold: u8,
-    pub hardware_txop_enabled: bool,
-    pub bsr_update_enabled: bool,
-    pub trigger_based_stop_option: bool,
-    pub trigger_response_scheduling_supported: bool,
-    pub uplink_mu_data_disabled: bool,
-    pub uplink_mu_disabled: bool,
-    pub trigger_based_no_resource_continue_tx: bool,
-    pub automatic_ack_allows_extended_range_su: bool,
-    pub he_response_ack: bool,
-    pub nominal_packet_padding_duration: [u8; 5],
-    pub rx_control_9_bssid_position: u8,
-    pub power_save: MacHeRxPowerSaveSnapshot,
-    /// Profiles are ordered exactly as CUSTOM_TYPE0, 1 and 2.
-    pub custom_receive_types: [MacHeCustomReceiveType; 3],
-    pub beamforming: MacHeBeamformingConfigurationSnapshot,
 }
 
 /// The CONF1 element of logical trigger queue `queue`: the eight physical
@@ -414,7 +325,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         policy: MacHeTbTidLimit,
         reservation: MacHeTbLinkReservation,
         tid: MacHeTid,
-        mpdu_lengths: &[u16],
+        mpdu_lengths: &[MacHeMpduLength],
         queued_msdu_bytes: u32,
     ) -> Result<MacHeTriggerTxQueueSnapshot, MacHeTbProgramError> {
         if !policy.contains(tid) {
@@ -423,15 +334,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         if mpdu_lengths.len() != usize::from(reservation.count) {
             return Err(MacHeTbProgramError::LengthCountMismatch);
         }
-        if mpdu_lengths
-            .iter()
-            .any(|length| *length == 0 || *length > 0x3fff)
-        {
-            return Err(MacHeTbProgramError::InvalidMpduLength);
-        }
-        if queued_msdu_bytes > 0x000f_ffff {
-            return Err(MacHeTbProgramError::QueuedBytesTooLarge);
-        }
+        let queued: Bits<{ oer_chips_esp32s31_pac::wifi_mac::software_bsr::VALUE_WIDTH }> =
+            Bits::new(queued_msdu_bytes).map_err(|_| MacHeTbProgramError::QueuedBytesTooLarge)?;
 
         let queue = reservation.queue;
         let physical_queue = trigger_queue_element(queue);
@@ -459,7 +363,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_trigger_based_enable(true)
                 .set_mu_edca_timer_select(bits(u32::from(queue)))
                 .set_mpdu_length_link_address(bits(u32::from(reservation.first)))
-                .set_tid(bits(u32::from(tid.value())))
+                .set_tid(tid.field())
                 .set_minimum_tx_power(Bits::constant::<0>())
                 .set_high_cleared_by_tb_setup(Bits::constant::<0>());
         });
@@ -472,7 +376,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         let status = &mut self.mac.wifi_mac_he_buffer_status;
         status.modify_software_bsr(element(usize::from(queue)), |w| {
-            w.set_value(bits(queued_msdu_bytes));
+            w.set_value(queued);
         });
         // Do not add a fence or diagnostic read here. The complete blob and
         // ROM sequence is exactly SW(BSR), LW(CONTROL), SW(CONTROL). BSR
@@ -500,7 +404,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         reservation: MacHeTbLinkReservation,
         position: u8,
-        length: u16,
+        length: MacHeMpduLength,
     ) {
         let index = reservation
             .index(position)
@@ -511,7 +415,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_he_scratch(element(usize::from(index)), |w| {
-                w.set_mpdu_length(bits(u32::from(length)))
+                w.set_mpdu_length(length.field())
                     .set_next_link(bits(u32::from(next)));
             });
         if next == oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8 {
@@ -612,149 +516,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
     }
 
-    /// Read all eight interleaved hardware/software BSR values and control.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_bsr_info` and `libpp.a[hal_mac_ctl.o]`
-    /// `hal_he_get_hw_txq_bsr`.
-    pub fn he_buffer_status_snapshot(&self) -> MacHeBufferStatusSnapshot {
-        let registers = &self.mac.wifi_mac_he_buffer_status;
-        let mut hardware = [0_u32; MacHeTid::COUNT];
-        let mut software = [0_u32; MacHeTid::COUNT];
-        for tid in 0..MacHeTid::COUNT {
-            hardware[tid] = registers.read_hardware_bsr(element(tid)).value().get();
-            software[tid] = registers.read_software_bsr(element(tid)).value().get();
-        }
-        let control = registers.read_he_buffer_status_control();
-
-        MacHeBufferStatusSnapshot {
-            hardware,
-            software,
-            valid: [
-                control.valid_0(),
-                control.valid_1(),
-                control.valid_2(),
-                control.valid_3(),
-                control.valid_4(),
-                control.valid_5(),
-                control.valid_6(),
-                control.valid_7(),
-            ],
-            trigger_based_tid_enabled: [
-                control.trigger_based_tid_0_enabled(),
-                control.trigger_based_tid_1_enabled(),
-                control.trigger_based_tid_2_enabled(),
-                control.trigger_based_tid_3_enabled(),
-                control.trigger_based_tid_4_enabled(),
-                control.trigger_based_tid_5_enabled(),
-                control.trigger_based_tid_6_enabled(),
-                control.trigger_based_tid_7_enabled(),
-            ],
-            ac_empty_software_tid: byte(control.ac_empty_software_tid()),
-            ac_empty_uses_software_tid: control.ac_empty_use_software_tid(),
-            basic_special_bsr_sequence: control.basic_special_bsr_sequence(),
-            tid_limit_zero_bsr_sequence: control.tid_limit_zero_bsr_sequence(),
-        }
-    }
-
-    /// Read all HE/RX configuration fields recovered from `dbg_read_rx_misc`.
-    ///
-    /// This is a best-effort multi-register sample. It deliberately exposes
-    /// the blob's hardware polarity: `uplink_mu_disabled == true` means the
-    /// disable bit is set, while `hardware_txop_enabled == true` means the
-    /// blob's `HE_USE_SW_TXOP` bit is clear.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_rx_misc`, size `0x42a`, and its function-local strings.
-    pub fn he_receive_configuration_snapshot(&self) -> MacHeReceiveConfigurationSnapshot {
-        let suffix = &self.mac.wifi_mac_he_init_suffix;
-        let multi = suffix.read_multi_bssid_control();
-        let options1 = suffix.read_ersu_and_vht_control();
-        let options2 = suffix.read_he_default_control();
-        let padding = suffix.read_he_packet_padding();
-        let power_save = self.mac.wifi_mac_rx_power_save.read_rx_power_save_control();
-        let custom = self
-            .mac
-            .wifi_mac_rx_custom_type
-            .read_rx_custom_type_control();
-        let beamforming = self.mac.wifi_mac_he_init_prefix.read_bf_timing_control();
-
-        MacHeReceiveConfigurationSnapshot {
-            bss_color: byte(multi.bss_color()),
-            bss_color_enabled: multi.bss_color_enable(),
-            partial_bss_color_enabled: multi.partial_bss_color_enable(),
-            bssid_select: byte(multi.bssid_select()),
-            he_bssid_enabled: multi.he_bssid_enable(),
-            multi_bssid_enabled: multi.multi_bssid_enable(),
-            multi_bssid_mask: multi.multi_bssid_mask(),
-            co_hosted_enabled: multi.co_hosted_enable(),
-            default_packet_extension_duration: byte(options2.default_pe_duration()),
-            mpdu_length_offset: halfword(options2.mpdu_length_offset()),
-            nfrp_buffer_threshold: options2.nfrp_buffer_threshold(),
-            hardware_txop_enabled: !options2.he_use_software_txop(),
-            bsr_update_enabled: options2.bsr_update_enable(),
-            trigger_based_stop_option: options2.tb_stop_option(),
-            trigger_response_scheduling_supported: options2.he_trs_support(),
-            uplink_mu_data_disabled: options2.ul_mu_data_disable(),
-            uplink_mu_disabled: options2.ul_mu_disable(),
-            trigger_based_no_resource_continue_tx: options1.tb_no_resource_continue_tx(),
-            automatic_ack_allows_extended_range_su: options1.auto_ack_allow_ersu(),
-            he_response_ack: options1.he_response_ack(),
-            nominal_packet_padding_duration: [
-                byte(padding.bpsk_duration()),
-                byte(padding.qpsk_duration()),
-                byte(padding.qam16_duration()),
-                byte(padding.qam64_duration()),
-                byte(padding.qam256_duration()),
-            ],
-            rx_control_9_bssid_position: byte(
-                self.mac
-                    .wifi_mac_rx_bssid_list
-                    .read_rx_bssid_list_control()
-                    .rx_control_9_bssid_position(),
-            ),
-            power_save: MacHeRxPowerSaveSnapshot {
-                threshold: halfword(power_save.rx_ps_threshold()),
-                enabled: power_save.rx_ps_enable(),
-                stop_rf: power_save.stop_rf(),
-                ready: power_save.ps_ready(),
-                front_end_frequency_hop_time: power_save.fe_frequency_hop_time(),
-                phy_signal_delay: byte(power_save.rx_phy_signal_delay()),
-                intra_bss_color_check_enabled: power_save.intra_ps_check_bss_color_enable(),
-                intra_ppdu_enabled: power_save.intra_ppdu_ps_enable(),
-                vht_txop_address_check_enabled: power_save.rx_vht_txop_ps_check_address(),
-                vht_txop_enabled: power_save.rx_vht_txop_ps_enable(),
-            },
-            custom_receive_types: [
-                MacHeCustomReceiveType {
-                    enabled: custom.type_0_enable(),
-                    value: byte(custom.type_0_value()),
-                    ack_index: byte(custom.type_0_ack_index()),
-                },
-                MacHeCustomReceiveType {
-                    enabled: custom.type_1_enable(),
-                    value: byte(custom.type_1_value()),
-                    ack_index: byte(custom.type_1_ack_index()),
-                },
-                MacHeCustomReceiveType {
-                    enabled: custom.type_2_enable(),
-                    value: byte(custom.type_2_value()),
-                    ack_index: byte(custom.type_2_ack_index()),
-                },
-            ],
-            beamforming: MacHeBeamformingConfigurationSnapshot {
-                memory_write_enabled: beamforming.bf_memory_write_enable(),
-                bfrp_time: byte(beamforming.rx_bfrp_timeout_ms()),
-                ndp_time: beamforming.he_beam_ndp_time(),
-                hardware_sequence_select: byte(beamforming.he_beam_hw_sequence_select()),
-                hardware_sequence_enabled: beamforming.he_beam_hw_sequence_enable(),
-                he_beam_enabled: beamforming.he_beam_enable(),
-                non_trigger_based_ru_select: beamforming.non_tb_beam_ru_select(),
-                ru_select: beamforming.beam_ru_select(),
-            },
-        }
-    }
-
     /// Make trigger-based transmissions respect or ignore CCA and NAV.
     ///
     /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
@@ -778,10 +539,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn set_he_obss_narrow_band_ru_disabled(&mut self, disabled: bool) {
         let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
         registers.modify_disable_bitmap(|w| {
-            w.set_value(bits(if disabled { 0x000f_ffff } else { 0 }));
+            w.set_value(if disabled {
+                Bits::constant::<0x000f_ffff>()
+            } else {
+                Bits::constant::<0>()
+            });
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_class_disable(bits(if disabled { oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled.bits() } else { oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled.bits() }));
+            w.set_class_disable(
+                if disabled {
+                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled
+                } else {
+                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled
+                }
+                .into(),
+            );
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
             w.set_global_disable(disabled);
@@ -857,63 +629,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             beam_timer: byte(state.beam_timer()),
             ndp_detected_successfully: state.ndp_detect_success(),
             feedback_status: padding.feedback_status(),
-        }
-    }
-
-    /// Read queue-local TB, TID, minimum-MPDU and MU-EDCA state.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_txq_conf1`, `dbg_read_txq_conf2` and
-    /// `dbg_read_muedca_timer`. CONF1 and CONF2 use reverse logical queue
-    /// addressing, normalized here so array index equals the blob's logged
-    /// logical queue number.
-    pub fn he_queue_scheduling_snapshot(&self) -> MacHeQueueSchedulingSnapshot {
-        let suffix = &self.mac.wifi_mac_he_init_suffix;
-        let queue_control = &self.mac.wifi_mac_tx_queue_control;
-        let timers = &self.mac.wifi_mac_he_mu_edca_timer;
-
-        let trigger_queues = core::array::from_fn(|logical_queue| {
-            let queue = suffix.read_queue_control(element(7 - logical_queue));
-            MacHeTriggerQueueConfiguration {
-                tid: byte(queue.tid()),
-                trigger_based_enabled: queue.trigger_based_enable(),
-                mu_edca_timer_select: byte(queue.mu_edca_timer_select()),
-                mpdu_length_link_address: byte(queue.mpdu_length_link_address()),
-                minimum_tx_power: byte(queue.minimum_tx_power()),
-            }
-        });
-        let edca_queues = core::array::from_fn(|logical_queue| {
-            let queue = queue_control.read_protection(element(3 - logical_queue));
-            MacHeEdcaQueueConfiguration {
-                minimum_mpdu_length_cbw20: halfword(queue.minimum_mpdu_length_cbw20()),
-                minimum_mpdu_length_cbw40: halfword(queue.minimum_mpdu_length_cbw40()),
-                minimum_mpdu_length_cbw80: halfword(queue.minimum_mpdu_length_cbw80()),
-                software_rts: matches!(
-                    queue.software_rts(),
-                    oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareRts::Requested
-                ),
-                software_cts: matches!(
-                    queue.software_cts(),
-                    oer_chips_esp32s31_pac::wifi_mac::protection::SoftwareCts::Requested
-                ),
-            }
-        });
-        let mu_edca_timers = core::array::from_fn(|index| {
-            let timer = timers.read_timer(element(index));
-            MacHeMuEdcaTimerSnapshot {
-                timer_8tu: timer.timer_8tu(),
-                enabled: timer.enable(),
-                reset: timer.reset(),
-                current_count_8tu: timer.current_count_8tu(),
-                reached: timer.reached(),
-                aifs: byte(timer.aifs()),
-            }
-        });
-
-        MacHeQueueSchedulingSnapshot {
-            trigger_queues,
-            edca_queues,
-            mu_edca_timers,
         }
     }
 }

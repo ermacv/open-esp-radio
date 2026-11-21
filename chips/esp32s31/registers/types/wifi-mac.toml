@@ -8574,7 +8574,7 @@ description = "Complete libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate writes th
 
 [[registers.fields]]
 name = "RATE_0"
-values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
+values = { dictionary = "ERSU_ACK_RATE" }
 bits = "7:0"
 class = "plain"
 description = "First byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8582,7 +8582,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_1"
-values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
+values = { dictionary = "ERSU_ACK_RATE" }
 bits = "15:8"
 class = "plain"
 description = "Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8590,7 +8590,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_2"
-values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
+values = { dictionary = "ERSU_ACK_RATE" }
 bits = "23:16"
 class = "plain"
 description = "Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -8598,7 +8598,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "RATE_3"
-values = [{ name = "ORDINARY", value = 128 }, { name = "EXTENDED_RANGE", value = 160 }]
+values = { dictionary = "ERSU_ACK_RATE" }
 bits = "31:24"
 class = "plain"
 description = "Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate."
@@ -15121,3 +15121,10 @@ sources = ["ROM_REV0_WDEV_APPEND_RX_BLOCKS", "ROM_REV0_HAL_MAC_RX_GATE"]
 status = "RAW"
 clear = "CLEAR"
 sources = ["BLOB_LIBPP_ISR_REGISTER_DUMP", "BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT", "BLOB_LIBPP_WIFI_IRQ_FACTS_20261026"]
+
+[[dictionaries]]
+name = "ERSU_ACK_RATE"
+description = "An ER-SU ACK rate byte: the ordinary rate, or the extended-range one. hal_he_set_ersu_ack_rate writes the same byte to all four RATE fields of ERSU_ACK_RATE, argument zero selecting 0x80 and nonzero 0xa0."
+width = 8
+values = [{ name = "ORDINARY", value = 0x80, description = "The ordinary ACK rate (hal_he_set_ersu_ack_rate argument zero).", sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }, { name = "EXTENDED_RANGE", value = 0xa0, description = "The extended-range ACK rate (hal_he_set_ersu_ack_rate argument nonzero).", sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"]

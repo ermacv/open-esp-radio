@@ -19,8 +19,11 @@ fn low_rate_path_switches_all_three_edges() {
     memory.owners().registers.configure_phy_low_rate(true);
     {
         let owners = memory.owners();
-        assert!(owners.registers.phy_low_rate_enabled());
         let rate = &owners.registers.mac.wifi_phy_rate_oracle_wifi_bb_brx;
+        assert_eq!(
+            rate.read_low_rate_primary_control().low_rate_enable_first(),
+            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled
+        );
         assert_eq!(
             rate.read_low_rate_primary_control()
                 .low_rate_enable_second(),

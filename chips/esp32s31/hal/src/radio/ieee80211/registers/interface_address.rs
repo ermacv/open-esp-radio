@@ -3,7 +3,7 @@
 use oer_chips_esp32s31_pac::wifi_mac::WifiMacInterfaceAddress;
 use oer_portable_mmio::Placement;
 
-use super::{MacInterface, MacPlacement, WifiRadioRegisters, bits};
+use super::{MacInterface, MacPlacement, WifiRadioRegisters};
 
 /// `hal_mac_set_addr`'s three hardware operations, in its order.
 ///
@@ -28,7 +28,7 @@ fn program<P: Placement>(
     block.modify_address_high(index, |w| {
         w.set_bytes_4_5(u16::from_le_bytes([a4, a5]))
             .set_rx_policy_enable(false)
-            .set_bits_17_31_opaque(bits(0));
+            .set_bits_17_31_opaque(oer_portable_mmio::Bits::constant::<0>());
     });
     block.modify_address_high(index, |w| {
         w.set_rx_policy_enable(true);

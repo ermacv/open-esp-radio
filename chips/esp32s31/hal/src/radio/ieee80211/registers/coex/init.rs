@@ -14,7 +14,7 @@ pub struct MacCoexPrioritySnapshot {
 
 /// The four-bit field value of a PTI.
 const fn pti(value: MacPti) -> Bits<4> {
-    bits(value.get())
+    value.field()
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {

@@ -7,7 +7,7 @@
 use oer_chips_esp32s31_pac::layouts::WifiRxDmaDescriptor;
 use oer_portable_memory::DmaRef;
 
-use crate::radio::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters, bits};
+use crate::radio::ieee80211::registers::{MacPlacement, WifiRxDmaRegisters};
 
 /// Field-level observation of `RX_NEXT_DESCRIPTOR`.
 ///
@@ -37,12 +37,13 @@ impl MacRxNextDescriptorObservation {
 /// the descriptor base. Its units and hardware function are not established.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_C68_INIT_IMAGE: u32 = 0x000f_ffff;
+const RX_C68_INIT_IMAGE: oer_portable_mmio::Bits<20> =
+    oer_portable_mmio::Bits::constant::<0x000f_ffff>();
 
 /// The opaque twenty-bit value `mac_rxbuf_init` publishes to `0x0c6c`.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_C6C_INIT_IMAGE: u32 = 4;
+const RX_C6C_INIT_IMAGE: oer_portable_mmio::Bits<20> = oer_portable_mmio::Bits::constant::<4>();
 
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// Initialize the RX walker configuration without publishing a descriptor.
@@ -52,10 +53,10 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// is deliberately excluded because the RX ring owner publishes it later.
     pub fn initialize_mac_rx_buffer_prefix(&mut self) {
         self.dma.modify_word_0c68_opaque(|w| {
-            w.set_bits_0_19_opaque(bits(RX_C68_INIT_IMAGE));
+            w.set_bits_0_19_opaque(RX_C68_INIT_IMAGE);
         });
         self.dma.modify_word_0c6c_opaque(|w| {
-            w.set_bits_0_19_opaque(bits(RX_C6C_INIT_IMAGE));
+            w.set_bits_0_19_opaque(RX_C6C_INIT_IMAGE);
         });
         self.dma.modify_rx_descriptor_high_window(|w| {
             w.set_address_high_prefix();

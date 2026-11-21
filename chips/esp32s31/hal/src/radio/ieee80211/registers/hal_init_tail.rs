@@ -2,9 +2,7 @@
 
 use oer_chips_esp32s31_pac::wifi_mac::rx_csi_control::{Bits0_7Opaque, Bits8_15Opaque};
 
-use super::{
-    MacPlacement, MacSlowClockCalibrationValue, WifiRadioRegisters, WifiRxDmaRegisters, bits,
-};
+use super::{MacPlacement, MacSlowClockCalibrationValue, WifiRadioRegisters, WifiRxDmaRegisters};
 
 /// The RTC calibration field after the vendor OS-interface conversion.
 /// It carries only a register value, not evidence that a clock was measured.
@@ -12,21 +10,24 @@ use super::{
 pub struct MacRtcCalibration(MacSlowClockCalibrationValue);
 
 impl MacRtcCalibration {
-    pub const ZERO: Self = Self(match MacSlowClockCalibrationValue::new(0) {
-        Some(zero) => zero,
-        None => unreachable!(),
-    });
+    pub const ZERO: Self = Self(MacSlowClockCalibrationValue::ZERO);
 
     /// Preserve the exact truncation performed by `hal_timer_update_by_rtc`.
     pub const fn from_osi_value(value: u32) -> Self {
-        match MacSlowClockCalibrationValue::new(value & MacSlowClockCalibrationValue::MAX) {
-            Some(fitted) => Self(fitted),
-            None => unreachable!(),
-        }
+        Self(MacSlowClockCalibrationValue::from_low_bits(value))
     }
 
     pub const fn value(self) -> u32 {
         self.0.get()
+    }
+
+    /// The calibration as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
+    > {
+        self.0.field()
     }
 }
 
@@ -71,7 +72,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_lp_clock_sync_enable(true);
         });
         rtc.modify_slow_clock_calibration(|w| {
-            w.set_value(bits(slow_clock_calibration.value()));
+            w.set_value(slow_clock_calibration.field());
         });
     }
 }

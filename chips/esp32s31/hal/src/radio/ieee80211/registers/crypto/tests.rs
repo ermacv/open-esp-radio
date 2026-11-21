@@ -8,7 +8,7 @@ use oer_chips_esp32s31_pac::wifi_mac::{
 };
 use oer_portable_mmio::Index;
 
-use super::{MacCcmpKeyIdentity, MacKeyInstallOutcome, MacSppMode};
+use super::{MacCcmpKeyIdentity, MacCryptoInterface, MacKeyInstallOutcome, MacSppMode};
 use crate::radio::ieee80211::registers::{HostWords, MacInterface, MacKeyEntryIndex};
 
 const PEER: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
@@ -86,7 +86,7 @@ fn an_association_enables_ccmp_with_its_spp_decision() {
     words
         .owners()
         .registers
-        .configure_mac_ccmp_association(MacInterface::AccessPoint, MacSppMode::Authenticated);
+        .configure_mac_ccmp_association(MacCryptoInterface::AccessPoint, MacSppMode::Authenticated);
     assert_eq!(
         changed(&before, &words),
         [("wifi_mac_crypto_control", interface_control::OFFSET + 4)]
@@ -117,7 +117,7 @@ fn a_context_two_association_keeps_the_station_and_ap_profiles() {
     words
         .owners()
         .registers
-        .configure_mac_ccmp_association(MacInterface::Context2, MacSppMode::Authenticated);
+        .configure_mac_ccmp_association(MacCryptoInterface::Context2, MacSppMode::Authenticated);
     let owners = words.owners();
     let control = &owners.registers.mac.wifi_mac_crypto_control;
     assert_eq!(

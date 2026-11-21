@@ -91,7 +91,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_ac_empty_single_bsr(false);
         });
         init.modify_ersu_and_vht_control(|w| {
-            w.set_bsr_aci_high_comparison_method(Bits::truncate(oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::BsrAciHighComparisonMethod::Method1.bits()));
+            w.set_bsr_aci_high_comparison_method(oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::BsrAciHighComparisonMethod::Method1.into());
         });
     }
 
@@ -133,22 +133,22 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         init.modify_ersu_ack_rate(|w| {
             w.set_rate_0(
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
             );
         });
         init.modify_ersu_ack_rate(|w| {
             w.set_rate_1(
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
             );
         });
         init.modify_ersu_ack_rate(|w| {
             w.set_rate_2(
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
             );
         });
         init.modify_ersu_ack_rate(|w| {
             w.set_rate_3(
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8,
+                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
             );
         });
 

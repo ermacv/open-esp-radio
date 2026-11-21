@@ -7,19 +7,18 @@
 use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 
 pub use crate::types::{
-    ExtraSoftApRxBlockAckEntrySnapshot, MacApReceivePolicySnapshot, MacCoexPrioritySnapshot,
-    MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti, MacRoleReceivePolicy,
-    MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
-    MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
-    MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode, MacStaReceivePolicySnapshot,
+    MacCoexPrioritySnapshot, MacInterface, MacItwtClearIndex, MacKeyInstallOutcome, MacPti,
+    MacRoleReceivePolicy, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta,
+    MacRxHangStatistics, MacRxHangStatisticsDelta, MacRxPrimaryStatistics,
+    MacRxPrimaryStatisticsDelta, MacRxStatisticsSnapshot, MacStaApReceivePlan, MacStaPolicyMode,
     MacTxPowerTable, MacTxPtiCount, MacTxPtiProgram, MacTxQueueIndex, MacTxStatisticsSnapshot,
     RxBlockAckEntrySnapshot,
 };
 
 use crate::types::{
     MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
-    MacHeErSuAckRateProfile, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit,
-    MacHeTid, MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
+    MacHeMpduLength, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
+    MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
     MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
     MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence,
     MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxAbortOutcome,
@@ -345,12 +344,6 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac().read_noise_floor_dbm()
     }
 
-    /// Read the reviewed ROM low-rate enable status while the runtime MAC
-    /// register authority is exclusively borrowed.
-    pub fn phy_low_rate_enabled(&self) -> bool {
-        self.pac().phy_low_rate_enabled()
-    }
-
     /// Apply the complete three-RMW ROM low-rate gate transaction.
     pub fn configure_phy_low_rate(&mut self, enabled: bool) {
         self.pac_mut().configure_phy_low_rate(enabled);
@@ -445,14 +438,6 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac_mut().apply_sta_ap_receive_plan(plan);
     }
 
-    pub fn station_receive_policy_snapshot(&self) -> MacStaReceivePolicySnapshot {
-        self.pac().sta_receive_policy_snapshot()
-    }
-
-    pub fn access_point_receive_policy_snapshot(&self) -> MacApReceivePolicySnapshot {
-        self.pac().ap_receive_policy_snapshot()
-    }
-
     pub fn receive_statistics_snapshot(&self) -> MacRxStatisticsSnapshot {
         self.pac().rx_statistics_snapshot()
     }
@@ -468,7 +453,7 @@ impl<'registers> WifiMacHal<'registers> {
     /// Apply the interface's association mode before its first key installation.
     pub fn configure_ccmp_association(
         &mut self,
-        interface: crate::types::MacInterface,
+        interface: crate::radio::ieee80211::registers::MacCryptoInterface,
         mode: crate::types::MacSppMode,
     ) {
         self.pac_mut()
@@ -602,7 +587,10 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Publish the matching reviewed ER-SU ACK-rate register image.
-    pub fn set_he_ersu_ack_rate_profile(&mut self, profile: MacHeErSuAckRateProfile) {
+    pub fn set_he_ersu_ack_rate_profile(
+        &mut self,
+        profile: oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate,
+    ) {
         self.pac_mut().set_he_ersu_ack_rate_profile(profile);
     }
 
@@ -688,7 +676,7 @@ impl<'registers> WifiMacHal<'registers> {
         policy: MacHeTbTidLimit,
         reservation: MacHeTbLinkReservation,
         tid: MacHeTid,
-        mpdu_lengths: &[u16],
+        mpdu_lengths: &[MacHeMpduLength],
         queued_msdu_bytes: u32,
     ) -> Result<MacHeTriggerTxQueueSnapshot, MacHeTbProgramError> {
         self.pac_mut().prepare_he_trigger_based_queue(
@@ -827,14 +815,6 @@ impl<'registers> WifiMacHal<'registers> {
     ) {
         self.pac_mut()
             .reset_extra_softap_rx_block_ack_window(index, starting_sequence, window);
-    }
-
-    pub fn extra_softap_rx_block_ack_entry_snapshot(
-        &mut self,
-        index: MacExtraSoftApRxBlockAckEntryIndex,
-    ) -> ExtraSoftApRxBlockAckEntrySnapshot {
-        self.pac_mut()
-            .extra_softap_rx_block_ack_entry_snapshot(index)
     }
 
     pub fn set_he_trigger_based_tid_enabled(&mut self, tid: MacHeTid, enabled: bool) {

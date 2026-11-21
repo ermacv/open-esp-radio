@@ -2,33 +2,7 @@
 
 use oer_portable_mmio::Bits;
 
-use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, bits};
-
-/// Four-byte ER-SU ACK-rate image selected by the recovered rate policy.
-///
-/// The byte values are hardware rate encodings, not booleans. Keeping the
-/// choice typed prevents MAC policy from manufacturing other undocumented
-/// images for this register.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacHeErSuAckRateProfile {
-    /// Ordinary report response selected by a zero HAL argument.
-    Ordinary,
-    /// Extended-range report response selected by a nonzero HAL argument.
-    ExtendedRange,
-}
-
-impl MacHeErSuAckRateProfile {
-    pub const fn encoded_byte(self) -> u8 {
-        match self {
-            Self::Ordinary => {
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8
-            }
-            Self::ExtendedRange => {
-                oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::ExtendedRange.bits() as u8
-            }
-        }
-    }
-}
+use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters};
 
 /// Invalid input to the recovered `hal_he_set_bf_report_rate` transform.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,8 +21,9 @@ pub enum MacHeBeamformingReportProfileError {
 /// rely on unsigned wrap and field truncation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeBeamformingReportProfile {
-    signal_mode: u8,
-    normalized_rate: u8,
+    signal_mode:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_SIGNAL_MODE_WIDTH }>,
+    normalized_rate: Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_RATE_WIDTH }>,
     dcm: bool,
     extended_range_single_user: bool,
 }
@@ -61,23 +36,28 @@ impl MacHeBeamformingReportProfile {
         dcm: bool,
         extended_range_single_user: bool,
     ) -> Result<Self, MacHeBeamformingReportProfileError> {
-        if signal_mode > 3 {
+        let Ok(mode) = Bits::new(signal_mode as u32) else {
             return Err(MacHeBeamformingReportProfileError::SignalMode(signal_mode));
-        }
-
-        let normalized_rate = if signal_mode == 0 {
-            if rate_code > 0x1f {
-                return Err(MacHeBeamformingReportProfileError::RateCode {
-                    signal_mode,
-                    rate_code,
-                });
-            }
-            rate_code as u8
+        };
+        // Mode zero takes the rate code as it is; the others take the
+        // offset of a code within its block of ten.
+        let normalized = if signal_mode == 0 {
+            Some(rate_code)
         } else if rate_code >= 0x10 && rate_code <= 0x19 {
-            (rate_code - 0x10) as u8
+            Some(rate_code - 0x10)
         } else if rate_code >= 0x1a && rate_code <= 0x23 {
-            (rate_code - 0x1a) as u8
+            Some(rate_code - 0x1a)
         } else {
+            None
+        };
+        let rate = match normalized {
+            Some(normalized) => match Bits::new(normalized as u32) {
+                Ok(rate) => Some(rate),
+                Err(_) => None,
+            },
+            None => None,
+        };
+        let Some(rate) = rate else {
             return Err(MacHeBeamformingReportProfileError::RateCode {
                 signal_mode,
                 rate_code,
@@ -85,19 +65,21 @@ impl MacHeBeamformingReportProfile {
         };
 
         Ok(Self {
-            signal_mode,
-            normalized_rate,
+            signal_mode: mode,
+            normalized_rate: rate,
             dcm,
             extended_range_single_user,
         })
     }
 
     pub const fn signal_mode(self) -> u8 {
-        self.signal_mode
+        // Two bits: the low byte is the whole value.
+        self.signal_mode.get().to_le_bytes()[0]
     }
 
     pub const fn normalized_rate(self) -> u8 {
-        self.normalized_rate
+        // Five bits: the low byte is the whole value.
+        self.normalized_rate.get().to_le_bytes()[0]
     }
 
     pub const fn dcm(self) -> bool {
@@ -118,8 +100,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp[trc.o]::trc_set_bf_report_rate`. The three fresh-read RMWs and their
     /// high-to-low order are preserved.
     pub fn set_he_beamforming_report_profile(&mut self, profile: MacHeBeamformingReportProfile) {
-        let rate: Bits<5> = bits(u32::from(profile.normalized_rate));
-        let mode: Bits<2> = bits(u32::from(profile.signal_mode));
+        let rate = profile.normalized_rate;
+        let mode = profile.signal_mode;
         let report = &mut self.mac.wifi_mac_he_init_prefix;
         report.modify_bf_report_rate(|w| {
             w.set_qam16_rate(rate)
@@ -148,8 +130,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp[trc.o]::trc_set_bf_report_rate`, size `0x52`.
     /// The four fresh-read byte RMWs and their low-to-high order are
     /// instruction-exact.
-    pub fn set_he_ersu_ack_rate_profile(&mut self, profile: MacHeErSuAckRateProfile) {
-        let encoded = profile.encoded_byte();
+    pub fn set_he_ersu_ack_rate_profile(
+        &mut self,
+        profile: oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate,
+    ) {
+        let encoded = u8::from(profile);
         let ack = &mut self.mac.wifi_mac_he_init_suffix;
         ack.modify_ersu_ack_rate(|w| {
             w.set_rate_0(encoded);

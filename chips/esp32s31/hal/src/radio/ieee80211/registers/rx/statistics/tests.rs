@@ -1,7 +1,9 @@
 use super::{
-    MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
+    MacPlacement, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
     MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
+    WifiRadioRegisters,
 };
+use crate::radio::ieee80211::registers::byte;
 
 fn primary(mpdu_count: u16, buffer_full: u16) -> MacRxPrimaryStatistics {
     MacRxPrimaryStatistics {
@@ -138,11 +140,48 @@ fn the_snapshots_only_read_and_decode_each_counter_at_its_width() {
             snapshot.hang
         );
         assert_eq!(owners.registers.mac_rx_buffer_full_count(), 0x0402);
-        let colors = owners.registers.he_color_collision_snapshot();
+        let colors = he_color_collision_snapshot(&owners.registers);
         assert_eq!(colors.observed_color_bitmap, 0x8001_0402_8001_0402);
     }
     assert!(
         before.changes(&after).is_empty(),
         "a snapshot writes nothing"
     );
+}
+
+// Reads of what the writers left, from the register image: the HAL keeps
+// no read of what it wrote.
+
+/// BSS-color collision state read by the complete blob debug decoder.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MacHeColorCollisionSnapshot {
+    observed_color_bitmap: u64,
+    collision_threshold: u8,
+    timeout_seconds: u8,
+    color_bitmap_clear: bool,
+    bitmap_control_high: bool,
+}
+
+/// Read the recovered HE BSS-color collision state.
+///
+/// SOURCE: complete pinned `libpp.a[hal_debug.o]`
+/// `dbg_read_color_collision`, size `0x64`, and its format strings.
+fn he_color_collision_snapshot<M: MacPlacement>(
+    registers: &WifiRadioRegisters<M>,
+) -> MacHeColorCollisionSnapshot {
+    let colors = &registers.mac.wifi_mac_he_color_collision;
+    let control = registers
+        .mac
+        .wifi_mac_he_init_prefix
+        .read_rx_field_control();
+    let low = colors.read_bss_color_bitmap_low().value();
+    let high = colors.read_bss_color_bitmap_high().value();
+
+    MacHeColorCollisionSnapshot {
+        observed_color_bitmap: u64::from(low) | (u64::from(high) << 32),
+        collision_threshold: byte(control.collision_threshold()),
+        timeout_seconds: byte(control.timeout_seconds()),
+        color_bitmap_clear: control.color_bitmap_clear(),
+        bitmap_control_high: control.bitmap_control_high(),
+    }
 }
