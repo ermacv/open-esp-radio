@@ -10,6 +10,8 @@
 
 use std::{fs, process::Command};
 
+use oer_tools_image_checks::linker::hot;
+
 use object::{
     Architecture, BinaryFormat, Endianness, Object as _, ObjectSection as _, ObjectSymbol as _,
     SectionKind, SymbolFlags, SymbolKind, SymbolScope,
@@ -66,9 +68,16 @@ fn link_stacks(
         vectors.stack_linker(),
     )
     .unwrap();
-    for fragment in ["strict-text.x", "dma-window.x", "hot-code.x"] {
+    for fragment in ["strict-text.x", "dma-window.x"] {
         fs::write(path.join(fragment), "").unwrap();
     }
+    // The image takes hot level 1: the fixture's level-2 function stays
+    // with ordinary code.
+    fs::write(
+        path.join(hot::FRAGMENT),
+        hot::fragment(Some(hot::Level::try_from(1).unwrap())),
+    )
+    .unwrap();
     fs::write(
         path.join("link.x"),
         "ENTRY(_runtime_start)\nINCLUDE memory.x\nINCLUDE sections.x\nINCLUDE oer-staged-runtime-stacks.x\n",
@@ -88,6 +97,23 @@ fn link_stacks(
         section: SymbolSection::Section(text),
         flags: SymbolFlags::None,
     });
+    for (section, symbol) in [
+        (&b".hot.1.text.fixture::taken"[..], &b"taken"[..]),
+        (b".hot.2.text.fixture::not_taken", b"not_taken"),
+    ] {
+        let hot = object.add_section(Vec::new(), section.to_vec(), SectionKind::Text);
+        object.append_section_data(hot, &0x00008067_u32.to_le_bytes(), 4);
+        object.add_symbol(Symbol {
+            name: symbol.to_vec(),
+            value: 0,
+            size: 4,
+            kind: SymbolKind::Text,
+            scope: SymbolScope::Linkage,
+            weak: false,
+            section: SymbolSection::Section(hot),
+            flags: SymbolFlags::None,
+        });
+    }
     let isr = object.add_section(Vec::new(), b".isr.text".to_vec(), SectionKind::Text);
     object.append_section_data(isr, &0x00008067_u32.to_le_bytes(), 4);
     let bss = object.add_section(
@@ -162,6 +188,30 @@ fn exact_noload_stacks_precede_isr_code_and_leave_only_state_in_critical_bss() {
             assert_eq!(elf.section_by_name(".critical.bss").unwrap().size(), 64);
         }
     }
+}
+
+#[test]
+fn the_hot_levels_an_image_takes_load_in_sram_and_the_others_with_ordinary_code() {
+    let bytes = link(1, &[32768], 0x20000000).unwrap();
+    let elf = object::File::parse(&*bytes).unwrap();
+    let address = |name: &str| elf.symbol_by_name(name).unwrap().address();
+    let section = |name: &str| elf.section_by_name(name).unwrap();
+    let level = section(".hot.1.text");
+    assert_eq!(address("taken"), level.address());
+    assert!(address("__runtime_hot_text_start") <= level.address());
+    assert_eq!(
+        address("__runtime_hot_text_end"),
+        level.address() + level.size()
+    );
+    let text = section(".text");
+    assert!((text.address()..text.address() + text.size()).contains(&address("not_taken")));
+    assert!(elf.section_by_name(".hot.2.text").is_none());
+    // One copy at start: the levels load at the hot code's offset (the
+    // script asserts it), so the load image is as long as the code.
+    assert_eq!(
+        address("__runtime_hot_text_load_end") - address("__runtime_hot_text_load_start"),
+        address("__runtime_hot_text_end") - address("__runtime_hot_text_start")
+    );
 }
 
 #[test]

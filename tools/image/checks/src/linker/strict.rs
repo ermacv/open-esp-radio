@@ -52,6 +52,9 @@ pub struct Spec {
     /// (`task-stack-reserve-bytes`); absent, the stack policy's.
     #[serde(default)]
     pub task_stack_reserve_bytes: Option<u32>,
+    /// The highest hot level the image takes (`hot`); absent, none.
+    #[serde(default)]
+    pub hot: Option<super::hot::Level>,
 }
 
 impl Spec {

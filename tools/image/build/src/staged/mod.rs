@@ -35,6 +35,8 @@ pub(crate) struct CompileInput<'a> {
     harts: &'a [u32],
     irq_stacks: &'a crate::irq_stack::IrqStackChoices,
     panics: &'a oer_tools_image_checks::panics::Contract,
+    /// The highest hot level the image takes.
+    hot: Option<oer_tools_image_checks::linker::hot::Level>,
     output: &'a Path,
     log: &'a BuildLog,
 }
@@ -62,6 +64,7 @@ pub(crate) fn build(
     harts: &[u32],
     irq_stacks: &crate::irq_stack::IrqStackChoices,
     panics: &oer_tools_image_checks::panics::Contract,
+    hot: Option<oer_tools_image_checks::linker::hot::Level>,
     compile: impl FnOnce(&CompileInput<'_>, &mut ImageBundle) -> Result<Compiled>,
 ) -> Result<ImageBundle> {
     let root = spec.root.as_path();
@@ -114,6 +117,7 @@ pub(crate) fn build(
             harts,
             irq_stacks,
             panics,
+            hot,
             output: &output,
             log: &log,
         },

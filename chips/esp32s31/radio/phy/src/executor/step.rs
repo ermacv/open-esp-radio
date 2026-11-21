@@ -694,147 +694,205 @@ impl<
 > Future for Driver<'a, '_, R, T, F, M, D>
 {
     type Output = Result<(), Failure>;
-    oer_chips_esp32s31_hal::place_phy_engine_hot_path! {
-        /// One engine poll per timer/register type, shared by all families.
-        #[inline(never)]
-        fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-            let mut this = self.project();
-            let mut route = this.route.as_mut().project();
-            let clock = &rfpll::OutlinedClock(*this.timer);
-            let started = match &route {
-                RouteProj::Transport { stats, .. } => stats.as_ref().map(|_| clock.now()),
-                RouteProj::Power { measured, .. } => measured.then(|| clock.now()),
-            };
-            let mut resumed = None;
-            let mut advanced = false;
-            let mut ready_elapsed = None;
-            let mut ready_started = None;
-            let mut rfpll_sample = None;
-            let batch_started = started.unwrap_or_else(|| clock.now());
-            let result = loop {
-                if *this.gate == Gate::Yield {
-                    if let Some(trace) = this.trace.as_deref_mut() {
-                        if let RouteProj::Transport { wait_at, .. } = &route {
-                            trace.yield_resumed(clock.now().saturating_duration_since(**wait_at).as_micros());
-                        }
+    /// One engine poll per timer/register type, shared by all families.
+    #[oer_portable_hot::hot(1)]
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let mut route = this.route.as_mut().project();
+        let clock = &rfpll::OutlinedClock(*this.timer);
+        let started = match &route {
+            RouteProj::Transport { stats, .. } => stats.as_ref().map(|_| clock.now()),
+            RouteProj::Power { measured, .. } => measured.then(|| clock.now()),
+        };
+        let mut resumed = None;
+        let mut advanced = false;
+        let mut ready_elapsed = None;
+        let mut ready_started = None;
+        let mut rfpll_sample = None;
+        let batch_started = started.unwrap_or_else(|| clock.now());
+        let result = loop {
+            if *this.gate == Gate::Yield {
+                if let Some(trace) = this.trace.as_deref_mut() {
+                    if let RouteProj::Transport { wait_at, .. } = &route {
+                        trace.yield_resumed(
+                            clock.now().saturating_duration_since(**wait_at).as_micros(),
+                        );
                     }
-                    *this.gate = Gate::Idle;
                 }
-                if *this.gate != Gate::Idle {
-                    let RouteProj::Transport { wait_at, .. } = &route else { break Poll::Ready(Err(Failure::Binding)); };
-                    let at = **wait_at;
-                    let ready = if *this.gate == Gate::Ready {
-                        true
-                    } else if let RouteProj::Transport { wait, .. } = &mut route {
-                        if let Some(wait) = wait.as_mut().as_pin_mut() {
-                            poll_timer(wait, context).is_ready()
-                        } else { break Poll::Ready(Err(Failure::Binding)); }
-                    } else { break Poll::Ready(Err(Failure::Binding)); };
-                    if advanced {
-                        *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
-                        if ready { context.waker().wake_by_ref(); }
-                        break Poll::Pending;
-                    }
-                    if !ready { break Poll::Pending; }
-                    resumed = Some((at, clock.now()));
-                    *this.gate = Gate::Idle;
-                }
-                let (step, now) = match &mut route {
-                    RouteProj::Transport { job, stats, .. } => {
-                        let sample = this.trace.as_ref().and_then(|_| match &job.work {
-                            Work::I2c(t) => match t.action() {
-                                PhyColdI2cAction::StartRead { .. } | PhyColdI2cAction::StartWrite { .. } => Some(None),
-                                PhyColdI2cAction::AwaitReadCompletionEdge { .. }
-                                | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => Some(Some(job.first_wait)),
-                                _ => None,
-                            },
-                            _ => None,
-                        });
-                        let now = if matches!(&job.work, Work::Rfpll(_) | Work::Dcode { .. }) { Instant::EPOCH } else { clock.now() };
-                        let mut step = this.registers.advance::<D, _>(job, *this.timer, now);
-                        if job.first_wait {
-                            match answer_deadline(clock.now()) {
-                                Ok(at) => job.deadline = at,
-                                Err(error) => step = Step::Failure(error),
-                            }
-                        }
-                        if stats.is_some() {
-                            if let Some(at) = job.ready_started.take() {
-                                let at = *ready_started.get_or_insert(at);
-                                ready_elapsed = Some(clock.now().saturating_duration_since(at));
-                            }
-                        }
-                        if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
-                            if let Some(first) = sample {
-                                trace_checked(trace, *this.registers, now, first, step, resumed);
-                            } else if job.first_wait { trace.command_started(clock.now()); }
-                        }
-                        (step, now)
-                    }
-                    RouteProj::Power { child, measured, gain: cursor, .. } => {
-                        let Some(child) = child.as_mut() else { break Poll::Ready(Err(Failure::Binding)); };
-                        use crate::tracking::power::PhyTxPowerTrackingAction as Action;
-                        let action = child.action();
-                        let gain = **measured && matches!(action,
-                            Action::RegenerateWifiGain { .. } | Action::RegenerateBluetoothIeee802154Gain { .. });
-                        let at = gain.then(|| clock.now());
-                        // This owning route calls stepped control/gain atoms directly;
-                        // no monolithic gain-image lowering is reachable here.
-                        let step = this.registers.advance_power::<D, _>(child, cursor, action, clock, gain);
-                        if let Some(at) = at { ready_elapsed = Some(clock.now().saturating_duration_since(at)); }
-                        (step, Instant::EPOCH)
-                    }
+                *this.gate = Gate::Idle;
+            }
+            if *this.gate != Gate::Idle {
+                let RouteProj::Transport { wait_at, .. } = &route else {
+                    break Poll::Ready(Err(Failure::Binding));
                 };
-                let at = match step {
-                    Step::Complete => break Poll::Ready(Ok(())),
-                    Step::Failure(error) => break Poll::Ready(Err(error)),
-                    Step::Rfpll(_) | Step::Runnable => {
-                        if let Step::Rfpll(sample) = step { rfpll_sample = Some(sample); }
-                        if this.rfpll.is_none() && !this.timer.should_yield()
-                            && clock.now().saturating_duration_since(batch_started).as_micros() < POLL_ADMISSION_MICROS
-                        {
-                            continue;
-                        }
-                        *this.gate = Gate::Yield;
+                let at = **wait_at;
+                let ready = if *this.gate == Gate::Ready {
+                    true
+                } else if let RouteProj::Transport { wait, .. } = &mut route {
+                    if let Some(wait) = wait.as_mut().as_pin_mut() {
+                        poll_timer(wait, context).is_ready()
+                    } else {
+                        break Poll::Ready(Err(Failure::Binding));
+                    }
+                } else {
+                    break Poll::Ready(Err(Failure::Binding));
+                };
+                if advanced {
+                    *this.gate = if ready { Gate::Ready } else { Gate::Waiting };
+                    if ready {
                         context.waker().wake_by_ref();
-                        if this.trace.is_some() {
-                            if let RouteProj::Transport { wait_at, .. } = &mut route { **wait_at = clock.now(); }
+                    }
+                    break Poll::Pending;
+                }
+                if !ready {
+                    break Poll::Pending;
+                }
+                resumed = Some((at, clock.now()));
+                *this.gate = Gate::Idle;
+            }
+            let (step, now) = match &mut route {
+                RouteProj::Transport { job, stats, .. } => {
+                    let sample = this.trace.as_ref().and_then(|_| match &job.work {
+                        Work::I2c(t) => match t.action() {
+                            PhyColdI2cAction::StartRead { .. }
+                            | PhyColdI2cAction::StartWrite { .. } => Some(None),
+                            PhyColdI2cAction::AwaitReadCompletionEdge { .. }
+                            | PhyColdI2cAction::AwaitWriteCompletionEdge { .. } => {
+                                Some(Some(job.first_wait))
+                            }
+                            _ => None,
+                        },
+                        _ => None,
+                    });
+                    let now = if matches!(&job.work, Work::Rfpll(_) | Work::Dcode { .. }) {
+                        Instant::EPOCH
+                    } else {
+                        clock.now()
+                    };
+                    let mut step = this.registers.advance::<D, _>(job, *this.timer, now);
+                    if job.first_wait {
+                        match answer_deadline(clock.now()) {
+                            Ok(at) => job.deadline = at,
+                            Err(error) => step = Step::Failure(error),
                         }
-                        break Poll::Pending;
                     }
-                    Step::WaitAt(at) => {
-                        let completed = clock.now();
-                        let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
-                            break Poll::Ready(Err(Failure::DeadlineOverflow));
-                        };
-                        let RouteProj::Transport { job, .. } = &route else {
-                            break Poll::Ready(Err(Failure::Binding));
-                        };
-                        if job.first_wait { at } else { at.min(job.deadline) }
+                    if stats.is_some() {
+                        if let Some(at) = job.ready_started.take() {
+                            let at = *ready_started.get_or_insert(at);
+                            ready_elapsed = Some(clock.now().saturating_duration_since(at));
+                        }
                     }
-                };
-                let RouteProj::Transport { wait_at, .. } = &mut route else { break Poll::Ready(Err(Failure::Binding)); };
-                **wait_at = at;
-                if at <= clock.now() { *this.gate = Gate::Ready; }
-                else {
-                    let RouteProj::Transport { wait, .. } = &mut route else {
+                    if let (Some(trace), Some(sample)) = (this.trace.as_deref_mut(), sample) {
+                        if let Some(first) = sample {
+                            trace_checked(trace, *this.registers, now, first, step, resumed);
+                        } else if job.first_wait {
+                            trace.command_started(clock.now());
+                        }
+                    }
+                    (step, now)
+                }
+                RouteProj::Power {
+                    child,
+                    measured,
+                    gain: cursor,
+                    ..
+                } => {
+                    let Some(child) = child.as_mut() else {
                         break Poll::Ready(Err(Failure::Binding));
                     };
-                    wait.as_mut().set(Some((this.make_wait)(*this.timer, at)));
-                    *this.gate = Gate::Waiting;
+                    use crate::tracking::power::PhyTxPowerTrackingAction as Action;
+                    let action = child.action();
+                    let gain = **measured
+                        && matches!(
+                            action,
+                            Action::RegenerateWifiGain { .. }
+                                | Action::RegenerateBluetoothIeee802154Gain { .. }
+                        );
+                    let at = gain.then(|| clock.now());
+                    // This owning route calls stepped control/gain atoms directly;
+                    // no monolithic gain-image lowering is reachable here.
+                    let step = this
+                        .registers
+                        .advance_power::<D, _>(child, cursor, action, clock, gain);
+                    if let Some(at) = at {
+                        ready_elapsed = Some(clock.now().saturating_duration_since(at));
+                    }
+                    (step, Instant::EPOCH)
                 }
-                advanced = true;
             };
-            let stats = match route {
-                RouteProj::Transport { stats, .. } => stats.as_deref_mut(),
-                RouteProj::Power { timing, measured, .. } => measured.then_some(timing),
+            let at = match step {
+                Step::Complete => break Poll::Ready(Ok(())),
+                Step::Failure(error) => break Poll::Ready(Err(error)),
+                Step::Rfpll(_) | Step::Runnable => {
+                    if let Step::Rfpll(sample) = step {
+                        rfpll_sample = Some(sample);
+                    }
+                    if this.rfpll.is_none()
+                        && !this.timer.should_yield()
+                        && clock
+                            .now()
+                            .saturating_duration_since(batch_started)
+                            .as_micros()
+                            < POLL_ADMISSION_MICROS
+                    {
+                        continue;
+                    }
+                    *this.gate = Gate::Yield;
+                    context.waker().wake_by_ref();
+                    if this.trace.is_some() {
+                        if let RouteProj::Transport { wait_at, .. } = &mut route {
+                            **wait_at = clock.now();
+                        }
+                    }
+                    break Poll::Pending;
+                }
+                Step::WaitAt(at) => {
+                    let completed = clock.now();
+                    let Some(at) = completed.checked_add(at.saturating_duration_since(now)) else {
+                        break Poll::Ready(Err(Failure::DeadlineOverflow));
+                    };
+                    let RouteProj::Transport { job, .. } = &route else {
+                        break Poll::Ready(Err(Failure::Binding));
+                    };
+                    if job.first_wait {
+                        at
+                    } else {
+                        at.min(job.deadline)
+                    }
+                }
             };
-            if let (Some(stats), Some(started)) = (stats, started) {
-                stats.poll_finished(clock, started, result.is_pending(), resumed,
-                    ready_elapsed, this.rfpll.as_deref_mut().zip(rfpll_sample));
+            let RouteProj::Transport { wait_at, .. } = &mut route else {
+                break Poll::Ready(Err(Failure::Binding));
+            };
+            **wait_at = at;
+            if at <= clock.now() {
+                *this.gate = Gate::Ready;
+            } else {
+                let RouteProj::Transport { wait, .. } = &mut route else {
+                    break Poll::Ready(Err(Failure::Binding));
+                };
+                wait.as_mut().set(Some((this.make_wait)(*this.timer, at)));
+                *this.gate = Gate::Waiting;
             }
-            result
+            advanced = true;
+        };
+        let stats = match route {
+            RouteProj::Transport { stats, .. } => stats.as_deref_mut(),
+            RouteProj::Power {
+                timing, measured, ..
+            } => measured.then_some(timing),
+        };
+        if let (Some(stats), Some(started)) = (stats, started) {
+            stats.poll_finished(
+                clock,
+                started,
+                result.is_pending(),
+                resumed,
+                ready_elapsed,
+                this.rfpll.as_deref_mut().zip(rfpll_sample),
+            );
         }
+        result
     }
 }
 

@@ -25,6 +25,7 @@ use std::{
     path::PathBuf,
 };
 
+pub mod hot;
 pub mod irq_stacks;
 pub mod strict;
 pub mod task_stack;
@@ -159,8 +160,10 @@ fn link(
         .parent()
         .ok_or("image linker specification has no directory")?;
     let output = output_file(arguments).ok_or("runtime link has no -o output ELF")?;
-    // A previous build's fragments must never affect the first pass.
+    // A previous build's fragments must never affect the first pass. The
+    // hot levels the image takes are its choice, the same in both passes.
     std::fs::write(directory.join(strict::FRAGMENT), "")?;
+    std::fs::write(directory.join(hot::FRAGMENT), hot::fragment(spec.hot))?;
     arguments.push("-L".into());
     arguments.push(directory.into());
     let code = run_linker(arguments);

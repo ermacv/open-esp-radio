@@ -83,22 +83,25 @@ SECTIONS
   __runtime_isr_load_start = LOADADDR(.isr.text);
   __runtime_isr_load_end = LOADADDR(.isr.text) + SIZEOF(.isr.text);
 
-  /* Modules classify optional performance-sensitive code with semantic
-     .hot.text.* input sections, which execute from internal SRAM. Code that
-     can carry no section of its own, generic and in crates that forbid
-     unsafe code, the chip names in its hot-code.x; this
-     script stays unaware of module names and Rust symbol mangling. */
+  /* Hot code: a function marked `#[hot(N)]` (oer-portable-hot) has an
+     input section of its own, `.hot.<N>.text.*`. The image linker writes
+     hot-text.x from the image's `hot` level: an output section
+     `.hot.<N>.text` a level the image takes, here in SRAM, each following
+     this one's load offset. The levels it does not take fall into `.text`
+     by the rule there. This script names no module and no level. */
   .hot.text ALIGN(ADDR(.isr.text) + SIZEOF(.isr.text), 64) :
     AT(ALIGN(LOADADDR(.isr.text) + SIZEOF(.isr.text), 64))
   {
     __runtime_hot_text_start = ABSOLUTE(.);
-    *(.hot.text .hot.text.*);
-    INCLUDE hot-code.x
+  } > INTERNAL_LOW
+  INCLUDE hot-text.x
+  .hot.text.end :
+  {
     . = ALIGN(4);
     __runtime_hot_text_end = ABSOLUTE(.);
   } > INTERNAL_LOW
   __runtime_hot_text_load_start = LOADADDR(.hot.text);
-  __runtime_hot_text_load_end = LOADADDR(.hot.text) + SIZEOF(.hot.text);
+  __runtime_hot_text_load_end = LOADADDR(.hot.text.end);
 
   /* Explicit ISR/flash-safe constants and initialized interrupt-owned state.
      Runtime copies this range before interrupts are enabled. */
@@ -157,6 +160,8 @@ SECTIONS
     KEEP(*(.text.runtime_trap));
     KEEP(*(.text.instruction_stream));
     *(.text .text.*);
+    /* Hot code of the levels the image does not take (hot-text.x). */
+    *(.hot.*.text.*);
     *(.init .init.*);
     __runtime_text_end = ABSOLUTE(.);
   } > PSRAM_RUNTIME
@@ -311,6 +316,9 @@ INCLUDE dma-window.x
 ASSERT((__runtime_isr_load_start & 3) == 0 &&
        ((__runtime_isr_end - __runtime_isr_start) & 3) == 0,
        "runtime interrupt copy must be word aligned");
+ASSERT(LOADADDR(.hot.text.end) - ADDR(.hot.text.end) ==
+       LOADADDR(.hot.text) - ADDR(.hot.text),
+       "runtime hot code must load as one copy");
 ASSERT((__runtime_hot_text_load_start & 3) == 0 &&
        ((__runtime_hot_text_end - __runtime_hot_text_start) & 3) == 0,
        "runtime hot-text copy must be word aligned");

@@ -1520,6 +1520,7 @@ dependencies = [
  "oer-chips-family-radio-phy",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
+ "oer-portable-hot",
  "oer-portable-memory",
  "oer-portable-time",
  "oer-portable-time-virtual",
@@ -2130,6 +2131,10 @@ dependencies = [
 
 [[package]]
 name = "oer-portable-events"
+version = "0.1.0"
+
+[[package]]
+name = "oer-portable-hot"
 version = "0.1.0"
 
 [[package]]
@@ -2827,6 +2832,7 @@ dependencies = [
  "object",
  "oer-chips-family-facts",
  "oer-chips-family-platform-runtime",
+ "oer-portable-hot",
  "oer-tools-analysis-elf",
  "oer-tools-analysis-riscv-decode",
  "oer-tools-analysis-riscv-lift",

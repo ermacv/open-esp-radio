@@ -62,11 +62,9 @@ static RING_PLACE: static_cell::StaticCell<MaybeUninit<Ring>> = static_cell::Sta
 
 use crate::phy_pilot;
 
-// SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
-// each generated wrapper retains the interrupt-table ABI and owned part.
 oer_chips_family_platform_interrupt_table::interrupt_table! {
     lines: oer_chips_family_platform_runtime::interrupts::LINES,
-    handler_attributes: [#[unsafe(link_section = ".hot.text.case_c_sender_vectors")]];
+    handler_attributes: [];
     contexts { app: 1; radio_exec: 2; radio_irq: 3; }
     wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
     // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:

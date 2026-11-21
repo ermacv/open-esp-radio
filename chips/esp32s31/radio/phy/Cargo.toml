@@ -14,6 +14,7 @@ radio-health = []
 oer-chips-family-radio-phy = { path = "../../../family/radio/phy" }
 oer-chips-family-drivers-regi2c = { path = "../../../family/drivers/regi2c" }
 oer-portable-diagnostics = { path = "../../../../portable/diagnostics" }
+oer-portable-hot = { path = "../../../../portable/hot" }
 oer-portable-time = { path = "../../../../portable/time" }
 oer-portable-cooperate = { path = "../../../../portable/cooperate" }
 oer-portable-memory = { path = "../../../../portable/memory" }

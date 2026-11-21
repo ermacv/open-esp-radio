@@ -32,16 +32,18 @@ facts at build time; the host checks read the same facts.
 - The image linker selects strict code by analysis and places its input
   sections in SRAM through `strict-text.x`: [execution in the
   architecture](architecture.md#execution) and [image checks](../tools/image/checks/README.md).
-- `.hot.text` places code in SRAM for performance, from semantic
-  `.hot.text.*` input sections written in code:
-  [`place_rx_hot_path!`](../chips/esp32s31/hal/src/radio/ieee80211/dma.rs) for
-  the RX path and [the PHY engine](../chips/esp32s31/hal/src/radio/phy.rs). The
-  Wi-Fi datapath's generic code carries no section of its own: the chip's
-  [`hot-code.x`](../chips/esp32s31/platform/layout/linker/hot-code.x) names its
-  functions, because a turn reaches more code than the L1 instruction cache
-  holds and PSRAM behind it sets the turn's time. What goes on the list
-  is code a data turn runs, chosen by what it does; it never comes from a
-  profile.
+- Hot code is said at the function: [`#[hot(N)]`](../portable/hot/src/lib.rs),
+  N from 1 (1 is the best gain a byte), gives the function a section of
+  its own, `.hot.<N>.text.*`, and keeps it from being inlined. It says
+  nothing of memory. An image names the highest level it takes,
+  `[package.metadata.open-radio] hot = N` (absent, none); the image linker
+  writes `hot-text.x` from it, which gives each level taken an output
+  section `.hot.<N>.text` in SRAM, and the levels not taken fall into
+  `.text` ([runtime sections](../chips/family/platform/layout/linker/runtime/sections.x)).
+  The sizes report gives each level's bytes as its section's; the linker's
+  limit of the SRAM holds them. Nothing is selected by name from a file.
+  Today the S31 PHY's engine poll is level 1, and every image that links
+  the PHY takes it.
 - The staged platform uses `.trap`, `.rwtext` and
   `.flash.critical.text` conventions collected by the
   [runtime linker script](../chips/family/platform/layout/linker/runtime/sections.x).

@@ -51,6 +51,7 @@ pub mod encode;
 pub mod esp_idf;
 pub mod exclusion;
 mod harts;
+mod hot;
 pub mod images;
 pub mod instrumentation;
 mod irq_stack;
@@ -145,6 +146,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let harts = harts::declared(&spec.root, &spec.application, &profile)?;
     let irq_stacks = irq_stack::declared(&spec.root, &spec.application.package, &profile)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
+    let hot = hot::declared(&spec.root, &spec.application.package)?;
     staged::build(
         spec,
         &profile,
@@ -154,6 +156,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
         &harts,
         &irq_stacks,
         &panics,
+        hot,
         staged::cargo,
     )
 }

@@ -1,0 +1,14 @@
+[package]
+name = "oer-portable-hot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The #[hot(N)] attribute: a function's place in the image's choice of SRAM code"
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

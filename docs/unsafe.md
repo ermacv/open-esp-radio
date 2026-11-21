@@ -153,6 +153,7 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | Semantic PACs and the HAL | `chips/esp32s31/pac`, `chips/esp32s31/hal` |
 | Platform, interrupt bindings, executor and architectural instructions | `chips/esp32s31/platform/board`, `chips/family/platform/bootstrap`, `chips/family/platform/runtime`, `chips/family/platform/interrupt-table`, `chips/family/platform/executor`, `portable/riscv` |
 | Cores of memory the hardware shares | `portable/memory`, `chips/family/platform/layout` |
+| The hot-code attribute | `portable/hot` |
 | The host's operating-system bindings | `tools/os/process`, `tools/os/serial` |
 | The C-driver stand (kept as sources, not built) | `tools/vendor/ieee802154-esp32s31` |
 | Bootstrap and probe images | `chips/esp32s31/platform/bootstrap/`, `hil/probes/` |
@@ -182,6 +183,16 @@ calls `vector` (the lint policy), that vector is exported as
 `__oer_interrupt_h<HART>_l<LINE>`, which only that hart's vector table names
 (generated from the facts), and the router binds the entry only on its hart.
 The crate has 7 unsafe sites, the promise's one call among them.
+
+`oer-portable-hot` is a proc-macro crate whose one attribute, `#[hot(N)]`,
+writes `#[unsafe(link_section = ".hot.<N>.text.<module path>::<name>")]`
+and `#[inline(never)]` on a bare-metal target, and nothing on the host. Its
+contract: it takes functions only, and writes section names of the one
+family `.hot.<N>.text.*`, which the platform's runtime script maps to
+executable memory whether the image takes the level (SRAM) or not (`.text`).
+A wrong level costs SRAM, never soundness. The attribute is the expansion's,
+so a crate that uses it keeps `#![forbid(unsafe_code)]`; the crate itself
+forbids unsafe code and has no unsafe site of its own.
 
 ## Generated access and trusted handwritten code
 
