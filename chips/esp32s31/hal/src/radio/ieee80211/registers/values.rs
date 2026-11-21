@@ -942,34 +942,22 @@ impl StationTsfHighWord {
     }
 }
 
-/// Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacItwtControlMaskedInput(u32);
-
-impl MacItwtControlMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
+/// The first argument of the vendor's `hal_set_itwt_pti`, which writes the
+/// low byte of `ITWT_CONTROL` as `seqz(argument)`: one for a zero argument,
+/// zero for any other. The byte's meaning is not established; these are the
+/// two images the vendor writes.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MacItwtArgument {
+    Zero,
+    Nonzero,
 }
 
-/// Boolean state shared by the three separately ordered low-rate control edges.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum PhyLowRateState {
-    /// Disable the selected PHY low-rate control edge.
-    Disabled,
-    /// Enable the selected PHY low-rate control edge.
-    Enabled,
-}
-
-impl PhyLowRateState {
-    /// Numeric image for diagnostics.
-    pub const fn bits(self) -> u32 {
-        match self { Self::Disabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Disabled.bits(), Self::Enabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled.bits() }
+impl MacItwtArgument {
+    /// The control byte the vendor writes for the argument.
+    pub(crate) const fn control_byte(self) -> u8 {
+        match self {
+            Self::Zero => 1,
+            Self::Nonzero => 0,
+        }
     }
 }

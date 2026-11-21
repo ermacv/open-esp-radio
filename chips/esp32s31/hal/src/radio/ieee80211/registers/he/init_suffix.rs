@@ -101,14 +101,17 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp[hal_mac_ctl.o]::hal_he_set_ersu` and
     /// `libnet80211.a[ieee80211_he.o]`
     /// `ieee80211_parse_heopr`, whose format string names complete-IE byte
-    /// five bit zero `ER-SU-Disable`. A true argument clears the blob-named
-    /// `AUTO_ACK_ALLOW_ERSU` bit; false sets it. The permitted leaf also
+    /// five bit zero `ER-SU-Disable`. The IE's `ER-SU-Disable` is the blob-named
+    /// `AUTO_ACK_ALLOW_ERSU` bit's `DISALLOWED`. The permitted leaf also
     /// rewrites ACK-rate bytes already initialized by the cold HE suffix.
-    pub fn set_he_extended_range_single_user_disabled(&mut self, disabled: bool) {
+    pub fn set_he_extended_range_single_user(
+        &mut self,
+        allowed: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu,
+    ) {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_ersu_and_vht_control(|w| {
-                w.set_auto_ack_allow_ersu(!disabled);
+                w.set_auto_ack_allow_ersu(allowed);
             });
     }
 
@@ -129,7 +132,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // hal_he_set_ersu_ack_rate(0) child. The four bytes are deliberately
         // four fresh-read RMWs rather than one full-word write.
         init.modify_ersu_and_vht_control(|w| {
-            w.set_auto_ack_allow_ersu(true);
+            w.set_auto_ack_allow_ersu(
+                oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+            );
         });
         init.modify_ersu_ack_rate(|w| {
             w.set_rate_0(

@@ -223,7 +223,11 @@ fn the_rx_delivery_group_masks_and_unmasks_alone() {
         .publish_mac_interrupt_mask(MacInterruptMask::STATION);
     owners.mac_interrupt.mask_rx_delivery_interrupts();
     let enable = owners.mac_interrupt.mac.read_enable();
-    assert!(!enable.rx_success() && !enable.rx_associated_auxiliary_5());
+    assert!(
+        !(enable.rx_success() == oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled)
+            && !(enable.rx_associated_auxiliary_5()
+                == oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled)
+    );
     assert!(enable.tx_complete(), "TX stays live");
     owners.mac_interrupt.unmask_rx_delivery_interrupts();
     assert_eq!(
@@ -392,17 +396,19 @@ fn observe_mac_interrupt_enable<P: Placement>(
         && enable.bits_25_26_opaque().get() == 0
         && enable.bits_29_31_opaque().get() == 0;
     let station_fields = [
-        enable.rx_associated_auxiliary_5(),
+        (enable.rx_associated_auxiliary_5()
+            == oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled),
         enable.bit_6_opaque(),
         enable.tx_complete(),
         enable.watchdog(),
         enable.bit_12_opaque(),
         enable.bit_13_opaque(),
-        enable.rx_success(),
+        (enable.rx_success() == oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled),
         enable.tx_timeout(),
         enable.fatal_assertion(),
         enable.bit_23_opaque(),
-        enable.rx_associated_auxiliary_24(),
+        (enable.rx_associated_auxiliary_24()
+            == oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Enabled),
         enable.wdev_timer_0(),
         enable.wdev_timer_1(),
     ];
@@ -430,13 +436,18 @@ fn opaque_interrupt_enable<P: Placement>(
 fn rx_interrupt_enable<P: Placement>(interrupt: &WifiMacInterrupt<P>) -> super::MacRxInterrupts {
     use super::{MacRxInterrupts, MacRxLane};
     let value = interrupt.read_enable();
-    MacRxInterrupts::of_bit(value.rx_associated_auxiliary_5(), MacRxLane::Auxiliary5)
-        .union(MacRxInterrupts::of_bit(
-            value.rx_success(),
-            MacRxLane::Success,
-        ))
-        .union(MacRxInterrupts::of_bit(
-            value.rx_associated_auxiliary_24(),
-            MacRxLane::Auxiliary24,
-        ))
+    MacRxInterrupts::of_bit(
+        (value.rx_associated_auxiliary_5()
+            == oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled),
+        MacRxLane::Auxiliary5,
+    )
+    .union(MacRxInterrupts::of_bit(
+        (value.rx_success() == oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled),
+        MacRxLane::Success,
+    ))
+    .union(MacRxInterrupts::of_bit(
+        (value.rx_associated_auxiliary_24()
+            == oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Enabled),
+        MacRxLane::Auxiliary24,
+    ))
 }

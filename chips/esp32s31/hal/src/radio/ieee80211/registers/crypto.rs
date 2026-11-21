@@ -8,12 +8,9 @@ use oer_portable_mmio::Bits;
 
 const KEY_ENTRY_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
 
-/// Hardware authentication of the QoS A-MSDU-present bit for one interface.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MacSppMode {
-    Authenticated,
-    Unauthenticated,
-}
+/// Hardware authentication of the QoS A-MSDU-present bit for one interface:
+/// the model's `SPP_AMSDU` dictionary.
+pub use oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu as MacSppMode;
 
 /// Semantic identity encoded into one CCMP hardware key-table entry.
 ///
@@ -167,7 +164,7 @@ fn publish_key_entry_validity<P: Placement>(
 struct InterfaceControl {
     bits_0_1: Bits<2>,
     bit_8: bool,
-    spp_amsdu: bool,
+    spp_amsdu: MacSppMode,
     bit_16: bool,
     bit_17: bool,
 }
@@ -296,7 +293,11 @@ fn clear_key_entry_words<P: Placement>(
 
 // Complete ordinary CCMP enable leaf. Keys preserve the interface's prior SPP
 // decision; only configuring a new association supplies a different value.
-fn enable_ccmp<P: Placement>(control: &mut WifiMacCryptoControl<P>, index: Index<3>, spp: bool) {
+fn enable_ccmp<P: Placement>(
+    control: &mut WifiMacCryptoControl<P>,
+    index: Index<3>,
+    spp: MacSppMode,
+) {
     store_interface_control(
         control,
         index,
@@ -341,7 +342,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 InterfaceControl {
                     bits_0_1: Bits::constant::<0>(),
                     bit_8: false,
-                    spp_amsdu: false,
+                    spp_amsdu: MacSppMode::Unauthenticated,
                     bit_16: initial_flags,
                     bit_17: initial_flags,
                 },
@@ -373,7 +374,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         enable_ccmp(
             &mut self.mac.wifi_mac_crypto_control,
             interface_control(interface),
-            matches!(mode, MacSppMode::Authenticated),
+            mode,
         );
         oer_portable_riscv::fence();
     }

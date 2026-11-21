@@ -1,6 +1,6 @@
 //! Closed runtime Wi-Fi COEX/PTI register leaves.
 
-use super::super::{MacItwtClearIndex, MacPlacement, MacPti, WifiRadioRegisters};
+use super::super::{MacItwtArgument, MacItwtClearIndex, MacPlacement, MacPti, WifiRadioRegisters};
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Publish receive-beacon and shared receive PTI in vendor instruction order.
@@ -55,10 +55,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// contributes only its low PTI nibble. The control edge replaces its low
     /// byte, while the shared-PTI edge preserves bits 31:4 and replaces only
     /// bits 3:0.
-    pub fn set_itwt_pti(&mut self, argument_is_zero: bool, shared: MacPti) {
+    pub fn set_itwt_pti(&mut self, argument: MacItwtArgument, shared: MacPti) {
         let runtime = &mut self.mac.wifi_mac_coex_runtime;
         runtime.modify_itwt_control(|w| {
-            w.set_bits_0_7_opaque(u8::from(argument_is_zero));
+            w.set_bits_0_7_opaque(argument.control_byte());
         });
         runtime.modify_shared_rx_pti(|w| {
             w.set_pti(shared.field());

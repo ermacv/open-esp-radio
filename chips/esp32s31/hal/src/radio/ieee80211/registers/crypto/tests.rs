@@ -66,14 +66,22 @@ fn the_cold_bypass_stores_each_interface_control_then_clears_two_words() {
     for position in 0..interface_control::COUNT {
         let word = control.read_interface_control(Index::new(position).expect("an interface"));
         assert_eq!(word.bits_0_1_opaque().get(), 0);
-        assert!(!(word.bit_8_opaque() || word.spp_amsdu() || word.wep_mode()));
+        assert!(!(word.bit_8_opaque() || word.wep_mode()));
+        assert_eq!(
+            word.spp_amsdu(),
+            oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu::Unauthenticated
+        );
         assert!(word.bit_16_opaque() && word.mgmt_rx_crypto_enabled());
         assert!(!(word.bit_30_opaque() || word.sms4_mode()));
     }
     let context2 = control.read_context2_crypto_control();
     assert_eq!(context2.bits_0_1_opaque().get(), 0);
     assert!(!(context2.bit_16_opaque() || context2.bit_17_opaque()));
-    assert!(!(context2.bit_8_opaque() || context2.spp_amsdu() || context2.wep_mode()));
+    assert!(!(context2.bit_8_opaque() || context2.wep_mode()));
+    assert_eq!(
+        context2.spp_amsdu(),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu::Unauthenticated
+    );
     assert!(!(context2.bit_30_opaque() || context2.sms4_mode()));
     assert_eq!(control.read_word_080c_opaque().bits_0_31_opaque(), 0);
     assert_eq!(control.read_policy_control().bits_6_21_opaque(), 0);
@@ -98,7 +106,11 @@ fn an_association_enables_ccmp_with_its_spp_decision() {
         .wifi_mac_crypto_control
         .read_interface_control(Index::constant::<1>());
     assert_eq!(word.bits_0_1_opaque().get(), 3);
-    assert!(word.bit_8_opaque() && word.spp_amsdu());
+    assert!(word.bit_8_opaque());
+    assert_eq!(
+        word.spp_amsdu(),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu::Authenticated
+    );
     assert!(word.bit_16_opaque() && word.mgmt_rx_crypto_enabled());
     assert!(!(word.wep_mode() || word.bit_30_opaque() || word.sms4_mode()));
 }
@@ -126,7 +138,11 @@ fn a_context_two_association_keeps_the_station_and_ap_profiles() {
     );
     assert_eq!(control.read_interface_control(Index::constant::<1>()), ap);
     let context2 = control.read_context2_crypto_control();
-    assert!(context2.bit_8_opaque() && context2.spp_amsdu());
+    assert!(context2.bit_8_opaque());
+    assert_eq!(
+        context2.spp_amsdu(),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu::Authenticated
+    );
     assert_eq!(context2.bits_0_1_opaque().get(), 3);
     assert!(context2.bit_16_opaque() && context2.bit_17_opaque());
     assert!(!(context2.wep_mode() || context2.bit_30_opaque() || context2.sms4_mode()));
@@ -193,7 +209,11 @@ fn a_pairwise_station_key_is_written_validated_and_enabled() {
         .wifi_mac_crypto_control
         .read_interface_control(Index::constant::<0>());
     assert_eq!(interface.bits_0_1_opaque().get(), 3);
-    assert!(interface.bit_8_opaque() && !interface.spp_amsdu());
+    assert!(interface.bit_8_opaque());
+    assert_eq!(
+        interface.spp_amsdu(),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::SppAmsdu::Unauthenticated
+    );
 }
 
 #[test]

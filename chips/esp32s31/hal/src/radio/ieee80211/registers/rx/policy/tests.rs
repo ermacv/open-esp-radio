@@ -28,7 +28,11 @@ fn the_cold_policy_clears_the_first_three_interfaces_and_keeps_their_high_bits()
     ] {
         let high = block.read_address_high(interface_index(interface));
         assert_eq!(high.bytes_4_5(), 0, "{interface:?} address bytes cleared");
-        assert!(high.rx_policy_enable(), "{interface:?} enable kept");
+        assert!(
+            (high.rx_policy_enable()
+                == oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled),
+            "{interface:?} enable kept"
+        );
         assert_ne!(
             high.bits_17_31_opaque().get(),
             0,
@@ -73,7 +77,10 @@ fn the_cold_policy_marks_only_the_access_point_bank_soft_ap_and_disables_checks(
             bssid.interface_is_soft_ap(),
             context == Some(MacInterface::AccessPoint)
         );
-        assert!(!bssid.address_check_enable());
+        assert_eq!(
+            bssid.address_check_enable(),
+            oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Disabled
+        );
     }
     // Only the four filter words change from zero.
     let changes = before.changes(&after);
@@ -242,12 +249,14 @@ fn ap_receive_policy_snapshot<M: MacPlacement>(
     let bssid_high = bssids.read_bssid_high(ACCESS_POINT);
     MacApReceivePolicySnapshot {
         bssid: bssid(bssids, ACCESS_POINT),
-        bssid_address_check_enabled: bssid_high.address_check_enable(),
+        bssid_address_check_enabled: (bssid_high.address_check_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Enabled),
         interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
         interface_rx_policy_enabled: registers
             .interface
             .read_address_high(interface_index(MacInterface::AccessPoint))
-            .rx_policy_enable(),
+            .rx_policy_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled,
     }
 }
 
@@ -271,9 +280,11 @@ fn sta_receive_policy_snapshot<M: MacPlacement>(
         bssid,
         association_id: crate::radio::ieee80211::registers::halfword(bssid_high.association_id()),
         minimum_mpdu_start_spacing: byte(bssid_high.minimum_mpdu_start_spacing()),
-        bssid_address_check_enabled: bssid_high.address_check_enable(),
+        bssid_address_check_enabled: (bssid_high.address_check_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Enabled),
         interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
-        interface_rx_policy_enabled: interface.rx_policy_enable(),
+        interface_rx_policy_enabled: (interface.rx_policy_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled),
         beacon_filter_enabled: beacon_filter.beacon_filter_enable(),
         broadcast_wakeup_enabled: beacon_filter.broadcast_wakeup_enable(),
         unicast_wakeup_enabled: beacon_filter.unicast_wakeup_enable(),

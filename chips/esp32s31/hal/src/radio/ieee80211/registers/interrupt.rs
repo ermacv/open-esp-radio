@@ -338,9 +338,22 @@ fn publish_mac_interrupt_mask<P: Placement>(
     event_mask: MacInterruptMask,
 ) {
     let station = event_mask != MacInterruptMask::NONE;
+    let (auxiliary_5, success, auxiliary_24) = if station {
+        (
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled,
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled,
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Enabled,
+        )
+    } else {
+        (
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Disabled,
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Disabled,
+            oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Disabled,
+        )
+    };
     interrupt.modify_enable(|w| {
         w.set_bits_0_4_opaque(Bits::constant::<0>())
-            .set_rx_associated_auxiliary_5(station)
+            .set_rx_associated_auxiliary_5(auxiliary_5)
             .set_bit_6_opaque(station)
             .set_tx_complete(station)
             .set_tx_queue_collision(false)
@@ -348,7 +361,7 @@ fn publish_mac_interrupt_mask<P: Placement>(
             .set_watchdog(station)
             .set_bit_12_opaque(station)
             .set_bit_13_opaque(station)
-            .set_rx_success(station)
+            .set_rx_success(success)
             .set_sta_beacon_filter(false)
             .set_bits_16_18_opaque(Bits::constant::<0>())
             .set_tx_timeout(station)
@@ -356,7 +369,7 @@ fn publish_mac_interrupt_mask<P: Placement>(
             .set_fatal_assertion(station)
             .set_bit_22_opaque(false)
             .set_bit_23_opaque(station)
-            .set_rx_associated_auxiliary_24(station)
+            .set_rx_associated_auxiliary_24(auxiliary_24)
             .set_bits_25_26_opaque(Bits::constant::<0>())
             .set_wdev_timer_0(station)
             .set_wdev_timer_1(station)
@@ -499,9 +512,23 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// This is a mask operation and acknowledges nothing.
     pub fn set_mac_rx_interrupt_enable(&mut self, enabled: MacRxInterrupts) {
         self.mac.modify_enable(|w| {
-            w.set_rx_associated_auxiliary_5(enabled.contains(MacRxLane::Auxiliary5))
-                .set_rx_success(enabled.contains(MacRxLane::Success))
-                .set_rx_associated_auxiliary_24(enabled.contains(MacRxLane::Auxiliary24));
+            w.set_rx_associated_auxiliary_5(if enabled.contains(MacRxLane::Auxiliary5) {
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled
+            } else {
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Disabled
+            })
+            .set_rx_success(if enabled.contains(MacRxLane::Success) {
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled
+            } else {
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Disabled
+            })
+            .set_rx_associated_auxiliary_24(
+                if enabled.contains(MacRxLane::Auxiliary24) {
+                    oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Enabled
+                } else {
+                    oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Disabled
+                },
+            );
         });
         oer_portable_riscv::fence();
     }
@@ -548,7 +575,16 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// RX_SUCCESS and the two auxiliary sources observed on every saturated
     /// RX edge; TX and unrelated sources remain independently live.
     pub fn mask_rx_delivery_interrupts(&mut self) {
-        self.set_rx_delivery_interrupts(false);
+        self.mac.modify_enable(|w| {
+            w.set_rx_associated_auxiliary_5(
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Disabled,
+            )
+            .set_rx_success(oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Disabled)
+            .set_rx_associated_auxiliary_24(
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Disabled,
+            );
+        });
+        oer_portable_riscv::fence();
     }
 
     /// Restore the RX delivery group while preserving the current mask.
@@ -559,14 +595,14 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     ///
     /// SOURCE: `HW18_RX_MASK_STATUS_20261027` in the register model.
     pub fn unmask_rx_delivery_interrupts(&mut self) {
-        self.set_rx_delivery_interrupts(true);
-    }
-
-    fn set_rx_delivery_interrupts(&mut self, enabled: bool) {
         self.mac.modify_enable(|w| {
-            w.set_rx_associated_auxiliary_5(enabled)
-                .set_rx_success(enabled)
-                .set_rx_associated_auxiliary_24(enabled);
+            w.set_rx_associated_auxiliary_5(
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary5::Enabled,
+            )
+            .set_rx_success(oer_chips_esp32s31_pac::wifi_mac::enable::RxSuccess::Enabled)
+            .set_rx_associated_auxiliary_24(
+                oer_chips_esp32s31_pac::wifi_mac::enable::RxAssociatedAuxiliary24::Enabled,
+            );
         });
         oer_portable_riscv::fence();
     }

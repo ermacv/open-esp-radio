@@ -39,7 +39,10 @@ fn an_interface_address_is_stored_whole_and_then_enabled() {
         .interface
         .read_address_high(interface_index(MacInterface::AccessPoint));
     assert_eq!(high.bytes_4_5(), 0x5544);
-    assert!(high.rx_policy_enable());
+    assert_eq!(
+        high.rx_policy_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled
+    );
     assert_eq!(high.bits_17_31_opaque().get(), 0);
 }
 

@@ -30,6 +30,14 @@ fn clear_cold_interface_address<P: Placement>(
     });
 }
 
+/// An interface's control and management admission: one decision that sets
+/// both its BSSID check and its receive-policy enable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReceiveAdmission {
+    Admitted,
+    Closed,
+}
+
 /// Closed register plan for simultaneous same-channel STA and SoftAP receive
 /// contexts.
 ///
@@ -127,7 +135,9 @@ const SNIFFER: Index<4> = Index::constant::<3>();
 fn set_bssid<P: Placement>(bssids: &mut WifiMacBssidPolicy<P>, bank: Index<4>, bssid: [u8; 6]) {
     let [b0, b1, b2, b3, b4, b5] = bssid;
     bssids.modify_bssid_high(bank, |w| {
-        w.set_address_check_enable(false);
+        w.set_address_check_enable(
+            oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Disabled,
+        );
     });
     // The vendor's whole-word store of the low word: its one field covers
     // every bit.
@@ -138,7 +148,9 @@ fn set_bssid<P: Placement>(bssids: &mut WifiMacBssidPolicy<P>, bank: Index<4>, b
         w.set_bssid_high(u16::from_le_bytes([b4, b5]));
     });
     bssids.modify_bssid_high(bank, |w| {
-        w.set_address_check_enable(true);
+        w.set_address_check_enable(
+            oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Enabled,
+        );
     });
 }
 
@@ -195,14 +207,16 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 } else {
                     bssids.modify_bssid_high(queue, |w| {
                         w.set_interface_is_soft_ap(false)
-                            .set_address_check_enable(false);
+                            .set_address_check_enable(oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Disabled);
                     });
                 }
                 filters.modify_policy(queue, |w| {
                     w.set_dump_management_not_check_bssid(false);
                 });
                 bssids.modify_bssid_high(queue, |w| {
-                    w.set_address_check_enable(false);
+                    w.set_address_check_enable(
+                        oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Disabled,
+                    );
                 });
                 clear_cold_interface_address(interfaces, interface);
             }
@@ -288,11 +302,15 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_dump_management_not_check_bssid(false);
         });
         bssids.modify_bssid_high(STATION, |w| {
-            w.set_address_check_enable(true);
+            w.set_address_check_enable(
+                oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Enabled,
+            );
         });
         self.interface
             .modify_address_high(interface_index(MacInterface::Station), |w| {
-                w.set_rx_policy_enable(true);
+                w.set_rx_policy_enable(
+                    oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled,
+                );
             });
 
         // Station policy six finishes with receive-unicast BSSID checking,
@@ -350,7 +368,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.program_interface_bssid(MacInterface::AccessPoint, access_point);
 
         // `ic_set_rx_policy(interface=1, mode=0, control=1, management=1)`.
-        self.set_interface_receive_context(ACCESS_POINT, MacInterface::AccessPoint, true);
+        self.set_interface_receive_context(
+            ACCESS_POINT,
+            MacInterface::AccessPoint,
+            ReceiveAdmission::Admitted,
+        );
     }
 
     /// Disable only the first SoftAP receive context.
@@ -360,7 +382,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// management=0)`. The address and BSSID banks are deliberately retained
     /// so a concurrent station context is not reconstructed or disturbed.
     pub fn disable_ap_receive_policy(&mut self) {
-        self.set_interface_receive_context(ACCESS_POINT, MacInterface::AccessPoint, false);
+        self.set_interface_receive_context(
+            ACCESS_POINT,
+            MacInterface::AccessPoint,
+            ReceiveAdmission::Closed,
+        );
     }
 
     /// Disable only the infrastructure-station receive context.
@@ -389,19 +415,23 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// `ic_set_rx_policy(interface=0, mode=0, control=0, management=0)`.
     fn clear_sta_receive_context(&mut self) {
-        self.set_interface_receive_context(STATION, MacInterface::Station, false);
+        self.set_interface_receive_context(
+            STATION,
+            MacInterface::Station,
+            ReceiveAdmission::Closed,
+        );
     }
 
     /// `ic_set_rx_policy(interface, mode=0, control, management)` of the
     /// station (bank zero, never SoftAP) or the SoftAP (bank one, always
-    /// SoftAP): five fresh-read RMW edges in blob order. `enabled` is the
+    /// SoftAP): five fresh-read RMW edges in blob order. `admission` is the
     /// control and management admission, which sets the BSSID check and the
     /// interface's receive-policy enable.
     fn set_interface_receive_context(
         &mut self,
         bank: Index<4>,
         interface: MacInterface,
-        enabled: bool,
+        admission: ReceiveAdmission,
     ) {
         let soft_ap = interface == MacInterface::AccessPoint;
         let filters = &mut self.mac.wifi_mac_rx_filter;
@@ -416,12 +446,22 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         filters.modify_policy(bank, |w| {
             w.set_dump_management_not_check_bssid(false);
         });
+        let (address_check, rx_policy) = match admission {
+            ReceiveAdmission::Admitted => (
+                oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Enabled,
+                oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled,
+            ),
+            ReceiveAdmission::Closed => (
+                oer_chips_esp32s31_pac::wifi_mac::bssid_high::AddressCheckEnable::Disabled,
+                oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Disabled,
+            ),
+        };
         bssids.modify_bssid_high(bank, |w| {
-            w.set_address_check_enable(enabled);
+            w.set_address_check_enable(address_check);
         });
         self.interface
             .modify_address_high(interface_index(interface), |w| {
-                w.set_rx_policy_enable(enabled);
+                w.set_rx_policy_enable(rx_policy);
             });
     }
 

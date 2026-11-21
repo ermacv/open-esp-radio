@@ -6,24 +6,36 @@ use crate::radio::ieee80211::registers::HostWords;
 fn the_uplink_multi_user_flags_are_two_independent_edges() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners
-        .registers
-        .set_he_uplink_multi_user_disable(true, false);
+    owners.registers.set_he_uplink_multi_user_disable(
+        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled,
+        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Enabled,
+    );
     let control = owners
         .registers
         .mac
         .wifi_mac_he_init_suffix
         .read_he_default_control();
-    assert!(control.ul_mu_disable() && !control.ul_mu_data_disable());
-    owners
-        .registers
-        .set_he_uplink_multi_user_disable(false, true);
+    assert!(
+        (control.ul_mu_disable()
+            == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled)
+            && !(control.ul_mu_data_disable()
+                == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled)
+    );
+    owners.registers.set_he_uplink_multi_user_disable(
+        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Enabled,
+        oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled,
+    );
     let control = owners
         .registers
         .mac
         .wifi_mac_he_init_suffix
         .read_he_default_control();
-    assert!(!control.ul_mu_disable() && control.ul_mu_data_disable());
+    assert!(
+        !(control.ul_mu_disable()
+            == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled)
+            && (control.ul_mu_data_disable()
+                == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled)
+    );
 }
 
 #[test]

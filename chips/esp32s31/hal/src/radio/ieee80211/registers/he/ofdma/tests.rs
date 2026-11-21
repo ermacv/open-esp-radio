@@ -211,20 +211,24 @@ fn an_invalid_request_writes_nothing() {
 fn a_tid_bit_and_the_obss_disable_are_published() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners
-        .registers
-        .set_he_trigger_based_tid_enabled(MacHeTid::new(6).expect("a TID"), true);
+    owners.registers.set_he_trigger_based_tid_enabled(
+        MacHeTid::new(6).expect("a TID"),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled,
+    );
     let snapshot = he_buffer_status_snapshot(&owners.registers);
     assert_eq!(
         snapshot.trigger_based_tid_enabled,
         [false, false, false, false, false, false, true, false]
     );
-    owners.registers.set_he_obss_narrow_band_ru_disabled(true);
+    owners.registers.disable_he_obss_narrow_band_ru();
     let obss = &owners.registers.mac.wifi_mac_he_obss_narrow_band_ru;
     assert_eq!(obss.read_disable_bitmap().value().get(), 0x000f_ffff);
     let control = obss.read_he_obss_narrow_band_ru_control();
     assert_eq!(control.class_disable().get(), 0x1f);
-    assert!(control.global_disable());
+    assert_eq!(
+        control.global_disable(),
+        oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Disabled
+    );
 }
 
 // Reads of what the writers left, from the register image: the HAL keeps
@@ -381,14 +385,22 @@ fn he_buffer_status_snapshot<M: MacPlacement>(
             control.valid_7(),
         ],
         trigger_based_tid_enabled: [
-            control.trigger_based_tid_0_enabled(),
-            control.trigger_based_tid_1_enabled(),
-            control.trigger_based_tid_2_enabled(),
-            control.trigger_based_tid_3_enabled(),
-            control.trigger_based_tid_4_enabled(),
-            control.trigger_based_tid_5_enabled(),
-            control.trigger_based_tid_6_enabled(),
-            control.trigger_based_tid_7_enabled(),
+            (control.trigger_based_tid_0_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_1_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_2_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_3_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_4_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_5_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_6_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_7_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
         ],
         ac_empty_software_tid: byte(control.ac_empty_software_tid()),
         ac_empty_uses_software_tid: control.ac_empty_use_software_tid(),
@@ -429,8 +441,8 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
 
     MacHeReceiveConfigurationSnapshot {
         bss_color: byte(multi.bss_color()),
-        bss_color_enabled: multi.bss_color_enable(),
-        partial_bss_color_enabled: multi.partial_bss_color_enable(),
+        bss_color_enabled: (multi.bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled),
+        partial_bss_color_enabled: (multi.partial_bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled),
         bssid_select: byte(multi.bssid_select()),
         he_bssid_enabled: multi.he_bssid_enable(),
         multi_bssid_enabled: multi.multi_bssid_enable(),
@@ -443,10 +455,10 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
         bsr_update_enabled: options2.bsr_update_enable(),
         trigger_based_stop_option: options2.tb_stop_option(),
         trigger_response_scheduling_supported: options2.he_trs_support(),
-        uplink_mu_data_disabled: options2.ul_mu_data_disable(),
-        uplink_mu_disabled: options2.ul_mu_disable(),
+        uplink_mu_data_disabled: (options2.ul_mu_data_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled),
+        uplink_mu_disabled: (options2.ul_mu_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled),
         trigger_based_no_resource_continue_tx: options1.tb_no_resource_continue_tx(),
-        automatic_ack_allows_extended_range_su: options1.auto_ack_allow_ersu(),
+        automatic_ack_allows_extended_range_su: (options1.auto_ack_allow_ersu() == oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed),
         he_response_ack: options1.he_response_ack(),
         nominal_packet_padding_duration: [
             byte(padding.bpsk_duration()),

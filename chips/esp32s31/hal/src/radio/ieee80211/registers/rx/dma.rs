@@ -104,7 +104,7 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
 
     /// Start the walker.
     pub fn publish_mac_rx_walker_enable(&mut self) {
-        self.set_walker_enabled(true);
+        self.set_walker(oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Enabled);
     }
 
     /// Ask the live walker to follow newly published descriptor links: ring
@@ -131,12 +131,12 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_txrx_init`, offsets
     /// `0xee..0x16e`.
     pub(crate) fn clear_mac_rx_walker_enable(&mut self) {
-        self.set_walker_enabled(false);
+        self.set_walker(oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Disabled);
     }
 
-    fn set_walker_enabled(&mut self, enabled: bool) {
+    fn set_walker(&mut self, walker: oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable) {
         self.dma.modify_rx_control(|w| {
-            w.set_walker_enable(enabled);
+            w.set_walker_enable(walker);
         });
     }
 }

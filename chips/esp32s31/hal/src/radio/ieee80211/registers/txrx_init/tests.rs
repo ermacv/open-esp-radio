@@ -104,7 +104,9 @@ fn suffix_stops_the_walker_and_publishes_its_own_words() {
     {
         let mut owners = memory.owners();
         owners.rx_dma.dma.modify_rx_control(|w| {
-            w.set_walker_enable(true);
+            w.set_walker_enable(
+                oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Enabled,
+            );
         });
         owners
             .registers
@@ -112,7 +114,10 @@ fn suffix_stops_the_walker_and_publishes_its_own_words() {
     }
 
     let owners = memory.owners();
-    assert!(!owners.rx_dma.dma.read_rx_control().walker_enable());
+    assert_eq!(
+        owners.rx_dma.dma.read_rx_control().walker_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Disabled
+    );
     let mac = &owners.registers.mac;
     let hang = mac.wifi_mac_txrx_callbacks.read_bb_rx_hang_control();
     assert!(hang.bit_30_opaque() && hang.bit_31_opaque());

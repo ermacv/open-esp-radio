@@ -58,7 +58,10 @@ fn the_doorbell_sets_only_its_request_and_reads_back_pending() {
     // Host memory does not clear the doorbell as the hardware does.
     assert!(owners.rx_dma.mac_rx_reload_pending());
     let control = owners.rx_dma.dma.read_rx_control();
-    assert!(!control.walker_enable());
+    assert_eq!(
+        control.walker_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Disabled
+    );
     assert!(!control.timestamp_use_tsf());
     assert_eq!(control.beacon_memory_address_map(), 0);
     assert_eq!(control.bits_10_16_opaque().get(), 0);
@@ -76,14 +79,22 @@ fn the_walker_enable_edges_keep_every_other_control_bit() {
         owners.rx_dma.enable_mac_rx_hw_beacon_reload();
     }
     let control = after.owners().rx_dma.dma.read_rx_control();
-    assert!(control.walker_enable() && control.rxbuf_reload_use_hw_beacon_enable());
+    assert!(
+        (control.walker_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Enabled)
+            && control.rxbuf_reload_use_hw_beacon_enable()
+    );
     assert!(!control.append_descriptor_reload());
     assert_eq!(before.changes(&after).len(), 1);
 
     let mut owners = after.owners();
     owners.rx_dma.clear_mac_rx_walker_enable();
     let control = owners.rx_dma.dma.read_rx_control();
-    assert!(!control.walker_enable() && control.rxbuf_reload_use_hw_beacon_enable());
+    assert!(
+        !(control.walker_enable()
+            == oer_chips_esp32s31_pac::wifi_mac::rx_control::WalkerEnable::Enabled)
+            && control.rxbuf_reload_use_hw_beacon_enable()
+    );
 }
 
 #[test]

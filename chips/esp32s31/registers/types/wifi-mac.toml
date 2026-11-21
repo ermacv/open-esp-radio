@@ -6652,6 +6652,7 @@ description = "Cleared for interface zero by the associated-STA policy-five tran
 
 [[registers.fields]]
 name = "ADDRESS_CHECK_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "31"
 class = "plain"
 description = "MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it."
@@ -6696,11 +6697,13 @@ value-range = { min = 0x0, max = 0x3f, sources = ["BLOB_LIBPP_HAL_HE_BSSID_LIFEC
 
 [[registers.fields]]
 name = "BSS_COLOR_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "27"
 class = "plain"
 
 [[registers.fields]]
 name = "PARTIAL_BSS_COLOR_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "28"
 class = "plain"
 
@@ -6912,6 +6915,7 @@ write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
 name = "RX_POLICY_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "16"
 class = "plain"
 description = "Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch."
@@ -6952,6 +6956,7 @@ description = "Write one after publishing old_tail.next to make a prepared live-
 
 [[registers.fields]]
 name = "WALKER_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "31"
 class = "plain"
 description = "Set by libpp[hal_mac.o]::hal_mac_rx_enable and cleared by libpp[hal_mac.o]::hal_mac_rx_disable; gates the RX descriptor walker."
@@ -7897,6 +7902,7 @@ description = "Complete extra-SoftAP add/reset/delete pulses this bit high then 
 
 [[registers.fields]]
 name = "EXTRA_SOFTAP_READBACK_LATCH"
+values = [{ name = "RELEASED", value = 0 }, { name = "LATCHED", value = 1 }]
 bits = "9"
 class = "plain"
 description = "Complete extra-SoftAP diagnostics, reset and delete set this bit while reading the entry selected in the staging control and clear it afterwards."
@@ -8944,11 +8950,13 @@ write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "BPSK_DCM"
+values = { dictionary = "BF_REPORT_DCM" }
 bits = "7"
 class = "plain"
 
 [[registers.fields]]
 name = "BPSK_ERSU"
+values = { dictionary = "BF_REPORT_ERSU" }
 bits = "8"
 class = "plain"
 
@@ -8968,11 +8976,13 @@ write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "QPSK_DCM"
+values = { dictionary = "BF_REPORT_DCM" }
 bits = "16"
 class = "plain"
 
 [[registers.fields]]
 name = "QPSK_ERSU"
+values = { dictionary = "BF_REPORT_ERSU" }
 bits = "17"
 class = "plain"
 
@@ -8992,11 +9002,13 @@ write-range = { min = 0x0, max = 0x3 }
 
 [[registers.fields]]
 name = "QAM16_DCM"
+values = { dictionary = "BF_REPORT_DCM" }
 bits = "25"
 class = "plain"
 
 [[registers.fields]]
 name = "QAM16_ERSU"
+values = { dictionary = "BF_REPORT_ERSU" }
 bits = "26"
 class = "plain"
 
@@ -9642,6 +9654,7 @@ description = "Set together with low bits 1:0 in all inspected enable profiles a
 
 [[registers.fields]]
 name = "SPP_AMSDU"
+values = { dictionary = "SPP_AMSDU" }
 bits = "9"
 class = "plain"
 description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream."
@@ -9696,6 +9709,7 @@ description = "Set together with low bits 1:0 in all inspected enable profiles a
 
 [[registers.fields]]
 name = "SPP_AMSDU"
+values = { dictionary = "SPP_AMSDU" }
 bits = "9"
 class = "plain"
 description = "Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream."
@@ -10051,6 +10065,7 @@ description = "Interrupt-enable bits whose event identities remain unknown. In t
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_5"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "5"
 class = "plain"
 description = "Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic."
@@ -10099,6 +10114,7 @@ description = "Unknown event enabled by the complete cold receive mask. The comm
 
 [[registers.fields]]
 name = "RX_SUCCESS"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "14"
 class = "plain"
 description = "Enable for successful receive completion."
@@ -10147,6 +10163,7 @@ description = "Unknown event enabled by the complete cold receive mask. The comm
 
 [[registers.fields]]
 name = "RX_ASSOCIATED_AUXILIARY_24"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "24"
 class = "plain"
 description = "Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic."
@@ -10637,6 +10654,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "AUTO_ACK_ALLOW_ERSU"
+values = [{ name = "DISALLOWED", value = 0 }, { name = "ALLOWED", value = 1 }]
 bits = "10"
 class = "plain"
 description = "Complete dbg_read_rx_misc names the bit AUTOACK_ALLOW_ERSU. Complete libpp[hal_mac_ctl.o]::hal_he_set_ersu clears it for a nonzero HE Operation ER-SU argument and sets it for zero; the PAC preserves that counterintuitive instruction-exact polarity."
@@ -10648,6 +10666,7 @@ class = "plain"
 
 [[registers.fields]]
 name = "TB_CARE_CCA_AND_NAV"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "12"
 class = "plain"
 description = "Complete dbg_tb_ignore_cca_enable clears this bit and logs \"tb ignore CCA and NAV\" for a nonzero argument; it sets the bit and logs \"tb care CCA and NAV\" for zero."
@@ -10744,12 +10763,14 @@ class = "plain"
 
 [[registers.fields]]
 name = "UL_MU_DATA_DISABLE"
+values = [{ name = "ENABLED", value = 0 }, { name = "DISABLED", value = 1 }]
 bits = "30"
 class = "plain"
 description = "HE Operating Mode Control UL MU Data Disable copied from HT-Control bit 17 by wifi_htc_omc_txcb."
 
 [[registers.fields]]
 name = "UL_MU_DISABLE"
+values = [{ name = "ENABLED", value = 0 }, { name = "DISABLED", value = 1 }]
 bits = "31"
 class = "plain"
 description = "HE Operating Mode Control UL MU Disable copied from HT-Control bit 11 by wifi_htc_omc_txcb."
@@ -11650,48 +11671,56 @@ class = "plain"
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_0_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "13"
 class = "plain"
 description = "Trigger-based TID zero enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_1_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "14"
 class = "plain"
 description = "Trigger-based TID one enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_2_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "15"
 class = "plain"
 description = "Trigger-based TID two enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_3_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "16"
 class = "plain"
 description = "Trigger-based TID three enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_4_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "17"
 class = "plain"
 description = "Trigger-based TID four enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_5_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "18"
 class = "plain"
 description = "Trigger-based TID five enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_6_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "19"
 class = "plain"
 description = "Trigger-based TID six enabled by successful HE BlockAck setup."
 
 [[registers.fields]]
 name = "TRIGGER_BASED_TID_7_ENABLED"
+values = { dictionary = "TRIGGER_BASED_TID" }
 bits = "20"
 class = "plain"
 description = "Trigger-based TID seven enabled by successful HE BlockAck setup."
@@ -12271,6 +12300,7 @@ description = "The complete leaf updates CLASS_DISABLE bits first and GLOBAL_DIS
 
 [[registers.fields]]
 name = "GLOBAL_DISABLE"
+values = [{ name = "ENABLED", value = 0 }, { name = "DISABLED", value = 1 }]
 bits = "0"
 class = "plain"
 
@@ -15135,3 +15165,31 @@ description = "A MAC interface selector: the hardware context a TX queue, a rece
 width = 2
 values = [{ name = "STATION", value = 0x0, description = "The infrastructure-station context, traced from the vendor's station callers.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"] }, { name = "ACCESS_POINT", value = 0x1, description = "The SoftAP context, traced from the vendor's access-point callers.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"] }, { name = "CONTEXT_2", value = 0x2, description = "The third selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }, { name = "CONTEXT_3", value = 0x3, description = "The fourth selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }]
 sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"]
+
+[[dictionaries]]
+name = "TRIGGER_BASED_TID"
+description = "Whether one TID takes part in HE trigger-based BSR handling: hal_he_set_tid_bitmap sets its bit of HE_BUFFER_STATUS_CONTROL, hal_he_clr_tid_bitmap clears it."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "The TID takes no part in trigger-based BSR handling (hal_he_clr_tid_bitmap).", sources = ["BLOB_LIBPP_HAL_HE_BSR_DEBUG", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBNET80211_HE_TID_BITMAP"] }, { name = "ENABLED", value = 0x1, description = "The TID takes part in trigger-based BSR handling (hal_he_set_tid_bitmap).", sources = ["BLOB_LIBPP_HAL_HE_BSR_DEBUG", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBNET80211_HE_TID_BITMAP"] }]
+sources = ["BLOB_LIBPP_HAL_HE_BSR_DEBUG", "BLOB_LIBPP_MAC_TX_SET_TB", "ROM_REV0_MAC_TX_SET_TB", "BLOB_LIBNET80211_HE_TID_BITMAP"]
+
+[[dictionaries]]
+name = "SPP_AMSDU"
+description = "Whether CCMP authenticates the QoS A-MSDU-present bit for an interface: hal_crypto_enable takes the association's SPP decision (wDev_Insert_KeyEntry's argument four)."
+width = 1
+values = [{ name = "UNAUTHENTICATED", value = 0x0, description = "The A-MSDU-present bit is not authenticated.", sources = ["BLOB_LIBPP_SPP_AMSDU"] }, { name = "AUTHENTICATED", value = 0x1, description = "The A-MSDU-present bit is authenticated (SPP A-MSDU).", sources = ["BLOB_LIBPP_SPP_AMSDU"] }]
+sources = ["BLOB_LIBPP_SPP_AMSDU"]
+
+[[dictionaries]]
+name = "BF_REPORT_DCM"
+description = "Whether a beamforming report response uses DCM: hal_he_set_bf_report_rate publishes the same choice for its 16-QAM, QPSK and BPSK profiles."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "The report response uses no DCM.", sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }, { name = "ENABLED", value = 0x1, description = "The report response uses DCM.", sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"]
+
+[[dictionaries]]
+name = "BF_REPORT_ERSU"
+description = "Whether a beamforming report response is an extended-range SU PPDU: hal_he_set_bf_report_rate publishes the same choice for its 16-QAM, QPSK and BPSK profiles."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "The report response is no extended-range SU PPDU.", sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }, { name = "ENABLED", value = 0x1, description = "The report response is an extended-range SU PPDU.", sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }]
+sources = ["BLOB_LIBPP_HAL_HE_INIT_PREFIX", "BLOB_LIBPP_HAL_BF_CONFIG"]

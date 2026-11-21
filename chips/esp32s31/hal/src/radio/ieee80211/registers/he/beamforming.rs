@@ -24,8 +24,8 @@ pub struct MacHeBeamformingReportProfile {
     signal_mode:
         Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_SIGNAL_MODE_WIDTH }>,
     normalized_rate: Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_RATE_WIDTH }>,
-    dcm: bool,
-    extended_range_single_user: bool,
+    dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm,
+    extended_range_single_user: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu,
 }
 
 impl MacHeBeamformingReportProfile {
@@ -33,8 +33,8 @@ impl MacHeBeamformingReportProfile {
     pub const fn from_hal_arguments(
         signal_mode: u8,
         rate_code: u16,
-        dcm: bool,
-        extended_range_single_user: bool,
+        dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm,
+        extended_range_single_user: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu,
     ) -> Result<Self, MacHeBeamformingReportProfileError> {
         let Ok(mode) = Bits::new(signal_mode as u32) else {
             return Err(MacHeBeamformingReportProfileError::SignalMode(signal_mode));
@@ -82,11 +82,13 @@ impl MacHeBeamformingReportProfile {
         self.normalized_rate.get().to_le_bytes()[0]
     }
 
-    pub const fn dcm(self) -> bool {
+    pub const fn dcm(self) -> oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm {
         self.dcm
     }
 
-    pub const fn extended_range_single_user(self) -> bool {
+    pub const fn extended_range_single_user(
+        self,
+    ) -> oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu {
         self.extended_range_single_user
     }
 }

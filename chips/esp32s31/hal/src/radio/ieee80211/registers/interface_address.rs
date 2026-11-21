@@ -28,11 +28,15 @@ fn program<P: Placement>(
     });
     block.modify_address_high(index, |w| {
         w.set_bytes_4_5(u16::from_le_bytes([a4, a5]))
-            .set_rx_policy_enable(false)
+            .set_rx_policy_enable(
+                oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Disabled,
+            )
             .set_bits_17_31_opaque(oer_portable_mmio::Bits::constant::<0>());
     });
     block.modify_address_high(index, |w| {
-        w.set_rx_policy_enable(true);
+        w.set_rx_policy_enable(
+            oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Enabled,
+        );
     });
 }
 

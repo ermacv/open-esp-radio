@@ -296,14 +296,14 @@ pub(super) fn block_ack(s: &mut Session<'_>) {
         w.set_extra_softap_commit(false);
     });
     b.modify_rx_block_ack_agreement_update(|w| {
-        w.set_extra_softap_readback_latch(true);
+        w.set_extra_softap_readback_latch(oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
     });
     oer_portable_riscv::fence();
     extra_snapshot(s, 0xce);
     s.opaque
         .block_ack
         .modify_rx_block_ack_agreement_update(|w| {
-            w.set_extra_softap_readback_latch(false);
+            w.set_extra_softap_readback_latch(oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
         });
 }
 

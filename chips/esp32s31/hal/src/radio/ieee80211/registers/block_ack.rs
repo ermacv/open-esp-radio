@@ -242,9 +242,12 @@ fn select_extra_softap_entry<P: Placement>(block: &mut WifiMacBlockAck<P>, index
 }
 
 /// Set or release the extra-SoftAP readback latch.
-fn set_extra_softap_latch<P: Placement>(block: &mut WifiMacBlockAck<P>, latched: bool) {
+fn set_extra_softap_latch<P: Placement>(
+    block: &mut WifiMacBlockAck<P>,
+    latch: oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch,
+) {
     block.modify_rx_block_ack_agreement_update(|w| {
-        w.set_extra_softap_readback_latch(latched);
+        w.set_extra_softap_readback_latch(latch);
     });
 }
 
@@ -436,7 +439,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
 
         commit_extra_softap_entry(block);
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
 
         // Preserve the complete vendor readback order. The values feed only
         // wifi_log in the blob and therefore do not cross this boundary.
@@ -450,7 +453,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let _ = block.read_extra_softap_rx_block_ack_peer_tail_and_policy();
         let control = block.read_extra_softap_rx_block_ack_control();
 
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
 
         observed_peer_head == peer_head
             && peer_tail_and_policy.peer_address_tail() == peer_tail
@@ -485,9 +488,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) {
         let block = &mut self.mac.wifi_mac_block_ack;
         select_extra_softap_entry(block, extra_softap_index(hardware_index));
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
         let _ = block.read_extra_softap_rx_block_ack_control();
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
         block.modify_extra_softap_rx_block_ack_start_sequence(|w| {
             w.set_sequence(starting_sequence.field());
         });
@@ -507,9 +510,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) {
         let block = &mut self.mac.wifi_mac_block_ack;
         select_extra_softap_entry(block, extra_softap_index(hardware_index));
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
         let _ = block.read_extra_softap_rx_block_ack_control();
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
         block.modify_extra_softap_rx_block_ack_control(|w| {
             w.set_valid(false);
         });

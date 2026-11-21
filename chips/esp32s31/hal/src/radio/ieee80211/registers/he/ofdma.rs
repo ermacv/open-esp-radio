@@ -439,20 +439,24 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// complete HE BlockAck response/deletion paths in
     /// `libnet80211.a[ieee80211_ht.o]`. The separate initial read and
     /// fresh read inside `modify` preserve the two-read/one-write blob edge.
-    pub fn set_he_trigger_based_tid_enabled(&mut self, tid: MacHeTid, enabled: bool) {
+    pub fn set_he_trigger_based_tid_enabled(
+        &mut self,
+        tid: MacHeTid,
+        state: oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid,
+    ) {
         let control = &mut self.mac.wifi_mac_he_buffer_status;
         let _initial = control.read_he_buffer_status_control();
         control.modify_he_buffer_status_control(|w| {
             match tid.value() {
-                0 => w.set_trigger_based_tid_0_enabled(enabled),
-                1 => w.set_trigger_based_tid_1_enabled(enabled),
-                2 => w.set_trigger_based_tid_2_enabled(enabled),
-                3 => w.set_trigger_based_tid_3_enabled(enabled),
-                4 => w.set_trigger_based_tid_4_enabled(enabled),
-                5 => w.set_trigger_based_tid_5_enabled(enabled),
-                6 => w.set_trigger_based_tid_6_enabled(enabled),
-                7 => w.set_trigger_based_tid_7_enabled(enabled),
-                _ => unreachable!("MacHeTid is bounded"),
+                0 => w.set_trigger_based_tid_0_enabled(state),
+                1 => w.set_trigger_based_tid_1_enabled(state),
+                2 => w.set_trigger_based_tid_2_enabled(state),
+                3 => w.set_trigger_based_tid_3_enabled(state),
+                4 => w.set_trigger_based_tid_4_enabled(state),
+                5 => w.set_trigger_based_tid_5_enabled(state),
+                6 => w.set_trigger_based_tid_6_enabled(state),
+                // MacHeTid holds 0 to 7.
+                _ => w.set_trigger_based_tid_7_enabled(state),
             };
         });
     }
@@ -462,7 +466,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
     /// `dbg_tb_ignore_cca_enable` and its own strings. A set hardware bit means
     /// "tb care CCA and NAV"; the debug ignore mode clears it.
-    pub fn set_he_trigger_based_cca_and_nav_care(&mut self, care: bool) {
+    pub fn set_he_trigger_based_cca_and_nav_care(
+        &mut self,
+        care: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::TbCareCcaAndNav,
+    ) {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_ersu_and_vht_control(|w| {
@@ -477,27 +484,31 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// is symbol-exact; the individual twenty-bit bitmap and five-bit class
     /// identities remain approximate. The bitmap's store sets its one
     /// field; the bits above it are kept.
-    pub fn set_he_obss_narrow_band_ru_disabled(&mut self, disabled: bool) {
+    pub fn disable_he_obss_narrow_band_ru(&mut self) {
         let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
         registers.modify_disable_bitmap(|w| {
-            w.set_value(if disabled {
-                Bits::constant::<0x000f_ffff>()
-            } else {
-                Bits::constant::<0>()
-            });
+            w.set_value(Bits::constant::<0x000f_ffff>());
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_class_disable(
-                if disabled {
-                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled
-                } else {
-                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled
-                }
-                .into(),
-            );
+            w.set_class_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled.into());
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_global_disable(disabled);
+            w.set_global_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Disabled);
+        });
+    }
+
+    /// Undo [`Self::disable_he_obss_narrow_band_ru`]: the same three
+    /// stores with every value cleared.
+    pub fn enable_he_obss_narrow_band_ru(&mut self) {
+        let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
+        registers.modify_disable_bitmap(|w| {
+            w.set_value(Bits::constant::<0>());
+        });
+        registers.modify_he_obss_narrow_band_ru_control(|w| {
+            w.set_class_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled.into());
+        });
+        registers.modify_he_obss_narrow_band_ru_control(|w| {
+            w.set_global_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Enabled);
         });
     }
 }

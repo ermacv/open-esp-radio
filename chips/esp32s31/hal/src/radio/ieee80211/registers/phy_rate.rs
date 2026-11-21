@@ -4,11 +4,6 @@
 //! Only Wi-Fi touches these words, so they belong to the Wi-Fi register set
 //! and need no shared radio lease.
 
-use oer_chips_esp32s31_pac::wifi_bb_brx::{
-    low_rate_primary_control::{LowRateEnableFirst, LowRateEnableSecond},
-    low_rate_secondary_control::LowRateEnable,
-};
-
 use super::{MacPlacement, WifiRadioRegisters, halfword};
 
 /// The signed quarter-dB noise floor of the measurement's twelve-bit code.
@@ -34,28 +29,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete rev0 ROM `phy_enable_low_rate` at `0x2f82_5210`
     /// and `phy_disable_low_rate` at `0x2f82_5230`, both size `0x20`.
     /// The two primary-word bits remain separate RMWs exactly as in ROM.
-    pub fn configure_phy_low_rate(&mut self, enabled: bool) {
+    pub fn configure_phy_low_rate(
+        &mut self,
+        state: oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate,
+    ) {
         let rate = &mut self.mac.wifi_phy_rate_oracle_wifi_bb_brx;
         rate.modify_low_rate_primary_control(|w| {
-            w.set_low_rate_enable_first(if enabled {
-                LowRateEnableFirst::Enabled
-            } else {
-                LowRateEnableFirst::Disabled
-            });
+            w.set_low_rate_enable_first(state);
         });
         rate.modify_low_rate_primary_control(|w| {
-            w.set_low_rate_enable_second(if enabled {
-                LowRateEnableSecond::Enabled
-            } else {
-                LowRateEnableSecond::Disabled
-            });
+            w.set_low_rate_enable_second(state);
         });
         rate.modify_low_rate_secondary_control(|w| {
-            w.set_low_rate_enable(if enabled {
-                LowRateEnable::Enabled
-            } else {
-                LowRateEnable::Disabled
-            });
+            w.set_low_rate_enable(state);
         });
     }
 
