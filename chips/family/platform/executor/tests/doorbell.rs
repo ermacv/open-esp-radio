@@ -1,4 +1,13 @@
 #![cfg(not(target_os = "none"))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 // Inline const checks in a runtime constructor are evaluated when it is
 // monomorphized. A metadata-only UI check cannot observe their rejection.

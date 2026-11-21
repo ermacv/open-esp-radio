@@ -1,4 +1,13 @@
 #![cfg(not(target_os = "none"))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[test]
 fn executor_startup_rejects_a_foreign_harts_route_at_monomorphization() {

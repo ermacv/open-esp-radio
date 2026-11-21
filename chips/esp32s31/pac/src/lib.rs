@@ -1,3 +1,7 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    reason = "generated: a field setter's one bool parameter is the bit's value"
+)]
 //! The ESP32-S31 PAC: the exact hardware model generated from the chip's
 //! register model (`chips/esp32s31/registers/`) by `cargo registers
 //! generate`, and the root that takes every claimed part once.

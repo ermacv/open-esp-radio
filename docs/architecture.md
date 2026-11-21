@@ -277,10 +277,9 @@ They also cover the following Espressif crates: their ordinary dependency closur
 contain no PAC, HAL, mmio or riscv crate, and their roots forbid unsafe code.
 Build and development dependencies do not determine this membership.
 The workspace denies both `clippy::disallowed_methods` and
-`clippy::disallowed_macros` for every package; every sans-IO crate (testing
-packages aside) has a local `clippy.toml` containing the complete catalogue
-in `tools/test/layers/sans-io-lints.toml`, the common root entries and its
-existing local entries.
+`clippy::disallowed_macros` for every package; the root `clippy.toml` holds
+the whole catalogue for every product crate, and a sans-IO crate (testing
+packages aside) has no configuration of its own.
 
 | Package | Directory |
 | --- | --- |

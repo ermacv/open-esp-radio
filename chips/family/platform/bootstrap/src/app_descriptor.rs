@@ -60,7 +60,8 @@ impl AppDescriptor {
             elf_sha256: [0; 32],
             min_revision: 0,
             max_revision: u16::MAX,
-            mmu_page_log2: page_bytes.ilog2() as u8,
+            // A power of two (checked above): its trailing zeros are its log2.
+            mmu_page_log2: page_bytes.trailing_zeros() as u8,
             flash_mode: 0,
             reserved3: [0; 2],
             reserved2: [0; 18],
@@ -88,10 +89,13 @@ const fn text<const N: usize>(value: &str) -> Result<[u8; N], DescriptorError> {
 // The loader/OTA ABI is fixed; a compiler layout change must fail compilation.
 const _: () = {
     use core::mem::{offset_of, size_of};
-    assert!(size_of::<AppDescriptor>() == 256);
-    assert!(offset_of!(AppDescriptor, secure_version) == 4);
-    assert!(offset_of!(AppDescriptor, elf_sha256) == 144);
-    assert!(offset_of!(AppDescriptor, mmu_page_log2) == 180);
+    if size_of::<AppDescriptor>() != 256
+        || offset_of!(AppDescriptor, secure_version) != 4
+        || offset_of!(AppDescriptor, elf_sha256) != 144
+        || offset_of!(AppDescriptor, mmu_page_log2) != 180
+    {
+        panic!("the application descriptor's layout is the loader's");
+    }
 };
 
 /// Place one descriptor in the bootstrap ELF under the name the host checks.

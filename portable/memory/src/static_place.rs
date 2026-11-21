@@ -57,14 +57,12 @@ impl<Layout: 'static> StaticPlace<Layout> {
     /// ```
     pub fn uninit<'a, T>(&'static mut self) -> &'a mut MaybeUninit<T> {
         const {
-            assert!(
-                size_of::<T>() <= size_of::<Layout>(),
-                "static place is too small"
-            );
-            assert!(
-                align_of::<T>() <= align_of::<Layout>(),
-                "static place is under-aligned"
-            );
+            if size_of::<T>() > size_of::<Layout>() {
+                panic!("static place is too small");
+            }
+            if align_of::<T>() > align_of::<Layout>() {
+                panic!("static place is under-aligned");
+            }
         }
         // SAFETY: the permanent exclusive loan prevents reuse, even if the
         // initialized owner is forgotten. The allocation outlives 'a; only

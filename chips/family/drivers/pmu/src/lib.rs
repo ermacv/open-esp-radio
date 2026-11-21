@@ -1,3 +1,8 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    clippy::struct_excessive_bools,
+    reason = "the family's drivers and facts, in the stand campaign"
+)]
 //! Espressif PMU light sleep over a chip's typed register traits.
 //!
 //! The chips with a PMU (the ESP32-C5, C6, P4 and S31) put the HP system to

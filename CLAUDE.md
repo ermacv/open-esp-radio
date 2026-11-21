@@ -148,10 +148,10 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   allow(…))` line for what Clippy's in-tests options do not cover.
   `disallowed_methods` is never allowed or expected at a crate root or for a
   module: tests take it by the one test line, and a production site allows
-  it only at the method's own home, with its reason. Every local Clippy
-  configuration retains all common method bans; a cleaned sans-IO crate's
-  `clippy.toml` holds the union described in
-  [docs/unsafe.md](docs/unsafe.md).
+  it only at the method's own home, with its reason. The root `clippy.toml`
+  holds the bans for every product crate; a local file exists only where a
+  crate cannot yet pass it, names the step that removes it and retains
+  every common ban; a sans-IO crate has none.
 - **Terminal decisions.** A reset or a runtime panic exists only at the
   hardware level, behind a proof marked `HW_PANIC_SOURCE: <name>` at the site
   and named in `[proofs]` of `tools/test/layers/terminal-sites.toml`. The
@@ -187,7 +187,8 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   `&mut` ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
   access; generated register code has none), `portable/riscv` (architectural
   instructions), `portable/memory` (cells, placement, DMA custody, typed symbol
-  exports), `portable/waker`, Espressif interrupt bindings in
+  exports), `portable/waker`, `portable/hot` (the hot-code attribute's
+  section), Espressif interrupt bindings in
   `chips/family/platform/interrupt-table`, the PAC's one root claim, probe
   images, the placement constructor, the HAL's PSRAM owner (slice creation)
   and the HAL's DMA release proofs (one constructor a kind of observation,

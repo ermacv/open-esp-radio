@@ -320678,7 +320678,11 @@ pub mod layouts {
 
         /// This value with `USER_PRIORITY` set to `VALUE`, checked at compile time.
         pub const fn with_user_priority_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf0) | value)
         }
@@ -320707,7 +320711,11 @@ pub mod layouts {
 
         /// This value with `QUEUE_CLASS` set to `VALUE`, checked at compile time.
         pub const fn with_queue_class_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf) | (value) << 4)
         }
@@ -320776,7 +320784,11 @@ pub mod layouts {
 
         /// This value with `INTERFACE` set to `VALUE`, checked at compile time.
         pub const fn with_interface_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff3ffff) | (value as u32) << 18)
         }
@@ -320917,7 +320929,11 @@ pub mod layouts {
 
         /// This value with `PAYLOAD` set to `VALUE`, checked at compile time.
         pub const fn with_payload_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xffffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xffffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff000000) | value)
         }
@@ -321594,7 +321610,11 @@ pub mod layouts {
 
         /// This value with `LOW` set to `VALUE`, checked at compile time.
         pub const fn with_low_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffff8) | value as u32)
         }
@@ -321703,8 +321723,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<WifiRxDmaDescriptor>() == 12);
-        assert!(core::mem::align_of::<WifiRxDmaDescriptor>() == 4);
+        if core::mem::size_of::<WifiRxDmaDescriptor>() != 12 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiRxDmaDescriptor>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl WifiRxDmaDescriptor {
@@ -321804,7 +321828,11 @@ pub mod layouts {
 
         /// This value with `SIZE` set to `VALUE`, checked at compile time.
         pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffc000) | value as u32)
         }
@@ -321833,7 +321861,11 @@ pub mod layouts {
 
         /// This value with `LENGTH` set to `VALUE`, checked at compile time.
         pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
@@ -322055,8 +322087,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<WifiBeaconRxDescriptor>() == 12);
-        assert!(core::mem::align_of::<WifiBeaconRxDescriptor>() == 4);
+        if core::mem::size_of::<WifiBeaconRxDescriptor>() != 12 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiBeaconRxDescriptor>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl WifiBeaconRxDescriptor {
@@ -322158,7 +322194,11 @@ pub mod layouts {
 
         /// This value with `SIZE` set to `VALUE`, checked at compile time.
         pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffc000) | value as u32)
         }
@@ -322187,7 +322227,11 @@ pub mod layouts {
 
         /// This value with `LENGTH` set to `VALUE`, checked at compile time.
         pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
@@ -322404,8 +322448,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<WifiTxopEntry>() == 4);
-        assert!(core::mem::align_of::<WifiTxopEntry>() == 4);
+        if core::mem::size_of::<WifiTxopEntry>() != 4 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiTxopEntry>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl WifiTxopEntry {
@@ -322493,7 +322541,11 @@ pub mod layouts {
 
         /// This value with `DESCRIPTOR_ADDRESS_LOW` set to `VALUE`, checked at compile time.
         pub const fn with_descriptor_address_low_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xfffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff00000) | value)
         }
@@ -322522,7 +322574,11 @@ pub mod layouts {
 
         /// This value with `MPDU_LENGTH` set to `VALUE`, checked at compile time.
         pub const fn with_mpdu_length_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffff) | (value as u32) << 20)
         }
@@ -322536,8 +322592,12 @@ pub mod layouts {
         entries: [WifiTxopEntry; 15],
     }
     const _: () = {
-        assert!(core::mem::size_of::<WifiTxopList>() == 60);
-        assert!(core::mem::align_of::<WifiTxopList>() == 4);
+        if core::mem::size_of::<WifiTxopList>() != 60 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiTxopList>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
     impl WifiTxopList {
         pub const SIZE: usize = 60;
@@ -322561,8 +322621,12 @@ pub mod layouts {
         entries: [WifiTxopEntry; 45],
     }
     const _: () = {
-        assert!(core::mem::size_of::<WifiTxopLists>() == 180);
-        assert!(core::mem::align_of::<WifiTxopLists>() == 4);
+        if core::mem::size_of::<WifiTxopLists>() != 180 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiTxopLists>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
     impl WifiTxopLists {
         pub const SIZE: usize = 180;
@@ -322592,8 +322656,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<WifiTxDmaDescriptor>() == 12);
-        assert!(core::mem::align_of::<WifiTxDmaDescriptor>() == 4);
+        if core::mem::size_of::<WifiTxDmaDescriptor>() != 12 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<WifiTxDmaDescriptor>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl WifiTxDmaDescriptor {
@@ -322693,7 +322761,11 @@ pub mod layouts {
 
         /// This value with `SIZE` set to `VALUE`, checked at compile time.
         pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffc000) | value as u32)
         }
@@ -322722,7 +322794,11 @@ pub mod layouts {
 
         /// This value with `LENGTH` set to `VALUE`, checked at compile time.
         pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf0003fff) | (value as u32) << 14)
         }
@@ -322925,8 +323001,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<AxiDmaDescriptor>() == 16);
-        assert!(core::mem::align_of::<AxiDmaDescriptor>() == 8);
+        if core::mem::size_of::<AxiDmaDescriptor>() != 16 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<AxiDmaDescriptor>() != 8 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl AxiDmaDescriptor {
@@ -323030,7 +323110,11 @@ pub mod layouts {
 
         /// This value with `SIZE` set to `VALUE`, checked at compile time.
         pub const fn with_size_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffff000) | value as u32)
         }
@@ -323059,7 +323143,11 @@ pub mod layouts {
 
         /// This value with `LENGTH` set to `VALUE`, checked at compile time.
         pub const fn with_length_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff000fff) | (value as u32) << 12)
         }
@@ -324040,7 +324128,11 @@ pub mod layouts {
 
         /// This value with `MPDU_LEN` set to `VALUE`, checked at compile time.
         pub const fn with_mpdu_len_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffc000) | value as u32)
         }
@@ -324107,7 +324199,11 @@ pub mod layouts {
 
         /// This value with `BITS_25_28_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_25_28_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xe1ffffff) | (value as u32) << 25)
         }
@@ -324136,7 +324232,11 @@ pub mod layouts {
 
         /// This value with `NULL_BYTE` set to `VALUE`, checked at compile time.
         pub const fn with_null_byte_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x1fffffff) | (value as u32) << 29)
         }
@@ -324296,8 +324396,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleBufferHeader>() == 24);
-        assert!(core::mem::align_of::<BleBufferHeader>() == 4);
+        if core::mem::size_of::<BleBufferHeader>() != 24 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleBufferHeader>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleBufferHeader {
@@ -324814,7 +324918,11 @@ pub mod layouts {
 
         /// This value with `LLID` set to `VALUE`, checked at compile time.
         pub const fn with_llid_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffff9) | (value as u32) << 1)
         }
@@ -325239,7 +325347,11 @@ pub mod layouts {
 
         /// This value with `BITS_5_8_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_5_8_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffe1f) | (value as u32) << 5)
         }
@@ -325310,7 +325422,11 @@ pub mod layouts {
 
         /// This value with `BITS_11_23_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_11_23_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x1fff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1fff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff0007ff) | (value as u32) << 11)
         }
@@ -325859,8 +325975,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleSchedulerItem>() == 96);
-        assert!(core::mem::align_of::<BleSchedulerItem>() == 4);
+        if core::mem::size_of::<BleSchedulerItem>() != 96 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleSchedulerItem>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleSchedulerItem {
@@ -326159,7 +326279,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_21_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_21_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffcfffff) | (value as u32) << 20)
         }
@@ -326467,7 +326591,11 @@ pub mod layouts {
 
         /// This value with `KIND` set to `VALUE`, checked at compile time.
         pub const fn with_kind_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff0fffff) | (value as u32) << 20)
         }
@@ -326673,7 +326801,11 @@ pub mod layouts {
 
         /// This value with `PHY_CODE_28_29` set to `VALUE`, checked at compile time.
         pub const fn with_phy_code_28_29_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xcfffffff) | (value as u32) << 28)
         }
@@ -326705,7 +326837,11 @@ pub mod layouts {
 
         /// This value with `PHY_CODE_30_31` set to `VALUE`, checked at compile time.
         pub const fn with_phy_code_30_31_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x3fffffff) | (value as u32) << 30)
         }
@@ -326775,7 +326911,11 @@ pub mod layouts {
 
         /// This value with `ARBITRATION_PRIORITY` set to `VALUE`, checked at compile time.
         pub const fn with_arbitration_priority_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffff0) | value as u32)
         }
@@ -326804,7 +326944,11 @@ pub mod layouts {
 
         /// This value with `PRIORITY_COPY` set to `VALUE`, checked at compile time.
         pub const fn with_priority_copy_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffff0f) | (value as u32) << 4)
         }
@@ -326833,7 +326977,11 @@ pub mod layouts {
 
         /// This value with `FREQUENCY` set to `VALUE`, checked at compile time.
         pub const fn with_frequency_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffff80ff) | (value as u32) << 8)
         }
@@ -326903,7 +327051,11 @@ pub mod layouts {
 
         /// This value with `BITS_0_20_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_0_20_opaque_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0x1fffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1fffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffe00000) | value)
         }
@@ -326932,7 +327084,11 @@ pub mod layouts {
 
         /// This value with `BITS_22_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_22_31_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x3fffff) | (value as u32) << 22)
         }
@@ -327002,7 +327158,11 @@ pub mod layouts {
 
         /// This value with `VALUE` set to `VALUE`, checked at compile time.
         pub const fn with_value_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0xfff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffff000) | value as u32)
         }
@@ -327072,7 +327232,11 @@ pub mod layouts {
 
         /// This value with `LANE_0` set to `VALUE`, checked at compile time.
         pub const fn with_lane_0_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x1f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffffe0) | value as u32)
         }
@@ -327101,7 +327265,11 @@ pub mod layouts {
 
         /// This value with `LANE_1` set to `VALUE`, checked at compile time.
         pub const fn with_lane_1_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x1f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffc1f) | (value as u32) << 5)
         }
@@ -327130,7 +327298,11 @@ pub mod layouts {
 
         /// This value with `LANE_2` set to `VALUE`, checked at compile time.
         pub const fn with_lane_2_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x1f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffff83ff) | (value as u32) << 10)
         }
@@ -327159,7 +327331,11 @@ pub mod layouts {
 
         /// This value with `LANE_3` set to `VALUE`, checked at compile time.
         pub const fn with_lane_3_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x1f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff07fff) | (value as u32) << 15)
         }
@@ -327287,7 +327463,11 @@ pub mod layouts {
 
         /// This value with `BITS_16_20_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_16_20_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x1f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffe0ffff) | (value as u32) << 16)
         }
@@ -327480,7 +327660,11 @@ pub mod layouts {
 
         /// This value with `BITS_0_10_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_0_10_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x7ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffff800) | value as u32)
         }
@@ -327536,7 +327720,11 @@ pub mod layouts {
 
         /// This value with `BITS_12_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_12_31_opaque_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xfffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff) | (value) << 12)
         }
@@ -327862,7 +328050,11 @@ pub mod layouts {
 
         /// This value with `BITS_17_23_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_17_23_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff01ffff) | (value as u32) << 17)
         }
@@ -328233,8 +328425,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleLinkState>() == 132);
-        assert!(core::mem::align_of::<BleLinkState>() == 4);
+        if core::mem::size_of::<BleLinkState>() != 132 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleLinkState>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleLinkState {
@@ -328734,7 +328930,11 @@ pub mod layouts {
 
         /// This value with `PHY_CODE_28_29` set to `VALUE`, checked at compile time.
         pub const fn with_phy_code_28_29_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xcfffffff) | (value as u32) << 28)
         }
@@ -328763,7 +328963,11 @@ pub mod layouts {
 
         /// This value with `PHY_CODE_30_31` set to `VALUE`, checked at compile time.
         pub const fn with_phy_code_30_31_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x3fffffff) | (value as u32) << 30)
         }
@@ -328887,7 +329091,11 @@ pub mod layouts {
 
         /// This value with `BITS_28_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_28_31_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffff) | (value as u32) << 28)
         }
@@ -328957,7 +329165,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_23_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_23_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff0fffff) | (value as u32) << 20)
         }
@@ -328986,7 +329198,11 @@ pub mod layouts {
 
         /// This value with `BITS_24_27_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_24_27_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf0ffffff) | (value as u32) << 24)
         }
@@ -329098,7 +329314,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_30_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_30_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x7ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x800fffff) | (value as u32) << 20)
         }
@@ -329171,7 +329391,11 @@ pub mod layouts {
 
         /// This value with `BITS_26_27_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_26_27_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf3ffffff) | (value as u32) << 26)
         }
@@ -329241,7 +329465,11 @@ pub mod layouts {
 
         /// This value with `BITS_0_19_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_0_19_opaque_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xfffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xfffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff00000) | value)
         }
@@ -329291,7 +329519,11 @@ pub mod layouts {
 
         /// This value with `BITS_21_24_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_21_24_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfe1fffff) | (value as u32) << 21)
         }
@@ -329341,7 +329573,11 @@ pub mod layouts {
 
         /// This value with `BITS_26_29_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_26_29_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xc3ffffff) | (value as u32) << 26)
         }
@@ -329494,7 +329730,11 @@ pub mod layouts {
 
         /// This value with `BITS_0_6_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_0_6_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffff80) | value as u32)
         }
@@ -329532,7 +329772,11 @@ pub mod layouts {
 
         /// This value with `CLASS` set to `VALUE`, checked at compile time.
         pub const fn with_class_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x8fffffff) | (value as u32) << 28)
         }
@@ -329641,7 +329885,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_22_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_22_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff8fffff) | (value as u32) << 20)
         }
@@ -329670,7 +329918,11 @@ pub mod layouts {
 
         /// This value with `BITS_24_26_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_24_26_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x7, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xf8ffffff) | (value as u32) << 24)
         }
@@ -329699,7 +329951,11 @@ pub mod layouts {
 
         /// This value with `SOURCE` set to `VALUE`, checked at compile time.
         pub const fn with_source_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xcfffffff) | (value as u32) << 28)
         }
@@ -329728,7 +329984,11 @@ pub mod layouts {
 
         /// This value with `BITS_30_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_30_31_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x3fffffff) | (value as u32) << 30)
         }
@@ -329839,7 +330099,11 @@ pub mod layouts {
 
         /// This value with `VALUE` set to `VALUE`, checked at compile time.
         pub const fn with_value_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xffffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xffffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff000000) | value)
         }
@@ -329868,7 +330132,11 @@ pub mod layouts {
 
         /// This value with `SCAN_FILTER_POLICY` set to `VALUE`, checked at compile time.
         pub const fn with_scan_filter_policy_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfcffffff) | (value as u32) << 24)
         }
@@ -329976,7 +330244,11 @@ pub mod layouts {
 
         /// This value with `BITS_9_12_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_9_12_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffe1ff) | (value as u32) << 9)
         }
@@ -330026,7 +330298,11 @@ pub mod layouts {
 
         /// This value with `COEXISTENCE_PROTECTION` set to `VALUE`, checked at compile time.
         pub const fn with_coexistence_protection_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfff03fff) | (value as u32) << 14)
         }
@@ -330055,7 +330331,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_21_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_21_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffcfffff) | (value as u32) << 20)
         }
@@ -330316,7 +330596,11 @@ pub mod layouts {
 
         /// This value with `BITS_16_17_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_16_17_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffcffff) | (value as u32) << 16)
         }
@@ -330444,7 +330728,11 @@ pub mod layouts {
 
         /// This value with `BITS_0_8_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_0_8_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x1ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x1ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xfffffe00) | value as u32)
         }
@@ -330650,7 +330938,11 @@ pub mod layouts {
 
         /// This value with `BITS_20_23_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_20_23_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0xf, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xf {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff0fffff) | (value as u32) << 20)
         }
@@ -330679,7 +330971,11 @@ pub mod layouts {
 
         /// This value with `COMMON_RADIO_POLICY` set to `VALUE`, checked at compile time.
         pub const fn with_common_radio_policy_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3f, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3f {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xc0ffffff) | (value as u32) << 24)
         }
@@ -330791,7 +331087,11 @@ pub mod layouts {
 
         /// This value with `BITS_19_20_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_19_20_opaque_constant<const VALUE: u8>(self) -> Self {
-            const { assert!(VALUE <= 0x3, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3 {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffe7ffff) | (value as u32) << 19)
         }
@@ -330820,7 +331120,11 @@ pub mod layouts {
 
         /// This value with `BITS_21_30_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_21_30_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x3ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x3ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0x801fffff) | (value as u32) << 21)
         }
@@ -331476,8 +331780,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleSchedulerContext>() == 72);
-        assert!(core::mem::align_of::<BleSchedulerContext>() == 4);
+        if core::mem::size_of::<BleSchedulerContext>() != 72 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleSchedulerContext>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleSchedulerContext {
@@ -332420,8 +332728,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BlePhyEnvironment>() == 132);
-        assert!(core::mem::align_of::<BlePhyEnvironment>() == 4);
+        if core::mem::size_of::<BlePhyEnvironment>() != 132 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BlePhyEnvironment>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BlePhyEnvironment {
@@ -334857,8 +335169,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleResolvingList>() == 64);
-        assert!(core::mem::align_of::<BleResolvingList>() == 4);
+        if core::mem::size_of::<BleResolvingList>() != 64 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleResolvingList>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleResolvingList {
@@ -335693,8 +336009,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleDeviceTableEntry>() == 8);
-        assert!(core::mem::align_of::<BleDeviceTableEntry>() == 4);
+        if core::mem::size_of::<BleDeviceTableEntry>() != 8 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleDeviceTableEntry>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleDeviceTableEntry {
@@ -335834,7 +336154,11 @@ pub mod layouts {
 
         /// This value with `BITS_2_12_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_2_12_opaque_constant<const VALUE: u16>(self) -> Self {
-            const { assert!(VALUE <= 0x7ff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0x7ff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xffffe003) | (value as u32) << 2)
         }
@@ -335986,8 +336310,12 @@ pub mod layouts {
         entries: [BleDeviceTableEntry; 12],
     }
     const _: () = {
-        assert!(core::mem::size_of::<BleDeviceTable>() == 96);
-        assert!(core::mem::align_of::<BleDeviceTable>() == 4);
+        if core::mem::size_of::<BleDeviceTable>() != 96 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleDeviceTable>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
     impl BleDeviceTable {
         pub const SIZE: usize = 96;
@@ -336014,8 +336342,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleDirectionFindingConfiguration>() == 4);
-        assert!(core::mem::align_of::<BleDirectionFindingConfiguration>() == 4);
+        if core::mem::size_of::<BleDirectionFindingConfiguration>() != 4 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleDirectionFindingConfiguration>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleDirectionFindingConfiguration {
@@ -336126,7 +336458,11 @@ pub mod layouts {
 
         /// This value with `BITS_8_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_8_31_opaque_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xffffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xffffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff) | (value) << 8)
         }
@@ -336146,8 +336482,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleDirectionFindingDescriptor>() == 16);
-        assert!(core::mem::align_of::<BleDirectionFindingDescriptor>() == 4);
+        if core::mem::size_of::<BleDirectionFindingDescriptor>() != 16 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleDirectionFindingDescriptor>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleDirectionFindingDescriptor {
@@ -336404,8 +336744,12 @@ pub mod layouts {
     }
 
     const _: () = {
-        assert!(core::mem::size_of::<BleDirectionFindingWorkspace>() == 32);
-        assert!(core::mem::align_of::<BleDirectionFindingWorkspace>() == 4);
+        if core::mem::size_of::<BleDirectionFindingWorkspace>() != 32 {
+            panic!("the layout's size is the hardware's")
+        }
+        if core::mem::align_of::<BleDirectionFindingWorkspace>() != 4 {
+            panic!("the layout's alignment is the hardware's")
+        }
     };
 
     impl BleDirectionFindingWorkspace {
@@ -336656,7 +337000,11 @@ pub mod layouts {
 
         /// This value with `BITS_8_31_OPAQUE` set to `VALUE`, checked at compile time.
         pub const fn with_bits_8_31_opaque_constant<const VALUE: u32>(self) -> Self {
-            const { assert!(VALUE <= 0xffffff, "the constant fits the layout field") };
+            const {
+                if VALUE > 0xffffff {
+                    panic!("the constant fits the layout field")
+                }
+            };
             let value = VALUE;
             Self((self.0 & 0xff) | (value) << 8)
         }

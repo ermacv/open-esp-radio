@@ -1,4 +1,8 @@
 #![expect(
+    clippy::fn_params_excessive_bools,
+    reason = "R2: the family drivers' area"
+)]
+#![expect(
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
 )]

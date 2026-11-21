@@ -21,16 +21,21 @@ it:
   refuses that attribute even from a foreign macro (E0453), while the lint
   does not fire on the macro's own unsafe code. A crate that expands its own
   macro allows the unsafe code at the call site.
-- `[workspace.lints.clippy]` denies `disallowed_methods`; `clippy.toml` lists
-  them, including direct `core::mem::{zeroed, transmute}` and their `std`
-  counterparts. An intentional use carries a local `allow` or `expect`
-  with a reason. Every `clippy.toml` in the tree retains all common method
-  bans; `every_clippy_config_retains_all_common_method_bans` checks this.
-  One ban has exceptions: `oer_portable_mmio::Bits::truncate`, which keeps
-  the low bits of any value. The PAC's `clippy.toml` leaves it out for
-  good, because its generated getters cut a field out of a word they read.
-  The HAL's and the facts probe's leave it out until the steps that remove
-  their calls (R2's area PRs; the probe's own PR after R2).
+- `[workspace.lints.clippy]` denies `disallowed_methods`; the root
+  `clippy.toml` lists them for every product crate, including direct
+  `core::mem::{zeroed, transmute}` and their `std` counterparts. Its
+  entries with a reason are the common bans; its plain entries are the
+  catalogue of methods that panic. A crate that cannot yet pass it keeps a
+  local `clippy.toml`: the root's without the entries it still calls,
+  naming in its first line the step that removes it; the tools read
+  `tools/clippy.toml`. Every `clippy.toml` in the tree retains all common
+  method bans; `every_clippy_config_retains_all_common_method_bans` checks
+  this. One ban has exceptions: `oer_portable_mmio::Bits::truncate`, which
+  keeps the low bits of any value. The PAC's `clippy.toml` leaves it out
+  until the step after R2, in which the PAC builds its field values itself
+  and the method is no longer public; the HAL's and the facts probe's
+  leave it out until the steps that remove their calls (R2's area PRs; the
+  probe's own PR after R2).
   `TRUNCATE_BAN_LEFT_OUT` in the layer tests names the three, and
   `a_package_without_the_truncate_ban_still_calls_it` fails once a
   package with a temporary exception has no call left. The four lints
@@ -59,13 +64,13 @@ it:
   module, allow at their top. `disallowed_methods` is otherwise allowed
   only at a banned method's own home, with its reason, and never
   expected; `SILENCED` counts every such attribute.
-  `tools/test/layers/sans-io-lints.toml` is the canonical sans-IO catalogue:
-  assertion macros (including `vendor_assert!`), panicking core methods and
-  `core::task::Waker::noop`. Every sans-IO package (testing packages aside)
-  has a local `clippy.toml` containing that entire catalogue, all common
-  root bans and its existing local entries. Layer tests enforce catalogue
-  membership; they do not replace Clippy or prove transitive absence of
-  panics.
+  The root `clippy.toml` is the catalogue: assertion macros (including
+  `vendor_assert!`), panicking core methods and `core::task::Waker::noop`.
+  A sans-IO package (testing packages aside) has no local `clippy.toml`
+  (`a_local_clippy_configuration_is_the_exception_and_names_its_step`); the
+  layer tests do not replace Clippy or prove transitive absence of panics.
+  A build-time check takes the form `if !cond { panic!("…") }` in a const
+  item or block, never an assertion macro.
 
 Sans-IO code contains no `unsafe` and no runtime panic paths, including
 `panic!`, `unreachable!`, `todo!`, `unimplemented!`, assertions and debug

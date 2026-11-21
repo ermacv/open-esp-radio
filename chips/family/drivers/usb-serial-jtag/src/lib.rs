@@ -1,3 +1,7 @@
+#![expect(
+    clippy::struct_excessive_bools,
+    reason = "the family's drivers and facts, in the stand campaign"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(

@@ -1,4 +1,13 @@
 #![cfg(not(target_os = "none"))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 // `Extends` is a safe trait any crate may implement; the rights it converts
 // check their executor where they convert, at monomorphization, which a

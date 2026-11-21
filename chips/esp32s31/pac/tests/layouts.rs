@@ -1,4 +1,12 @@
-#![allow(clippy::disallowed_methods, reason = "test code: a test may panic")]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! The generated memory layouts as values and cells: the builders and
 //! getters agree, a value wider than its field is refused, cells keep what
 //! they were given, and typed addresses round-trip. Field positions are the

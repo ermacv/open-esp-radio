@@ -102,23 +102,24 @@ is gone both fail, so every list only shrinks:
     slice of bytes named otherwise.
 
 - A state is a sum (`CLAUDE.md`). Clippy's `struct_excessive_bools` and
-  `fn_params_excessive_bools` are errors in the whole workspace, at
-  `max-struct-bools = 1` and `max-fn-params-bools = 0` (1 in the packages
-  of the roles `Pac`, `Hal` and `HardwareDriver`, where one `bool`
-  parameter is a bit's value). Two kinds of packages read thresholds that
-  never fire (255): the tools (`tools/`, but the layer tests), and the
-  packages outside the Wi-Fi path not yet clean, by the list
+  `fn_params_excessive_bools` are errors in the whole workspace, at the
+  root's `max-struct-bools = 1` and `max-fn-params-bools = 0`; the tools
+  (`tools/`) read `tools/clippy.toml`, whose thresholds never fire (255).
+  The packages outside the Wi-Fi path not yet clean, by the list
   `DEFERRED_BOOL_LINTS`, each with its two counts (a record) and what
-  cleans it, which only shrinks and is emptied after the stand campaign.
+  cleans it, expect the lints at their crate root with that step as the
+  reason; the list only shrinks and is emptied after the stand campaign.
+  The PAC alone, whose generated setters take a bit's value as a `bool`,
+  expects `fn_params_excessive_bools` at its crate root for good; no other
+  package has a `bool` parameter. `SILENCED` counts each expectation.
   The Wi-Fi path (`protocols/ieee80211`, every path holding
   `radio/ieee80211`, `oer` and the entries) is never deferred
   (`every_deferred_package_is_a_package_outside_the_wifi_path_and_the_tools`).
-  `every_clippy_config_holds_the_rules_thresholds` holds every
-  configuration to its kind: a listed package with the rule's thresholds
-  fails (it is clean: take it out of the list), and so does a package
-  with the loose ones that is in neither kind; and
-  `no_source_allows_or_expects_a_bool_lint` refuses any `allow` or
-  `expect` of the two, in production and in tests. Over the protocols, the
+  `every_clippy_config_holds_the_rules_thresholds` holds the configuration
+  every package reads to its kind, and
+  `no_source_allows_or_expects_a_bool_lint` refuses any `allow` of the two,
+  and any `expect` but those crate-root ones
+  (`may_expect_a_bool_lint`), in production and in tests. Over the protocols, the
   Wi-Fi radio crates, the applications' entries and `oer`, lists that only
   shrink keep what no lint sees:
   - `HIDDEN_FLAGS`: an enum variant's fields, or a struct's, whose types

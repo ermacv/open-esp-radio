@@ -30,7 +30,9 @@ struct TrapFrame {
 }
 
 const FRAME_BYTES: usize = core::mem::size_of::<TrapFrame>();
-const _: () = assert!(FRAME_BYTES.is_multiple_of(16));
+const _: () = if !FRAME_BYTES.is_multiple_of(16) {
+    panic!("a trap frame keeps the stack 16-byte aligned");
+};
 
 #[cfg(target_arch = "riscv32")]
 // SAFETY: this image alone defines its trap symbols and generated vector table.

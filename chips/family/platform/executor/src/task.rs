@@ -281,12 +281,17 @@ pub struct Task<M: MakeFuture, T> {
 unsafe impl<M: MakeFuture, T> Sync for Task<M, T> {}
 
 impl<M: MakeFuture, T: Tasks> Task<M, T> {
-    /// The empty slot of the task at `index` of `T`.
-    pub const fn new(index: u8) -> Self {
-        assert!(index < T::COUNT, "the task's index lies in its set");
+    /// The empty slot of the task at `INDEX` of `T`, checked at
+    /// monomorphization.
+    pub const fn new<const INDEX: u8>() -> Self {
+        const {
+            if INDEX >= T::COUNT {
+                panic!("the task's index lies in its set");
+            }
+        };
         Self {
             state: AtomicU8::new(EMPTY),
-            index,
+            index: INDEX,
             stage: UnsafeCell::new(MaybeUninit::uninit()),
             _tasks: PhantomData,
         }
@@ -809,10 +814,9 @@ macro_rules! tasks {
             }
         }
 
-        const _: () = assert!(
-            <$set as $crate::task::Tasks>::COUNT <= $crate::task::MAX_TASKS,
-            "an executor declares at most MAX_TASKS tasks"
-        );
+        const _: () = if <$set as $crate::task::Tasks>::COUNT > $crate::task::MAX_TASKS {
+            panic!("an executor declares at most MAX_TASKS tasks");
+        };
 
         impl $set {
             $(
@@ -849,7 +853,7 @@ macro_rules! tasks {
             pub(super) type Start = impl $crate::task::MakeFuture;
             pub(super) const TASK_INDEX: u8 = $index;
             pub(super) static TASK: $crate::task::Task<Start, super::$set> =
-                $crate::task::Task::new(TASK_INDEX);
+                $crate::task::Task::new::<TASK_INDEX>();
         }
         $crate::tasks!(@slots $set [$index + 1] $($rest)*);
     };

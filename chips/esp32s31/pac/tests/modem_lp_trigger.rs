@@ -1,3 +1,12 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! Bus-image contracts of the silicon-qualified mixed mode word. The host
 //! memory models a bus write, not the silicon's subsequent latch transition.
 use oer_chips_esp32s31_pac::{

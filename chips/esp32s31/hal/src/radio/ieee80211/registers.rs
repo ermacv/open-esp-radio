@@ -464,13 +464,21 @@ pub(crate) const fn bits<const WIDTH: u32>(value: u32) -> Bits<WIDTH> {
 
 /// A field of at most eight bits, as the byte it holds.
 pub(crate) const fn byte<const WIDTH: u32>(value: Bits<WIDTH>) -> u8 {
-    const { assert!(WIDTH <= 8, "the field fits a byte") };
+    const {
+        if WIDTH > 8 {
+            panic!("the field fits a byte")
+        }
+    };
     value.get().to_le_bytes()[0]
 }
 
 /// A field of at most sixteen bits, as the halfword it holds.
 pub(crate) const fn halfword<const WIDTH: u32>(value: Bits<WIDTH>) -> u16 {
-    const { assert!(WIDTH <= 16, "the field fits a halfword") };
+    const {
+        if WIDTH > 16 {
+            panic!("the field fits a halfword")
+        }
+    };
     let [low, high, _, _] = value.get().to_le_bytes();
     u16::from_le_bytes([low, high])
 }

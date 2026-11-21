@@ -76,10 +76,9 @@ type ThisHart = PhantomData<*const ()>;
 /// A fatal path's key of its hart in the cells.
 pub(crate) const fn key(hart: Hart) -> u8 {
     const {
-        assert!(
-            HARTS <= oer_portable_memory::KEYS as usize,
-            "every hart has a fatal election key"
-        );
+        if !(HARTS <= oer_portable_memory::KEYS as usize) {
+            panic!("every hart has a fatal election key")
+        };
     }
     hart.get() as u8
 }

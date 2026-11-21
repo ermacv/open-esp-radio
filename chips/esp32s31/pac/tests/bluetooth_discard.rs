@@ -1,3 +1,12 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! A fixed timer discard must leave delivery configuration and sibling words
 //! alone. Host storage observes bus writes, not silicon W1C behavior.
 use oer_chips_esp32s31_pac::{

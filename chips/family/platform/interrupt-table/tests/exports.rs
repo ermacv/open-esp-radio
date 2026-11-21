@@ -1,4 +1,13 @@
 #![cfg(not(target_os = "none"))]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 #![forbid(unsafe_code)]
 
 use std::{fs, path::Path, process::Command};

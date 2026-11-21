@@ -70,7 +70,9 @@ impl DmaSpace for NativeDma {
     fn address<A: ?Sized, F: ?Sized>(_: &A, field: *const F) -> Option<u32> {
         #[cfg(target_arch = "riscv32")]
         const {
-            assert!(size_of::<usize>() == size_of::<u32>());
+            if !(size_of::<usize>() == size_of::<u32>()) {
+                panic!("build-time check: size_of::<usize>() == size_of::<u32>()")
+            };
         }
         Some(field.addr() as u32)
     }

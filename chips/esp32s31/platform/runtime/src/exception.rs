@@ -109,24 +109,37 @@ pub struct LineView {
 }
 
 #[cfg(any(test, target_arch = "riscv32"))]
-/// The retained words, in order.
-#[derive(Clone, Copy, bytemuck::AnyBitPattern, bytemuck::NoUninit)]
-#[repr(C)]
-struct Payload {
-    flags: u32,
-    terminal: u32,
-    mcause: u32,
-    mepc: u32,
-    mtval: u32,
-    ra: u32,
-    sp: u32,
-    mtvec: u32,
-    mtvt: u32,
-    vector: u32,
-    slot: u32,
-    state: u32,
-    pending: [u32; SOURCE_WORDS],
-    routed: [u32; SOURCE_WORDS],
+use payload::Payload;
+
+/// The retained words, in a module of their own: the derive's expansion is
+/// the one place its lint attribute covers.
+#[cfg(any(test, target_arch = "riscv32"))]
+#[expect(
+    clippy::disallowed_macros,
+    reason = "bytemuck's derive asserts the layout at build time"
+)]
+mod payload {
+    use super::SOURCE_WORDS;
+
+    /// The retained words, in order.
+    #[derive(Clone, Copy, bytemuck::AnyBitPattern, bytemuck::NoUninit)]
+    #[repr(C)]
+    pub(super) struct Payload {
+        pub(super) flags: u32,
+        pub(super) terminal: u32,
+        pub(super) mcause: u32,
+        pub(super) mepc: u32,
+        pub(super) mtval: u32,
+        pub(super) ra: u32,
+        pub(super) sp: u32,
+        pub(super) mtvec: u32,
+        pub(super) mtvt: u32,
+        pub(super) vector: u32,
+        pub(super) slot: u32,
+        pub(super) state: u32,
+        pub(super) pending: [u32; SOURCE_WORDS],
+        pub(super) routed: [u32; SOURCE_WORDS],
+    }
 }
 
 impl Observed {

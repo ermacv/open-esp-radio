@@ -137,11 +137,12 @@ impl<T, const DEPTH: usize> AffineSpscQueue<T, DEPTH> {
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
     const fn check_capacity() {
         const {
-            assert!(DEPTH != 0, "affine SPSC queue must not be empty");
-            assert!(
-                DEPTH <= usize::MAX / 2,
-                "affine SPSC cursor domain must fit usize"
-            );
+            if DEPTH == 0 {
+                panic!("affine SPSC queue must not be empty");
+            }
+            if DEPTH > usize::MAX / 2 {
+                panic!("affine SPSC cursor domain must fit usize");
+            }
         }
     }
 

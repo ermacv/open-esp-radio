@@ -11,7 +11,7 @@
 //!   back, then a cold start and receive again.
 //!
 //! Every window counts the sender's units and the ring's anomalies by kind.
-use crate::case_c::{CASES, Case, byte};
+use crate::case_c::{CASES, Case, byte, word_padded};
 use crate::radio::{
     Brought, CooperativeTimer, Failure, Radio, SessionParts, apart, begin, bring_up, held, phase,
     prepare, stop,
@@ -551,7 +551,7 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: &mut Option<[u8
     // The bytes after the header are the MPDU without its FCS, rounded up to
     // a word. SOURCE: `HW_RX_CHAIN_LAPS_20261117` in
     // chips/esp32s31/registers/evidence/hw-rx-radio.toml.
-    let length_agrees = (FLOOR + length).next_multiple_of(4) == FLOOR + written;
+    let length_agrees = word_padded(FLOOR + length) == FLOOR + written;
     let bytes_agree = (0..length).all(|offset| {
         // Duration and Sequence Control are the MAC's; so is the Retry flag.
         if matches!(offset, 2 | 3 | 22 | 23) {
@@ -576,7 +576,8 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: &mut Option<[u8
 /// its FCS, padded to a word, in buffers of [`SIZE`]
 /// (`HW_RX_CHAIN_LAPS_20261117`).
 const fn expected_descriptors(case: Case) -> usize {
-    (FLOOR + case.length()).next_multiple_of(4).div_ceil(SIZE)
+    // `SIZE` is a constant above zero: the division cannot fail.
+    (word_padded(FLOOR + case.length()) + (SIZE - 1)) / SIZE
 }
 
 /// What a window serves with.

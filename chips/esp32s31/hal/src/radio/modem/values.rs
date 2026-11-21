@@ -461,15 +461,41 @@ impl ForcedRxGain {
 
 // The HAL domains fit the generated accessor argument widths without narrowing.
 const _: () = {
-    assert!(ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX);
-    assert!(CoexTimerClockDividerMinusOne::MAX == oer_portable_mmio::Bits::<12>::MAX);
-    assert!(CoexTimerClientValue::MAX == oer_portable_mmio::Bits::<2>::MAX);
-    assert!(CoexTimerPtiValue::MAX == oer_portable_mmio::Bits::<4>::MAX);
-    assert!(ExternalCoexGrantDelay::MAX == oer_portable_mmio::Bits::<4>::MAX);
-    assert!(ExternalCoexNibble::MAX == oer_portable_mmio::Bits::<4>::MAX);
-    assert!(ExternalCoexSync::MAX == oer_portable_mmio::Bits::<10>::MAX);
-    assert!(ExternalCoexWorkMode::MAX == oer_portable_mmio::Bits::<2>::MAX);
-    assert!(PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX);
-    assert!(CfrValue::MAX == oer_portable_mmio::Bits::<12>::MAX);
-    assert!(ForcedRxGain::MAX == oer_portable_mmio::Bits::<8>::MAX);
+    if !(ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX) {
+        panic!(
+            "build-time check: ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX"
+        )
+    };
+    if !(CoexTimerClockDividerMinusOne::MAX == oer_portable_mmio::Bits::<12>::MAX) {
+        panic!(
+            "build-time check: CoexTimerClockDividerMinusOne::MAX == oer_portable_mmio::Bits::<12>::MAX"
+        )
+    };
+    if !(CoexTimerClientValue::MAX == oer_portable_mmio::Bits::<2>::MAX) {
+        panic!("build-time check: CoexTimerClientValue::MAX == oer_portable_mmio::Bits::<2>::MAX")
+    };
+    if !(CoexTimerPtiValue::MAX == oer_portable_mmio::Bits::<4>::MAX) {
+        panic!("build-time check: CoexTimerPtiValue::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    };
+    if !(ExternalCoexGrantDelay::MAX == oer_portable_mmio::Bits::<4>::MAX) {
+        panic!("build-time check: ExternalCoexGrantDelay::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    };
+    if !(ExternalCoexNibble::MAX == oer_portable_mmio::Bits::<4>::MAX) {
+        panic!("build-time check: ExternalCoexNibble::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    };
+    if !(ExternalCoexSync::MAX == oer_portable_mmio::Bits::<10>::MAX) {
+        panic!("build-time check: ExternalCoexSync::MAX == oer_portable_mmio::Bits::<10>::MAX")
+    };
+    if !(ExternalCoexWorkMode::MAX == oer_portable_mmio::Bits::<2>::MAX) {
+        panic!("build-time check: ExternalCoexWorkMode::MAX == oer_portable_mmio::Bits::<2>::MAX")
+    };
+    if !(PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX) {
+        panic!("build-time check: PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX")
+    };
+    if !(CfrValue::MAX == oer_portable_mmio::Bits::<12>::MAX) {
+        panic!("build-time check: CfrValue::MAX == oer_portable_mmio::Bits::<12>::MAX")
+    };
+    if !(ForcedRxGain::MAX == oer_portable_mmio::Bits::<8>::MAX) {
+        panic!("build-time check: ForcedRxGain::MAX == oer_portable_mmio::Bits::<8>::MAX")
+    };
 };

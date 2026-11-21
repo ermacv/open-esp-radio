@@ -1,3 +1,7 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    reason = "the platform's step, in the stand campaign"
+)]
 #![cfg_attr(
     test,
     expect(

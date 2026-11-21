@@ -71,7 +71,11 @@ impl<const H: u8> PreAdmission<H> {
     /// Called only while wrapping the boot entry's handoff proof or minting a
     /// secondary hart's `SecondaryHandoff`.
     pub(crate) const fn new() -> Self {
-        const { assert!((H as usize) < oer_chips_family_platform_port::HARTS) };
+        const {
+            if (H as usize) >= oer_chips_family_platform_port::HARTS {
+                panic!("a hart's number is below the chip's hart count");
+            }
+        };
         Self {
             hart: Hart {
                 _local: PhantomData,

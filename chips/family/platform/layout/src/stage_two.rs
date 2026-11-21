@@ -116,8 +116,12 @@ impl Header {
             self.payload_crc32,
         ];
         let mut bytes = [0; HEADER_BYTES];
-        for (chunk, word) in bytes.chunks_exact_mut(4).zip(words) {
-            chunk.copy_from_slice(&word.to_le_bytes());
+        // Twelve words fill the twelve-word header exactly.
+        for (byte, value) in bytes
+            .iter_mut()
+            .zip(words.into_iter().flat_map(u32::to_le_bytes))
+        {
+            *byte = value;
         }
         bytes
     }

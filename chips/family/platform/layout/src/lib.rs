@@ -46,4 +46,4 @@ pub mod zeroed;
 #[cfg(feature = "build")]
 pub mod build;
 
-pub use memory::{Layout, Region};
+pub use memory::{Layout, LayoutFault, Region};

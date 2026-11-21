@@ -26,11 +26,14 @@ const PHY_BB_INIT_TRANSITION_LIMIT: usize = 1_600;
 const PHY_RX_PROGRAM_LIMIT: usize = 512;
 
 const _: () = {
-    assert!(size_of::<PhyState>() <= PHY_STATE_LIMIT);
-    assert!(size_of::<RegisteredPhyState>() <= PHY_STATE_LIMIT);
-    assert!(size_of::<crate::concurrent::ConcurrentPhy>() <= CONCURRENT_PHY_LIMIT);
-    assert!(size_of::<PhyCalibrationCache>() <= PHY_CALIBRATION_CACHE_LIMIT);
-    assert!(size_of::<PhyRegisterTransition>() <= PHY_REGISTER_TRANSITION_LIMIT);
-    assert!(size_of::<PhyBbInitTransition>() <= PHY_BB_INIT_TRANSITION_LIMIT);
-    assert!(size_of::<RxProgram>() <= PHY_RX_PROGRAM_LIMIT);
+    if size_of::<PhyState>() > PHY_STATE_LIMIT
+        || size_of::<RegisteredPhyState>() > PHY_STATE_LIMIT
+        || size_of::<crate::concurrent::ConcurrentPhy>() > CONCURRENT_PHY_LIMIT
+        || size_of::<PhyCalibrationCache>() > PHY_CALIBRATION_CACHE_LIMIT
+        || size_of::<PhyRegisterTransition>() > PHY_REGISTER_TRANSITION_LIMIT
+        || size_of::<PhyBbInitTransition>() > PHY_BB_INIT_TRANSITION_LIMIT
+        || size_of::<RxProgram>() > PHY_RX_PROGRAM_LIMIT
+    {
+        panic!("a PHY state outgrew its size limit");
+    }
 };

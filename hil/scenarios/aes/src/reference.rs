@@ -28,29 +28,30 @@ pub struct InvalidKeyData {
 
 /// Wrap `data`, `n` 64-bit blocks with `n >= 2`, under `kek` (RFC 3394 §2.2.1).
 pub fn wrap(kek: &[u8; 16], data: &[u8]) -> Result<Vec<u8>, InvalidKeyData> {
-    let (blocks, []) = data.as_chunks::<8>() else {
+    if !data.len().is_multiple_of(8) || data.len() < 16 {
         return Err(InvalidKeyData { length: data.len() });
-    };
-    if blocks.len() < 2 {
-        return Err(InvalidKeyData { length: data.len() });
+    }
+    let mut r = vec![[0_u8; 8]; data.len() / 8];
+    for (out, byte) in r.iter_mut().flatten().zip(data) {
+        *out = *byte;
     }
     let cipher = aes::Aes128::new(kek.into());
     let mut a = IV;
-    let mut r = blocks.to_vec();
     let mut t = 0_u64;
     for _ in 0..6 {
         for register in &mut r {
             t += 1;
             let mut b = [0; 16];
-            let (high, low) = b.split_at_mut(8);
-            high.copy_from_slice(&a);
-            low.copy_from_slice(register);
+            for (out, byte) in b.iter_mut().zip(a.iter().chain(register.iter())) {
+                *out = *byte;
+            }
             cipher.encrypt_block((&mut b).into());
-            let (high, low) = b.split_at(8);
-            for ((byte, cipher), counter) in a.iter_mut().zip(high).zip(t.to_be_bytes()) {
+            for ((byte, cipher), counter) in a.iter_mut().zip(&b).zip(t.to_be_bytes()) {
                 *byte = cipher ^ counter;
             }
-            register.copy_from_slice(low);
+            for (out, byte) in register.iter_mut().zip(b.iter().skip(8)) {
+                *out = *byte;
+            }
         }
     }
     Ok([a].iter().chain(&r).flatten().copied().collect())

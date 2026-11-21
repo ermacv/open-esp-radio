@@ -62,11 +62,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "const LINE: usize = {first};\nconst LEVEL_BITS: u32 = {levels};\nconst CONTROLS: [u8; 3] = {controls:?};\n"
         ),
     )?;
+    // The vector table's alignment: its bytes rounded up to a power of two.
+    let align = (count * 4)
+        .checked_next_power_of_two()
+        .ok_or("the vector table's alignment does not fit usize")?;
     let mut asm = String::from(".macro FACTS_VECTOR_TABLE\n");
-    asm.push_str(&format!(
-        ".balign {}\n.word 0\n",
-        (count * 4).next_power_of_two()
-    ));
+    asm.push_str(&format!(".balign {align}\n.word 0\n"));
     for _ in 1..count {
         asm.push_str(".word _facts_irq\n");
     }
@@ -90,7 +91,6 @@ SECTIONS {{
 }}
 "#,
             length = end - base,
-            align = (count * 4).next_power_of_two()
         ),
     )?;
     if std::env::var("CARGO_CFG_TARGET_ARCH")? == "riscv32" {

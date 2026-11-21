@@ -153,40 +153,60 @@ impl Layout {
         self.psram.after(self.bootstrap_psram_bytes)
     }
 
-    /// Panics unless every derived region stays inside its memory, the loader
-    /// lies in SRAM, the interrupt stacks lie below every task stack (the
-    /// trap entries tell the interrupt stack from a task stack by address)
-    /// and the pages are pages. A chip's generated layout calls this in a
-    /// `const` item.
-    pub const fn check(&self) {
-        assert!(self.bootstrap_flash_text().is_some());
-        assert!(self.runtime_psram().is_some());
-        assert!(self.mmu_page_bytes.is_power_of_two());
-        assert!(
-            self.bootstrap_psram_bytes
-                .is_multiple_of(self.mmu_page_bytes)
-        );
-        assert!(self.image_segment_header_bytes < self.mmu_page_bytes);
-        assert!(self.sram.contains(self.bootstrap_sram));
-        assert!(self.bootstrap_sram.contains_range(
+    /// The first part of the layout's contract it breaks, or none: every
+    /// derived region stays inside its memory, the loader lies in SRAM, the
+    /// interrupt stacks lie below every task stack (the trap entries tell the
+    /// interrupt stack from a task stack by address) and the pages are pages.
+    /// A chip's generated layout refuses to build on a fault, in a `const`
+    /// item.
+    pub const fn fault(&self) -> Option<LayoutFault> {
+        let fault = if self.bootstrap_flash_text().is_none() {
+            LayoutFault::BootstrapFlashText
+        } else if self.runtime_psram().is_none() {
+            LayoutFault::RuntimePsram
+        } else if !self.mmu_page_bytes.is_power_of_two() {
+            LayoutFault::PageSize
+        } else if !self
+            .bootstrap_psram_bytes
+            .is_multiple_of(self.mmu_page_bytes)
+        {
+            LayoutFault::BootstrapPsramPages
+        } else if self.image_segment_header_bytes >= self.mmu_page_bytes {
+            LayoutFault::SegmentHeader
+        } else if !self.sram.contains(self.bootstrap_sram) {
+            LayoutFault::BootstrapSram
+        } else if !self.bootstrap_sram.contains_range(
             self.second_stage_loader_start as u64,
-            self.bootstrap_sram.end() as u64
-        ));
-        assert!(self.sram.end() <= self.psram.origin);
-        assert!(self.harts > 0 && self.boot_hart < self.harts);
-        assert!(self.task_stack_bytes.len() == self.harts as usize);
-        assert!(self.task_stack_bytes[self.boot_hart as usize] > 0);
-        assert!(self.retained_reserved_tail <= self.retained.length);
+            self.bootstrap_sram.end() as u64,
+        ) {
+            LayoutFault::Loader
+        } else if self.sram.end() > self.psram.origin {
+            LayoutFault::SramAbovePsram
+        } else if self.harts == 0 || self.boot_hart >= self.harts {
+            LayoutFault::Harts
+        } else if self.task_stack_bytes.len() != self.harts as usize {
+            LayoutFault::TaskStackCount
+        } else if self.task_stack_bytes[self.boot_hart as usize] == 0 {
+            LayoutFault::BootTaskStack
+        } else if self.retained_reserved_tail > self.retained.length {
+            LayoutFault::RetainedTail
         // Per-hart guards belong to chip.toml and are checked by the image
         // linker; this chip-neutral layout only constrains the placeholder.
-        assert!(
-            self.analysis_irq_stack_bytes >= 16 && self.analysis_irq_stack_bytes.is_multiple_of(16)
-        );
-        let mut hart = 0;
-        while hart < self.task_stack_bytes.len() {
-            assert!(self.task_stack_bytes[hart].is_multiple_of(16));
-            hart += 1;
-        }
+        } else if self.analysis_irq_stack_bytes < 16
+            || !self.analysis_irq_stack_bytes.is_multiple_of(16)
+        {
+            LayoutFault::AnalysisIrqStack
+        } else {
+            let mut hart = 0;
+            while hart < self.task_stack_bytes.len() {
+                if !self.task_stack_bytes[hart].is_multiple_of(16) {
+                    return Some(LayoutFault::TaskStackAlignment);
+                }
+                hart += 1;
+            }
+            return None;
+        };
+        Some(fault)
     }
 }
 
@@ -225,5 +245,60 @@ mod tests {
             REGION.origin()
         );
         assert_eq!(REGION.after(16), Region::new(u32::MAX, 0));
+    }
+}
+
+/// A part of the layout's contract a [`Layout`] breaks.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LayoutFault {
+    /// The bootstrap's flash text does not fit its flash.
+    BootstrapFlashText,
+    /// Stage two does not fit the PSRAM after the bootstrap's probe page.
+    RuntimePsram,
+    /// The MMU page is not a power of two.
+    PageSize,
+    /// The bootstrap's PSRAM is not a whole number of pages.
+    BootstrapPsramPages,
+    /// An image segment's header does not fit a page.
+    SegmentHeader,
+    /// The bootstrap's SRAM is outside the SRAM.
+    BootstrapSram,
+    /// The second-stage loader is outside the bootstrap's SRAM.
+    Loader,
+    /// The SRAM ends above the PSRAM's start.
+    SramAbovePsram,
+    /// No harts, or the boot hart is not one of them.
+    Harts,
+    /// Not one task stack a hart.
+    TaskStackCount,
+    /// The boot hart has no task stack.
+    BootTaskStack,
+    /// The retained memory's reserved tail is longer than the memory.
+    RetainedTail,
+    /// The analysis placeholder of an interrupt stack is not 16-byte sized.
+    AnalysisIrqStack,
+    /// A task stack is not a multiple of 16 bytes.
+    TaskStackAlignment,
+}
+
+impl LayoutFault {
+    /// What the fault breaks, for the generated layout's refusal.
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::BootstrapFlashText => "the bootstrap's flash text does not fit its flash",
+            Self::RuntimePsram => "stage two does not fit the PSRAM",
+            Self::PageSize => "the MMU page is not a power of two",
+            Self::BootstrapPsramPages => "the bootstrap's PSRAM is not whole pages",
+            Self::SegmentHeader => "an image segment's header does not fit a page",
+            Self::BootstrapSram => "the bootstrap's SRAM is outside the SRAM",
+            Self::Loader => "the second-stage loader is outside the bootstrap's SRAM",
+            Self::SramAbovePsram => "the SRAM ends above the PSRAM",
+            Self::Harts => "the boot hart is not one of the harts",
+            Self::TaskStackCount => "not one task stack a hart",
+            Self::BootTaskStack => "the boot hart has no task stack",
+            Self::RetainedTail => "the retained memory's reserved tail is too long",
+            Self::AnalysisIrqStack => "the interrupt-stack placeholder is not 16-byte sized",
+            Self::TaskStackAlignment => "a task stack is not a multiple of 16 bytes",
+        }
     }
 }

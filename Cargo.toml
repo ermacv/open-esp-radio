@@ -381,8 +381,10 @@ debug_assert_with_mut_call = "deny"
 # instead of yielding; an intentional use carries a local `allow` with a reason.
 disallowed_methods = "deny"
 # A state is a sum (CLAUDE.md): flags in a struct and a `bool` parameter
-# that selects behaviour are errors, with no `allow` and no `expect` (the
-# layer tests refuse both). The thresholds are in each `clippy.toml`.
+# that selects behaviour are errors. The root `clippy.toml` sets the
+# thresholds for every product crate (the tools' file sets none that fire);
+# a package with sites left expects the lint at its crate root, naming the
+# step that cleans it, and no source allows it (the layer tests).
 struct_excessive_bools = "deny"
 fn_params_excessive_bools = "deny"
 # A cast that drops bits, a sign or wraps loses a value in silence, as a
@@ -401,7 +403,7 @@ let_underscore_must_use = "deny"
 # may panic: Clippy's in-tests options (`clippy.toml`) cover `unwrap`,
 # `expect`, `panic!` and indexing in a test, and a crate root carries one
 # `cfg_attr(test, allow(…))` line for the rest. `disallowed_macros` refuses
-# only what a crate's `clippy.toml` lists.
+# what the root `clippy.toml` lists, or a crate's local one.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"

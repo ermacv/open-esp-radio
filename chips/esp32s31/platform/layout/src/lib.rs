@@ -28,7 +28,7 @@
 //! use oer_chips_esp32s31_platform_layout::LAYOUT;
 //! use oer_chips_family_platform_layout::Layout;
 //! const INVALID: Layout = Layout { bootstrap_psram_bytes: u32::MAX, ..LAYOUT };
-//! const _: () = INVALID.check();
+//! const _: () = if let Some(fault) = INVALID.fault() { panic!("{}", fault.message()); };
 //! ```
 
 include!(concat!(env!("OUT_DIR"), "/layout.rs"));

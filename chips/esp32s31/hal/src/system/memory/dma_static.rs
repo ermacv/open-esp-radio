@@ -438,10 +438,7 @@ macro_rules! dma_static {
         $vis:vis static $name:ident: $ty:ty = zeroed in $section:literal;
         $($rest:tt)*
     ) => {
-        const _: () = assert!(
-            $crate::system::memory::dma_static::is_dma_section($section),
-            "a DMA static lives in a `.dma.bss.<block>` section"
-        );
+        const _: () = if !$crate::system::memory::dma_static::is_dma_section($section) { panic!("a DMA static lives in a `.dma.bss.<block>` section") };
         $(#[$meta])*
         #[unsafe(link_section = $section)]
         $vis static $name: $crate::system::memory::dma_static::DmaStatic<$ty> =

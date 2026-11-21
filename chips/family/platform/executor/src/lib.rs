@@ -1,3 +1,10 @@
+#![cfg_attr(
+    any(feature = "chip", test),
+    expect(
+        clippy::fn_params_excessive_bools,
+        reason = "the platform's step, in the stand campaign"
+    )
+)]
 #![expect(
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
@@ -26,7 +33,7 @@
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
 )]
 #![cfg_attr(
-    target_arch = "riscv32",
+    all(target_arch = "riscv32", feature = "chip"),
     expect(
         clippy::indexing_slicing,
         reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"

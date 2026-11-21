@@ -46,8 +46,12 @@ pub fn descriptor_ring_index(address: u32, ring_base: u32, count: usize) -> Opti
 }
 
 const _: () = {
-    assert!(WifiTxDmaDescriptor::SIZE == WifiRxDmaDescriptor::SIZE);
-    assert!(WifiTxDmaDescriptor::ALIGN == WifiRxDmaDescriptor::ALIGN);
+    if WifiTxDmaDescriptor::SIZE != WifiRxDmaDescriptor::SIZE {
+        panic!("build-time check: WifiTxDmaDescriptor::SIZE == WifiRxDmaDescriptor::SIZE")
+    };
+    if WifiTxDmaDescriptor::ALIGN != WifiRxDmaDescriptor::ALIGN {
+        panic!("build-time check: WifiTxDmaDescriptor::ALIGN == WifiRxDmaDescriptor::ALIGN")
+    };
 };
 
 /// The exact three-word RX descriptor the Wi-Fi MAC's RX walker follows.
@@ -63,8 +67,16 @@ const _: () = {
 pub struct RxDescriptor(WifiRxDmaDescriptor);
 
 const _: () = {
-    assert!(core::mem::size_of::<RxDescriptor>() == DESCRIPTOR_BYTES as usize);
-    assert!(core::mem::align_of::<RxDescriptor>() == WifiRxDmaDescriptor::ALIGN);
+    if !(core::mem::size_of::<RxDescriptor>() == DESCRIPTOR_BYTES as usize) {
+        panic!(
+            "build-time check: core::mem::size_of::<RxDescriptor>() == DESCRIPTOR_BYTES as usize"
+        )
+    };
+    if !(core::mem::align_of::<RxDescriptor>() == WifiRxDmaDescriptor::ALIGN) {
+        panic!(
+            "build-time check: core::mem::align_of::<RxDescriptor>() == WifiRxDmaDescriptor::ALIGN"
+        )
+    };
 };
 
 impl RxDescriptor {
@@ -179,8 +191,16 @@ impl Default for RxDescriptor {
 pub struct TxDescriptor(WifiTxDmaDescriptor);
 
 const _: () = {
-    assert!(core::mem::size_of::<TxDescriptor>() == DESCRIPTOR_BYTES as usize);
-    assert!(core::mem::align_of::<TxDescriptor>() == WifiTxDmaDescriptor::ALIGN);
+    if !(core::mem::size_of::<TxDescriptor>() == DESCRIPTOR_BYTES as usize) {
+        panic!(
+            "build-time check: core::mem::size_of::<TxDescriptor>() == DESCRIPTOR_BYTES as usize"
+        )
+    };
+    if !(core::mem::align_of::<TxDescriptor>() == WifiTxDmaDescriptor::ALIGN) {
+        panic!(
+            "build-time check: core::mem::align_of::<TxDescriptor>() == WifiTxDmaDescriptor::ALIGN"
+        )
+    };
 };
 
 impl TxDescriptor {
