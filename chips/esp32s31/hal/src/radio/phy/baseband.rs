@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(target_arch = "riscv32")]
-use crate::{phy_blocks_mut, system::owner::SharedPhyAccess, types::CfrValue};
+use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
 pub mod ops;
 

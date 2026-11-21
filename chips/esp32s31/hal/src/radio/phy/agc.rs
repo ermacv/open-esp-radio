@@ -6,12 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(target_arch = "riscv32")]
 use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
 pub mod ops;
-
-#[cfg(target_arch = "riscv32")]
-use crate::types::ForcedRxGain;
 
 /// Apply complete rev0 ROM `phy_bb_agc_reg_update`.
 ///

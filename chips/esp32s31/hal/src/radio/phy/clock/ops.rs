@@ -20,11 +20,7 @@ use {oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio, oer_portable_mmio::
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRadio<P>) {
     syscon.modify_wifi_bb_cfg(|w| {
-        w.set_wifi_enable(if false {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
-        });
+        w.set_wifi_enable(oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled);
     });
 }
 

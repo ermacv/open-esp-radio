@@ -8,9 +8,9 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{BasebandRegisters, ClockRegisters, PhyPlacement};
+use oer_chips_esp32s31_pac::fe;
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_pac::fe::PhyPbus;
-use oer_chips_esp32s31_pac::{fe, wifi_bb};
 use oer_portable_mmio::Bits;
 #[cfg(any(test, target_arch = "riscv32"))]
 use {oer_chips_esp32s31_pac::fe::PhyFedataRecovered, oer_portable_mmio::Placement};
@@ -30,7 +30,7 @@ pub struct TxIqToneControlFields {
     selector_high: u8,
     low_reserved_clear_opaque: Bits<2>,
     negated_step_or_attenuation: u8,
-    tone_enable_or_arm: bool,
+    tone: crate::types::PhyTone,
     txiq_mismatch_mode_opaque: Bits<3>,
     middle_reserved_clear_opaque: Bits<2>,
     txiq_polarity_image: Bits<4>,
@@ -44,7 +44,7 @@ impl Default for TxIqToneControlFields {
             selector_high: 0,
             low_reserved_clear_opaque: Bits::constant::<0>(),
             negated_step_or_attenuation: 0,
-            tone_enable_or_arm: false,
+            tone: crate::types::PhyTone::Disarmed,
             txiq_mismatch_mode_opaque: Bits::constant::<0>(),
             middle_reserved_clear_opaque: Bits::constant::<0>(),
             txiq_polarity_image: Bits::constant::<0>(),
@@ -61,10 +61,7 @@ impl TxIqToneControlFields {
             selector_high: control.selector_high(),
             low_reserved_clear_opaque: control.bits_8_9_opaque(),
             negated_step_or_attenuation: control.negated_step_or_attenuation(),
-            tone_enable_or_arm: matches!(
-                control.tone_enable_or_arm(),
-                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
-            ),
+            tone: control.tone_enable_or_arm(),
             txiq_mismatch_mode_opaque: control.bits_19_21_opaque(),
             middle_reserved_clear_opaque: control.bits_22_23_opaque(),
             txiq_polarity_image: control.txiq_polarity_image(),
@@ -83,11 +80,7 @@ impl TxIqToneControlFields {
             w.set_selector_high(self.selector_high)
                 .set_bits_8_9_opaque(self.low_reserved_clear_opaque)
                 .set_negated_step_or_attenuation(self.negated_step_or_attenuation)
-                .set_tone_enable_or_arm(if self.tone_enable_or_arm {
-                    oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
-                } else {
-                    oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
-                })
+                .set_tone_enable_or_arm(self.tone)
                 .set_bits_19_21_opaque(self.txiq_mismatch_mode_opaque)
                 .set_bits_22_23_opaque(self.middle_reserved_clear_opaque)
                 .set_txiq_polarity_image(self.txiq_polarity_image)
@@ -197,10 +190,7 @@ pub fn enable_iq_correction_modes<P: PhyPlacement>(bb: &mut BasebandRegisters<P>
 
 /// Enter the RXIQ root correction mode: the complete pinned parent's prefix.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn begin_rxiq_root_correction<P: PhyPlacement>(
-    bb: &mut BasebandRegisters<P>,
-    pbus: &mut PhyPbus<P::Fe>,
-) {
+pub(crate) fn begin_rxiq_root_correction<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_iq_correction_control(|w| {
         w.set_rx_iq_correction_mode_low(true);
@@ -855,11 +845,9 @@ pub fn stop_power_detector_tone<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) 
 pub fn stop_calibration_tone_paths<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
     bb.fe.modify_tone_path_0_control(|w| {
-        w.set_tone_enable_or_arm(if false {
-            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
-        } else {
-            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
-        });
+        w.set_tone_enable_or_arm(
+            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed,
+        );
     });
     // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
     bb.fe.modify_tone_path_1_control(|w| {
@@ -1054,19 +1042,15 @@ pub fn initialize_front_end_suffix<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
-        w.set_bit_1_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
-        });
+        w.set_bit_1_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High,
+        );
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
-        w.set_bit_0_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
-        });
+        w.set_bit_0_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High,
+        );
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_tx_pa_control_0(|w| {
@@ -1074,19 +1058,15 @@ pub fn initialize_front_end_suffix<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
-        w.set_bit_0_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
-        });
+        w.set_bit_0_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High,
+        );
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
-        w.set_bit_1_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
-        });
+        w.set_bit_1_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High,
+        );
     });
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     bb.fe.modify_iq_correction_control(|w| {
@@ -1117,16 +1097,12 @@ pub fn update_front_end<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     });
     // SOURCE: BLOB_LIBPHY_PHY_FE_REG_UPDATE, S31_ESP_PACS_SVD.
     bb.fe.modify_adc_rate_and_front_end_control(|w| {
-        w.set_bit_0_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::Low
-        })
-        .set_bit_1_opaque(if true {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High
-        } else {
-            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::Low
-        });
+        w.set_bit_0_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit0Opaque::High,
+        )
+        .set_bit_1_opaque(
+            oer_chips_esp32s31_pac::fe::adc_rate_and_front_end_control::Bit1Opaque::High,
+        );
     });
 }
 
@@ -1144,11 +1120,6 @@ pub fn set_rx_gain_dc_calibration<P: PhyPlacement>(
     bb.fe.modify_rx_gain_dc_control(|w| {
         w.set_bits_5_6_opaque(calibration.into());
     });
-}
-
-/// A CFR value's twelve bits.
-const fn cfr_bits(value: crate::types::CfrValue) -> Bits<12> {
-    value.field()
 }
 
 #[cfg(test)]

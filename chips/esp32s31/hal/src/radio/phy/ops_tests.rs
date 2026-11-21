@@ -9,7 +9,6 @@
 //! error. The access order inside one operation is not visible in host
 //! memory: each operation keeps the vendor order by construction.
 
-use crate::radio::modem::values::{CfrValue, ForcedRxGain};
 use crate::radio::phy::registers::{
     AgcRegisters, BasebandRegisters, ClockRegisters, FrequencyRegisters,
 };

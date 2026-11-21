@@ -23,7 +23,7 @@ pub(crate) fn update_agc<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
     );
 }
 pub(crate) fn begin_rxiq_root_correction<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
-    bb::begin_rxiq_root_correction(&mut parts.phy_baseband_config_oracle, &mut parts.phy_pbus);
+    bb::begin_rxiq_root_correction(&mut parts.phy_baseband_config_oracle);
 }
 
 /// Leave the RXIQ root correction mode.

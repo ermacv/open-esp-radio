@@ -123,11 +123,9 @@ pub fn configure_pbus_work_mode_pulse<P: PhyPlacement>(agc: &mut AgcRegisters<P>
     });
     // SOURCE: ROM_REV0_PHY_PBUS, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if true {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(
+            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled,
+        );
     });
 }
 
@@ -135,11 +133,9 @@ pub fn configure_pbus_work_mode_pulse<P: PhyPlacement>(agc: &mut AgcRegisters<P>
 pub fn clear_pbus_work_mode_pulse<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     // SOURCE: ROM_REV0_PHY_PBUS, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if false {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(
+            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled,
+        );
     });
 }
 
@@ -178,19 +174,15 @@ pub fn initialize_registers<P: PhyPlacement>(
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if true {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(
+            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled,
+        );
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if false {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(
+            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled,
+        );
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_init_high_control(|w| {
@@ -354,9 +346,4 @@ pub fn disable_rx_11b_optimization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     agc.wifi_bb.modify_rx_11b_window_control(|w| {
         w.set_bits_0_8_opaque(Bits::constant::<0x1c8>());
     });
-}
-
-/// The forced gain's byte.
-const fn gain_byte(gain: crate::types::ForcedRxGain) -> u8 {
-    gain.get().to_le_bytes()[0]
 }

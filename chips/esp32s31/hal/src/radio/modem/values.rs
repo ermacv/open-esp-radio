@@ -386,79 +386,6 @@ impl PhyForcedPowerIndex {
     }
 }
 
-// SOURCE: complete libphy phy_config_hccfr, phy_iccfr_en and phy_force_iccfr.
-/// Complete twelve-bit value accepted by reviewed HCCFR and forced-ICCFR transactions.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct CfrValue(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH }>,
-);
-impl CfrValue {
-    pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_MAX;
-
-    /// Construct a value only when it lies in the reviewed inclusive range.
-    pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
-            Ok(field) => Some(Self(field)),
-            Err(_) => None,
-        }
-    }
-
-    /// The value of a 12-bit field, which the range holds whole.
-    pub const fn from_bits(
-        bits: oer_portable_mmio::Bits<
-            { oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH },
-        >,
-    ) -> Self {
-        Self(bits)
-    }
-
-    /// The value's field.
-    pub(crate) const fn field(
-        self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH }>
-    {
-        self.0
-    }
-
-    /// Return the checked numeric value.
-    pub const fn get(self) -> u32 {
-        self.0.get()
-    }
-}
-
-// SOURCE: complete rev0 ROM phy_force_rx_gain (ROM_REV0_PHY_AGC).
-/// Complete byte accepted by the recovered forced-RX-gain transaction.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ForcedRxGain(u32);
-impl ForcedRxGain {
-    pub const MIN: u32 = 0x00000000;
-    pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::FORCED_GAIN_INDEX_MAX;
-
-    /// Construct a value only when it lies in the reviewed inclusive range.
-    pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
-        }
-    }
-
-    /// The value of a 8-bit field, which the range holds whole.
-    pub const fn from_bits(
-        bits: oer_portable_mmio::Bits<
-            { oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::FORCED_GAIN_INDEX_WIDTH },
-        >,
-    ) -> Self {
-        Self(bits.get())
-    }
-
-    /// Return the checked numeric value.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
 // The HAL domains fit the generated accessor argument widths without narrowing.
 const _: () = {
     if !(ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX) {
@@ -491,11 +418,5 @@ const _: () = {
     };
     if !(PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX) {
         panic!("build-time check: PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX")
-    };
-    if !(CfrValue::MAX == oer_portable_mmio::Bits::<12>::MAX) {
-        panic!("build-time check: CfrValue::MAX == oer_portable_mmio::Bits::<12>::MAX")
-    };
-    if !(ForcedRxGain::MAX == oer_portable_mmio::Bits::<8>::MAX) {
-        panic!("build-time check: ForcedRxGain::MAX == oer_portable_mmio::Bits::<8>::MAX")
     };
 };

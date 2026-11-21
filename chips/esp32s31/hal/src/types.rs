@@ -80,8 +80,8 @@ pub use crate::radio::ieee80211::registers::WifiRxCsiControlMask;
 pub use crate::radio::ieee80211::station_wake::StaTbttScheduleError;
 
 pub use crate::radio::modem::values::{
-    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
-    CoexTimerPtiValue, ForcedRxGain, PhyForcedPowerIndex,
+    CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource, CoexTimerPtiValue,
+    PhyForcedPowerIndex,
 };
 pub use crate::radio::modem::{
     CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,

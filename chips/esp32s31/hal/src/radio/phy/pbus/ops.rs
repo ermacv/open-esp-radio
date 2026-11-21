@@ -143,19 +143,11 @@ pub(crate) fn set_tx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, pair: super
 pub(crate) fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
-        w.set_bit_14_opaque(if true {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
-        } else {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Disabled
-        });
+        w.set_bit_14_opaque(oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled);
     });
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
-        w.set_bit_15_opaque(if true {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
-        } else {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
-        });
+        w.set_bit_15_opaque(oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled);
     });
 }
 
@@ -164,11 +156,7 @@ pub(crate) fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
 pub(crate) fn clear_rxiq_root_status_second<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
-        w.set_bit_15_opaque(if false {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Enabled
-        } else {
-            oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled
-        });
+        w.set_bit_15_opaque(oer_chips_esp32s31_pac::fe::status_clock_force::Bit15Opaque::Disabled);
     });
 }
 
