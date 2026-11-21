@@ -5968,6 +5968,8 @@ const BY_IEEE802154: &str = "the IEEE 802.15.4 step, in the stand campaign";
 const BY_PLATFORM: &str = "the platform's step, in the stand campaign";
 const BY_HIL: &str = "the HIL images, probes and examples, in the stand campaign";
 const BY_FAMILY: &str = "the family's drivers and facts, in the stand campaign";
+/// R2's area PR for the family drivers.
+const BY_R2_FAMILY_DRIVERS: &str = "R2: the family drivers' area";
 
 /// The package that removes a list's entry in `file`, by its place: the
 /// first assignment, which a package that removes one corrects.
@@ -7699,18 +7701,16 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/platform/interrupt-table", 0, 1, BY_PLATFORM),
     ("chips/family/platform/runtime", 0, 2, BY_PLATFORM),
     ("chips/family/radio/coex", 1, 0, BY_RADIO_SYSTEM),
+    ("chips/family/radio/modem-clock", 0, 2, BY_R2_FAMILY_DRIVERS),
     ("chips/family/radio/phy", 2, 1, BY_PHY),
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
 ];
 
-/// The packages whose one `bool` parameter is a bit's value: those of the
-/// layer tests' roles `Pac`, `Hal` and `HardwareDriver`. They may expect
-/// `fn_params_excessive_bools` at their crate root for it.
+/// The package whose one `bool` parameter is a bit's value: the PAC (the
+/// layer tests' role `Pac`), whose generated setters take it. It expects
+/// `fn_params_excessive_bools` at its crate root for good.
 fn bit_parameters(path: &str) -> bool {
-    matches!(
-        role(path),
-        Some(Role::Pac | Role::Hal | Role::HardwareDriver)
-    )
+    matches!(role(path), Some(Role::Pac))
 }
 
 /// Whether `file` may expect the bool lints: the crate root of a deferred
@@ -7817,6 +7817,11 @@ fn only_a_crate_root_may_expect_a_bool_lint_and_only_for_its_reason() {
     assert!(!may_expect_a_bool_lint(
         "chips/esp32s31/pac/src/lib.rs",
         &expect(&structs)
+    ));
+    // A HAL or a driver is no exception: its parameters are not bits.
+    assert!(!may_expect_a_bool_lint(
+        "chips/family/drivers/regi2c/src/lib.rs",
+        &expect(&parameters)
     ));
     // A package neither deferred nor of bits expects neither.
     assert!(!may_expect_a_bool_lint(
@@ -9332,6 +9337,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
     (
+        "chips/esp32s31/platform/runtime/src/exception.rs",
+        "clippy::disallowed_macros",
+        1,
+        "bytemuck's derive asserts the layout at build time",
+    ),
+    (
         "chips/esp32s31/platform/runtime/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9917,7 +9928,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/radio/modem-clock/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        "a hardware driver's one bool parameter is a bit's value",
+        "R2: the family drivers' area",
     ),
     (
         "chips/family/radio/modem-clock/src/lib.rs",

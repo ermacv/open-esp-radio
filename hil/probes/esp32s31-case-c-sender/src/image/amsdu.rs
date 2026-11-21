@@ -74,19 +74,19 @@ async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), F
         // The tag; the acknowledged by the frame before; the ACK timeouts by
         // the frame before; the other ends in all.
         let mut values = [0_u32; 1 + 2 * (CASES.len() + 1) + 1];
-        let (acked, rest) = values.split_at_mut(1 + CASES.len() + 1);
-        let (timeouts, other) = rest.split_at_mut(CASES.len() + 1);
-        if let Some(tag) = acked.first_mut() {
+        // Laid out as the tag, the acknowledged, the timeouts, the other.
+        const TIMEOUTS: usize = 1 + CASES.len() + 1;
+        if let Some(tag) = values.first_mut() {
             *tag = case.tag();
         }
         for (before, ends) in row.iter().enumerate() {
-            if let Some(cell) = acked.get_mut(1 + before) {
+            if let Some(cell) = values.get_mut(1 + before) {
                 *cell = ends[0];
             }
-            if let Some(cell) = timeouts.get_mut(before) {
+            if let Some(cell) = values.get_mut(TIMEOUTS + before) {
                 *cell = ends[1];
             }
-            if let Some(cell) = other.first_mut() {
+            if let Some(cell) = values.last_mut() {
                 *cell = cell.saturating_add(ends[2]);
             }
         }

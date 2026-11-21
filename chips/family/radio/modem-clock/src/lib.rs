@@ -1,6 +1,6 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "a hardware driver's one bool parameter is a bit's value"
+    reason = "R2: the family drivers' area"
 )]
 #![expect(
     clippy::cast_possible_truncation,

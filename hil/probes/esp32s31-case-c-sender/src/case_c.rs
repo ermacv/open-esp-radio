@@ -339,7 +339,7 @@ pub fn protected_expected(
 
 /// `bytes` rounded up to a whole word: a subframe's padding. A frame's
 /// lengths are a few kilobytes, far from the top of `usize`.
-const fn word_padded(bytes: usize) -> usize {
+pub(crate) const fn word_padded(bytes: usize) -> usize {
     bytes.wrapping_add(3) & !3
 }
 

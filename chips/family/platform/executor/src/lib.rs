@@ -33,7 +33,7 @@
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
 )]
 #![cfg_attr(
-    target_arch = "riscv32",
+    all(target_arch = "riscv32", feature = "chip"),
     expect(
         clippy::indexing_slicing,
         reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"

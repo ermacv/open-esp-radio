@@ -109,9 +109,9 @@ is gone both fail, so every list only shrinks:
   `DEFERRED_BOOL_LINTS`, each with its two counts (a record) and what
   cleans it, expect the lints at their crate root with that step as the
   reason; the list only shrinks and is emptied after the stand campaign.
-  A package of the roles `Pac`, `Hal` and `HardwareDriver`, where one
-  `bool` parameter is a bit's value, may expect `fn_params_excessive_bools`
-  alone at its crate root for it. `SILENCED` counts each expectation.
+  The PAC alone, whose generated setters take a bit's value as a `bool`,
+  expects `fn_params_excessive_bools` at its crate root for good; no other
+  package has a `bool` parameter. `SILENCED` counts each expectation.
   The Wi-Fi path (`protocols/ieee80211`, every path holding
   `radio/ieee80211`, `oer` and the entries) is never deferred
   (`every_deferred_package_is_a_package_outside_the_wifi_path_and_the_tools`).
