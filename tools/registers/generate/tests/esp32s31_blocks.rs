@@ -302,11 +302,6 @@ fn the_esp32s31_policy_loads_over_the_root() {
         panic!("a part holds the IEEE 802.15.4 event word");
     };
     assert!(policy.part(*irq).expect("the holder is a part").irq_side);
-    // A former header subfield modify sets bits of the header's fields.
-    assert_eq!(
-        owner("prepare_modem_syscon_clock_map"),
-        ("RadioPhyPeripherals", "ModemSysconClockReset")
-    );
     // Radio words are held whole by their distinct functional owners.
     let word_owner = |word: &str| {
         let Some(Claim::Whole(Holder::Part(id))) = policy.claim(word) else {
@@ -356,10 +351,6 @@ fn the_esp32s31_policy_loads_over_the_root() {
             let word = format!("COEX.{register}{timer}");
             assert_eq!(word_owner(&word), expected, "{word}");
         }
-        assert_eq!(
-            owner(&format!("configure_coex_timer_client_{timer}")).1,
-            expected
-        );
     }
     // The split trigger word: each channel's owner holds its own bits.
     let Some(Claim::Fields(fields)) = policy.claim("MODEM_ETM.CHANNEL_ENABLE_SET") else {
@@ -396,10 +387,7 @@ fn the_esp32s31_policy_loads_over_the_root() {
         .find(|write| write.name == "publish_phy_i2c_read_mask")
         .expect("the read-mask publication exists");
     assert_eq!(mask.fields, ["I2C_ANA_MST.ANA_CONF1.ANA_CONF1"]);
-    assert_eq!(
-        mask.whole_word_bits.as_ref().map(|bits| bits.value),
-        Some(0xff00_0000)
-    );
+    assert_eq!(mask.whole_word_bits.value, 0xff00_0000);
     // The TX completion acknowledgement writes its sample and the selected
     // queue's consumed event.
     let completion = file

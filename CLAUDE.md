@@ -281,7 +281,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   regenerate them. `cargo registers generate --chip <chip>` renders the PAC
   and `chips/*/platform/layout/linker/dma-window.x`; the linker fragment may
   be read, never edited. Its inputs are `chips/<chip>/registers/chip.toml`,
-  `types/`, `layouts/`, `evidence/` and the schema-6 `policy.toml`.
+  `types/`, `layouts/`, `evidence/` and the schema-7 `policy.toml`.
 - **Sources.** No vendor binaries, disassembly or credentials in git. A
   recovered value carries its `SOURCE:`. From sources without a license only
   facts, never code or verbatim tables

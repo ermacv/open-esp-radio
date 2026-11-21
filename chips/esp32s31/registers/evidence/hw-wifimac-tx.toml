@@ -4,21 +4,6 @@
 schema = 1
 
 [[sources]]
-id = "HW_WIFIMAC_STOP_ACTIVITY_CLEAR_20261118"
-kind = "unattested-hil-observation"
-description = "SOURCE: s31-a rev v0.0, probe esp32s31-mac-reset (PR #1328). Part one, runs 1 (350c78aa4) and 3 (9575cae72), 1 000 ordinary stops each with no frame in the air: the MAC's activity field clear after 2.14 to 3.48 us and 2.18 to 3.45 us. Part two, A3, 1 000 stops each with a 1 024-octet frame at 6 Mb/s spread over 0 to 1.6 ms after the queue's start: run 18, clear in 2.21 us minimum, 2.24 median, 2.37 p99, 4.27 maximum; runs 19 and c6 (230d51854, quiet air) median 717 and 711, p99 750 and 750, maximum 1 212 and 1 203 cycles of mcycle at 320 MHz. No stop of about 3 000 reached 10 ms. Details: oer-notes research/mac-reset-mid-run-2026-11-16.md, tasks/166 to 168; logs in evidence/168-c6."
-
-[[sources]]
-id = "HW_WIFIMAC_RESET_LEAVES_TX_CHAINS_20261118"
-kind = "unattested-hil-observation"
-description = "SOURCE: s31-a rev v0.0, probe esp32s31-mac-reset --features transmit and quiet (PR #1328), A1 of runs 18, 19 and c6 (230d51854): 100 RST_WIFIMAC pulses each, each on a transmit queue holding a chain of its own (one descriptor and a 1 024-octet frame between guard slots), the frame on the air at the pulse in 87 of 100 (run 18). After the pulse the queue reads VALID = ENABLE = 0, its descriptor address 0, activity 0 and no raw interrupt. Each abandoned descriptor's three words, read right after the pulse as its reference, the frame's bytes and the 101 guard slots read unchanged after a 20 ms wait and at the run's end: 0 changed words in all three runs; every descriptor's word 0 read 0xc103040c before and after. After the pulse, the cold preparation and a start, a frame was sent and acknowledged 100 of 100 (run c6). Details: PR #1328; logs in evidence/168-c6."
-
-[[sources]]
-id = "HW_WIFIMAC_STOP_CUT_STATUS_20261118"
-kind = "unattested-hil-observation"
-description = "SOURCE: s31-a rev v0.0, probe esp32s31-mac-reset (PR #1328), A3: 1 000 ordinary stops each with a frame on the transmit queue. A frame the stop cut on the air ended with completion status 4, detail 4, which the vendor's status table reads as a collision: 838 (run 18), 858 (run 19) and 867 of 1 000 in run c6 (230d51854), whose capture holds no transmitter but the probe's board and its peer's acknowledgements; status 0 105 and status 5 28 there. A monitor caught 844 of run 18's cut frames with a bad FCS. Details: PR #1328, oer-notes tasks/168; logs in evidence/168-c6."
-
-[[sources]]
 id = "HW_WIFIMAC_TX_ENTRY_REQUIRED_20261117"
 kind = "unattested-hil-observation"
 description = "SOURCE: s31-a rev v0.0, probe esp32s31-mac-reset --features transmit, runs 11 to 17 (oer-notes tasks/155, 157, 158): a transmit buffer holding a bare MPDU, without the eight bytes before it and the four bytes of FCS room after it, ended at once with completion status 4, details 16 and 24, and nothing of it was on the air. With the eight bytes (the first word the MPDU's length with its FCS, the second zero) and the FCS room (6f0dac4a3), run 18's monitor saw 1 099 frames from the probe's address. Which field of a bare frame made the MAC refuse it is not established. Details: PR #1328, oer-notes research/tx-metadata-entry-2026-11-17.md."

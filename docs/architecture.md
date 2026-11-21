@@ -1112,7 +1112,7 @@ defines the scan's scope and limits.
   and index), RAM regions and the memory the hardware reads and writes (DMA
   descriptors, the RX control prefix, TX descriptor words, BLE exchange
   memory), all in `chips/<chip>/registers/`: `types/`, `layouts/` and
-  `chip.toml`, with sources in `evidence/` and the schema-6 ownership policy
+  `chip.toml`, with sources in `evidence/` and the schema-7 ownership policy
   in `policy.toml` ([hardware memory](hardware-memory.md)). A bit is
   described, opaque (a use observed, meaning unknown), reserved or absent;
   only described and opaque bits are fields, each of one access class.

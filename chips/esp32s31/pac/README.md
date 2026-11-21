@@ -2,7 +2,7 @@
 
 The PAC is the exact model of the hardware, generated from the
 [register model](../registers/README.md) (`types/`, `layouts/`, `chip.toml`,
-`evidence/`) and its schema-6 `policy.toml` by
+`evidence/`) and its schema-7 `policy.toml` by
 `cargo registers generate --chip esp32s31`
 ([renderer](../../../tools/registers/model/README.md#the-thin-pac)). It
 holds no logic: every sequence, poll, retry, routing and lifecycle decision
@@ -23,10 +23,11 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   from an `oer_portable_memory::DmaRef` of its target layout or a `DmaWindowAddress`,
   never from an integer; a pointer's high field only to its placement's
   prefix.
-- **Transactions.** Beside ownership the policy holds the catalogue of
-  named transactions: each a named write of one register of an owner (a
-  field replace, a fixed image, a masked modify, …) with its source,
-  rendered as one method of that owner.
+- **Transactions.** Beside ownership the policy holds the named
+  transactions no field accessor expresses (a whole-word image, an
+  acknowledgement with its proof, a snapshot, a pointer OR, …), each with
+  its sources and rendered as one method of its owner; every other write
+  is HAL code over the accessors.
 - **Ownership.** Each part of the policy is one owner type over its words:
   the interrupt and task sides of a block, the parts of a divided block,
   read-only and `Copy` views and shared blocks. A part that serves an

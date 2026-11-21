@@ -27,28 +27,6 @@ timestamp-insertion control or the timer used by such an insertion.
 # libpp[wdev.o]::wDev_Get_Next_TBTT, libpp[if_hwctrl.o]::ic_get_next_tbtt,
 # libpp[pp.o]::ppTxProtoProc.
 [[sources]]
-id = "BLOB_LIBPP_AP_BEACON_TIMING_20261015"
-description = """
-espressif/esp32-wifi-lib commit f856b5db55cb18e2d1826044430f3f4089e47cf9,
-esp32s31/libpp.a, sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391.
-Complete libpp[hal_mac.o]::hal_now (0x0a) reads the MAC local-time word
-0x2010d800; this is the source of the pre-transmit beacon timestamp in
-BLOB_LIBNET80211_AP_TSF_TIMESTAMP_TIM_20261015. In
-libpp[wdev.o]::wDev_Get_Next_TBTT (0x50), +0x1a..+0x34 advances the saved
-32-bit beacon cursor by its interval and compares it against the low word
-of AP TSF obtained with argument one. It repeats until the unsigned delay
-is within the interval and returns delay / 1000 + 1 at +0x38..+0x46.
-libpp[if_hwctrl.o]::ic_get_next_tbtt (0x08) forwards to this leaf. This is
-software scheduling from AP time, not a count of successful beacon TX
-terminals, and it does not establish use of AP TBTT IRQ by that callback.
-Complete libpp[pp.o]::ppTxProtoProc (0x96) marks a unicast probe response
-with software TX-descriptor bit 27. That flag alone does not identify a
-hardware timestamp enable or timer selection. The cursor leaf's calls and
-state remain incompletely resolved by static analysis; these are bounded
-observations of the named instructions, not whole-function equivalence.
-"""
-
-[[sources]]
 id = "BLOB_LIBPP_TX_PROTECTION_ARGUMENTS"
 description = "libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete hal_debug.o dbg_read_txq_conf2 size 0x80 and its .LANCHOR61 format string. The string orders queue, image, CBW20, CBW40, CBW80, SW_RTS, SW_CTS. The RISC-V ILP32 call places the first four variadic arguments in a4..a7, CBW80 at sp+0, bit 31 at sp+4 and bit 30 at sp+8. Therefore SOFTWARE_RTS is bit 31 and SOFTWARE_CTS is bit 30. Complete hal_mac_ctl.o hal_he_set_tx_protection size 0x40 updates only bit 31 from a1; a2 is unused, and nonzero a3 additionally writes a4 truncated to 16 bits OR 0x10000 to the queue vector at 0x201054dc-q*0x7c. Complete hal_mac_tx.o libpp[hal_mac_tx.o]::mac_tx_set_plcp0 size 0x2a0 passes descriptor flags bit 8 as a1 at offsets 0x10c..0x12c. Complete pp_he.o libpp[pp_he.o]::ppCheckTxRTS size 0x98 sets that flag for RTS length/duration thresholds. Complete hal_mac_ctl.o hal_he_init size 0x19e offsets 0xb6..0xec ANDs each protection word with 0xbfffffff in logical queue order zero through three, clearing CTS while retaining RTS and spacing. The private-input tx_protection test compares those four ordered RMWs against compiled production; other initialization effects and pre-edge children are outside that property. Complete hal_mac_ctl.o hal_he_disable_rts_threshold size 0x32 performs four fresh-read RMWs in logical queue order zero through three, setting bit 17 and retaining the low byte threshold and bit 16. Its exact unrelocated section SHA-256 is 1cd0e787d4aafd4a2ca5083ef88207f215bcf20e9194a3520b22a9702d58ee7e. The no-threshold-publication branch retains the prior byte threshold; threshold publication clears bit 17 and all higher state. These register transactions and the separate CTS reset do not establish a CTS-to-Self formatter, on-air NAV calculation, protected publication or completion contract. Complete pp_he.o libpp[pp_he.o]::ppCalTxHEAMPDULength offsets 0x110..0x11a calls libpp[if_hwctrl.o]::ic_get_he_rts_threshold_bytes and stores the returned halfword value into descriptor word 0x34. Complete libpp[hal_mac_tx.o]::mac_tx_set_plcp0 offsets 0x10c..0x128 loads that same word as argument a4. Thus the optional register payload is a PHY-specific byte threshold, not a Duration/NAV override. The duration-threshold predicate comes separately from descriptor word 0x30 bits 12:3. libpp[pp_he.o]::ppCheckTxRTS compares descriptor word 0x34 against the proposed frame length when that predicate is nonzero."
 
@@ -91,10 +69,6 @@ description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788
 [[sources]]
 id = "BLOB_LIBPP_WDEV_PROCESS_FIQ"
 description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete wdev.o libpp[wdev.o]::wDev_ProcessFiq body, size 0x1ae, including MAC event-mask dispatch and event-clear call graph."
-
-[[sources]]
-id = "BLOB_LIBPP_HAL_MAC_COLOR_COLLISION_ISR"
-description = "_oracles/libpp.a sha256 f863c65c3ed89cf5d2a2cbe0d6bca3b783ca35788a704bb68e13958e4b94958e; complete color-collision branch reached from wdev.o libpp[wdev.o]::wDev_ProcessFiq and the independently named dbg_read_color_collision register decode."
 
 [[sources]]
 id = "BLOB_LIBPP_HAL_TSF"

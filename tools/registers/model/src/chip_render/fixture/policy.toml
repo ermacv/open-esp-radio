@@ -1,4 +1,4 @@
-schema = 6
+schema = 7
 chip = "testchip"
 
 [[partitions]]
@@ -104,16 +104,6 @@ consumed-event = "The auxiliary event the task consumed in its own status."
 consumed-fields = ["RADIO0.RAD_EVENT_CLR.AUX"]
 sources = ["SRC_DRIVER"]
 
-[[pointer-fields]]
-name = "descriptor"
-field = "RADIO0.RAD_DESC.PTR"
-sources = ["SRC_DRIVER"]
-
-[[zero-register-writes]]
-name = "clear_command"
-register = "RADIO0.RAD_COMMAND"
-sources = ["SRC_DRIVER"]
-
 [[zero-based-field-writes]]
 name = "publish_low"
 fields = ["RADIO0.RAD_PUBLISH.LOW"]
@@ -134,13 +124,7 @@ value = 0x12345678
 whole-word = true
 sources = ["SRC_VENDOR"]
 
-[[fixed-register-images]]
-name = "set_slow_mode"
-register = "RADIO0.RAD_ENABLE"
-value = 0x00000001
-sources = ["SRC_DRIVER"]
-
 [[fixed-register-sequences]]
 name = "initialize_vendor_words"
-steps = [{ register = "RADIO0.RAD_SLOT2", value = 0x00001234 }, { register = "RADIO0.WORD_0060_OPAQUE", value = 0x0badf00d, whole-word = true }]
+steps = [{ register = "RADIO0.WORD_0060_OPAQUE", value = 0x0badf00d }]
 sources = ["SRC_VENDOR"]

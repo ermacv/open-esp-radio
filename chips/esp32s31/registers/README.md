@@ -13,7 +13,7 @@ generate --chip esp32s31` renders the [PAC](../pac/README.md)
 | `chip.toml` | The root: the types and layouts it includes, every instance at its base with its extent, clocks, resets and selectors, every interrupt source bound to an instance or unbound with a reason, the analog-I2C instances with their routes, the `dma-window` RAM region and the placement of the memory layouts |
 | `types/` | The block types: the vendor blocks (each from its pinned ESP-IDF header and the vendor SVD, refined with the curated facts), the curated blocks no vendor header describes (the Wi-Fi MAC, baseband and front end, the Bluetooth blocks, IEEE 802.15.4, coexistence, the modem power block, the CLIC and others, each with a partial extent and its sources) and the analog-I2C blocks |
 | `layouts/` | Memory layouts the hardware reads and writes in RAM: the Wi-Fi RX and TX DMA descriptors, the RX-control prefix and tail, the BLE controller structures and the PHY frequency records |
-| `policy.toml` | The schema-6 ownership policy: the owners as partitions of parts of instances, every other MMIO word unclaimed with its reason, the interrupt source each handler part serves, operation-specific domains, references to the complete field domains in block types, and the transactions by `INSTANCE.REGISTER.FIELD` |
+| `policy.toml` | The schema-7 ownership policy: the owners as partitions of parts of instances, every other MMIO word unclaimed with its reason, the interrupt source each handler part serves, and the transactions the PAC renders by `INSTANCE.REGISTER.FIELD` |
 | `evidence/` | Source identities, provenance, reviewed confidence and supporting records, every catalog loaded with the root |
 
 ```console
@@ -48,11 +48,10 @@ two console events (`SERIAL_OUT_RECV_PKT`, `SERIAL_IN_EMPTY`).
 and waits for the hardware to clear it, and `hal_mac_rx_enable` and
 `hal_mac_rx_disable` write it back as read.
 
-The schema-6 policy's `field-domains` references preserve policy names without
-copying value lists or bounds; a `positioned` one stands at its field's bits.
-Its pointer operations reference hardware fields without redeclaring targets,
-encodings or placement. Narrow domains, array indices and split or
-transformed operation inputs remain policy.
+The policy holds no domain: a field's complete values are its type's, and
+narrow domains, array indices and split or transformed inputs are the HAL's.
+Its pointer OR references a hardware pointer field without redeclaring its
+target, encoding or placement.
 
 ## Evidence
 

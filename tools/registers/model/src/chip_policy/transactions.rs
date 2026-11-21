@@ -1,118 +1,32 @@
-//! Value domains and transactions: each names fields and registers of the
-//! root, writes only what their classes, write constraints and DMA address
-//! fields allow and reaches one part.
+//! Transactions: each names fields and registers of the root, writes only
+//! what their classes, write constraints and DMA pointer fields allow,
+//! reaches one part and renders a method no field accessor expresses.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    BitwiseComposedDomain, BoundedDomain, Constraint, Context, DomainValue, EnumDomain, Error,
-    ErrorKind, FlagDomain, Holder, Index, InputTransform, InterruptSnapshot, PartId, PolicyFile,
-    Projection, SequenceStep, Target, WholeWordBits, Word, field_mask, field_ones, lower_snake,
-    ownership::Coverage, stored, upper_camel, upper_snake,
+    Context, Error, ErrorKind, Holder, Index, InterruptSnapshot, PartId, PolicyFile, SequenceStep,
+    Target, WholeWordBits, Word, field_mask, lower_snake, ownership::Coverage, stored,
 };
-use crate::chip_model::{ExpandedField, Field, FieldClass, Value};
-
-/// A declared domain; a register-bound one names its register.
-#[derive(Clone, Copy)]
-enum Domain<'a> {
-    Flag(&'a FlagDomain),
-    Enum(&'a EnumDomain),
-    Bounded(&'a BoundedDomain),
-    /// A field's values, at the field's bits when the shift is nonzero,
-    /// with the field's word and lane.
-    Field(&'a Field, u8, (Target, u32)),
-    Opaque(Target),
-    Composed(&'a BitwiseComposedDomain, Target),
-}
-
-impl<'a> Domain<'a> {
-    fn projected(self) -> bool {
-        match self {
-            Self::Bounded(domain) => domain.min == 0,
-            Self::Enum(_) => true,
-            Self::Field(field, ..) => field
-                .value_range
-                .as_ref()
-                .is_none_or(|range| range.min == 0),
-            _ => false,
-        }
-    }
-
-    fn bound(self) -> Option<Target> {
-        match self {
-            Self::Opaque(target) | Self::Composed(_, target) => Some(target),
-            _ => None,
-        }
-    }
-
-    /// Every bit a value of the domain may set.
-    fn bits(self) -> u32 {
-        let or = |values: &[DomainValue]| values.iter().fold(0, |mask, value| mask | value.value);
-        match self {
-            Self::Flag(domain) => or(&domain.values),
-            Self::Enum(domain) => or(&domain.values),
-            Self::Bounded(domain) => ones_through(domain.max),
-            Self::Field(field, shift, _) => {
-                field.value_range.as_ref().map_or_else(
-                    || {
-                        field
-                            .values
-                            .iter()
-                            .fold(0, |mask, value| mask | value.value)
-                    },
-                    |range| ones_through(range.max),
-                ) << shift
-            }
-            Self::Opaque(_) => u32::MAX,
-            Self::Composed(domain, _) => domain.output_mask,
-        }
-    }
-
-    /// The domain's values, as a write constraint checks them.
-    fn values(self) -> Values<'a> {
-        match self {
-            Self::Enum(domain) => Values::List(&domain.values),
-            Self::Bounded(domain) => Values::Range(domain.min, domain.max),
-            Self::Field(field, shift, _) => field
-                .value_range
-                .as_ref()
-                .map_or(Values::FieldList(&field.values, shift), |range| {
-                    Values::Range(range.min, range.max)
-                }),
-            Self::Flag(_) | Self::Opaque(_) | Self::Composed(..) => Values::Any,
-        }
-    }
-}
+use crate::chip_model::{ExpandedField, FieldClass};
 
 /// The values a transaction may give one field.
 #[derive(Clone, Copy)]
-enum Values<'a> {
+enum Values {
     Fixed(u32),
-    Range(u32, u32),
-    List(&'a [DomainValue]),
-    FieldList(&'a [Value], u8),
     /// Any subset of these bits, including zero for unacknowledged events.
     Bits(u32),
-    /// Unknown to the loader: a combination of flags, an opaque or composed
-    /// word, an address or a transformed input.
-    Any,
 }
 
-impl Values<'_> {
+impl Values {
     /// Every value is one `constraint` admits.
-    fn within(self, constraint: Option<Constraint<'_>>) -> bool {
+    fn within(self, constraint: Option<super::Constraint<'_>>) -> bool {
         let Some(constraint) = constraint else {
             return true;
         };
         match self {
             Self::Fixed(value) => constraint.admits(value),
-            Self::Range(min, max) => constraint.admits_range(min, max),
-            Self::List(values) => values.iter().all(|value| constraint.admits(value.value)),
-            Self::FieldList(values, shift) => values
-                .iter()
-                .all(|value| constraint.admits(value.value << shift)),
             Self::Bits(mask) => constraint.admits_bits(mask),
-            Self::Any => false,
         }
     }
 }
@@ -124,26 +38,21 @@ impl Values<'_> {
 enum WordWrite {
     /// A separately sourced complete zero publication, without replay.
     Zero,
+    /// A write from zero giving `written` its value.
     Store {
         written: u32,
-        whole: bool,
     },
     Image {
         value: u32,
         whole_word: bool,
     },
+    /// A sequence step: a whole-word image.
     Sequence {
         value: u32,
-        whole_word: bool,
     },
     Acknowledge {
         mask: u32,
     },
-}
-
-/// The ones from bit zero through the highest one of `value`.
-fn ones_through(value: u32) -> u32 {
-    u32::MAX.checked_shr(value.leading_zeros()).unwrap_or(0)
 }
 
 /// Who holds every word of a repeated template.
@@ -179,7 +88,7 @@ fn read(class: FieldClass) -> bool {
     class.readable() && class != FieldClass::ReadClears
 }
 
-/// The lanes of DMA address fields of the words a target reaches: set in
+/// The lanes of DMA pointer fields of the words a target reaches: set in
 /// any of them, and set in all of them.
 #[derive(Clone, Copy, Default)]
 struct Lanes {
@@ -187,22 +96,11 @@ struct Lanes {
     all: u32,
 }
 
-/// What a projected modify takes: its register, the bits it changes, the
-/// input bits its projections take and the field of a single projection
-/// from input bit zero.
-struct Projected<'f> {
-    target: Target,
-    mask: u32,
-    source: u32,
-    single: Option<&'f ExpandedField>,
-}
-
 struct Checker<'a, 'm> {
     context: Context<'a>,
     index: &'a Index<'m>,
     coverage: &'a Coverage,
     file: &'a PolicyFile,
-    domains: BTreeMap<&'a str, Domain<'a>>,
     templates: Vec<TemplateOwner>,
     /// The clear words of the interrupt snapshots.
     clears: BTreeSet<usize>,
@@ -211,14 +109,11 @@ struct Checker<'a, 'm> {
     /// The lanes of each word's pointer fields: set only from the image of
     /// a typed DMA reference, or to zero.
     pointers: BTreeMap<usize, u32>,
-    /// The lanes of each word's address fields: set only by their
-    /// full-register write of a DMA reference or buffer address.
-    addresses: BTreeMap<usize, u32>,
     names: BTreeSet<&'a str>,
     owners: BTreeMap<String, PartId>,
 }
 
-/// Check every domain and transaction; the part each transaction reaches.
+/// Check every transaction; the part each transaction reaches.
 pub(super) fn check(
     context: Context<'_>,
     index: &Index<'_>,
@@ -250,20 +145,16 @@ pub(super) fn check(
         index,
         coverage,
         file,
-        domains: BTreeMap::new(),
         templates,
         clears: BTreeSet::new(),
         clear_templates: BTreeSet::new(),
         pointers: BTreeMap::new(),
-        addresses: BTreeMap::new(),
         names: BTreeSet::new(),
         owners: BTreeMap::new(),
     };
-    checker.domains()?;
+    checker.pointers();
     checker.snapshots()?;
     checker.reads()?;
-    checker.addresses();
-    checker.pointers()?;
     checker.stores()?;
     checker.images()?;
     checker.modifies()?;
@@ -273,178 +164,6 @@ pub(super) fn check(
 impl<'a, 'm: 'a> Checker<'a, 'm> {
     fn error(&self, entity: impl Into<String>, kind: ErrorKind) -> Error {
         self.context.error(entity, kind)
-    }
-
-    fn declare(
-        &mut self,
-        name: &'a str,
-        description: &str,
-        domain: Domain<'a>,
-    ) -> Result<(), Error> {
-        if !upper_camel(name) {
-            return Err(self.error(
-                name,
-                ErrorKind::InvalidName(format!("domain {name:?} is not UpperCamelCase")),
-            ));
-        }
-        if self.domains.insert(name, domain).is_some() {
-            return Err(self.error(name, ErrorKind::Duplicate(format!("domain {name}"))));
-        }
-        self.context.description(name, description)
-    }
-
-    fn domains(&mut self) -> Result<(), Error> {
-        let file = self.file;
-        for domain in &file.flag_domains {
-            self.declare(&domain.name, &domain.description, Domain::Flag(domain))?;
-        }
-        for domain in &file.enum_domains {
-            self.declare(&domain.name, &domain.description, Domain::Enum(domain))?;
-        }
-        for domain in &file.bounded_domains {
-            self.declare(&domain.name, &domain.description, Domain::Bounded(domain))?;
-        }
-        for domain in &file.field_domains {
-            let (target, field) = self.field(&domain.name, &domain.field)?;
-            let source = self
-                .word(&domain.name, target)?
-                .source(field)
-                .ok_or_else(|| {
-                    self.error(&domain.name, ErrorKind::UnknownField(domain.field.clone()))
-                })?;
-            if source.value_range.is_none() && source.values.is_empty() {
-                return Err(self.error(
-                    &domain.name,
-                    ErrorKind::Domain("referenced field has no value domain".into()),
-                ));
-            }
-            let bits = source
-                .values
-                .iter()
-                .fold(0u64, |bits, value| bits | u64::from(value.value));
-            // A positioned domain's values stand at the field's own bits:
-            // the shift is the field's, never a copy of it.
-            let shift = if domain.positioned {
-                u8::try_from(field.low).unwrap_or(u8::MAX)
-            } else {
-                0
-            };
-            if (source.value_range.is_some() && domain.positioned)
-                || (bits << shift) > u64::from(u32::MAX)
-            {
-                return Err(self.error(&domain.name, ErrorKind::Domain("a positioned domain is an enum field's values at the field's bits; bounded field domains are unpositioned".into())));
-            }
-            let lane = (target, field_mask(field));
-            if let Some(description) = &domain.description {
-                self.context.description(&domain.name, description)?;
-            }
-            if !upper_camel(&domain.name) {
-                return Err(self.error(
-                    &domain.name,
-                    ErrorKind::InvalidName("field domain name must be UpperCamelCase".into()),
-                ));
-            }
-            if self
-                .domains
-                .insert(&domain.name, Domain::Field(source, shift, lane))
-                .is_some()
-            {
-                return Err(self.error(
-                    &domain.name,
-                    ErrorKind::Duplicate(format!("domain {}", domain.name)),
-                ));
-            }
-        }
-        for domain in &file.opaque_domains {
-            let target = self.register(&domain.name, &domain.register)?;
-            self.declare(&domain.name, &domain.description, Domain::Opaque(target))?;
-        }
-        for domain in &file.bitwise_composed_domains {
-            let target = self.register(&domain.name, &domain.register)?;
-            self.declare(
-                &domain.name,
-                &domain.description,
-                Domain::Composed(domain, target),
-            )?;
-        }
-        for (domain, values, named) in file
-            .flag_domains
-            .iter()
-            .map(|domain| {
-                (
-                    &domain.name,
-                    &domain.values,
-                    upper_snake as fn(&str) -> bool,
-                )
-            })
-            .chain(file.enum_domains.iter().map(|domain| {
-                (
-                    &domain.name,
-                    &domain.values,
-                    upper_camel as fn(&str) -> bool,
-                )
-            }))
-        {
-            if values.is_empty() {
-                return Err(self.error(domain, ErrorKind::Domain("has no value".to_owned())));
-            }
-            let mut names = BTreeSet::new();
-            let mut numbers = BTreeSet::new();
-            for value in values {
-                let entity = format!("{domain}::{}", value.name);
-                if !named(&value.name) {
-                    return Err(self.error(
-                        &entity,
-                        ErrorKind::InvalidName(format!("value {:?}", value.name)),
-                    ));
-                }
-                if !names.insert(&value.name) || !numbers.insert(value.value) {
-                    return Err(
-                        self.error(&entity, ErrorKind::Duplicate(format!("value {entity}")))
-                    );
-                }
-                self.context.description(&entity, &value.description)?;
-                self.context.sources(&entity, &value.sources)?;
-            }
-        }
-        for domain in &file.bounded_domains {
-            if domain.min > domain.max {
-                return Err(self.error(
-                    &domain.name,
-                    ErrorKind::Domain("min is above max".to_owned()),
-                ));
-            }
-            self.context.sources(&domain.name, &domain.sources)?;
-        }
-        for domain in &file.opaque_domains {
-            self.context.sources(&domain.name, &domain.sources)?;
-        }
-        for domain in &file.bitwise_composed_domains {
-            let mut names = BTreeSet::new();
-            if domain.arguments.is_empty() || domain.output_mask == 0 {
-                return Err(self.error(
-                    &domain.name,
-                    ErrorKind::Domain("needs arguments and a nonzero output mask".to_owned()),
-                ));
-            }
-            for argument in &domain.arguments {
-                if !lower_snake(&argument.name)
-                    || !names.insert(&argument.name)
-                    || argument.left_shift >= 32
-                    || argument.right_shift >= 32
-                {
-                    return Err(self.error(
-                        &domain.name,
-                        ErrorKind::Domain(format!(
-                            "argument {:?} needs a distinct lower_snake_case name and shifts below 32",
-                            argument.name
-                        )),
-                    ));
-                }
-            }
-            self.context.sources(&domain.name, &domain.sources)?;
-        }
-        Ok(())
     }
 
     /// A transaction's name is a distinct `lower_snake_case` method name
@@ -490,11 +209,11 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 ));
             }
         };
-        if !step.whole_word || steps != 1 {
+        if steps != 1 {
             return Err(self.error(
                 entity,
                 ErrorKind::Transaction(format!(
-                    "{}: an element range is a whole-word step and its sequence's only step",
+                    "{}: an element range is its sequence's only step",
                     step.register
                 )),
             ));
@@ -568,29 +287,23 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             })
     }
 
-    /// The DMA address lanes (pointer and address fields) of the words
-    /// `target` reaches.
-    fn lanes(&self, target: Target, which: &BTreeMap<usize, u32>) -> Lanes {
+    /// The DMA pointer lanes of the words `target` reaches.
+    fn lanes(&self, target: Target) -> Lanes {
         let mut lanes = Lanes {
             any: 0,
             all: u32::MAX,
         };
         for word in self.index.reach(target) {
-            let mask = which.get(&word).copied().unwrap_or(0);
+            let mask = self.pointers.get(&word).copied().unwrap_or(0);
             lanes.any |= mask;
             lanes.all &= mask;
         }
         lanes
     }
 
-    /// The lanes of `target`'s pointer and address fields together.
-    fn dma_lanes(&self, target: Target) -> u32 {
-        self.lanes(target, &self.pointers).any | self.lanes(target, &self.addresses).any
-    }
-
-    /// `bits` set no DMA address field of `target`.
+    /// `bits` set no DMA pointer field of `target`.
     fn no_dma(&self, entity: &str, target: Target, bits: u32) -> Result<(), Error> {
-        if bits & self.dma_lanes(target) != 0 {
+        if bits & self.lanes(target).any != 0 {
             return Err(self.error(
                 entity,
                 ErrorKind::Pointer(
@@ -607,7 +320,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         entity: &str,
         word: &Word<'_>,
         field: &ExpandedField,
-        values: Values<'_>,
+        values: Values,
     ) -> Result<(), Error> {
         if values.within(word.constraint(field)) {
             return Ok(());
@@ -777,20 +490,6 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         }
         self.owners.insert(entity.to_owned(), owner);
         Ok(())
-    }
-
-    /// A domain that exists and, when bound to a register, is used there.
-    fn domain(&self, entity: &str, name: &str, target: Target) -> Result<Domain<'a>, Error> {
-        let domain = self.domains.get(name).copied().ok_or_else(|| {
-            self.error(entity, ErrorKind::Domain(format!("{name} is not declared")))
-        })?;
-        if domain.bound().is_some_and(|bound| bound != target) {
-            return Err(self.error(
-                entity,
-                ErrorKind::Domain(format!("{name} belongs to another register")),
-            ));
-        }
-        Ok(domain)
     }
 
     fn class(
@@ -997,68 +696,6 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
 
     fn reads(&mut self) -> Result<(), Error> {
         let file = self.file;
-        for operation in &file.field_reads {
-            let entity = operation.name.as_str();
-            self.begin(entity, &operation.sources)?;
-            let (target, field) = self.field(entity, &operation.field)?;
-            self.class(entity, field, read(field.class), "a read")?;
-            self.reads_freely(entity, target)?;
-            if operation.signed && !matches!(field.width, 8 | 16 | 32) {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(
-                        "a signed read takes an 8-, 16- or 32-bit field".to_owned(),
-                    ),
-                ));
-            }
-            let owner = self.owner(entity, target, None)?;
-            self.take(entity, &[owner], false)?;
-        }
-        for operation in &file.full_register_reads {
-            let entity = operation.name.as_str();
-            self.begin(entity, &operation.sources)?;
-            let (target, field) = self.field(entity, &operation.field)?;
-            let Target::Word(_) = target else {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(format!("{} must name one element", operation.field)),
-                ));
-            };
-            self.class(entity, field, read(field.class), "a read")?;
-            self.reads_freely(entity, target)?;
-            if self
-                .word(entity, target)?
-                .whole_field()
-                .is_none_or(|whole| whole.name != field.name)
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(
-                        "a full-register read names its word's one 32-bit field".to_owned(),
-                    ),
-                ));
-            }
-            match self.domain(entity, &operation.domain, target)? {
-                Domain::Opaque(_) => {}
-                Domain::Bounded(domain) if domain.min == 0 && domain.max == u32::MAX => {}
-                Domain::Field(field, 0, _)
-                    if field
-                        .value_range
-                        .as_ref()
-                        .is_some_and(|range| range.min == 0 && range.max == u32::MAX) => {}
-                _ => {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Domain(format!(
-                            "{} does not represent every u32 the word may hold",
-                            operation.domain
-                        )),
-                    ));
-                }
-            }
-            let owner = self.owner(entity, target, None)?;
-            self.take(entity, &[owner], false)?;
-        }
         let mut recorded = std::collections::BTreeSet::new();
         for record in &file.record_words {
             let entity = record.register.as_str();
@@ -1153,15 +790,9 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
     }
 
     /// A write of the whole of `target` from zero that gives `written`
-    /// its value; `whole` for a write of a data port's one field.
-    fn store(
-        &mut self,
-        entity: &str,
-        target: Target,
-        written: u32,
-        whole: bool,
-    ) -> Result<(), Error> {
-        self.write_word(entity, target, WordWrite::Store { written, whole })?;
+    /// its value.
+    fn store(&mut self, entity: &str, target: Target, written: u32) -> Result<(), Error> {
+        self.write_word(entity, target, WordWrite::Store { written })?;
         let owner = self.owner(entity, target, Some(written))?;
         self.take(entity, &[owner], true)
     }
@@ -1218,24 +849,20 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 ),
             ));
         }
-        if let WordWrite::Store { whole, .. } = write {
+        if let WordWrite::Store { .. } = write {
             if let Some(reason) = word.unstorable() {
                 return Err(self.error(entity, ErrorKind::Register(reason.to_owned())));
             }
-            if word.template.data_port.is_some() && !whole {
+            if word.template.data_port.is_some() {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Register(
-                        "a data port's word is written only whole by a full-register write"
-                            .to_owned(),
-                    ),
+                    ErrorKind::Register("a data port's word takes no write from zero".to_owned()),
                 ));
             }
         }
         let fixed = match write {
-            WordWrite::Image { value, whole_word } | WordWrite::Sequence { value, whole_word } => {
-                Some((value, whole_word))
-            }
+            WordWrite::Image { value, whole_word } => Some((value, whole_word)),
+            WordWrite::Sequence { value } => Some((value, true)),
             _ => None,
         };
         for field in word.fields() {
@@ -1261,7 +888,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 WordWrite::Zero => Values::Fixed(0),
                 WordWrite::Store { written, .. } if mask & written != 0 => continue,
                 WordWrite::Store { .. } => Values::Fixed(0),
-                WordWrite::Image { value, .. } | WordWrite::Sequence { value, .. } => {
+                WordWrite::Image { value, .. } | WordWrite::Sequence { value } => {
                     Values::Fixed((value & mask).checked_shr(field.low).unwrap_or(0))
                 }
                 WordWrite::Acknowledge { mask: sampled } => {
@@ -1292,8 +919,9 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         Ok(())
     }
 
-    /// Hardware pointer lanes are protected even when policy exposes no pointer operation.
-    fn addresses(&mut self) {
+    /// The lanes of each word's hardware pointer fields: set only from a
+    /// typed reference's image.
+    fn pointers(&mut self) {
         for (position, word) in self.index.words.iter().enumerate() {
             for field in word.fields() {
                 if word
@@ -1304,105 +932,10 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 }
             }
         }
-        for write in &self.file.full_register_writes {
-            if write.pointer
-                && let Some((target, position)) = self.index.field(&write.field)
-            {
-                for index in self.index.reach(target) {
-                    if let Some(field) = self
-                        .index
-                        .word(index)
-                        .and_then(|word| word.fields().get(position))
-                    {
-                        *self.addresses.entry(index).or_default() |= field_mask(field);
-                    }
-                }
-            }
-        }
-    }
-
-    fn pointers(&mut self) -> Result<(), Error> {
-        for pointer in &self.file.pointer_fields {
-            let entity = pointer.name.as_str();
-            self.begin(entity, &pointer.sources)?;
-            let (target, field) = self.field(entity, &pointer.field)?;
-            self.class(
-                entity,
-                field,
-                matches!(field.class, FieldClass::Plain | FieldClass::WriteOnly),
-                "a pointer",
-            )?;
-            if self
-                .word(entity, target)?
-                .source(field)
-                .is_none_or(|source| source.pointer.is_none())
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Pointer(format!("{} has no hardware pointer fact", pointer.field)),
-                ));
-            }
-            let mask = field_mask(field);
-            if self.lanes(target, &self.addresses).any & mask != 0 {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Pointer("field already has a full-register pointer write".into()),
-                ));
-            }
-            self.store(entity, target, mask, false)?;
-        }
-        Ok(())
     }
 
     fn stores(&mut self) -> Result<(), Error> {
         let file = self.file;
-        for write in &file.full_register_writes {
-            let entity = write.name.as_str();
-            self.begin(entity, &write.sources)?;
-            let (target, field) = self.field(entity, &write.field)?;
-            let word = self.word(entity, target)?;
-            if word
-                .whole_field()
-                .is_none_or(|whole| whole.name != field.name)
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(
-                        "a full-register write names its word's one 32-bit field".to_owned(),
-                    ),
-                ));
-            }
-            let port = word.template.data_port.is_some();
-            self.class(
-                entity,
-                field,
-                stored(field.class) || (port && field.class == FieldClass::HardwareWritten),
-                "a write from zero",
-            )?;
-            let mask = field_mask(field);
-            let values = match (&write.domain, write.pointer) {
-                (Some(domain), false) => {
-                    self.no_dma(entity, target, mask)?;
-                    self.domain(entity, domain, target)?.values()
-                }
-                (None, true)
-                    if word
-                        .source(field)
-                        .is_some_and(|source| source.pointer.is_some()) =>
-                {
-                    Values::Any
-                }
-                _ => return Err(self.error(
-                    entity,
-                    ErrorKind::Pointer(
-                        "takes a domain or pointer = true referencing the field's hardware fact"
-                            .into(),
-                    ),
-                )),
-            };
-            self.constrained(entity, word, field, values)?;
-            self.store(entity, target, mask, true)?;
-        }
         for write in &file.zero_based_field_writes {
             let entity = write.name.as_str();
             self.begin(entity, &write.sources)?;
@@ -1418,19 +951,6 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 let bits = field_mask(field);
                 if mask & bits != 0 {
                     return Err(self.error(entity, ErrorKind::Duplicate(reference.clone())));
-                }
-                // A pointer field takes the image of a typed reference; an
-                // address field only its own full-register write.
-                let pointers = self.lanes(target, &self.pointers);
-                if self.lanes(target, &self.addresses).any & bits != 0
-                    || (pointers.any & bits != 0 && pointers.all & bits != bits)
-                {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Pointer(format!(
-                            "{reference} is an address field or a pointer field of some elements only"
-                        )),
-                    ));
                 }
                 // The field's own type: its named values when it takes
                 // only those; no bounded integer type exists.
@@ -1450,42 +970,28 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 mask |= bits;
             }
             if let Some(target) = register {
-                let whole = match &write.whole_word_bits {
-                    Some(bits) => self.whole_word_bits(entity, target, mask, bits)?,
-                    None => 0,
-                };
-                self.store(entity, target, mask | whole, false)?;
+                let whole = self.whole_word_bits(entity, target, mask, &write.whole_word_bits)?;
+                self.store(entity, target, mask | whole)?;
             }
-        }
-        for write in &file.sampled_bit_zero_writes {
-            let entity = write.name.as_str();
-            self.begin(entity, &write.sources)?;
-            let (target, field) = self.field(entity, &write.field)?;
-            self.class(
-                entity,
-                field,
-                field.width == 1 && read(field.class) && stored(field.class),
-                "a sampled one-bit write",
-            )?;
-            self.reads_freely(entity, target)?;
-            let mask = field_mask(field);
-            self.no_dma(entity, target, mask)?;
-            let word = self.word(entity, target)?;
-            self.constrained(entity, word, field, Values::Any)?;
-            self.store(entity, target, mask, false)?;
         }
         for write in &file.zero_register_writes {
             let entity = write.name.as_str();
             self.begin(entity, &write.sources)?;
             let target = self.register(entity, &write.register)?;
-            if self.word(entity, target)?.has(FieldClass::ReadObserved) {
-                self.element(entity, &write.register)?;
-                self.write_word(entity, target, WordWrite::Zero)?;
-                let owner = self.owner(entity, target, Some(0))?;
-                self.take(entity, &[owner], true)?;
-            } else {
-                self.store(entity, target, 0, false)?;
+            // Any other word's zero is a write of its fields, which the
+            // generic accessors express: the record would render nothing.
+            if !self.word(entity, target)?.has(FieldClass::ReadObserved) {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Register(
+                        "a zero register write publishes zero to a read-observed word".to_owned(),
+                    ),
+                ));
             }
+            self.element(entity, &write.register)?;
+            self.write_word(entity, target, WordWrite::Zero)?;
+            let owner = self.owner(entity, target, Some(0))?;
+            self.take(entity, &[owner], true)?;
         }
         Ok(())
     }
@@ -1640,10 +1146,7 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                     self.write_word(
                         entity,
                         Target::Word(word),
-                        WordWrite::Sequence {
-                            value: step.value,
-                            whole_word: step.whole_word,
-                        },
+                        WordWrite::Sequence { value: step.value },
                     )?;
                     owners.push(self.owner(entity, Target::Word(word), Some(step.value))?);
                 }
@@ -1653,15 +1156,9 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         Ok(())
     }
 
-    /// A read-modify-write of `target` replacing `bits`; unless `checked`,
-    /// no replaced field has a write constraint.
-    fn modify(
-        &mut self,
-        entity: &str,
-        target: Target,
-        bits: u32,
-        checked: bool,
-    ) -> Result<(), Error> {
+    /// A read-modify-write of `target` replacing `bits`, none of a field
+    /// with a write constraint.
+    fn modify(&mut self, entity: &str, target: Target, bits: u32) -> Result<(), Error> {
         let word = self.word(entity, target)?;
         if !word.modifiable() || self.on_clear(target) {
             return Err(self.error(
@@ -1676,8 +1173,14 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         for field in word.fields() {
             if bits & field_mask(field) != 0 {
                 self.class(entity, field, modified(field.class), "a read-modify-write")?;
-                if !checked {
-                    self.constrained(entity, word, field, Values::Any)?;
+                if word.constraint(field).is_some() {
+                    return Err(self.error(
+                        entity,
+                        ErrorKind::WriteConstraint(format!(
+                            "{} admits fewer values than the transaction writes",
+                            field.identity
+                        )),
+                    ));
                 }
                 covered |= field_mask(field);
             }
@@ -1692,303 +1195,23 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
         self.take(entity, &[owner], true)
     }
 
-    /// The projections' register, the bits they replace and the input bits
-    /// they take.
-    fn projections<'f>(
-        &'f self,
-        entity: &str,
-        fields: &[Projection],
-    ) -> Result<Projected<'f>, Error> {
-        let mut register = None;
-        let mut mask = 0u32;
-        let mut source = 0u32;
-        let mut single = None;
-        for projection in fields {
-            let (target, field) = self.field(entity, &projection.field)?;
-            self.same(entity, &mut register, target)?;
-            if mask & field_mask(field) != 0 {
-                return Err(self.error(entity, ErrorKind::Duplicate(projection.field.clone())));
-            }
-            let offset = u32::from(projection.source_bit_offset);
-            if offset.saturating_add(field.width) > 32 {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(format!(
-                        "{} takes input bits above bit 31",
-                        projection.field
-                    )),
-                ));
-            }
-            mask |= field_mask(field);
-            source |= field_ones(field.width).checked_shl(offset).unwrap_or(0);
-            single = (fields.len() == 1 && offset == 0).then_some(field);
-        }
-        let target = register.ok_or_else(|| self.error(entity, ErrorKind::EmptySelection))?;
-        Ok(Projected {
-            target,
-            mask,
-            source,
-            single,
-        })
-    }
-
-    /// The input of a projected modify fits the input bits its projections
-    /// take, so no admitted value is truncated.
-    fn fits(&self, entity: &str, admitted: u32, source: u32) -> Result<(), Error> {
-        if admitted & !source != 0 {
-            return Err(self.error(
-                entity,
-                ErrorKind::Transaction(format!(
-                    "its input sets bits 0x{:08x} its projections do not take",
-                    admitted & !source
-                )),
-            ));
-        }
-        Ok(())
-    }
-
-    /// Whether `projected` is the one pointer field of every word it
-    /// reaches, from input bit zero: it takes a typed reference's image.
-    fn pointer_image(&self, projected: &Projected<'_>) -> bool {
-        projected.single.is_some()
-            && self.lanes(projected.target, &self.pointers).all & projected.mask == projected.mask
-    }
-
+    /// A field-or-modify ORs a typed reference's image into a fresh read
+    /// of one pointer field; any other OR of a field is a write the
+    /// generic accessors express.
     fn modifies(&mut self) -> Result<(), Error> {
         let file = self.file;
-        for modify in &file.masked_register_modifies {
-            let entity = modify.name.as_str();
-            self.begin(entity, &modify.sources)?;
-            let target = self.register(entity, &modify.register)?;
-            if modify.input_mask & modify.set_mask != 0
-                || modify.preserve_mask & (modify.input_mask | modify.set_mask) != 0
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction("preserve, input and set masks are disjoint".to_owned()),
-                ));
-            }
-            if modify.preserve_mask | modify.input_mask | modify.set_mask != u32::MAX {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(
-                        "preserve, input and set masks cover every bit of the word".to_owned(),
-                    ),
-                ));
-            }
-            // An opaque domain is a raw word its input mask selects from;
-            // every other domain's values fit the input mask. A positioned
-            // field domain's input is exactly its field's lane.
-            let domain = self.domain(entity, &modify.domain, target)?;
-            if let Domain::Field(_, shift, (word, lane)) = domain
-                && shift != 0
-                && (word != target || modify.input_mask != lane)
-            {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(format!(
-                        "the positioned domain {} takes exactly its field's lane of {} as input",
-                        modify.domain, modify.register
-                    )),
-                ));
-            }
-            if !matches!(domain, Domain::Opaque(_)) && domain.bits() & !modify.input_mask != 0 {
-                return Err(self.error(
-                    entity,
-                    ErrorKind::Transaction(format!(
-                        "{} admits bits 0x{:08x} its input mask discards",
-                        modify.domain,
-                        domain.bits() & !modify.input_mask
-                    )),
-                ));
-            }
-            self.no_dma(entity, target, modify.input_mask | modify.set_mask)?;
-            self.modify(entity, target, modify.input_mask | modify.set_mask, false)?;
-        }
-        let bitwise = file
-            .field_or_modifies
-            .iter()
-            .map(|modify| (modify, true))
-            .chain(
-                file.field_clear_modifies
-                    .iter()
-                    .map(|modify| (modify, false)),
-            );
-        for (modify, or) in bitwise {
-            let entity = modify.name.as_str();
-            self.begin(entity, &modify.sources)?;
-            let projected = self.projections(entity, &modify.fields)?;
-            let image = or
-                && modify.domain.is_none()
-                && modify.value.is_none()
-                && self.pointer_image(&projected);
-            let (target, mask, source) = (projected.target, projected.mask, projected.source);
-            if !image {
-                self.no_dma(entity, target, mask)?;
-            }
-            let admitted = match (modify.domain.as_deref(), modify.value) {
-                (Some(name), None) => match self.domain(entity, name, target)? {
-                    domain if domain.projected() => domain.bits(),
-                    _ => {
-                        return Err(self.error(
-                            entity,
-                            ErrorKind::Domain(format!(
-                                "{name} is no bounded domain from zero or enum domain"
-                            )),
-                        ));
-                    }
-                },
-                (None, Some(value)) => value,
-                (None, None) if image => source,
-                _ => {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Transaction(
-                            "takes exactly one of domain and value, or neither for one pointer field"
-                                .to_owned(),
-                        ),
-                    ));
-                }
-            };
-            self.fits(entity, admitted, source)?;
-            self.modify(entity, target, mask, false)?;
-        }
-        for modify in &file.field_replace_modifies {
-            let entity = modify.name.as_str();
-            self.begin(entity, &modify.sources)?;
-            let projected = self.projections(entity, &modify.fields)?;
-            let (target, mask, source) = (projected.target, projected.mask, projected.source);
-            let pointers = self.lanes(target, &self.pointers);
-            let image = modify.domain.is_none()
-                && modify.value.is_none()
-                && modify.input_transform.is_none()
-                && self.pointer_image(&projected);
-            // Zero is the null reference of a pointer field of every word
-            // the transaction reaches; an address field takes no zero here.
-            let null = modify.value == Some(0)
-                && self.lanes(target, &self.addresses).any & mask == 0
-                && pointers.any & mask & !pointers.all == 0;
-            if !(image || null) {
-                self.no_dma(entity, target, mask)?;
-            }
-            let transform = modify.input_transform;
-            self.transform(entity, transform, modify.domain.is_some())?;
-            let domain = match modify.domain.as_deref() {
-                Some(name) => Some(self.domain(entity, name, target)?),
-                None => None,
-            };
-            let admitted = match (domain, modify.value) {
-                (Some(domain), None)
-                    if domain.projected() || matches!(domain, Domain::Composed(..)) =>
-                {
-                    transform.map_or(domain.bits(), |transform| transform.retain_mask)
-                }
-                (Some(_), None) => {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Domain(format!(
-                            "{} is no bounded domain from zero, enum or bitwise-composed domain",
-                            modify.domain.as_deref().unwrap_or_default()
-                        )),
-                    ));
-                }
-                (None, Some(value)) => value,
-                (None, None) if image => source,
-                _ => {
-                    return Err(self.error(
-                        entity,
-                        ErrorKind::Transaction(
-                            "takes exactly one of domain and value, or neither for one pointer field"
-                                .to_owned(),
-                        ),
-                    ));
-                }
-            };
-            self.fits(entity, admitted, source)?;
-            // A field with a write constraint takes a fixed value or a
-            // closed domain from input bit zero, untransformed.
-            let word = self.word(entity, target)?;
-            for projection in &modify.fields {
-                let (_, field) = self.field(entity, &projection.field)?;
-                let values = match (domain, modify.value) {
-                    (None, Some(value)) => Values::Fixed(
-                        value
-                            .checked_shr(u32::from(projection.source_bit_offset))
-                            .unwrap_or(0)
-                            & field_ones(field.width),
-                    ),
-                    (Some(domain), None)
-                        if transform.is_none()
-                            && modify.fields.len() == 1
-                            && projection.source_bit_offset == 0 =>
-                    {
-                        domain.values()
-                    }
-                    _ => Values::Any,
-                };
-                self.constrained(entity, word, field, values)?;
-            }
-            self.modify(entity, target, mask, true)?;
-        }
-        for modify in &file.indexed_bit_set_modifies {
+        for modify in &file.field_or_modifies {
             let entity = modify.name.as_str();
             self.begin(entity, &modify.sources)?;
             let (target, field) = self.field(entity, &modify.field)?;
             let mask = field_mask(field);
-            let width = field.width;
-            let below = match self.domain(entity, &modify.domain, target)? {
-                Domain::Bounded(domain) => domain.min == 0 && domain.max < width,
-                Domain::Enum(domain) => domain.values.iter().all(|value| value.value < width),
-                Domain::Field(field, shift, _) => field.value_range.as_ref().map_or_else(
-                    || {
-                        field
-                            .values
-                            .iter()
-                            .all(|value| (value.value << shift) < width)
-                    },
-                    |range| range.min == 0 && range.max < width,
-                ),
-                _ => false,
-            };
-            if !below {
+            if self.lanes(target).all & mask != mask {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Domain(format!(
-                        "{} is no bounded domain from zero or enum domain of indices below {width}",
-                        modify.domain
-                    )),
+                    ErrorKind::Pointer(format!("{} is no hardware pointer field", modify.field)),
                 ));
             }
-            self.no_dma(entity, target, mask)?;
-            self.modify(entity, target, mask, false)?;
-        }
-        Ok(())
-    }
-
-    /// An input transform transforms a domain's value, adds or subtracts
-    /// and keeps some bit.
-    fn transform(
-        &self,
-        entity: &str,
-        transform: Option<InputTransform>,
-        domain: bool,
-    ) -> Result<(), Error> {
-        let Some(transform) = transform else {
-            return Ok(());
-        };
-        if !domain || transform.retain_mask == 0 {
-            return Err(self.error(
-                entity,
-                ErrorKind::Transaction(
-                    "an input transform takes a domain and a nonzero retain mask".to_owned(),
-                ),
-            ));
-        }
-        if transform.wrapping_add != 0 && transform.wrapping_subtract != 0 {
-            return Err(self.error(
-                entity,
-                ErrorKind::Transaction("an input transform adds or subtracts, not both".to_owned()),
-            ));
+            self.modify(entity, target, mask)?;
         }
         Ok(())
     }

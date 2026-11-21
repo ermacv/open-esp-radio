@@ -139,9 +139,9 @@ sources = ["IDF_TIMG_REG_H"]
 ```
 
 Hardware pointer and complete value-domain facts belong to the field in its
-block type. Ownership policy names these facts; it carries no second encoding
-or value list. A domain narrower than an entire field's representable range
-remains in policy/HAL.
+block type; the ownership policy carries no second encoding, value list or
+domain. A domain narrower than an entire field's representable range
+remains in the HAL.
 
 ```toml
 [[registers.fields]]
@@ -632,12 +632,12 @@ and numeric mux inputs. `gate_groups()` returns resolved fields and sources;
 `shared_controls()`, `clock_sources()`, `interrupt_sources()` and
 `unbound_interrupts()` retain their checked root facts.
 
-### Ownership policy (`schema = 6`)
+### Ownership policy (`schema = 7`)
 
 `chip_policy::ChipPolicy::load(path, model, evidence)` reads the ownership
 policy over a loaded `ChipModel`.
 
-The policy holds ownership and transactions only. A **part** is the words
+The policy holds ownership and the transactions the PAC renders only. A **part** is the words
 of one MMIO instance one owner holds; a **partition** is one owner, a
 generated owner type holding parts of any number of instances, with no
 limit on the parts of one instance. Every word (an expanded element: a
@@ -647,7 +647,7 @@ rest" of an instance or of the chip. Analog-I2C instances are reached
 through their I2C master's words and are not partitioned.
 
 ```toml
-schema = 6
+schema = 7
 chip = "esp32s31"                 # the root's chip
 
 [[partitions]]
@@ -705,13 +705,8 @@ reason = "Event channel three is unused."
 name = "enable_ieee802154_etm_channel0"
 register = "MODEM_ETM.CHANNEL_ENABLE_SET"
 value = 0x00000001
+whole-word = true
 sources = ["IDF_IEEE802154_ETM"]
-
-[[field-replace-modifies]]
-name = "set_ieee802154_channel"
-fields = [{ field = "IEEE802154.CONFIG.CHANNEL", source-bit-offset = 0 }]
-domain = "Channel"
-sources = ["IDF_IEEE802154_LL"]
 ```
 
 Each rendered fixed-register image also exposes `<NAME>_IMAGE: u32` in
@@ -745,38 +740,39 @@ A part with any flag, `observes` or `triggers` has a `description` and
 `sources`. Partitions have unique names and members, a description and at
 least one part; a part selects at least one word.
 
-Policy domains (`flag-domains`, `enum-domains`, `bounded-domains`,
-`opaque-domains`, `bitwise-composed-domains`) retain operation-specific inputs.
-A `[[field-domains]]` entry names `name` (the policy's UpperCamelCase name)
-and `field` (`INSTANCE.REGISTER.FIELD`, including templates), with an optional
-policy `description`: it refers to the type's `value-range` or `values`
-without copying them. `positioned = true` places an enum reference's
-values at the field's own bits, for a masked register modify whose input is
-exactly that field's lane (for example, the TSENS clock-enable bit at
-position 30); the shift is the field's, never a copy. Bounded references
-are unpositioned. All transaction validation uses the referenced domain.
-An opaque or bitwise-composed domain names its `register` and is used on
-it alone. Transactions name `INSTANCE.REGISTER` and
-`INSTANCE.REGISTER.FIELD` of the root, a template key for every element
-(`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
-kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
-`full-register-reads`, `partition-image-reads`,
-`full-register-writes`, `pointer-fields`, `zero-based-field-writes` (`fields`),
-`sampled-bit-zero-writes`, `zero-register-writes`,
-`fixed-register-images`, `fixed-register-sequences` (each step one
-element, or an element range), `masked-register-modifies`,
-`field-or-modifies`, `field-clear-modifies`, `field-replace-modifies` and
-`indexed-bit-set-modifies`. Names are unique `lower_snake_case` across
-all transactions; the fields of one transaction lie in one register.
+Transactions name `INSTANCE.REGISTER` and `INSTANCE.REGISTER.FIELD` of the
+root, a template key for every element (`MODEM_ETM.CH%s_EVENT.ID`), and take
+no `peripheral` or `exposure`. Each renders a method no field accessor
+expresses ("The thin PAC", "Owners, names and policy items"); every other
+write is a sequence of field accessors and belongs to the HAL, which keeps no
+record of it. The kinds:
+
+| Kind | What it renders |
+| --- | --- |
+| `interrupt-snapshots` (`status`, optional `events`) | a sample of the status word into an affine token and its acknowledgement |
+| `partition-image-reads` | each part's readable, side-effect-free words, raw |
+| `zero-based-field-writes` (`fields`, `whole-word-bits`) | a write from zero of the fields beside the vendor's fixed ones |
+| `zero-register-writes` (`register`) | a sourced zero publication to a `read-observed` word |
+| `fixed-register-images` | a `whole-word` image, an acknowledgement with its proof (`masks` or `consumed-event`), or a configuration of a readable hardware-updated word without a modify accessor |
+| `fixed-register-sequences` | each step's whole-word image, one method a step; the HAL orders them |
+| `field-or-modifies` (`field`) | the vendor's OR of a typed reference's image into a fresh read of one pointer field |
+
+A record that would render nothing is refused, so none enters the file: a
+`zero-register-write` of a word that is not `read-observed` and a
+`field-or-modify` of a field that is not a hardware pointer fail to
+load; a write from zero without `whole-word-bits` and a sequence
+step that is not a whole-word image cannot be written; a fixed image of
+none of the forms above fails to render, which `cargo registers validate`
+runs. Names are unique `lower_snake_case` across all transactions; the
+fields of one transaction lie in one register.
 
 A fixed-sequence step that names a template with `first` and `count`
-(`{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0,
-whole-word = true }`, the spelling of a part's `elements`) is an element
+(`{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0 }`,
+the spelling of a part's `elements`) is an element
 range: it writes its image to `count` elements from `first`, in ascending
 order. `count` may cover the whole array; a range outside the array, an
 empty one, one over a single element or `first` without `count` is a load
-error. An element range is a `whole-word` step and its sequence's only
-step. Every element takes the rules of a sequence step below and one owner
+error. An element range is its sequence's only step. Every element takes the rules of a sequence step below and one owner
 holds them all.
 
 A word containing a `read-observed` field admits only observation and a
@@ -790,10 +786,9 @@ What a transaction may reach follows the field class and the word:
 
 | Transaction | Fields it may write or read | Its word |
 | --- | --- | --- |
-| read | not `write-only`, `write-trigger` or `read-clears` | reads without a side effect: no FIFO, read side effect or `read-clears` field |
-| write from zero (full, zero-based, sampled bit, pointer, zero register) | `plain`, `write-only`, `write-trigger`; a data port's `hardware-written` field by a full-register write (a pointer: `plain` or `write-only`; a sampled bit: one `plain` bit); a zero-based write's `whole-word-bits` also `read-only` fields and undeclared bits | no FIFO or command register, no `self-clearing`, `set-only` or `write-one-to-clear` field, no `hardware-written` field outside a data port; a data port only by a full-register write; at least one field a write gives a value |
-| read-modify-write | `plain` | reads without a side effect; no command register, data port, `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or `hardware-written` field |
-| fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` also undeclared bits and `read-only` fields | no FIFO or command register; at least one writable field even for zero or `whole-word`; W1C only by a paired image with a proof, never a sequence step |
+| write from zero (zero-based, zero register) | `plain`, `write-only`, `write-trigger`; its `whole-word-bits` also `read-only` fields and undeclared bits | no FIFO, data port or command register, no `self-clearing`, `set-only`, `write-one-to-clear` or `hardware-written` field; at least one field a write gives a value |
+| pointer OR (read-modify-write) | one `plain` pointer field | reads without a side effect; no command register, data port, `write-only`, `write-one-to-clear`, `self-clearing`, `set-only` or `hardware-written` field |
+| fixed image or sequence step | sets bits of `plain`, `write-only`, `write-trigger`, `set-only`, `self-clearing`, `hardware-written`; with `whole-word` (every sequence step) also undeclared bits and `read-only` fields | no FIFO or command register; at least one writable field even for zero or `whole-word`; W1C only by a paired image with a proof, never a sequence step |
 
 A non-whole-word fixed image of a readable hardware-updated register without a
 generic modify accessor renders a named configuration operation. It replaces
@@ -825,60 +820,27 @@ reason = "The timer's fault record keeps the status word beside its cause."
 sources = ["SRC_TIMER_STATUS_CONSUMER"]
 ```
 
-The shapes and inputs:
+A `zero-based-field-write` stores fixed ones outside its fields,
+`whole-word-bits = { value, sources }` (a vendor's store of a whole word):
+nonzero, disjoint from its fields, only bits of `read-only` fields or of no
+field, each field's value one its constraint admits, with their own
+sources. The bits grant no setter and no read-modify-write; no other kind
+takes them.
 
-- a `full-register-write` names its word's one 32-bit field and takes a
-  `domain` or `pointer = true` referring to that field's type-level pointer
-  fact; a
-  `full-register-read` names one element's one 32-bit field and an opaque
-  domain or a bounded one of every `u32`; a signed `field-read` reads an
-  8-, 16- or 32-bit field;
-- a `masked-register-modify`'s preserve, input and set masks are disjoint
-  and cover all 32 bits; its domain's values fit the input mask, except an
-  opaque domain's, a raw word the mask selects from;
-- `field-or-modifies` and `field-clear-modifies` take a bounded domain
-  from zero, an enum domain or a fixed `value`; `field-replace-modifies`
-  also a bitwise-composed domain, and an `input-transform` (on a domain,
-  with a nonzero `retain-mask`, adding or subtracting) truncates to its
-  retain mask. The bits the input may set (a fixed value, a bounded
-  domain's bits up to its maximum, an enum's values, a composed output
-  mask, a transform's retain mask) lie in the input bits the projections
-  take;
-- `indexed-bit-set-modifies` take a bounded domain from zero or an enum
-  domain whose every index lies below the field's width;
-- a `zero-based-field-write` may store fixed ones outside its fields,
-  `whole-word-bits = { value, sources }` (a vendor's store of a whole
-  word): nonzero, disjoint from its fields, only bits of `read-only`
-  fields or of no field, each field's value one its constraint admits,
-  with their own sources. The bits grant no setter and no
-  read-modify-write; no other kind takes them.
-
-A policy `pointer-fields` entry contains only `name`, `field` and `sources`:
-a typed pointer-image operation referencing the field's hardware fact. It
-names a plain or write-only pointer. Neither this entry nor a full-register
-write may redeclare `points-to`, `placement`, `encoding` or `member-offset`.
-
-Every hardware pointer field is protected, including those with no pointer
-operation in policy. It is set only from a typed reference image, by a
-`field-or-modifies` or `field-replace-modifies` of one field from input bit
-zero with neither `domain` nor `value`, a `zero-based-field-write` of its
-image, or to zero. A field exposed by a full-register pointer write is set
-only by that write or to zero by a write from zero. No fixed image, masked
-modify, indexed bit set, sampled bit or integer full write may forge either
-kind of address. Template and element spellings denote the same lanes.
+Every hardware pointer field (its type's pointer fact) is protected: it is
+set only from a typed reference's image, by a `field-or-modify` of the one
+field, a `zero-based-field-write` of its image, or to zero. No fixed image
+or sequence step may forge it. Template and element spellings denote the
+same lanes.
 
 A field's `write-range` or `write-values-only` bounds every transaction:
 every lane of a fixed image or step, and the zero a write from zero
 leaves in its other fields, is a value its field takes. A snapshot's
 acknowledgement may write any subset of its sampled mask and consumed
-fields, including zero for retained events and lanes outside them; these possible clear-field
-values must all satisfy the field's constraints. A
-`full-register-write` takes a bounded domain inside the range or an enum
-of taken values, and a `field-replace-modify` a fixed value or, from input
-bit zero of its one projection and untransformed, such a domain; a
-`zero-based-field-write` takes a field with named values only,
-not a narrower range. Every other transaction on a constrained field
-fails.
+fields, including zero for retained events and lanes outside them; these
+possible clear-field values must all satisfy the field's constraints. A
+`zero-based-field-write` takes a field with named values only, not a
+narrower range; a pointer OR replaces no constrained field.
 
 A `write-one-to-clear` field is written only by its snapshot's
 acknowledgement. A snapshot names its `status` element; its clear element
@@ -1065,8 +1027,9 @@ What a write does with the lanes it does not set:
   image, `name(&self, index, &Proof<H>)`, each storing the whole byte
   through `&self` (the CLIC's pending bytes, `pend_line` and
   `clear_line`).
-- **Policy items.** Only the items field accessors cannot express render:
-  `whole-word` fixed images, each `whole-word` step of a fixed sequence
+- **Policy items.** The policy holds only items field accessors cannot
+  express, and each renders: `whole-word` fixed images, each step of a
+  fixed sequence
   (one method per image, `<sequence>_<element>`; the HAL orders the
   steps), an element range (one method named after its sequence that
   stores every element of the range in ascending order through an indexed
@@ -1075,13 +1038,15 @@ What a write does with the lanes it does not set:
   array), fixed images with a `masks` (masked first, whole-word or not) or
   `consumed-event` proof, interrupt snapshots (with the consumed field as
   an `Option` argument; the token reads back its sampled `bits()` and has
-  no constructor), zero-based writes with `whole-word-bits` and
-  field-or-modifies of a pointer field (a typed reference's image ORed
+  no constructor), configurations of a readable hardware-updated word
+  without a modify accessor, zero publications to a `read-observed` word,
+  zero-based writes with `whole-word-bits`, field-or-modifies of a
+  pointer field (a typed reference's image ORed
   into a fresh read) and partition image reads (on each part of the
   partition, `<name>(index)` reads the part's readable side-effect-free
   words whole, at `<NAME>_OFFSETS`, a diagnostic without field decoding).
   Each becomes a method of the part that owns it; every
-  other transaction is HAL code over the accessors.
+  other write is HAL code over the accessors, with no policy record.
 
 ### Linker fragment
 

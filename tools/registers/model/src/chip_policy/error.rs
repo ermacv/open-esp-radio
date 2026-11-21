@@ -75,8 +75,6 @@ pub enum ErrorKind {
     Shared(String),
     #[error("read-only part: {0}")]
     ReadOnly(String),
-    #[error("domain: {0}")]
-    Domain(String),
     #[error("reaches {0}, which is unclaimed")]
     ReachesUnclaimed(String),
     #[error("reaches words of more than one part: {0}")]

@@ -1,5 +1,5 @@
 //! The ownership policy over a chip root: partitions of parts, unclaimed
-//! words, value domains and transactions.
+//! words and the transactions the PAC renders.
 //!
 //! A part is the words of one instance one owner holds; a partition is one
 //! owner holding parts of several instances. Every word of every MMIO
@@ -30,13 +30,9 @@ mod transactions;
 
 pub use error::{Error, ErrorKind};
 pub use source::{
-    BitwiseComposedDomain, BoundedDomain, ComposedArgument, ComposedValueType, DomainValue,
-    Elements, EnumDomain, FieldBitModify, FieldDomain, FieldRead, FieldReplaceModify,
-    FixedRegisterImage, FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite,
-    IndexedBitSetModify, InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain,
-    POLICY_SCHEMA, Part, Partition, PartitionImageRead, PointerField, PolicyFile, Projection,
-    RecordWord, SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits,
-    ZeroBasedFieldWrite, ZeroRegisterWrite,
+    Elements, FieldOrModify, FixedRegisterImage, FixedRegisterSequence, InterruptSnapshot,
+    POLICY_SCHEMA, Part, Partition, PartitionImageRead, PolicyFile, RecordWord, SequenceStep,
+    Triggers, Unclaimed, WholeWordBits, ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 
 /// One part: its partition's position in the file and its own in the
@@ -398,14 +394,6 @@ impl<'m> Word<'m> {
             .fold(0, |mask, field| mask | field_mask(field))
     }
 
-    /// The word's one field covering all 32 bits, if it has one.
-    fn whole_field(&self) -> Option<&ExpandedField> {
-        match self.fields() {
-            [field] if field.low == 0 && field.width == 32 => Some(field),
-            _ => None,
-        }
-    }
-
     /// The type file's declaration of `field`.
     fn source(&self, field: &ExpandedField) -> Option<&'m Field> {
         self.template
@@ -462,22 +450,6 @@ impl Constraint<'_> {
             && self
                 .values
                 .is_none_or(|values| values.iter().any(|named| named.value == value))
-    }
-
-    /// Every value of `min..=max` is admitted, without enumerating it.
-    fn admits_range(&self, min: u32, max: u32) -> bool {
-        self.range
-            .is_none_or(|range| range.min <= min && max <= range.max)
-            && self.values.is_none_or(|values| {
-                let inside = values
-                    .iter()
-                    .filter(|named| min <= named.value && named.value <= max)
-                    .count();
-                u64::try_from(inside).unwrap_or(u64::MAX)
-                    == u64::from(max)
-                        .saturating_sub(u64::from(min))
-                        .saturating_add(1)
-            })
     }
 
     /// Every subset of `mask` is admitted, including zero. Named values
@@ -658,15 +630,6 @@ fn upper_camel(name: &str) -> bool {
         .next()
         .is_some_and(|byte| byte.is_ascii_uppercase())
         && name.bytes().all(|byte| byte.is_ascii_alphanumeric())
-}
-
-fn upper_snake(name: &str) -> bool {
-    name.bytes()
-        .next()
-        .is_some_and(|byte| byte.is_ascii_uppercase())
-        && name
-            .bytes()
-            .all(|byte| byte == b'_' || byte.is_ascii_uppercase() || byte.is_ascii_digit())
 }
 
 fn lower_snake(name: &str) -> bool {

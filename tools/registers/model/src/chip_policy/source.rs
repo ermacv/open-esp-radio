@@ -3,10 +3,10 @@
 use serde::Deserialize;
 
 /// The schema of an ownership policy over a chip root.
-pub const POLICY_SCHEMA: u32 = 6;
+pub const POLICY_SCHEMA: u32 = 7;
 
-/// One ownership policy: partitions of parts, unclaimed words, value
-/// domains and transactions over the instances of one chip root.
+/// One ownership policy: partitions of parts, unclaimed words and the
+/// transactions the PAC renders over the instances of one chip root.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PolicyFile {
@@ -18,35 +18,13 @@ pub struct PolicyFile {
     #[serde(default)]
     pub unclaimed: Vec<Unclaimed>,
     #[serde(default)]
-    pub flag_domains: Vec<FlagDomain>,
-    #[serde(default)]
-    pub enum_domains: Vec<EnumDomain>,
-    #[serde(default)]
-    pub field_domains: Vec<FieldDomain>,
-    #[serde(default)]
-    pub bounded_domains: Vec<BoundedDomain>,
-    #[serde(default)]
-    pub opaque_domains: Vec<OpaqueDomain>,
-    #[serde(default)]
-    pub bitwise_composed_domains: Vec<BitwiseComposedDomain>,
-    #[serde(default)]
     pub interrupt_snapshots: Vec<InterruptSnapshot>,
-    #[serde(default)]
-    pub field_reads: Vec<FieldRead>,
-    #[serde(default)]
-    pub full_register_reads: Vec<FullRegisterRead>,
     #[serde(default)]
     pub record_words: Vec<RecordWord>,
     #[serde(default)]
     pub partition_image_reads: Vec<PartitionImageRead>,
     #[serde(default)]
-    pub full_register_writes: Vec<FullRegisterWrite>,
-    #[serde(default)]
-    pub pointer_fields: Vec<PointerField>,
-    #[serde(default)]
     pub zero_based_field_writes: Vec<ZeroBasedFieldWrite>,
-    #[serde(default)]
-    pub sampled_bit_zero_writes: Vec<SampledBitZeroWrite>,
     #[serde(default)]
     pub zero_register_writes: Vec<ZeroRegisterWrite>,
     #[serde(default)]
@@ -54,15 +32,7 @@ pub struct PolicyFile {
     #[serde(default)]
     pub fixed_register_sequences: Vec<FixedRegisterSequence>,
     #[serde(default)]
-    pub masked_register_modifies: Vec<MaskedRegisterModify>,
-    #[serde(default)]
-    pub field_or_modifies: Vec<FieldBitModify>,
-    #[serde(default)]
-    pub field_clear_modifies: Vec<FieldBitModify>,
-    #[serde(default)]
-    pub field_replace_modifies: Vec<FieldReplaceModify>,
-    #[serde(default)]
-    pub indexed_bit_set_modifies: Vec<IndexedBitSetModify>,
+    pub field_or_modifies: Vec<FieldOrModify>,
 }
 
 /// One owner: a generated owner type holding parts of several instances.
@@ -180,92 +150,6 @@ pub struct Unclaimed {
     pub reason: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FlagDomain {
-    pub name: String,
-    pub description: String,
-    pub values: Vec<DomainValue>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct EnumDomain {
-    pub name: String,
-    pub description: String,
-    pub values: Vec<DomainValue>,
-}
-
-/// One named value of a flag (`UPPER_SNAKE`) or enum (`UpperCamel`) domain.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct DomainValue {
-    pub name: String,
-    pub value: u32,
-    pub description: String,
-    pub sources: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct BoundedDomain {
-    pub name: String,
-    pub description: String,
-    pub min: u32,
-    pub max: u32,
-    pub sources: Vec<String>,
-}
-
-/// A full-width value of one register, used only on that register.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct OpaqueDomain {
-    pub name: String,
-    pub description: String,
-    /// `INSTANCE.REGISTER`.
-    pub register: String,
-    pub sources: Vec<String>,
-}
-
-/// A value of one register composed from shifted logical arguments.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct BitwiseComposedDomain {
-    pub name: String,
-    pub description: String,
-    /// `INSTANCE.REGISTER`.
-    pub register: String,
-    pub arguments: Vec<ComposedArgument>,
-    #[serde(default)]
-    pub fixed_value: u32,
-    pub output_mask: u32,
-    pub sources: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct ComposedArgument {
-    pub name: String,
-    pub value_type: ComposedValueType,
-    #[serde(default)]
-    pub right_shift: u8,
-    #[serde(default = "all_bits")]
-    pub retain_mask: u32,
-    pub left_shift: u8,
-}
-
-const fn all_bits() -> u32 {
-    u32::MAX
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ComposedValueType {
-    U8,
-    U16,
-    U32,
-}
-
 /// A status word sampled into an affine token and acknowledged, exactly
 /// as sampled, in its clear word.
 #[derive(Clone, Debug, Deserialize)]
@@ -295,27 +179,6 @@ pub struct InterruptSnapshot {
     pub sources: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FieldRead {
-    pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
-    pub field: String,
-    #[serde(default)]
-    pub signed: bool,
-    pub sources: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FullRegisterRead {
-    pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
-    pub field: String,
-    pub domain: String,
-    pub sources: Vec<String>,
-}
-
 /// A register whose observation a diagnostic record keeps as the
 /// hardware has it: its read value gets the whole word, undecoded.
 #[derive(Clone, Debug, Deserialize)]
@@ -338,43 +201,8 @@ pub struct PartitionImageRead {
     pub sources: Vec<String>,
 }
 
-/// A policy name for a complete value domain declared by a hardware field.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FieldDomain {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub field: String,
-    /// The domain's values stand at the field's own bits in a register
-    /// image (a masked register modify's input), not from bit zero.
-    #[serde(default)]
-    pub positioned: bool,
-}
-
-/// A write of the whole word from zero, using a domain or its field's pointer fact.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FullRegisterWrite {
-    pub name: String,
-    pub field: String,
-    #[serde(default)]
-    pub domain: Option<String>,
-    #[serde(default)]
-    pub pointer: bool,
-    pub sources: Vec<String>,
-}
-
-/// A typed pointer-image operation over the field's hardware pointer fact.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct PointerField {
-    pub name: String,
-    pub field: String,
-    pub sources: Vec<String>,
-}
-
-/// A write from zero of `fields` of one register.
+/// A write from zero of `fields` of one register beside the vendor's fixed
+/// ones, which no field accessor stores.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ZeroBasedFieldWrite {
@@ -383,8 +211,7 @@ pub struct ZeroBasedFieldWrite {
     pub fields: Vec<String>,
     /// Ones the source stores beside the fields: bits of `read-only`
     /// fields or of no field.
-    #[serde(default)]
-    pub whole_word_bits: Option<WholeWordBits>,
+    pub whole_word_bits: WholeWordBits,
     pub sources: Vec<String>,
 }
 
@@ -394,16 +221,6 @@ pub struct ZeroBasedFieldWrite {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct WholeWordBits {
     pub value: u32,
-    pub sources: Vec<String>,
-}
-
-/// One fresh one-bit sample written back into an otherwise zero word.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct SampledBitZeroWrite {
-    pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
-    pub field: String,
     pub sources: Vec<String>,
 }
 
@@ -451,8 +268,6 @@ pub struct SequenceStep {
     /// template (`INSTANCE.REGISTER%s`) whose elements the step writes.
     pub register: String,
     pub value: u32,
-    #[serde(default)]
-    pub whole_word: bool,
     /// The first element of a template step.
     #[serde(default)]
     pub first: Option<u32>,
@@ -461,78 +276,13 @@ pub struct SequenceStep {
     pub count: Option<u32>,
 }
 
-/// A read-modify-write of caller (`input-mask`) and fixed (`set-mask`)
-/// bits, keeping `preserve-mask`.
+/// The vendor's OR of a typed DMA reference's image into a fresh read of
+/// one pointer field.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct MaskedRegisterModify {
+pub struct FieldOrModify {
     pub name: String,
-    /// `INSTANCE.REGISTER`.
-    pub register: String,
-    pub domain: String,
-    pub preserve_mask: u32,
-    pub input_mask: u32,
-    pub set_mask: u32,
-    pub sources: Vec<String>,
-}
-
-/// A read-modify-write that ORs (or clears) fields from one logical input.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FieldBitModify {
-    pub name: String,
-    pub fields: Vec<Projection>,
-    #[serde(default)]
-    pub domain: Option<String>,
-    #[serde(default)]
-    pub value: Option<u32>,
-    pub sources: Vec<String>,
-}
-
-/// A read-modify-write that replaces fields from one logical input.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct FieldReplaceModify {
-    pub name: String,
-    pub fields: Vec<Projection>,
-    #[serde(default)]
-    pub domain: Option<String>,
-    #[serde(default)]
-    pub value: Option<u32>,
-    #[serde(default)]
-    pub input_transform: Option<InputTransform>,
-    pub sources: Vec<String>,
-}
-
-/// One field of a modify, taken from the input at `source-bit-offset`.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct Projection {
-    /// `INSTANCE.REGISTER.FIELD`, all projections of one register.
+    /// `INSTANCE.REGISTER.FIELD`: a hardware pointer field.
     pub field: String,
-    pub source_bit_offset: u8,
-}
-
-/// Arithmetic and truncation applied to the input before projection.
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct InputTransform {
-    #[serde(default)]
-    pub wrapping_add: u32,
-    #[serde(default)]
-    pub wrapping_subtract: u32,
-    #[serde(default)]
-    pub clamp_maximum: Option<u32>,
-    pub retain_mask: u32,
-}
-
-/// A read-modify-write that sets the one bit a bounded index selects.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct IndexedBitSetModify {
-    pub name: String,
-    /// `INSTANCE.REGISTER.FIELD`.
-    pub field: String,
-    pub domain: String,
     pub sources: Vec<String>,
 }

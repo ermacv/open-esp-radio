@@ -17,10 +17,6 @@ id = "HW30_S31_TBTT_PERIODIC_POLICY_20261027"
 description = "SOURCE: hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-03/recovery01.json and hw-hw30/hw30-20261027-tbtt-observer-03/recovery23.json: after a stopped target crossing, run-before-schedule plus explicit stale discard gives zero RAW before a future target, a witnessed crossing/positive cause, then mask/all-ones CLEAR while run26 remains one. RAW reasserts under mask at the next selected TSF interval, snapshot delta0x1fff or0x2000 with interval8; unmask reveals STATUS/output122. This refutes producer shutdown by this bank policy for these four local TBTT domains, not a universal output equation or minimal setup proof."
 
 [[sources]]
-id = "HW30_S31_IRQ_OBSERVER_20261027"
-description = "SOURCE: hw30-20261027-tbtt-observer-01 and hw30-20261027-tbtt-observer-03, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. Members hw-hw30/<run-id>/*.json, tags3001/3002: each new leaf validates two CLIC PositiveEdge inputs with FROM_CPU2 while CPU delivery IE and MIE remain off: IP0 ->1, matrix bank2=8, then cleared IP0. Radio matrix inputs are read independently. Observer validation alone qualifies no radio producer."
-
-[[sources]]
 id = "HW30_S31_I2C_READ_OBSERVER_20261027"
 description = "SOURCE: hw30-20261027-tbtt-observer-01, s31-b; oer-notes/research/hw30-tbtt-irq-observer.md. hw-hw30/hw30-20261027-tbtt-observer-01/reads.json: seeded BBTOP04/TXRF08 serial, parallel and serial commands show BUSY then idle with BBTOP DATA0x1c/TXRF DATA0; host status bytes7 ->0x4a ->7 and burst DONE remains1. Matrix123/131 and validated edge IP stay0. These short command observations do not identify a completion interrupt, IRQ gate or acknowledgement, and do not close P4."
 
