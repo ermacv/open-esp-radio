@@ -11344,3 +11344,275 @@ fn a_truncation_is_found_in_each_of_its_forms() {
         0
     );
 }
+
+// ---- The HAL publishes every generated name its API takes ----------------
+
+/// A PAC crate's name: its path root above the HAL.
+fn is_pac_root(word: &str) -> bool {
+    word.starts_with("oer_chips_") && word.ends_with("_pac")
+}
+
+/// A type's name: upper camel case, not a constant's upper snake case.
+fn is_type_name(word: &str) -> bool {
+    word.starts_with(|first: char| first.is_ascii_uppercase())
+        && word.chars().any(|character| character.is_ascii_lowercase())
+}
+
+/// The names a `use` tree imports from a PAC crate, each with the name it
+/// takes in the file: `use oer_…_pac::a::{B, C as D};` gives `B` and `D`.
+fn pac_imports(tree: &[TokenTree], prefix: &[String], found: &mut Vec<String>) {
+    let mut path = prefix.to_vec();
+    // Whether the segment just read is a type the walk recorded: an `as`
+    // renames that one, never a module.
+    let mut last_is_type = false;
+    let mut index = 0;
+    while let Some(token) = tree.get(index) {
+        match token {
+            TokenTree::Ident(word) if word == "as" => {
+                if let Some(TokenTree::Ident(alias)) = tree.get(index + 1)
+                    && last_is_type
+                {
+                    found.pop();
+                    found.push(alias.to_string());
+                }
+                last_is_type = false;
+                index += 2;
+                continue;
+            }
+            TokenTree::Ident(word) => {
+                path.push(word.to_string());
+                last_is_type = path.first().is_some_and(|first| is_pac_root(first))
+                    && is_type_name(&word.to_string());
+                if last_is_type {
+                    found.push(word.to_string());
+                }
+            }
+            TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                for part in split_commas(&group.stream()) {
+                    pac_imports(&part, &path, found);
+                }
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+}
+
+/// The generated names one stretch of a signature or a field's type spells:
+/// a path from a PAC crate ending in a type's name, or a name the file
+/// imports from a PAC with a plain `use`.
+fn pac_names_in(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut Vec<String>) {
+    let mut index = 0;
+    while let Some(token) = tokens.get(index) {
+        match token {
+            TokenTree::Ident(word) if is_pac_root(&word.to_string()) => {
+                // Follow `::` segments to the path's last name.
+                let mut last = word.to_string();
+                let mut next = index + 1;
+                while punct_at(tokens, next, ':') && punct_at(tokens, next + 1, ':') {
+                    match tokens.get(next + 2) {
+                        Some(TokenTree::Ident(segment)) => last = segment.to_string(),
+                        _ => break,
+                    }
+                    next += 3;
+                }
+                if is_type_name(&last) {
+                    found.push(last);
+                }
+                index = next;
+                continue;
+            }
+            TokenTree::Ident(word) if imported.contains(&word.to_string()) => {
+                found.push(word.to_string());
+            }
+            TokenTree::Group(group) => {
+                pac_names_in(
+                    &group.stream().into_iter().collect::<Vec<_>>(),
+                    imported,
+                    found,
+                );
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+}
+
+/// The generated names the public signatures and fields of one source
+/// spell: a `pub` function (not `pub(…)`) from its name to its body, and a
+/// `pub` field of a struct, each with the line it is on.
+fn unpublished_pac_names(source: &str) -> Vec<(usize, String)> {
+    let Ok(stream) = source.parse::<TokenStream>() else {
+        return vec![(0, "unparsed".to_owned())];
+    };
+    let mut imported = Vec::new();
+    let tokens = stream.into_iter().collect::<Vec<_>>();
+    for (index, token) in tokens.iter().enumerate() {
+        // A plain `use` imports; a `pub use` publishes, and is the door.
+        if let TokenTree::Ident(word) = token
+            && word == "use"
+            && !index
+                .checked_sub(1)
+                .is_some_and(|before| ident_at(&tokens, before).is_some_and(|w| w == "pub"))
+        {
+            let tree = tokens
+                .iter()
+                .skip(index + 1)
+                .take_while(|token| !matches!(token, TokenTree::Punct(end) if end.as_char() == ';'))
+                .cloned()
+                .collect::<Vec<_>>();
+            pac_imports(&tree, &[], &mut imported);
+        }
+    }
+    let imported = imported.into_iter().collect::<BTreeSet<_>>();
+    let mut found = Vec::new();
+    fn walk(tokens: &[TokenTree], imported: &BTreeSet<String>, found: &mut Vec<(usize, String)>) {
+        let mut index = 0;
+        while let Some(token) = tokens.get(index) {
+            let public = matches!(token, TokenTree::Ident(word) if word == "pub")
+                && !matches!(tokens.get(index + 1), Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis);
+            if public {
+                let line = token.span().start().line;
+                let mut names = Vec::new();
+                match tokens.get(index + 1) {
+                    Some(TokenTree::Ident(word)) if word == "fn" || word == "const" => {
+                        // The signature: to the body or the `;`.
+                        let signature = tokens
+                            .iter()
+                            .skip(index + 1)
+                            .take_while(|token| {
+                                !matches!(token, TokenTree::Group(body) if body.delimiter() == Delimiter::Brace)
+                                    && !matches!(token, TokenTree::Punct(end) if end.as_char() == ';')
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        if signature
+                            .iter()
+                            .any(|token| matches!(token, TokenTree::Ident(word) if word == "fn"))
+                        {
+                            pac_names_in(&signature, imported, &mut names);
+                        }
+                    }
+                    Some(TokenTree::Ident(_))
+                        if punct_at(tokens, index + 2, ':')
+                            && !punct_at(tokens, index + 3, ':') =>
+                    {
+                        // A field: its type, to the next `,` of this level.
+                        let field = tokens
+                            .iter()
+                            .skip(index + 3)
+                            .take_while(|token| !matches!(token, TokenTree::Punct(comma) if comma.as_char() == ','))
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        pac_names_in(&field, imported, &mut names);
+                    }
+                    _ => {}
+                }
+                found.extend(names.into_iter().map(|name| (line, name)));
+            }
+            if let TokenTree::Group(group) = token {
+                walk(
+                    &group.stream().into_iter().collect::<Vec<_>>(),
+                    imported,
+                    found,
+                );
+            }
+            index += 1;
+        }
+    }
+    walk(&tokens, &imported, &mut found);
+    found
+}
+
+/// Every generated name a public function or field of the HAL's
+/// production code takes is published by the HAL: the signature spells the
+/// HAL's published name, never a path into the PAC.
+#[test]
+fn the_hals_public_signatures_spell_published_names() {
+    let root = root();
+    let package = "chips/esp32s31/hal";
+    let manifest = packages(&root).remove(package).expect("the HAL");
+    let mut found = Vec::new();
+    for crate_root in crate_roots(&root.join(package), &manifest) {
+        // The production module files: the walk skips test-only modules.
+        let mut files = BTreeSet::new();
+        walk_crate_root(&crate_root, &mut |file: &Path, _| {
+            files.insert(file.to_path_buf());
+        });
+        for file in files {
+            let source = std::fs::read_to_string(&file).expect("a module file");
+            let relative = file
+                .strip_prefix(&root)
+                .unwrap_or(&file)
+                .display()
+                .to_string();
+            for (line, name) in unpublished_pac_names(&source) {
+                found.push(format!("{relative}:{line}: {name}"));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "unpublished generated names:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn an_unpublished_generated_name_is_found_in_each_of_its_forms() {
+    let names = |source: &str| {
+        unpublished_pac_names(source)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect::<Vec<_>>()
+    };
+    // A path into the PAC in a parameter, a return type and a field.
+    assert_eq!(
+        names("pub fn f(x: oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock) {}"),
+        ["PowerSaveTxBlock"]
+    );
+    assert_eq!(
+        names(
+            "impl A { pub fn g(&self) -> oer_chips_esp32s31_pac::wifi_mac::dictionaries::Interface { x } }"
+        ),
+        ["Interface"]
+    );
+    assert_eq!(
+        names(
+            "pub struct S { pub color: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable, }"
+        ),
+        ["BssColorEnable"]
+    );
+    // A name imported from the PAC by a plain `use`.
+    assert_eq!(
+        names(
+            "use oer_chips_esp32s31_pac::wifi_mac::control::{PowerSaveTxBlock as Block}; pub fn f(b: Block) {}"
+        ),
+        ["Block"]
+    );
+    // A module imported under another name is not a type.
+    assert!(
+        names("use oer_chips_esp32s31_pac::spi_mem_c as spi1; pub fn f(spi1: &mut [u32]) {}")
+            .is_empty()
+    );
+    // Not found: a `pub(crate)` function, a width constant, a published
+    // name, a private field, and a function body.
+    assert!(
+        names("pub(crate) fn f(x: oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock) {}")
+            .is_empty()
+    );
+    assert!(
+        names(
+            "pub fn f(x: Bits<{ oer_chips_esp32s31_pac::wifi_mac::queue_control::TID_WIDTH }>) {}"
+        )
+        .is_empty()
+    );
+    assert!(names("pub use oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock; pub fn f(x: PowerSaveTxBlock) {}").is_empty());
+    assert!(names("pub struct S { color: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable }").is_empty());
+    assert!(
+        names(
+            "pub fn f() { let x: oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock = y; }"
+        )
+        .is_empty()
+    );
+}

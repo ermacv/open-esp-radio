@@ -49,26 +49,20 @@ fn the_prefix_from_zero_sets_every_vendor_field() {
         (
             report.qam16_rate(),
             report.qam16_signal_mode(),
-            (report.qam16_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.qam16_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.qam16_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.qam16_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
         (
             report.qpsk_rate(),
             report.qpsk_signal_mode(),
-            (report.qpsk_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.qpsk_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.qpsk_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.qpsk_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
         (
             report.bpsk_rate(),
             report.bpsk_signal_mode(),
-            (report.bpsk_dcm()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled),
-            (report.bpsk_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled),
+            (report.bpsk_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled),
+            (report.bpsk_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled),
         ),
     ] {
         assert_eq!(
@@ -104,10 +98,9 @@ fn the_prefix_from_ones_clears_its_bits_and_keeps_the_others() {
         .wifi_mac_he_init_suffix
         .read_he_default_control();
     assert!(
-        !(options.ul_mu_disable()
-            == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled)
+        !(options.ul_mu_disable() == crate::types::MacHeUplinkMultiUserDisable::Disabled)
             && !(options.ul_mu_data_disable()
-                == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled)
+                == crate::types::MacHeUplinkMultiUserDataDisable::Disabled)
     );
     assert!(options.bsr_update_enable(), "the UL-MU edges keep the rest");
     let prefix = &registers.mac.wifi_mac_he_init_prefix;
@@ -125,10 +118,8 @@ fn the_prefix_from_ones_clears_its_bits_and_keeps_the_others() {
     assert_eq!(tb.bits_16_31_opaque(), 0xffff);
     let report = prefix.read_bf_report_rate();
     assert!(
-        !(report.qam16_dcm()
-            == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Enabled)
-            && !(report.bpsk_ersu()
-                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Enabled)
+        !(report.qam16_dcm() == crate::types::MacHeBeamformingReportDcm::Enabled)
+            && !(report.bpsk_ersu() == crate::types::MacHeBeamformingReportErsu::Enabled)
     );
     assert_eq!(report.bits_27_31_opaque().get(), 0x1f);
 }

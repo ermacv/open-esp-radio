@@ -11,8 +11,9 @@ use crate::{
     system::owner::{SharedPhyAccess, phy_parts_mut},
 };
 
-use oer_chips_esp32s31_pac::fe::PhyRxDcoOracle;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Bits;
+#[cfg(target_arch = "riscv32")]
+use {oer_chips_esp32s31_pac::fe::PhyRxDcoOracle, oer_portable_mmio::Placement};
 
 /// Opaque capture of the two-bit RX-DCO calibration control field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,7 +35,8 @@ impl RxDcoControlField {
 }
 
 /// Capture the RX-DCO control field, then clear it with a fresh RMW.
-pub fn capture_and_clear<P: Placement>(rx_dco: &mut PhyRxDcoOracle<P>) -> RxDcoControlField {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn capture_and_clear<P: Placement>(rx_dco: &mut PhyRxDcoOracle<P>) -> RxDcoControlField {
     let saved = rx_dco.read_control().bits_22_23_opaque();
     // SOURCE: BLOB_LIBPHY_PHY_XTAL_DUTY_CAL, ROM_REV0_PHY_RX_DCO_CAL.
     rx_dco.modify_control(|w| {
@@ -44,7 +46,8 @@ pub fn capture_and_clear<P: Placement>(rx_dco: &mut PhyRxDcoOracle<P>) -> RxDcoC
 }
 
 /// Restore one captured RX-DCO control field with a fresh RMW.
-pub fn restore<P: Placement>(rx_dco: &mut PhyRxDcoOracle<P>, field: RxDcoControlField) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn restore<P: Placement>(rx_dco: &mut PhyRxDcoOracle<P>, field: RxDcoControlField) {
     rx_dco.modify_control(|w| {
         w.set_bits_22_23_opaque(field.0);
     });

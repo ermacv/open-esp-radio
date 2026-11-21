@@ -62,7 +62,7 @@ pub struct Uart0ClockRegisters<P: Placement = Fixed<{ instances::hp_sys_clkrst::
 
 impl CoreControlRegisters {
     /// Own the root's core-control partition.
-    pub fn new(peripherals: CoreControlPeripherals) -> Self {
+    pub(crate) fn new(peripherals: CoreControlPeripherals) -> Self {
         let CoreControlPeripherals {
             pmu_cpu_stall,
             hp_sys_core_stall_status,
@@ -82,7 +82,7 @@ impl CoreControlRegisters {
 
 impl Uart0ClockRegisters {
     /// Own the root's UART0 clock partition.
-    pub fn new(peripherals: Uart0ClockPeripherals) -> Self {
+    pub(crate) fn new(peripherals: Uart0ClockPeripherals) -> Self {
         Self(peripherals.hp_sys_clkrst_uart0)
     }
 }

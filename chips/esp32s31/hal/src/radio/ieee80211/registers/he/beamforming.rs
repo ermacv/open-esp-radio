@@ -24,8 +24,8 @@ pub struct MacHeBeamformingReportProfile {
     signal_mode:
         Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_SIGNAL_MODE_WIDTH }>,
     normalized_rate: Bits<{ oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QAM16_RATE_WIDTH }>,
-    dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm,
-    extended_range_single_user: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu,
+    dcm: crate::types::MacHeBeamformingReportDcm,
+    extended_range_single_user: crate::types::MacHeBeamformingReportErsu,
 }
 
 impl MacHeBeamformingReportProfile {
@@ -33,8 +33,8 @@ impl MacHeBeamformingReportProfile {
     pub const fn from_hal_arguments(
         signal_mode: u8,
         rate_code: u16,
-        dcm: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm,
-        extended_range_single_user: oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu,
+        dcm: crate::types::MacHeBeamformingReportDcm,
+        extended_range_single_user: crate::types::MacHeBeamformingReportErsu,
     ) -> Result<Self, MacHeBeamformingReportProfileError> {
         let Ok(mode) = Bits::new(signal_mode as u32) else {
             return Err(MacHeBeamformingReportProfileError::SignalMode(signal_mode));
@@ -82,13 +82,11 @@ impl MacHeBeamformingReportProfile {
         self.normalized_rate.get().to_le_bytes()[0]
     }
 
-    pub const fn dcm(self) -> oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm {
+    pub const fn dcm(self) -> crate::types::MacHeBeamformingReportDcm {
         self.dcm
     }
 
-    pub const fn extended_range_single_user(
-        self,
-    ) -> oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu {
+    pub const fn extended_range_single_user(self) -> crate::types::MacHeBeamformingReportErsu {
         self.extended_range_single_user
     }
 }
@@ -132,10 +130,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `libpp[trc.o]::trc_set_bf_report_rate`, size `0x52`.
     /// The four fresh-read byte RMWs and their low-to-high order are
     /// instruction-exact.
-    pub fn set_he_ersu_ack_rate_profile(
-        &mut self,
-        profile: oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate,
-    ) {
+    pub fn set_he_ersu_ack_rate_profile(&mut self, profile: crate::types::MacHeErsuAckRate) {
         let encoded = u8::from(profile);
         let ack = &mut self.mac.wifi_mac_he_init_suffix;
         ack.modify_ersu_ack_rate(|w| {

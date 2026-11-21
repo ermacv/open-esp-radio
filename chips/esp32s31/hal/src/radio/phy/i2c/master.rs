@@ -5,11 +5,8 @@ use super::commands::{
     PHY_I2C_COMMAND_MEMORY_DYNAMIC_INDICES, PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT,
     PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cCommandMemoryInputs,
 };
-use oer_chips_esp32s31_pac::{
-    analog_i2c::{Address, Host, Profile, Route},
-    i2c_ana_mst::I2cAnaMst,
-    i2c_ana_mst_mem::PhyI2cCommandRam,
-};
+use super::{Address, Host, Profile, Route};
+use oer_chips_esp32s31_pac::{i2c_ana_mst::I2cAnaMst, i2c_ana_mst_mem::PhyI2cCommandRam};
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_mmio::{Bits, Index, Placement};
@@ -19,7 +16,7 @@ pub struct MasterPort<'a, P: Placement> {
     master: &'a mut I2cAnaMst<P>,
 }
 impl<'a, P: Placement> MasterPort<'a, P> {
-    pub fn new(master: &'a mut I2cAnaMst<P>) -> Self {
+    pub(crate) fn new(master: &'a mut I2cAnaMst<P>) -> Self {
         Self { master }
     }
     pub fn pulse_master_reset(&mut self, host: Host) {
@@ -39,7 +36,7 @@ pub struct MasterSample<'a, P: Placement> {
     master: &'a I2cAnaMst<P>,
 }
 impl<'a, P: Placement> MasterSample<'a, P> {
-    pub fn new(master: &'a I2cAnaMst<P>) -> Self {
+    pub(crate) fn new(master: &'a I2cAnaMst<P>) -> Self {
         Self { master }
     }
 }
@@ -184,7 +181,7 @@ fn configure_host_map<P: Placement>(master: &mut I2cAnaMst<P>) {
 }
 
 /// Sample the busy bit of one host once.
-pub fn is_busy<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> bool {
+pub(crate) fn is_busy<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> bool {
     match host {
         Host::Host0 => master.read_i2c0_ctrl().i2c0_busy(),
         Host::Host1 => master.read_i2c1_ctrl().i2c1_busy(),
@@ -226,7 +223,7 @@ fn publish_command<P: Placement>(
 
 /// Apply all six timing RMWs of complete rev0 ROM `phy_i2c_clk_sel` in
 /// order.
-pub fn configure_clock_selection<P: Placement>(master: &mut I2cAnaMst<P>) {
+pub(crate) fn configure_clock_selection<P: Placement>(master: &mut I2cAnaMst<P>) {
     // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
     master.modify_i2c0_ctrl1(|w| {
         w.set_i2c0_sda_side_guard(Bits::constant::<0x2>());
@@ -255,7 +252,7 @@ pub fn configure_clock_selection<P: Placement>(master: &mut I2cAnaMst<P>) {
 
 /// Select register mode two, then enable it with a separate fresh RMW
 /// (complete rev0 ROM `phy_i2cmst_reg_init`).
-pub fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>) {
+pub(crate) fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>) {
     // SOURCE: ROM_REV0_PHY_I2C, S31_ESP_PACS_SVD.
     master.modify_ana_conf0(|w| {
         w.set_phy_register_mode(Bits::constant::<2>());
@@ -269,7 +266,7 @@ pub fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>) {
 /// Select one of the two complete-ROM BBPLL calibration encodings.
 ///
 /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
-pub fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: bool) {
+pub(crate) fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: bool) {
     use oer_chips_esp32s31_pac::i2c_ana_mst::ana_conf0::BbpllCalMode;
     let mode = if enabled {
         BbpllCalMode::Enabled
@@ -285,7 +282,7 @@ pub fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: b
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_I2C (`phy_i2c_master_cmd_mem_init`). Callers
 /// provide only the six retained vendor-parameter facts.
-pub fn configure_command_memory<P: Placement>(
+pub(crate) fn configure_command_memory<P: Placement>(
     command_ram: &mut PhyI2cCommandRam<P>,
     inputs: PhyI2cCommandMemoryInputs,
 ) {

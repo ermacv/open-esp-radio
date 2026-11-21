@@ -5,8 +5,9 @@
 
 use crate::layouts::PhyFrequencyMemoryWordWord;
 use crate::radio::phy::registers::{FrequencyRegisters, PhyPlacement};
-use oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam;
-use oer_portable_mmio::{Bits, Index, Placement};
+use oer_portable_mmio::{Bits, Index};
+#[cfg(target_arch = "riscv32")]
+use {oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam, oer_portable_mmio::Placement};
 
 /// Capture admission and the exact fields changed by ownership and read selection.
 pub fn capture_read_configuration<P: PhyPlacement>(
@@ -611,7 +612,8 @@ pub fn configure_bt_filter<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P
 ///
 /// SOURCE: ROM_REV0_PHY_I2C. ROM `phy_i2c_master_mem_txcap` stores TXRF
 /// register 2 with the readback in command slot one.
-pub fn publish_tx_cap<P: Placement>(command_ram: &mut PhyI2cCommandRam<P>, value: u8) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn publish_tx_cap<P: Placement>(command_ram: &mut PhyI2cCommandRam<P>, value: u8) {
     command_ram.write_command_memory(Index::constant::<1>(), |w| {
         w.set_block(oer_chips_esp32s31_pac::analog_i2c::blocks::TXRF.code())
             .set_register(2)

@@ -81,3 +81,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
     }
 }
+
+#[cfg(test)]
+mod tests;

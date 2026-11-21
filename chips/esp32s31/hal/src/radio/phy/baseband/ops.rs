@@ -8,12 +8,12 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{BasebandRegisters, ClockRegisters, PhyPlacement};
-use oer_chips_esp32s31_pac::{
-    fe,
-    fe::{PhyFedataRecovered, PhyPbus},
-    wifi_bb,
-};
-use oer_portable_mmio::{Bits, Placement};
+#[cfg(target_arch = "riscv32")]
+use oer_chips_esp32s31_pac::fe::PhyPbus;
+use oer_chips_esp32s31_pac::{fe, wifi_bb};
+use oer_portable_mmio::Bits;
+#[cfg(any(test, target_arch = "riscv32"))]
+use {oer_chips_esp32s31_pac::fe::PhyFedataRecovered, oer_portable_mmio::Placement};
 
 use crate::radio::phy::i2c::PhyAdcRate;
 
@@ -169,7 +169,8 @@ pub(crate) fn configure_tone_path_0<P: PhyPlacement>(
 }
 
 /// Apply both fresh-read edges of complete ROM `phy_fe_txrx_reset`.
-pub fn reset_frontend_txrx<P: Placement>(fedata: &mut PhyFedataRecovered<P>) {
+#[cfg(any(test, target_arch = "riscv32"))]
+pub(crate) fn reset_frontend_txrx<P: Placement>(fedata: &mut PhyFedataRecovered<P>) {
     // SOURCE: ROM_REV0_PHY_BLOBRAY_GAPS.
     fedata.modify_word_0440_opaque(|w| {
         w.set_tx_rx_reset_bit_25(false)
@@ -199,7 +200,8 @@ pub fn enable_iq_correction_modes<P: PhyPlacement>(bb: &mut BasebandRegisters<P>
 }
 
 /// Apply the complete four-edge RXIQ correction prefix or suffix.
-pub fn configure_rxiq_root_correction<P: PhyPlacement>(
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn configure_rxiq_root_correction<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
     pbus: &mut PhyPbus<P::Fe>,
     begin: bool,
@@ -989,7 +991,8 @@ pub fn configure_adc_rate<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, rate: 
 /// This is the exact prefix of complete rev0 ROM `phy_fe_reg_init` at
 /// `0x2f82_7740`, size `0xf6`. The table-memory edge remains between this
 /// operation and [`initialize_front_end_suffix`].
-pub fn initialize_front_end_prefix<P: PhyPlacement>(
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn initialize_front_end_prefix<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
     pbus: &mut PhyPbus<P::Fe>,
 ) {

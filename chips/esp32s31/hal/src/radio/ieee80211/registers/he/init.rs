@@ -21,14 +21,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // The older oracle (BLOB_LIBPP_HAL_HE_INIT_PREFIX) cleared bits 31:30
         // in the second edge.
         options.modify_he_default_control(|w| {
-            w.set_ul_mu_disable(
-                oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Enabled,
-            );
+            w.set_ul_mu_disable(crate::types::MacHeUplinkMultiUserDisable::Enabled);
         });
         options.modify_he_default_control(|w| {
-            w.set_ul_mu_data_disable(
-                oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Enabled,
-            );
+            w.set_ul_mu_data_disable(crate::types::MacHeUplinkMultiUserDataDisable::Enabled);
         });
 
         let init = &mut self.mac.wifi_mac_he_init_prefix;
@@ -83,8 +79,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .set_qam16_signal_mode(
                 oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::Qam16SignalMode::Mode1.into(),
             )
-            .set_qam16_dcm(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled)
-            .set_qam16_ersu(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled);
+            .set_qam16_dcm(crate::types::MacHeBeamformingReportDcm::Disabled)
+            .set_qam16_ersu(crate::types::MacHeBeamformingReportErsu::Disabled);
         });
         init.modify_bf_report_rate(|w| {
             w.set_qpsk_rate(
@@ -93,8 +89,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .set_qpsk_signal_mode(
                 oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QpskSignalMode::Mode1.into(),
             )
-            .set_qpsk_dcm(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled)
-            .set_qpsk_ersu(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled);
+            .set_qpsk_dcm(crate::types::MacHeBeamformingReportDcm::Disabled)
+            .set_qpsk_ersu(crate::types::MacHeBeamformingReportErsu::Disabled);
         });
         init.modify_bf_report_rate(|w| {
             w.set_bpsk_rate(
@@ -103,8 +99,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .set_bpsk_signal_mode(
                 oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::BpskSignalMode::Mode1.into(),
             )
-            .set_bpsk_dcm(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportDcm::Disabled)
-            .set_bpsk_ersu(oer_chips_esp32s31_pac::wifi_mac::dictionaries::BfReportErsu::Disabled);
+            .set_bpsk_dcm(crate::types::MacHeBeamformingReportDcm::Disabled)
+            .set_bpsk_ersu(crate::types::MacHeBeamformingReportErsu::Disabled);
         });
 
         // The complete leaf reads the shared PHY's AGC word here and discards

@@ -442,7 +442,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn set_he_trigger_based_tid_enabled(
         &mut self,
         tid: MacHeTid,
-        state: oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid,
+        state: crate::types::MacHeTriggerBasedTid,
     ) {
         let control = &mut self.mac.wifi_mac_he_buffer_status;
         let _initial = control.read_he_buffer_status_control();
@@ -468,7 +468,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// "tb care CCA and NAV"; the debug ignore mode clears it.
     pub fn set_he_trigger_based_cca_and_nav_care(
         &mut self,
-        care: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::TbCareCcaAndNav,
+        care: crate::types::MacHeTbCareCcaAndNav,
     ) {
         self.mac
             .wifi_mac_he_init_suffix

@@ -127,7 +127,7 @@ pub struct SoftwareInterrupts {
 
 impl SoftwareInterrupts {
     /// Split the root's four software interrupt partitions.
-    pub fn new(
+    pub(crate) fn new(
         zero: SoftwareInterrupt0Peripherals,
         one: SoftwareInterrupt1Peripherals,
         two: SoftwareInterrupt2Peripherals,

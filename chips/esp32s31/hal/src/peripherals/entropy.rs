@@ -30,7 +30,7 @@ pub struct EntropyRegisters<P: Placement = TrngPlacement, Q: Placement = RngCloc
 impl EntropyRegisters {
     /// Own the root's entropy partition and the generator's clock word of
     /// its SoC partition.
-    pub fn new(peripherals: EntropyPeripherals, clock: LpPericlkrstRngInit) -> Self {
+    pub(crate) fn new(peripherals: EntropyPeripherals, clock: LpPericlkrstRngInit) -> Self {
         Self {
             trng: peripherals.trng,
             clock,

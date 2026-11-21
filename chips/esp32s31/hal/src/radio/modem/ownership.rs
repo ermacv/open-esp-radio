@@ -49,7 +49,7 @@ impl SharedRadioRegisters {
     /// Bluetooth and IEEE 802.15.4 baseband words have no owner in the
     /// build: they are dropped here, as the root drops those radios' own
     /// blocks.
-    pub fn new(
+    pub(crate) fn new(
         radio_phy: RadioPhyRegisters,
         coexistence: CoexistencePeripherals,
         shared_radio: SharedRadioPeripherals,

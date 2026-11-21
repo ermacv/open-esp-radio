@@ -21,7 +21,7 @@ pub struct ResetCauseRegisters<P: Placement = Fixed<{ instances::lp_aon_clkrst::
 
 impl ResetCauseRegisters {
     /// Own the root's reset-cause partition.
-    pub fn new(peripherals: ResetCausePeripherals) -> Self {
+    pub(crate) fn new(peripherals: ResetCausePeripherals) -> Self {
         Self(peripherals.lp_aon_reset_cause)
     }
 }

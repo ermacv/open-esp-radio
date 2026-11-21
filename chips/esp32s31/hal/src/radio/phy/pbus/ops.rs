@@ -11,7 +11,7 @@ use oer_portable_mmio::{Bits, Placement};
 /// Publish one of the four reviewed force-TX/RX transition phases.
 ///
 /// SOURCE: ROM_REV0_PHY_CLOCK_FORCE.
-pub fn set_force_txrx_mode<P: Placement>(
+pub(crate) fn set_force_txrx_mode<P: Placement>(
     pbus: &mut PhyPbus<P>,
     enabled: bool,
     initial_phase: bool,
@@ -31,7 +31,8 @@ pub fn set_force_txrx_mode<P: Placement>(
 /// Enable or disable the PBus work-mode selector.
 ///
 /// SOURCE: ROM_REV0_PHY_PBUS.
-pub fn set_work_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn set_work_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_mode(|w| {
         w.set_work_mode_enable(if enabled {
             oer_chips_esp32s31_pac::fe::mode::WorkModeEnable::Enabled
@@ -44,7 +45,8 @@ pub fn set_work_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
 /// Enable or disable the PBus debug-mode selector.
 ///
 /// SOURCE: ROM_REV0_PHY_PBUS.
-pub fn set_debug_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn set_debug_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_pbus_command(|w| {
         w.set_debug_mode_enable(if enabled {
             oer_chips_esp32s31_pac::fe::pbus_command::DebugModeEnable::Enabled
@@ -55,7 +57,8 @@ pub fn set_debug_mode<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
 }
 
 /// Sample the PBus busy bit exactly once.
-pub fn is_busy<P: Placement>(pbus: &PhyPbus<P>) -> bool {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn is_busy<P: Placement>(pbus: &PhyPbus<P>) -> bool {
     pbus.read_status_clock_force().busy()
 }
 
@@ -68,7 +71,7 @@ pub fn is_busy<P: Placement>(pbus: &PhyPbus<P>) -> bool {
 /// nibble lands on the test value's low bits, and the test value's bits
 /// above its nine-bit field land on the path. RX-DCO passes signed halfword
 /// images, whose high bits take that path.
-pub fn publish_force_test<P: Placement>(
+pub(crate) fn publish_force_test<P: Placement>(
     pbus: &mut PhyPbus<P>,
     selector: u8,
     path: u8,
@@ -89,14 +92,16 @@ pub fn publish_force_test<P: Placement>(
 /// Clear the force-test transaction bit after one completed observation.
 ///
 /// SOURCE: ROM_REV0_PHY_PBUS.
-pub fn clear_transaction<P: Placement>(pbus: &mut PhyPbus<P>) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn clear_transaction<P: Placement>(pbus: &mut PhyPbus<P>) {
     pbus.modify_pbus_command(|w| {
         w.set_transaction_start(false);
     });
 }
 
 /// Read the packed nine-bit result selected by the recovered ROM tables.
-pub fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u16 {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u16 {
     let path_one = path == 1;
     let bits: Bits<9> = match selector {
         0 if path_one => pbus.read_read_result_3().bits_18_26_opaque(),
@@ -119,7 +124,7 @@ pub fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u
 /// Enable or disable both recovered RX clock bits as one pair.
 ///
 /// SOURCE: ROM_REV0_PHY_CLOCK_FORCE.
-pub fn set_rx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
+pub(crate) fn set_rx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     pbus.modify_status_clock_force(|w| {
         w.set_bit_14_opaque(if enabled {
             oer_chips_esp32s31_pac::fe::status_clock_force::Bit14Opaque::Enabled
@@ -137,7 +142,7 @@ pub fn set_rx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
 /// Enable or disable both recovered TX clock bits as one pair.
 ///
 /// SOURCE: ROM_REV0_PHY_CLOCK_FORCE.
-pub fn set_tx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
+pub(crate) fn set_tx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
     use status_clock_force::TxClockEnablePair as Pair;
     pbus.modify_status_clock_force(|w| {
         w.set_tx_clock_enable_pair(if enabled {
@@ -149,7 +154,8 @@ pub fn set_tx_clock_pair<P: Placement>(pbus: &mut PhyPbus<P>, enabled: bool) {
 }
 
 /// Publish both RXIQ root status bits through independent fresh RMWs.
-pub fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
         w.set_bit_14_opaque(if true {
@@ -169,7 +175,8 @@ pub fn configure_rxiq_root_status<P: Placement>(pbus: &mut PhyPbus<P>) {
 }
 
 /// Clear the second RXIQ root status bit, the suffix's last edge.
-pub fn clear_rxiq_root_status_second<P: Placement>(pbus: &mut PhyPbus<P>) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn clear_rxiq_root_status_second<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
     pbus.modify_status_clock_force(|w| {
         w.set_bit_15_opaque(if false {
@@ -181,7 +188,8 @@ pub fn clear_rxiq_root_status_second<P: Placement>(pbus: &mut PhyPbus<P>) {
 }
 
 /// The PBus edge that opens complete rev0 ROM `phy_fe_reg_init`.
-pub fn initialize_front_end<P: Placement>(pbus: &mut PhyPbus<P>) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn initialize_front_end<P: Placement>(pbus: &mut PhyPbus<P>) {
     // SOURCE: ROM_REV0_PHY_FE_REG_INIT, S31_ESP_PACS_SVD.
     pbus.modify_read_result_0(|w| {
         w.set_bit_20_opaque(true);

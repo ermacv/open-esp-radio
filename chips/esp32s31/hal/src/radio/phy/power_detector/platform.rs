@@ -18,14 +18,14 @@ const POWER_DETECTOR_INITIALIZATION_MODE: Bits<3> = Bits::constant::<4>();
 const POWER_DETECTOR_CALIBRATION_MODE: Bits<3> = Bits::constant::<2>();
 
 /// Select the power-detector circuit mode of initialization and enable.
-pub fn select_circuit_initialization_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
+pub(crate) fn select_circuit_initialization_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
     aon.modify_rtc_sar2_pwdet_cct(|w| {
         w.set_rtc_sar2_pwdet_cct(POWER_DETECTOR_INITIALIZATION_MODE);
     });
 }
 
 /// Select the power-detector circuit mode of TX-calibration debug mode.
-pub fn select_circuit_calibration_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
+pub(crate) fn select_circuit_calibration_mode<P: Placement>(aon: &mut LpAonClkrst<P>) {
     aon.modify_rtc_sar2_pwdet_cct(|w| {
         w.set_rtc_sar2_pwdet_cct(POWER_DETECTOR_CALIBRATION_MODE);
     });

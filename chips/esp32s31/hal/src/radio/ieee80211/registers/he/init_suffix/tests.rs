@@ -28,8 +28,7 @@ fn the_suffix_from_zero_publishes_the_vendor_baseline() {
     );
     let control = suffix.read_ersu_and_vht_control();
     assert!(
-        (control.auto_ack_allow_ersu()
-            == oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed)
+        (control.auto_ack_allow_ersu() == crate::types::MacHeAutoAckErsu::Allowed)
             && !control.vht_bw_signaling_rts()
     );
     assert_eq!(
@@ -111,8 +110,7 @@ fn the_suffix_from_ones_clears_the_link_table_cts_and_translation() {
     assert!(!multi.multi_bssid_enable() && !multi.co_hosted_enable());
     assert_eq!(multi.bssid_byte_5(), 0);
     assert!(
-        (multi.bss_color_enable()
-            == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled),
+        (multi.bss_color_enable() == crate::types::MacHeBssColorEnable::Enabled),
         "the clear leaves keep the color"
     );
     let high = suffix.read_multi_bssid_high();
@@ -179,9 +177,9 @@ fn the_buffer_status_report_init_sets_its_eight_edges() {
 fn the_extended_range_allowance_is_written_as_given() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.set_he_extended_range_single_user(
-        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
-    );
+    owners
+        .registers
+        .set_he_extended_range_single_user(crate::types::MacHeAutoAckErsu::Allowed);
     let read = |owners: &crate::radio::ieee80211::registers::HostOwners<'_>| {
         owners
             .registers
@@ -190,15 +188,9 @@ fn the_extended_range_allowance_is_written_as_given() {
             .read_ersu_and_vht_control()
             .auto_ack_allow_ersu()
     };
-    assert_eq!(
-        read(&owners),
-        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed
-    );
-    owners.registers.set_he_extended_range_single_user(
-        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Disallowed,
-    );
-    assert_eq!(
-        read(&owners),
-        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Disallowed
-    );
+    assert_eq!(read(&owners), crate::types::MacHeAutoAckErsu::Allowed);
+    owners
+        .registers
+        .set_he_extended_range_single_user(crate::types::MacHeAutoAckErsu::Disallowed);
+    assert_eq!(read(&owners), crate::types::MacHeAutoAckErsu::Disallowed);
 }

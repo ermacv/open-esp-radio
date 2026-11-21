@@ -287,26 +287,6 @@ pub(crate) fn enable_ieee802154_mac_clock<P: Placement>(
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn set_ieee802154_mac_reset<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: Reset,
-) {
-    registers.modify_modem_rst_conf(|w| {
-        w.set_rst_zbmac(value);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn set_ieee802154_apb_reset<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-    value: Reset,
-) {
-    registers.modify_modem_rst_conf(|w| {
-        w.set_rst_zbmac_apb(value);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {

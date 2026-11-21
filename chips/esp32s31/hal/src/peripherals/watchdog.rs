@@ -81,7 +81,7 @@ pub struct WatchdogRegisters {
 
 impl WatchdogRegisters {
     /// Split the root's watchdog partition.
-    pub fn new(peripherals: WatchdogPeripherals) -> Self {
+    pub(crate) fn new(peripherals: WatchdogPeripherals) -> Self {
         let WatchdogPeripherals {
             timg0_wdt,
             timg1_wdt,

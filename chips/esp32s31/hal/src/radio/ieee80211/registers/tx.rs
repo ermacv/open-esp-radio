@@ -9,10 +9,9 @@ use crate::layouts::{DmaRef, WifiTxDmaDescriptor};
 use core::marker::PhantomData;
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
+use crate::types::{MacPlcpRate as PlcpRate, MacRtsRate as RtsRate};
 use oer_chips_esp32s31_pac::wifi_mac::{
-    control_n::PlcpFormat,
-    length_control::{RtsRate, TxopListSelect},
-    plcp1::{Rate as PlcpRate, VectorFormat},
+    control_n::PlcpFormat, length_control::TxopListSelect, plcp1::VectorFormat,
 };
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
 use oer_portable_mmio::Bits;
@@ -652,54 +651,22 @@ pub struct MacHtRate {
 impl MacHtRate {
     const fn plcp_rate(self) -> PlcpRate {
         match (self.guard_interval, self.mcs) {
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs0) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs0
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs1) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs1
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs2) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs2
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs3) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs3
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs4) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs4
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs5) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs5
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs6) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs6
-            }
-            (MacHtGuardInterval::Normal, MacHtMcs::Mcs7) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtLongMcs7
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs0) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs0
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs1) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs1
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs2) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs2
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs3) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs3
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs4) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs4
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs5) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs5
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs6) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs6
-            }
-            (MacHtGuardInterval::Short, MacHtMcs::Mcs7) => {
-                oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HtShortMcs7
-            }
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs0) => crate::types::MacPlcpRate::HtLongMcs0,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs1) => crate::types::MacPlcpRate::HtLongMcs1,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs2) => crate::types::MacPlcpRate::HtLongMcs2,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs3) => crate::types::MacPlcpRate::HtLongMcs3,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs4) => crate::types::MacPlcpRate::HtLongMcs4,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs5) => crate::types::MacPlcpRate::HtLongMcs5,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs6) => crate::types::MacPlcpRate::HtLongMcs6,
+            (MacHtGuardInterval::Normal, MacHtMcs::Mcs7) => crate::types::MacPlcpRate::HtLongMcs7,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs0) => crate::types::MacPlcpRate::HtShortMcs0,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs1) => crate::types::MacPlcpRate::HtShortMcs1,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs2) => crate::types::MacPlcpRate::HtShortMcs2,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs3) => crate::types::MacPlcpRate::HtShortMcs3,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs4) => crate::types::MacPlcpRate::HtShortMcs4,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs5) => crate::types::MacPlcpRate::HtShortMcs5,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs6) => crate::types::MacPlcpRate::HtShortMcs6,
+            (MacHtGuardInterval::Short, MacHtMcs::Mcs7) => crate::types::MacPlcpRate::HtShortMcs7,
         }
     }
 }
@@ -723,7 +690,7 @@ pub struct MacHtTxParameters {
     pub contention_window: u16,
     pub interface: MacInterface,
     pub hardware_key_selector: u8,
-    pub txop: oer_chips_esp32s31_pac::wifi_mac::pti::Txop,
+    pub txop: crate::types::MacTxop,
 }
 
 /// HAL-owned register program for one bounded HT PPDU.
@@ -839,7 +806,7 @@ pub enum MacHeFecCoding {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeRate {
     pub mcs: MacHeMcs,
-    pub guard_interval_and_ltf: oer_chips_esp32s31_pac::wifi_mac::he_su_signal_a1::GiLtf,
+    pub guard_interval_and_ltf: crate::types::MacHeGiLtf,
     pub fec_coding: MacHeFecCoding,
     pub dcm: bool,
 }
@@ -847,16 +814,16 @@ pub struct MacHeRate {
 impl MacHeRate {
     const fn plcp_rate(self) -> PlcpRate {
         match self.mcs {
-            MacHeMcs::Mcs0 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs0,
-            MacHeMcs::Mcs1 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs1,
-            MacHeMcs::Mcs2 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs2,
-            MacHeMcs::Mcs3 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs3,
-            MacHeMcs::Mcs4 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs4,
-            MacHeMcs::Mcs5 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs5,
-            MacHeMcs::Mcs6 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs6,
-            MacHeMcs::Mcs7 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs7,
-            MacHeMcs::Mcs8 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs8,
-            MacHeMcs::Mcs9 => oer_chips_esp32s31_pac::wifi_mac::plcp1::Rate::HeMcs9,
+            MacHeMcs::Mcs0 => crate::types::MacPlcpRate::HeMcs0,
+            MacHeMcs::Mcs1 => crate::types::MacPlcpRate::HeMcs1,
+            MacHeMcs::Mcs2 => crate::types::MacPlcpRate::HeMcs2,
+            MacHeMcs::Mcs3 => crate::types::MacPlcpRate::HeMcs3,
+            MacHeMcs::Mcs4 => crate::types::MacPlcpRate::HeMcs4,
+            MacHeMcs::Mcs5 => crate::types::MacPlcpRate::HeMcs5,
+            MacHeMcs::Mcs6 => crate::types::MacPlcpRate::HeMcs6,
+            MacHeMcs::Mcs7 => crate::types::MacPlcpRate::HeMcs7,
+            MacHeMcs::Mcs8 => crate::types::MacPlcpRate::HeMcs8,
+            MacHeMcs::Mcs9 => crate::types::MacPlcpRate::HeMcs9,
         }
     }
 }
@@ -1548,11 +1515,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     }
 
     /// The parent's independent PTI-low edge.
-    fn set_txop(
-        &mut self,
-        queue: MacTxQueueIndex,
-        txop: oer_chips_esp32s31_pac::wifi_mac::pti::Txop,
-    ) {
+    fn set_txop(&mut self, queue: MacTxQueueIndex, txop: crate::types::MacTxop) {
         self.mac
             .wifi_mac_tx_queue_vector
             .modify_pti(queue::bank(queue), |w| {
@@ -1669,7 +1632,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         );
         self.clear_trigger_based_enable(queue);
         // The parent's independent PTI-low edge; a legacy PPDU holds no TXOP.
-        self.set_txop(queue, oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None);
+        self.set_txop(queue, crate::types::MacTxop::None);
         self.publish_length_control(
             queue,
             parameters.control.rate.rts_rate(),
@@ -1890,7 +1853,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.clear_trigger_based_enable(queue);
         // The parent's independent PTI-low edge; this SU profile holds no
         // TXOP.
-        self.set_txop(queue, oer_chips_esp32s31_pac::wifi_mac::pti::Txop::None);
+        self.set_txop(queue, crate::types::MacTxop::None);
 
         // SOURCE: complete libpp[hal_mac_tx.o]::mac_tx_set_hesig stores A1
         // then A2/length (each from zero, `publish_mac_tx_he_signal_a1_fields`

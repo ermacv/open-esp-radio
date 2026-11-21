@@ -96,7 +96,7 @@ impl<M: MacPlacement> WifiRxDmaRegisters<M> {
 
     /// Publish a descriptor head: a placed descriptor, so inside the DMA
     /// window by the link's proof.
-    pub fn write_mac_rx_descriptor_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>) {
+    pub(crate) fn write_mac_rx_descriptor_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>) {
         self.dma.modify_rx_descriptor_base(|w| {
             w.set_address(head);
         });

@@ -21,14 +21,12 @@ pub struct MacHePeerConfig {
     /// The Association Response's BSS color, whether it is enabled and
     /// whether it is partial.
     pub bss_color: MacHeBssColor,
-    pub bss_color_enabled: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable,
-    pub partial_bss_color:
-        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable,
+    pub bss_color_enabled: crate::types::MacHeBssColorEnable,
+    pub partial_bss_color: crate::types::MacHePartialBssColorEnable,
     /// The HE Operation's Max Co-Hosted BSSID Indicator of a co-hosted BSS;
     /// `None` when it announces none.
     pub max_co_hosted_bssid_indicator: Option<u8>,
-    pub extended_range_single_user:
-        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu,
+    pub extended_range_single_user: crate::types::MacHeAutoAckErsu,
 }
 
 /// One interface-zero HE20 association: the peer's parsed state, the
@@ -89,21 +87,17 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// then the partial bit 28.
     fn set_interface_zero_he_bss_color(
         &mut self,
-        enabled: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable,
+        enabled: crate::types::MacHeBssColorEnable,
         color: MacHeBssColor,
-        partial: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable,
+        partial: crate::types::MacHePartialBssColorEnable,
     ) {
         let control = &mut self.mac.wifi_mac_he_init_suffix;
         control.modify_multi_bssid_control(|w| {
             w.set_bss_color_enable(enabled);
         });
         let color = match enabled {
-            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled => {
-                color.field()
-            }
-            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Disabled => {
-                Bits::constant::<0>()
-            }
+            crate::types::MacHeBssColorEnable::Enabled => color.field(),
+            crate::types::MacHeBssColorEnable::Disabled => Bits::constant::<0>(),
         };
         control.modify_multi_bssid_control(|w| {
             w.set_bss_color(color);
@@ -186,8 +180,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn connect_he_bss(
         &mut self,
         color: MacHeBssColor,
-        enabled: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable,
-        partial: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable,
+        enabled: crate::types::MacHeBssColorEnable,
+        partial: crate::types::MacHePartialBssColorEnable,
     ) {
         self.initialize_interface_zero_he_bssid();
         self.clear_he_color_bitmap();
@@ -254,22 +248,12 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         init.modify_ersu_and_vht_control(|w| {
             w.set_auto_ack_allow_ersu(peer.extended_range_single_user);
         });
-        if peer.extended_range_single_user
-            == oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed
-        {
+        if peer.extended_range_single_user == crate::types::MacHeAutoAckErsu::Allowed {
             init.modify_ersu_ack_rate(|w| {
-                w.set_rate_0(
-                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-                )
-                .set_rate_1(
-                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-                )
-                .set_rate_2(
-                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-                )
-                .set_rate_3(
-                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-                );
+                w.set_rate_0(crate::types::MacHeErsuAckRate::Ordinary.into())
+                    .set_rate_1(crate::types::MacHeErsuAckRate::Ordinary.into())
+                    .set_rate_2(crate::types::MacHeErsuAckRate::Ordinary.into())
+                    .set_rate_3(crate::types::MacHeErsuAckRate::Ordinary.into());
             });
         }
 
@@ -331,9 +315,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             });
         self.clear_he_color_bitmap();
         self.set_interface_zero_he_bss_color(
-            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Disabled,
+            crate::types::MacHeBssColorEnable::Disabled,
             MacHeBssColor::from_bits(Bits::constant::<0>()),
-            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled,
+            crate::types::MacHePartialBssColorEnable::Disabled,
         );
     }
 }

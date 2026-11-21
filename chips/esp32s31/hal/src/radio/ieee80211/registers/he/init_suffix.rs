@@ -104,10 +104,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// five bit zero `ER-SU-Disable`. The IE's `ER-SU-Disable` is the blob-named
     /// `AUTO_ACK_ALLOW_ERSU` bit's `DISALLOWED`. The permitted leaf also
     /// rewrites ACK-rate bytes already initialized by the cold HE suffix.
-    pub fn set_he_extended_range_single_user(
-        &mut self,
-        allowed: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu,
-    ) {
+    pub fn set_he_extended_range_single_user(&mut self, allowed: crate::types::MacHeAutoAckErsu) {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_ersu_and_vht_control(|w| {
@@ -132,29 +129,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // hal_he_set_ersu_ack_rate(0) child. The four bytes are deliberately
         // four fresh-read RMWs rather than one full-word write.
         init.modify_ersu_and_vht_control(|w| {
-            w.set_auto_ack_allow_ersu(
-                oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
-            );
+            w.set_auto_ack_allow_ersu(crate::types::MacHeAutoAckErsu::Allowed);
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_0(
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-            );
+            w.set_rate_0(crate::types::MacHeErsuAckRate::Ordinary.into());
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_1(
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-            );
+            w.set_rate_1(crate::types::MacHeErsuAckRate::Ordinary.into());
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_2(
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-            );
+            w.set_rate_2(crate::types::MacHeErsuAckRate::Ordinary.into());
         });
         init.modify_ersu_ack_rate(|w| {
-            w.set_rate_3(
-                oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
-            );
+            w.set_rate_3(crate::types::MacHeErsuAckRate::Ordinary.into());
         });
 
         // Here the vendor's hal_set_tx_min_pwr(-11): the MAC reset's.

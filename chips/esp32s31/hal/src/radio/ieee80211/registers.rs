@@ -283,7 +283,7 @@ impl<P: Placement> Copy for MacLocalTime<P> {}
 
 impl MacLocalTime {
     /// Take the counter's read from its partition. This performs no MMIO.
-    pub fn new(partition: MacLocalTimePeripherals) -> Self {
+    pub(crate) fn new(partition: MacLocalTimePeripherals) -> Self {
         let MacLocalTimePeripherals {
             wifi_mac_local_time,
         } = partition;
@@ -339,7 +339,7 @@ pub struct WifiMacPartition {
 impl WifiMacPartition {
     /// Take the partitions of `oer_chips_esp32s31_pac::take()`. This performs no
     /// MMIO.
-    pub fn new(
+    pub(crate) fn new(
         mac: WifiMacPeripherals,
         interface: WifiMacInterfacePeripherals,
         local_time: MacLocalTime,
@@ -354,11 +354,6 @@ impl WifiMacPartition {
     /// The MAC local-time read this partition holds a copy of.
     pub const fn mac_local_time(&self) -> MacLocalTime {
         self.local_time
-    }
-
-    /// Return the partitions. This performs no MMIO.
-    pub fn into_partitions(self) -> (WifiMacPeripherals, WifiMacInterfacePeripherals) {
-        (self.mac, self.interface)
     }
 }
 
@@ -416,17 +411,10 @@ pub struct WifiRxDmaRegisters<M: MacPlacement = Chip> {
 
 impl WifiRxDmaRegisters {
     /// Take the walker's registers. This performs no MMIO.
-    pub fn new(partition: WifiRxDmaPeripherals) -> Self {
+    pub(crate) fn new(partition: WifiRxDmaPeripherals) -> Self {
         let WifiRxDmaPeripherals { wifi_mac_rx_dma } = partition;
         Self {
             dma: wifi_mac_rx_dma,
-        }
-    }
-
-    /// Return the walker's registers. This performs no MMIO.
-    pub fn into_partition(self) -> WifiRxDmaPeripherals {
-        WifiRxDmaPeripherals {
-            wifi_mac_rx_dma: self.dma,
         }
     }
 }

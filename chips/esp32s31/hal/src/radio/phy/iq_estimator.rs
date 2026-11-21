@@ -7,6 +7,7 @@
 #[cfg(target_arch = "riscv32")]
 use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
+#[cfg(any(test, target_arch = "riscv32"))]
 pub mod ops;
 
 /// Saved software configuration; restoring it preserves all other lanes.

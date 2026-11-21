@@ -6,8 +6,10 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{ClockRegisters, PhyPlacement};
-use oer_chips_esp32s31_pac::{fe, modem_syscon::ModemSysconRadio, wifi_bb};
-use oer_portable_mmio::{Bits, Placement};
+use oer_chips_esp32s31_pac::{fe, wifi_bb};
+use oer_portable_mmio::Bits;
+#[cfg(target_arch = "riscv32")]
+use {oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio, oer_portable_mmio::Placement};
 
 /// Clear the Wi-Fi enable bit, the only baseband-control bit complete
 /// `phy_xpd_rf_new` changes.
@@ -15,7 +17,8 @@ use oer_portable_mmio::{Bits, Placement};
 /// SOURCE: BLOB_LIBPHY_PHY_XPD_RF_NEW_20260907; the vendor leaf performs one
 /// preserving update of `WIFI_BB_CFG` that clears bit one alone before its
 /// one-microsecond settle.
-pub fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRadio<P>) {
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRadio<P>) {
     syscon.modify_wifi_bb_cfg(|w| {
         w.set_wifi_enable(if false {
             oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled

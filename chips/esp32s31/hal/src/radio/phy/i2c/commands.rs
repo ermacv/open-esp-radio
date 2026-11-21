@@ -8,7 +8,7 @@
 
 #![forbid(unsafe_code)]
 
-use oer_chips_esp32s31_pac::analog_i2c::{self, Address, Field};
+use super::{Address, Field, analog_i2c};
 
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.
