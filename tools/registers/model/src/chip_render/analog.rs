@@ -21,9 +21,9 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
          /// register bytes and their fields. These values perform no hardware\n\
          /// access.\n\
          pub mod analog_i2c {\n\
-         pub use oer_chips_family_drivers_regi2c::model::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, KnownReset, RegisterFacts, Route, SampledByte};\n\
+         pub use oer_chips_family_registers_analog_i2c::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, Route};\n\
          /// One field of an analog-I2C byte.\n\
-         pub type Field = oer_chips_family_drivers_regi2c::AnalogField<Address>;\n\n\
+         pub type Field = oer_chips_family_registers_analog_i2c::AnalogField<Address>;\n\n\
          /// The block codes.\npub mod blocks {\nuse super::Block;\n",
     );
     for instance in instances {
@@ -83,15 +83,7 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
                 address.index
             );
             let mut field_names = BTreeMap::from([("ADDRESS".to_owned(), entity.to_owned())]);
-            let mut described = 0u32;
-            let mut opaque = 0u32;
             for field in &register.fields {
-                let mask = (u32::MAX >> (32 - field.width)) << field.low;
-                if field.name.ends_with(crate::OPAQUE_SUFFIX) {
-                    opaque |= mask;
-                } else {
-                    described |= mask;
-                }
                 let field_constant = constant(names::strip(&field.name, &prefix));
                 let maximum = u32::MAX >> (32 - field.width);
                 let _ = writeln!(
@@ -148,18 +140,8 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
                 )?;
             }
             output.push_str("}\n\n");
-            let byte = |bits: u32| u8::try_from(bits & 0xff).unwrap_or(u8::MAX);
             facts.push(Facts {
                 address: (address.block, address.index),
-                described: byte(described),
-                opaque: byte(opaque),
-                reserved: byte(register.reserved),
-                reset: register.reset.map(|reset| {
-                    (
-                        byte(reset.value & reset.mask.unwrap_or(0xff)),
-                        byte(reset.mask.unwrap_or(0xff)),
-                    )
-                }),
                 read_safe: template
                     .read_safe
                     .as_ref()
@@ -297,39 +279,16 @@ fn render_routes(output: &mut String, model: &ChipModel) -> Result<(), Error> {
     Ok(())
 }
 
-/// One register byte's facts.
+/// One register byte's read-safety: the epoch that admits a read and the
+/// comparison mask of its capture.
 struct Facts {
     address: (u8, u8),
-    described: u8,
-    opaque: u8,
-    reserved: u8,
-    reset: Option<(u8, u8)>,
     read_safe: Option<(String, Option<u32>)>,
 }
 
 fn render_facts(output: &mut String, facts: &[Facts]) {
-    let _ = writeln!(
-        output,
-        "/// The facts of every register byte.\npub const REGISTERS: [RegisterFacts; {}] = [",
-        facts.len()
-    );
-    for fact in facts {
-        let (block, index) = fact.address;
-        let reset = fact.reset.map_or_else(
-            || "None".to_owned(),
-            |(value, mask)| format!("KnownReset::new(0x{value:x}, 0x{mask:x})"),
-        );
-        let _ = writeln!(
-            output,
-            "RegisterFacts {{ address: Address::new(0x{block:x}, 0x{index:x}), described: 0x{:x}, opaque: 0x{:x}, reserved: 0x{:x}, reset: {reset}, read_safe_epoch: {:?} }},",
-            fact.described,
-            fact.opaque,
-            fact.reserved,
-            fact.read_safe.as_ref().map(|(epoch, _)| epoch.as_str())
-        );
-    }
     output.push_str(
-        "];\n\n/// The bytes a finite reviewed epoch admits to a read.\n\
+        "/// The bytes a finite reviewed epoch admits to a read.\n\
          pub const READ_SAFE: &[(Address, &str)] = &[\n",
     );
     for fact in facts {

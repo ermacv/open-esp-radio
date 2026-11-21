@@ -1,0 +1,12 @@
+[package]
+name = "oer-chips-family-registers-analog-i2c"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Vocabulary of the Espressif analog register space: fields of a byte, block codes, byte addresses, hosts and routes"
+readme = "README.md"
+
+[lints]
+workspace = true

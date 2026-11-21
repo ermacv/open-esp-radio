@@ -6,7 +6,8 @@ use crate::{
     wait::{BootBudget, BootDeadline, BootWait, WaitFailure},
 };
 use core::cell::{Cell, RefCell};
-use oer_chips_family_drivers_regi2c::{AnalogField, AnalogRegisterBus, BusRefusal};
+use oer_chips_family_drivers_regi2c::{AnalogRegisterBus, BusRefusal};
+use oer_chips_family_registers_analog_i2c::AnalogField;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use std::{rc::Rc, vec, vec::Vec};

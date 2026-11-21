@@ -1,5 +1,5 @@
 //! Finite retained-wake analog-I2C host sequencing.
-use oer_chips_family_drivers_regi2c::model::Host;
+use oer_chips_family_registers_analog_i2c::Host;
 
 /// One finite failure while publishing current-vendor retained-wake analog
 /// initialization through both PHY-I²C hosts.
@@ -31,11 +31,7 @@ pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess, W>(
     maximum_observations: u32,
     mut wait: impl AsyncFnMut() -> Result<(), W>,
 ) -> Result<(), PhyI2cInitializationStageTwoError<W>> {
-    use oer_chips_family_drivers_regi2c::{ParallelAction, ParallelHost, ParallelTransition};
-    let host = |host| match host {
-        ParallelHost::First => Host::Host0,
-        ParallelHost::Second => Host::Host1,
-    };
+    use oer_chips_family_drivers_regi2c::{ParallelAction, ParallelTransition};
     let mut transition = ParallelTransition::new(pair);
     let mut result = Ok(());
     loop {
@@ -52,8 +48,7 @@ pub async fn configure_initialization_stage_two<P: PhyI2cParallelAccess, W>(
                 }
             }
             ParallelAction::StartPair(pair) => access.start_pair(pair),
-            ParallelAction::AwaitIdle(parallel_host) => {
-                let awaited = host(parallel_host);
+            ParallelAction::AwaitIdle(awaited) => {
                 let mut observations = 0;
                 while access.is_busy(awaited) {
                     if observations == maximum_observations {

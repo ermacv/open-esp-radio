@@ -65,6 +65,7 @@ chips/esp32s31/radio/phy/
 chips/family/{app, boot, facts}/
 chips/family/drivers/{efuse, pmu, regi2c, system-timer, usb-serial-jtag,
     watchdog}/
+chips/family/registers/analog-i2c/
 chips/family/platform/{bootstrap, executor, interrupt-table, layout, port,
     runtime}/
 chips/family/radio/{coex, modem-clock, phy, power}/
@@ -186,9 +187,7 @@ network contract on the codec.
 
 - `protocols/ieee80211/runtime` and `protocols/network/testing/model` have a
   dev-dependency on `chips/family/radio/ieee80211/policy`.
-- Normal dependencies outside their role:
-  `chips/esp32s31/pac` renders the analog-I2C model types of
-  `chips/family/drivers/regi2c`; `chips/esp32s31/hal` depends on
+- A normal dependency outside its role: `chips/esp32s31/hal` depends on
   `protocols/radio/coex`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `radio::bluetooth`, `system::boot`, `radio::ieee80211` and

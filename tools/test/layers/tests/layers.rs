@@ -157,6 +157,7 @@ fn the_boundary_is_named_by_package_or_domain() {
 // The metadata-derived Espressif value/algorithm crates in docs/architecture.md.
 const ESPRESSIF_SANS_IO: &[&str] = &[
     "chips/family/drivers/regi2c",
+    "chips/family/registers/analog-i2c",
     "chips/family/boot",
     "chips/family/radio/coex",
     "chips/family/drivers/efuse",
@@ -992,6 +993,7 @@ const ROLES: &[(&str, Role)] = &[
     ("chips/esp32s31/knowledge", Role::Facts),
     ("chips/esp32s31/pac", Role::Pac),
     ("chips/esp32s31/hal", Role::Hal),
+    ("chips/family/registers/analog-i2c", Role::Facts),
     ("chips/family/drivers/regi2c", Role::HardwareDriver),
     ("chips/family/boot", Role::HardwareDriver),
     ("chips/family/radio/coex", Role::HardwareDriver),
@@ -3335,18 +3337,11 @@ fn outside_its_role(from: &Member, to: &Member) -> bool {
 }
 
 /// Direct normal edges against [`role_allows`], with what removes each.
-const OUTSIDE_THE_ROLES: &[Deviation] = &[
-    (
-        "chips/esp32s31/hal",
-        "protocols/radio/coex",
-        "radio/coex merges into the HAL (#848)",
-    ),
-    (
-        "chips/esp32s31/pac",
-        "chips/family/drivers/regi2c",
-        "analog-I2C model types out of the family driver (#848)",
-    ),
-];
+const OUTSIDE_THE_ROLES: &[Deviation] = &[(
+    "chips/esp32s31/hal",
+    "protocols/radio/coex",
+    "radio/coex merges into the HAL (#848)",
+)];
 
 #[test]
 fn every_chip_and_hil_package_depends_only_on_what_its_role_allows() {
@@ -4684,6 +4679,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
     ("radio/phy/i2c.rs", 685, PHY_DRIVER),
+    ("radio/phy/i2c/commands.rs", 571, PHY_DRIVER),
     ("radio/phy/restore.rs", 368, PHY_DRIVER),
     ("radio/phy/temperature.rs", 152, PHY_DRIVER),
     ("radio/phy/temperature/", 78, PHY_DRIVER),
@@ -5887,8 +5883,9 @@ fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     raw.then_some(word)
 }
 
-/// S8c: a value cut to a field's width: a call of `Bits::truncate`, or of
-/// the HAL's `bits` helper, which is one. Each is to become a type that
+/// S8c: a value cut to a field's width: a call of `Bits::truncate`, of
+/// the HAL's `bits` helper, which is one, or of an analog field's
+/// `insert_truncated`. Each is to become a type that
 /// carries the bound, a checked constructor, or a listed boundary.
 fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     let word = ident_at(tokens, at)?;
@@ -5908,7 +5905,9 @@ fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
             .checked_sub(1)
             .is_some_and(|before| punct_at(tokens, before, ':'));
     let helper = word == "bits" && !before_dot && !after_fn;
-    ((truncate || helper) && called).then_some(word)
+    // The analog vocabulary's field door of the same kind.
+    let field = word == "insert_truncated" && before_dot;
+    ((truncate || helper || field) && called).then_some(word)
 }
 
 /// S8b: the protocol packages, the wire crates among them: the one place a
@@ -5961,6 +5960,10 @@ const BY_RADIO_SYSTEM: &str = "no package yet: the radio system and Bluetooth";
 const BY_PHASE_C: &str = "phase C, the network owner in the network runtime";
 const BY_NONE: &str = "no package yet";
 const BY_R2: &str = "R2, the area PR that holds the file";
+/// R2's area PR for the PHY baseband and AGC in the HAL.
+const BY_R2_HAL_PHY: &str = "R2: the PHY baseband and AGC area of the HAL";
+/// R2's area PR for the S31 PHY.
+const BY_R2_PHY: &str = "R2: the S31 PHY area";
 const BY_IMAGES: &str = "the HAL's register images, in the stand campaign";
 const BY_IEEE802154: &str = "the IEEE 802.15.4 step, in the stand campaign";
 const BY_PLATFORM: &str = "the platform's step, in the stand campaign";
@@ -6531,6 +6534,32 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         1,
         BY_R2,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_R2_HAL_PHY),
+    (
+        "chips/esp32s31/hal/src/radio/phy/i2c/commands.rs",
+        2,
+        BY_R2_HAL_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
+        9,
+        BY_R2_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/i2c/profile.rs",
+        1,
+        BY_R2_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/cold.rs",
+        1,
+        BY_R2_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_executor.rs",
+        1,
+        BY_R2_PHY,
     ),
 ];
 
@@ -11309,6 +11338,11 @@ fn a_truncation_is_found_in_each_of_its_forms() {
         found
     };
     assert_eq!(count("w.set_x(Bits::truncate(value));"), 1);
+    assert_eq!(count("let byte = FIELD.insert_truncated(byte, value);"), 1);
+    assert_eq!(
+        count("pub const fn insert_truncated(self, byte: u8) -> u8 { 0 }"),
+        0
+    );
     assert_eq!(count("w.set_x(bits(value));"), 1);
     assert_eq!(count("let x = bits::<3>(value);"), 1);
     assert_eq!(count("let x = name.bits();"), 0);

@@ -1425,6 +1425,7 @@ dependencies = [
  "oer-chips-family-radio-modem-clock",
  "oer-chips-family-radio-phy",
  "oer-chips-family-radio-power",
+ "oer-chips-family-registers-analog-i2c",
  "oer-portable-diagnostics",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1449,7 +1450,7 @@ name = "oer-chips-esp32s31-pac"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "oer-chips-family-drivers-regi2c",
+ "oer-chips-family-registers-analog-i2c",
  "oer-portable-memory",
  "oer-portable-mmio",
  "oer-portable-riscv",
@@ -1542,6 +1543,7 @@ dependencies = [
  "oer-chips-family-drivers-regi2c",
  "oer-chips-family-drivers-watchdog",
  "oer-chips-family-platform-layout",
+ "oer-chips-family-registers-analog-i2c",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1557,6 +1559,9 @@ version = "0.1.0"
 [[package]]
 name = "oer-chips-family-drivers-regi2c"
 version = "0.1.0"
+dependencies = [
+ "oer-chips-family-registers-analog-i2c",
+]
 
 [[package]]
 name = "oer-chips-family-drivers-system-timer"
@@ -1714,6 +1719,7 @@ name = "oer-chips-family-radio-phy"
 version = "0.1.0"
 dependencies = [
  "oer-chips-family-drivers-regi2c",
+ "oer-chips-family-registers-analog-i2c",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1727,6 +1733,10 @@ dependencies = [
  "oer-portable-time-virtual",
  "oer-protocols-radio-coex",
 ]
+
+[[package]]
+name = "oer-chips-family-registers-analog-i2c"
+version = "0.1.0"
 
 [[package]]
 name = "oer-hil-agent"
