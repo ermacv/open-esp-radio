@@ -369,13 +369,19 @@ impl ControlBinding {
         match self.0 {
             ControlEdge::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                    },
                 );
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
             }
             ControlEdge::ForceTxRx(PhyForceTxRxEdge::Configure { enabled, phase }) => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers, enabled, phase,
+                    registers,
+                    crate::hardware::force_txrx_phase(enabled, phase),
                 );
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
                     enabled,
@@ -495,7 +501,12 @@ impl PhyTxPowerTrackingExternalBinding {
         match &self.operation {
             PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, *enabled,
+                    registers,
+                    if *enabled {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                    },
                 );
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: *enabled }
             }
@@ -504,7 +515,8 @@ impl PhyTxPowerTrackingExternalBinding {
                 phase,
             }) => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers, *enabled, *phase,
+                    registers,
+                    crate::hardware::force_txrx_phase(*enabled, *phase),
                 );
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
                     enabled: *enabled,

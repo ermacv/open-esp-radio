@@ -126,21 +126,21 @@ fn estimator(
     );
     emit(
         0x1551,
-        u32::from(original.start_enabled),
-        u32::from(original.measurement_enabled),
+        original.start.bits(),
+        original.measurement.bits(),
         0,
     );
     if saved.enabled() {
         return Err(7);
     }
     let calibration_clock = clock::calibration_clock_enabled(phy);
-    phy.set_phy_calibration_clock(true);
+    phy.enable_phy_calibration_clock();
     // SOURCE: phy/analog/crystal_duty.rs::XtalDutyPrepareTransition. The complete
     // production registration already calibrated RX-DCO and settled RFPLL; this
     // leaf reopens its internal stimulus, clocks and forced paths in that epoch.
-    phy.configure_calibration_tone(true, 0x80, 0);
-    pbus::configure_rx_clock(phy, true);
-    pbus::configure_tx_clock(phy, true);
+    phy.start_calibration_tone(0x80, 0);
+    pbus::configure_rx_clock(phy, oer_chips_esp32s31_hal::types::PhyClockPair::Enabled);
+    pbus::configure_tx_clock(phy, oer_chips_esp32s31_hal::types::PhyClockPair::Enabled);
     oer_chips_family_radio_phy::pbus::configure_debug_mode(
         &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
     );
@@ -166,9 +166,15 @@ fn estimator(
         let measured = (|| {
             for repeat in 0..2 {
                 iq::configure(phy, 1000);
-                iq::set_start_enabled(phy, true);
+                iq::set_start_enabled(
+                    phy,
+                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Enabled,
+                );
                 settle()?;
-                iq::set_measurement_enabled(phy, true);
+                iq::set_measurement_enabled(
+                    phy,
+                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Enabled,
+                );
                 pairs(phy, 0x1510 + repeat * 2);
                 emit(
                     0x1540 + repeat * 2,
@@ -176,9 +182,15 @@ fn estimator(
                     oer_portable_riscv::cycle32(),
                     1,
                 );
-                iq::set_measurement_enabled(phy, false);
+                iq::set_measurement_enabled(
+                    phy,
+                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled,
+                );
                 settle()?;
-                iq::set_start_enabled(phy, false);
+                iq::set_start_enabled(
+                    phy,
+                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled,
+                );
                 pairs(phy, 0x1511 + repeat * 2);
                 emit(
                     0x1541 + repeat * 2,
@@ -194,9 +206,15 @@ fn estimator(
     } else {
         prepared
     };
-    iq::set_measurement_enabled(phy, false);
+    iq::set_measurement_enabled(
+        phy,
+        oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled,
+    );
     let delay_result = settle();
-    iq::set_start_enabled(phy, false);
+    iq::set_start_enabled(
+        phy,
+        oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled,
+    );
     iq::restore_configuration(phy, saved);
     let restored = iq::capture_configuration(phy).fields();
     emit(
@@ -207,13 +225,13 @@ fn estimator(
     );
     emit(
         0x1553,
-        u32::from(restored.start_enabled),
-        u32::from(restored.measurement_enabled),
+        restored.start.bits(),
+        restored.measurement.bits(),
         0,
     );
-    phy.configure_calibration_tone(false, 0x80, 0x28);
-    pbus::configure_rx_clock(phy, false);
-    pbus::configure_tx_clock(phy, false);
+    phy.stop_calibration_tone(0x80, 0x28);
+    pbus::configure_rx_clock(phy, oer_chips_esp32s31_hal::types::PhyClockPair::Disabled);
+    pbus::configure_tx_clock(phy, oer_chips_esp32s31_hal::types::PhyClockPair::Disabled);
     let mut cleanup = Ok(());
     for (selector, path) in [(0, 1), (1, 1), (1, 2)] {
         if !bus_usable || cleanup.is_err() {
@@ -232,7 +250,11 @@ fn estimator(
         cleanup = cleanup.and(settle());
         oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(phy);
     }
-    phy.set_phy_calibration_clock(calibration_clock);
+    if calibration_clock {
+        phy.enable_phy_calibration_clock();
+    } else {
+        phy.disable_phy_calibration_clock();
+    }
     result
         .and(delay_result)
         .and(cleanup)
@@ -279,10 +301,13 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
         u32::from(original.high_address_or_reset),
         u32::from(original.read_mode),
     );
-    emit(0x1533, u32::from(original.hardware_disabled), 0, 0);
+    emit(0x1533, original.hardware.bits(), 0, 0);
     let result = (|| {
         observation(phy, 0x1520)?;
-        freq::set_hardware_control(phy, false);
+        freq::set_hardware_control(
+            phy,
+            oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software,
+        );
         if !RomShortDelay::settle_micros(2) {
             return Err(5);
         }
@@ -329,7 +354,7 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
         u32::from(restored.high_address_or_reset),
         u32::from(restored.read_mode),
     );
-    emit(0x1535, u32::from(restored.hardware_disabled), 0, 0);
+    emit(0x1535, restored.hardware.bits(), 0, 0);
     result
         .and(observation(phy, 0x152e))
         .and(if restored == original {

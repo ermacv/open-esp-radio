@@ -307,7 +307,7 @@ oer_tools_probe_macros::probe! {
 oer_tools_probe_macros::probe! {
     pub fn open_phy_trace_dis_hw_set_freq() {
         let _ = session::with(|session| session.phy(|phy| {
-            oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(phy, false)
+            oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(phy, oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software)
         }));
         ets_delay_us(2);
         // Keep the delay as a non-tail edge so the executor sees the named

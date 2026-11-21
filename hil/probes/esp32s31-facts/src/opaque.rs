@@ -500,7 +500,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
     });
     s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled)
-            .set_lp_tsens_rst_en(false);
+            .set_lp_tsens_rst_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Released);
     });
     for (case, bit9, bit23) in [
         (0, true, true),
@@ -530,7 +530,7 @@ pub(super) fn temperature(s: &mut Session<'_>) {
             control.power_up().bits()
                 | (u32::from(control.power_up_force()) << 1)
                 | (peripheral.lp_tsens_clk_en().bits() << 2)
-                | (u32::from(peripheral.lp_tsens_rst_en()) << 3),
+                | (peripheral.lp_tsens_rst_en().bits() << 3),
         );
         for repeat in 0..2 {
             s.sar.radio.lp_tsens.modify_ctrl(|w| {

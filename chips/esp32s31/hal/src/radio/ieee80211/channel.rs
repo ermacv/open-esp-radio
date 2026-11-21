@@ -138,8 +138,12 @@ impl<P> RadioChannelHal<'_, P> {
         self.platform
     }
 
-    pub fn set_agc_enabled(&mut self, enabled: bool) {
-        crate::radio::phy::agc::set_enabled(self, enabled);
+    pub fn enable_agc(&mut self) {
+        crate::radio::phy::agc::enable(self);
+    }
+
+    pub fn disable_agc(&mut self) {
+        crate::radio::phy::agc::disable(self);
     }
 
     pub fn start_frequency_switch(&mut self, frequency_index: u8) {
@@ -200,8 +204,8 @@ impl<P> RadioChannelHal<'_, P> {
 
 #[cfg(target_arch = "riscv32")]
 impl<P> RadioChannelHal<'_, P> {
-    pub fn set_bbpll_calibration_enabled(&mut self, enabled: bool) {
-        crate::radio::phy::i2c::configure_bbpll_calibration(self, enabled);
+    pub fn set_bbpll_calibration(&mut self, mode: crate::types::PhyBbpllCalibration) {
+        crate::radio::phy::i2c::configure_bbpll_calibration(self, mode);
     }
 }
 

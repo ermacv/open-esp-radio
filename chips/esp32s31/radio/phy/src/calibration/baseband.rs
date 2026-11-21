@@ -545,11 +545,18 @@ impl PhyBbMmioBinding {
         match self.action {
             PhyBbMmioAction::SetForcedDigitalGain { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
-                    registers, enabled, -120, -120,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Disabled
+                    },
+                    -120,
+                    -120,
                 );
             }
             PhyBbMmioAction::EnableBasebandInitialization => {
-                registers.set_phy_calibration_clock(true)
+                registers.enable_phy_calibration_clock()
             }
             PhyBbMmioAction::SetBasebandMode { mode } => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::set_baseband_mode(
@@ -565,18 +572,28 @@ impl PhyBbMmioBinding {
             }
             PhyBbMmioAction::EnableAgc => crate::hardware::enable_phy_agc(registers),
             PhyBbMmioAction::SetWifiEnabled { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::frequency::set_wifi_enabled(registers, enabled)
+                if enabled {
+                    oer_chips_esp32s31_hal::radio::phy::frequency::enable_wifi(registers)
+                } else {
+                    oer_chips_esp32s31_hal::radio::phy::frequency::disable_wifi(registers)
+                }
             }
             PhyBbMmioAction::ConfigureTxPowerTracking { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_tx_power_tracking(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyTxPowerTracking::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyTxPowerTracking::Disabled
+                    },
                 )
             }
             PhyBbMmioAction::ConfigureRfRxSaturation { phase } => {
-                oer_chips_esp32s31_hal::radio::phy::agc::configure_rf_rx_saturation(
-                    registers,
-                    phase.enabled(),
-                )
+                if phase.enabled() {
+                    oer_chips_esp32s31_hal::radio::phy::agc::enable_rf_rx_saturation(registers)
+                } else {
+                    oer_chips_esp32s31_hal::radio::phy::agc::disable_rf_rx_saturation(registers)
+                }
             }
             PhyBbMmioAction::ConfigureI2cTxRate => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_i2c_tx_rate(registers)

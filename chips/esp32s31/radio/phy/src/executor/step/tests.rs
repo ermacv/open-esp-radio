@@ -167,8 +167,9 @@ impl Io {
         self.byte = match kind {
             Kind::InitialLow => self.rfpll_initial as u8,
             Kind::InitialHigh => analog_i2c::rfpll::lock_status::CALIBRATED_CAPACITOR_HIGH
-                .insert(0, (self.rfpll_initial >> 8) as u8)
-                .unwrap(),
+                .place((self.rfpll_initial >> 8) as u8)
+                .unwrap()
+                .apply(0),
             Kind::EnableRead | Kind::CapHighRead => 0xa5,
             Kind::Status => {
                 use crate::tracking::rfpll::search::Status;
@@ -184,8 +185,9 @@ impl Io {
                     Status::Other => 3,
                 };
                 analog_i2c::rfpll::capacitor_search_status::CAPACITOR_SEARCH_STATUS
-                    .insert(0, value)
+                    .place(value)
                     .unwrap()
+                    .apply(0)
             }
             _ => self.byte,
         };

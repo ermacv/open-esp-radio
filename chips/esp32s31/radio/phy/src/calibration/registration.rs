@@ -1334,7 +1334,8 @@ impl PhyRegisterMmioBinding {
             }
             PhyRegisterMmioAction::ConfigureForceTxRx { enabled, phase } => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers, enabled, phase,
+                    registers,
+                    crate::hardware::force_txrx_phase(enabled, phase),
                 )
             }
             PhyRegisterMmioAction::ResetFrequencyModule => {
@@ -1342,7 +1343,12 @@ impl PhyRegisterMmioBinding {
             }
             PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Hardware
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software
+                    },
                 )
             }
             PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
@@ -1361,7 +1367,12 @@ impl PhyRegisterMmioBinding {
             }
             PhyRegisterMmioAction::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                    },
                 )
             }
         }

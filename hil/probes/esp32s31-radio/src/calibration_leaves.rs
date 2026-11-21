@@ -12,7 +12,11 @@ oer_tools_probe_macros::probe! {
                 0 => oer_chips_esp32s31_hal::radio::phy::baseband::restore_tx_gain_compensation(phy),
                 1 => oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
                     phy,
-                    a & 1 != 0,
+                    if a & 1 != 0 {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Disabled
+                    },
                     b as i8,
                     c as i8,
                 ),

@@ -28,13 +28,22 @@ pub(crate) fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRa
     });
 }
 
-/// Enable or disable the recovered PHY calibration clock.
+/// Enable the recovered PHY calibration clock.
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_BB_INIT; the complete parent sets this bit
 /// before executing the baseband calibration sequence.
-pub fn set_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>, enabled: bool) {
+pub fn enable_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>) {
     clock.fe.modify_word_0800_opaque(|w| {
-        w.set_bit_2_opaque(enabled);
+        w.set_bit_2_opaque(true);
+    });
+}
+
+/// Disable the recovered PHY calibration clock.
+///
+/// SOURCE: BLOB_LIBPHY_PHY_BB_INIT.
+pub fn disable_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>) {
+    clock.fe.modify_word_0800_opaque(|w| {
+        w.set_bit_2_opaque(false);
     });
 }
 

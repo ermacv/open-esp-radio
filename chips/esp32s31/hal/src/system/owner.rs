@@ -17,6 +17,7 @@ use crate::*;
 use crate::radio::ieee80211::registers::WifiRadioRegisters;
 use crate::radio::phy::registers::RadioPhyParts;
 use crate::radio::phy::{baseband::ops as bb_ops, restore::PhyRouteState};
+use crate::types::TxIqMismatchPolarity;
 
 pub use crate::radio::phy::registration::{PhyRegistrationEpoch, PhyRegistrationGrant};
 
@@ -77,17 +78,22 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         sealed::SharedPhyAccess::route_state(self).registration_epoch()
     }
 
-    fn set_phy_calibration_clock(&mut self, enabled: bool) {
-        crate::radio::phy::clock::ops::set_calibration_clock(
+    fn enable_phy_calibration_clock(&mut self) {
+        crate::radio::phy::clock::ops::enable_calibration_clock(
             &mut phy_blocks_mut(self).phy_clock_oracle,
-            enabled,
         );
     }
 
-    fn set_rx_gain_dc_calibration(&mut self, enabled: bool) {
+    fn disable_phy_calibration_clock(&mut self) {
+        crate::radio::phy::clock::ops::disable_calibration_clock(
+            &mut phy_blocks_mut(self).phy_clock_oracle,
+        );
+    }
+
+    fn set_rx_gain_dc_calibration(&mut self, calibration: crate::types::PhyRxGainDcCalibration) {
         bb_ops::set_rx_gain_dc_calibration(
             &mut phy_blocks_mut(self).phy_baseband_config_oracle,
-            enabled,
+            calibration,
         );
     }
 
@@ -99,20 +105,28 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         );
     }
 
-    fn configure_calibration_tone(&mut self, enabled: bool, selector: u16, step: u8) {
-        bb_ops::configure_calibration_tone(
+    fn start_calibration_tone(&mut self, selector: u16, step: u8) {
+        bb_ops::start_calibration_tone(
             &mut phy_blocks_mut(self).phy_baseband_config_oracle,
-            enabled,
             selector,
             step,
         );
     }
 
-    fn configure_tx_iq_correction(&mut self, begin: bool) {
-        bb_ops::configure_tx_iq_correction(
+    fn stop_calibration_tone(&mut self, selector: u16, step: u8) {
+        bb_ops::stop_calibration_tone(
             &mut phy_blocks_mut(self).phy_baseband_config_oracle,
-            begin,
+            selector,
+            step,
         );
+    }
+
+    fn begin_tx_iq_correction(&mut self) {
+        bb_ops::begin_tx_iq_correction(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
+    }
+
+    fn end_tx_iq_correction(&mut self) {
+        bb_ops::end_tx_iq_correction(&mut phy_blocks_mut(self).phy_baseband_config_oracle);
     }
 
     /// Capture the first-path TX-IQ tone-control state into the route slot.
@@ -143,19 +157,24 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         })
     }
 
-    fn configure_txiq_mismatch_power(
+    fn configure_txiq_mismatch_power_first(
         &mut self,
-        first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     ) {
-        bb_ops::configure_txiq_mismatch_power(
+        bb_ops::configure_txiq_mismatch_power_first(
             &mut phy_blocks_mut(self).phy_baseband_config_oracle,
-            first,
             polarity,
             attenuation,
             selector,
+        );
+    }
+
+    fn configure_txiq_mismatch_power_second(&mut self, polarity: TxIqMismatchPolarity) {
+        bb_ops::configure_txiq_mismatch_power_second(
+            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
+            polarity,
         );
     }
 
@@ -197,11 +216,8 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         bb_ops::configure_adc_rate(&mut phy_blocks_mut(self).phy_baseband_config_oracle, rate);
     }
 
-    fn set_power_detector_tone_armed(&mut self, armed: bool) {
-        bb_ops::set_power_detector_tone_armed(
-            &mut phy_blocks_mut(self).phy_baseband_config_oracle,
-            armed,
-        );
+    fn set_power_detector_tone(&mut self, tone: crate::types::PhyTone) {
+        bb_ops::set_power_detector_tone(&mut phy_blocks_mut(self).phy_baseband_config_oracle, tone);
     }
 
     fn stop_power_detector_tone(&mut self) {

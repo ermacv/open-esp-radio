@@ -40,7 +40,7 @@
     )
 )]
 
-use oer_chips_family_registers_analog_i2c::{AnalogField, Host};
+use oer_chips_family_registers_analog_i2c::{AnalogField, FieldValue, Host};
 
 /// Why the bus did not take or finish a command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -215,8 +215,8 @@ pub struct ValueTooWide;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FieldWriteTransition<Address> {
     field: AnalogField<Address>,
-    /// Validated field bits already positioned in their byte.
-    bits: u8,
+    /// The value in the field's place.
+    value: FieldValue,
     step: FieldWriteStep,
 }
 
@@ -227,12 +227,12 @@ impl<Address: Copy> FieldWriteTransition<Address> {
     ///
     /// `value` does not fit the field.
     pub const fn new(field: AnalogField<Address>, value: u8) -> Result<Self, ValueTooWide> {
-        let Some(bits) = field.insert(0, value) else {
+        let Some(value) = field.place(value) else {
             return Err(ValueTooWide);
         };
         Ok(Self {
             field,
-            bits,
+            value,
             step: FieldWriteStep::Read,
         })
     }
@@ -269,7 +269,7 @@ impl<Address: Copy + Eq> FieldWriteTransition<Address> {
                     address: read,
                     value,
                 },
-            ) if read == address => FieldWriteStep::Write((value & !self.field.mask()) | self.bits),
+            ) if read == address => FieldWriteStep::Write(self.value.apply(value)),
             (FieldWriteStep::Write(_), Completion::Written { address: written })
                 if written == address =>
             {
@@ -336,7 +336,7 @@ where
 enum ConfigurationStep<Address> {
     Reading(usize, Address),
     Writing(usize, Address, u8),
-    Modifying(usize, AnalogField<Address>, u8),
+    Modifying(usize, AnalogField<Address>, FieldValue),
     Invalid(usize),
     Complete,
 }
@@ -369,8 +369,8 @@ where
             Some(ConfigurationCommand::Write(address, value)) => {
                 ConfigurationStep::Writing(index, address, value)
             }
-            Some(ConfigurationCommand::Modify(field, value)) => match field.insert(0, value) {
-                Some(bits) => ConfigurationStep::Modifying(index, field, bits),
+            Some(ConfigurationCommand::Modify(field, value)) => match field.place(value) {
+                Some(placed) => ConfigurationStep::Modifying(index, field, placed),
                 None => ConfigurationStep::Invalid(index),
             },
         }
@@ -423,10 +423,10 @@ where
                 Completion::Written { address: written },
             ) if written == address => self.next(index)?,
             (
-                ConfigurationStep::Modifying(index, field, bits),
+                ConfigurationStep::Modifying(index, field, placed),
                 Completion::Read { address, value },
             ) if address == field.address() => {
-                ConfigurationStep::Writing(index, address, (value & !field.mask()) | bits)
+                ConfigurationStep::Writing(index, address, placed.apply(value))
             }
             (ConfigurationStep::Complete | ConfigurationStep::Invalid(_), _) => {
                 return Err(TransitionError::AlreadyComplete);

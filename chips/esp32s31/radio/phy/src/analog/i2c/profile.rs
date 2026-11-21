@@ -5,11 +5,9 @@ use oer_chips_family_radio_phy::i2c::PhyI2cParallelWrite;
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.
 const TXRF_INITIAL_RATE_CLASS: u8 = match analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS
-    .insert(
-        0,
-        analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8,
-    ) {
-    Some(value) => value,
+    .place(analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8)
+{
+    Some(value) => value.apply(0),
     None => panic!("the named initial rate class fits the model field"),
 };
 

@@ -66,34 +66,28 @@ pub fn update_baseband_registers<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     });
 }
 
-/// Select the complete rev0 ROM AGC enable or disable sequence.
-pub fn set_enabled<P: PhyPlacement>(agc: &mut AgcRegisters<P>, enabled: bool) {
-    if !enabled {
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_agc_antenna_control(|w| {
-            w.set_bit_29_opaque(true);
-        });
-        return;
-    }
+/// Apply complete rev0 ROM `phy_disable_agc`.
+pub fn disable<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_agc_antenna_control(|w| {
+        w.set_bit_29_opaque(true);
+    });
+}
+
+/// Apply complete rev0 ROM `phy_enable_agc`.
+pub fn enable<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
+    use oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable;
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_antenna_control(|w| {
         w.set_bit_29_opaque(false);
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if true {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(ForcedGainEnable::Enabled);
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if false {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+        w.set_forced_gain_enable(ForcedGainEnable::Disabled);
     });
 }
 
@@ -221,34 +215,38 @@ pub fn configure_antenna<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     });
 }
 
-/// Apply either complete branch of rev0 ROM `phy_rfrx_sat_rst`.
-pub fn configure_rf_rx_saturation<P: PhyPlacement>(agc: &mut AgcRegisters<P>, enabled: bool) {
+/// Apply the enabling branch of complete rev0 ROM `phy_rfrx_sat_rst`.
+pub fn enable_rf_rx_saturation<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     agc.wifi_bb.initialize_rf_rx_saturation_config();
-    if enabled {
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_agc_saturation_control(|w| {
-            w.set_bit_19_opaque(true)
-                .set_bit_24_opaque(true)
-                .set_bit_28_opaque(true)
-                .set_bits_30_31_opaque(Bits::constant::<0x3>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_agc_saturation_control(|w| {
-            w.set_bits_0_18_opaque(Bits::constant::<0x800>());
-        });
-    } else {
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_agc_saturation_control(|w| {
-            w.set_bit_19_opaque(false)
-                .set_bit_24_opaque(false)
-                .set_bit_28_opaque(false)
-                .set_bits_30_31_opaque(Bits::constant::<0x0>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_agc_saturation_control(|w| {
-            w.set_bits_0_18_opaque(Bits::constant::<0x400>());
-        });
-    }
+
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_agc_saturation_control(|w| {
+        w.set_bit_19_opaque(true)
+            .set_bit_24_opaque(true)
+            .set_bit_28_opaque(true)
+            .set_bits_30_31_opaque(Bits::constant::<0x3>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_agc_saturation_control(|w| {
+        w.set_bits_0_18_opaque(Bits::constant::<0x800>());
+    });
+}
+
+/// Apply the disabling branch of complete rev0 ROM `phy_rfrx_sat_rst`.
+pub fn disable_rf_rx_saturation<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
+    agc.wifi_bb.initialize_rf_rx_saturation_config();
+
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_agc_saturation_control(|w| {
+        w.set_bit_19_opaque(false)
+            .set_bit_24_opaque(false)
+            .set_bit_28_opaque(false)
+            .set_bits_30_31_opaque(Bits::constant::<0x0>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_agc_saturation_control(|w| {
+        w.set_bits_0_18_opaque(Bits::constant::<0x400>());
+    });
 }
 
 /// Publish both final RX-gain limits through separate fresh RMWs.
@@ -280,13 +278,6 @@ pub fn set_saturation_gain<P: PhyPlacement>(agc: &mut AgcRegisters<P>, value: u3
     });
 }
 
-/// Apply the complete pinned `phy_set_ftm_en` one-bit image.
-pub fn set_ftm_enabled<P: PhyPlacement>(agc: &mut AgcRegisters<P>, enabled: bool) {
-    agc.wifi_bb.modify_ftm_control(|w| {
-        w.set_enable(enabled);
-    });
-}
-
 /// Apply `phy_reg_update_new` while preserving the independently owned FTM
 /// mode.
 pub fn update_post_initialization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
@@ -309,72 +300,59 @@ pub fn update_post_initialization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     });
 }
 
-/// Apply either complete branch of rev0 ROM `phy_rx_11b_opt`.
-pub fn configure_rx_11b_optimization<P: PhyPlacement>(agc: &mut AgcRegisters<P>, enabled: bool) {
-    if enabled {
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
-            w.set_bits_16_21_opaque(Bits::constant::<0x3f>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
-            w.set_bits_8_13_opaque(Bits::constant::<0x21>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
-            w.set_bits_10_15_opaque(Bits::constant::<0x21>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
-            w.set_bits_0_3_opaque(Bits::constant::<0x3>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb_brx.modify_rx_11b_mode_control(|w| {
-            w.set_bits_12_15_opaque(Bits::constant::<0x9>());
-        });
-    } else {
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
-            w.set_bits_16_21_opaque(Bits::constant::<0x3e>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
-            w.set_bits_8_13_opaque(Bits::constant::<0x18>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
-            w.set_bits_10_15_opaque(Bits::constant::<0x18>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
-            w.set_bits_0_3_opaque(Bits::constant::<0x4>());
-        });
-        // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
-        agc.wifi_bb_brx.modify_rx_11b_mode_control(|w| {
-            w.set_bits_12_15_opaque(Bits::constant::<0x6>());
-        });
-    }
+/// Apply the enabling branch of complete rev0 ROM `phy_rx_11b_opt`.
+pub fn enable_rx_11b_optimization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
+        w.set_bits_16_21_opaque(Bits::constant::<0x3f>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
+        w.set_bits_8_13_opaque(Bits::constant::<0x21>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
+        w.set_bits_10_15_opaque(Bits::constant::<0x21>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
+        w.set_bits_0_3_opaque(Bits::constant::<0x3>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb_brx.modify_rx_11b_mode_control(|w| {
+        w.set_bits_12_15_opaque(Bits::constant::<0x9>());
+    });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_rx_11b_window_control(|w| {
         w.set_bits_0_8_opaque(Bits::constant::<0x1c8>());
     });
 }
 
-/// Apply complete rev0 ROM `phy_force_rx_gain`.
-pub fn configure_forced_rx_gain<P: PhyPlacement>(
-    agc: &mut AgcRegisters<P>,
-    enabled: bool,
-    gain: crate::types::ForcedRxGain,
-) {
-    agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_index(gain_byte(gain));
+/// Apply the disabling branch of complete rev0 ROM `phy_rx_11b_opt`.
+pub fn disable_rx_11b_optimization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
+        w.set_bits_16_21_opaque(Bits::constant::<0x3e>());
     });
-    agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_forced_gain_enable(if enabled {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::agc_shared_control::ForcedGainEnable::Disabled
-        });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_0(|w| {
+        w.set_bits_8_13_opaque(Bits::constant::<0x18>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
+        w.set_bits_10_15_opaque(Bits::constant::<0x18>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_path_control_1(|w| {
+        w.set_bits_0_3_opaque(Bits::constant::<0x4>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb_brx.modify_rx_11b_mode_control(|w| {
+        w.set_bits_12_15_opaque(Bits::constant::<0x6>());
+    });
+    // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
+    agc.wifi_bb.modify_rx_11b_window_control(|w| {
+        w.set_bits_0_8_opaque(Bits::constant::<0x1c8>());
     });
 }
 

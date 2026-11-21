@@ -29,7 +29,7 @@ fn state(s: &Session<'_>, tag: u32) {
         s.sar.radio.lp_tsens.read_ctrl().record_word(),
         s.sar.radio.lp_tsens.read_clk_conf().record_word(),
         lp.lp_tsens_clk_en().bits()
-            | (u32::from(lp.lp_tsens_rst_en()) << 1)
+            | (lp.lp_tsens_rst_en().bits() << 1)
             | (u32::from(power.xpd_perif_i2c()) << 2)
             | (u32::from(power.rstb_perif_i2c()) << 3),
     );
@@ -38,7 +38,7 @@ fn state(s: &Session<'_>, tag: u32) {
 fn dac(s: &mut Session<'_>, value: u8) -> Option<u32> {
     let field = pac::analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC;
     let old = s.sar.analog_byte(field.address(), None)?;
-    let new = field.insert(old, value)?;
+    let new = field.place(value)?.apply(old);
     s.sar.analog_byte(field.address(), Some(new))?;
     let end = oer_portable_riscv::cycle32();
     emit(0x3102, value.into(), old.into(), new.into());
@@ -107,10 +107,10 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
     });
     s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled)
-            .set_lp_tsens_rst_en(true);
+            .set_lp_tsens_rst_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Asserted);
     });
     s.sar.radio.lp_periclkrst.modify_tsens_ctrl(|w| {
-        w.set_lp_tsens_rst_en(false);
+        w.set_lp_tsens_rst_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Released);
     });
     s.sar.radio.lp_tsens.modify_clk_conf(|w| {
         w.set_clk_en(true);

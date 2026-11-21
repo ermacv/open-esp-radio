@@ -37,7 +37,7 @@ fn a_tone_path_edge_zeroes_both_reserved_lanes_and_keeps_the_high_nibble() {
         TonePath0 {
             selector_high: 0x12,
             negated_step: 0x34,
-            enabled: true,
+            tone: crate::types::PhyTone::Armed,
             mismatch_mode: Bits::constant::<5>(),
             polarity: Bits::constant::<4>(),
         },
@@ -75,6 +75,32 @@ fn the_frontend_reset_ends_with_both_reset_bits_raised_and_keeps_every_other_bit
         for bits in differing {
             assert_eq!(bits & initial, 0, "the edges only raise the reset bits");
             assert!(bits.count_ones() <= 2);
+        }
+    }
+}
+
+#[test]
+fn rx_gain_dc_calibration_writes_its_named_state_and_keeps_the_word() {
+    use crate::types::PhyRxGainDcCalibration as Calibration;
+    for (fill, state, expected) in [
+        (0, Calibration::Enabled, 0b11),
+        (u32::MAX, Calibration::Disabled, 0b00),
+        (0x9a5c_3e71, Calibration::Enabled, 0b11),
+        (0x9a5c_3e71, Calibration::Disabled, 0b00),
+    ] {
+        let before = vec![fill; 31956 / 4];
+        let mut after = before.clone();
+        let mut block = BasebandRegisters::host(&mut after).expect("memory holds it");
+        super::set_rx_gain_dc_calibration(&mut block, state);
+        let control = block.fe.read_rx_gain_dc_control();
+        // SOURCE: ROM `phy_set_rx_gain_cal_dc`: bits 6:5 are 0b11 before the
+        // calibration graph and 0b00 in its cleanup.
+        assert_eq!(control.bits_5_6_opaque().get(), expected, "{fill:#x}");
+        assert_eq!(control.bits_5_6_opaque_variant(), Some(state));
+        drop(block);
+        // Only those two bits of the one word may change.
+        for bits in changed(&before, &after) {
+            assert_eq!(bits & !(0b11 << 5), 0, "{fill:#x}: {bits:#x}");
         }
     }
 }

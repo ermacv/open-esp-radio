@@ -298,6 +298,7 @@ write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
 name = "READ_WRITE"
+values = { dictionary = "READ_WRITE" }
 bits = "24"
 class = "plain"
 
@@ -338,6 +339,7 @@ class = "plain"
 write-range = { min = 0x0, max = 0xff }
 
 [[registers.fields]]
+values = { dictionary = "READ_WRITE" }
 name = "READ_WRITE"
 bits = "24"
 class = "plain"
@@ -717,3 +719,10 @@ sources = ["HW30_S31_I2C_READ_OBSERVER_20261027"]
 
 [review.entity."I2C_BURST_STATUS.I2C_MST_BURST_DONE"]
 sources = ["HW30_S31_I2C_READ_OBSERVER_20261027"]
+
+[[dictionaries]]
+name = "READ_WRITE"
+description = "The direction of one analog-I2C host command: the host's control word's READ_WRITE bit."
+width = 1
+values = [{ name = "READ", value = 0x0, description = "The command reads the addressed analog byte.", sources = ["S31_ESP_PACS_SVD"] }, { name = "WRITE", value = 0x1, description = "The command writes the addressed analog byte.", sources = ["S31_ESP_PACS_SVD"] }]
+sources = ["S31_ESP_PACS_SVD"]

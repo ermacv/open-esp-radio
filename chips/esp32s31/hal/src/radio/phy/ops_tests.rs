@@ -59,8 +59,11 @@ fn estimator_restoration_returns_saved_fields_and_enable_state() {
     let saved = iq::capture_configuration(&estimator);
     assert!(!saved.enabled());
     iq::configure(&mut estimator, 1000);
-    iq::set_start_enabled(&mut estimator, true);
-    iq::set_measurement_enabled(&mut estimator, true);
+    iq::set_start_enabled(&mut estimator, crate::types::PhyEstimatorStart::Enabled);
+    iq::set_measurement_enabled(
+        &mut estimator,
+        crate::types::PhyEstimatorMeasurement::Enabled,
+    );
     iq::restore_configuration(&mut estimator, saved);
     assert_eq!(
         estimator.read_estimator_control().bits_2_16_opaque().get(),
@@ -88,7 +91,7 @@ fn frequency_read_restore_preserves_other_owner_changes_and_never_pulses_writers
         w.set_channel_switch_pulse(false);
     });
     let saved = fr::capture_read_configuration(&frequency).expect("quiet engine");
-    fr::set_hardware_control(&mut frequency, false);
+    fr::set_hardware_control(&mut frequency, crate::types::PhyFrequencyControl::Software);
     fr::read_memory(
         &mut frequency,
         fr::FrequencyMemoryAddress::new(0x400).expect("in the memory"),
@@ -203,7 +206,7 @@ golden!(
     AgcRegisters,
     8223,
     |b| {
-        agc::set_enabled(&mut b, true);
+        agc::enable(&mut b);
     },
     [
         (0x00000000, &[]),
@@ -262,7 +265,7 @@ golden!(
     AgcRegisters,
     8223,
     |b| {
-        agc::configure_rf_rx_saturation(&mut b, true);
+        agc::enable_rf_rx_saturation(&mut b);
     },
     [
         (0x00000000, &[(0x705c, 0xd1080800), (0x7068, 0x00000404)]),
@@ -305,7 +308,7 @@ golden!(
     AgcRegisters,
     8223,
     |b| {
-        agc::configure_rx_11b_optimization(&mut b, true);
+        agc::enable_rx_11b_optimization(&mut b);
     },
     [
         (
@@ -330,24 +333,11 @@ golden!(
 );
 
 golden!(
-    agc_forced_rx_gain,
-    AgcRegisters,
-    8223,
-    |b| {
-        agc::configure_forced_rx_gain(&mut b, true, ForcedRxGain::new(0x5a).unwrap());
-    },
-    [
-        (0x00000000, &[(0x702c, 0x5a800000)]),
-        (0xffffffff, &[(0x702c, 0x5affffff)]),
-    ]
-);
-
-golden!(
     bb_tx_power_tracking,
     BasebandRegisters,
     7989,
     |b| {
-        bb::configure_tx_power_tracking(&mut b, true);
+        bb::configure_tx_power_tracking(&mut b, crate::types::PhyTxPowerTracking::Enabled);
     },
     [
         (
@@ -477,7 +467,7 @@ golden!(
     BasebandRegisters,
     7989,
     |b| {
-        bb::configure_calibration_tone(&mut b, false, 0x155, 3);
+        bb::stop_calibration_tone(&mut b, 0x155, 3);
     },
     [
         (
@@ -507,7 +497,12 @@ golden!(
     BasebandRegisters,
     7989,
     |b| {
-        bb::configure_txiq_mismatch_power(&mut b, true, true, 7, 0x2a6);
+        bb::configure_txiq_mismatch_power_first(
+            &mut b,
+            bb::TxIqMismatchPolarity::Inverted,
+            7,
+            0x2a6,
+        );
     },
     [
         (0x00000000, &[(0x041c, 0x042fe4a9), (0x0428, 0x00000002)]),
@@ -560,19 +555,6 @@ golden!(
 );
 
 golden!(
-    bb_forced_iccfr,
-    BasebandRegisters,
-    7989,
-    |b| {
-        bb::configure_forced_iccfr(&mut b, true, true, CfrValue::new(0xabc).unwrap());
-    },
-    [
-        (0x00000000, &[(0x7478, 0x0000f579)]),
-        (0xffffffff, &[(0x7478, 0xfffff579), (0x747c, 0xf9ffffff)]),
-    ]
-);
-
-golden!(
     clock_open_frontend_baseband,
     ClockRegisters,
     7969,
@@ -597,7 +579,12 @@ golden!(
     ClockRegisters,
     7969,
     |b| {
-        bb::configure_forced_digital_gain(&mut b, true, -2, 5);
+        bb::configure_forced_digital_gain(
+            &mut b,
+            crate::types::PhyForcedDigitalGain::Enabled,
+            -2,
+            5,
+        );
     },
     [
         (0x00000000, &[(0x0408, 0x000105fe)]),
@@ -610,7 +597,10 @@ golden!(
     FrequencyRegisters,
     7994,
     |b| {
-        fr::initialize_registers(&mut b, true);
+        fr::initialize_registers(
+            &mut b,
+            crate::types::FrequencyRegisterMode::ParameterOverride,
+        );
     },
     [
         (
@@ -931,9 +921,9 @@ golden!(
     PhyPbus,
     instances::fe::SIZE / 4,
     |b| {
-        pb::set_rx_clock_pair(&mut b, true);
-        pb::set_tx_clock_pair(&mut b, true);
-        pb::set_force_txrx_mode(&mut b, true, false);
+        pb::set_rx_clock_pair(&mut b, crate::types::PhyClockPair::Enabled);
+        pb::set_tx_clock_pair(&mut b, crate::types::PhyClockPair::Enabled);
+        pb::set_force_txrx_mode(&mut b, crate::types::PhyForceTxRxPhase::EnableFinalPhase);
     },
     [
         (0x00000000, &[(0x0890, 0x0003ca00)]),
@@ -962,7 +952,10 @@ golden!(
         ts::enable_register_bank(&mut b);
         ts::enable_phy_readout(&mut b);
         ts::enable_phy_conversion(&mut b);
-        ts::set_power(&mut b, true);
+        ts::set_power(
+            &mut b,
+            oer_chips_esp32s31_pac::tsens::ctrl::PowerUp::Enabled,
+        );
     },
     [
         (0x00000000, &[(0x0000, 0x00400000), (0x0018, 0x00800201)]),
@@ -975,8 +968,14 @@ golden!(
     LpPericlkrst,
     instances::lp_periclkrst::SIZE / 4,
     |b| {
-        ts::set_clock(&mut b, true);
-        ts::set_reset(&mut b, false);
+        ts::set_clock(
+            &mut b,
+            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled,
+        );
+        ts::set_reset(
+            &mut b,
+            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Released,
+        );
     },
     [
         (0x00000000, &[(0x0030, 0x40000000)]),
@@ -1004,7 +1003,7 @@ golden!(
     |b| {
         master::configure_clock_selection(&mut b);
         master::configure_master_registers(&mut b);
-        master::set_bbpll_calibration(&mut b, true);
+        master::set_bbpll_calibration(&mut b, crate::types::PhyBbpllCalibration::Enabled);
     },
     [
         (

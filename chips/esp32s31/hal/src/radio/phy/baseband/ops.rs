@@ -140,7 +140,7 @@ const fn tone_selector_high(selector: u16) -> u8 {
 pub(crate) struct TonePath0 {
     pub(crate) selector_high: u8,
     pub(crate) negated_step: u8,
-    pub(crate) enabled: bool,
+    pub(crate) tone: crate::types::PhyTone,
     pub(crate) mismatch_mode: Bits<3>,
     pub(crate) polarity: Bits<4>,
 }
@@ -157,11 +157,7 @@ pub(crate) fn configure_tone_path_0<P: PhyPlacement>(
         w.set_selector_high(path.selector_high)
             .set_bits_8_9_opaque(Bits::constant::<0>())
             .set_negated_step_or_attenuation(path.negated_step)
-            .set_tone_enable_or_arm(if path.enabled {
-                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
-            } else {
-                oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
-            })
+            .set_tone_enable_or_arm(path.tone)
             .set_bits_19_21_opaque(path.mismatch_mode)
             .set_bits_22_23_opaque(Bits::constant::<0>())
             .set_txiq_polarity_image(path.polarity);
@@ -199,57 +195,60 @@ pub fn enable_iq_correction_modes<P: PhyPlacement>(bb: &mut BasebandRegisters<P>
     });
 }
 
-/// Apply the complete four-edge RXIQ correction prefix or suffix.
+/// Enter the RXIQ root correction mode: the complete pinned parent's prefix.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn configure_rxiq_root_correction<P: PhyPlacement>(
+pub(crate) fn begin_rxiq_root_correction<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
     pbus: &mut PhyPbus<P::Fe>,
-    begin: bool,
 ) {
-    if begin {
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_control(|w| {
-            w.set_rx_iq_correction_mode_low(true);
-        });
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_aux(|w| {
-            w.set_tx_iq_correction_mode_low(true);
-        });
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_control(|w| {
-            w.set_rx_iq_correction_mode_high(false);
-        });
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_aux(|w| {
-            w.set_tx_iq_correction_mode_high(false);
-        });
-    } else {
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_control(|w| {
-            w.set_rx_iq_correction_mode_high(true);
-        });
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_aux(|w| {
-            w.set_tx_iq_correction_mode_high(true);
-        });
-        // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_control(|w| {
-            w.set_rx_iq_correction_mode_low(false);
-        });
-        crate::radio::phy::pbus::ops::clear_rxiq_root_status_second(pbus);
-    }
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_control(|w| {
+        w.set_rx_iq_correction_mode_low(true);
+    });
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_aux(|w| {
+        w.set_tx_iq_correction_mode_low(true);
+    });
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_control(|w| {
+        w.set_rx_iq_correction_mode_high(false);
+    });
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_aux(|w| {
+        w.set_tx_iq_correction_mode_high(false);
+    });
+}
+
+/// Leave the RXIQ root correction mode: the complete pinned parent's suffix.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn end_rxiq_root_correction<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    pbus: &mut PhyPbus<P::Fe>,
+) {
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_control(|w| {
+        w.set_rx_iq_correction_mode_high(true);
+    });
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_aux(|w| {
+        w.set_tx_iq_correction_mode_high(true);
+    });
+    // SOURCE: BLOB_LIBPHY_PHY_RXIQ_CAL_INIT, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_control(|w| {
+        w.set_rx_iq_correction_mode_low(false);
+    });
+    crate::radio::phy::pbus::ops::clear_rxiq_root_status_second(pbus);
 }
 
 /// Configure all fourteen ordered TX-power tracking RMW edges.
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
-pub fn configure_tx_power_tracking<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, enabled: bool) {
+pub fn configure_tx_power_tracking<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    tracking: crate::types::PhyTxPowerTracking,
+) {
     bb.wifi_bb.modify_tx_power_track_control_0(|w| {
-        w.set_track_enable(if enabled {
-            oer_chips_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::tx_power_track_control_0::TrackEnable::Disabled
-        });
+        w.set_track_enable(tracking);
     });
     // SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG, S31_ESP_PACS_SVD.
     bb.wifi_bb.modify_tx_power_track_control_0(|w| {
@@ -667,7 +666,7 @@ fn configure_tone_selectors<P: PhyPlacement>(
 
 fn configure_tone_paths<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
-    enabled: bool,
+    tone: crate::types::PhyTone,
     path_0_selector: u16,
     path_0_step: u8,
 ) {
@@ -676,7 +675,7 @@ fn configure_tone_paths<P: PhyPlacement>(
         TonePath0 {
             selector_high: tone_selector_high(path_0_selector),
             negated_step: path_0_step.wrapping_neg(),
-            enabled,
+            tone,
             mismatch_mode: Bits::constant::<0>(),
             polarity: Bits::constant::<0>(),
         },
@@ -697,12 +696,12 @@ fn configure_tone_paths<P: PhyPlacement>(
 /// Disabling retains the supplied gain values for the next calibration.
 pub fn configure_forced_digital_gain<P: PhyPlacement>(
     clock: &mut ClockRegisters<P>,
-    enabled: bool,
+    forcing: crate::types::PhyForcedDigitalGain,
     gain_0: i8,
     gain_1: i8,
 ) {
     clock.fe.modify_table_memory_index_source(|w| {
-        w.set_force_digital_gain_enable(enabled);
+        w.set_force_digital_gain_enable(forcing);
     });
     clock.fe.modify_table_memory_index_source(|w| {
         w.set_forced_digital_gain_0(gain_0 as u8);
@@ -712,14 +711,13 @@ pub fn configure_forced_digital_gain<P: PhyPlacement>(
     });
 }
 
-/// Program the calibration tone, restoring TX gain only when stopping it.
+/// Start the calibration tone.
 ///
 /// This preserves every fresh-read/write edge in
 /// `libphy.a[phy_reg.o]::phy_start_tx_tone_step_new` and its
 /// `phy_txgain_comp_pacfg_new` child.
-pub fn configure_calibration_tone<P: PhyPlacement>(
+pub fn start_calibration_tone<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
-    enabled: bool,
     selector: u16,
     step: u8,
 ) {
@@ -729,14 +727,27 @@ pub fn configure_calibration_tone<P: PhyPlacement>(
     });
     clear_tx_gain_compensation(bb);
     configure_tone_selectors(bb, selector, 0);
-    configure_tone_paths(bb, enabled, selector, step);
-    if !enabled {
-        // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
-        bb.fe.modify_front_end_and_tone_stop_control(|w| {
-            w.set_bits_0_1_opaque(Bits::constant::<0x3>());
-        });
-        restore_tx_gain_compensation(bb);
-    }
+    configure_tone_paths(bb, crate::types::PhyTone::Armed, selector, step);
+}
+
+/// Stop the calibration tone, restoring TX gain.
+pub fn stop_calibration_tone<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    selector: u16,
+    step: u8,
+) {
+    // SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
+    bb.fe.modify_front_end_and_tone_stop_control(|w| {
+        w.set_bits_0_1_opaque(Bits::constant::<0x0>());
+    });
+    clear_tx_gain_compensation(bb);
+    configure_tone_selectors(bb, selector, 0);
+    configure_tone_paths(bb, crate::types::PhyTone::Disarmed, selector, step);
+    // SOURCE: BLOB_LIBPHY_PHY_START_TX_TONE_STEP_NEW, ROM_REV0_PHY_START_STOP_TX_TONE, S31_ESP_PACS_SVD.
+    bb.fe.modify_front_end_and_tone_stop_control(|w| {
+        w.set_bits_0_1_opaque(Bits::constant::<0x3>());
+    });
+    restore_tx_gain_compensation(bb);
 }
 
 /// Program the ROM power-control tone with DAC scale and TX gain disabled.
@@ -759,59 +770,67 @@ pub fn configure_power_control_tone<P: PhyPlacement>(
     });
     clear_tx_gain_compensation(bb);
     configure_tone_selectors(bb, selector, 0);
-    configure_tone_paths(bb, true, selector, step);
+    configure_tone_paths(bb, crate::types::PhyTone::Armed, selector, step);
 }
 
-/// Configure one of the two complete TX-IQ mismatch-power polarity edges.
+/// The first TX-IQ mismatch-power edge.
 ///
 /// SOURCE: ROM_REV0_PHY_TXIQ_GET_MIS_PWR. The first edge selects mismatch
 /// mode five and polarity four or zero; the second writes the second-path
 /// polarity eight or one.
-pub fn configure_txiq_mismatch_power<P: PhyPlacement>(
+pub fn configure_txiq_mismatch_power_first<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
-    first: bool,
-    polarity: bool,
+    polarity: TxIqMismatchPolarity,
     attenuation: u8,
     selector: u16,
 ) {
-    if first {
-        configure_tone_path_0(
-            bb,
-            TonePath0 {
-                selector_high: tone_selector_high(selector),
-                negated_step: attenuation.wrapping_neg(),
-                enabled: true,
-                mismatch_mode: Bits::constant::<5>(),
-                polarity: if polarity {
-                    Bits::constant::<4>()
-                } else {
-                    Bits::constant::<0>()
-                },
+    configure_tone_path_0(
+        bb,
+        TonePath0 {
+            selector_high: tone_selector_high(selector),
+            negated_step: attenuation.wrapping_neg(),
+            tone: crate::types::PhyTone::Armed,
+            mismatch_mode: Bits::constant::<5>(),
+            polarity: match polarity {
+                TxIqMismatchPolarity::Inverted => Bits::constant::<4>(),
+                TxIqMismatchPolarity::Normal => Bits::constant::<0>(),
             },
-        );
-        bb.fe.modify_tone_selector_control(|w| {
-            w.set_path_0_selector_low(tone_selector_low(selector));
-        });
-    } else {
-        let second: Bits<4> = if polarity {
-            Bits::constant::<8>()
-        } else {
-            Bits::constant::<1>()
-        };
-        bb.fe.modify_tone_path_0_control(|w| {
-            w.set_txiq_polarity_image(second);
-        });
-    }
+        },
+    );
+    bb.fe.modify_tone_selector_control(|w| {
+        w.set_path_0_selector_low(tone_selector_low(selector));
+    });
+}
+
+/// The second TX-IQ mismatch-power edge: the second path's polarity image.
+pub fn configure_txiq_mismatch_power_second<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    polarity: TxIqMismatchPolarity,
+) {
+    let second: Bits<4> = match polarity {
+        TxIqMismatchPolarity::Inverted => Bits::constant::<8>(),
+        TxIqMismatchPolarity::Normal => Bits::constant::<1>(),
+    };
+    bb.fe.modify_tone_path_0_control(|w| {
+        w.set_txiq_polarity_image(second);
+    });
+}
+
+/// The polarity argument of ROM `phy_txiq_get_mis_pwr`: one image of each
+/// edge for the vendor's zero (`Normal`) and its one (`Inverted`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxIqMismatchPolarity {
+    Normal,
+    Inverted,
 }
 
 /// Set or clear the shared first-path arm bit for one PWDET sample.
-pub fn set_power_detector_tone_armed<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, armed: bool) {
+pub fn set_power_detector_tone<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    tone: crate::types::PhyTone,
+) {
     bb.fe.modify_tone_path_0_control(|w| {
-        w.set_tone_enable_or_arm(if armed {
-            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
-        } else {
-            oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Disarmed
-        });
+        w.set_tone_enable_or_arm(tone);
     });
 }
 
@@ -852,23 +871,21 @@ pub fn stop_calibration_tone_paths<P: PhyPlacement>(bb: &mut BasebandRegisters<P
     });
 }
 
-/// Enter or complete the TX-IQ correction phase with one fresh RMW.
-///
-/// Complete ROM `phy_rfcal_txiq` clears the high mode bit while setting
-/// the low bit on entry. Its completion edge sets only the high bit.
-pub fn configure_tx_iq_correction<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, begin: bool) {
-    if begin {
-        // SOURCE: ROM_REV0_PHY_RFCAL_TXIQ, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_aux(|w| {
-            w.set_tx_iq_correction_mode_low(true)
-                .set_tx_iq_correction_mode_high(false);
-        });
-    } else {
-        // SOURCE: ROM_REV0_PHY_RFCAL_TXIQ, S31_ESP_PACS_SVD.
-        bb.fe.modify_iq_correction_aux(|w| {
-            w.set_tx_iq_correction_mode_high(true);
-        });
-    }
+/// Enter the TX-IQ coefficient calibration register mode.
+pub fn begin_tx_iq_correction<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
+    // SOURCE: ROM_REV0_PHY_RFCAL_TXIQ, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_aux(|w| {
+        w.set_tx_iq_correction_mode_low(true)
+            .set_tx_iq_correction_mode_high(false);
+    });
+}
+
+/// Leave the TX-IQ coefficient calibration register mode.
+pub fn end_tx_iq_correction<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
+    // SOURCE: ROM_REV0_PHY_RFCAL_TXIQ, S31_ESP_PACS_SVD.
+    bb.fe.modify_iq_correction_aux(|w| {
+        w.set_tx_iq_correction_mode_high(true);
+    });
 }
 
 /// Select the RX-IQ calibration mode with one fresh RMW.
@@ -1120,85 +1137,13 @@ pub fn update_front_end<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
 /// `0x206`, sets bits 6:5 to `0b11` before entering the bounded
 /// calibration graph and clears them to `0b00` in its common cleanup.
 /// The field's narrower electrical meaning is not independently proved.
-pub fn set_rx_gain_dc_calibration<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, enabled: bool) {
-    use fe::rx_gain_dc_control::Bits5_6Opaque as State;
+pub fn set_rx_gain_dc_calibration<P: PhyPlacement>(
+    bb: &mut BasebandRegisters<P>,
+    calibration: crate::types::PhyRxGainDcCalibration,
+) {
     bb.fe.modify_rx_gain_dc_control(|w| {
-        w.set_bits_5_6_opaque(if enabled {
-            State::Enabled.into()
-        } else {
-            State::Disabled.into()
-        });
+        w.set_bits_5_6_opaque(calibration.into());
     });
-}
-
-/// Publish both fields of complete pinned `phy_config_hccfr` in order.
-pub fn configure_hccfr<P: PhyPlacement>(
-    bb: &mut BasebandRegisters<P>,
-    enabled: bool,
-    value: crate::types::CfrValue,
-) {
-    use wifi_bb::hccfr_control::Enable;
-    bb.wifi_bb.modify_hccfr_control(|w| {
-        w.set_enable(if enabled {
-            Enable::Enabled
-        } else {
-            Enable::Disabled
-        });
-    });
-    bb.wifi_bb.modify_hccfr_value(|w| {
-        w.set_value(cfr_bits(value));
-    });
-}
-
-/// Apply either complete branch of pinned `phy_iccfr_en`.
-pub fn configure_iccfr_gate<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, enabled: bool) {
-    use wifi_bb::iccfr_enable_control::Gate;
-    bb.wifi_bb.modify_iccfr_enable_control(|w| {
-        w.set_gate(if enabled {
-            Gate::Enabled
-        } else {
-            Gate::Disabled
-        });
-    });
-}
-
-/// Publish all five fields and the tail gate of pinned `phy_force_iccfr`.
-pub fn configure_forced_iccfr<P: PhyPlacement>(
-    bb: &mut BasebandRegisters<P>,
-    mode: bool,
-    enabled: bool,
-    value: crate::types::CfrValue,
-) {
-    use wifi_bb::iccfr_force_control::ForceEnable;
-    bb.wifi_bb.modify_iccfr_force_control(|w| {
-        w.set_force_mode_high(if mode {
-            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::High
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeHigh::Low
-        });
-    });
-    bb.wifi_bb.modify_iccfr_force_control(|w| {
-        w.set_force_enable(if enabled {
-            ForceEnable::Enabled
-        } else {
-            ForceEnable::Disabled
-        });
-    });
-    // SOURCE: BLOB_LIBPHY_PHY_CFR_CONTROL, S31_ESP_PACS_SVD.
-    bb.wifi_bb.modify_iccfr_force_control(|w| {
-        w.set_force_trigger(true);
-    });
-    bb.wifi_bb.modify_iccfr_force_control(|w| {
-        w.set_force_mode_low(if mode {
-            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::High
-        } else {
-            oer_chips_esp32s31_pac::wifi_bb::iccfr_force_control::ForceModeLow::Low
-        });
-    });
-    bb.wifi_bb.modify_iccfr_force_control(|w| {
-        w.set_force_value(cfr_bits(value));
-    });
-    configure_iccfr_gate(bb, enabled);
 }
 
 /// A CFR value's twelve bits.

@@ -85,11 +85,23 @@ pub(crate) fn set_enable_target(
 ) {
     match phase {
         PhyDcIqEnablePhase::Start => {
-            oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_start_enabled(registers, enabled);
+            oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_start_enabled(
+                registers,
+                if enabled {
+                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Enabled
+                } else {
+                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled
+                },
+            );
         }
         PhyDcIqEnablePhase::Measurement => {
             oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_measurement_enabled(
-                registers, enabled,
+                registers,
+                if enabled {
+                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Enabled
+                } else {
+                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled
+                },
             );
         }
     }
@@ -99,10 +111,20 @@ pub(crate) fn set_enable_target(
 pub(crate) fn sample_readiness_target(
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
 ) -> PhyDcIqReadinessSnapshot {
-    let snapshot = oer_chips_esp32s31_hal::radio::phy::iq_estimator::sample_readiness(registers);
-    PhyDcIqReadinessSnapshot {
-        ready: snapshot.ready,
-        activity: snapshot.activity,
+    use oer_chips_esp32s31_hal::radio::phy::iq_estimator::EstimatorReadiness;
+    match oer_chips_esp32s31_hal::radio::phy::iq_estimator::sample_readiness(registers) {
+        EstimatorReadiness::Ready => PhyDcIqReadinessSnapshot {
+            ready: true,
+            activity: false,
+        },
+        EstimatorReadiness::Quiet => PhyDcIqReadinessSnapshot {
+            ready: false,
+            activity: false,
+        },
+        EstimatorReadiness::Active => PhyDcIqReadinessSnapshot {
+            ready: false,
+            activity: true,
+        },
     }
 }
 

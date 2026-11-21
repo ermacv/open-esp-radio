@@ -21,22 +21,24 @@ pub(crate) fn enable_register_bank<P: Placement>(tsens: &mut LpTsens<P>) {
 /// Enable or disable the LP temperature-sensor peripheral clock.
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_TSENS_READ_INIT.
-pub(crate) fn set_clock<P: Placement>(periclkrst: &mut LpPericlkrst<P>, enabled: bool) {
+pub(crate) fn set_clock<P: Placement>(
+    periclkrst: &mut LpPericlkrst<P>,
+    clock: oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn,
+) {
     periclkrst.modify_tsens_ctrl(|w| {
-        w.set_lp_tsens_clk_en(if enabled {
-            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled
-        } else {
-            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Disabled
-        });
+        w.set_lp_tsens_clk_en(clock);
     });
 }
 
 /// Assert or release the first-owner TSENS peripheral reset.
 ///
 /// SOURCE: IDF_S31_TSENS_POWER_LIFECYCLE.
-pub(crate) fn set_reset<P: Placement>(periclkrst: &mut LpPericlkrst<P>, asserted: bool) {
+pub(crate) fn set_reset<P: Placement>(
+    periclkrst: &mut LpPericlkrst<P>,
+    reset: oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn,
+) {
     periclkrst.modify_tsens_ctrl(|w| {
-        w.set_lp_tsens_rst_en(asserted);
+        w.set_lp_tsens_rst_en(reset);
     });
 }
 
@@ -62,13 +64,12 @@ pub(crate) fn enable_phy_conversion<P: Placement>(tsens: &mut LpTsens<P>) {
 /// bit (`phy_set_tsens_power_`).
 ///
 /// SOURCE: ROM_REV0_PHY_TSENS, BLOB_LIBPHY_PHY_TSENS_READ_INIT.
-pub(crate) fn set_power<P: Placement>(tsens: &mut LpTsens<P>, enabled: bool) {
+pub(crate) fn set_power<P: Placement>(
+    tsens: &mut LpTsens<P>,
+    power: oer_chips_esp32s31_pac::tsens::ctrl::PowerUp,
+) {
     tsens.modify_ctrl(|w| {
-        w.set_power_up(if enabled {
-            oer_chips_esp32s31_pac::tsens::ctrl::PowerUp::Enabled
-        } else {
-            oer_chips_esp32s31_pac::tsens::ctrl::PowerUp::Disabled
-        });
+        w.set_power_up(power);
     });
 }
 

@@ -1036,17 +1036,26 @@ impl PhyChipChannelMmioBinding {
     ) -> PhyChipChannelCompletion {
         match self.action {
             PhyChipChannelMmioAction::SetAgc { enabled } => {
-                channel.set_agc_enabled(enabled);
+                if enabled {
+                    channel.enable_agc();
+                } else {
+                    channel.disable_agc();
+                }
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
             PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    channel, enabled, phase,
+                    channel,
+                    crate::hardware::force_txrx_phase(enabled, phase),
                 );
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
             PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
-                channel.set_bbpll_calibration_enabled(enabled);
+                channel.set_bbpll_calibration(if enabled {
+                    oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                } else {
+                    oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                });
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
             }
             PhyChipChannelMmioAction::StartFrequencySwitch {
@@ -1112,13 +1121,19 @@ impl PhyChipChannelMmioBinding {
             }
             PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers, enabled, phase,
+                    registers,
+                    crate::hardware::force_txrx_phase(enabled, phase),
                 );
                 PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
             }
             PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                    },
                 );
                 PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
             }

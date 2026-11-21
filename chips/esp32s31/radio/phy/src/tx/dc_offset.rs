@@ -977,7 +977,10 @@ impl PhyTxDcMmioBinding {
                 },
             },
             PhyTxDcMmioAction::ConfigureTxClock => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, true);
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                    registers,
+                    crate::hardware::clock_pair(true),
+                );
                 PhyTxDcCompletion::TxClockConfigured
             }
             PhyTxDcMmioAction::ConfigureTone {

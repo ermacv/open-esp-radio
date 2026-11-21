@@ -842,7 +842,10 @@ impl PhyTxDcPwdetTransition {
         )
         .map_err(|_| PhyTargetPortError::HardwareInvariant)?;
 
-        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(physical.hardware(), true);
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+            physical.hardware(),
+            oer_chips_esp32s31_hal::types::PhyClockPair::Enabled,
+        );
         oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(physical.hardware());
         oer_chips_family_radio_phy::pbus::configure_debug_mode(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(physical.hardware()),
@@ -970,7 +973,10 @@ impl PhyTxDcPwdetTransition {
                 physical.hardware(),
             );
         }
-        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(physical.hardware(), false);
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+            physical.hardware(),
+            oer_chips_esp32s31_hal::types::PhyClockPair::Disabled,
+        );
         oer_chips_esp32s31_hal::radio::phy::power_detector::restore_txdc_calibration(
             physical.hardware(),
         )
@@ -1430,7 +1436,10 @@ impl PhyTxDcPwdetMmioBinding {
                 Ok(PhyTxDcPwdetCompletion::RegistersPrepared)
             }
             PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                    registers,
+                    crate::hardware::clock_pair(enabled),
+                );
                 Ok(PhyTxDcPwdetCompletion::TxClockConfigured { enabled })
             }
             PhyTxDcPwdetMmioAction::ConfigurePowerDetector => {

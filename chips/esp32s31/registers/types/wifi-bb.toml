@@ -2651,6 +2651,7 @@ description = "Complete phy_set_ftm_en replaces bit zero with its one-bit argume
 
 [[registers.fields]]
 name = "ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "0"
 class = "plain"
 description = "One-bit FTM enable argument."
