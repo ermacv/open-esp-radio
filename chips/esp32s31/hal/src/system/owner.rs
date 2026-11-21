@@ -21,31 +21,11 @@ use crate::types::TxIqMismatchPolarity;
 
 pub use crate::radio::phy::registration::{PhyRegistrationEpoch, PhyRegistrationGrant};
 
-/// One PAC-observed image of the Wi-Fi baseband enable condition.
-///
-/// The shared PBus work-mode leaf uses this condition only to decide whether
-/// its caller must execute the recovered settle pulse. Keeping it separate
-/// prevents the protocol-neutral PHY owner from retaining Wi-Fi state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiBasebandEnableObservation(pub(crate) bool);
-
-impl WifiBasebandEnableObservation {
-    /// Record one semantic PAC readback made by the lifecycle owner.
-    pub const fn from_pac_readback(enabled: bool) -> Self {
-        Self(enabled)
-    }
-
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) const fn is_enabled(self) -> bool {
-        self.0
-    }
-}
-
 use crate::radio::domain::transaction::PhyHardware;
 
 pub(crate) mod sealed {
 
-    use crate::{radio::phy::restore::PhyRouteState, system::owner::WifiBasebandEnableObservation};
+    use crate::radio::phy::restore::PhyRouteState;
 
     use super::RadioPhyRegisters;
 
@@ -58,9 +38,7 @@ pub(crate) mod sealed {
         fn parts_mut(&mut self) -> (&mut RadioPhyRegisters, &mut PhyRouteState);
     }
 
-    pub trait SharedPhyContext {
-        fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation;
-    }
+    pub trait SharedPhyContext {}
 
     pub trait PhyInitializationAccess {}
 }
@@ -275,15 +253,10 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
     }
 }
 
-/// Shared PHY access paired with one explicit Wi-Fi-baseband observation.
-///
-/// Only the PBus work-mode settle decision needs this additional context.
-/// Ordinary shared-PHY leaves require [`SharedPhyAccess`] alone.
-pub trait SharedPhyContext: SharedPhyAccess + sealed::SharedPhyContext {
-    fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
-        sealed::SharedPhyContext::wifi_baseband_enable_observation(self)
-    }
-}
+/// Shared PHY access of the PHY's lifecycle owner: the PBus work-mode settle
+/// decision and the leaves bounded by it take this owner, and a channel
+/// transaction, which has [`SharedPhyAccess`] alone, cannot reach them.
+pub trait SharedPhyContext: SharedPhyAccess + sealed::SharedPhyContext {}
 
 /// Common PHY-initialization port that tracks temporary Wi-Fi-BB edges.
 ///
@@ -320,11 +293,7 @@ impl sealed::SharedPhyAccess for PhyHardware {
     }
 }
 
-impl sealed::SharedPhyContext for PhyHardware {
-    fn wifi_baseband_enable_observation(&self) -> WifiBasebandEnableObservation {
-        WifiBasebandEnableObservation::from_pac_readback(self.registers.wifi_baseband_is_enabled())
-    }
-}
+impl sealed::SharedPhyContext for PhyHardware {}
 
 impl SharedPhyAccess for PhyHardware {}
 impl SharedPhyContext for PhyHardware {}
@@ -494,14 +463,6 @@ impl RadioAccess {
         reservation: types::MacHeTbLinkReservation,
     ) -> types::MacHeTriggerTxQueueSnapshot {
         self.registers.he_trigger_based_queue_snapshot(reservation)
-    }
-
-    pub(crate) fn pac(&self) -> &WifiRadioRegisters {
-        &self.registers
-    }
-
-    pub(crate) fn pac_mut(&mut self) -> &mut WifiRadioRegisters {
-        &mut self.registers
     }
 
     /// Borrow the Wi-Fi MAC together with the station wake state.

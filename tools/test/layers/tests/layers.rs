@@ -6495,7 +6495,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         2,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/modem/ops.rs", 16, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
     (

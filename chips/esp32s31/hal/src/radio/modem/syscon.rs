@@ -564,16 +564,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         super::ops::clear_cold_start_wifi_control(&mut self.peripherals.modem_syscon_radio);
     }
 
-    pub fn wifi_baseband_is_enabled(&self) -> bool {
-        matches!(
-            self.peripherals
-                .modem_syscon_radio
-                .read_wifi_bb_cfg()
-                .wifi_enable(),
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
-        )
-    }
-
     pub(crate) fn set_wifi_baseband_enabled(&mut self, enable: WifiEnable) {
         super::ops::set_wifi_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
     }

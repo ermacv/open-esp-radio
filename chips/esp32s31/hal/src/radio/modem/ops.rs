@@ -1,7 +1,8 @@
 //! Register-local modem operations over the physical generated parts.
 #![forbid(unsafe_code)]
 use super::values::*;
-use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, Reset};
+use oer_chips_esp32s31_pac::modem_lpcon::dictionaries::IcgStateMap as LpconIcgStateMap;
+use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, IcgStateMap, Reset};
 use oer_portable_mmio::{Bits, Placement};
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
@@ -154,140 +155,31 @@ pub(crate) fn set_mac_baseband_enable<P: Placement>(
 }
 
 // SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_modem_apb_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_modem_peripheral_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_wifi_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_bluetooth_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_frontend_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn prepare_ieee802154_clock_map<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_wifi_baseband_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_80x1_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_etm_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf(|w| {
-        w.set_clk_etm_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_bluetooth_apb_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf1(|w| {
-        w.set_clk_bt_apb_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_modem_security_apb_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf(|w| {
-        w.set_clk_modem_sec_apb_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_common_baseband_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf1(|w| {
-        w.set_clk_btbb_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_apb_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf(|w| {
-        w.set_clk_zb_apb_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
-pub(crate) fn enable_ieee802154_mac_clock<P: Placement>(
-    registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
-) {
-    registers.modify_clk_conf(|w| {
-        w.set_clk_zbmac_en(ClockGate::Enabled);
-    });
-}
-
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
-        w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
-        w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
-        w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
-        w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
-        w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
+        w.set_clk_zb_st_map(w.clk_zb_st_map().or(IcgStateMap::NogatingActive.into()));
+        w.set_clk_fe_st_map(
+            w.clk_fe_st_map()
+                .or(IcgStateMap::NogatingModem.into())
+                .or(IcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_bt_st_map(w.clk_bt_st_map().or(IcgStateMap::NogatingActive.into()));
+        w.set_clk_wifi_st_map(
+            w.clk_wifi_st_map()
+                .or(IcgStateMap::NogatingModem.into())
+                .or(IcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_modem_peri_st_map(
+            w.clk_modem_peri_st_map()
+                .or(IcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_modem_apb_st_map(
+            w.clk_modem_apb_st_map()
+                .or(IcgStateMap::NogatingModem.into())
+                .or(IcgStateMap::NogatingActive.into()),
+        );
     });
 }
 
@@ -688,11 +580,26 @@ pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
-        // Lossless: a constant ORed into the field's own value stays in its width.
-        w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
-        w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
-        w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
-        w.set_clk_lp_apb_st_map(Bits::truncate(w.clk_lp_apb_st_map().get() | 6));
+        w.set_clk_wifipwr_st_map(
+            w.clk_wifipwr_st_map()
+                .or(LpconIcgStateMap::NogatingModem.into())
+                .or(LpconIcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_coex_st_map(
+            w.clk_coex_st_map()
+                .or(LpconIcgStateMap::NogatingModem.into())
+                .or(LpconIcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_i2c_mst_st_map(
+            w.clk_i2c_mst_st_map()
+                .or(LpconIcgStateMap::NogatingModem.into())
+                .or(LpconIcgStateMap::NogatingActive.into()),
+        );
+        w.set_clk_lp_apb_st_map(
+            w.clk_lp_apb_st_map()
+                .or(LpconIcgStateMap::NogatingModem.into())
+                .or(LpconIcgStateMap::NogatingActive.into()),
+        );
     });
 }
 

@@ -142,13 +142,6 @@ impl SharedRadioRegisters {
     pub fn radio_phy_mut(&mut self) -> &mut RadioPhyRegisters {
         &mut self.radio_phy
     }
-    /// The shared radio init control, lent to the Wi-Fi MAC's TX/RX
-    /// initialization suffix.
-    pub(crate) fn shared_radio_init_control_mut(
-        &mut self,
-    ) -> &mut oer_chips_esp32s31_pac::wifi_mac::SharedRadioInitControl {
-        &mut self.shared_radio.shared_radio_init_control
-    }
 
     pub fn coex_timers_mut(&mut self) -> CoexTimerBankRegisters<'_> {
         CoexTimerBankRegisters::new(

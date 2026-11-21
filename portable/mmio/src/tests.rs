@@ -439,3 +439,33 @@ fn a_byte_a_halfword_and_an_index_convert_into_a_field_that_holds_them() {
     assert_eq!(Bits::<2>::from(Index::<4>::constant::<3>()).get(), 3);
     assert_eq!(Bits::<32>::from(Index::<4>::constant::<0>()).get(), 0);
 }
+
+#[test]
+fn or_keeps_the_width_and_every_set_bit() {
+    assert_eq!(
+        Bits::<3>::constant::<1>().or(Bits::constant::<6>()).get(),
+        7
+    );
+    assert_eq!(
+        Bits::<3>::constant::<4>().or(Bits::constant::<6>()).get(),
+        6
+    );
+    assert_eq!(
+        Bits::<3>::constant::<0>().or(Bits::constant::<0>()).get(),
+        0
+    );
+    assert_eq!(
+        Bits::<3>::constant::<5>().or(Bits::constant::<0>()).get(),
+        5
+    );
+    assert_eq!(
+        Bits::<32>::constant::<0x8000_0000>()
+            .or(Bits::constant::<1>())
+            .get(),
+        0x8000_0001
+    );
+    assert_eq!(
+        Bits::<3>::MAX,
+        Bits::<3>::constant::<7>().or(Bits::constant::<7>()).get()
+    );
+}

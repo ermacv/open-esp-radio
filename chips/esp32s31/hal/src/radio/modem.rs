@@ -3,6 +3,8 @@
 mod clock_device;
 mod low_power_phy;
 pub(crate) mod ops;
+#[cfg(test)]
+mod ops_tests;
 pub mod ownership;
 pub mod platform;
 pub mod shared_clock;

@@ -1,6 +1,6 @@
 //! The PHY owner over separate host memory for each owned PAC part.
 
-use std::vec;
+use std::{vec, vec::Vec};
 
 use oer_chips_esp32s31_pac::{self as pac, instances};
 
@@ -14,18 +14,37 @@ pub(crate) fn with_registers<R>(
     fill: u32,
     run: impl FnOnce(&mut RadioPhyRegisters<HostPlacement<'_>>) -> R,
 ) -> R {
+    with_registers_memory(fill, run).0
+}
+
+/// The memory of one owned part after a run, named by its owner field.
+pub(crate) type PartMemory = (&'static str, Vec<u32>);
+
+/// Lend the complete PHY owner, then return every part's memory with the
+/// result, so a test compares whole images.
+pub(crate) fn with_registers_memory<R>(
+    fill: u32,
+    run: impl FnOnce(&mut RadioPhyRegisters<HostPlacement<'_>>) -> R,
+) -> (R, Vec<PartMemory>) {
     macro_rules! parts {
         (@size $instance:ident) => { instances::$instance::SIZE };
         (@size $module:ident => $instance:ident) => { instances::$instance::SIZE };
-        ($($name:ident: $module:ident::$part:ident $(=> $instance:ident)?),* $(,)?) => {
+        ($memory:ident; $($name:ident: $module:ident::$part:ident $(=> $instance:ident)?),* $(,)?) => {
+            let mut $memory: Vec<PartMemory> = vec![
+                $((stringify!($name), vec![fill; parts!(@size $module $(=> $instance)?).div_ceil(4)])),*
+            ];
+            let mut slots = $memory.iter_mut();
             $(
-                let mut $name = vec![fill; parts!(@size $module $(=> $instance)?).div_ceil(4)];
-                let $name = pac::$module::$part::host(&mut $name)
-                    .expect("host memory holds the instance");
+                let $name = pac::$module::$part::host(
+                    &mut slots.next().expect("one memory a part").1,
+                )
+                .expect("host memory holds the instance");
             )*
         };
     }
+    let mut local_time = vec![fill; instances::modem_pwr::SIZE.div_ceil(4)];
     parts! {
+        memory;
         phy_agc_oracle_fe: fe::PhyAgcOracleFe,
         phy_agc_oracle_wifi_bb: wifi_bb::PhyAgcOracleWifiBb,
         phy_agc_oracle_wifi_bb_brx: wifi_bb_brx::PhyAgcOracleWifiBbBrx,
@@ -68,7 +87,6 @@ pub(crate) fn with_registers<R>(
         phy_pbus: fe::PhyPbus,
         phy_rx_dco_oracle: fe::PhyRxDcoOracle,
     }
-    let mut local_time = vec![fill; instances::modem_pwr::SIZE.div_ceil(4)];
     let mac_local_time = crate::radio::ieee80211::registers::MacLocalTime::host(&mut local_time)
         .expect("host memory holds the local-time counter");
     let mut registers = RadioPhyRegisters {
@@ -125,5 +143,8 @@ pub(crate) fn with_registers<R>(
         },
         mac_local_time,
     };
-    run(&mut registers)
+    let result = run(&mut registers);
+    drop(registers);
+    memory.push(("mac_local_time", local_time));
+    (result, memory)
 }

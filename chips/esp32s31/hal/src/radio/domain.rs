@@ -474,7 +474,8 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     }
 
     /// Borrow the shared PHY registers with the route restore state, for a
-    /// protocol capability that also borrows its own registers.
+    /// test that also borrows a protocol's own registers.
+    #[cfg(test)]
     pub(crate) fn phy_parts_mut(
         &mut self,
     ) -> (

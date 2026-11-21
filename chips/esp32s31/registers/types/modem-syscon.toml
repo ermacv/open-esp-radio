@@ -548,36 +548,42 @@ name = "CLK_ZB_ST_MAP"
 bits = "11:8"
 class = "plain"
 description = "Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_FE_ST_MAP"
 bits = "15:12"
 class = "plain"
 description = "Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_BT_ST_MAP"
 bits = "19:16"
 class = "plain"
 description = "Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_WIFI_ST_MAP"
 bits = "23:20"
 class = "plain"
 description = "Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_MODEM_PERI_ST_MAP"
 bits = "27:24"
 class = "plain"
 description = "Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_MODEM_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
 description = "Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization."
+values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers]]
 name = "MODEM_RST_CONF"
@@ -1026,3 +1032,10 @@ description = "A modem block reset: the selected block's reset is released or as
 width = 1
 values = [{ name = "RELEASED", value = 0x0, description = "The selected MODEM_SYSCON reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ASSERTED", value = 0x1, description = "The selected MODEM_SYSCON reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
+
+[[dictionaries]]
+name = "ICG_STATE_MAP"
+description = "A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads."
+width = 4
+values = [{ name = "NOGATING_SLEEP", value = 0x1, description = "ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_MODEM", value = 0x2, description = "ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_ACTIVE", value = 0x4, description = "ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }]
+sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
