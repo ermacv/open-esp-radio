@@ -683,3 +683,40 @@ fn every_he_mcs_selects_the_models_he_rate() {
         assert_eq!(mcs.signal_mcs(), signal, "{mcs:?}");
     }
 }
+
+/// A TX queue's `PLCP1.BSSID_SELECT` holds its interface's selector, and its
+/// `CONFIG.INTERFACE` the interface itself, for each of the four.
+#[test]
+fn a_tx_queue_of_each_interface_carries_its_selector() {
+    let dma = dma();
+    for (interface, selector) in [
+        (MacInterface::Station, 0),
+        (MacInterface::AccessPoint, 1),
+        (MacInterface::Context2, 2),
+        (MacInterface::Context3, 3),
+    ] {
+        let mut memory = HostWords::filled(0);
+        let mut parameters = legacy_program(&dma).parameters;
+        parameters.interface = interface;
+        let program = MacLegacyTxProgram::new(&dma, parameters).expect("the parameters fit");
+        memory
+            .owners()
+            .registers
+            .prepare_bound_legacy_mac_tx(&dma, MacTxQueueIndex::constant::<0>(), program)
+            .expect("an idle queue");
+        let owners = memory.owners();
+        let bank = queue::bank(MacTxQueueIndex::constant::<0>());
+        let plcp1 = owners
+            .registers
+            .mac
+            .wifi_mac_tx_queue_vector
+            .read_plcp1(bank);
+        assert_eq!(plcp1.bssid_select().get(), selector, "{interface:?}");
+        let config = owners
+            .registers
+            .mac
+            .wifi_mac_tx_queue_control
+            .read_config(bank);
+        assert_eq!(config.interface(), interface);
+    }
+}

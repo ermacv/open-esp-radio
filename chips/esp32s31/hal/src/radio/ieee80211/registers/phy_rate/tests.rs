@@ -16,26 +16,30 @@ fn noise_floor_decodes_like_the_rom_and_the_blob() {
 #[test]
 fn low_rate_path_switches_all_three_edges() {
     let mut memory = HostWords::filled(0);
-    memory.owners().registers.configure_phy_low_rate(true);
+    memory.owners().registers.configure_phy_low_rate(
+        oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Enabled,
+    );
     {
         let owners = memory.owners();
         let rate = &owners.registers.mac.wifi_phy_rate_oracle_wifi_bb_brx;
         assert_eq!(
             rate.read_low_rate_primary_control().low_rate_enable_first(),
-            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled
+            oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Enabled
         );
         assert_eq!(
             rate.read_low_rate_primary_control()
                 .low_rate_enable_second(),
-            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableSecond::Enabled
+            oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Enabled
         );
         assert_eq!(
             rate.read_low_rate_secondary_control().low_rate_enable(),
-            oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_secondary_control::LowRateEnable::Enabled
+            oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Enabled
         );
     }
     let enabled = memory.clone();
-    memory.owners().registers.configure_phy_low_rate(false);
+    memory.owners().registers.configure_phy_low_rate(
+        oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Disabled,
+    );
     assert_eq!(enabled.changes(&memory).len(), 2);
     assert_eq!(memory, HostWords::filled(0));
 }

@@ -18,12 +18,11 @@ pub use crate::types::{
 use crate::types::{
     MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
     MacHeMpduLength, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
-    MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
-    MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
-    MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence,
-    MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxAbortOutcome,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused,
-    MacTxQueueAborted, MacTxQueueDetached,
+    MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
+    MacKeyEntryIndex, MacLegacyTxProgram, MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex,
+    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause,
+    MacTxAbortOutcome, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxPrepareRefused, MacTxQueueAborted, MacTxQueueDetached,
 };
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
@@ -165,7 +164,9 @@ impl<'registers> WifiMacColdHal<'registers> {
     }
 
     pub fn disable_phy_low_rate(&mut self) {
-        self.mac().configure_phy_low_rate(false);
+        self.mac().configure_phy_low_rate(
+            oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate::Disabled,
+        );
     }
 
     pub fn configure_open_promiscuous_receive(&mut self) {
@@ -345,8 +346,11 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Apply the complete three-RMW ROM low-rate gate transaction.
-    pub fn configure_phy_low_rate(&mut self, enabled: bool) {
-        self.pac_mut().configure_phy_low_rate(enabled);
+    pub fn configure_phy_low_rate(
+        &mut self,
+        state: oer_chips_esp32s31_pac::wifi_bb_brx::dictionaries::LowRate,
+    ) {
+        self.pac_mut().configure_phy_low_rate(state);
     }
 
     /// Begin the reviewed no-power-save MAC quiesce sequence before PHY
@@ -467,12 +471,13 @@ impl<'registers> WifiMacHal<'registers> {
         index: u8,
         identity: crate::types::MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: crate::types::MacSppMode,
     ) -> MacKeyInstallOutcome {
         let Some(index) = MacKeyEntryIndex::new(u32::from(index)) else {
             return MacKeyInstallOutcome::Rejected;
         };
         self.pac_mut()
-            .install_sta_ccmp_key_entry(index, identity, temporal_key)
+            .install_sta_ccmp_key_entry(index, identity, temporal_key, spp)
     }
 
     /// Install one reviewed semantic access-point CCMP key. Association/key-ID
@@ -482,12 +487,13 @@ impl<'registers> WifiMacHal<'registers> {
         index: u8,
         identity: crate::types::MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: crate::types::MacSppMode,
     ) -> MacKeyInstallOutcome {
         let Some(index) = MacKeyEntryIndex::new(u32::from(index)) else {
             return MacKeyInstallOutcome::Rejected;
         };
         self.pac_mut()
-            .install_ap_ccmp_key_entry(index, identity, temporal_key)
+            .install_ap_ccmp_key_entry(index, identity, temporal_key, spp)
     }
 
     /// Clear one key-table entry when its generated index is valid.
@@ -531,13 +537,20 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Block or unblock the TX queues for station power management.
-    pub fn set_power_save_tx_block(&mut self, blocked: bool) {
-        self.pac_mut().set_power_save_tx_block(blocked);
+    pub fn set_power_save_tx_block(
+        &mut self,
+        block: oer_chips_esp32s31_pac::wifi_mac::control::PowerSaveTxBlock,
+    ) {
+        self.pac_mut().set_power_save_tx_block(block);
     }
 
     /// Publish the complete two-edge individual-TWT PTI transaction.
-    pub fn set_itwt_pti(&mut self, argument_is_zero: bool, shared: MacPti) {
-        self.pac_mut().set_itwt_pti(argument_is_zero, shared);
+    pub fn set_itwt_pti(
+        &mut self,
+        argument: crate::radio::ieee80211::registers::MacItwtArgument,
+        shared: MacPti,
+    ) {
+        self.pac_mut().set_itwt_pti(argument, shared);
     }
 
     /// Publish one bounded individual-TWT clear request.
@@ -554,8 +567,8 @@ impl<'registers> WifiMacHal<'registers> {
     pub fn connect_he_bss(
         &mut self,
         color: crate::types::MacHeBssColor,
-        enabled: bool,
-        partial: bool,
+        enabled: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable,
+        partial: oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable,
     ) {
         self.pac_mut().connect_he_bss(color, enabled, partial)
     }
@@ -699,11 +712,6 @@ impl<'registers> WifiMacHal<'registers> {
         self.pac().he_trigger_based_queue_snapshot(reservation)
     }
 
-    /// Observe the non-latched RX diagnostic word decoded by the reviewed PAC.
-    pub fn he_trigger_receive_diagnostics(&self) -> MacHeTriggerRxDiagnostics {
-        self.pac().he_trigger_receive_diagnostics()
-    }
-
     pub fn rx_buffer_full_count(&mut self) -> u16 {
         self.pac_mut().mac_rx_buffer_full_count()
     }
@@ -817,9 +825,12 @@ impl<'registers> WifiMacHal<'registers> {
             .reset_extra_softap_rx_block_ack_window(index, starting_sequence, window);
     }
 
-    pub fn set_he_trigger_based_tid_enabled(&mut self, tid: MacHeTid, enabled: bool) {
-        self.pac_mut()
-            .set_he_trigger_based_tid_enabled(tid, enabled);
+    pub fn set_he_trigger_based_tid_enabled(
+        &mut self,
+        tid: MacHeTid,
+        state: oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid,
+    ) {
+        self.pac_mut().set_he_trigger_based_tid_enabled(tid, state);
     }
 }
 

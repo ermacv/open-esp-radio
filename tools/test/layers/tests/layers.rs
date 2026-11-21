@@ -6600,11 +6600,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
         1,
         BY_P3,
@@ -6621,7 +6616,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        17,
+        15,
         BY_P3,
     ),
     (

@@ -31,13 +31,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete pinned `libpp[pm.o]::pm_coex_go_to_sleep` and
     /// `pm_coex_schm_process` set bits 19:17 at `0x2010_4cac`, and
     /// `hal_pm_unblock_txq` clears them, each through one fresh-read RMW.
-    pub fn set_power_save_tx_block(&mut self, blocked: bool) {
+    pub fn set_power_save_tx_block(&mut self, block: PowerSaveTxBlock) {
         self.mac.wifi_mac_control.modify_control(|w| {
-            w.set_power_save_tx_block(if blocked {
-                PowerSaveTxBlock::Blocked
-            } else {
-                PowerSaveTxBlock::Run
-            });
+            w.set_power_save_tx_block(block);
         });
         oer_portable_riscv::fence();
     }

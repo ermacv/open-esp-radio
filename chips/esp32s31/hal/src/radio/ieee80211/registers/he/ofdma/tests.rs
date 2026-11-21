@@ -20,33 +20,16 @@ fn traffic_identifier_limits_expose_semantic_membership() {
 }
 
 #[test]
-fn beamforming_average_snr_retains_the_blob_quarter_db_transform() {
-    assert_eq!(
-        MacBeamformingAverageSnr::from_raw_code(0),
-        MacBeamformingAverageSnr {
-            raw_code: 0,
-            quarter_db: 88,
-            is_lower_bound: false,
-        }
-    );
-    assert_eq!(
-        MacBeamformingAverageSnr::from_raw_code(0x7f),
-        MacBeamformingAverageSnr {
-            raw_code: 0x7f,
-            quarter_db: 215,
-            is_lower_bound: true,
-        }
-    );
-}
-
-#[test]
 fn default_trigger_link_ranges_partition_all_120_entries() {
     let expected = [(32, 32), (64, 32), (0, 32), (96, 24)];
     let mut seen = [false; 120];
     for (queue, (first, capacity)) in expected.into_iter().enumerate() {
-        let reservation =
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, queue as u8, capacity)
-                .unwrap();
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::Three,
+            Index::new(queue).unwrap(),
+            capacity,
+        )
+        .unwrap();
         assert_eq!(reservation.first(), first);
         assert_eq!(reservation.count(), capacity);
         for position in 0..capacity {
@@ -70,13 +53,21 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
 fn single_tid_trigger_link_ranges_match_the_blob_tables() {
     let expected = [(64, 18), (82, 18), (0, 64), (100, 18)];
     for (queue, (first, capacity)) in expected.into_iter().enumerate() {
-        let reservation =
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::One, queue as u8, capacity).unwrap();
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::One,
+            Index::new(queue).unwrap(),
+            capacity,
+        )
+        .unwrap();
         assert_eq!(reservation.first(), first);
         assert_eq!(reservation.count(), capacity);
         assert!(
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::One, queue as u8, capacity + 1)
-                .is_none()
+            MacHeTbLinkReservation::for_queue(
+                MacHeTbTidLimit::One,
+                Index::new(queue).unwrap(),
+                capacity + 1
+            )
+            .is_none()
         );
     }
 }
@@ -84,7 +75,8 @@ fn single_tid_trigger_link_ranges_match_the_blob_tables() {
 use crate::radio::ieee80211::registers::{HostWords, element};
 
 fn reservation() -> MacHeTbLinkReservation {
-    MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, 1, 3).expect("a queue-one range")
+    MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, Index::constant::<1>(), 3)
+        .expect("a queue-one range")
 }
 
 #[test]
@@ -219,39 +211,24 @@ fn an_invalid_request_writes_nothing() {
 fn a_tid_bit_and_the_obss_disable_are_published() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners
-        .registers
-        .set_he_trigger_based_tid_enabled(MacHeTid::new(6).expect("a TID"), true);
+    owners.registers.set_he_trigger_based_tid_enabled(
+        MacHeTid::new(6).expect("a TID"),
+        oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled,
+    );
     let snapshot = he_buffer_status_snapshot(&owners.registers);
     assert_eq!(
         snapshot.trigger_based_tid_enabled,
         [false, false, false, false, false, false, true, false]
     );
-    owners.registers.set_he_obss_narrow_band_ru_disabled(true);
+    owners.registers.disable_he_obss_narrow_band_ru();
     let obss = &owners.registers.mac.wifi_mac_he_obss_narrow_band_ru;
     assert_eq!(obss.read_disable_bitmap().value().get(), 0x000f_ffff);
     let control = obss.read_he_obss_narrow_band_ru_control();
     assert_eq!(control.class_disable().get(), 0x1f);
-    assert!(control.global_disable());
-}
-
-#[test]
-fn the_diagnostic_snapshots_only_read() {
-    let before = HostWords::filled(u32::MAX);
-    let mut after = before.clone();
-    {
-        let owners = after.owners();
-        let registers = &owners.registers;
-        let _ = registers.he_beamforming_diagnostics();
-        let _ = registers.beamforming_average_snr();
-        let diagnostics = registers.he_trigger_receive_diagnostics();
-        assert_eq!(
-            diagnostics.ru_allocation,
-            diagnostics.ru_allocation_raw >> 1
-        );
-        assert_eq!(diagnostics.cbw20_packet_count, 0x3f);
-    }
-    assert!(before.changes(&after).is_empty());
+    assert_eq!(
+        control.global_disable(),
+        oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Disabled
+    );
 }
 
 // Reads of what the writers left, from the register image: the HAL keeps
@@ -408,14 +385,22 @@ fn he_buffer_status_snapshot<M: MacPlacement>(
             control.valid_7(),
         ],
         trigger_based_tid_enabled: [
-            control.trigger_based_tid_0_enabled(),
-            control.trigger_based_tid_1_enabled(),
-            control.trigger_based_tid_2_enabled(),
-            control.trigger_based_tid_3_enabled(),
-            control.trigger_based_tid_4_enabled(),
-            control.trigger_based_tid_5_enabled(),
-            control.trigger_based_tid_6_enabled(),
-            control.trigger_based_tid_7_enabled(),
+            (control.trigger_based_tid_0_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_1_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_2_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_3_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_4_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_5_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_6_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
+            (control.trigger_based_tid_7_enabled()
+                == oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid::Enabled),
         ],
         ac_empty_software_tid: byte(control.ac_empty_software_tid()),
         ac_empty_uses_software_tid: control.ac_empty_use_software_tid(),
@@ -456,8 +441,8 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
 
     MacHeReceiveConfigurationSnapshot {
         bss_color: byte(multi.bss_color()),
-        bss_color_enabled: multi.bss_color_enable(),
-        partial_bss_color_enabled: multi.partial_bss_color_enable(),
+        bss_color_enabled: (multi.bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled),
+        partial_bss_color_enabled: (multi.partial_bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled),
         bssid_select: byte(multi.bssid_select()),
         he_bssid_enabled: multi.he_bssid_enable(),
         multi_bssid_enabled: multi.multi_bssid_enable(),
@@ -470,10 +455,10 @@ fn he_receive_configuration_snapshot<M: MacPlacement>(
         bsr_update_enabled: options2.bsr_update_enable(),
         trigger_based_stop_option: options2.tb_stop_option(),
         trigger_response_scheduling_supported: options2.he_trs_support(),
-        uplink_mu_data_disabled: options2.ul_mu_data_disable(),
-        uplink_mu_disabled: options2.ul_mu_disable(),
+        uplink_mu_data_disabled: (options2.ul_mu_data_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDataDisable::Disabled),
+        uplink_mu_disabled: (options2.ul_mu_disable() == oer_chips_esp32s31_pac::wifi_mac::he_default_control::UlMuDisable::Disabled),
         trigger_based_no_resource_continue_tx: options1.tb_no_resource_continue_tx(),
-        automatic_ack_allows_extended_range_su: options1.auto_ack_allow_ersu(),
+        automatic_ack_allows_extended_range_su: (options1.auto_ack_allow_ersu() == oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed),
         he_response_ack: options1.he_response_ack(),
         nominal_packet_padding_duration: [
             byte(padding.bpsk_duration()),
@@ -614,4 +599,23 @@ fn a_tid_holds_the_eight_values_of_its_field() {
         assert_eq!(MacHeTid::new(value).map(MacHeTid::value), Some(value));
     }
     assert_eq!(MacHeTid::new(8), None);
+}
+
+/// Logical queue `q` lives in physical bank `3 - q`: each queue's
+/// reservation publishes its tail in its own bank and no other.
+#[test]
+fn each_ordinary_queues_reservation_uses_the_bank_of_its_queue() {
+    for (queue, bank) in [(0, 3), (1, 2), (2, 1), (3, 0)] {
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::Three,
+            Index::new(queue).unwrap(),
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            super::reservation_bank(reservation).get(),
+            bank,
+            "queue {queue}"
+        );
+    }
 }

@@ -68,62 +68,6 @@ impl TxBlockAckPayload {
     }
 }
 
-/// Semantic `WDEVTXQBA` result plus adjacent TX queue information.
-///
-/// SOURCE: complete `libpp[hal_debug.o]::dbg_read_rx_ba`.
-/// Despite the function name, its strings identify eight reverse-addressed
-/// TX BlockAck result banks.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TxBlockAckDiagnosticSnapshot {
-    control: u8,
-    starting_sequence: u16,
-    bitmap: u64,
-    transmitter_address: [u8; 6],
-    acknowledgement_tid: u8,
-    acknowledgement_received: bool,
-    block_ack_received: bool,
-    last_tx_was_trigger_based: bool,
-    trigger_based_packet_count: u8,
-}
-
-impl TxBlockAckDiagnosticSnapshot {
-    pub const fn control(self) -> u8 {
-        self.control
-    }
-
-    pub const fn starting_sequence(self) -> u16 {
-        self.starting_sequence
-    }
-
-    pub const fn bitmap(self) -> u64 {
-        self.bitmap
-    }
-
-    pub const fn transmitter_address(self) -> [u8; 6] {
-        self.transmitter_address
-    }
-
-    pub const fn acknowledgement_tid(self) -> u8 {
-        self.acknowledgement_tid
-    }
-
-    pub const fn acknowledgement_received(self) -> bool {
-        self.acknowledgement_received
-    }
-
-    pub const fn block_ack_received(self) -> bool {
-        self.block_ack_received
-    }
-
-    pub const fn last_tx_was_trigger_based(self) -> bool {
-        self.last_tx_was_trigger_based
-    }
-
-    pub const fn trigger_based_packet_count(self) -> u8 {
-        self.trigger_based_packet_count
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InternalTxBlockAckSnapshot {
     bitmap: u64,
@@ -298,9 +242,12 @@ fn select_extra_softap_entry<P: Placement>(block: &mut WifiMacBlockAck<P>, index
 }
 
 /// Set or release the extra-SoftAP readback latch.
-fn set_extra_softap_latch<P: Placement>(block: &mut WifiMacBlockAck<P>, latched: bool) {
+fn set_extra_softap_latch<P: Placement>(
+    block: &mut WifiMacBlockAck<P>,
+    latch: oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch,
+) {
     block.modify_rx_block_ack_agreement_update(|w| {
-        w.set_extra_softap_readback_latch(latched);
+        w.set_extra_softap_readback_latch(latch);
     });
 }
 
@@ -492,7 +439,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
 
         commit_extra_softap_entry(block);
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
 
         // Preserve the complete vendor readback order. The values feed only
         // wifi_log in the blob and therefore do not cross this boundary.
@@ -506,7 +453,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let _ = block.read_extra_softap_rx_block_ack_peer_tail_and_policy();
         let control = block.read_extra_softap_rx_block_ack_control();
 
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
 
         observed_peer_head == peer_head
             && peer_tail_and_policy.peer_address_tail() == peer_tail
@@ -541,9 +488,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) {
         let block = &mut self.mac.wifi_mac_block_ack;
         select_extra_softap_entry(block, extra_softap_index(hardware_index));
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
         let _ = block.read_extra_softap_rx_block_ack_control();
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
         block.modify_extra_softap_rx_block_ack_start_sequence(|w| {
             w.set_sequence(starting_sequence.field());
         });
@@ -563,9 +510,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ) {
         let block = &mut self.mac.wifi_mac_block_ack;
         select_extra_softap_entry(block, extra_softap_index(hardware_index));
-        set_extra_softap_latch(block, true);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
         let _ = block.read_extra_softap_rx_block_ack_control();
-        set_extra_softap_latch(block, false);
+        set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
         block.modify_extra_softap_rx_block_ack_control(|w| {
             w.set_valid(false);
         });
@@ -655,110 +602,6 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             starting_sequence: payload.starting_sequence(),
             bitmap: payload.bitmap(),
             block_ack_received,
-        })
-    }
-
-    /// Sample one complete TX BlockAck result and its queue-information word.
-    ///
-    /// SOURCE: complete `libpp[hal_debug.o]::dbg_read_rx_ba`.
-    /// Queue zero occupies `0x2010_5528..0x2010_5538`; logical queues descend
-    /// by `0x7c` through queue seven at `0x2010_51c4..0x2010_51d4`. The model
-    /// names each queue's words after the vendor's queue, so no index is
-    /// translated here.
-    pub fn tx_block_ack_diagnostic_snapshot(
-        &self,
-        hardware_queue: u8,
-    ) -> Option<TxBlockAckDiagnosticSnapshot> {
-        let block = &self.mac.wifi_mac_block_ack;
-        macro_rules! snapshot {
-            ($control:ident, $bitmap_low:ident, $bitmap_high:ident, $address_high:ident, $address_low:ident, $information:ident) => {{
-                let control = block.$control();
-                let bitmap_low = block.$bitmap_low().bitmap();
-                let bitmap_high = block.$bitmap_high().bitmap();
-                let address_high = block.$address_high();
-                let [a0, a1, a2, a3] = block.$address_low().address_bytes_0_3().to_le_bytes();
-                let [a4, a5] = address_high.address_bytes_4_5().to_le_bytes();
-                let information = block.$information();
-                TxBlockAckDiagnosticSnapshot {
-                    control: byte(control.tid_or_control()),
-                    starting_sequence: halfword(control.starting_sequence()),
-                    bitmap: block_ack_bitmap(bitmap_low, bitmap_high),
-                    transmitter_address: [a0, a1, a2, a3, a4, a5],
-                    acknowledgement_tid: byte(address_high.ack_tid()),
-                    acknowledgement_received: address_high.ack_received(),
-                    block_ack_received: address_high.block_ack_received(),
-                    last_tx_was_trigger_based: information.last_tx_was_trigger_based(),
-                    trigger_based_packet_count: byte(information.trigger_based_packet_count()),
-                }
-            }};
-        }
-
-        Some(match hardware_queue {
-            0 => snapshot!(
-                read_tx_block_ack_control_sequence_q0,
-                read_tx_block_ack_bitmap_low_q0,
-                read_tx_block_ack_bitmap_high_q0,
-                read_tx_block_ack_transmitter_address_high_q0,
-                read_tx_block_ack_transmitter_address_low_q0,
-                read_tx_queue_information_q0
-            ),
-            1 => snapshot!(
-                read_tx_block_ack_control_sequence_q1,
-                read_tx_block_ack_bitmap_low_q1,
-                read_tx_block_ack_bitmap_high_q1,
-                read_tx_block_ack_transmitter_address_high_q1,
-                read_tx_block_ack_transmitter_address_low_q1,
-                read_tx_queue_information_q1
-            ),
-            2 => snapshot!(
-                read_tx_block_ack_control_sequence_q2,
-                read_tx_block_ack_bitmap_low_q2,
-                read_tx_block_ack_bitmap_high_q2,
-                read_tx_block_ack_transmitter_address_high_q2,
-                read_tx_block_ack_transmitter_address_low_q2,
-                read_tx_queue_information_q2
-            ),
-            3 => snapshot!(
-                read_tx_block_ack_control_sequence_q3,
-                read_tx_block_ack_bitmap_low_q3,
-                read_tx_block_ack_bitmap_high_q3,
-                read_tx_block_ack_transmitter_address_high_q3,
-                read_tx_block_ack_transmitter_address_low_q3,
-                read_tx_queue_information_q3
-            ),
-            4 => snapshot!(
-                read_tx_block_ack_control_sequence_q4,
-                read_tx_block_ack_bitmap_low_q4,
-                read_tx_block_ack_bitmap_high_q4,
-                read_tx_block_ack_transmitter_address_high_q4,
-                read_tx_block_ack_transmitter_address_low_q4,
-                read_tx_queue_information_q4
-            ),
-            5 => snapshot!(
-                read_tx_block_ack_control_sequence_q5,
-                read_tx_block_ack_bitmap_low_q5,
-                read_tx_block_ack_bitmap_high_q5,
-                read_tx_block_ack_transmitter_address_high_q5,
-                read_tx_block_ack_transmitter_address_low_q5,
-                read_tx_queue_information_q5
-            ),
-            6 => snapshot!(
-                read_tx_block_ack_control_sequence_q6,
-                read_tx_block_ack_bitmap_low_q6,
-                read_tx_block_ack_bitmap_high_q6,
-                read_tx_block_ack_transmitter_address_high_q6,
-                read_tx_block_ack_transmitter_address_low_q6,
-                read_tx_queue_information_q6
-            ),
-            7 => snapshot!(
-                read_tx_block_ack_control_sequence_q7,
-                read_tx_block_ack_bitmap_low_q7,
-                read_tx_block_ack_bitmap_high_q7,
-                read_tx_block_ack_transmitter_address_high_q7,
-                read_tx_block_ack_transmitter_address_low_q7,
-                read_tx_queue_information_q7
-            ),
-            _ => return None,
         })
     }
 

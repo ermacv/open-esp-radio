@@ -310,7 +310,11 @@ fn an_extra_softap_delete_clears_validity_and_the_staged_bitmap() {
     assert!(!control.valid());
     assert_eq!(control.index().get(), 1);
     let update = block.read_rx_block_ack_agreement_update();
-    assert!(!(update.extra_softap_commit() || update.extra_softap_readback_latch()));
+    assert!(!update.extra_softap_commit());
+    assert_eq!(
+        update.extra_softap_readback_latch(),
+        oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released
+    );
 }
 
 #[test]
@@ -351,20 +355,6 @@ fn tx_block_ack_results_are_read_by_vendor_queue() {
         .expect("an ordinary queue");
     assert!(!observation.block_ack_received);
 
-    let diagnostic = owners
-        .registers
-        .tx_block_ack_diagnostic_snapshot(7)
-        .expect("a TX BlockAck queue");
-    assert_eq!(diagnostic.control(), 0xf);
-    assert_eq!(diagnostic.starting_sequence(), 0x0fff);
-    assert_eq!(diagnostic.bitmap(), 0x5555_5555_aaaa_aaaa);
-    assert_eq!(diagnostic.transmitter_address(), PEER);
-    assert!(
-        owners
-            .registers
-            .tx_block_ack_diagnostic_snapshot(8)
-            .is_none()
-    );
     drop(owners);
     assert_eq!(before.changes(&words), []);
 }
@@ -422,7 +412,7 @@ fn extra_softap_rx_block_ack_entry_snapshot<M: MacPlacement>(
 ) -> ExtraSoftApRxBlockAckEntrySnapshot {
     let block = &mut registers.mac.wifi_mac_block_ack;
     select_extra_softap_entry(block, extra_softap_index(hardware_index));
-    set_extra_softap_latch(block, true);
+    set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Latched);
 
     // Preserve the complete vendor diagnostic read order before sampling
     // the two adjacent staging words.
@@ -439,7 +429,7 @@ fn extra_softap_rx_block_ack_entry_snapshot<M: MacPlacement>(
     let bitmap_low = block.read_extra_softap_rx_block_ack_bitmap_low().bitmap();
     let bitmap_high = block.read_extra_softap_rx_block_ack_bitmap_high().bitmap();
 
-    set_extra_softap_latch(block, false);
+    set_extra_softap_latch(block, oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_agreement_update::ExtraSoftapReadbackLatch::Released);
 
     let [h0, h1, h2, h3] = peer_head.to_le_bytes();
     let [t0, t1] = peer_tail_and_policy.peer_address_tail().to_le_bytes();

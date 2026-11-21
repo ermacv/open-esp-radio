@@ -509,10 +509,7 @@ pub mod tsf;
 pub mod tx;
 pub mod txrx_init;
 
-pub use block_ack::{
-    InternalTxBlockAckSnapshot, RxBlockAckEntrySnapshot, TxBlockAckDiagnosticSnapshot,
-    TxBlockAckPayload,
-};
+pub use block_ack::{InternalTxBlockAckSnapshot, RxBlockAckEntrySnapshot, TxBlockAckPayload};
 pub use coex::init::MacCoexPrioritySnapshot;
 pub use crypto::{MacCcmpKeyIdentity, MacCryptoInterface, MacKeyInstallOutcome, MacSppMode};
 pub use hal_init_tail::MacRtcCalibration;
@@ -520,9 +517,8 @@ pub use he::{
     beamforming::{MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError},
     init_suffix::{MAC_MINIMUM_TX_POWER_DBM, MacHeTxMpduLengthLink},
     ofdma::{
-        MacBeamformingAverageSnr, MacHeBeamformingDiagnostics, MacHeMpduLength,
-        MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
-        MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot,
+        MacHeMpduLength, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
+        MacHeTriggerTxQueueSnapshot,
     },
     peer::{MacHeAssociation, MacHePeerConfig},
     tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},

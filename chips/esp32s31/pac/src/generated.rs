@@ -272051,6 +272051,43 @@ pub mod wifi_bb {
 /// Word 0x50: Sparse BRX words absent from the public platform PAC.
 /// Words 0x60-0x7c: Wi-Fi-owned PHY words: the noise-floor measurement read by Wi-Fi link policy and the low-rate receive gate of Wi-Fi rate control and 11b long-range RX. Only Wi-Fi touches these words: no PHY registration, calibration or tracking body and no Bluetooth or IEEE 802.15.4 body accesses them, so they belong to the Wi-Fi partition rather than the shared radio PHY. They share the radio-core base with the PHY oracles.
 pub mod wifi_bb_brx {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// The PHY low-rate path: complete phy_enable_low_rate sets its three control edges, complete phy_disable_low_rate clears them in the same order.
+        ///
+        /// SOURCE: ROM_REV0_PHY_LOW_RATE, S31_ESP_PACS_SVD.
+        /// The declared values of the `LOW_RATE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum LowRate {
+            /// Disable the selected PHY low-rate control edge.
+            Disabled = 0x0,
+            /// Enable the selected PHY low-rate control edge.
+            Enabled = 0x1,
+        }
+
+        impl LowRate {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+    }
+
     /// The `RX_11B_MODE_CONTROL` register.
     ///
     /// Complete phy_bb_agc_reg_update clears bit 26; complete phy_rx_11b_opt replaces bits 15:12.
@@ -272394,86 +272431,12 @@ pub mod wifi_bb_brx {
         /// Positioned bits of `LOW_RATE_ENABLE_FIRST`.
         pub const LOW_RATE_ENABLE_FIRST_MASK: u32 = 0x400;
 
-        /// The declared values of the `LOW_RATE_ENABLE_FIRST` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum LowRateEnableFirst {
-            /// Disable the selected PHY low-rate control edge.
-            Disabled = 0x0,
-            /// Enable the selected PHY low-rate control edge.
-            Enabled = 0x1,
-        }
-
-        impl LowRateEnableFirst {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 10
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `LOW_RATE_ENABLE_SECOND` in bits.
         pub const LOW_RATE_ENABLE_SECOND_WIDTH: u32 = 1;
         /// Greatest unsigned image of `LOW_RATE_ENABLE_SECOND`.
         pub const LOW_RATE_ENABLE_SECOND_MAX: u32 = 0x1;
         /// Positioned bits of `LOW_RATE_ENABLE_SECOND`.
         pub const LOW_RATE_ENABLE_SECOND_MASK: u32 = 0x800;
-
-        /// The declared values of the `LOW_RATE_ENABLE_SECOND` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum LowRateEnableSecond {
-            /// Disable the selected PHY low-rate control edge.
-            Disabled = 0x0,
-            /// Enable the selected PHY low-rate control edge.
-            Enabled = 0x1,
-        }
-
-        impl LowRateEnableSecond {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 11
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `BITS_0_9_OPAQUE` in bits.
         pub const BITS_0_9_OPAQUE_WIDTH: u32 = 10;
@@ -272496,14 +272459,14 @@ pub mod wifi_bb_brx {
         impl R {
             /// First independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_first(self) -> LowRateEnableFirst {
-                LowRateEnableFirst::from_field(self.0 >> 10)
+            pub const fn low_rate_enable_first(self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 10)
             }
 
             /// Second independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_second(self) -> LowRateEnableSecond {
-                LowRateEnableSecond::from_field(self.0 >> 11)
+            pub const fn low_rate_enable_second(self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 11)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -272525,14 +272488,14 @@ pub mod wifi_bb_brx {
         impl W {
             /// First independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_first(&self) -> LowRateEnableFirst {
-                LowRateEnableFirst::from_field(self.0 >> 10)
+            pub const fn low_rate_enable_first(&self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 10)
             }
 
             /// Second independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_second(&self) -> LowRateEnableSecond {
-                LowRateEnableSecond::from_field(self.0 >> 11)
+            pub const fn low_rate_enable_second(&self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 11)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -272549,14 +272512,20 @@ pub mod wifi_bb_brx {
 
             /// Set `LOW_RATE_ENABLE_FIRST`.
             #[inline]
-            pub fn set_low_rate_enable_first(&mut self, value: LowRateEnableFirst) -> &mut Self {
+            pub fn set_low_rate_enable_first(
+                &mut self,
+                value: super::dictionaries::LowRate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffbff) | (value.bits() << 10);
                 self
             }
 
             /// Set `LOW_RATE_ENABLE_SECOND`.
             #[inline]
-            pub fn set_low_rate_enable_second(&mut self, value: LowRateEnableSecond) -> &mut Self {
+            pub fn set_low_rate_enable_second(
+                &mut self,
+                value: super::dictionaries::LowRate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffff7ff) | (value.bits() << 11);
                 self
             }
@@ -272684,43 +272653,6 @@ pub mod wifi_bb_brx {
         /// Positioned bits of `LOW_RATE_ENABLE`.
         pub const LOW_RATE_ENABLE_MASK: u32 = 0x800;
 
-        /// The declared values of the `LOW_RATE_ENABLE` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum LowRateEnable {
-            /// Disable the selected PHY low-rate control edge.
-            Disabled = 0x0,
-            /// Enable the selected PHY low-rate control edge.
-            Enabled = 0x1,
-        }
-
-        impl LowRateEnable {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 11
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `BITS_0_10_OPAQUE` in bits.
         pub const BITS_0_10_OPAQUE_WIDTH: u32 = 11;
         /// Greatest unsigned image of `BITS_0_10_OPAQUE`.
@@ -272742,8 +272674,8 @@ pub mod wifi_bb_brx {
         impl R {
             /// Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate.
             #[inline]
-            pub const fn low_rate_enable(self) -> LowRateEnable {
-                LowRateEnable::from_field(self.0 >> 11)
+            pub const fn low_rate_enable(self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 11)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -272765,8 +272697,8 @@ pub mod wifi_bb_brx {
         impl W {
             /// Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate.
             #[inline]
-            pub const fn low_rate_enable(&self) -> LowRateEnable {
-                LowRateEnable::from_field(self.0 >> 11)
+            pub const fn low_rate_enable(&self) -> super::dictionaries::LowRate {
+                super::dictionaries::LowRate::from_field(self.0 >> 11)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -272783,7 +272715,10 @@ pub mod wifi_bb_brx {
 
             /// Set `LOW_RATE_ENABLE`.
             #[inline]
-            pub fn set_low_rate_enable(&mut self, value: LowRateEnable) -> &mut Self {
+            pub fn set_low_rate_enable(
+                &mut self,
+                value: super::dictionaries::LowRate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffff7ff) | (value.bits() << 11);
                 self
             }
@@ -273357,6 +273292,142 @@ pub mod wifi_mac {
                 }
             }
         }
+
+        /// Whether one TID takes part in HE trigger-based BSR handling: hal_he_set_tid_bitmap sets its bit of HE_BUFFER_STATUS_CONTROL, hal_he_clr_tid_bitmap clears it.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_BSR_DEBUG, BLOB_LIBPP_MAC_TX_SET_TB, ROM_REV0_MAC_TX_SET_TB, BLOB_LIBNET80211_HE_TID_BITMAP.
+        /// The declared values of the `TRIGGER_BASED_TID` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum TriggerBasedTid {
+            /// The TID takes no part in trigger-based BSR handling (hal_he_clr_tid_bitmap).
+            Disabled = 0x0,
+            /// The TID takes part in trigger-based BSR handling (hal_he_set_tid_bitmap).
+            Enabled = 0x1,
+        }
+
+        impl TriggerBasedTid {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
+        /// Whether CCMP authenticates the QoS A-MSDU-present bit for an interface: hal_crypto_enable takes the association's SPP decision (wDev_Insert_KeyEntry's argument four).
+        ///
+        /// SOURCE: BLOB_LIBPP_SPP_AMSDU.
+        /// The declared values of the `SPP_AMSDU` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum SppAmsdu {
+            /// The A-MSDU-present bit is not authenticated.
+            Unauthenticated = 0x0,
+            /// The A-MSDU-present bit is authenticated (SPP A-MSDU).
+            Authenticated = 0x1,
+        }
+
+        impl SppAmsdu {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Unauthenticated,
+                    _ => Self::Authenticated,
+                }
+            }
+        }
+
+        /// Whether a beamforming report response uses DCM: hal_he_set_bf_report_rate publishes the same choice for its 16-QAM, QPSK and BPSK profiles.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PREFIX, BLOB_LIBPP_HAL_BF_CONFIG.
+        /// The declared values of the `BF_REPORT_DCM` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum BfReportDcm {
+            /// The report response uses no DCM.
+            Disabled = 0x0,
+            /// The report response uses DCM.
+            Enabled = 0x1,
+        }
+
+        impl BfReportDcm {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
+        /// Whether a beamforming report response is an extended-range SU PPDU: hal_he_set_bf_report_rate publishes the same choice for its 16-QAM, QPSK and BPSK profiles.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_PREFIX, BLOB_LIBPP_HAL_BF_CONFIG.
+        /// The declared values of the `BF_REPORT_ERSU` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum BfReportErsu {
+            /// The report response is no extended-range SU PPDU.
+            Disabled = 0x0,
+            /// The report response is an extended-range SU PPDU.
+            Enabled = 0x1,
+        }
+
+        impl BfReportErsu {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
     }
 
     /// The `BSSID_LOW%s` register.
@@ -273464,6 +273535,41 @@ pub mod wifi_mac {
         /// Positioned bits of `ADDRESS_CHECK_ENABLE`.
         pub const ADDRESS_CHECK_ENABLE_MASK: u32 = 0x80000000;
 
+        /// The declared values of the `ADDRESS_CHECK_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum AddressCheckEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl AddressCheckEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -273495,8 +273601,8 @@ pub mod wifi_mac {
 
             /// MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it.
             #[inline]
-            pub const fn address_check_enable(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn address_check_enable(self) -> AddressCheckEnable {
+                AddressCheckEnable::from_field(self.0 >> 31)
             }
         }
 
@@ -273530,8 +273636,8 @@ pub mod wifi_mac {
 
             /// MACBSSID_EN: hal_mac_set_bssid clears this bit before changing the address and sets it after publication; the reachable associated-STA policy branch also sets it.
             #[inline]
-            pub const fn address_check_enable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn address_check_enable(&self) -> AddressCheckEnable {
+                AddressCheckEnable::from_field(self.0 >> 31)
             }
 
             /// Set `BSSID_HIGH`.
@@ -273567,8 +273673,8 @@ pub mod wifi_mac {
 
             /// Set `ADDRESS_CHECK_ENABLE`.
             #[inline]
-            pub fn set_address_check_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_address_check_enable(&mut self, value: AddressCheckEnable) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
         }
@@ -273635,12 +273741,82 @@ pub mod wifi_mac {
         /// Positioned bits of `BSS_COLOR_ENABLE`.
         pub const BSS_COLOR_ENABLE_MASK: u32 = 0x8000000;
 
+        /// The declared values of the `BSS_COLOR_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum BssColorEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl BssColorEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 27
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `PARTIAL_BSS_COLOR_ENABLE` in bits.
         pub const PARTIAL_BSS_COLOR_ENABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `PARTIAL_BSS_COLOR_ENABLE`.
         pub const PARTIAL_BSS_COLOR_ENABLE_MAX: u32 = 0x1;
         /// Positioned bits of `PARTIAL_BSS_COLOR_ENABLE`.
         pub const PARTIAL_BSS_COLOR_ENABLE_MASK: u32 = 0x10000000;
+
+        /// The declared values of the `PARTIAL_BSS_COLOR_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum PartialBssColorEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl PartialBssColorEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 28
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
 
         /// Width of `BSSID_SELECT` in bits.
         pub const BSSID_SELECT_WIDTH: u32 = 2;
@@ -273754,14 +273930,14 @@ pub mod wifi_mac {
 
             /// The `BSS_COLOR_ENABLE` field.
             #[inline]
-            pub const fn bss_color_enable(self) -> bool {
-                (self.0 & 0x08000000) != 0
+            pub const fn bss_color_enable(self) -> BssColorEnable {
+                BssColorEnable::from_field(self.0 >> 27)
             }
 
             /// The `PARTIAL_BSS_COLOR_ENABLE` field.
             #[inline]
-            pub const fn partial_bss_color_enable(self) -> bool {
-                (self.0 & 0x10000000) != 0
+            pub const fn partial_bss_color_enable(self) -> PartialBssColorEnable {
+                PartialBssColorEnable::from_field(self.0 >> 28)
             }
 
             /// Complete hal_he_bssid_init clears both selector bits for interface zero after enabling HE BSSID matching; dbg_read_rx_misc names the two-bit field HE_BSSID_IDX.
@@ -273837,14 +274013,14 @@ pub mod wifi_mac {
 
             /// The `BSS_COLOR_ENABLE` field.
             #[inline]
-            pub const fn bss_color_enable(&self) -> bool {
-                (self.0 & 0x08000000) != 0
+            pub const fn bss_color_enable(&self) -> BssColorEnable {
+                BssColorEnable::from_field(self.0 >> 27)
             }
 
             /// The `PARTIAL_BSS_COLOR_ENABLE` field.
             #[inline]
-            pub const fn partial_bss_color_enable(&self) -> bool {
-                (self.0 & 0x10000000) != 0
+            pub const fn partial_bss_color_enable(&self) -> PartialBssColorEnable {
+                PartialBssColorEnable::from_field(self.0 >> 28)
             }
 
             /// Complete hal_he_bssid_init clears both selector bits for interface zero after enabling HE BSSID matching; dbg_read_rx_misc names the two-bit field HE_BSSID_IDX.
@@ -273921,15 +274097,18 @@ pub mod wifi_mac {
 
             /// Set `BSS_COLOR_ENABLE`.
             #[inline]
-            pub fn set_bss_color_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xf7ffffff) | (u32::from(value) << 27);
+            pub fn set_bss_color_enable(&mut self, value: BssColorEnable) -> &mut Self {
+                self.0 = (self.0 & 0xf7ffffff) | (value.bits() << 27);
                 self
             }
 
             /// Set `PARTIAL_BSS_COLOR_ENABLE`.
             #[inline]
-            pub fn set_partial_bss_color_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xefffffff) | (u32::from(value) << 28);
+            pub fn set_partial_bss_color_enable(
+                &mut self,
+                value: PartialBssColorEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xefffffff) | (value.bits() << 28);
                 self
             }
 
@@ -274690,6 +274869,41 @@ pub mod wifi_mac {
         /// Positioned bits of `RX_POLICY_ENABLE`.
         pub const RX_POLICY_ENABLE_MASK: u32 = 0x10000;
 
+        /// The declared values of the `RX_POLICY_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum RxPolicyEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl RxPolicyEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 16
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `BITS_17_31_OPAQUE` in bits.
         pub const BITS_17_31_OPAQUE_WIDTH: u32 = 15;
         /// Greatest unsigned image of `BITS_17_31_OPAQUE`.
@@ -274710,8 +274924,8 @@ pub mod wifi_mac {
 
             /// Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
             #[inline]
-            pub const fn rx_policy_enable(self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn rx_policy_enable(self) -> RxPolicyEnable {
+                RxPolicyEnable::from_field(self.0 >> 16)
             }
 
             /// The `BITS_17_31_OPAQUE` field.
@@ -274733,8 +274947,8 @@ pub mod wifi_mac {
 
             /// Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
             #[inline]
-            pub const fn rx_policy_enable(&self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn rx_policy_enable(&self) -> RxPolicyEnable {
+                RxPolicyEnable::from_field(self.0 >> 16)
             }
 
             /// The `BITS_17_31_OPAQUE` field.
@@ -274752,8 +274966,8 @@ pub mod wifi_mac {
 
             /// Set `RX_POLICY_ENABLE`.
             #[inline]
-            pub fn set_rx_policy_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+            pub fn set_rx_policy_enable(&mut self, value: RxPolicyEnable) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
 
@@ -274874,6 +275088,41 @@ pub mod wifi_mac {
         /// Positioned bits of `WALKER_ENABLE`.
         pub const WALKER_ENABLE_MASK: u32 = 0x80000000;
 
+        /// The declared values of the `WALKER_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WalkerEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl WalkerEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `RXBUF_RELOAD_USE_HW_BEACON_ENABLE` in bits.
         pub const RXBUF_RELOAD_USE_HW_BEACON_ENABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RXBUF_RELOAD_USE_HW_BEACON_ENABLE`.
@@ -274936,8 +275185,8 @@ pub mod wifi_mac {
 
             /// Set by libpp[hal_mac.o]::hal_mac_rx_enable and cleared by libpp[hal_mac.o]::hal_mac_rx_disable; gates the RX descriptor walker.
             #[inline]
-            pub const fn walker_enable(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn walker_enable(self) -> WalkerEnable {
+                WalkerEnable::from_field(self.0 >> 31)
             }
 
             /// Project-assigned name. Hardware-beacon selection for RX-buffer reload, set by hal_mac_set_rxbuf_reload_use_hw_beacon_enable during hal_init. No standalone beacon-memory lifecycle is established.
@@ -274995,8 +275244,8 @@ pub mod wifi_mac {
 
             /// Set by libpp[hal_mac.o]::hal_mac_rx_enable and cleared by libpp[hal_mac.o]::hal_mac_rx_disable; gates the RX descriptor walker.
             #[inline]
-            pub const fn walker_enable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn walker_enable(&self) -> WalkerEnable {
+                WalkerEnable::from_field(self.0 >> 31)
             }
 
             /// Project-assigned name. Hardware-beacon selection for RX-buffer reload, set by hal_mac_set_rxbuf_reload_use_hw_beacon_enable during hal_init. No standalone beacon-memory lifecycle is established.
@@ -275043,8 +275292,8 @@ pub mod wifi_mac {
 
             /// Set `WALKER_ENABLE`.
             #[inline]
-            pub fn set_walker_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_walker_enable(&mut self, value: WalkerEnable) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
 
@@ -279112,6 +279361,41 @@ pub mod wifi_mac {
         /// Positioned bits of `EXTRA_SOFTAP_READBACK_LATCH`.
         pub const EXTRA_SOFTAP_READBACK_LATCH_MASK: u32 = 0x200;
 
+        /// The declared values of the `EXTRA_SOFTAP_READBACK_LATCH` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ExtraSoftapReadbackLatch {
+            Released = 0x0,
+            Latched = 0x1,
+        }
+
+        impl ExtraSoftapReadbackLatch {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 9
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Released,
+                    _ => Self::Latched,
+                }
+            }
+        }
+
         /// Width of `BITS_10_31_OPAQUE` in bits.
         pub const BITS_10_31_OPAQUE_WIDTH: u32 = 22;
         /// Greatest unsigned image of `BITS_10_31_OPAQUE`.
@@ -279138,8 +279422,8 @@ pub mod wifi_mac {
 
             /// Complete extra-SoftAP diagnostics, reset and delete set this bit while reading the entry selected in the staging control and clear it afterwards.
             #[inline]
-            pub const fn extra_softap_readback_latch(self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn extra_softap_readback_latch(self) -> ExtraSoftapReadbackLatch {
+                ExtraSoftapReadbackLatch::from_field(self.0 >> 9)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -279167,8 +279451,8 @@ pub mod wifi_mac {
 
             /// Complete extra-SoftAP diagnostics, reset and delete set this bit while reading the entry selected in the staging control and clear it afterwards.
             #[inline]
-            pub const fn extra_softap_readback_latch(&self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn extra_softap_readback_latch(&self) -> ExtraSoftapReadbackLatch {
+                ExtraSoftapReadbackLatch::from_field(self.0 >> 9)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -279193,8 +279477,11 @@ pub mod wifi_mac {
 
             /// Set `EXTRA_SOFTAP_READBACK_LATCH`.
             #[inline]
-            pub fn set_extra_softap_readback_latch(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+            pub fn set_extra_softap_readback_latch(
+                &mut self,
+                value: ExtraSoftapReadbackLatch,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
 
@@ -284255,14 +284542,14 @@ pub mod wifi_mac {
 
             /// The `BPSK_DCM` field.
             #[inline]
-            pub const fn bpsk_dcm(self) -> bool {
-                (self.0 & 0x00000080) != 0
+            pub const fn bpsk_dcm(self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 7)
             }
 
             /// The `BPSK_ERSU` field.
             #[inline]
-            pub const fn bpsk_ersu(self) -> bool {
-                (self.0 & 0x00000100) != 0
+            pub const fn bpsk_ersu(self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 8)
             }
 
             /// The `QPSK_RATE` field.
@@ -284291,14 +284578,14 @@ pub mod wifi_mac {
 
             /// The `QPSK_DCM` field.
             #[inline]
-            pub const fn qpsk_dcm(self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn qpsk_dcm(self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 16)
             }
 
             /// The `QPSK_ERSU` field.
             #[inline]
-            pub const fn qpsk_ersu(self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn qpsk_ersu(self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 17)
             }
 
             /// The `QAM16_RATE` field.
@@ -284327,14 +284614,14 @@ pub mod wifi_mac {
 
             /// The `QAM16_DCM` field.
             #[inline]
-            pub const fn qam16_dcm(self) -> bool {
-                (self.0 & 0x02000000) != 0
+            pub const fn qam16_dcm(self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 25)
             }
 
             /// The `QAM16_ERSU` field.
             #[inline]
-            pub const fn qam16_ersu(self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn qam16_ersu(self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 26)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -284374,14 +284661,14 @@ pub mod wifi_mac {
 
             /// The `BPSK_DCM` field.
             #[inline]
-            pub const fn bpsk_dcm(&self) -> bool {
-                (self.0 & 0x00000080) != 0
+            pub const fn bpsk_dcm(&self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 7)
             }
 
             /// The `BPSK_ERSU` field.
             #[inline]
-            pub const fn bpsk_ersu(&self) -> bool {
-                (self.0 & 0x00000100) != 0
+            pub const fn bpsk_ersu(&self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 8)
             }
 
             /// The `QPSK_RATE` field.
@@ -284410,14 +284697,14 @@ pub mod wifi_mac {
 
             /// The `QPSK_DCM` field.
             #[inline]
-            pub const fn qpsk_dcm(&self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn qpsk_dcm(&self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 16)
             }
 
             /// The `QPSK_ERSU` field.
             #[inline]
-            pub const fn qpsk_ersu(&self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn qpsk_ersu(&self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 17)
             }
 
             /// The `QAM16_RATE` field.
@@ -284446,14 +284733,14 @@ pub mod wifi_mac {
 
             /// The `QAM16_DCM` field.
             #[inline]
-            pub const fn qam16_dcm(&self) -> bool {
-                (self.0 & 0x02000000) != 0
+            pub const fn qam16_dcm(&self) -> super::dictionaries::BfReportDcm {
+                super::dictionaries::BfReportDcm::from_field(self.0 >> 25)
             }
 
             /// The `QAM16_ERSU` field.
             #[inline]
-            pub const fn qam16_ersu(&self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn qam16_ersu(&self) -> super::dictionaries::BfReportErsu {
+                super::dictionaries::BfReportErsu::from_field(self.0 >> 26)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -284478,15 +284765,15 @@ pub mod wifi_mac {
 
             /// Set `BPSK_DCM`.
             #[inline]
-            pub fn set_bpsk_dcm(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffff7f) | (u32::from(value) << 7);
+            pub fn set_bpsk_dcm(&mut self, value: super::dictionaries::BfReportDcm) -> &mut Self {
+                self.0 = (self.0 & 0xffffff7f) | (value.bits() << 7);
                 self
             }
 
             /// Set `BPSK_ERSU`.
             #[inline]
-            pub fn set_bpsk_ersu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffeff) | (u32::from(value) << 8);
+            pub fn set_bpsk_ersu(&mut self, value: super::dictionaries::BfReportErsu) -> &mut Self {
+                self.0 = (self.0 & 0xfffffeff) | (value.bits() << 8);
                 self
             }
 
@@ -284506,15 +284793,15 @@ pub mod wifi_mac {
 
             /// Set `QPSK_DCM`.
             #[inline]
-            pub fn set_qpsk_dcm(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+            pub fn set_qpsk_dcm(&mut self, value: super::dictionaries::BfReportDcm) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
 
             /// Set `QPSK_ERSU`.
             #[inline]
-            pub fn set_qpsk_ersu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+            pub fn set_qpsk_ersu(&mut self, value: super::dictionaries::BfReportErsu) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (value.bits() << 17);
                 self
             }
 
@@ -284537,15 +284824,18 @@ pub mod wifi_mac {
 
             /// Set `QAM16_DCM`.
             #[inline]
-            pub fn set_qam16_dcm(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfdffffff) | (u32::from(value) << 25);
+            pub fn set_qam16_dcm(&mut self, value: super::dictionaries::BfReportDcm) -> &mut Self {
+                self.0 = (self.0 & 0xfdffffff) | (value.bits() << 25);
                 self
             }
 
             /// Set `QAM16_ERSU`.
             #[inline]
-            pub fn set_qam16_ersu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+            pub fn set_qam16_ersu(
+                &mut self,
+                value: super::dictionaries::BfReportErsu,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
@@ -286579,8 +286869,8 @@ pub mod wifi_mac {
 
             /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
             #[inline]
-            pub const fn spp_amsdu(self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn spp_amsdu(self) -> super::dictionaries::SppAmsdu {
+                super::dictionaries::SppAmsdu::from_field(self.0 >> 9)
             }
 
             /// Set in every inspected STA/AP enable, cold-init and disable profile. It is not an established general crypto-enabled indicator; its individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
@@ -286632,8 +286922,8 @@ pub mod wifi_mac {
 
             /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
             #[inline]
-            pub const fn spp_amsdu(&self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn spp_amsdu(&self) -> super::dictionaries::SppAmsdu {
+                super::dictionaries::SppAmsdu::from_field(self.0 >> 9)
             }
 
             /// Set in every inspected STA/AP enable, cold-init and disable profile. It is not an established general crypto-enabled indicator; its individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
@@ -286682,8 +286972,8 @@ pub mod wifi_mac {
 
             /// Set `SPP_AMSDU`.
             #[inline]
-            pub fn set_spp_amsdu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+            pub fn set_spp_amsdu(&mut self, value: super::dictionaries::SppAmsdu) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
 
@@ -286811,8 +287101,8 @@ pub mod wifi_mac {
 
             /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
             #[inline]
-            pub const fn spp_amsdu(self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn spp_amsdu(self) -> super::dictionaries::SppAmsdu {
+                super::dictionaries::SppAmsdu::from_field(self.0 >> 9)
             }
 
             /// Zero in cold init and one in every inspected enable profile, independently of bit 17. The individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
@@ -286864,8 +287154,8 @@ pub mod wifi_mac {
 
             /// Authenticate the QoS A-MSDU-present bit in CCMP for this interface. SOURCE(esp32s31): libpp[hal_crypto.o]::hal_crypto_enable +0x2e..+0x34 consumes argument four from libpp[wdev.o]::wDev_Insert_KeyEntry; libnet80211[ieee80211_supplicant.o]::ieee80211_get_spp selects the association decision upstream.
             #[inline]
-            pub const fn spp_amsdu(&self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn spp_amsdu(&self) -> super::dictionaries::SppAmsdu {
+                super::dictionaries::SppAmsdu::from_field(self.0 >> 9)
             }
 
             /// Zero in cold init and one in every inspected enable profile, independently of bit 17. The individual hardware function remains unknown. SOURCE: BLOB_MAC_CRYPTO_INTERFACE_PROFILES_20261104.
@@ -286914,8 +287204,8 @@ pub mod wifi_mac {
 
             /// Set `SPP_AMSDU`.
             #[inline]
-            pub fn set_spp_amsdu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+            pub fn set_spp_amsdu(&mut self, value: super::dictionaries::SppAmsdu) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
 
@@ -288372,6 +288662,41 @@ pub mod wifi_mac {
         /// Positioned bits of `RX_ASSOCIATED_AUXILIARY_5`.
         pub const RX_ASSOCIATED_AUXILIARY_5_MASK: u32 = 0x20;
 
+        /// The declared values of the `RX_ASSOCIATED_AUXILIARY_5` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum RxAssociatedAuxiliary5 {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl RxAssociatedAuxiliary5 {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 5
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `BIT_6_OPAQUE` in bits.
         pub const BIT_6_OPAQUE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `BIT_6_OPAQUE`.
@@ -288427,6 +288752,41 @@ pub mod wifi_mac {
         pub const RX_SUCCESS_MAX: u32 = 0x1;
         /// Positioned bits of `RX_SUCCESS`.
         pub const RX_SUCCESS_MASK: u32 = 0x4000;
+
+        /// The declared values of the `RX_SUCCESS` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum RxSuccess {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl RxSuccess {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 14
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
 
         /// Width of `STA_BEACON_FILTER` in bits.
         pub const STA_BEACON_FILTER_WIDTH: u32 = 1;
@@ -288484,6 +288844,41 @@ pub mod wifi_mac {
         /// Positioned bits of `RX_ASSOCIATED_AUXILIARY_24`.
         pub const RX_ASSOCIATED_AUXILIARY_24_MASK: u32 = 0x1000000;
 
+        /// The declared values of the `RX_ASSOCIATED_AUXILIARY_24` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum RxAssociatedAuxiliary24 {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl RxAssociatedAuxiliary24 {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 24
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `BITS_25_26_OPAQUE` in bits.
         pub const BITS_25_26_OPAQUE_WIDTH: u32 = 2;
         /// Greatest unsigned image of `BITS_25_26_OPAQUE`.
@@ -288525,8 +288920,8 @@ pub mod wifi_mac {
 
             /// Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
             #[inline]
-            pub const fn rx_associated_auxiliary_5(self) -> bool {
-                (self.0 & 0x00000020) != 0
+            pub const fn rx_associated_auxiliary_5(self) -> RxAssociatedAuxiliary5 {
+                RxAssociatedAuxiliary5::from_field(self.0 >> 5)
             }
 
             /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
@@ -288573,8 +288968,8 @@ pub mod wifi_mac {
 
             /// Enable for successful receive completion.
             #[inline]
-            pub const fn rx_success(self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn rx_success(self) -> RxSuccess {
+                RxSuccess::from_field(self.0 >> 14)
             }
 
             /// Enable for the station beacon-filter event; the complete disable leaf clears this bit after disabling the filter hardware.
@@ -288621,8 +289016,8 @@ pub mod wifi_mac {
 
             /// Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
             #[inline]
-            pub const fn rx_associated_auxiliary_24(self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn rx_associated_auxiliary_24(self) -> RxAssociatedAuxiliary24 {
+                RxAssociatedAuxiliary24::from_field(self.0 >> 24)
             }
 
             /// Interrupt-enable bits whose event identities remain unknown.
@@ -288662,8 +289057,8 @@ pub mod wifi_mac {
 
             /// Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
             #[inline]
-            pub const fn rx_associated_auxiliary_5(&self) -> bool {
-                (self.0 & 0x00000020) != 0
+            pub const fn rx_associated_auxiliary_5(&self) -> RxAssociatedAuxiliary5 {
+                RxAssociatedAuxiliary5::from_field(self.0 >> 5)
             }
 
             /// Unknown event enabled by the complete cold receive mask. The common vendor FIQ includes this lane in its aggregate nonempty test and full-snapshot acknowledgement before dispatch, with no separate bit test or task action for it. Neither the cold enable image nor that acknowledgement identifies a producer. SOURCE: BLOB_WIFI_MAC_SNAPSHOT_SERVICE_20261027.
@@ -288710,8 +289105,8 @@ pub mod wifi_mac {
 
             /// Enable for successful receive completion.
             #[inline]
-            pub const fn rx_success(&self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn rx_success(&self) -> RxSuccess {
+                RxSuccess::from_field(self.0 >> 14)
             }
 
             /// Enable for the station beacon-filter event; the complete disable leaf clears this bit after disabling the filter hardware.
@@ -288758,8 +289153,8 @@ pub mod wifi_mac {
 
             /// Enable for the status bit observed together with RX_SUCCESS during sustained receive traffic.
             #[inline]
-            pub const fn rx_associated_auxiliary_24(&self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn rx_associated_auxiliary_24(&self) -> RxAssociatedAuxiliary24 {
+                RxAssociatedAuxiliary24::from_field(self.0 >> 24)
             }
 
             /// Interrupt-enable bits whose event identities remain unknown.
@@ -288795,8 +289190,11 @@ pub mod wifi_mac {
 
             /// Set `RX_ASSOCIATED_AUXILIARY_5`.
             #[inline]
-            pub fn set_rx_associated_auxiliary_5(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffffdf) | (u32::from(value) << 5);
+            pub fn set_rx_associated_auxiliary_5(
+                &mut self,
+                value: RxAssociatedAuxiliary5,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffffdf) | (value.bits() << 5);
                 self
             }
 
@@ -288851,8 +289249,8 @@ pub mod wifi_mac {
 
             /// Set `RX_SUCCESS`.
             #[inline]
-            pub fn set_rx_success(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffbfff) | (u32::from(value) << 14);
+            pub fn set_rx_success(&mut self, value: RxSuccess) -> &mut Self {
+                self.0 = (self.0 & 0xffffbfff) | (value.bits() << 14);
                 self
             }
 
@@ -288910,8 +289308,11 @@ pub mod wifi_mac {
 
             /// Set `RX_ASSOCIATED_AUXILIARY_24`.
             #[inline]
-            pub fn set_rx_associated_auxiliary_24(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
+            pub fn set_rx_associated_auxiliary_24(
+                &mut self,
+                value: RxAssociatedAuxiliary24,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
@@ -290505,6 +290906,41 @@ pub mod wifi_mac {
         /// Positioned bits of `AUTO_ACK_ALLOW_ERSU`.
         pub const AUTO_ACK_ALLOW_ERSU_MASK: u32 = 0x400;
 
+        /// The declared values of the `AUTO_ACK_ALLOW_ERSU` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum AutoAckAllowErsu {
+            Disallowed = 0x0,
+            Allowed = 0x1,
+        }
+
+        impl AutoAckAllowErsu {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 10
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disallowed,
+                    _ => Self::Allowed,
+                }
+            }
+        }
+
         /// Width of `HE_RESPONSE_ACK` in bits.
         pub const HE_RESPONSE_ACK_WIDTH: u32 = 1;
         /// Greatest unsigned image of `HE_RESPONSE_ACK`.
@@ -290518,6 +290954,41 @@ pub mod wifi_mac {
         pub const TB_CARE_CCA_AND_NAV_MAX: u32 = 0x1;
         /// Positioned bits of `TB_CARE_CCA_AND_NAV`.
         pub const TB_CARE_CCA_AND_NAV_MASK: u32 = 0x1000;
+
+        /// The declared values of the `TB_CARE_CCA_AND_NAV` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum TbCareCcaAndNav {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl TbCareCcaAndNav {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 12
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
 
         /// Width of `BSR_ENABLE` in bits.
         pub const BSR_ENABLE_WIDTH: u32 = 1;
@@ -290637,8 +291108,8 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_rx_misc names the bit AUTOACK_ALLOW_ERSU. Complete libpp[hal_mac_ctl.o]::hal_he_set_ersu clears it for a nonzero HE Operation ER-SU argument and sets it for zero; the PAC preserves that counterintuitive instruction-exact polarity.
             #[inline]
-            pub const fn auto_ack_allow_ersu(self) -> bool {
-                (self.0 & 0x00000400) != 0
+            pub const fn auto_ack_allow_ersu(self) -> AutoAckAllowErsu {
+                AutoAckAllowErsu::from_field(self.0 >> 10)
             }
 
             /// The `HE_RESPONSE_ACK` field.
@@ -290649,8 +291120,8 @@ pub mod wifi_mac {
 
             /// Complete dbg_tb_ignore_cca_enable clears this bit and logs "tb ignore CCA and NAV" for a nonzero argument; it sets the bit and logs "tb care CCA and NAV" for zero.
             #[inline]
-            pub const fn tb_care_cca_and_nav(self) -> bool {
-                (self.0 & 0x00001000) != 0
+            pub const fn tb_care_cca_and_nav(self) -> TbCareCcaAndNav {
+                TbCareCcaAndNav::from_field(self.0 >> 12)
             }
 
             /// Complete hal_he_bsr_init sets this bit; complete hal_he_bsr_ctrl controls it.
@@ -290764,8 +291235,8 @@ pub mod wifi_mac {
 
             /// Complete dbg_read_rx_misc names the bit AUTOACK_ALLOW_ERSU. Complete libpp[hal_mac_ctl.o]::hal_he_set_ersu clears it for a nonzero HE Operation ER-SU argument and sets it for zero; the PAC preserves that counterintuitive instruction-exact polarity.
             #[inline]
-            pub const fn auto_ack_allow_ersu(&self) -> bool {
-                (self.0 & 0x00000400) != 0
+            pub const fn auto_ack_allow_ersu(&self) -> AutoAckAllowErsu {
+                AutoAckAllowErsu::from_field(self.0 >> 10)
             }
 
             /// The `HE_RESPONSE_ACK` field.
@@ -290776,8 +291247,8 @@ pub mod wifi_mac {
 
             /// Complete dbg_tb_ignore_cca_enable clears this bit and logs "tb ignore CCA and NAV" for a nonzero argument; it sets the bit and logs "tb care CCA and NAV" for zero.
             #[inline]
-            pub const fn tb_care_cca_and_nav(&self) -> bool {
-                (self.0 & 0x00001000) != 0
+            pub const fn tb_care_cca_and_nav(&self) -> TbCareCcaAndNav {
+                TbCareCcaAndNav::from_field(self.0 >> 12)
             }
 
             /// Complete hal_he_bsr_init sets this bit; complete hal_he_bsr_ctrl controls it.
@@ -290893,8 +291364,8 @@ pub mod wifi_mac {
 
             /// Set `AUTO_ACK_ALLOW_ERSU`.
             #[inline]
-            pub fn set_auto_ack_allow_ersu(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffbff) | (u32::from(value) << 10);
+            pub fn set_auto_ack_allow_ersu(&mut self, value: AutoAckAllowErsu) -> &mut Self {
+                self.0 = (self.0 & 0xfffffbff) | (value.bits() << 10);
                 self
             }
 
@@ -290907,8 +291378,8 @@ pub mod wifi_mac {
 
             /// Set `TB_CARE_CCA_AND_NAV`.
             #[inline]
-            pub fn set_tb_care_cca_and_nav(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffefff) | (u32::from(value) << 12);
+            pub fn set_tb_care_cca_and_nav(&mut self, value: TbCareCcaAndNav) -> &mut Self {
+                self.0 = (self.0 & 0xffffefff) | (value.bits() << 12);
                 self
             }
 
@@ -291050,12 +291521,82 @@ pub mod wifi_mac {
         /// Positioned bits of `UL_MU_DATA_DISABLE`.
         pub const UL_MU_DATA_DISABLE_MASK: u32 = 0x40000000;
 
+        /// The declared values of the `UL_MU_DATA_DISABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum UlMuDataDisable {
+            Enabled = 0x0,
+            Disabled = 0x1,
+        }
+
+        impl UlMuDataDisable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 30
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Enabled,
+                    _ => Self::Disabled,
+                }
+            }
+        }
+
         /// Width of `UL_MU_DISABLE` in bits.
         pub const UL_MU_DISABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `UL_MU_DISABLE`.
         pub const UL_MU_DISABLE_MAX: u32 = 0x1;
         /// Positioned bits of `UL_MU_DISABLE`.
         pub const UL_MU_DISABLE_MASK: u32 = 0x80000000;
+
+        /// The declared values of the `UL_MU_DISABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum UlMuDisable {
+            Enabled = 0x0,
+            Disabled = 0x1,
+        }
+
+        impl UlMuDisable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Enabled,
+                    _ => Self::Disabled,
+                }
+            }
+        }
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -291112,14 +291653,14 @@ pub mod wifi_mac {
 
             /// HE Operating Mode Control UL MU Data Disable copied from HT-Control bit 17 by wifi_htc_omc_txcb.
             #[inline]
-            pub const fn ul_mu_data_disable(self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn ul_mu_data_disable(self) -> UlMuDataDisable {
+                UlMuDataDisable::from_field(self.0 >> 30)
             }
 
             /// HE Operating Mode Control UL MU Disable copied from HT-Control bit 11 by wifi_htc_omc_txcb.
             #[inline]
-            pub const fn ul_mu_disable(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn ul_mu_disable(self) -> UlMuDisable {
+                UlMuDisable::from_field(self.0 >> 31)
             }
         }
 
@@ -291177,14 +291718,14 @@ pub mod wifi_mac {
 
             /// HE Operating Mode Control UL MU Data Disable copied from HT-Control bit 17 by wifi_htc_omc_txcb.
             #[inline]
-            pub const fn ul_mu_data_disable(&self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn ul_mu_data_disable(&self) -> UlMuDataDisable {
+                UlMuDataDisable::from_field(self.0 >> 30)
             }
 
             /// HE Operating Mode Control UL MU Disable copied from HT-Control bit 11 by wifi_htc_omc_txcb.
             #[inline]
-            pub const fn ul_mu_disable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn ul_mu_disable(&self) -> UlMuDisable {
+                UlMuDisable::from_field(self.0 >> 31)
             }
 
             /// Set `DEFAULT_PE_DURATION`.
@@ -291251,15 +291792,15 @@ pub mod wifi_mac {
 
             /// Set `UL_MU_DATA_DISABLE`.
             #[inline]
-            pub fn set_ul_mu_data_disable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+            pub fn set_ul_mu_data_disable(&mut self, value: UlMuDataDisable) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
 
             /// Set `UL_MU_DISABLE`.
             #[inline]
-            pub fn set_ul_mu_disable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_ul_mu_disable(&mut self, value: UlMuDisable) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
         }
@@ -295111,50 +295652,50 @@ pub mod wifi_mac {
 
             /// Trigger-based TID zero enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_0_enabled(self) -> bool {
-                (self.0 & 0x00002000) != 0
+            pub const fn trigger_based_tid_0_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 13)
             }
 
             /// Trigger-based TID one enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_1_enabled(self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn trigger_based_tid_1_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 14)
             }
 
             /// Trigger-based TID two enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_2_enabled(self) -> bool {
-                (self.0 & 0x00008000) != 0
+            pub const fn trigger_based_tid_2_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 15)
             }
 
             /// Trigger-based TID three enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_3_enabled(self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn trigger_based_tid_3_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 16)
             }
 
             /// Trigger-based TID four enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_4_enabled(self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn trigger_based_tid_4_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 17)
             }
 
             /// Trigger-based TID five enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_5_enabled(self) -> bool {
-                (self.0 & 0x00040000) != 0
+            pub const fn trigger_based_tid_5_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 18)
             }
 
             /// Trigger-based TID six enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_6_enabled(self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn trigger_based_tid_6_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 19)
             }
 
             /// Trigger-based TID seven enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_7_enabled(self) -> bool {
-                (self.0 & 0x00100000) != 0
+            pub const fn trigger_based_tid_7_enabled(self) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 20)
             }
 
             /// The `BASIC_SPECIAL_BSR_SEQUENCE` field.
@@ -295242,50 +295783,66 @@ pub mod wifi_mac {
 
             /// Trigger-based TID zero enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_0_enabled(&self) -> bool {
-                (self.0 & 0x00002000) != 0
+            pub const fn trigger_based_tid_0_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 13)
             }
 
             /// Trigger-based TID one enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_1_enabled(&self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn trigger_based_tid_1_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 14)
             }
 
             /// Trigger-based TID two enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_2_enabled(&self) -> bool {
-                (self.0 & 0x00008000) != 0
+            pub const fn trigger_based_tid_2_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 15)
             }
 
             /// Trigger-based TID three enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_3_enabled(&self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn trigger_based_tid_3_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 16)
             }
 
             /// Trigger-based TID four enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_4_enabled(&self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn trigger_based_tid_4_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 17)
             }
 
             /// Trigger-based TID five enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_5_enabled(&self) -> bool {
-                (self.0 & 0x00040000) != 0
+            pub const fn trigger_based_tid_5_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 18)
             }
 
             /// Trigger-based TID six enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_6_enabled(&self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn trigger_based_tid_6_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 19)
             }
 
             /// Trigger-based TID seven enabled by successful HE BlockAck setup.
             #[inline]
-            pub const fn trigger_based_tid_7_enabled(&self) -> bool {
-                (self.0 & 0x00100000) != 0
+            pub const fn trigger_based_tid_7_enabled(
+                &self,
+            ) -> super::dictionaries::TriggerBasedTid {
+                super::dictionaries::TriggerBasedTid::from_field(self.0 >> 20)
             }
 
             /// The `BASIC_SPECIAL_BSR_SEQUENCE` field.
@@ -295381,57 +295938,81 @@ pub mod wifi_mac {
 
             /// Set `TRIGGER_BASED_TID_0_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_0_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffdfff) | (u32::from(value) << 13);
+            pub fn set_trigger_based_tid_0_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffdfff) | (value.bits() << 13);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_1_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_1_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffbfff) | (u32::from(value) << 14);
+            pub fn set_trigger_based_tid_1_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffbfff) | (value.bits() << 14);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_2_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_2_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffff7fff) | (u32::from(value) << 15);
+            pub fn set_trigger_based_tid_2_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffff7fff) | (value.bits() << 15);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_3_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_3_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+            pub fn set_trigger_based_tid_3_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_4_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_4_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+            pub fn set_trigger_based_tid_4_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (value.bits() << 17);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_5_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_5_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffbffff) | (u32::from(value) << 18);
+            pub fn set_trigger_based_tid_5_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffbffff) | (value.bits() << 18);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_6_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_6_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
+            pub fn set_trigger_based_tid_6_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfff7ffff) | (value.bits() << 19);
                 self
             }
 
             /// Set `TRIGGER_BASED_TID_7_ENABLED`.
             #[inline]
-            pub fn set_trigger_based_tid_7_enabled(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffefffff) | (u32::from(value) << 20);
+            pub fn set_trigger_based_tid_7_enabled(
+                &mut self,
+                value: super::dictionaries::TriggerBasedTid,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffefffff) | (value.bits() << 20);
                 self
             }
 
@@ -297681,6 +298262,41 @@ pub mod wifi_mac {
         /// Positioned bits of `GLOBAL_DISABLE`.
         pub const GLOBAL_DISABLE_MASK: u32 = 0x1;
 
+        /// The declared values of the `GLOBAL_DISABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum GlobalDisable {
+            Enabled = 0x0,
+            Disabled = 0x1,
+        }
+
+        impl GlobalDisable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Enabled,
+                    _ => Self::Disabled,
+                }
+            }
+        }
+
         /// Width of `CLASS_DISABLE` in bits.
         pub const CLASS_DISABLE_WIDTH: u32 = 5;
         /// Greatest unsigned image of `CLASS_DISABLE`.
@@ -297738,8 +298354,8 @@ pub mod wifi_mac {
         impl R {
             /// The `GLOBAL_DISABLE` field.
             #[inline]
-            pub const fn global_disable(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn global_disable(self) -> GlobalDisable {
+                GlobalDisable::from_field(self.0)
             }
 
             /// Approximate functional name for the five bits toggled together by hal_he_disable_obss_narrow_bw_ru.
@@ -297761,8 +298377,8 @@ pub mod wifi_mac {
         impl W {
             /// The `GLOBAL_DISABLE` field.
             #[inline]
-            pub const fn global_disable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn global_disable(&self) -> GlobalDisable {
+                GlobalDisable::from_field(self.0)
             }
 
             /// Approximate functional name for the five bits toggled together by hal_he_disable_obss_narrow_bw_ru.
@@ -297779,8 +298395,8 @@ pub mod wifi_mac {
 
             /// Set `GLOBAL_DISABLE`.
             #[inline]
-            pub fn set_global_disable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_global_disable(&mut self, value: GlobalDisable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 

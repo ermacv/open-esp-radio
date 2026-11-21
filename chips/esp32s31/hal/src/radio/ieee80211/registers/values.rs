@@ -10,6 +10,17 @@ pub use oer_chips_esp32s31_pac::wifi_mac::dictionaries::Interface as MacInterfac
 
 /// The interface's selector in a TX queue's `PLCP1.BSSID_SELECT`, which the
 /// model leaves a number: the HAL writes the interface's own value there.
+///
+/// SOURCE: `libpp[hal_mac_tx.o]::mac_tx_set_plcp1+0x38..0x46` (pinned
+/// `esp32-wifi-lib@f856b5db`, `libpp.a` SHA-256 `4b9cd74b…`) stores bits
+/// 24:17 from one byte of the frame's control block (`+0x10`): the key
+/// entry index in its low six bits, this selector in its top two;
+/// `libpp[hal_debug.o]::dbg_read_key_entry` prints bits 24:23 as
+/// `bssid_sel`. The vendor's station frames carry zero there
+/// (`HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29`, PLCP1 `0x0401a000`). That
+/// the selector is the interface's value for every interface is the HAL's
+/// reading, not a vendor record: no capture of an access point's frame
+/// establishes selector one.
 pub(crate) const fn interface_bssid_select(
     interface: MacInterface,
 ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::BSSID_SELECT_WIDTH }> {
@@ -931,34 +942,22 @@ impl StationTsfHighWord {
     }
 }
 
-/// Zero-or-one control image accepted only by the reviewed hal_set_itwt_pti low-byte replacement helper.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacItwtControlMaskedInput(u32);
-
-impl MacItwtControlMaskedInput {
-    /// Wrap one register-specific opaque value.
-    pub const fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    /// Return the opaque numeric image.
-    pub const fn get(self) -> u32 {
-        self.0
-    }
+/// The first argument of the vendor's `hal_set_itwt_pti`, which writes the
+/// low byte of `ITWT_CONTROL` as `seqz(argument)`: one for a zero argument,
+/// zero for any other. The byte's meaning is not established; these are the
+/// two images the vendor writes.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MacItwtArgument {
+    Zero,
+    Nonzero,
 }
 
-/// Boolean state shared by the three separately ordered low-rate control edges.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum PhyLowRateState {
-    /// Disable the selected PHY low-rate control edge.
-    Disabled,
-    /// Enable the selected PHY low-rate control edge.
-    Enabled,
-}
-
-impl PhyLowRateState {
-    /// Numeric image for diagnostics.
-    pub const fn bits(self) -> u32 {
-        match self { Self::Disabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Disabled.bits(), Self::Enabled => oer_chips_esp32s31_pac::wifi_bb_brx::low_rate_primary_control::LowRateEnableFirst::Enabled.bits() }
+impl MacItwtArgument {
+    /// The control byte the vendor writes for the argument.
+    pub(crate) const fn control_byte(self) -> u8 {
+        match self {
+            Self::Zero => 1,
+            Self::Nonzero => 0,
+        }
     }
 }

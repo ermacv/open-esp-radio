@@ -6,16 +6,20 @@ use crate::radio::ieee80211::registers::{
     MacHePacketPaddingDuration, MacMinimumMpduStartSpacing, element,
 };
 
-fn peer(extended_range_single_user_disabled: bool) -> MacHePeerConfig {
+fn peer(
+    extended_range_single_user: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu,
+) -> MacHePeerConfig {
     MacHePeerConfig {
         packet_padding_duration: MacHePacketPaddingDuration::new(16).expect("in range"),
         default_packet_extension_duration: MacHeDefaultPacketExtensionDuration::new(4)
             .expect("in range"),
         bss_color: color(),
-        bss_color_enabled: true,
-        partial_bss_color: false,
+        bss_color_enabled:
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+        partial_bss_color:
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled,
         max_co_hosted_bssid_indicator: None,
-        extended_range_single_user_disabled,
+        extended_range_single_user,
     }
 }
 
@@ -35,14 +39,25 @@ fn association(peer: MacHePeerConfig) -> MacHeAssociation {
 fn a_connection_and_its_association_publish_the_bssid_color_padding_and_rts_disable() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.connect_he_bss(color(), true, false);
-    owners
-        .registers
-        .install_he_association(association(peer(false)));
+    owners.registers.connect_he_bss(
+        color(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled,
+    );
+    owners.registers.install_he_association(association(peer(
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+    )));
     let mac = &owners.registers.mac;
     let multi = mac.wifi_mac_he_init_suffix.read_multi_bssid_control();
-    assert!(multi.he_bssid_enable() && multi.bss_color_enable());
-    assert!(!multi.partial_bss_color_enable());
+    assert!(
+        multi.he_bssid_enable()
+            && (multi.bss_color_enable()
+                == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled)
+    );
+    assert_eq!(
+        multi.partial_bss_color_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled
+    );
     assert_eq!(multi.bss_color().get(), 0x2a);
     assert_eq!(multi.bssid_select().get(), 0);
     let power_save = mac.wifi_mac_rx_power_save.read_rx_power_save_control();
@@ -76,7 +91,10 @@ fn a_connection_and_its_association_publish_the_bssid_color_padding_and_rts_disa
         assert!(rts.he_rts_disabled() && !rts.rts_threshold_valid());
     }
     let suffix = &mac.wifi_mac_he_init_suffix;
-    assert!(suffix.read_ersu_and_vht_control().auto_ack_allow_ersu());
+    assert_eq!(
+        suffix.read_ersu_and_vht_control().auto_ack_allow_ersu(),
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed
+    );
     let ack = suffix.read_ersu_ack_rate();
     assert_eq!(
         [ack.rate_0(), ack.rate_1(), ack.rate_2(), ack.rate_3()],
@@ -102,11 +120,14 @@ fn a_connection_and_its_association_publish_the_bssid_color_padding_and_rts_disa
 fn a_disabled_extended_range_keeps_the_ack_rates() {
     let mut words = HostWords::filled(u32::MAX);
     let mut owners = words.owners();
-    owners
-        .registers
-        .install_he_association(association(peer(true)));
+    owners.registers.install_he_association(association(peer(
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Disallowed,
+    )));
     let suffix = &owners.registers.mac.wifi_mac_he_init_suffix;
-    assert!(!suffix.read_ersu_and_vht_control().auto_ack_allow_ersu());
+    assert_eq!(
+        suffix.read_ersu_and_vht_control().auto_ack_allow_ersu(),
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Disallowed
+    );
     assert_eq!(suffix.read_ersu_ack_rate().rate_0(), 0xff);
 }
 
@@ -114,15 +135,25 @@ fn a_disabled_extended_range_keeps_the_ack_rates() {
 fn a_disabled_color_is_published_as_zero() {
     let mut words = HostWords::filled(u32::MAX);
     let mut owners = words.owners();
-    owners.registers.connect_he_bss(color(), false, true);
+    owners.registers.connect_he_bss(
+        color(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Disabled,
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled,
+    );
     let multi = owners
         .registers
         .mac
         .wifi_mac_he_init_suffix
         .read_multi_bssid_control();
     assert_eq!(multi.bss_color().get(), 0);
-    assert!(!multi.bss_color_enable());
-    assert!(multi.partial_bss_color_enable());
+    assert_eq!(
+        multi.bss_color_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Disabled
+    );
+    assert_eq!(
+        multi.partial_bss_color_enable(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled
+    );
     assert!(multi.he_bssid_enable());
 }
 
@@ -133,12 +164,16 @@ fn the_association_writes_the_response_s_color_over_the_scan_s() {
     // is the response's; HE BSSID matching stays the connection's.
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners
-        .registers
-        .connect_he_bss(MacHeBssColor::new(27).unwrap(), true, true);
-    let mut response = peer(false);
+    owners.registers.connect_he_bss(
+        MacHeBssColor::new(27).unwrap(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled,
+    );
+    let mut response =
+        peer(oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed);
     response.bss_color = MacHeBssColor::new(5).unwrap();
-    response.partial_bss_color = false;
+    response.partial_bss_color =
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled;
     owners
         .registers
         .install_he_association(association(response));
@@ -148,7 +183,7 @@ fn the_association_writes_the_response_s_color_over_the_scan_s() {
         .wifi_mac_he_init_suffix
         .read_multi_bssid_control();
     assert_eq!(multi.bss_color().get(), 5);
-    assert!(multi.bss_color_enable() && !multi.partial_bss_color_enable());
+    assert!((multi.bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled) && !(multi.partial_bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled));
     assert!(multi.he_bssid_enable());
 }
 
@@ -157,7 +192,8 @@ fn a_co_hosted_bss_publishes_its_mask_and_none_restores_the_cold_init_s() {
     for (indicator, mask) in [(0, 0xff), (3, 0xf8), (8, 0x00)] {
         let mut words = HostWords::filled(0);
         let mut owners = words.owners();
-        let mut hosted = peer(false);
+        let mut hosted =
+            peer(oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed);
         hosted.max_co_hosted_bssid_indicator = Some(indicator);
         owners.registers.install_he_association(association(hosted));
         let multi = owners
@@ -170,9 +206,9 @@ fn a_co_hosted_bss_publishes_its_mask_and_none_restores_the_cold_init_s() {
     }
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners
-        .registers
-        .install_he_association(association(peer(false)));
+    owners.registers.install_he_association(association(peer(
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+    )));
     let multi = owners
         .registers
         .mac
@@ -193,7 +229,8 @@ fn an_enabled_multiple_bssid_keeps_the_co_hosted_fields() {
         .modify_multi_bssid_control(|w| {
             w.set_multi_bssid_enable(true);
         });
-    let mut hosted = peer(false);
+    let mut hosted =
+        peer(oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed);
     hosted.max_co_hosted_bssid_indicator = Some(3);
     owners.registers.install_he_association(association(hosted));
     let multi = owners
@@ -209,15 +246,19 @@ fn an_enabled_multiple_bssid_keeps_the_co_hosted_fields() {
 fn a_removal_ends_bssid_matching_and_the_color() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.connect_he_bss(color(), true, true);
-    owners
-        .registers
-        .install_he_association(association(peer(false)));
+    owners.registers.connect_he_bss(
+        color(),
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+        oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled,
+    );
+    owners.registers.install_he_association(association(peer(
+        oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+    )));
     owners.registers.clear_he_association();
     let mac = &owners.registers.mac;
     let multi = mac.wifi_mac_he_init_suffix.read_multi_bssid_control();
     assert!(!multi.he_bssid_enable());
-    assert!(!multi.bss_color_enable() && !multi.partial_bss_color_enable());
+    assert!(!(multi.bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled) && !(multi.partial_bss_color_enable() == oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled));
     assert_eq!(multi.bss_color().get(), 0);
     assert!(
         mac.wifi_mac_he_init_prefix
@@ -240,23 +281,35 @@ fn a_reinstallation_after_a_removal_is_the_first_installation() {
     let mut once = HostWords::filled(0);
     {
         let mut owners = once.owners();
-        owners.registers.connect_he_bss(color(), true, false);
-        owners
-            .registers
-            .install_he_association(association(peer(false)));
+        owners.registers.connect_he_bss(
+            color(),
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled,
+        );
+        owners.registers.install_he_association(association(peer(
+            oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+        )));
     }
     let mut again = HostWords::filled(0);
     {
         let mut owners = again.owners();
-        owners.registers.connect_he_bss(color(), false, true);
-        owners
-            .registers
-            .install_he_association(association(peer(true)));
+        owners.registers.connect_he_bss(
+            color(),
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Disabled,
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Enabled,
+        );
+        owners.registers.install_he_association(association(peer(
+            oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Disallowed,
+        )));
         owners.registers.clear_he_association();
-        owners.registers.connect_he_bss(color(), true, false);
-        owners
-            .registers
-            .install_he_association(association(peer(false)));
+        owners.registers.connect_he_bss(
+            color(),
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssColorEnable::Enabled,
+            oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::PartialBssColorEnable::Disabled,
+        );
+        owners.registers.install_he_association(association(peer(
+            oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::AutoAckAllowErsu::Allowed,
+        )));
     }
     // A connection, its association, the removal and another connection
     // and association end where one of each does: the removal leaves

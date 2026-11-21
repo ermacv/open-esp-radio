@@ -125,28 +125,29 @@ impl MacHeTbLinkReservation {
     /// `libpp[hal_he_common.o]::hal_he_get_mplen_addr_start,libpp[hal_he_common.o]::hal_he_get_mplen_addr_end` and the
     /// corresponding ROM leaves. The single-TID layout differs from all
     /// other policies.
-    pub const fn for_queue(policy: MacHeTbTidLimit, queue: u8, count: u8) -> Option<Self> {
+    pub const fn for_queue(
+        policy: MacHeTbTidLimit,
+        queue: Index<{ ORDINARY_QUEUE_COUNT as usize }>,
+        count: u8,
+    ) -> Option<Self> {
         if count == 0 {
             return None;
         }
-        let (first, last) = match (policy, queue) {
-            (MacHeTbTidLimit::One, 0) => (64, 81),
-            (MacHeTbTidLimit::One, 1) => (82, 99),
-            (MacHeTbTidLimit::One, 2) => (0, 63),
-            (MacHeTbTidLimit::One, 3) => (100, 117),
-            (_, 0) => (32, 63),
-            (_, 1) => (64, 95),
-            (_, 2) => (0, 31),
-            (_, 3) => (96, 119),
-            _ => return None,
+        let single = matches!(policy, MacHeTbTidLimit::One);
+        // Each range's first entry and its capacity, by the blob's tables.
+        let (first, capacity): (MacHeTbLink, u8) = match (single, queue.get()) {
+            (true, 0) => (Index::constant::<64>(), 18),
+            (true, 1) => (Index::constant::<82>(), 18),
+            (true, 2) => (Index::constant::<0>(), 64),
+            (true, _) => (Index::constant::<100>(), 18),
+            (false, 0) => (Index::constant::<32>(), 32),
+            (false, 1) => (Index::constant::<64>(), 32),
+            (false, 2) => (Index::constant::<0>(), 32),
+            (false, _) => (Index::constant::<96>(), 24),
         };
-        if count > last - first + 1 {
+        if count > capacity {
             return None;
         }
-        let (Ok(queue), Ok(first)) = (Index::new(queue as usize), Index::new(first as usize))
-        else {
-            return None;
-        };
         Some(Self {
             queue,
             first,
@@ -154,9 +155,8 @@ impl MacHeTbLinkReservation {
         })
     }
 
-    pub const fn queue(self) -> u8 {
-        // Below four: the low byte is the whole index.
-        self.queue.get().to_le_bytes()[0]
+    pub const fn queue(self) -> Index<{ ORDINARY_QUEUE_COUNT as usize }> {
+        self.queue
     }
 
     pub const fn first(self) -> u8 {
@@ -225,83 +225,6 @@ pub struct MacHeTriggerTxQueueSnapshot {
     pub queue_valid: bool,
 }
 
-/// Key fields from the last HE Trigger receive calculation.
-///
-/// The blob explicitly warns that `WDEVAXDIAG0..9` can be overwritten by a
-/// following RX frame. This is a diagnostic sample, not durable protocol
-/// state. Pair it with a change in `MacHeTbStatistics::rx_trigger_count`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeTriggerRxDiagnostics {
-    pub trigger_state_cs: u8,
-    pub station_match: bool,
-    pub trigger_type: u8,
-    pub uplink_length: u16,
-    pub association_id: u16,
-    pub ru_allocation_raw: u8,
-    pub ru_allocation: u8,
-    pub uplink_mcs: u8,
-    pub uplink_dcm: bool,
-    pub fec_coding_type: bool,
-    pub gi_and_ltf_type: u8,
-    pub uplink_bandwidth: u8,
-    pub stbc: bool,
-    pub mu_mimo_ltf: bool,
-    pub spatial_reuse: u16,
-    pub basic_target_rssi: u8,
-    pub spatial_stream_allocation: u8,
-    pub cs_required: bool,
-    pub more_trigger_frames: bool,
-    pub symbol_count: u16,
-    pub tb_apep_length: u16,
-    pub cbw20_packet_count: u8,
-    pub cbw40_packet_count: u8,
-    pub cbw80_packet_count: u8,
-    pub qos_null_append_packet_count: u8,
-    pub ax_match_bssid1: bool,
-    pub ax_match_bssid0: bool,
-    pub bss_color_valid: bool,
-    pub rx_ampdu_auto_ack_valid: bool,
-}
-
-/// Non-latched hardware state for the HE sounding/feedback sequence.
-///
-/// Complete `dbg_read_ax_diag` prints these fields from `WDEVAXDIAG0` and
-/// `WDEVAXDIAG3`. Like the Trigger fields in the same words, a following RX
-/// frame may overwrite them. Sample this immediately after a parsed NDPA/NDP
-/// edge; it is evidence about hardware progress, not owned protocol state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeBeamformingDiagnostics {
-    pub transmit_or_receive_beam: bool,
-    pub bfrp_timer: u8,
-    pub bfrp_detection_enabled: bool,
-    pub beam_timer: u8,
-    pub ndp_detected_successfully: bool,
-    pub feedback_status: bool,
-}
-
-/// Stream-zero average SNR captured by the beamforming-report hardware.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacBeamformingAverageSnr {
-    /// Raw byte printed by the complete vendor debug helper.
-    pub raw_code: u8,
-    /// SNR in quarter-dB units: `(raw_code + 88)`.
-    pub quarter_db: u16,
-    /// Code `0x7f` is rendered by the blob as a lower bound (`>=`).
-    pub is_lower_bound: bool,
-}
-
-impl MacBeamformingAverageSnr {
-    const fn from_raw_code(raw_code: u8) -> Self {
-        Self {
-            raw_code,
-            quarter_db: raw_code as u16 + 88,
-            is_lower_bound: raw_code
-                == oer_chips_esp32s31_pac::wifi_mac::average_snr::Stream0Code::SaturatedOrInvalid
-                    .bits() as u8,
-        }
-    }
-}
-
 /// The CONF1 element of logical trigger queue `queue`: the four ordinary
 /// queues' words are the last four of eight, in reverse logical order.
 const fn trigger_queue_element(queue: Index<{ ORDINARY_QUEUE_COUNT as usize }>) -> Index<8> {
@@ -325,20 +248,6 @@ const fn reservation_bank(reservation: MacHeTbLinkReservation) -> Index<4> {
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
-    /// Read the beamforming-report average SNR without using floating point.
-    ///
-    /// SOURCE: complete `libpp[hal_debug.o]::esp_test_get_bfr_avgsnr`, size `0x86`. The blob reads
-    /// `0x20105f94[7:0]` and computes `(code + 88.0) * 0.25` dB. Code `0x7f`
-    /// uses a `>=` prefix, so the typed value retains that saturation state.
-    pub fn beamforming_average_snr(&self) -> MacBeamformingAverageSnr {
-        let raw_code = self
-            .mac
-            .wifi_mac_beamforming_report
-            .read_average_snr()
-            .stream_0_code();
-        MacBeamformingAverageSnr::from_raw_code(raw_code)
-    }
-
     /// Program the complete write-side HE Trigger-eligible queue transition.
     ///
     /// SOURCE: instruction-equivalent complete
@@ -503,7 +412,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let control = status.read_he_buffer_status_control();
 
         MacHeTriggerTxQueueSnapshot {
-            logical_queue: reservation.queue(),
+            logical_queue: reservation.queue.get().to_le_bytes()[0],
             tid: byte(queue_control.tid()),
             trigger_based_enabled: queue_control.trigger_based_enable(),
             mu_edca_timer_select: byte(queue_control.mu_edca_timer_select()),
@@ -530,20 +439,24 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// complete HE BlockAck response/deletion paths in
     /// `libnet80211.a[ieee80211_ht.o]`. The separate initial read and
     /// fresh read inside `modify` preserve the two-read/one-write blob edge.
-    pub fn set_he_trigger_based_tid_enabled(&mut self, tid: MacHeTid, enabled: bool) {
+    pub fn set_he_trigger_based_tid_enabled(
+        &mut self,
+        tid: MacHeTid,
+        state: oer_chips_esp32s31_pac::wifi_mac::dictionaries::TriggerBasedTid,
+    ) {
         let control = &mut self.mac.wifi_mac_he_buffer_status;
         let _initial = control.read_he_buffer_status_control();
         control.modify_he_buffer_status_control(|w| {
             match tid.value() {
-                0 => w.set_trigger_based_tid_0_enabled(enabled),
-                1 => w.set_trigger_based_tid_1_enabled(enabled),
-                2 => w.set_trigger_based_tid_2_enabled(enabled),
-                3 => w.set_trigger_based_tid_3_enabled(enabled),
-                4 => w.set_trigger_based_tid_4_enabled(enabled),
-                5 => w.set_trigger_based_tid_5_enabled(enabled),
-                6 => w.set_trigger_based_tid_6_enabled(enabled),
-                7 => w.set_trigger_based_tid_7_enabled(enabled),
-                _ => unreachable!("MacHeTid is bounded"),
+                0 => w.set_trigger_based_tid_0_enabled(state),
+                1 => w.set_trigger_based_tid_1_enabled(state),
+                2 => w.set_trigger_based_tid_2_enabled(state),
+                3 => w.set_trigger_based_tid_3_enabled(state),
+                4 => w.set_trigger_based_tid_4_enabled(state),
+                5 => w.set_trigger_based_tid_5_enabled(state),
+                6 => w.set_trigger_based_tid_6_enabled(state),
+                // MacHeTid holds 0 to 7.
+                _ => w.set_trigger_based_tid_7_enabled(state),
             };
         });
     }
@@ -553,7 +466,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
     /// `dbg_tb_ignore_cca_enable` and its own strings. A set hardware bit means
     /// "tb care CCA and NAV"; the debug ignore mode clears it.
-    pub fn set_he_trigger_based_cca_and_nav_care(&mut self, care: bool) {
+    pub fn set_he_trigger_based_cca_and_nav_care(
+        &mut self,
+        care: oer_chips_esp32s31_pac::wifi_mac::ersu_and_vht_control::TbCareCcaAndNav,
+    ) {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_ersu_and_vht_control(|w| {
@@ -568,100 +484,32 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// is symbol-exact; the individual twenty-bit bitmap and five-bit class
     /// identities remain approximate. The bitmap's store sets its one
     /// field; the bits above it are kept.
-    pub fn set_he_obss_narrow_band_ru_disabled(&mut self, disabled: bool) {
+    pub fn disable_he_obss_narrow_band_ru(&mut self) {
         let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
         registers.modify_disable_bitmap(|w| {
-            w.set_value(if disabled {
-                Bits::constant::<0x000f_ffff>()
-            } else {
-                Bits::constant::<0>()
-            });
+            w.set_value(Bits::constant::<0x000f_ffff>());
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_class_disable(
-                if disabled {
-                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled
-                } else {
-                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled
-                }
-                .into(),
-            );
+            w.set_class_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled.into());
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_global_disable(disabled);
+            w.set_global_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Disabled);
         });
     }
 
-    /// Read key fields from the blob's ten-word Trigger RX diagnostic block.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_ax_diag`, size `0x466`, and its `WDEVAXDIAG0..9` strings.
-    pub fn he_trigger_receive_diagnostics(&self) -> MacHeTriggerRxDiagnostics {
-        let registers = &self.mac.wifi_mac_he_trigger_rx_diagnostics;
-        let state = registers.read_he_trigger_rx_diagnostics_state();
-        let length = registers.read_length();
-        let dependent = registers.read_trigger_dependent();
-        let user = registers.read_basic_user();
-        let phy = registers.read_common_phy();
-        let trigger = registers.read_common_trigger();
-        let counts = registers.read_packet_counts();
-        let ru_allocation_raw = user.ru_allocation_raw();
-
-        MacHeTriggerRxDiagnostics {
-            trigger_state_cs: byte(state.trigger_state_cs()),
-            station_match: dependent.sta_match(),
-            trigger_type: byte(trigger.trigger_type()),
-            uplink_length: halfword(trigger.ul_length()),
-            association_id: halfword(user.rx_aid()),
-            ru_allocation_raw,
-            ru_allocation: ru_allocation_raw >> 1,
-            uplink_mcs: byte(user.ul_mcs()),
-            uplink_dcm: dependent.basic_ul_dcm(),
-            fec_coding_type: user.fec_coding_type(),
-            gi_and_ltf_type: byte(phy.gi_and_ltf_type()),
-            uplink_bandwidth: byte(phy.ul_bandwidth()),
-            stbc: phy.stbc(),
-            mu_mimo_ltf: phy.mu_mimo_ltf(),
-            spatial_reuse: phy.spatial_reuse(),
-            basic_target_rssi: byte(dependent.basic_target_rssi()),
-            spatial_stream_allocation: byte(dependent.basic_spatial_stream_allocation()),
-            cs_required: trigger.cs_required(),
-            more_trigger_frames: trigger.more_tf(),
-            symbol_count: length.symbol_count(),
-            tb_apep_length: length.tb_apep_length(),
-            cbw20_packet_count: byte(counts.cbw20_packet_count()),
-            cbw40_packet_count: byte(counts.cbw40_packet_count()),
-            cbw80_packet_count: byte(counts.cbw80_packet_count()),
-            qos_null_append_packet_count: byte(counts.qos_null_append_packet_count()),
-            ax_match_bssid1: counts.ax_match_bssid1(),
-            ax_match_bssid0: counts.ax_match_bssid0(),
-            bss_color_valid: counts.bss_color_valid(),
-            rx_ampdu_auto_ack_valid: counts.rx_ampdu_auto_ack_valid(),
-        }
-    }
-
-    /// Read the hardware-owned HE NDP/feedback sequence state.
-    ///
-    /// SOURCE: complete pinned `libpp.a[hal_debug.o]`
-    /// `dbg_read_ax_diag`, size `0x466`, and its exact `WDEVAXDIAG0` and
-    /// `WDEVAXDIAG3` format strings. Complete
-    /// `libpp[wdev.o]::wDev_ProcessRxSucData`, size `0x6ca`, only
-    /// logs the result of `libpp[wdev.o]::is_ndpa_to_dut`; it does not call a software
-    /// feedback producer. These diagnostic bits therefore observe the
-    /// hardware sequence configured by `hal_init_bf`.
-    pub fn he_beamforming_diagnostics(&self) -> MacHeBeamformingDiagnostics {
-        let registers = &self.mac.wifi_mac_he_trigger_rx_diagnostics;
-        let state = registers.read_he_trigger_rx_diagnostics_state();
-        let padding = registers.read_padding();
-
-        MacHeBeamformingDiagnostics {
-            transmit_or_receive_beam: state.txrx_beam(),
-            bfrp_timer: byte(state.bfrp_timer()),
-            bfrp_detection_enabled: state.bfrp_detect_enable(),
-            beam_timer: byte(state.beam_timer()),
-            ndp_detected_successfully: state.ndp_detect_success(),
-            feedback_status: padding.feedback_status(),
-        }
+    /// Undo [`Self::disable_he_obss_narrow_band_ru`]: the same three
+    /// stores with every value cleared.
+    pub fn enable_he_obss_narrow_band_ru(&mut self) {
+        let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
+        registers.modify_disable_bitmap(|w| {
+            w.set_value(Bits::constant::<0>());
+        });
+        registers.modify_he_obss_narrow_band_ru_control(|w| {
+            w.set_class_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled.into());
+        });
+        registers.modify_he_obss_narrow_band_ru_control(|w| {
+            w.set_global_disable(oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::GlobalDisable::Enabled);
+        });
     }
 }
 
