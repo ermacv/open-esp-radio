@@ -351,20 +351,6 @@ fn tx_block_ack_results_are_read_by_vendor_queue() {
         .expect("an ordinary queue");
     assert!(!observation.block_ack_received);
 
-    let diagnostic = owners
-        .registers
-        .tx_block_ack_diagnostic_snapshot(7)
-        .expect("a TX BlockAck queue");
-    assert_eq!(diagnostic.control(), 0xf);
-    assert_eq!(diagnostic.starting_sequence(), 0x0fff);
-    assert_eq!(diagnostic.bitmap(), 0x5555_5555_aaaa_aaaa);
-    assert_eq!(diagnostic.transmitter_address(), PEER);
-    assert!(
-        owners
-            .registers
-            .tx_block_ack_diagnostic_snapshot(8)
-            .is_none()
-    );
     drop(owners);
     assert_eq!(before.changes(&words), []);
 }

@@ -18,12 +18,11 @@ pub use crate::types::{
 use crate::types::{
     MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
     MacHeMpduLength, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
-    MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
-    MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
-    MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence,
-    MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxAbortOutcome,
-    MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareRefused,
-    MacTxQueueAborted, MacTxQueueDetached,
+    MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtTxProgram,
+    MacKeyEntryIndex, MacLegacyTxProgram, MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex,
+    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause,
+    MacTxAbortOutcome, MacTxCompletionObservation, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxPrepareRefused, MacTxQueueAborted, MacTxQueueDetached,
 };
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
@@ -697,11 +696,6 @@ impl<'registers> WifiMacHal<'registers> {
         reservation: MacHeTbLinkReservation,
     ) -> MacHeTriggerTxQueueSnapshot {
         self.pac().he_trigger_based_queue_snapshot(reservation)
-    }
-
-    /// Observe the non-latched RX diagnostic word decoded by the reviewed PAC.
-    pub fn he_trigger_receive_diagnostics(&self) -> MacHeTriggerRxDiagnostics {
-        self.pac().he_trigger_receive_diagnostics()
     }
 
     pub fn rx_buffer_full_count(&mut self) -> u16 {

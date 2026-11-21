@@ -480,10 +480,6 @@ impl RadioAccess {
         self.registers.he_trigger_based_queue_snapshot(reservation)
     }
 
-    pub fn he_trigger_receive_diagnostics(&self) -> types::MacHeTriggerRxDiagnostics {
-        self.registers.he_trigger_receive_diagnostics()
-    }
-
     pub(crate) fn pac(&self) -> &WifiRadioRegisters {
         &self.registers
     }

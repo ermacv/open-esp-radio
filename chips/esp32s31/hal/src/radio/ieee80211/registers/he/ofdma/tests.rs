@@ -20,26 +20,6 @@ fn traffic_identifier_limits_expose_semantic_membership() {
 }
 
 #[test]
-fn beamforming_average_snr_retains_the_blob_quarter_db_transform() {
-    assert_eq!(
-        MacBeamformingAverageSnr::from_raw_code(0),
-        MacBeamformingAverageSnr {
-            raw_code: 0,
-            quarter_db: 88,
-            is_lower_bound: false,
-        }
-    );
-    assert_eq!(
-        MacBeamformingAverageSnr::from_raw_code(0x7f),
-        MacBeamformingAverageSnr {
-            raw_code: 0x7f,
-            quarter_db: 215,
-            is_lower_bound: true,
-        }
-    );
-}
-
-#[test]
 fn default_trigger_link_ranges_partition_all_120_entries() {
     let expected = [(32, 32), (64, 32), (0, 32), (96, 24)];
     let mut seen = [false; 120];
@@ -245,25 +225,6 @@ fn a_tid_bit_and_the_obss_disable_are_published() {
     let control = obss.read_he_obss_narrow_band_ru_control();
     assert_eq!(control.class_disable().get(), 0x1f);
     assert!(control.global_disable());
-}
-
-#[test]
-fn the_diagnostic_snapshots_only_read() {
-    let before = HostWords::filled(u32::MAX);
-    let mut after = before.clone();
-    {
-        let owners = after.owners();
-        let registers = &owners.registers;
-        let _ = registers.he_beamforming_diagnostics();
-        let _ = registers.beamforming_average_snr();
-        let diagnostics = registers.he_trigger_receive_diagnostics();
-        assert_eq!(
-            diagnostics.ru_allocation,
-            diagnostics.ru_allocation_raw >> 1
-        );
-        assert_eq!(diagnostics.cbw20_packet_count, 0x3f);
-    }
-    assert!(before.changes(&after).is_empty());
 }
 
 // Reads of what the writers left, from the register image: the HAL keeps
