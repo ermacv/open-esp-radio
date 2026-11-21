@@ -1,6 +1,5 @@
 //! Route-owned PMU and upstream radio clock transactions.
 
-use core::num::NonZeroU32;
 use oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio;
 
 use oer_portable_mmio::Placement;
@@ -52,58 +51,28 @@ impl PlatformPllSourceBaseline {
                 .set_modem_xtal_clk_en(self.modem_xtal_clock_enabled);
         });
     }
-
-    const BIT_COUNT: u32 = 5;
-
-    fn bits(self) -> u32 {
-        u32::from(self.modem_apb_clock_enabled)
-            | (u32::from(self.modem_source_clock_enabled) << 1)
-            | (u32::from(self.modem_pll_selected) << 2)
-            | (u32::from(self.modem_pll_clock_enabled) << 3)
-            | (u32::from(self.modem_xtal_clock_enabled) << 4)
-    }
-
-    fn from_bits(bits: u32) -> Self {
-        Self {
-            modem_apb_clock_enabled: bits & (1 << 0) != 0,
-            modem_source_clock_enabled: bits & (1 << 1) != 0,
-            modem_pll_selected: bits & (1 << 2) != 0,
-            modem_pll_clock_enabled: bits & (1 << 3) != 0,
-            modem_xtal_clock_enabled: bits & (1 << 4) != 0,
-        }
-    }
 }
 
-/// Packed semantic cold-power baseline captured before the first Wi-Fi or
-/// shared Bluetooth power edge.
-///
-/// The stored non-zero representation reserves zero for `Option::None` and
-/// keeps its independent boolean fields in four bytes. Register geometry does
-/// not enter this value; each bit represents one named decoded field.
+/// The cold-power baseline captured before the first Wi-Fi or shared
+/// Bluetooth power edge: each field one decoded register field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiPowerBaseline(NonZeroU32);
+pub struct WifiPowerBaseline {
+    modem_register_bus_clock_enabled: bool,
+    pll_source: PlatformPllSourceBaseline,
+    modem_syscon: ModemSysconPowerBaseline,
+}
 
 impl WifiPowerBaseline {
-    const MODEM_BUS_SHIFT: u32 = 0;
-    const PLL_SOURCE_SHIFT: u32 = 1;
-    const MODEM_SYSCON_SHIFT: u32 = Self::PLL_SOURCE_SHIFT + PlatformPllSourceBaseline::BIT_COUNT;
-
-    fn new(
+    const fn new(
         modem_register_bus_clock_enabled: bool,
         pll_source: PlatformPllSourceBaseline,
         modem_syscon: ModemSysconPowerBaseline,
     ) -> Self {
-        let bits = (u32::from(modem_register_bus_clock_enabled) << Self::MODEM_BUS_SHIFT)
-            | (pll_source.bits() << Self::PLL_SOURCE_SHIFT)
-            | (modem_syscon.bits() << Self::MODEM_SYSCON_SHIFT);
-        debug_assert!(
-            bits < (1 << (Self::MODEM_SYSCON_SHIFT + ModemSysconPowerBaseline::BIT_COUNT))
-        );
-        Self(NonZeroU32::new(bits + 1).expect("encoded Wi-Fi power baseline is non-zero"))
-    }
-
-    fn bits(self) -> u32 {
-        self.0.get() - 1
+        Self {
+            modem_register_bus_clock_enabled,
+            pll_source,
+            modem_syscon,
+        }
     }
 
     /// Construct one distinguishable baseline for a host test.
@@ -117,16 +86,16 @@ impl WifiPowerBaseline {
         )
     }
 
-    fn modem_register_bus_clock_enabled(self) -> bool {
-        self.bits() & (1 << Self::MODEM_BUS_SHIFT) != 0
+    const fn modem_register_bus_clock_enabled(self) -> bool {
+        self.modem_register_bus_clock_enabled
     }
 
-    fn pll_source(self) -> PlatformPllSourceBaseline {
-        PlatformPllSourceBaseline::from_bits(self.bits() >> Self::PLL_SOURCE_SHIFT)
+    const fn pll_source(self) -> PlatformPllSourceBaseline {
+        self.pll_source
     }
 
-    fn modem_syscon(self) -> ModemSysconPowerBaseline {
-        ModemSysconPowerBaseline::from_bits(self.bits() >> Self::MODEM_SYSCON_SHIFT)
+    const fn modem_syscon(self) -> ModemSysconPowerBaseline {
+        self.modem_syscon
     }
 }
 

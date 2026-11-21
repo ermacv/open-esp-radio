@@ -124,38 +124,22 @@ pub(crate) fn set_wifi_baseband_enable<P: Placement>(
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD, ROM_REV0_RADIO_ACCESSOR_FIELDS.
 pub(crate) fn set_wifi_baseband_40mhz_state<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
-    value: WifiBaseband40MhzState,
+    value: oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital,
 ) {
     registers.modify_wifi_bb_cfg(|w| {
-        w.set_bss_cbw_40_digital(match value {
-            WifiBaseband40MhzState::Disabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Disabled
-            }
-            WifiBaseband40MhzState::Enabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Enabled
-            }
-        });
-        w.set_bit_3_opaque(match value {
-            WifiBaseband40MhzState::Disabled => false,
-            WifiBaseband40MhzState::Enabled => false,
-        });
+        w.set_bss_cbw_40_digital(value);
+        // Both states clear the adjacent bit.
+        w.set_bit_3_opaque(false);
     });
 }
 
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
 pub(crate) fn set_wifi_baseband_agc_update_mode<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
-    value: WifiBasebandAgcUpdateMode,
+    value: oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque,
 ) {
     registers.modify_wifi_bb_cfg(|w| {
-        w.set_bits_11_13_opaque(match value {
-            WifiBasebandAgcUpdateMode::Initialization => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::Initialization
-            }
-            WifiBasebandAgcUpdateMode::RegisterUpdatesEnabled => {
-                oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::RegisterUpdatesEnabled
-            }
-        });
+        w.set_bits_11_13_opaque(value);
     });
 }
 
@@ -174,6 +158,7 @@ pub(crate) fn prepare_ieee802154_modem_apb_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_modem_apb_st_map(Bits::truncate(w.clk_modem_apb_st_map().get() | 6));
     });
 }
@@ -183,6 +168,7 @@ pub(crate) fn prepare_ieee802154_modem_peripheral_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_modem_peri_st_map(Bits::truncate(w.clk_modem_peri_st_map().get() | 4));
     });
 }
@@ -192,6 +178,7 @@ pub(crate) fn prepare_ieee802154_wifi_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
     });
 }
@@ -201,6 +188,7 @@ pub(crate) fn prepare_ieee802154_bluetooth_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
     });
 }
@@ -210,6 +198,7 @@ pub(crate) fn prepare_ieee802154_frontend_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
     });
 }
@@ -219,6 +208,7 @@ pub(crate) fn prepare_ieee802154_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
     });
 }
@@ -291,6 +281,7 @@ pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
         w.set_clk_fe_st_map(Bits::truncate(w.clk_fe_st_map().get() | 6));
         w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
@@ -697,6 +688,7 @@ pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_lpcon::ModemLpconPower<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
+        // Lossless: a constant ORed into the field's own value stays in its width.
         w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
         w.set_clk_coex_st_map(Bits::truncate(w.clk_coex_st_map().get() | 6));
         w.set_clk_i2c_mst_st_map(Bits::truncate(w.clk_i2c_mst_st_map().get() | 6));
@@ -755,7 +747,7 @@ pub(crate) fn set_bluetooth_low_power_timer_divider<P: Placement>(
     value: ModemLowPowerClockDivider,
 ) {
     registers.modify_lp_timer_conf(|w| {
-        w.set_clk_lp_timer_div_num(Bits::truncate(value.get()));
+        w.set_clk_lp_timer_div_num(value.field());
     });
 }
 
@@ -828,7 +820,7 @@ pub(crate) fn set_wifi_low_power_clock_divider<P: Placement>(
     value: ModemLowPowerClockDivider,
 ) {
     registers.modify_wifi_lp_clk_conf(|w| {
-        w.set_clk_wifipwr_lp_div_num(Bits::truncate(value.get()));
+        w.set_clk_wifipwr_lp_div_num(value.field());
     });
 }
 
@@ -871,7 +863,7 @@ pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
     value: CoexTimerClockDividerMinusOne,
 ) {
     registers.modify_coex_lp_clk_conf(|w| {
-        w.set_clk_coex_lp_div_num(Bits::truncate(value.get()));
+        w.set_clk_coex_lp_div_num(value.field());
     });
 }
 

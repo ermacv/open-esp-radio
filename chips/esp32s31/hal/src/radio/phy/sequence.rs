@@ -9,17 +9,14 @@ use super::{
     registers::{RadioPhyParts, RadioPhyRegisters, RadioPlacement},
     restore::{PhyRouteState, TxDcPwdetLifecycleError},
 };
-use crate::radio::modem::{
-    ops as modem,
-    values::{WifiBaseband40MhzState, WifiBasebandAgcUpdateMode},
-};
+use crate::radio::modem::ops as modem;
 
 // SOURCE: ROM_REV0_PHY_AGC. The system update follows all fourteen AGC edges.
 pub(crate) fn update_agc<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
     agc::update_baseband_registers(&mut parts.phy_agc_oracle);
     modem::set_wifi_baseband_agc_update_mode(
         &mut parts.modem_syscon_radio,
-        WifiBasebandAgcUpdateMode::RegisterUpdatesEnabled,
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::RegisterUpdatesEnabled,
     );
 }
 pub(crate) fn begin_rxiq_root_correction<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
@@ -45,7 +42,7 @@ pub(crate) fn initialize_baseband<P: RadioPlacement>(parts: &mut RadioPhyParts<P
     bb::initialize_baseband_middle(&mut parts.phy_baseband_config_oracle);
     modem::set_wifi_baseband_agc_update_mode(
         &mut parts.modem_syscon_radio,
-        WifiBasebandAgcUpdateMode::Initialization,
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::Bits11_13Opaque::Initialization,
     );
     bb::initialize_baseband_tail(&mut parts.phy_baseband_config_oracle);
 }
@@ -55,9 +52,9 @@ pub(crate) fn configure_bss_cbw<P: RadioPlacement>(parts: &mut RadioPhyParts<P>,
     modem::set_wifi_baseband_40mhz_state(
         &mut parts.modem_syscon_radio,
         if cbw != 0 {
-            WifiBaseband40MhzState::Enabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Enabled
         } else {
-            WifiBaseband40MhzState::Disabled
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Disabled
         },
     );
     frequency::configure_bss_cbw_suffix(&mut parts.phy_frequency_channel_oracle, cbw);

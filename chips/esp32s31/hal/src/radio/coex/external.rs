@@ -6,9 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::radio::modem::values::{
-    ExternalCoexFlag, ExternalCoexGrantDelay, ExternalCoexNibble, ExternalCoexSync,
-};
+use crate::radio::modem::values::{ExternalCoexGrantDelay, ExternalCoexNibble};
 use oer_chips_esp32s31_pac::coex::pti::WorkMode;
 
 /// Signal wires between the chip and the external radio
@@ -49,14 +47,6 @@ impl ExternalCoexPriority {
     }
 }
 
-fn nibble(value: u32) -> ExternalCoexNibble {
-    ExternalCoexNibble::new(value).expect("an external coexistence nibble fits four bits")
-}
-
-fn flag(value: bool) -> ExternalCoexFlag {
-    ExternalCoexFlag::new(u32::from(value)).expect("a flag fits one bit")
-}
-
 /// One finite external-coexistence transaction over its exclusive part.
 pub struct ExternalCoexControl<'a, P: oer_portable_mmio::Placement> {
     block: &'a mut oer_chips_esp32s31_pac::coex::CoexExternal<P>,
@@ -76,36 +66,36 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_sync(oer_portable_mmio::Bits::truncate((sync(0)).get()));
+            w.set_sync(oer_portable_mmio::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
             w.set_work_mode(match role {
-                ExternalCoexRole::Leader => {
-                    oer_portable_mmio::Bits::constant::<{ WorkMode::Leader.bits() }>()
-                }
-                ExternalCoexRole::Follower => {
-                    oer_portable_mmio::Bits::constant::<{ WorkMode::Follower.bits() }>()
-                }
+                ExternalCoexRole::Leader => WorkMode::Leader.into(),
+                ExternalCoexRole::Follower => WorkMode::Follower.into(),
             });
         });
         match role {
             ExternalCoexRole::Leader => block.modify_control(|w| {
-                w.set_sync(oer_portable_mmio::Bits::truncate((sync(0x14)).get()));
+                w.set_sync(oer_portable_mmio::Bits::constant::<0x14>());
             }),
             ExternalCoexRole::Follower => {
                 let one_wire = wires == ExternalCoexWires::One;
                 block.modify_pti(|w| {
-                    w.set_bits_24_27_opaque(oer_portable_mmio::Bits::truncate((nibble(1)).get()));
+                    w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<1>());
                 });
                 block.modify_pti(|w| {
-                    w.set_bits_20_23_opaque(oer_portable_mmio::Bits::truncate(
-                        (nibble(if one_wire { 1 } else { 8 })).get(),
-                    ));
+                    w.set_bits_20_23_opaque(if one_wire {
+                        oer_portable_mmio::Bits::constant::<1>()
+                    } else {
+                        oer_portable_mmio::Bits::constant::<8>()
+                    });
                 });
                 block.modify_pti(|w| {
-                    w.set_bits_16_19_opaque(oer_portable_mmio::Bits::truncate(
-                        (nibble(if one_wire { 1 } else { 0xc })).get(),
-                    ));
+                    w.set_bits_16_19_opaque(if one_wire {
+                        oer_portable_mmio::Bits::constant::<1>()
+                    } else {
+                        oer_portable_mmio::Bits::constant::<0xc>()
+                    });
                 });
             }
         }
@@ -121,11 +111,11 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_grant_delay_low(oer_portable_mmio::Bits::truncate(0));
-            w.set_grant_delay(oer_portable_mmio::Bits::truncate(delay.get()));
+            w.set_grant_delay_low(oer_portable_mmio::Bits::constant::<0>());
+            w.set_grant_delay(delay.field());
         });
         block.modify_control(|w| {
-            w.set_validate_high((flag(validate_high)).get() != 0);
+            w.set_validate_high(validate_high);
         });
     }
 
@@ -142,33 +132,35 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
             ExternalCoexRole::Follower => {
                 let full = !matches!(wires, ExternalCoexWires::One | ExternalCoexWires::Four);
                 block.modify_pti(|w| {
-                    w.set_advanced_priority(oer_portable_mmio::Bits::truncate(
-                        (nibble(if full { 0xf } else { 0 })).get(),
-                    ));
+                    w.set_advanced_priority(if full {
+                        oer_portable_mmio::Bits::constant::<0xf>()
+                    } else {
+                        oer_portable_mmio::Bits::constant::<0>()
+                    });
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_2(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_priority_2(oer_portable_mmio::Bits::constant::<0>());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_1(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
+                    w.set_priority_1(oer_portable_mmio::Bits::constant::<0xf>());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_0(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_priority_0(oer_portable_mmio::Bits::constant::<0>());
                 });
             }
             ExternalCoexRole::Leader => {
                 let [first, second, third] = priorities;
                 block.modify_pti(|w| {
-                    w.set_advanced_priority(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+                    w.set_advanced_priority(oer_portable_mmio::Bits::constant::<0>());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_2(oer_portable_mmio::Bits::truncate((first.0).get()));
+                    w.set_priority_2(first.0.field());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_1(oer_portable_mmio::Bits::truncate((second.0).get()));
+                    w.set_priority_1(second.0.field());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_0(oer_portable_mmio::Bits::truncate((third.0).get()));
+                    w.set_priority_0(third.0.field());
                 });
             }
         }
@@ -180,26 +172,26 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
         let block = &mut *self.block;
         if role == ExternalCoexRole::Follower {
             block.modify_pti(|w| {
-                w.set_bits_24_27_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0xf>());
             });
             block.modify_pti(|w| {
-                w.set_bits_20_23_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_20_23_opaque(oer_portable_mmio::Bits::constant::<0xf>());
             });
             block.modify_pti(|w| {
-                w.set_bits_16_19_opaque(oer_portable_mmio::Bits::truncate((nibble(0xf)).get()));
+                w.set_bits_16_19_opaque(oer_portable_mmio::Bits::constant::<0xf>());
             });
         }
         block.modify_pti(|w| {
-            w.set_advanced_priority(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_advanced_priority(oer_portable_mmio::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_2(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_2(oer_portable_mmio::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_1(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_1(oer_portable_mmio::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_0(oer_portable_mmio::Bits::truncate((nibble(0)).get()));
+            w.set_priority_0(oer_portable_mmio::Bits::constant::<0>());
         });
     }
 
@@ -208,24 +200,24 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     /// enable.
     pub fn set_external_coex_enabled(&mut self, enabled: bool) {
         let block = &mut *self.block;
-        let mask = nibble(if enabled { 0xf } else { 0 });
+        let mask: oer_portable_mmio::Bits<4> = if enabled {
+            oer_portable_mmio::Bits::constant::<0xf>()
+        } else {
+            oer_portable_mmio::Bits::constant::<0>()
+        };
         block.modify_enable_mask_0(|w| {
-            w.set_mask(oer_portable_mmio::Bits::truncate((mask).get()));
+            w.set_mask(mask);
         });
         block.modify_enable_mask_1(|w| {
-            w.set_mask(oer_portable_mmio::Bits::truncate((mask).get()));
+            w.set_mask(mask);
         });
         block.modify_enable_1(|w| {
-            w.set_enable((flag(enabled)).get() != 0);
+            w.set_enable(enabled);
         });
         block.modify_control(|w| {
-            w.set_enable((flag(enabled)).get() != 0);
+            w.set_enable(enabled);
         });
     }
-}
-
-fn sync(value: u32) -> ExternalCoexSync {
-    ExternalCoexSync::new(value).expect("the synchronization fits ten bits")
 }
 
 impl crate::radio::modem::SharedRadioRegisters {

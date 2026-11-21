@@ -91,12 +91,10 @@ impl<'owner> PhyGrantProtect<'owner> {
         if *self.protected {
             return Err(PhyGrantProtectError::AlreadyProtected);
         }
-        let (Some(client), Some(pti)) = (
-            CoexTimerClientValue::new(
-                oer_chips_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect.bits(),
-            ),
-            CoexTimerPtiValue::new(u32::from(self.pti.value())),
-        ) else {
+        let client = CoexTimerClientValue::from(
+            oer_chips_esp32s31_pac::coex::configuration::Parameter1::PhyGrantProtect,
+        );
+        let Some(pti) = CoexTimerPtiValue::new(u32::from(self.pti.value())) else {
             return Err(PhyGrantProtectError::Domain);
         };
         let timer = CoexTimerRegister::Timer5;
