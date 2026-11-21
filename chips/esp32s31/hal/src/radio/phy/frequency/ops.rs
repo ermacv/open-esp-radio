@@ -131,13 +131,13 @@ pub(crate) struct ChannelCbwFields {
     pub(crate) control_1_low: u8,
 }
 
-pub(crate) const fn bss_tx_offset(cbw: u8) -> u8 {
+pub(crate) const fn bss_tx_offset(cbw: u8) -> Bits<4> {
     if cbw == 2 {
-        2
+        Bits::constant::<2>()
     } else if cbw == 3 {
-        1
+        Bits::constant::<1>()
     } else {
-        0
+        Bits::constant::<0>()
     }
 }
 
@@ -194,10 +194,10 @@ impl FrequencyMemoryAddress {
 
     /// The address `value`, when the memory has it.
     pub const fn new(value: u16) -> Option<Self> {
-        if value > Self::LAST {
-            return None;
+        match Bits::new(value as u32) {
+            Ok(address) => Some(Self(address)),
+            Err(_) => None,
         }
-        Some(Self(Bits::truncate(value as u32)))
     }
 
     /// `base + index * STRIDE + OFFSET`, the form of every address the
@@ -241,22 +241,22 @@ pub enum BasebandMode {
 
 impl BasebandMode {
     const fn bits(self) -> Bits<2> {
-        Bits::truncate(match self {
-            Self::Idle => 0,
-            Self::Calibration => 2,
-        })
+        match self {
+            Self::Idle => Bits::constant::<0>(),
+            Self::Calibration => Bits::constant::<2>(),
+        }
     }
 }
 
 /// The read mode of `phy_read_rf_freq_mem`.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
-const RF_MEMORY_READ_MODE: Bits<2> = Bits::truncate(2);
+const RF_MEMORY_READ_MODE: Bits<2> = Bits::constant::<2>();
 
 /// The read mode the P-FREQ diagnostic sheet held for its reads.
 ///
 /// SOURCE: HW19_S31_FREQUENCY_SELECTION_20261027.
-const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::truncate(0);
+const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::constant::<0>();
 
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(
@@ -352,6 +352,8 @@ pub fn write_memory<P: PhyPlacement>(
         w.set_memory_address_low(address.low())
             .set_memory_address_high(address.high());
     });
+    // Lossless: the layout's 24-bit payload into the 24-bit data field; the
+    // layout's getter returns it as a number.
     frequency.fe.write_frequency_memory_data(|w| {
         w.set_data(Bits::truncate(word.payload())).set_mode(mode);
     });
@@ -529,8 +531,7 @@ pub fn initialize_nrx_baseband<P: PhyPlacement>(frequency: &mut FrequencyRegiste
 
 /// Publish the channel-offset prefix of complete `phy_bb_bss_cbw40`.
 pub fn configure_bss_cbw_prefix<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, cbw: u8) {
-    // Lossless: the offset is at most two.
-    let offset = Bits::<4>::truncate(u32::from(bss_tx_offset(cbw)));
+    let offset = bss_tx_offset(cbw);
     frequency.wifi_mac.modify_channel_tx_offset_control(|w| {
         w.set_primary_20_channel_offset(offset);
     });

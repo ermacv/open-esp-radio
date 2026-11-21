@@ -210,6 +210,11 @@ pub(crate) fn program_pbus_memory_entry<P: Placement>(
 }
 
 /// Sample the shared CFR/gain-memory base index exactly once.
+///
+/// SOURCE: BLOB_LIBPHY_PHY_SET_TX_CFR_MEM, BLOB_LIBPHY_PHY_SET_TX_GAIN_MEM_NEW:
+/// the vendor reads the index `phy_fe_reg_init` writes
+/// (ROM_REV0_PHY_FE_REG_INIT) to address its tables, as does rev0 ROM
+/// `phy_set_tx_gain_mem` (Blobray `register-accesses`).
 pub fn read_table_memory_base_index<P: PhyPlacement>(clock: &ClockRegisters<P>) -> u8 {
     clock.fe.read_table_memory_index_source().base_index()
 }

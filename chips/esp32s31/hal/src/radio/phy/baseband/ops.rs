@@ -1124,9 +1124,9 @@ pub fn set_rx_gain_dc_calibration<P: PhyPlacement>(bb: &mut BasebandRegisters<P>
     use fe::rx_gain_dc_control::Bits5_6Opaque as State;
     bb.fe.modify_rx_gain_dc_control(|w| {
         w.set_bits_5_6_opaque(if enabled {
-            Bits::truncate(State::Enabled.bits())
+            State::Enabled.into()
         } else {
-            Bits::truncate(State::Disabled.bits())
+            State::Disabled.into()
         });
     });
 }
@@ -1203,7 +1203,7 @@ pub fn configure_forced_iccfr<P: PhyPlacement>(
 
 /// A CFR value's twelve bits.
 const fn cfr_bits(value: crate::types::CfrValue) -> Bits<12> {
-    Bits::truncate(value.get())
+    value.field()
 }
 
 #[cfg(test)]

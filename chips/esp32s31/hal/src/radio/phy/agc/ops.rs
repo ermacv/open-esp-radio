@@ -287,11 +287,6 @@ pub fn set_ftm_enabled<P: PhyPlacement>(agc: &mut AgcRegisters<P>, enabled: bool
     });
 }
 
-/// Read back the single field owned by `phy_set_ftm_en`.
-pub fn ftm_enabled<P: PhyPlacement>(agc: &AgcRegisters<P>) -> bool {
-    agc.wifi_bb.read_ftm_control().enable()
-}
-
 /// Apply `phy_reg_update_new` while preserving the independently owned FTM
 /// mode.
 pub fn update_post_initialization<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {

@@ -6,29 +6,12 @@
 
 #![forbid(unsafe_code)]
 
-use crate::{phy_blocks, phy_blocks_mut, system::owner::SharedPhyAccess};
+use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
 pub mod ops;
 
 #[cfg(target_arch = "riscv32")]
 use crate::types::ForcedRxGain;
-
-/// Affine obligation to restore the FTM enable field to its exact prior bit.
-#[must_use = "the exact prior FTM enable bit must be restored"]
-#[derive(Debug, Eq, PartialEq)]
-pub struct FtmEnableRestore {
-    previous: bool,
-}
-
-impl FtmEnableRestore {
-    pub const fn previous(&self) -> bool {
-        self.previous
-    }
-
-    pub fn restore(self, registers: &mut impl SharedPhyAccess) {
-        set_ftm_enabled(registers, self.previous);
-    }
-}
 
 /// Apply complete rev0 ROM `phy_bb_agc_reg_update`.
 ///
@@ -123,21 +106,6 @@ pub fn set_saturation_gain(registers: &mut impl SharedPhyAccess, value: u32) {
 /// Apply complete pinned `libphy.a[phy_reg.o]::phy_set_ftm_en`.
 pub fn set_ftm_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
     ops::set_ftm_enabled(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled);
-}
-
-/// Read the exact bit written by [`set_ftm_enabled`].
-pub fn ftm_enabled(registers: &impl SharedPhyAccess) -> bool {
-    ops::ftm_enabled(&phy_blocks(registers).phy_agc_oracle)
-}
-
-/// Set the FTM leaf while returning its exact previous state for rollback.
-pub fn prepare_ftm_enabled(
-    registers: &mut impl SharedPhyAccess,
-    enabled: bool,
-) -> FtmEnableRestore {
-    let previous = ftm_enabled(registers);
-    set_ftm_enabled(registers, enabled);
-    FtmEnableRestore { previous }
 }
 
 /// Apply complete pinned `phy_reg_update_new` and its finite children.

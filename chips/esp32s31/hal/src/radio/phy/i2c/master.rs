@@ -190,7 +190,8 @@ pub(crate) fn is_busy<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> bool {
 
 /// Publish the complete complemented read mask used by the vendor leaf.
 fn publish_read_mask<P: Placement>(master: &mut I2cAnaMst<P>, block: Route) {
-    // SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
+    // SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C. The vendor's own cut:
+    // a whole-word mask's top byte is the published word's fixed `0xff`.
     master.publish_phy_i2c_read_mask(Bits::truncate(block.complemented_read_select()));
 }
 
@@ -274,7 +275,7 @@ pub(crate) fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, ena
         BbpllCalMode::Disabled
     };
     master.modify_ana_conf0(|w| {
-        w.set_bbpll_cal_mode(Bits::truncate(mode.bits()));
+        w.set_bbpll_cal_mode(mode.into());
     });
 }
 
