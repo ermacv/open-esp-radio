@@ -14,4 +14,3 @@
  * (association, teardown, settings) stays in PSRAM.
  */
 *(.text.*34oer_chips_family_platform_executor4task9poll_task*8datapath*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend2rx7session*12port_service*)
