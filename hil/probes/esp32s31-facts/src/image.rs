@@ -17,18 +17,10 @@ mod opaque;
 mod opaque_wave2;
 
 mod analog_pmu;
-mod ble;
-mod ble_inherited;
-mod ble_masked;
-mod ble_wave2;
 mod generic;
 mod hart1_entry;
 mod irq_observer;
 mod levels;
-mod lp_ack_race;
-mod lp_lanes;
-mod lp_softreset;
-mod pb1;
 mod radio_local;
 #[path = "sar.rs"]
 mod sar;
@@ -211,12 +203,9 @@ struct Session<'a> {
     core_control: pac::ownership::CoreControlPeripherals,
     uart0_clock: pac::ownership::Uart0ClockPeripherals,
     reset_cause: pac::ownership::ResetCausePeripherals,
-    wake_status: pac::pmu::PmuWakeStatus,
-    /// Read only: the sleep request's raw wake/reject status and causes.
-    sleep_control: pac::pmu::PmuSleepControl,
     secondary_launch: pac::ownership::SecondaryLaunchPeripherals,
-    modem_wake_status: pac::modem_lpcon::ModemWakeStatus,
-    ble: ble::Ble,
+    /// The LP watchdog the ROM leaves armed: every bounded leaf feeds it.
+    watchdog: pac::rtc_wdt::LpWdt,
     radio: radio_local::Radio,
     generic: generic::Hardware,
     opaque: opaque::Hardware,
@@ -278,42 +267,6 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(hart1_entry::direct_path),
     },
     Probe {
-        id: 240,
-        run: Action::Thread(pb1::bank1),
-    },
-    Probe {
-        id: 241,
-        run: Action::Thread(pb1::sleep16),
-    },
-    Probe {
-        id: 242,
-        run: Action::Thread(pb1::sleep17),
-    },
-    Probe {
-        id: 243,
-        run: Action::Thread(pb1::sleep0),
-    },
-    Probe {
-        id: 244,
-        run: Action::Thread(pb1::width),
-    },
-    Probe {
-        id: 248,
-        run: Action::Thread(pb1::reference_wrap),
-    },
-    Probe {
-        id: 247,
-        run: Action::Thread(pb1::width_remaining),
-    },
-    Probe {
-        id: 246,
-        run: Action::Thread(pb1::width_set),
-    },
-    Probe {
-        id: 245,
-        run: Action::Thread(pb1::whole),
-    },
-    Probe {
         id: 273,
         run: Action::Thread(radio_local::hw30::recovery23),
     },
@@ -366,18 +319,6 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(opaque_wave2::observer::reset),
     },
     Probe {
-        id: 269,
-        run: Action::Thread(radio_local::hw30::route132),
-    },
-    Probe {
-        id: 231,
-        run: Action::Thread(ble_wave2::natural_ready),
-    },
-    Probe {
-        id: 230,
-        run: Action::Thread(ble_wave2::natural_wrap),
-    },
-    Probe {
         id: 220,
         run: Action::Thread(radio_local::wave2::wifi2),
     },
@@ -388,14 +329,6 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 222,
         run: Action::Thread(radio_local::wave2::tbtt),
-    },
-    Probe {
-        id: 223,
-        run: Action::Thread(radio_local::wave2::ed),
-    },
-    Probe {
-        id: 224,
-        run: Action::Thread(radio_local::wave2::ed_stop),
     },
     Probe {
         id: 225,
@@ -416,42 +349,6 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 229,
         run: Action::Thread(generic::wave2::wrap),
-    },
-    Probe {
-        id: 210,
-        run: Action::Thread(ble_inherited::inherited),
-    },
-    Probe {
-        id: 212,
-        run: Action::Thread(ble_inherited::software_reset),
-    },
-    Probe {
-        id: 213,
-        run: Action::Thread(ble_inherited::after_reset),
-    },
-    Probe {
-        id: 214,
-        run: Action::Thread(ble_inherited::empty_arrival),
-    },
-    Probe {
-        id: 215,
-        run: Action::Thread(ble_inherited::different_arrival),
-    },
-    Probe {
-        id: 216,
-        run: Action::Thread(ble_inherited::same_arrival),
-    },
-    Probe {
-        id: 217,
-        run: Action::Thread(ble_inherited::overflow_arrival),
-    },
-    Probe {
-        id: 218,
-        run: Action::Thread(ble_inherited::retention),
-    },
-    Probe {
-        id: 219,
-        run: Action::Thread(ble_inherited::finish),
     },
     Probe {
         id: 190,
@@ -482,22 +379,6 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(timg_arbitration::timer_high),
     },
     Probe {
-        id: 180,
-        run: Action::Thread(lp_ack_race::compare),
-    },
-    Probe {
-        id: 181,
-        run: Action::Thread(lp_ack_race::wraps),
-    },
-    Probe {
-        id: 182,
-        run: Action::Thread(lp_ack_race::rearm),
-    },
-    Probe {
-        id: 183,
-        run: Action::Thread(lp_ack_race::compare_width),
-    },
-    Probe {
         id: 14,
         run: Action::Thread(opaque_wave2::i2c),
     },
@@ -518,132 +399,8 @@ const PROBES: &[Probe] = &[
         run: Action::Thread(opaque::temperature),
     },
     Probe {
-        id: 170,
-        run: Action::Thread(lp_lanes::rest::compare),
-    },
-    Probe {
-        id: 171,
-        run: Action::Thread(lp_lanes::rest::sleep16),
-    },
-    Probe {
-        id: 172,
-        run: Action::Thread(lp_lanes::rest::sleep17),
-    },
-    Probe {
-        id: 113,
-        run: Action::Thread(lp_lanes::sleep17),
-    },
-    Probe {
-        id: 114,
-        run: Action::Thread(lp_lanes::compare_mode),
-    },
-    Probe {
-        id: 110,
-        run: Action::Thread(lp_lanes::sleep16),
-    },
-    Probe {
-        id: 111,
-        run: Action::Thread(lp_lanes::delivery),
-    },
-    Probe {
-        id: 112,
-        run: Action::Thread(lp_lanes::sleep_other),
-    },
-    Probe {
-        id: 105,
-        run: Action::Thread(lp_softreset::compare),
-    },
-    Probe {
-        id: 106,
-        run: Action::Thread(lp_softreset::rollover),
-    },
-    Probe {
-        id: 107,
-        run: Action::Thread(lp_softreset::both),
-    },
-    Probe {
-        id: 108,
-        run: Action::Thread(lp_softreset::control),
-    },
-    Probe {
-        id: 109,
-        run: Action::Thread(lp_softreset::observe),
-    },
-    Probe {
-        id: 102,
-        run: Action::Thread(ble_wave2::overflow_ack),
-    },
-    Probe {
-        id: 103,
-        run: Action::Thread(ble_wave2::overflow_rate),
-    },
-    Probe {
-        id: 104,
-        run: Action::Thread(ble_wave2::overflow_reset),
-    },
-    Probe {
-        id: 101,
-        run: Action::Thread(ble_wave2::lp_masked),
-    },
-    Probe {
-        id: 96,
-        run: Action::Thread(ble_wave2::lp_clear),
-    },
-    Probe {
-        id: 97,
-        run: Action::Thread(ble_wave2::sleep16),
-    },
-    Probe {
-        id: 98,
-        run: Action::Thread(ble_wave2::sleep_other),
-    },
-    Probe {
-        id: 99,
-        run: Action::Thread(ble_wave2::shutdown_soft),
-    },
-    Probe {
-        id: 100,
-        run: Action::Thread(ble_wave2::shutdown_wrap),
-    },
-    Probe {
-        id: 91,
-        run: Action::Thread(ble_wave2::mapping),
-    },
-    Probe {
-        id: 92,
-        run: Action::Thread(ble_wave2::masks),
-    },
-    Probe {
-        id: 93,
-        run: Action::Thread(ble_wave2::controls),
-    },
-    Probe {
-        id: 94,
-        run: Action::Thread(ble_wave2::groups),
-    },
-    Probe {
-        id: 95,
-        run: Action::Thread(ble_wave2::arrivals),
-    },
-    Probe {
-        id: 90,
-        run: Action::Thread(ble_wave2::prerequisite),
-    },
-    Probe {
-        id: 82,
-        run: Action::Thread(radio_local::ieee_timers),
-    },
-    Probe {
         id: 83,
         run: Action::Thread(radio_local::wifi_timers),
-    },
-    Probe {
-        id: 80,
-        run: Action::Thread(ble::compare_ack),
-    },
-    Probe {
-        id: 81,
-        run: Action::Thread(ble::two_wraps),
     },
     Probe {
         id: 40,
@@ -672,70 +429,6 @@ const PROBES: &[Probe] = &[
     Probe {
         id: 46,
         run: Action::Thread(time_csr::rate_halved),
-    },
-    Probe {
-        id: 32,
-        run: Action::Thread(ble::timer_reset_on),
-    },
-    Probe {
-        id: 33,
-        run: Action::Thread(ble::timer_reset_off),
-    },
-    Probe {
-        id: 34,
-        run: Action::Thread(ble::controller_reset_on),
-    },
-    Probe {
-        id: 35,
-        run: Action::Thread(ble::controller_reset_off),
-    },
-    Probe {
-        id: 20,
-        run: Action::Thread(ble::inherited),
-    },
-    Probe {
-        id: 31,
-        run: Action::Thread(ble::btlc_prefix),
-    },
-    Probe {
-        id: 30,
-        run: Action::Thread(ble::rollover_gates),
-    },
-    Probe {
-        id: 29,
-        run: Action::Thread(ble::software_pending),
-    },
-    Probe {
-        id: 28,
-        run: Action::Thread(ble::counter_controls),
-    },
-    Probe {
-        id: 27,
-        run: Action::Thread(ble::bit_one),
-    },
-    Probe {
-        id: 21,
-        run: Action::Thread(ble::nrt_controls),
-    },
-    Probe {
-        id: 22,
-        run: Action::Thread(ble::nrt_arrivals),
-    },
-    Probe {
-        id: 23,
-        run: Action::Thread(ble::lp_causes),
-    },
-    Probe {
-        id: 24,
-        run: Action::Thread(ble::lp_stop),
-    },
-    Probe {
-        id: 25,
-        run: Action::Thread(ble::lp_wrap),
-    },
-    Probe {
-        id: 26,
-        run: Action::Thread(ble::lp_modes),
     },
     Probe {
         id: 140,
@@ -885,18 +578,6 @@ const PROBES: &[Probe] = &[
         id: 299,
         run: Action::Thread(analog_pmu::injection::<3, 4>),
     },
-    Probe {
-        id: 300,
-        run: Action::Thread(ble_masked::compare0),
-    },
-    Probe {
-        id: 301,
-        run: Action::Thread(ble_masked::compare1),
-    },
-    Probe {
-        id: 302,
-        run: Action::Thread(ble_masked::overflow),
-    },
 ];
 
 // SAFETY: _start initializes the image and calls this once on hart 0.
@@ -913,21 +594,16 @@ extern "C" fn facts_main() -> ! {
         core_control: p.core_control,
         uart0_clock: p.uart0_clock,
         reset_cause: p.reset_cause,
-        wake_status: p.pmu_wake.pmu_wake_status,
-        sleep_control: p.sleep.pmu_sleep_control,
         secondary_launch: p.secondary_launch,
-        modem_wake_status: p.pmu_wake.modem_wake_status,
         radio: radio_local::Radio {
             local_time: p.mac_local_time.wifi_mac_local_time,
             status: p.wifi_mac.wifi_mac_tsf_status,
-            zb: p.ieee802154,
             power: p.wifi_interrupts.wifi_mac_power_interrupt,
             timer: p.wifi_mac.wifi_mac_tsf_timer,
             load: p.wifi_mac.wifi_mac_tsf_load,
             rtc: p.wifi_mac.wifi_mac_rtc_timer_update,
             aux: p.wifi_mac.wifi_mac_aux_tsf_control,
             tbtt: p.wifi_mac.wifi_mac_sta_tbtt_target,
-            idle: p.shared_radio.shared_baseband_reset_idle_status,
         },
         generic: generic::Hardware {
             usb: p.usb_serial_jtag.usb_serial_jtag_task,
@@ -938,16 +614,7 @@ extern "C" fn facts_main() -> ! {
             watchdog: p.watchdog.timg0_wdt,
             watchdog_clock: p.watchdog.hp_sys_clkrst_timg0,
         },
-        ble: ble::Ble {
-            bank: p.bluetooth_interrupts.bluetooth_interrupt_bank,
-            core: p.bluetooth.bluetooth_controller_core,
-            timer: p.bluetooth_modem_lp_timer.btdm_runtime_control,
-            timer_status: p.bluetooth_modem_lp_timer.btdm_lp_timer_status,
-            watchdog: p.watchdog.lp_wdt,
-            positional: p.bluetooth.ble_hw_positional_word1ff0,
-            etm: p.modem_etm.modem_etm_bluetooth,
-            task_irq: p.bluetooth.btmac_ble_phy_init,
-        },
+        watchdog: p.watchdog.lp_wdt,
         opaque: opaque::Hardware {
             block_ack: p.wifi_mac.wifi_mac_block_ack,
             core_enable: p.wifi_mac.wifi_mac_core_enable,
@@ -959,11 +626,7 @@ extern "C" fn facts_main() -> ! {
     // One take for the entire loader session. Commands reuse these owners;
     // the debugger never re-enters _start merely to select another leaf.
     let prior = retained_record();
-    let mut request = if ble_inherited::is_record(&prior) {
-        213
-    } else if lp_softreset::is_record(&prior) {
-        109
-    } else if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
+    let mut request = if prior[0] == 0xfac70007 && prior[1] == 0x687731 {
         8
     } else {
         u32::MAX

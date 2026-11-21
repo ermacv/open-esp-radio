@@ -325,14 +325,8 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "hil/probes/esp32s31-facts/src/image.rs:crate::image::facts_exception:terminal-entry:facts_exception:1" = { owner = "hil/probes/esp32s31-facts", classes = ["cpu-exception"] }
 "hil/probes/esp32s31-facts/src/image.rs:crate::image::facts_main:terminal-entry:facts_main:1" = { owner = "hil/probes/esp32s31-facts", classes = ["configuration-boot"] }
 
-# hil/probes/esp32s31-facts/src/image/ble_inherited.rs
-"hil/probes/esp32s31-facts/src/image/ble_inherited.rs:crate::image::ble_inherited::software_reset:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "hil/probes/esp32s31-facts", classes = ["requested-reset"] }
-
 # hil/probes/esp32s31-facts/src/image/hart1_entry.rs
 "hil/probes/esp32s31-facts/src/image/hart1_entry.rs:crate::image::hart1_entry::facts_hart1_main:terminal-entry:facts_hart1_main:1" = { owner = "hil/probes/esp32s31-facts", classes = ["configuration-boot"] }
-
-# hil/probes/esp32s31-facts/src/image/lp_softreset.rs
-"hil/probes/esp32s31-facts/src/image/lp_softreset.rs:crate::image::lp_softreset::run:reset-trigger:trigger_sys_ctrl_sys_sw_rst:1" = { owner = "hil/probes/esp32s31-facts", classes = ["requested-reset"] }
 
 # hil/probes/esp32s31-radio/src/hardware_image.rs
 "hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:4" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }

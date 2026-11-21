@@ -1,5 +1,8 @@
 # Natural BTLC wrap observation
 
+Selections 230 and 231 are out of the build with the Bluetooth LE radio
+(`ble_wave2`); this is their contract as their records were taken.
+
 Selection 230 observes one natural BTLC period and holds the board for about
 38 minutes. Selection 231 checks the same reset-origin setup for 120 ms before
 that interval. Run under a held `cargo stand lease --board s31-a --air none`.

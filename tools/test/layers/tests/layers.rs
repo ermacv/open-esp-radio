@@ -7444,15 +7444,6 @@ fn silences_a_bool_lint(source: &str) -> bool {
 const RECORD_WORD_CALLERS: &[&str] = &[
     "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
     "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
-    "hil/probes/esp32s31-facts/src/image/ble.rs",
-    "hil/probes/esp32s31-facts/src/image/ble/reset.rs",
-    "hil/probes/esp32s31-facts/src/image/ble_masked.rs",
-    "hil/probes/esp32s31-facts/src/image/ble_wave2/lp.rs",
-    "hil/probes/esp32s31-facts/src/image/lp_ack_race.rs",
-    "hil/probes/esp32s31-facts/src/image/lp_lanes.rs",
-    "hil/probes/esp32s31-facts/src/image/lp_lanes/rest.rs",
-    "hil/probes/esp32s31-facts/src/image/lp_softreset.rs",
-    "hil/probes/esp32s31-facts/src/image/pb1.rs",
 ];
 
 /// A call of `.record_word()`.
@@ -7545,7 +7536,7 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/radio/coex", 1, 0, BY_RADIO_SYSTEM),
     ("chips/family/radio/phy", 2, 1, BY_PHY),
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
-    ("hil/probes/esp32s31-facts", 0, 25, BY_HIL),
+    ("hil/probes/esp32s31-facts", 0, 12, BY_HIL),
 ];
 
 /// The thresholds a package reads: the tools' and the deferred packages'

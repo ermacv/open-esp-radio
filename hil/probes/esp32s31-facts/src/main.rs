@@ -12,9 +12,6 @@
     clippy::indexing_slicing
 )]
 
-#[cfg(test)]
-#[path = "image/ble_wave2/mac/enable_records.rs"]
-mod enable_records;
 #[cfg(target_arch = "riscv32")]
 mod image;
 #[cfg(any(test, target_arch = "riscv32"))]
