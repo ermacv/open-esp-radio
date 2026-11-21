@@ -5899,8 +5899,10 @@ fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
         .checked_sub(1)
         .and_then(|before| ident_at(tokens, before))
         .is_some_and(|before| before == "fn");
-    let called =
-        group_at(tokens, at + 1, Delimiter::Parenthesis).is_some() || punct_at(tokens, at + 1, ':');
+    // A call, `bits(…)`, or a turbofish, `bits::<N>(…)`; a binding named
+    // `bits: …` is neither.
+    let called = group_at(tokens, at + 1, Delimiter::Parenthesis).is_some()
+        || (punct_at(tokens, at + 1, ':') && punct_at(tokens, at + 2, ':'));
     let truncate = word == "truncate"
         && at
             .checked_sub(1)
@@ -6477,73 +6479,13 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         BY_R2,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
-        21,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/channel.rs",
-        2,
-        BY_R2,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/init.rs",
-        2,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
-        3,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/crypto.rs",
-        5,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/hal_init_tail.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
-        2,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init.rs",
-        6,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
         1,
         BY_R2,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        9,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
-        6,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/interface_address.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/last_rx_buffer.rs",
-        3,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/dma.rs",
-        2,
+        4,
         BY_R2,
     ),
     (
@@ -6563,13 +6505,10 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        16,
+        2,
         BY_R2,
     ),
     ("chips/esp32s31/hal/src/radio/modem/ops.rs", 19, BY_R2),
-    ("chips/esp32s31/hal/src/radio/modem/platform.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/modem/syscon.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/modem/values.rs", 12, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 5, BY_R2),
     (
@@ -6583,27 +6522,13 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         1,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 4, BY_R2),
-    ("chips/esp32s31/hal/src/set.rs", 7, BY_R2),
+    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 3, BY_R2),
     ("chips/esp32s31/hal/src/system/boot.rs", 5, BY_R2),
     ("chips/esp32s31/hal/src/system/boot/cache.rs", 1, BY_R2),
     ("chips/esp32s31/hal/src/system/boot/flash.rs", 3, BY_R2),
-    ("chips/esp32s31/hal/src/system/boot/psram.rs", 11, BY_R2),
+    ("chips/esp32s31/hal/src/system/boot/psram.rs", 10, BY_R2),
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
-        1,
-        BY_R2,
-    ),
-    ("chips/esp32s31/radio/phy/src/state/client.rs", 3, BY_R2),
-    (
-        "chips/family/platform/interrupt-table/src/router.rs",
-        1,
-        BY_R2,
-    ),
-    ("chips/family/radio/coex/src/executor.rs", 2, BY_R2),
-    ("chips/family/radio/coex/src/schedule.rs", 2, BY_R2),
-    (
-        "chips/family/radio/ieee80211/policy/src/he_txop.rs",
         1,
         BY_R2,
     ),
@@ -6649,48 +6574,18 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/channel.rs",
-        2,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
         1,
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/crypto.rs",
-        7,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init.rs",
-        6,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
-        5,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        5,
+        3,
         BY_P3,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
-        5,
+        1,
         BY_P3,
     ),
     (
@@ -6705,7 +6600,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        22,
+        17,
         BY_P3,
     ),
     (
@@ -11391,3 +11286,35 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
 ];
+
+/// S8c's finder over each of its forms: a call of `Bits::truncate` and of
+/// the `bits` helper (plain or turbofish) count; a method `.bits()`, a
+/// definition `fn bits` and a binding `bits: …` do not.
+#[test]
+fn a_truncation_is_found_in_each_of_its_forms() {
+    let count = |source: &str| {
+        fn walk(stream: TokenStream, found: &mut usize) {
+            let tokens = stream.into_iter().collect::<Vec<_>>();
+            for (at, token) in tokens.iter().enumerate() {
+                if truncation_at(&tokens, at).is_some() {
+                    *found += 1;
+                }
+                if let TokenTree::Group(group) = token {
+                    walk(group.stream(), found);
+                }
+            }
+        }
+        let mut found = 0;
+        walk(source.parse().expect("tokens"), &mut found);
+        found
+    };
+    assert_eq!(count("w.set_x(Bits::truncate(value));"), 1);
+    assert_eq!(count("w.set_x(bits(value));"), 1);
+    assert_eq!(count("let x = bits::<3>(value);"), 1);
+    assert_eq!(count("let x = name.bits();"), 0);
+    assert_eq!(count("pub const fn bits(self) -> u32 { 0 }"), 0);
+    assert_eq!(
+        count("fn from_field(bits: Bits<3>) -> Self { Self(bits) }"),
+        0
+    );
+}

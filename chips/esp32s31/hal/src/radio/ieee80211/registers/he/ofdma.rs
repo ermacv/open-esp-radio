@@ -12,33 +12,65 @@ use crate::radio::ieee80211::registers::{
 /// Keeping this as a bounded newtype means array and MMIO indexing cannot
 /// receive an arbitrary `u8`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHeTid(u8);
+pub struct MacHeTid(Bits<{ oer_chips_esp32s31_pac::wifi_mac::queue_control::TID_WIDTH }>);
 
 impl MacHeTid {
     pub const COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::hardware_bsr::COUNT;
 
     pub const fn new(value: u8) -> Option<Self> {
-        if value < Self::COUNT as u8 {
-            Some(Self(value))
-        } else {
-            None
+        if value >= Self::COUNT as u8 {
+            return None;
+        }
+        match Bits::new(value as u32) {
+            Ok(field) => Some(Self(field)),
+            Err(_) => None,
         }
     }
 
     pub const fn value(self) -> u8 {
+        // Below `COUNT`: the low byte is the whole value.
+        self.0.get().to_le_bytes()[0]
+    }
+
+    /// The TID as the queue control's field.
+    pub const fn field(
+        self,
+    ) -> Bits<{ oer_chips_esp32s31_pac::wifi_mac::queue_control::TID_WIDTH }> {
         self.0
     }
 
     const fn mask(self) -> u8 {
-        1 << self.0
+        1 << self.value()
     }
 }
 
-/// Configured maximum number of TIDs eligible for HE trigger-based TX.
-///
-/// SOURCE: complete `libpp[if_hecfg.o]::wifi_he_get_hetb_tid_bitmap` and its four-byte table. The enum is the
-/// Rust-owned replacement for `g_wifi_menuconfig + 0x5c`; callers cannot
-/// manufacture the blob's invalid configuration values.
+/// One MPDU length of a Trigger-based queue: non-zero, within the
+/// fourteen-bit length of its link entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MacHeMpduLength(
+    Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_scratch::MPDU_LENGTH_WIDTH }>,
+);
+
+impl MacHeMpduLength {
+    /// A length the link entry holds, or none for zero or a wider one.
+    pub const fn new(length: u16) -> Option<Self> {
+        if length == 0 {
+            return None;
+        }
+        match Bits::new(length as u32) {
+            Ok(field) => Some(Self(field)),
+            Err(_) => None,
+        }
+    }
+
+    /// The length as its link entry's field.
+    pub const fn field(
+        self,
+    ) -> Bits<{ oer_chips_esp32s31_pac::wifi_mac::he_scratch::MPDU_LENGTH_WIDTH }> {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum MacHeTbTidLimit {
@@ -144,7 +176,6 @@ impl MacHeTbLinkReservation {
 pub enum MacHeTbProgramError {
     TidNotEligible,
     LengthCountMismatch,
-    InvalidMpduLength,
     QueuedBytesTooLarge,
 }
 
@@ -294,7 +325,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         policy: MacHeTbTidLimit,
         reservation: MacHeTbLinkReservation,
         tid: MacHeTid,
-        mpdu_lengths: &[u16],
+        mpdu_lengths: &[MacHeMpduLength],
         queued_msdu_bytes: u32,
     ) -> Result<MacHeTriggerTxQueueSnapshot, MacHeTbProgramError> {
         if !policy.contains(tid) {
@@ -303,15 +334,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         if mpdu_lengths.len() != usize::from(reservation.count) {
             return Err(MacHeTbProgramError::LengthCountMismatch);
         }
-        if mpdu_lengths
-            .iter()
-            .any(|length| *length == 0 || *length > 0x3fff)
-        {
-            return Err(MacHeTbProgramError::InvalidMpduLength);
-        }
-        if queued_msdu_bytes > 0x000f_ffff {
-            return Err(MacHeTbProgramError::QueuedBytesTooLarge);
-        }
+        let queued: Bits<{ oer_chips_esp32s31_pac::wifi_mac::software_bsr::VALUE_WIDTH }> =
+            Bits::new(queued_msdu_bytes).map_err(|_| MacHeTbProgramError::QueuedBytesTooLarge)?;
 
         let queue = reservation.queue;
         let physical_queue = trigger_queue_element(queue);
@@ -339,7 +363,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 .set_trigger_based_enable(true)
                 .set_mu_edca_timer_select(bits(u32::from(queue)))
                 .set_mpdu_length_link_address(bits(u32::from(reservation.first)))
-                .set_tid(bits(u32::from(tid.value())))
+                .set_tid(tid.field())
                 .set_minimum_tx_power(Bits::constant::<0>())
                 .set_high_cleared_by_tb_setup(Bits::constant::<0>());
         });
@@ -352,7 +376,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         let status = &mut self.mac.wifi_mac_he_buffer_status;
         status.modify_software_bsr(element(usize::from(queue)), |w| {
-            w.set_value(bits(queued_msdu_bytes));
+            w.set_value(queued);
         });
         // Do not add a fence or diagnostic read here. The complete blob and
         // ROM sequence is exactly SW(BSR), LW(CONTROL), SW(CONTROL). BSR
@@ -380,7 +404,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         &mut self,
         reservation: MacHeTbLinkReservation,
         position: u8,
-        length: u16,
+        length: MacHeMpduLength,
     ) {
         let index = reservation
             .index(position)
@@ -391,7 +415,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_he_scratch(element(usize::from(index)), |w| {
-                w.set_mpdu_length(bits(u32::from(length)))
+                w.set_mpdu_length(length.field())
                     .set_next_link(bits(u32::from(next)));
             });
         if next == oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8 {
@@ -515,10 +539,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn set_he_obss_narrow_band_ru_disabled(&mut self, disabled: bool) {
         let registers = &mut self.mac.wifi_mac_he_obss_narrow_band_ru;
         registers.modify_disable_bitmap(|w| {
-            w.set_value(bits(if disabled { 0x000f_ffff } else { 0 }));
+            w.set_value(if disabled {
+                Bits::constant::<0x000f_ffff>()
+            } else {
+                Bits::constant::<0>()
+            });
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
-            w.set_class_disable(bits(if disabled { oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled.bits() } else { oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled.bits() }));
+            w.set_class_disable(
+                if disabled {
+                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllDisabled
+                } else {
+                    oer_chips_esp32s31_pac::wifi_mac::he_obss_narrow_band_ru_control::ClassDisable::AllEnabled
+                }
+                .into(),
+            );
         });
         registers.modify_he_obss_narrow_band_ru_control(|w| {
             w.set_global_disable(disabled);

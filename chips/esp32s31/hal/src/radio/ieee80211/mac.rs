@@ -17,8 +17,8 @@ pub use crate::types::{
 
 use crate::types::{
     MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
-    MacHeErSuAckRateProfile, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit,
-    MacHeTid, MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
+    MacHeMpduLength, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
+    MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
     MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
     MacOrdinaryTxQueueSnapshot, MacRxBlockAckEntryIndex, MacRxBlockAckStartingSequence,
     MacRxBlockAckTid, MacRxBlockAckWindow, MacTxAbortCause, MacTxAbortOutcome,
@@ -453,7 +453,7 @@ impl<'registers> WifiMacHal<'registers> {
     /// Apply the interface's association mode before its first key installation.
     pub fn configure_ccmp_association(
         &mut self,
-        interface: crate::types::MacInterface,
+        interface: crate::radio::ieee80211::registers::MacCryptoInterface,
         mode: crate::types::MacSppMode,
     ) {
         self.pac_mut()
@@ -587,7 +587,10 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Publish the matching reviewed ER-SU ACK-rate register image.
-    pub fn set_he_ersu_ack_rate_profile(&mut self, profile: MacHeErSuAckRateProfile) {
+    pub fn set_he_ersu_ack_rate_profile(
+        &mut self,
+        profile: oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate,
+    ) {
         self.pac_mut().set_he_ersu_ack_rate_profile(profile);
     }
 
@@ -673,7 +676,7 @@ impl<'registers> WifiMacHal<'registers> {
         policy: MacHeTbTidLimit,
         reservation: MacHeTbLinkReservation,
         tid: MacHeTid,
-        mpdu_lengths: &[u16],
+        mpdu_lengths: &[MacHeMpduLength],
         queued_msdu_bytes: u32,
     ) -> Result<MacHeTriggerTxQueueSnapshot, MacHeTbProgramError> {
         self.pac_mut().prepare_he_trigger_based_queue(

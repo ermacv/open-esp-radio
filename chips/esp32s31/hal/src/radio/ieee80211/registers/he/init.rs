@@ -73,32 +73,32 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // mode one, normalized rate zero, DCM false and ER-SU false, then
         // publishes the 16-QAM, QPSK and BPSK profiles in that order.
         init.modify_bf_report_rate(|w| {
-            w.set_qam16_rate(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::Qam16Rate::NormalizedRate0.bits(),
-            ))
-            .set_qam16_signal_mode(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::Qam16SignalMode::Mode1.bits(),
-            ))
+            w.set_qam16_rate(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::Qam16Rate::NormalizedRate0.into(),
+            )
+            .set_qam16_signal_mode(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::Qam16SignalMode::Mode1.into(),
+            )
             .set_qam16_dcm(false)
             .set_qam16_ersu(false);
         });
         init.modify_bf_report_rate(|w| {
-            w.set_qpsk_rate(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QpskRate::NormalizedRate0.bits(),
-            ))
-            .set_qpsk_signal_mode(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QpskSignalMode::Mode1.bits(),
-            ))
+            w.set_qpsk_rate(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QpskRate::NormalizedRate0.into(),
+            )
+            .set_qpsk_signal_mode(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::QpskSignalMode::Mode1.into(),
+            )
             .set_qpsk_dcm(false)
             .set_qpsk_ersu(false);
         });
         init.modify_bf_report_rate(|w| {
-            w.set_bpsk_rate(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::BpskRate::NormalizedRate0.bits(),
-            ))
-            .set_bpsk_signal_mode(Bits::truncate(
-                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::BpskSignalMode::Mode1.bits(),
-            ))
+            w.set_bpsk_rate(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::BpskRate::NormalizedRate0.into(),
+            )
+            .set_bpsk_signal_mode(
+                oer_chips_esp32s31_pac::wifi_mac::bf_report_rate::BpskSignalMode::Mode1.into(),
+            )
             .set_bpsk_dcm(false)
             .set_bpsk_ersu(false);
         });

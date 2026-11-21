@@ -273275,6 +273275,50 @@ pub mod wifi_mac {
     /// Ascending start of the three continuation lists. Slot s and one-based position p select word 15*s+15-p. The top six words overlap HE_SCRATCH; this format grants no independent MMIO owner.
     /// Hardware geometry. SOURCE: BLOB_MAC_TXOP_LIST_20261103.
     pub const TXOP_LIST_MEMORY_OFFSET: u32 = 5460;
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// An ER-SU ACK rate byte: the ordinary rate, or the extended-range one. hal_he_set_ersu_ack_rate writes the same byte to all four RATE fields of ERSU_ACK_RATE, argument zero selecting 0x80 and nonzero 0xa0.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_HE_INIT_SUFFIX, BLOB_LIBPP_HAL_BF_CONFIG.
+        /// The declared values of the `ERSU_ACK_RATE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ErsuAckRate {
+            /// The ordinary ACK rate (hal_he_set_ersu_ack_rate argument zero).
+            Ordinary = 0x80,
+            /// The extended-range ACK rate (hal_he_set_ersu_ack_rate argument nonzero).
+            ExtendedRange = 0xa0,
+        }
+
+        impl ErsuAckRate {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x80 => Some(Self::Ordinary),
+                    0xa0 => Some(Self::ExtendedRange),
+                    _ => None,
+                }
+            }
+        }
+
+        impl From<ErsuAckRate> for u8 {
+            #[inline]
+            fn from(value: ErsuAckRate) -> Self {
+                (value.bits() & 0xff) as u8
+            }
+        }
+    }
+
     /// The `BSSID_LOW%s` register.
     ///
     /// BSSID bytes 0..3 for interfaces 0..3; hal_mac_set_bssid publishes a complete full-word store.
@@ -281528,98 +281572,12 @@ pub mod wifi_mac {
         /// Positioned bits of `RATE_0`.
         pub const RATE_0_MASK: u32 = 0xff;
 
-        /// The declared values of the `RATE_0` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Rate0 {
-            Ordinary = 0x80,
-            ExtendedRange = 0xa0,
-        }
-
-        impl Rate0 {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits()
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x80 => Some(Self::Ordinary),
-                    0xa0 => Some(Self::ExtendedRange),
-                    _ => None,
-                }
-            }
-        }
-
-        /// A named value of the `RATE_0` field, written as the field's value.
-        impl From<Rate0> for u8 {
-            #[inline]
-            fn from(value: Rate0) -> Self {
-                (value.bits() & 0xff) as u8
-            }
-        }
-
         /// Width of `RATE_1` in bits.
         pub const RATE_1_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_1`.
         pub const RATE_1_MAX: u32 = 0xff;
         /// Positioned bits of `RATE_1`.
         pub const RATE_1_MASK: u32 = 0xff00;
-
-        /// The declared values of the `RATE_1` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Rate1 {
-            Ordinary = 0x80,
-            ExtendedRange = 0xa0,
-        }
-
-        impl Rate1 {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 8
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x80 => Some(Self::Ordinary),
-                    0xa0 => Some(Self::ExtendedRange),
-                    _ => None,
-                }
-            }
-        }
-
-        /// A named value of the `RATE_1` field, written as the field's value.
-        impl From<Rate1> for u8 {
-            #[inline]
-            fn from(value: Rate1) -> Self {
-                (value.bits() & 0xff) as u8
-            }
-        }
 
         /// Width of `RATE_2` in bits.
         pub const RATE_2_WIDTH: u32 = 8;
@@ -281628,98 +281586,12 @@ pub mod wifi_mac {
         /// Positioned bits of `RATE_2`.
         pub const RATE_2_MASK: u32 = 0xff0000;
 
-        /// The declared values of the `RATE_2` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Rate2 {
-            Ordinary = 0x80,
-            ExtendedRange = 0xa0,
-        }
-
-        impl Rate2 {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 16
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x80 => Some(Self::Ordinary),
-                    0xa0 => Some(Self::ExtendedRange),
-                    _ => None,
-                }
-            }
-        }
-
-        /// A named value of the `RATE_2` field, written as the field's value.
-        impl From<Rate2> for u8 {
-            #[inline]
-            fn from(value: Rate2) -> Self {
-                (value.bits() & 0xff) as u8
-            }
-        }
-
         /// Width of `RATE_3` in bits.
         pub const RATE_3_WIDTH: u32 = 8;
         /// Greatest unsigned image of `RATE_3`.
         pub const RATE_3_MAX: u32 = 0xff;
         /// Positioned bits of `RATE_3`.
         pub const RATE_3_MASK: u32 = 0xff000000;
-
-        /// The declared values of the `RATE_3` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Rate3 {
-            Ordinary = 0x80,
-            ExtendedRange = 0xa0,
-        }
-
-        impl Rate3 {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 24
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x80 => Some(Self::Ordinary),
-                    0xa0 => Some(Self::ExtendedRange),
-                    _ => None,
-                }
-            }
-        }
-
-        /// A named value of the `RATE_3` field, written as the field's value.
-        impl From<Rate3> for u8 {
-            #[inline]
-            fn from(value: Rate3) -> Self {
-                (value.bits() & 0xff) as u8
-            }
-        }
 
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -281734,8 +281606,8 @@ pub mod wifi_mac {
 
             /// The `RATE_0` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_0_variant(self) -> Option<Rate0> {
-                Rate0::from_bits(self.0 & 0xff)
+            pub const fn rate_0_variant(self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits(self.0 & 0xff)
             }
 
             /// Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281746,8 +281618,8 @@ pub mod wifi_mac {
 
             /// The `RATE_1` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_1_variant(self) -> Option<Rate1> {
-                Rate1::from_bits((self.0 >> 8) & 0xff)
+            pub const fn rate_1_variant(self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 8) & 0xff)
             }
 
             /// Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281758,8 +281630,8 @@ pub mod wifi_mac {
 
             /// The `RATE_2` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_2_variant(self) -> Option<Rate2> {
-                Rate2::from_bits((self.0 >> 16) & 0xff)
+            pub const fn rate_2_variant(self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 16) & 0xff)
             }
 
             /// Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281770,8 +281642,8 @@ pub mod wifi_mac {
 
             /// The `RATE_3` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_3_variant(self) -> Option<Rate3> {
-                Rate3::from_bits((self.0 >> 24) & 0xff)
+            pub const fn rate_3_variant(self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 24) & 0xff)
             }
         }
 
@@ -281787,8 +281659,8 @@ pub mod wifi_mac {
 
             /// The `RATE_0` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_0_variant(&self) -> Option<Rate0> {
-                Rate0::from_bits(self.0 & 0xff)
+            pub const fn rate_0_variant(&self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits(self.0 & 0xff)
             }
 
             /// Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281799,8 +281671,8 @@ pub mod wifi_mac {
 
             /// The `RATE_1` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_1_variant(&self) -> Option<Rate1> {
-                Rate1::from_bits((self.0 >> 8) & 0xff)
+            pub const fn rate_1_variant(&self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 8) & 0xff)
             }
 
             /// Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281811,8 +281683,8 @@ pub mod wifi_mac {
 
             /// The `RATE_2` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_2_variant(&self) -> Option<Rate2> {
-                Rate2::from_bits((self.0 >> 16) & 0xff)
+            pub const fn rate_2_variant(&self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 16) & 0xff)
             }
 
             /// Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
@@ -281823,8 +281695,8 @@ pub mod wifi_mac {
 
             /// The `RATE_3` field as its declared value, if it is one.
             #[inline]
-            pub const fn rate_3_variant(&self) -> Option<Rate3> {
-                Rate3::from_bits((self.0 >> 24) & 0xff)
+            pub const fn rate_3_variant(&self) -> Option<super::dictionaries::ErsuAckRate> {
+                super::dictionaries::ErsuAckRate::from_bits((self.0 >> 24) & 0xff)
             }
 
             /// Set `RATE_0`.

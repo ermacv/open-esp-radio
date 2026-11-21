@@ -10,7 +10,7 @@ pub use crate::radio::ieee80211::registers::{
     MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot, MacDelaySlot, MacDsssPreamble,
     MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
     MacHeBeamformingReportProfileError, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
-    MacHeErSuAckRateProfile, MacHeFecCoding, MacHeMcs, MacHePacketPaddingDuration, MacHePeerConfig,
+    MacHeFecCoding, MacHeMcs, MacHeMpduLength, MacHePacketPaddingDuration, MacHePeerConfig,
     MacHeRate, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbStatistics, MacHeTbTidLimit,
     MacHeTid, MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat,
     MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth,

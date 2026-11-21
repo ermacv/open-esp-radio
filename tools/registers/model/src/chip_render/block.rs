@@ -1398,6 +1398,27 @@ pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Res
             u32::MAX >> (32 - width),
             None,
         );
+        // An open dictionary's fields stay open for writing: their native
+        // setters take a name through `From`, the value masked to its width.
+        if !values.complete {
+            let (target, body) = match width {
+                8 => ("u8".to_owned(), "(value.bits() & 0xff) as u8".to_owned()),
+                16 => (
+                    "u16".to_owned(),
+                    "(value.bits() & 0xffff) as u16".to_owned(),
+                ),
+                32 => ("u32".to_owned(), "value.bits()".to_owned()),
+                _ => (
+                    format!("oer_portable_mmio::Bits<{width}>"),
+                    "oer_portable_mmio::Bits::truncate(value.bits())".to_owned(),
+                ),
+            };
+            let _ = writeln!(
+                output,
+                "impl From<{name}> for {target} {{\n#[inline]\nfn from(value: {name}) -> Self {{\n{body}\n}}\n}}\n",
+                name = values.name,
+            );
+        }
     }
     output.push_str("}\n\n");
     Ok(())

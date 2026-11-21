@@ -3,7 +3,7 @@
 use oer_chips_esp32s31_pac::wifi_mac::WifiMacLastRxBuffer;
 use oer_portable_mmio::Placement;
 
-use super::{MacPlacement, WifiRadioRegisters, bits, element};
+use super::{MacPlacement, WifiRadioRegisters, element};
 
 /// One last-RX-buffer table entry's three words, in the vendor's store order.
 struct LastRxBufferEntry {
@@ -18,7 +18,7 @@ enum EntryParameterB {
     /// The vendor's whole-word image (entries zero to four).
     WholeWord,
     /// The described twelve-bit field, stored from zero.
-    Field(u32),
+    Field(oer_portable_mmio::Bits<12>),
 }
 
 /// The six entries `mac_last_rxbuf_init` stores, in order.
@@ -56,7 +56,7 @@ const LAST_RX_BUFFER_ENTRIES: [LastRxBufferEntry; 6] = [
     LastRxBufferEntry {
         control: 0x0002_3011,
         parameter_a: 0x0000_0001,
-        parameter_b: EntryParameterB::Field(0x0000_00ff),
+        parameter_b: EntryParameterB::Field(oer_portable_mmio::Bits::constant::<0x0000_00ff>()),
     },
 ];
 
@@ -90,17 +90,17 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             match entry.parameter_b {
                 EntryParameterB::WholeWord => whole_word_step(table, position),
                 EntryParameterB::Field(value) => table.write_entry_parameter_b(index, |w| {
-                    w.set_bits_0_11_opaque(bits(value));
+                    w.set_bits_0_11_opaque(value);
                 }),
             }
         }
 
         // Preserve the two distinct fresh-read edges from the complete leaf.
         table.modify_last_rx_buffer_control(|w| {
-            w.set_bits_8_13_opaque(bits(0x3f));
+            w.set_bits_8_13_opaque(oer_portable_mmio::Bits::constant::<0x3f>());
         });
         table.modify_last_rx_buffer_control(|w| {
-            w.set_bits_1_6_opaque(bits(0x3f));
+            w.set_bits_1_6_opaque(oer_portable_mmio::Bits::constant::<0x3f>());
         });
         self.mac.wifi_mac_rx_csi_control.modify_rx_csi_control(|w| {
             w.set_bit_27_opaque(true);

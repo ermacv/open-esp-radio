@@ -5,8 +5,8 @@ use oer_portable_mmio::{Bits, Index, Placement};
 
 use super::{
     MacExtraSoftApRxBlockAckEntryIndex, MacInterface, MacPlacement, MacRxBlockAckEntryIndex,
-    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow, WifiRadioRegisters, bits,
-    byte, element, halfword,
+    MacRxBlockAckStartingSequence, MacRxBlockAckTid, MacRxBlockAckWindow, WifiRadioRegisters, byte,
+    element, halfword,
 };
 
 /// The BlockAck positions one TX queue's result bank captures: the
@@ -196,7 +196,7 @@ const fn rx_block_ack_update_bit(hardware_index: MacRxBlockAckEntryIndex) -> u8 
 
 /// The extra-SoftAP staging index field of a bounded entry index.
 const fn extra_softap_index(hardware_index: MacExtraSoftApRxBlockAckEntryIndex) -> Bits<5> {
-    bits(hardware_index.get())
+    hardware_index.field()
 }
 
 /// The one-way peer split of a 48-bit address: four head bytes, two tail.
@@ -221,9 +221,9 @@ fn store_rx_block_ack_peer<P: Placement>(
     });
     block.modify_rx_block_ack_entry_peer_tail_and_policy(entry, |w| {
         w.set_peer_address_tail(tail)
-            .set_interface(oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::Interface::from_field(interface.bits()))
-            .set_window(bits(window.get()))
-            .set_bits_25_31_opaque(bits(0));
+            .set_interface(interface.into())
+            .set_window(window.field())
+            .set_bits_25_31_opaque(Bits::constant::<0>());
     });
 }
 
@@ -242,9 +242,9 @@ fn clear_rx_block_ack_bitmap_load<P: Placement>(block: &mut WifiMacBlockAck<P>, 
 fn clear_rx_block_ack_entry_control<P: Placement>(block: &mut WifiMacBlockAck<P>, entry: Index<8>) {
     block.modify_rx_block_ack_entry_control(entry, |w| {
         w.set_enable(false)
-            .set_bits_1_11_opaque(bits(0))
-            .set_tid(bits(0))
-            .set_bits_16_29_opaque(bits(0))
+            .set_bits_1_11_opaque(Bits::constant::<0>())
+            .set_tid(Bits::constant::<0>())
+            .set_bits_16_29_opaque(Bits::constant::<0>())
             .set_write(false)
             .set_valid(false);
     });
@@ -271,9 +271,9 @@ fn publish_rx_block_ack_active_control<P: Placement>(
 ) {
     block.modify_rx_block_ack_entry_control(entry, |w| {
         w.set_enable(true)
-            .set_bits_1_11_opaque(bits(0))
-            .set_tid(bits(tid.get()))
-            .set_bits_16_29_opaque(bits(0))
+            .set_bits_1_11_opaque(Bits::constant::<0>())
+            .set_tid(tid.field())
+            .set_bits_16_29_opaque(Bits::constant::<0>())
             .set_write(true)
             .set_valid(true);
     });
@@ -386,7 +386,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let entry = rx_block_ack_element(hardware_index);
         store_rx_block_ack_peer(block, entry, interface, peer, window);
         block.modify_rx_block_ack_entry_start_sequence_load(entry, |w| {
-            w.set_sequence(bits(starting_sequence.get()));
+            w.set_sequence(starting_sequence.field());
         });
         block.modify_rx_block_ack_entry_control(entry, |w| {
             w.set_valid(false);
@@ -432,10 +432,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let entry = rx_block_ack_element(hardware_index);
         clear_rx_block_ack_entry_control(block, entry);
         block.modify_rx_block_ack_entry_start_sequence_load(entry, |w| {
-            w.set_sequence(bits(starting_sequence.get()));
+            w.set_sequence(starting_sequence.field());
         });
         block.modify_rx_block_ack_entry_peer_tail_and_policy(entry, |w| {
-            w.set_window(bits(window.get()));
+            w.set_window(window.field());
         });
         clear_rx_block_ack_bitmap_load(block, entry);
         request_rx_block_ack_entry_update(block, hardware_index);
@@ -471,22 +471,22 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         });
         block.modify_extra_softap_rx_block_ack_peer_tail_and_policy(|w| {
             w.set_peer_address_tail(peer_tail)
-                .set_interface(oer_chips_esp32s31_pac::wifi_mac::extra_softap_rx_block_ack_peer_tail_and_policy::Interface::from_field(interface.bits()))
-                .set_window(bits(window.get()))
-                .set_bits_25_31_opaque(bits(0));
+                .set_interface(interface.into())
+                .set_window(window.field())
+                .set_bits_25_31_opaque(Bits::constant::<0>());
         });
         block.modify_extra_softap_rx_block_ack_start_sequence(|w| {
-            w.set_sequence(bits(starting_sequence.get()));
+            w.set_sequence(starting_sequence.field());
         });
         clear_extra_softap_bitmap(block);
         // The zero-based `extra_softap_rx_block_ack_active_control` store.
         block.modify_extra_softap_rx_block_ack_control(|w| {
             w.set_enable(true)
-                .set_bits_1_4_opaque(bits(0))
+                .set_bits_1_4_opaque(Bits::constant::<0>())
                 .set_index(index)
-                .set_bits_10_11_opaque(bits(0))
-                .set_tid(bits(tid.get()))
-                .set_bits_16_29_opaque(bits(0))
+                .set_bits_10_11_opaque(Bits::constant::<0>())
+                .set_tid(tid.field())
+                .set_bits_16_29_opaque(Bits::constant::<0>())
                 .set_write(true)
                 .set_valid(true);
         });
@@ -545,10 +545,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let _ = block.read_extra_softap_rx_block_ack_control();
         set_extra_softap_latch(block, false);
         block.modify_extra_softap_rx_block_ack_start_sequence(|w| {
-            w.set_sequence(bits(starting_sequence.get()));
+            w.set_sequence(starting_sequence.field());
         });
         block.modify_extra_softap_rx_block_ack_peer_tail_and_policy(|w| {
-            w.set_window(bits(window.get()));
+            w.set_window(window.field());
         });
         clear_extra_softap_bitmap(block);
         commit_extra_softap_entry(block);

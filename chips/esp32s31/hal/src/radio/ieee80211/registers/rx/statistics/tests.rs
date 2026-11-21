@@ -1,7 +1,7 @@
 use super::{
     MacPlacement, MacRxDecodeErrorStatistics, MacRxDecodeErrorStatisticsDelta, MacRxHangStatistics,
     MacRxHangStatisticsDelta, MacRxPrimaryStatistics, MacRxPrimaryStatisticsDelta,
-    WifiRadioRegisters, halfword,
+    WifiRadioRegisters,
 };
 use crate::radio::ieee80211::registers::byte;
 

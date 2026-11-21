@@ -98,7 +98,7 @@ fn a_trigger_queue_links_its_lengths_and_publishes_validity_last() {
             MacHeTbTidLimit::Three,
             reservation(),
             tid,
-            &[100, 200, 300],
+            &lengths([100, 200, 300]),
             0x1234,
         )
         .expect("an eligible queue");
@@ -157,7 +157,7 @@ fn the_queue_control_store_keeps_only_the_translation_bit() {
             MacHeTbTidLimit::Three,
             reservation(),
             MacHeTid::new(0).expect("a TID"),
-            &[1, 2, 3],
+            &lengths([1, 2, 3]),
             0,
         )
         .expect("an eligible queue");
@@ -184,22 +184,18 @@ fn an_invalid_request_writes_nothing() {
             MacHeTbTidLimit::Three,
             reservation(),
             ineligible,
-            &[1, 2, 3],
+            &lengths([1, 2, 3]),
             0,
         ),
         Err(MacHeTbProgramError::TidNotEligible)
     );
     let eligible = MacHeTid::new(0).expect("a TID");
+    let two = lengths([1, 2]);
+    let three = lengths([1, 2, 3]);
     for (lengths, bytes, error) in [
-        (&[1_u16, 2][..], 0, MacHeTbProgramError::LengthCountMismatch),
-        (&[1, 0, 3][..], 0, MacHeTbProgramError::InvalidMpduLength),
+        (&two[..], 0, MacHeTbProgramError::LengthCountMismatch),
         (
-            &[1, 0x4000, 3][..],
-            0,
-            MacHeTbProgramError::InvalidMpduLength,
-        ),
-        (
-            &[1, 2, 3][..],
+            &three[..],
             0x10_0000,
             MacHeTbProgramError::QueuedBytesTooLarge,
         ),
@@ -592,4 +588,30 @@ fn he_queue_scheduling_snapshot<M: MacPlacement>(
         edca_queues,
         mu_edca_timers,
     }
+}
+
+fn lengths<const N: usize>(values: [u16; N]) -> [MacHeMpduLength; N] {
+    values.map(|value| MacHeMpduLength::new(value).expect("a link entry's length"))
+}
+
+#[test]
+fn an_mpdu_length_is_non_zero_and_fits_its_fourteen_bits() {
+    assert_eq!(MacHeMpduLength::new(0), None);
+    assert_eq!(MacHeMpduLength::new(0x4000), None);
+    assert_eq!(
+        MacHeMpduLength::new(0x3fff).map(|length| length.field().get()),
+        Some(0x3fff)
+    );
+    assert_eq!(
+        MacHeMpduLength::new(1).map(|length| length.field().get()),
+        Some(1)
+    );
+}
+
+#[test]
+fn a_tid_holds_the_eight_values_of_its_field() {
+    for value in 0..8 {
+        assert_eq!(MacHeTid::new(value).map(MacHeTid::value), Some(value));
+    }
+    assert_eq!(MacHeTid::new(8), None);
 }

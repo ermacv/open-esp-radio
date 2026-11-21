@@ -3,7 +3,6 @@
 use oer_chips_esp32s31_pac::{
     modem_pwr::regdma_control::ActiveLink, wifi_mac::control::PowerSaveTxBlock,
 };
-use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters, byte};
 
@@ -19,10 +18,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_no_retention_stop_request(true)
                 .set_tx_block_stop_request_low(true)
                 .set_power_save_tx_block(PowerSaveTxBlock::Blocked)
-                .set_tx_block_stop_request_high(Bits::truncate(
+                .set_tx_block_stop_request_high(
                     oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::StopAll
-                        .bits(),
-                ));
+                        .into(),
+                );
         });
         oer_portable_riscv::fence();
     }
@@ -54,9 +53,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_no_retention_stop_request(false)
                 .set_tx_block_stop_request_low(false)
                 .set_power_save_tx_block(PowerSaveTxBlock::Run)
-                .set_tx_block_stop_request_high(Bits::truncate(
-                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.bits(),
-                ));
+                .set_tx_block_stop_request_high(
+                    oer_chips_esp32s31_pac::wifi_mac::control::TxBlockStopRequestHigh::Run.into(),
+                );
         });
         oer_portable_riscv::fence();
     }

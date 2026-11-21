@@ -18,18 +18,6 @@ pub enum MacInterface {
 }
 
 impl MacInterface {
-    /// Numeric image for diagnostics.
-    pub const fn bits(self) -> u32 {
-        match self {
-            Self::Station => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Station.bits(),
-            Self::AccessPoint => {
-                oer_chips_esp32s31_pac::wifi_mac::config::Interface::AccessPoint.bits()
-            }
-            Self::Context2 => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Context2.bits(),
-            Self::Context3 => oer_chips_esp32s31_pac::wifi_mac::config::Interface::Context3.bits(),
-        }
-    }
-
     /// The interface's element of the four-entry interface register arrays.
     pub const fn index(
         self,
@@ -67,8 +55,8 @@ impl MacInterface {
     }
 }
 
-/// The interface each of the MAC's interface fields reads as: every value
-/// of the two bits is one.
+/// The interface each of the MAC's interface fields reads as, and the
+/// field value of each interface: every value of the two bits is one.
 macro_rules! interface_of_field {
     ($($register:ident),+) => {$(
         impl From<oer_chips_esp32s31_pac::wifi_mac::$register::Interface> for MacInterface {
@@ -79,6 +67,17 @@ macro_rules! interface_of_field {
                     Interface::AccessPoint => Self::AccessPoint,
                     Interface::Context2 => Self::Context2,
                     Interface::Context3 => Self::Context3,
+                }
+            }
+        }
+
+        impl From<MacInterface> for oer_chips_esp32s31_pac::wifi_mac::$register::Interface {
+            fn from(value: MacInterface) -> Self {
+                match value {
+                    MacInterface::Station => Self::Station,
+                    MacInterface::AccessPoint => Self::AccessPoint,
+                    MacInterface::Context2 => Self::Context2,
+                    MacInterface::Context3 => Self::Context3,
                 }
             }
         }
@@ -178,16 +177,32 @@ impl MacRxBeaconClearRequest {
 
 /// The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacSlowClockCalibrationValue(u32);
+pub struct MacSlowClockCalibrationValue(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
+    >,
+);
 
 impl MacSlowClockCalibrationValue {
     pub const MIN: u32 = 0x00000000;
+
+    /// Zero, the calibration the HAL publishes before a measurement.
+    pub const ZERO: Self = Self(oer_portable_mmio::Bits::constant::<0>());
+
+    /// The low eighteen bits of `value`: the vendor's own truncation of the
+    /// OS interface's calibration (`hal_timer_update_by_rtc`).
+    pub const fn from_low_bits(value: u32) -> Self {
+        Self(oer_portable_mmio::Bits::truncate(value))
+    }
     pub const MAX: u32 = oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -199,11 +214,20 @@ impl MacSlowClockCalibrationValue {
             { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
+    > {
         self.0
     }
 }
@@ -298,7 +322,9 @@ impl MacPti {
 
 /// Non-zero eleven-bit association identifier accepted by the reviewed HE association transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacAssociationId(u32);
+pub struct MacAssociationId(
+    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::bssid_high::ASSOCIATION_ID_WIDTH }>,
+);
 
 impl MacAssociationId {
     pub const MIN: u32 = 0x00000001;
@@ -307,7 +333,10 @@ impl MacAssociationId {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value >= Self::MIN && value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -315,13 +344,26 @@ impl MacAssociationId {
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::bssid_high::ASSOCIATION_ID_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Three-bit minimum MPDU start-spacing value accepted by the reviewed HE association transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacMinimumMpduStartSpacing(u32);
+pub struct MacMinimumMpduStartSpacing(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_WIDTH },
+    >,
+);
 
 impl MacMinimumMpduStartSpacing {
     pub const MIN: u32 = 0x00000000;
@@ -331,7 +373,10 @@ impl MacMinimumMpduStartSpacing {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -343,18 +388,31 @@ impl MacMinimumMpduStartSpacing {
             { oer_chips_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::bssid_high::MINIMUM_MPDU_START_SPACING_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Six-bit BSS color accepted by the reviewed HE BSSID lifecycle transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacHeBssColor(u32);
+pub struct MacHeBssColor(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_WIDTH },
+    >,
+);
 
 impl MacHeBssColor {
     pub const MIN: u32 = 0x00000000;
@@ -363,7 +421,10 @@ impl MacHeBssColor {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -375,18 +436,31 @@ impl MacHeBssColor {
             { oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BSS_COLOR_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Three-bit Default PE Duration accepted by complete hal_he_set_default_pe.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacHeDefaultPacketExtensionDuration(u32);
+pub struct MacHeDefaultPacketExtensionDuration(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_WIDTH },
+    >,
+);
 
 impl MacHeDefaultPacketExtensionDuration {
     pub const MIN: u32 = 0x00000000;
@@ -396,7 +470,10 @@ impl MacHeDefaultPacketExtensionDuration {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -408,18 +485,31 @@ impl MacHeDefaultPacketExtensionDuration {
             { oer_chips_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::he_default_control::DEFAULT_PE_DURATION_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Five-bit nominal packet-padding duration accepted by the reviewed HE peer transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacHePacketPaddingDuration(u32);
+pub struct MacHePacketPaddingDuration(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_WIDTH },
+    >,
+);
 
 impl MacHePacketPaddingDuration {
     pub const MIN: u32 = 0x00000000;
@@ -428,7 +518,10 @@ impl MacHePacketPaddingDuration {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -440,11 +533,20 @@ impl MacHePacketPaddingDuration {
             { oer_chips_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::he_packet_padding::BPSK_DURATION_WIDTH },
+    > {
         self.0
     }
 }
@@ -634,7 +736,11 @@ impl MacRxBlockAckEntryIndex {
 
 /// One of the eight extra-SoftAP receive BlockAck entries selected through the shared staging window.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacExtraSoftApRxBlockAckEntryIndex(u32);
+pub struct MacExtraSoftApRxBlockAckEntryIndex(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::extra_softap_rx_block_ack_control::INDEX_WIDTH },
+    >,
+);
 
 impl MacExtraSoftApRxBlockAckEntryIndex {
     pub const MIN: u32 = 0x00000000;
@@ -644,26 +750,37 @@ impl MacExtraSoftApRxBlockAckEntryIndex {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
     }
 
-    /// The value of a 3-bit field, which the range holds whole.
-    pub const fn from_bits(bits: oer_portable_mmio::Bits<3>) -> Self {
-        Self(bits.get())
-    }
-
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::extra_softap_rx_block_ack_control::INDEX_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Four-bit traffic identifier encoded by the reviewed receive BlockAck transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxBlockAckTid(u32);
+pub struct MacRxBlockAckTid(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_WIDTH },
+    >,
+);
 
 impl MacRxBlockAckTid {
     pub const MIN: u32 = 0x00000000;
@@ -672,7 +789,10 @@ impl MacRxBlockAckTid {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -684,18 +804,31 @@ impl MacRxBlockAckTid {
             { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_control::TID_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Twelve-bit starting sequence encoded by the reviewed receive BlockAck transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxBlockAckStartingSequence(u32);
+pub struct MacRxBlockAckStartingSequence(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_WIDTH },
+    >,
+);
 
 impl MacRxBlockAckStartingSequence {
     pub const MIN: u32 = 0x00000000;
@@ -705,7 +838,10 @@ impl MacRxBlockAckStartingSequence {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -719,18 +855,31 @@ impl MacRxBlockAckStartingSequence {
             },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_current_sequence::SEQUENCE_WIDTH },
+    > {
         self.0
     }
 }
 
 /// Non-zero seven-bit receive BlockAck window accepted by the reviewed transaction.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacRxBlockAckWindow(u32);
+pub struct MacRxBlockAckWindow(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::WINDOW_WIDTH },
+    >,
+);
 
 impl MacRxBlockAckWindow {
     pub const MIN: u32 = 0x00000001;
@@ -740,7 +889,10 @@ impl MacRxBlockAckWindow {
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
         if value >= Self::MIN && value <= Self::MAX {
-            Some(Self(value))
+            match oer_portable_mmio::Bits::new(value) {
+                Ok(field) => Some(Self(field)),
+                Err(_) => None,
+            }
         } else {
             None
         }
@@ -748,6 +900,15 @@ impl MacRxBlockAckWindow {
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The value as its register field.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::rx_block_ack_entry_peer_tail_and_policy::WINDOW_WIDTH },
+    > {
         self.0
     }
 }

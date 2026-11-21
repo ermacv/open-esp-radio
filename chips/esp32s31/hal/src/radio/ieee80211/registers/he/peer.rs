@@ -5,7 +5,7 @@ use oer_portable_mmio::{Bits, Index};
 
 use crate::radio::ieee80211::registers::{
     MacAssociationId, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
-    MacHePacketPaddingDuration, MacMinimumMpduStartSpacing, MacPlacement, WifiRadioRegisters, bits,
+    MacHePacketPaddingDuration, MacMinimumMpduStartSpacing, MacPlacement, WifiRadioRegisters,
 };
 
 /// Hardware-visible subset of one parsed HE20 peer.
@@ -51,10 +51,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_he_bssid_enable(true);
         });
         control.modify_multi_bssid_control(|w| {
-            w.set_bssid_select(Bits::truncate(
+            w.set_bssid_select(
                 oer_chips_esp32s31_pac::wifi_mac::multi_bssid_control::BssidSelect::Interface0
-                    .bits(),
-            ));
+                    .into(),
+            );
         });
 
         let power_save = &mut self.mac.wifi_mac_rx_power_save;
@@ -85,14 +85,23 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// (size `0xc2`), interface zero: three fresh-read RMWs of `0x2010_4020`,
     /// the enable bit 27, then the color bits 26:21 (zero when disabled),
     /// then the partial bit 28.
-    fn set_interface_zero_he_bss_color(&mut self, enabled: bool, color: u32, partial: bool) {
+    fn set_interface_zero_he_bss_color(
+        &mut self,
+        enabled: bool,
+        color: MacHeBssColor,
+        partial: bool,
+    ) {
         let control = &mut self.mac.wifi_mac_he_init_suffix;
         control.modify_multi_bssid_control(|w| {
             w.set_bss_color_enable(enabled);
         });
-        let color = if enabled { color } else { 0 };
+        let color = if enabled {
+            color.field()
+        } else {
+            Bits::constant::<0>()
+        };
         control.modify_multi_bssid_control(|w| {
-            w.set_bss_color(bits(color));
+            w.set_bss_color(color);
         });
         control.modify_multi_bssid_control(|w| {
             w.set_partial_bss_color_enable(partial);
@@ -141,7 +150,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// (size `0x70`) replaces the five five-bit durations of `0x2010_4c90`
     /// in five fresh-read RMWs, BPSK first.
     fn set_he_packet_padding(&mut self, duration: MacHePacketPaddingDuration) {
-        let duration = bits(duration.get());
+        let duration = duration.field();
         let init = &mut self.mac.wifi_mac_he_init_suffix;
         init.modify_he_packet_padding(|w| {
             w.set_bpsk_duration(duration);
@@ -172,7 +181,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn connect_he_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool) {
         self.initialize_interface_zero_he_bssid();
         self.clear_he_color_bitmap();
-        self.set_interface_zero_he_bss_color(enabled, color.get(), partial);
+        self.set_interface_zero_he_bss_color(enabled, color, partial);
     }
 
     /// Install the interface-zero HE20 association after its Association
@@ -208,7 +217,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.set_he_packet_padding(peer.packet_padding_duration);
         self.set_interface_zero_he_bss_color(
             peer.bss_color_enabled,
-            peer.bss_color.get(),
+            peer.bss_color,
             peer.partial_bss_color,
         );
         // SOURCE: complete pinned `hal_he_set_default_pe` (size `0x14`):
@@ -216,7 +225,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_he_default_control(|w| {
-                w.set_default_pe_duration(bits(peer.default_packet_extension_duration.get()));
+                w.set_default_pe_duration(peer.default_packet_extension_duration.field());
             });
         self.set_co_hosted_bss(peer.max_co_hosted_bssid_indicator);
         // SOURCE: complete pinned `hal_he_disable_rts_threshold`
@@ -238,16 +247,16 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         if !peer.extended_range_single_user_disabled {
             init.modify_ersu_ack_rate(|w| {
                 w.set_rate_0(
-                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate0::Ordinary.bits() as u8,
+                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
                 )
                 .set_rate_1(
-                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate1::Ordinary.bits() as u8,
+                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
                 )
                 .set_rate_2(
-                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate2::Ordinary.bits() as u8,
+                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
                 )
                 .set_rate_3(
-                    oer_chips_esp32s31_pac::wifi_mac::ersu_ack_rate::Rate3::Ordinary.bits() as u8,
+                    oer_chips_esp32s31_pac::wifi_mac::dictionaries::ErsuAckRate::Ordinary.into(),
                 );
             });
         }
@@ -259,10 +268,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // MULTI_BSSID_ENABLE is clear. Complete `hal_he_set_bcast_ru`
         // (size `0x62`): `0x2010_4038` enable bit 22, then bits 21:11;
         // `0x2010_403c` bit 11, bits 10:0, bit 23, bits 22:12.
-        let association: Bits<11> = bits(association_id.get());
+        let association = association_id.field();
         let policy = &mut self.mac.wifi_mac_bssid_policy;
         policy.modify_bssid_high(Index::constant::<0>(), |w| {
-            w.set_minimum_mpdu_start_spacing(bits(minimum_mpdu_start_spacing.get()));
+            w.set_minimum_mpdu_start_spacing(minimum_mpdu_start_spacing.field());
         });
         policy.modify_bssid_high(Index::constant::<0>(), |w| {
             w.set_association_id(association);
@@ -309,7 +318,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_he_bssid_enable(false);
             });
         self.clear_he_color_bitmap();
-        self.set_interface_zero_he_bss_color(false, 0, false);
+        self.set_interface_zero_he_bss_color(
+            false,
+            MacHeBssColor::from_bits(Bits::constant::<0>()),
+            false,
+        );
     }
 }
 

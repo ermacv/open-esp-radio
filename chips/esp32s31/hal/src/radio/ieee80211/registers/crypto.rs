@@ -3,7 +3,8 @@
 use oer_chips_esp32s31_pac::wifi_mac::{WifiMacCryptoControl, WifiMacKeyTable};
 use oer_portable_mmio::{Index, Placement};
 
-use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, bits, element};
+use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, element};
+use oer_portable_mmio::Bits;
 
 const KEY_ENTRY_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
 const MAX_GROUP_KEY_ID: u8 =
@@ -38,10 +39,33 @@ const fn key_entry(index: MacKeyEntryIndex) -> Index<KEY_ENTRY_COUNT> {
     element::<KEY_ENTRY_COUNT>(index.get() as usize)
 }
 
-/// The crypto interface-control element of an interface: the hardware has
-/// three, for interface selectors zero to two.
-const fn interface_control(interface: MacInterface) -> Index<3> {
-    element::<3>(interface.bits() as usize)
+/// The interfaces the crypto block holds a control word for: three, the
+/// STA and AP words and context two's. Interface selector three has none.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum MacCryptoInterface {
+    Station,
+    AccessPoint,
+    Context2,
+}
+
+impl MacCryptoInterface {
+    /// The MAC interface selector this control word serves.
+    pub const fn interface(self) -> MacInterface {
+        match self {
+            Self::Station => MacInterface::Station,
+            Self::AccessPoint => MacInterface::AccessPoint,
+            Self::Context2 => MacInterface::Context2,
+        }
+    }
+}
+
+/// The crypto interface-control element of an interface.
+const fn interface_control(interface: MacCryptoInterface) -> Index<3> {
+    match interface {
+        MacCryptoInterface::Station => Index::constant::<0>(),
+        MacCryptoInterface::AccessPoint => Index::constant::<1>(),
+        MacCryptoInterface::Context2 => Index::constant::<2>(),
+    }
 }
 
 fn key_entry_validity<P: Placement>(control: &WifiMacCryptoControl<P>) -> [bool; KEY_ENTRY_COUNT] {
@@ -143,7 +167,7 @@ fn publish_key_entry_validity<P: Placement>(
 /// The fields of one interface-control store, the others zero.
 #[derive(Clone, Copy)]
 struct InterfaceControl {
-    bits_0_1: u32,
+    bits_0_1: Bits<2>,
     bit_8: bool,
     spp_amsdu: bool,
     bit_16: bool,
@@ -162,7 +186,7 @@ fn store_interface_control<P: Placement>(
     // Only STA/AP have a vendor getter identifying management-RX bit 17.
     match Index::new(index.get()) {
         Ok(sta_ap) => control.modify_interface_control(sta_ap, |w| {
-            w.set_bits_0_1_opaque(bits(value.bits_0_1))
+            w.set_bits_0_1_opaque(value.bits_0_1)
                 .set_bit_8_opaque(value.bit_8)
                 .set_spp_amsdu(value.spp_amsdu)
                 .set_bit_16_opaque(value.bit_16)
@@ -172,7 +196,7 @@ fn store_interface_control<P: Placement>(
                 .set_sms4_mode(false);
         }),
         Err(_) => control.modify_context2_crypto_control(|w| {
-            w.set_bits_0_1_opaque(bits(value.bits_0_1))
+            w.set_bits_0_1_opaque(value.bits_0_1)
                 .set_bit_8_opaque(value.bit_8)
                 .set_spp_amsdu(value.spp_amsdu)
                 .set_bit_16_opaque(value.bit_16)
@@ -188,11 +212,12 @@ fn store_interface_control<P: Placement>(
 #[derive(Clone, Copy)]
 struct PeerControl {
     peer_high: u16,
-    algorithm: u32,
-    direction: u32,
+    algorithm: Bits<{ oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::ALGORITHM_WIDTH }>,
+    direction: Bits<{ oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::DIRECTION_WIDTH }>,
     interface: MacInterface,
     logical_index_not_three: bool,
-    logical_key_index: u8,
+    logical_key_index:
+        Bits<{ oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LOGICAL_KEY_INDEX_WIDTH }>,
 }
 
 /// Store one key entry's peer-control word: the zero-based
@@ -206,16 +231,12 @@ fn store_peer_control<P: Placement>(
         w.set_peer_high(value.peer_high)
             .set_wep104(false)
             .set_bit_17_opaque(false)
-            .set_algorithm(bits(value.algorithm))
-            .set_direction(bits(value.direction))
-            .set_interface(
-                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Interface::from_field(
-                    value.interface.bits(),
-                ),
-            )
+            .set_algorithm(value.algorithm)
+            .set_direction(value.direction)
+            .set_interface(value.interface.into())
             .set_gcmp_256_bit_key(false)
             .set_logical_index_not_three(value.logical_index_not_three)
-            .set_logical_key_index(bits(u32::from(value.logical_key_index)));
+            .set_logical_key_index(value.logical_key_index);
     });
 }
 
@@ -253,11 +274,11 @@ fn clear_key_entry_words<P: Placement>(
         index,
         PeerControl {
             peer_high: 0,
-            algorithm: 0,
-            direction: 0,
+            algorithm: Bits::constant::<0>(),
+            direction: Bits::constant::<0>(),
             interface: MacInterface::Station,
             logical_index_not_three: false,
-            logical_key_index: 0,
+            logical_key_index: Bits::constant::<0>(),
         },
     );
     store_key_words(table, index, [0; 4]);
@@ -282,7 +303,7 @@ fn enable_ccmp<P: Placement>(control: &mut WifiMacCryptoControl<P>, index: Index
         control,
         index,
         InterfaceControl {
-            bits_0_1: 3,
+            bits_0_1: Bits::constant::<3>(),
             bit_8: true,
             spp_amsdu: spp,
             bit_16: true,
@@ -320,7 +341,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 control,
                 element::<3>(position),
                 InterfaceControl {
-                    bits_0_1: 0,
+                    bits_0_1: Bits::constant::<0>(),
                     bit_8: false,
                     spp_amsdu: false,
                     bit_16: initial_flags,
@@ -346,7 +367,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// SOURCE: complete `libpp[hal_crypto.o]::hal_crypto_enable` consumes
     /// SPP from `libpp[wdev.o]::wDev_Insert_KeyEntry` at +0x2e..+0x34.
-    pub fn configure_mac_ccmp_association(&mut self, interface: MacInterface, mode: MacSppMode) {
+    pub fn configure_mac_ccmp_association(
+        &mut self,
+        interface: MacCryptoInterface,
+        mode: MacSppMode,
+    ) {
         enable_ccmp(
             &mut self.mac.wifi_mac_crypto_control,
             interface_control(interface),
@@ -366,7 +391,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
     ) -> MacKeyInstallOutcome {
-        self.install_ccmp_key_entry(MacInterface::Station, index, identity, temporal_key)
+        self.install_ccmp_key_entry(MacCryptoInterface::Station, index, identity, temporal_key)
     }
 
     /// Encode and install one semantic AP CCMP key into an invalid entry.
@@ -380,12 +405,17 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
     ) -> MacKeyInstallOutcome {
-        self.install_ccmp_key_entry(MacInterface::AccessPoint, index, identity, temporal_key)
+        self.install_ccmp_key_entry(
+            MacCryptoInterface::AccessPoint,
+            index,
+            identity,
+            temporal_key,
+        )
     }
 
     fn install_ccmp_key_entry(
         &mut self,
-        interface: MacInterface,
+        interface: MacCryptoInterface,
         index: MacKeyEntryIndex,
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
@@ -393,15 +423,25 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let (peer, direction, logical_key_index) = match identity {
             MacCcmpKeyIdentity::Pairwise { peer } => (
                 peer,
-                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise.bits(),
-                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise
-                    .bits() as u8,
+                Bits::from(
+                    oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Pairwise,
+                ),
+                Bits::from(
+                    oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::Pairwise,
+                ),
             ),
-            MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => (
-                [u8::MAX; 6],
-                oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Group.bits(),
-                key_id,
-            ),
+            MacCcmpKeyIdentity::Group { key_id } if key_id <= MAX_GROUP_KEY_ID => {
+                let Ok(key_id) = Bits::new(u32::from(key_id)) else {
+                    return MacKeyInstallOutcome::Rejected;
+                };
+                (
+                    [u8::MAX; 6],
+                    Bits::from(
+                        oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Direction::Group,
+                    ),
+                    key_id,
+                )
+            }
             MacCcmpKeyIdentity::Group { .. } => return MacKeyInstallOutcome::Rejected,
         };
         let position = index.get() as usize;
@@ -427,12 +467,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             entry,
             PeerControl {
                 peer_high: u16::from_le_bytes([e, f]),
-                algorithm: oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Algorithm::Ccmp.bits(),
+                algorithm: oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::Algorithm::Ccmp.into(),
                 direction,
-                interface,
+                interface: interface.interface(),
                 logical_index_not_three: logical_key_index
-                    != oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::WithoutFlag
-                        .bits() as u8,
+                    != Bits::from(oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::LogicalKeyIndex::WithoutFlag),
                 logical_key_index,
             },
         );
