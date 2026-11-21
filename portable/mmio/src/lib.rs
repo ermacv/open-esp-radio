@@ -45,6 +45,12 @@
 //!   strobes and one-field registers stored whole) is written through
 //!   `&self` with [`Block::write_shared`]; at a [`Fixed`] address it is
 //!   `Sync`, so one owner in a `static` serves every execution context.
+//! - **Field values** are [`Bits`] of a field's width: checked by
+//!   [`Bits::new`] (a refusal) or [`Bits::constant`] (at build). A byte,
+//!   a halfword or an [`Index`] converts into a field that holds every
+//!   such value with `From`, without loss. The bound of a build-time check
+//!   is a generic one, checked when the code is generated for its widths
+//!   (`cargo build`, `cargo test`): `cargo check` does not evaluate it.
 
 #![no_std]
 #![cfg_attr(
@@ -1726,6 +1732,67 @@ impl<const WIDTH: u32> Bits<WIDTH> {
     /// The value.
     pub const fn get(self) -> u32 {
         self.0
+    }
+}
+
+/// A byte into a field of at least eight bits: every value fits, so the
+/// conversion loses nothing. A narrower field refuses to build:
+///
+/// ```compile_fail,E0080
+/// let field: oer_portable_mmio::Bits<4> = oer_portable_mmio::Bits::from(0xff_u8);
+/// # let _ = field;
+/// ```
+impl<const WIDTH: u32> From<u8> for Bits<WIDTH> {
+    fn from(value: u8) -> Self {
+        const {
+            if !(WIDTH >= 8 && WIDTH <= 32) {
+                panic!("a byte fits a field of 8 to 32 bits");
+            }
+        };
+        Self(u32::from(value))
+    }
+}
+
+/// A halfword into a field of at least sixteen bits: every value fits. A
+/// narrower field refuses to build:
+///
+/// ```compile_fail,E0080
+/// let field: oer_portable_mmio::Bits<12> = oer_portable_mmio::Bits::from(0xffff_u16);
+/// # let _ = field;
+/// ```
+impl<const WIDTH: u32> From<u16> for Bits<WIDTH> {
+    fn from(value: u16) -> Self {
+        const {
+            if !(WIDTH >= 16 && WIDTH <= 32) {
+                panic!("a halfword fits a field of 16 to 32 bits");
+            }
+        };
+        Self(u32::from(value))
+    }
+}
+
+/// An index below `COUNT` into a field that holds every index: `COUNT` is
+/// at most `2^WIDTH`. A field too narrow for the array refuses to build:
+///
+/// ```compile_fail,E0080
+/// use oer_portable_mmio::{Bits, Index};
+/// let field: Bits<2> = Bits::from(Index::<5>::constant::<4>());
+/// # let _ = field;
+/// ```
+impl<const COUNT: usize, const WIDTH: u32> From<Index<COUNT>> for Bits<WIDTH> {
+    fn from(index: Index<COUNT>) -> Self {
+        const {
+            if !(WIDTH >= 1 && WIDTH <= 32) {
+                panic!("a field is 1 to 32 bits wide");
+            }
+            if !(COUNT as u64 <= 1_u64 << WIDTH) {
+                panic!("the field holds every index of the array");
+            }
+        };
+        // The index is below `COUNT`, at most `2^32`: its low four bytes
+        // are the whole index.
+        let [b0, b1, b2, b3, ..] = index.get().to_le_bytes();
+        Self(u32::from_le_bytes([b0, b1, b2, b3]))
     }
 }
 

@@ -425,3 +425,17 @@ fn a_host_block_covers_the_shared_bytes_its_parts_observe() {
     let block = Block::<Host<'_>, Observing>::host(&mut memory).unwrap();
     assert_eq!(block.read_byte::<8>(), 0x7f);
 }
+
+#[test]
+fn a_byte_a_halfword_and_an_index_convert_into_a_field_that_holds_them() {
+    assert_eq!(Bits::<8>::from(0xff_u8).get(), 0xff);
+    assert_eq!(Bits::<10>::from(0x80_u8).get(), 0x80);
+    assert_eq!(Bits::<32>::from(7_u8).get(), 7);
+    assert_eq!(Bits::<16>::from(0xffff_u16).get(), 0xffff);
+    assert_eq!(Bits::<26>::from(0x1234_u16).get(), 0x1234);
+    // An array of 128 elements fills seven bits; one of four, two.
+    assert_eq!(Bits::<7>::from(Index::<128>::constant::<127>()).get(), 127);
+    assert_eq!(Bits::<7>::from(Index::<120>::constant::<119>()).get(), 119);
+    assert_eq!(Bits::<2>::from(Index::<4>::constant::<3>()).get(), 3);
+    assert_eq!(Bits::<32>::from(Index::<4>::constant::<0>()).get(), 0);
+}
