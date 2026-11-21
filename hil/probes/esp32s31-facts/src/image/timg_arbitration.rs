@@ -156,7 +156,7 @@ fn begin(s: &mut Session<'_>) -> bool {
     let cpu = s.sar.boot.hp_sys_clkrst_boot_clock.read_cpu_freq_ctrl0();
     emit(
         0x1901,
-        root.reg_soc_clk_sel().get(),
+        root.reg_soc_clk_sel().bits(),
         u32::from(cpu.reg_cpu_clk_div_num()),
         cpu.reg_cpu_clk_div_numerator().get(),
     );

@@ -45,7 +45,10 @@ fn a_tone_path_edge_zeroes_both_reserved_lanes_and_keeps_the_high_nibble() {
     let control = block.fe.read_tone_path_0_control();
     assert_eq!(control.selector_high(), 0x12);
     assert_eq!(control.negated_step_or_attenuation(), 0x34);
-    assert!(control.tone_enable_or_arm());
+    assert_eq!(
+        control.tone_enable_or_arm(),
+        oer_chips_esp32s31_pac::fe::tone_path_0_control::ToneEnableOrArm::Armed
+    );
     assert_eq!(control.bits_19_21_opaque().get(), 5);
     assert_eq!(control.txiq_polarity_image().get(), 4);
     assert_eq!(control.bits_8_9_opaque().get(), 0);

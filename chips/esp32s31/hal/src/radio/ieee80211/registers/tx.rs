@@ -25,7 +25,7 @@ const DESCRIPTOR_ADDRESS_LOW_MASK: u32 = WifiDescriptorAddressLow::MAX;
 /// publication/result state together. It is used at low-frequency role
 /// boundaries to distinguish a real publication from a stale completion;
 /// it grants no register mutation authority.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacOrdinaryTxQueueSnapshot {
     pub descriptor_address_low: u32,
     pub plcp_format: u8,
@@ -34,7 +34,7 @@ pub struct MacOrdinaryTxQueueSnapshot {
     pub key_entry_index: u8,
     pub bssid_select: u8,
     pub vector_format: u8,
-    pub interface: u8,
+    pub interface: MacInterface,
     pub aifsn: u8,
     pub contention_window: u16,
     pub scheduler_priority: u8,
@@ -1063,7 +1063,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             key_entry_index: byte(plcp1.key_entry_index()),
             bssid_select: byte(plcp1.bssid_select()),
             vector_format: byte(plcp1.vector_format()),
-            interface: byte(config.interface()),
+            interface: MacInterface::from(config.interface()),
             aifsn: byte(config.aifsn()),
             contention_window: halfword(config.contention_window()),
             scheduler_priority: byte(config.scheduler_priority()),

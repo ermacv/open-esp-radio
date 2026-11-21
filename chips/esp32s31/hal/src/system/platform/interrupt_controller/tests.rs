@@ -390,7 +390,7 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_byte_and_
     let clic = memory.clic();
     let attributes = clic.read_attr(line(30));
     assert!(clic.read_ie(line(30)).ie() && attributes.shv());
-    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveLevel);
+    assert_eq!(attributes.trig(), clic::attr::Trig::PositiveLevel);
     assert_eq!(clic.read_ctl(line(30)).ctl(), level.bits());
     assert!(
         clic.read_ip(line(30)).ip(),
@@ -516,7 +516,7 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     let clic = memory.clic();
     let attributes = clic.read_attr(line(20));
     assert!(attributes.shv());
-    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveLevel);
+    assert_eq!(attributes.trig(), clic::attr::Trig::PositiveLevel);
     assert_eq!(
         clic.read_ctl(line(20)).ctl(),
         Control::level::<3, 3>().bits()
@@ -757,7 +757,7 @@ fn a_task_line_binds_vectored_positive_edge_at_its_level_with_its_pending_byte_c
     assert!(clic.read_ie(line(34)).ie());
     let attributes = clic.read_attr(line(34));
     assert!(attributes.shv());
-    assert_eq!(attributes.trig_variant(), clic::attr::Trig::PositiveEdge);
+    assert_eq!(attributes.trig(), clic::attr::Trig::PositiveEdge);
     assert_eq!(clic.read_ctl(line(34)).ctl(), level.bits());
 }
 

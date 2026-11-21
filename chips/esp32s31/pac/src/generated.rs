@@ -58114,13 +58114,7 @@ pub mod clic {
 
             /// Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity.
             #[inline]
-            pub const fn trig(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 1)
-            }
-
-            /// The `TRIG` field as its declared value.
-            #[inline]
-            pub const fn trig_variant(self) -> Trig {
+            pub const fn trig(self) -> Trig {
                 Trig::from_field(self.0 >> 1)
             }
 
@@ -58150,13 +58144,7 @@ pub mod clic {
 
             /// Trigger: bit 0 clear is level, set is edge; bit 1 selects the negative polarity.
             #[inline]
-            pub const fn trig(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 1)
-            }
-
-            /// The `TRIG` field as its declared value.
-            #[inline]
-            pub const fn trig_variant(&self) -> Trig {
+            pub const fn trig(&self) -> Trig {
                 Trig::from_field(self.0 >> 1)
             }
 
@@ -71313,13 +71301,7 @@ pub mod fe {
 
             /// Complete phy_dis_hw_set_freq sets bit 31 before its two-microsecond delay; complete phy_en_hw_set_freq clears it.
             #[inline]
-            pub const fn hardware_frequency_disable(self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-
-            /// The `HARDWARE_FREQUENCY_DISABLE` field as its declared value.
-            #[inline]
-            pub const fn hardware_frequency_disable_variant(self) -> HardwareFrequencyDisable {
+            pub const fn hardware_frequency_disable(self) -> HardwareFrequencyDisable {
                 HardwareFrequencyDisable::from_field(self.0 >> 31)
             }
 
@@ -71385,13 +71367,7 @@ pub mod fe {
 
             /// Complete phy_dis_hw_set_freq sets bit 31 before its two-microsecond delay; complete phy_en_hw_set_freq clears it.
             #[inline]
-            pub const fn hardware_frequency_disable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
-            }
-
-            /// The `HARDWARE_FREQUENCY_DISABLE` field as its declared value.
-            #[inline]
-            pub const fn hardware_frequency_disable_variant(&self) -> HardwareFrequencyDisable {
+            pub const fn hardware_frequency_disable(&self) -> HardwareFrequencyDisable {
                 HardwareFrequencyDisable::from_field(self.0 >> 31)
             }
 
@@ -72167,13 +72143,7 @@ pub mod fe {
 
             /// Complete phy_force_pwr_index replaces bit 23 with the low bit of its first argument.
             #[inline]
-            pub const fn force_power_enable(self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `FORCE_POWER_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn force_power_enable_variant(self) -> ForcePowerEnable {
+            pub const fn force_power_enable(self) -> ForcePowerEnable {
                 ForcePowerEnable::from_field(self.0 >> 23)
             }
 
@@ -72214,13 +72184,7 @@ pub mod fe {
 
             /// Complete phy_force_pwr_index replaces bit 23 with the low bit of its first argument.
             #[inline]
-            pub const fn force_power_enable(&self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `FORCE_POWER_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn force_power_enable_variant(&self) -> ForcePowerEnable {
+            pub const fn force_power_enable(&self) -> ForcePowerEnable {
                 ForcePowerEnable::from_field(self.0 >> 23)
             }
 
@@ -72834,13 +72798,7 @@ pub mod fe {
 
             /// Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup.
             #[inline]
-            pub const fn tone_enable_or_arm(self) -> bool {
-                (self.0 & 0x00040000) != 0
-            }
-
-            /// The `TONE_ENABLE_OR_ARM` field as its declared value.
-            #[inline]
-            pub const fn tone_enable_or_arm_variant(self) -> ToneEnableOrArm {
+            pub const fn tone_enable_or_arm(self) -> ToneEnableOrArm {
                 ToneEnableOrArm::from_field(self.0 >> 18)
             }
 
@@ -72893,13 +72851,7 @@ pub mod fe {
 
             /// Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup.
             #[inline]
-            pub const fn tone_enable_or_arm(&self) -> bool {
-                (self.0 & 0x00040000) != 0
-            }
-
-            /// The `TONE_ENABLE_OR_ARM` field as its declared value.
-            #[inline]
-            pub const fn tone_enable_or_arm_variant(&self) -> ToneEnableOrArm {
+            pub const fn tone_enable_or_arm(&self) -> ToneEnableOrArm {
                 ToneEnableOrArm::from_field(self.0 >> 18)
             }
 
@@ -74248,25 +74200,13 @@ pub mod fe {
         impl R {
             /// The `BIT_0_OPAQUE` field.
             #[inline]
-            pub const fn bit_0_opaque(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `BIT_0_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_0_opaque_variant(self) -> Bit0Opaque {
+            pub const fn bit_0_opaque(self) -> Bit0Opaque {
                 Bit0Opaque::from_field(self.0)
             }
 
             /// The `BIT_1_OPAQUE` field.
             #[inline]
-            pub const fn bit_1_opaque(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `BIT_1_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_1_opaque_variant(self) -> Bit1Opaque {
+            pub const fn bit_1_opaque(self) -> Bit1Opaque {
                 Bit1Opaque::from_field(self.0 >> 1)
             }
 
@@ -74283,25 +74223,13 @@ pub mod fe {
         impl W {
             /// The `BIT_0_OPAQUE` field.
             #[inline]
-            pub const fn bit_0_opaque(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `BIT_0_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_0_opaque_variant(&self) -> Bit0Opaque {
+            pub const fn bit_0_opaque(&self) -> Bit0Opaque {
                 Bit0Opaque::from_field(self.0)
             }
 
             /// The `BIT_1_OPAQUE` field.
             #[inline]
-            pub const fn bit_1_opaque(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `BIT_1_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_1_opaque_variant(&self) -> Bit1Opaque {
+            pub const fn bit_1_opaque(&self) -> Bit1Opaque {
                 Bit1Opaque::from_field(self.0 >> 1)
             }
 
@@ -74511,25 +74439,13 @@ pub mod fe {
         impl R {
             /// The `START_ENABLE` field.
             #[inline]
-            pub const fn start_enable(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `START_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn start_enable_variant(self) -> StartEnable {
+            pub const fn start_enable(self) -> StartEnable {
                 StartEnable::from_field(self.0)
             }
 
             /// The `MEASUREMENT_ENABLE` field.
             #[inline]
-            pub const fn measurement_enable(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `MEASUREMENT_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn measurement_enable_variant(self) -> MeasurementEnable {
+            pub const fn measurement_enable(self) -> MeasurementEnable {
                 MeasurementEnable::from_field(self.0 >> 1)
             }
 
@@ -74552,25 +74468,13 @@ pub mod fe {
         impl W {
             /// The `START_ENABLE` field.
             #[inline]
-            pub const fn start_enable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `START_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn start_enable_variant(&self) -> StartEnable {
+            pub const fn start_enable(&self) -> StartEnable {
                 StartEnable::from_field(self.0)
             }
 
             /// The `MEASUREMENT_ENABLE` field.
             #[inline]
-            pub const fn measurement_enable(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `MEASUREMENT_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn measurement_enable_variant(&self) -> MeasurementEnable {
+            pub const fn measurement_enable(&self) -> MeasurementEnable {
                 MeasurementEnable::from_field(self.0 >> 1)
             }
 
@@ -76843,13 +76747,7 @@ pub mod fe {
         impl R {
             /// The `DEBUG_MODE_ENABLE` field.
             #[inline]
-            pub const fn debug_mode_enable(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `DEBUG_MODE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn debug_mode_enable_variant(self) -> DebugModeEnable {
+            pub const fn debug_mode_enable(self) -> DebugModeEnable {
                 DebugModeEnable::from_field(self.0)
             }
 
@@ -76890,13 +76788,7 @@ pub mod fe {
         impl W {
             /// The `DEBUG_MODE_ENABLE` field.
             #[inline]
-            pub const fn debug_mode_enable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `DEBUG_MODE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn debug_mode_enable_variant(&self) -> DebugModeEnable {
+            pub const fn debug_mode_enable(&self) -> DebugModeEnable {
                 DebugModeEnable::from_field(self.0)
             }
 
@@ -77044,13 +76936,7 @@ pub mod fe {
         impl R {
             /// The `WORK_MODE_ENABLE` field.
             #[inline]
-            pub const fn work_mode_enable(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `WORK_MODE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn work_mode_enable_variant(self) -> WorkModeEnable {
+            pub const fn work_mode_enable(self) -> WorkModeEnable {
                 WorkModeEnable::from_field(self.0 >> 26)
             }
 
@@ -77073,13 +76959,7 @@ pub mod fe {
         impl W {
             /// The `WORK_MODE_ENABLE` field.
             #[inline]
-            pub const fn work_mode_enable(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `WORK_MODE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn work_mode_enable_variant(&self) -> WorkModeEnable {
+            pub const fn work_mode_enable(&self) -> WorkModeEnable {
                 WorkModeEnable::from_field(self.0 >> 26)
             }
 
@@ -77359,25 +77239,13 @@ pub mod fe {
 
             /// phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it first at root entry. The shared electrical identity remains unknown.
             #[inline]
-            pub const fn bit_14_opaque(self) -> bool {
-                (self.0 & 0x00004000) != 0
-            }
-
-            /// The `BIT_14_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_14_opaque_variant(self) -> Bit14Opaque {
+            pub const fn bit_14_opaque(self) -> Bit14Opaque {
                 Bit14Opaque::from_field(self.0 >> 14)
             }
 
             /// phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it at root entry and clears it during the successful cleanup suffix. The shared electrical identity remains unknown.
             #[inline]
-            pub const fn bit_15_opaque(self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// The `BIT_15_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_15_opaque_variant(self) -> Bit15Opaque {
+            pub const fn bit_15_opaque(self) -> Bit15Opaque {
                 Bit15Opaque::from_field(self.0 >> 15)
             }
 
@@ -77436,25 +77304,13 @@ pub mod fe {
 
             /// phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it first at root entry. The shared electrical identity remains unknown.
             #[inline]
-            pub const fn bit_14_opaque(&self) -> bool {
-                (self.0 & 0x00004000) != 0
-            }
-
-            /// The `BIT_14_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_14_opaque_variant(&self) -> Bit14Opaque {
+            pub const fn bit_14_opaque(&self) -> Bit14Opaque {
                 Bit14Opaque::from_field(self.0 >> 14)
             }
 
             /// phy_set_rxclk_en writes this bit with its neighbor as a pair; complete phy_rxiq_cal_init independently sets it at root entry and clears it during the successful cleanup suffix. The shared electrical identity remains unknown.
             #[inline]
-            pub const fn bit_15_opaque(&self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// The `BIT_15_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_15_opaque_variant(&self) -> Bit15Opaque {
+            pub const fn bit_15_opaque(&self) -> Bit15Opaque {
                 Bit15Opaque::from_field(self.0 >> 15)
             }
 
@@ -92838,13 +92694,7 @@ pub mod hp_sys_clkrst {
         impl R {
             /// Configures to select the clock source of HP_ROOT_CLK.\\ 0 (default): XTAL_CLK\\ 1: PLL_F300M_CLK\\ 2: RC_FAST_CLK\\
             #[inline]
-            pub const fn reg_soc_clk_sel(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0)
-            }
-
-            /// The `REG_SOC_CLK_SEL` field as its declared value.
-            #[inline]
-            pub const fn reg_soc_clk_sel_variant(self) -> RegSocClkSel {
+            pub const fn reg_soc_clk_sel(self) -> RegSocClkSel {
                 RegSocClkSel::from_field(self.0)
             }
         }
@@ -92855,13 +92705,7 @@ pub mod hp_sys_clkrst {
         impl W {
             /// Configures to select the clock source of HP_ROOT_CLK.\\ 0 (default): XTAL_CLK\\ 1: PLL_F300M_CLK\\ 2: RC_FAST_CLK\\
             #[inline]
-            pub const fn reg_soc_clk_sel(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0)
-            }
-
-            /// The `REG_SOC_CLK_SEL` field as its declared value.
-            #[inline]
-            pub const fn reg_soc_clk_sel_variant(&self) -> RegSocClkSel {
+            pub const fn reg_soc_clk_sel(&self) -> RegSocClkSel {
                 RegSocClkSel::from_field(self.0)
             }
 
@@ -94906,13 +94750,7 @@ pub mod hp_sys_clkrst {
         impl R {
             /// Modem control/register-bus clock enable.
             #[inline]
-            pub const fn reg_modem_clk_en(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `REG_MODEM_CLK_EN` field as its declared value.
-            #[inline]
-            pub const fn reg_modem_clk_en_variant(self) -> RegModemClkEn {
+            pub const fn reg_modem_clk_en(self) -> RegModemClkEn {
                 RegModemClkEn::from_field(self.0)
             }
         }
@@ -94923,13 +94761,7 @@ pub mod hp_sys_clkrst {
         impl W {
             /// Modem control/register-bus clock enable.
             #[inline]
-            pub const fn reg_modem_clk_en(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `REG_MODEM_CLK_EN` field as its declared value.
-            #[inline]
-            pub const fn reg_modem_clk_en_variant(&self) -> RegModemClkEn {
+            pub const fn reg_modem_clk_en(&self) -> RegModemClkEn {
                 RegModemClkEn::from_field(self.0)
             }
 
@@ -115458,37 +115290,19 @@ pub mod ieee802154 {
 
             /// The `ED_SAMPLE_RATE` field.
             #[inline]
-            pub const fn ed_sample_rate(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 11)
-            }
-
-            /// The `ED_SAMPLE_RATE` field as its declared value.
-            #[inline]
-            pub const fn ed_sample_rate_variant(self) -> EdSampleRate {
+            pub const fn ed_sample_rate(self) -> EdSampleRate {
                 EdSampleRate::from_field(self.0 >> 11)
             }
 
             /// The `ED_SAMPLE_MODE` field.
             #[inline]
-            pub const fn ed_sample_mode(self) -> bool {
-                (self.0 & 0x00002000) != 0
-            }
-
-            /// The `ED_SAMPLE_MODE` field as its declared value.
-            #[inline]
-            pub const fn ed_sample_mode_variant(self) -> EdSampleMode {
+            pub const fn ed_sample_mode(self) -> EdSampleMode {
                 EdSampleMode::from_field(self.0 >> 13)
             }
 
             /// The `CCA_MODE` field.
             #[inline]
-            pub const fn cca_mode(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 14)
-            }
-
-            /// The `CCA_MODE` field as its declared value.
-            #[inline]
-            pub const fn cca_mode_variant(self) -> CcaMode {
+            pub const fn cca_mode(self) -> CcaMode {
                 CcaMode::from_field(self.0 >> 14)
             }
 
@@ -115517,37 +115331,19 @@ pub mod ieee802154 {
 
             /// The `ED_SAMPLE_RATE` field.
             #[inline]
-            pub const fn ed_sample_rate(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 11)
-            }
-
-            /// The `ED_SAMPLE_RATE` field as its declared value.
-            #[inline]
-            pub const fn ed_sample_rate_variant(&self) -> EdSampleRate {
+            pub const fn ed_sample_rate(&self) -> EdSampleRate {
                 EdSampleRate::from_field(self.0 >> 11)
             }
 
             /// The `ED_SAMPLE_MODE` field.
             #[inline]
-            pub const fn ed_sample_mode(&self) -> bool {
-                (self.0 & 0x00002000) != 0
-            }
-
-            /// The `ED_SAMPLE_MODE` field as its declared value.
-            #[inline]
-            pub const fn ed_sample_mode_variant(&self) -> EdSampleMode {
+            pub const fn ed_sample_mode(&self) -> EdSampleMode {
                 EdSampleMode::from_field(self.0 >> 13)
             }
 
             /// The `CCA_MODE` field.
             #[inline]
-            pub const fn cca_mode(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 14)
-            }
-
-            /// The `CCA_MODE` field as its declared value.
-            #[inline]
-            pub const fn cca_mode_variant(&self) -> CcaMode {
+            pub const fn cca_mode(&self) -> CcaMode {
                 CcaMode::from_field(self.0 >> 14)
             }
 
@@ -130176,13 +129972,7 @@ pub mod lp_peri_clkrst {
         impl R {
             /// Temperature-sensor peripheral clock enable.
             #[inline]
-            pub const fn lp_tsens_clk_en(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `LP_TSENS_CLK_EN` field as its declared value.
-            #[inline]
-            pub const fn lp_tsens_clk_en_variant(self) -> LpTsensClkEn {
+            pub const fn lp_tsens_clk_en(self) -> LpTsensClkEn {
                 LpTsensClkEn::from_field(self.0 >> 30)
             }
 
@@ -130199,13 +129989,7 @@ pub mod lp_peri_clkrst {
         impl W {
             /// Temperature-sensor peripheral clock enable.
             #[inline]
-            pub const fn lp_tsens_clk_en(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `LP_TSENS_CLK_EN` field as its declared value.
-            #[inline]
-            pub const fn lp_tsens_clk_en_variant(&self) -> LpTsensClkEn {
+            pub const fn lp_tsens_clk_en(&self) -> LpTsensClkEn {
                 LpTsensClkEn::from_field(self.0 >> 30)
             }
 
@@ -145423,6 +145207,77 @@ pub mod modem_pwr {
 ///
 /// The modem system controller: the clocks and resets of the Wi-Fi, Bluetooth and IEEE 802.15.4 blocks, the front end and the modem memories.
 pub mod modem_syscon {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// A modem clock gate: the selected block's clock is disabled or enabled.
+        ///
+        /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
+        /// The declared values of the `CLOCK_GATE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ClockGate {
+            /// The selected MODEM_SYSCON clock gate is disabled.
+            Disabled = 0x0,
+            /// The selected MODEM_SYSCON clock gate is enabled.
+            Enabled = 0x1,
+        }
+
+        impl ClockGate {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
+        /// A modem block reset: the selected block's reset is released or asserted.
+        ///
+        /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
+        /// The declared values of the `RESET` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Reset {
+            /// The selected MODEM_SYSCON reset is released.
+            Released = 0x0,
+            /// The selected MODEM_SYSCON reset is asserted.
+            Asserted = 0x1,
+        }
+
+        impl Reset {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Released,
+                    _ => Self::Asserted,
+                }
+            }
+        }
+    }
+
     /// The `TEST_CONF` register.
     pub mod test_conf {
         /// The bits of the register's declared fields.
@@ -145763,43 +145618,6 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_I2C_MST_SEL_160M`.
         pub const CLK_I2C_MST_SEL_160M_MASK: u32 = 0x1000;
 
-        /// The declared values of the `CLK_I2C_MST_SEL_160M` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkI2cMstSel160m {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkI2cMstSel160m {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 12
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `BITS_13_20_OPAQUE` in bits.
         pub const BITS_13_20_OPAQUE_WIDTH: u32 = 8;
         /// Greatest unsigned image of `BITS_13_20_OPAQUE`.
@@ -145821,86 +145639,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_ETM_EN`.
         pub const CLK_ETM_EN_MASK: u32 = 0x400000;
 
-        /// The declared values of the `CLK_ETM_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkEtmEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkEtmEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 22
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_ZB_APB_EN` in bits.
         pub const CLK_ZB_APB_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_ZB_APB_EN`.
         pub const CLK_ZB_APB_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_ZB_APB_EN`.
         pub const CLK_ZB_APB_EN_MASK: u32 = 0x800000;
-
-        /// The declared values of the `CLK_ZB_APB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkZbApbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkZbApbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 23
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_ZBMAC_EN` in bits.
         pub const CLK_ZBMAC_EN_WIDTH: u32 = 1;
@@ -145909,86 +145653,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_ZBMAC_EN`.
         pub const CLK_ZBMAC_EN_MASK: u32 = 0x1000000;
 
-        /// The declared values of the `CLK_ZBMAC_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkZbmacEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkZbmacEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 24
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_MODEM_SEC_ECB_EN` in bits.
         pub const CLK_MODEM_SEC_ECB_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_MODEM_SEC_ECB_EN`.
         pub const CLK_MODEM_SEC_ECB_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_MODEM_SEC_ECB_EN`.
         pub const CLK_MODEM_SEC_ECB_EN_MASK: u32 = 0x2000000;
-
-        /// The declared values of the `CLK_MODEM_SEC_ECB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkModemSecEcbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkModemSecEcbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 25
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_MODEM_SEC_CCM_EN` in bits.
         pub const CLK_MODEM_SEC_CCM_EN_WIDTH: u32 = 1;
@@ -145997,86 +145667,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_MODEM_SEC_CCM_EN`.
         pub const CLK_MODEM_SEC_CCM_EN_MASK: u32 = 0x4000000;
 
-        /// The declared values of the `CLK_MODEM_SEC_CCM_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkModemSecCcmEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkModemSecCcmEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 26
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_MODEM_SEC_BAH_EN` in bits.
         pub const CLK_MODEM_SEC_BAH_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_MODEM_SEC_BAH_EN`.
         pub const CLK_MODEM_SEC_BAH_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_MODEM_SEC_BAH_EN`.
         pub const CLK_MODEM_SEC_BAH_EN_MASK: u32 = 0x8000000;
-
-        /// The declared values of the `CLK_MODEM_SEC_BAH_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkModemSecBahEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkModemSecBahEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 27
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_MODEM_SEC_APB_EN` in bits.
         pub const CLK_MODEM_SEC_APB_EN_WIDTH: u32 = 1;
@@ -146085,43 +145681,6 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_MODEM_SEC_APB_EN`.
         pub const CLK_MODEM_SEC_APB_EN_MASK: u32 = 0x10000000;
 
-        /// The declared values of the `CLK_MODEM_SEC_APB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkModemSecApbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkModemSecApbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 28
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_MODEM_SEC_EN` in bits.
         pub const CLK_MODEM_SEC_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_MODEM_SEC_EN`.
@@ -146129,86 +145688,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_MODEM_SEC_EN`.
         pub const CLK_MODEM_SEC_EN_MASK: u32 = 0x20000000;
 
-        /// The declared values of the `CLK_MODEM_SEC_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkModemSecEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkModemSecEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 29
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_BLE_TIMER_EN` in bits.
         pub const CLK_BLE_TIMER_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_BLE_TIMER_EN`.
         pub const CLK_BLE_TIMER_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_BLE_TIMER_EN`.
         pub const CLK_BLE_TIMER_EN_MASK: u32 = 0x40000000;
-
-        /// The declared values of the `CLK_BLE_TIMER_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkBleTimerEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkBleTimerEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 30
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_DATA_DUMP_EN` in bits.
         pub const CLK_DATA_DUMP_EN_WIDTH: u32 = 1;
@@ -146254,14 +145739,8 @@ pub mod modem_syscon {
 
             /// Select the 160 MHz PHY-I2C-master source.
             #[inline]
-            pub const fn clk_i2c_mst_sel_160m(self) -> bool {
-                (self.0 & 0x00001000) != 0
-            }
-
-            /// The `CLK_I2C_MST_SEL_160M` field as its declared value.
-            #[inline]
-            pub const fn clk_i2c_mst_sel_160m_variant(self) -> ClkI2cMstSel160m {
-                ClkI2cMstSel160m::from_field(self.0 >> 12)
+            pub const fn clk_i2c_mst_sel_160m(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 12)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -146278,110 +145757,56 @@ pub mod modem_syscon {
 
             /// Enable the modem ETM clock.
             #[inline]
-            pub const fn clk_etm_en(self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `CLK_ETM_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_etm_en_variant(self) -> ClkEtmEn {
-                ClkEtmEn::from_field(self.0 >> 22)
+            pub const fn clk_etm_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 22)
             }
 
             /// Enable the IEEE 802.15.4 APB clock.
             #[inline]
-            pub const fn clk_zb_apb_en(self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `CLK_ZB_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_zb_apb_en_variant(self) -> ClkZbApbEn {
-                ClkZbApbEn::from_field(self.0 >> 23)
+            pub const fn clk_zb_apb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 23)
             }
 
             /// Enable the IEEE 802.15.4 MAC clock.
             #[inline]
-            pub const fn clk_zbmac_en(self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `CLK_ZBMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_zbmac_en_variant(self) -> ClkZbmacEn {
-                ClkZbmacEn::from_field(self.0 >> 24)
+            pub const fn clk_zbmac_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 24)
             }
 
             /// Enable the modem-security ECB clock.
             #[inline]
-            pub const fn clk_modem_sec_ecb_en(self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_ECB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_ecb_en_variant(self) -> ClkModemSecEcbEn {
-                ClkModemSecEcbEn::from_field(self.0 >> 25)
+            pub const fn clk_modem_sec_ecb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 25)
             }
 
             /// Enable the modem-security CCM clock.
             #[inline]
-            pub const fn clk_modem_sec_ccm_en(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_CCM_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_ccm_en_variant(self) -> ClkModemSecCcmEn {
-                ClkModemSecCcmEn::from_field(self.0 >> 26)
+            pub const fn clk_modem_sec_ccm_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 26)
             }
 
             /// Enable the modem-security BAH clock.
             #[inline]
-            pub const fn clk_modem_sec_bah_en(self) -> bool {
-                (self.0 & 0x08000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_BAH_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_bah_en_variant(self) -> ClkModemSecBahEn {
-                ClkModemSecBahEn::from_field(self.0 >> 27)
+            pub const fn clk_modem_sec_bah_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 27)
             }
 
             /// Enable the modem-security APB clock.
             #[inline]
-            pub const fn clk_modem_sec_apb_en(self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_apb_en_variant(self) -> ClkModemSecApbEn {
-                ClkModemSecApbEn::from_field(self.0 >> 28)
+            pub const fn clk_modem_sec_apb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 28)
             }
 
             /// Enable the modem-security functional clock.
             #[inline]
-            pub const fn clk_modem_sec_en(self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_en_variant(self) -> ClkModemSecEn {
-                ClkModemSecEn::from_field(self.0 >> 29)
+            pub const fn clk_modem_sec_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 29)
             }
 
             /// Enable the Bluetooth low-power timer clock.
             #[inline]
-            pub const fn clk_ble_timer_en(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `CLK_BLE_TIMER_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_ble_timer_en_variant(self) -> ClkBleTimerEn {
-                ClkBleTimerEn::from_field(self.0 >> 30)
+            pub const fn clk_ble_timer_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 30)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -146427,14 +145852,8 @@ pub mod modem_syscon {
 
             /// Select the 160 MHz PHY-I2C-master source.
             #[inline]
-            pub const fn clk_i2c_mst_sel_160m(&self) -> bool {
-                (self.0 & 0x00001000) != 0
-            }
-
-            /// The `CLK_I2C_MST_SEL_160M` field as its declared value.
-            #[inline]
-            pub const fn clk_i2c_mst_sel_160m_variant(&self) -> ClkI2cMstSel160m {
-                ClkI2cMstSel160m::from_field(self.0 >> 12)
+            pub const fn clk_i2c_mst_sel_160m(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 12)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -146451,110 +145870,56 @@ pub mod modem_syscon {
 
             /// Enable the modem ETM clock.
             #[inline]
-            pub const fn clk_etm_en(&self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `CLK_ETM_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_etm_en_variant(&self) -> ClkEtmEn {
-                ClkEtmEn::from_field(self.0 >> 22)
+            pub const fn clk_etm_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 22)
             }
 
             /// Enable the IEEE 802.15.4 APB clock.
             #[inline]
-            pub const fn clk_zb_apb_en(&self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `CLK_ZB_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_zb_apb_en_variant(&self) -> ClkZbApbEn {
-                ClkZbApbEn::from_field(self.0 >> 23)
+            pub const fn clk_zb_apb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 23)
             }
 
             /// Enable the IEEE 802.15.4 MAC clock.
             #[inline]
-            pub const fn clk_zbmac_en(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `CLK_ZBMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_zbmac_en_variant(&self) -> ClkZbmacEn {
-                ClkZbmacEn::from_field(self.0 >> 24)
+            pub const fn clk_zbmac_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 24)
             }
 
             /// Enable the modem-security ECB clock.
             #[inline]
-            pub const fn clk_modem_sec_ecb_en(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_ECB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_ecb_en_variant(&self) -> ClkModemSecEcbEn {
-                ClkModemSecEcbEn::from_field(self.0 >> 25)
+            pub const fn clk_modem_sec_ecb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 25)
             }
 
             /// Enable the modem-security CCM clock.
             #[inline]
-            pub const fn clk_modem_sec_ccm_en(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_CCM_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_ccm_en_variant(&self) -> ClkModemSecCcmEn {
-                ClkModemSecCcmEn::from_field(self.0 >> 26)
+            pub const fn clk_modem_sec_ccm_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 26)
             }
 
             /// Enable the modem-security BAH clock.
             #[inline]
-            pub const fn clk_modem_sec_bah_en(&self) -> bool {
-                (self.0 & 0x08000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_BAH_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_bah_en_variant(&self) -> ClkModemSecBahEn {
-                ClkModemSecBahEn::from_field(self.0 >> 27)
+            pub const fn clk_modem_sec_bah_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 27)
             }
 
             /// Enable the modem-security APB clock.
             #[inline]
-            pub const fn clk_modem_sec_apb_en(&self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_apb_en_variant(&self) -> ClkModemSecApbEn {
-                ClkModemSecApbEn::from_field(self.0 >> 28)
+            pub const fn clk_modem_sec_apb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 28)
             }
 
             /// Enable the modem-security functional clock.
             #[inline]
-            pub const fn clk_modem_sec_en(&self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// The `CLK_MODEM_SEC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_modem_sec_en_variant(&self) -> ClkModemSecEn {
-                ClkModemSecEn::from_field(self.0 >> 29)
+            pub const fn clk_modem_sec_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 29)
             }
 
             /// Enable the Bluetooth low-power timer clock.
             #[inline]
-            pub const fn clk_ble_timer_en(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `CLK_BLE_TIMER_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_ble_timer_en_variant(&self) -> ClkBleTimerEn {
-                ClkBleTimerEn::from_field(self.0 >> 30)
+            pub const fn clk_ble_timer_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 30)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -146600,7 +145965,10 @@ pub mod modem_syscon {
 
             /// Set `CLK_I2C_MST_SEL_160M`.
             #[inline]
-            pub fn set_clk_i2c_mst_sel_160m(&mut self, value: ClkI2cMstSel160m) -> &mut Self {
+            pub fn set_clk_i2c_mst_sel_160m(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffffefff) | (value.bits() << 12);
                 self
             }
@@ -146621,63 +145989,84 @@ pub mod modem_syscon {
 
             /// Set `CLK_ETM_EN`.
             #[inline]
-            pub fn set_clk_etm_en(&mut self, value: ClkEtmEn) -> &mut Self {
+            pub fn set_clk_etm_en(&mut self, value: super::dictionaries::ClockGate) -> &mut Self {
                 self.0 = (self.0 & 0xffbfffff) | (value.bits() << 22);
                 self
             }
 
             /// Set `CLK_ZB_APB_EN`.
             #[inline]
-            pub fn set_clk_zb_apb_en(&mut self, value: ClkZbApbEn) -> &mut Self {
+            pub fn set_clk_zb_apb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xff7fffff) | (value.bits() << 23);
                 self
             }
 
             /// Set `CLK_ZBMAC_EN`.
             #[inline]
-            pub fn set_clk_zbmac_en(&mut self, value: ClkZbmacEn) -> &mut Self {
+            pub fn set_clk_zbmac_en(&mut self, value: super::dictionaries::ClockGate) -> &mut Self {
                 self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
             /// Set `CLK_MODEM_SEC_ECB_EN`.
             #[inline]
-            pub fn set_clk_modem_sec_ecb_en(&mut self, value: ClkModemSecEcbEn) -> &mut Self {
+            pub fn set_clk_modem_sec_ecb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfdffffff) | (value.bits() << 25);
                 self
             }
 
             /// Set `CLK_MODEM_SEC_CCM_EN`.
             #[inline]
-            pub fn set_clk_modem_sec_ccm_en(&mut self, value: ClkModemSecCcmEn) -> &mut Self {
+            pub fn set_clk_modem_sec_ccm_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
             /// Set `CLK_MODEM_SEC_BAH_EN`.
             #[inline]
-            pub fn set_clk_modem_sec_bah_en(&mut self, value: ClkModemSecBahEn) -> &mut Self {
+            pub fn set_clk_modem_sec_bah_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xf7ffffff) | (value.bits() << 27);
                 self
             }
 
             /// Set `CLK_MODEM_SEC_APB_EN`.
             #[inline]
-            pub fn set_clk_modem_sec_apb_en(&mut self, value: ClkModemSecApbEn) -> &mut Self {
+            pub fn set_clk_modem_sec_apb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xefffffff) | (value.bits() << 28);
                 self
             }
 
             /// Set `CLK_MODEM_SEC_EN`.
             #[inline]
-            pub fn set_clk_modem_sec_en(&mut self, value: ClkModemSecEn) -> &mut Self {
+            pub fn set_clk_modem_sec_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xdfffffff) | (value.bits() << 29);
                 self
             }
 
             /// Set `CLK_BLE_TIMER_EN`.
             #[inline]
-            pub fn set_clk_ble_timer_en(&mut self, value: ClkBleTimerEn) -> &mut Self {
+            pub fn set_clk_ble_timer_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
@@ -147316,86 +146705,12 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_WIFIBB`.
         pub const RST_WIFIBB_MASK: u32 = 0x100;
 
-        /// The declared values of the `RST_WIFIBB` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstWifibb {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstWifibb {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 8
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_WIFIMAC` in bits.
         pub const RST_WIFIMAC_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_WIFIMAC`.
         pub const RST_WIFIMAC_MAX: u32 = 0x1;
         /// Positioned bits of `RST_WIFIMAC`.
         pub const RST_WIFIMAC_MASK: u32 = 0x200;
-
-        /// The declared values of the `RST_WIFIMAC` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstWifimac {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstWifimac {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 9
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
 
         /// Width of `RST_FE_PWDET_ADC` in bits.
         pub const RST_FE_PWDET_ADC_WIDTH: u32 = 1;
@@ -147439,86 +146754,12 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_BTMAC_APB`.
         pub const RST_BTMAC_APB_MASK: u32 = 0x8000;
 
-        /// The declared values of the `RST_BTMAC_APB` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstBtmacApb {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstBtmacApb {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 15
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_BTMAC` in bits.
         pub const RST_BTMAC_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_BTMAC`.
         pub const RST_BTMAC_MAX: u32 = 0x1;
         /// Positioned bits of `RST_BTMAC`.
         pub const RST_BTMAC_MASK: u32 = 0x10000;
-
-        /// The declared values of the `RST_BTMAC` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstBtmac {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstBtmac {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 16
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
 
         /// Width of `RST_BTBB_APB` in bits.
         pub const RST_BTBB_APB_WIDTH: u32 = 1;
@@ -147562,86 +146803,12 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_ZBMAC_APB`.
         pub const RST_ZBMAC_APB_MASK: u32 = 0x800000;
 
-        /// The declared values of the `RST_ZBMAC_APB` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstZbmacApb {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstZbmacApb {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 23
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_ZBMAC` in bits.
         pub const RST_ZBMAC_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_ZBMAC`.
         pub const RST_ZBMAC_MAX: u32 = 0x1;
         /// Positioned bits of `RST_ZBMAC`.
         pub const RST_ZBMAC_MASK: u32 = 0x1000000;
-
-        /// The declared values of the `RST_ZBMAC` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstZbmac {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstZbmac {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 24
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
 
         /// Width of `RST_MODEM_ECB` in bits.
         pub const RST_MODEM_ECB_WIDTH: u32 = 1;
@@ -147650,86 +146817,12 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_MODEM_ECB`.
         pub const RST_MODEM_ECB_MASK: u32 = 0x2000000;
 
-        /// The declared values of the `RST_MODEM_ECB` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstModemEcb {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstModemEcb {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 25
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_MODEM_CCM` in bits.
         pub const RST_MODEM_CCM_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_MODEM_CCM`.
         pub const RST_MODEM_CCM_MAX: u32 = 0x1;
         /// Positioned bits of `RST_MODEM_CCM`.
         pub const RST_MODEM_CCM_MASK: u32 = 0x4000000;
-
-        /// The declared values of the `RST_MODEM_CCM` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstModemCcm {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstModemCcm {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 26
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
 
         /// Width of `RST_MODEM_BAH` in bits.
         pub const RST_MODEM_BAH_WIDTH: u32 = 1;
@@ -147738,43 +146831,6 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_MODEM_BAH`.
         pub const RST_MODEM_BAH_MASK: u32 = 0x8000000;
 
-        /// The declared values of the `RST_MODEM_BAH` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstModemBah {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstModemBah {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 27
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_MODEM_SEC` in bits.
         pub const RST_MODEM_SEC_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_MODEM_SEC`.
@@ -147782,86 +146838,12 @@ pub mod modem_syscon {
         /// Positioned bits of `RST_MODEM_SEC`.
         pub const RST_MODEM_SEC_MASK: u32 = 0x20000000;
 
-        /// The declared values of the `RST_MODEM_SEC` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstModemSec {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstModemSec {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 29
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// Width of `RST_BLE_TIMER` in bits.
         pub const RST_BLE_TIMER_WIDTH: u32 = 1;
         /// Greatest unsigned image of `RST_BLE_TIMER`.
         pub const RST_BLE_TIMER_MAX: u32 = 0x1;
         /// Positioned bits of `RST_BLE_TIMER`.
         pub const RST_BLE_TIMER_MASK: u32 = 0x40000000;
-
-        /// The declared values of the `RST_BLE_TIMER` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum RstBleTimer {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl RstBleTimer {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 30
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
 
         /// Width of `RST_DATA_DUMP` in bits.
         pub const RST_DATA_DUMP_WIDTH: u32 = 1;
@@ -147877,26 +146859,14 @@ pub mod modem_syscon {
         impl R {
             /// Wi-Fi baseband reset.
             #[inline]
-            pub const fn rst_wifibb(self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// The `RST_WIFIBB` field as its declared value.
-            #[inline]
-            pub const fn rst_wifibb_variant(self) -> RstWifibb {
-                RstWifibb::from_field(self.0 >> 8)
+            pub const fn rst_wifibb(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 8)
             }
 
             /// Wi-Fi MAC reset.
             #[inline]
-            pub const fn rst_wifimac(self) -> bool {
-                (self.0 & 0x00000200) != 0
-            }
-
-            /// The `RST_WIFIMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_wifimac_variant(self) -> RstWifimac {
-                RstWifimac::from_field(self.0 >> 9)
+            pub const fn rst_wifimac(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 9)
             }
 
             /// The `RST_FE_PWDET_ADC` field.
@@ -147931,26 +146901,14 @@ pub mod modem_syscon {
 
             /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac_apb(self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// The `RST_BTMAC_APB` field as its declared value.
-            #[inline]
-            pub const fn rst_btmac_apb_variant(self) -> RstBtmacApb {
-                RstBtmacApb::from_field(self.0 >> 15)
+            pub const fn rst_btmac_apb(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 15)
             }
 
             /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac(self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// The `RST_BTMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_btmac_variant(self) -> RstBtmac {
-                RstBtmac::from_field(self.0 >> 16)
+            pub const fn rst_btmac(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 16)
             }
 
             /// The `RST_BTBB_APB` field.
@@ -147985,86 +146943,44 @@ pub mod modem_syscon {
 
             /// IEEE 802.15.4 MAC APB reset.
             #[inline]
-            pub const fn rst_zbmac_apb(self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `RST_ZBMAC_APB` field as its declared value.
-            #[inline]
-            pub const fn rst_zbmac_apb_variant(self) -> RstZbmacApb {
-                RstZbmacApb::from_field(self.0 >> 23)
+            pub const fn rst_zbmac_apb(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 23)
             }
 
             /// IEEE 802.15.4 MAC reset.
             #[inline]
-            pub const fn rst_zbmac(self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `RST_ZBMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_zbmac_variant(self) -> RstZbmac {
-                RstZbmac::from_field(self.0 >> 24)
+            pub const fn rst_zbmac(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 24)
             }
 
             /// Modem-security ECB reset.
             #[inline]
-            pub const fn rst_modem_ecb(self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `RST_MODEM_ECB` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_ecb_variant(self) -> RstModemEcb {
-                RstModemEcb::from_field(self.0 >> 25)
+            pub const fn rst_modem_ecb(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 25)
             }
 
             /// Modem-security CCM reset.
             #[inline]
-            pub const fn rst_modem_ccm(self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `RST_MODEM_CCM` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_ccm_variant(self) -> RstModemCcm {
-                RstModemCcm::from_field(self.0 >> 26)
+            pub const fn rst_modem_ccm(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 26)
             }
 
             /// Modem-security BAH reset.
             #[inline]
-            pub const fn rst_modem_bah(self) -> bool {
-                (self.0 & 0x08000000) != 0
-            }
-
-            /// The `RST_MODEM_BAH` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_bah_variant(self) -> RstModemBah {
-                RstModemBah::from_field(self.0 >> 27)
+            pub const fn rst_modem_bah(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 27)
             }
 
             /// Modem-security reset.
             #[inline]
-            pub const fn rst_modem_sec(self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// The `RST_MODEM_SEC` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_sec_variant(self) -> RstModemSec {
-                RstModemSec::from_field(self.0 >> 29)
+            pub const fn rst_modem_sec(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 29)
             }
 
             /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
-            pub const fn rst_ble_timer(self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `RST_BLE_TIMER` field as its declared value.
-            #[inline]
-            pub const fn rst_ble_timer_variant(self) -> RstBleTimer {
-                RstBleTimer::from_field(self.0 >> 30)
+            pub const fn rst_ble_timer(self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 30)
             }
 
             /// The `RST_DATA_DUMP` field.
@@ -148080,26 +146996,14 @@ pub mod modem_syscon {
         impl W {
             /// Wi-Fi baseband reset.
             #[inline]
-            pub const fn rst_wifibb(&self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// The `RST_WIFIBB` field as its declared value.
-            #[inline]
-            pub const fn rst_wifibb_variant(&self) -> RstWifibb {
-                RstWifibb::from_field(self.0 >> 8)
+            pub const fn rst_wifibb(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 8)
             }
 
             /// Wi-Fi MAC reset.
             #[inline]
-            pub const fn rst_wifimac(&self) -> bool {
-                (self.0 & 0x00000200) != 0
-            }
-
-            /// The `RST_WIFIMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_wifimac_variant(&self) -> RstWifimac {
-                RstWifimac::from_field(self.0 >> 9)
+            pub const fn rst_wifimac(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 9)
             }
 
             /// The `RST_FE_PWDET_ADC` field.
@@ -148134,26 +147038,14 @@ pub mod modem_syscon {
 
             /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac_apb(&self) -> bool {
-                (self.0 & 0x00008000) != 0
-            }
-
-            /// The `RST_BTMAC_APB` field as its declared value.
-            #[inline]
-            pub const fn rst_btmac_apb_variant(&self) -> RstBtmacApb {
-                RstBtmacApb::from_field(self.0 >> 15)
+            pub const fn rst_btmac_apb(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 15)
             }
 
             /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac(&self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// The `RST_BTMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_btmac_variant(&self) -> RstBtmac {
-                RstBtmac::from_field(self.0 >> 16)
+            pub const fn rst_btmac(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 16)
             }
 
             /// The `RST_BTBB_APB` field.
@@ -148188,86 +147080,44 @@ pub mod modem_syscon {
 
             /// IEEE 802.15.4 MAC APB reset.
             #[inline]
-            pub const fn rst_zbmac_apb(&self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `RST_ZBMAC_APB` field as its declared value.
-            #[inline]
-            pub const fn rst_zbmac_apb_variant(&self) -> RstZbmacApb {
-                RstZbmacApb::from_field(self.0 >> 23)
+            pub const fn rst_zbmac_apb(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 23)
             }
 
             /// IEEE 802.15.4 MAC reset.
             #[inline]
-            pub const fn rst_zbmac(&self) -> bool {
-                (self.0 & 0x01000000) != 0
-            }
-
-            /// The `RST_ZBMAC` field as its declared value.
-            #[inline]
-            pub const fn rst_zbmac_variant(&self) -> RstZbmac {
-                RstZbmac::from_field(self.0 >> 24)
+            pub const fn rst_zbmac(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 24)
             }
 
             /// Modem-security ECB reset.
             #[inline]
-            pub const fn rst_modem_ecb(&self) -> bool {
-                (self.0 & 0x02000000) != 0
-            }
-
-            /// The `RST_MODEM_ECB` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_ecb_variant(&self) -> RstModemEcb {
-                RstModemEcb::from_field(self.0 >> 25)
+            pub const fn rst_modem_ecb(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 25)
             }
 
             /// Modem-security CCM reset.
             #[inline]
-            pub const fn rst_modem_ccm(&self) -> bool {
-                (self.0 & 0x04000000) != 0
-            }
-
-            /// The `RST_MODEM_CCM` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_ccm_variant(&self) -> RstModemCcm {
-                RstModemCcm::from_field(self.0 >> 26)
+            pub const fn rst_modem_ccm(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 26)
             }
 
             /// Modem-security BAH reset.
             #[inline]
-            pub const fn rst_modem_bah(&self) -> bool {
-                (self.0 & 0x08000000) != 0
-            }
-
-            /// The `RST_MODEM_BAH` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_bah_variant(&self) -> RstModemBah {
-                RstModemBah::from_field(self.0 >> 27)
+            pub const fn rst_modem_bah(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 27)
             }
 
             /// Modem-security reset.
             #[inline]
-            pub const fn rst_modem_sec(&self) -> bool {
-                (self.0 & 0x20000000) != 0
-            }
-
-            /// The `RST_MODEM_SEC` field as its declared value.
-            #[inline]
-            pub const fn rst_modem_sec_variant(&self) -> RstModemSec {
-                RstModemSec::from_field(self.0 >> 29)
+            pub const fn rst_modem_sec(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 29)
             }
 
             /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
-            pub const fn rst_ble_timer(&self) -> bool {
-                (self.0 & 0x40000000) != 0
-            }
-
-            /// The `RST_BLE_TIMER` field as its declared value.
-            #[inline]
-            pub const fn rst_ble_timer_variant(&self) -> RstBleTimer {
-                RstBleTimer::from_field(self.0 >> 30)
+            pub const fn rst_ble_timer(&self) -> super::dictionaries::Reset {
+                super::dictionaries::Reset::from_field(self.0 >> 30)
             }
 
             /// The `RST_DATA_DUMP` field.
@@ -148278,14 +147128,14 @@ pub mod modem_syscon {
 
             /// Set `RST_WIFIBB`.
             #[inline]
-            pub fn set_rst_wifibb(&mut self, value: RstWifibb) -> &mut Self {
+            pub fn set_rst_wifibb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfffffeff) | (value.bits() << 8);
                 self
             }
 
             /// Set `RST_WIFIMAC`.
             #[inline]
-            pub fn set_rst_wifimac(&mut self, value: RstWifimac) -> &mut Self {
+            pub fn set_rst_wifimac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
@@ -148327,14 +147177,14 @@ pub mod modem_syscon {
 
             /// Set `RST_BTMAC_APB`.
             #[inline]
-            pub fn set_rst_btmac_apb(&mut self, value: RstBtmacApb) -> &mut Self {
+            pub fn set_rst_btmac_apb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xffff7fff) | (value.bits() << 15);
                 self
             }
 
             /// Set `RST_BTMAC`.
             #[inline]
-            pub fn set_rst_btmac(&mut self, value: RstBtmac) -> &mut Self {
+            pub fn set_rst_btmac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
@@ -148376,49 +147226,49 @@ pub mod modem_syscon {
 
             /// Set `RST_ZBMAC_APB`.
             #[inline]
-            pub fn set_rst_zbmac_apb(&mut self, value: RstZbmacApb) -> &mut Self {
+            pub fn set_rst_zbmac_apb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xff7fffff) | (value.bits() << 23);
                 self
             }
 
             /// Set `RST_ZBMAC`.
             #[inline]
-            pub fn set_rst_zbmac(&mut self, value: RstZbmac) -> &mut Self {
+            pub fn set_rst_zbmac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
             /// Set `RST_MODEM_ECB`.
             #[inline]
-            pub fn set_rst_modem_ecb(&mut self, value: RstModemEcb) -> &mut Self {
+            pub fn set_rst_modem_ecb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfdffffff) | (value.bits() << 25);
                 self
             }
 
             /// Set `RST_MODEM_CCM`.
             #[inline]
-            pub fn set_rst_modem_ccm(&mut self, value: RstModemCcm) -> &mut Self {
+            pub fn set_rst_modem_ccm(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
             /// Set `RST_MODEM_BAH`.
             #[inline]
-            pub fn set_rst_modem_bah(&mut self, value: RstModemBah) -> &mut Self {
+            pub fn set_rst_modem_bah(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xf7ffffff) | (value.bits() << 27);
                 self
             }
 
             /// Set `RST_MODEM_SEC`.
             #[inline]
-            pub fn set_rst_modem_sec(&mut self, value: RstModemSec) -> &mut Self {
+            pub fn set_rst_modem_sec(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xdfffffff) | (value.bits() << 29);
                 self
             }
 
             /// Set `RST_BLE_TIMER`.
             #[inline]
-            pub fn set_rst_ble_timer(&mut self, value: RstBleTimer) -> &mut Self {
+            pub fn set_rst_ble_timer(&mut self, value: super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
@@ -148451,86 +147301,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIBB_22M_EN`.
         pub const CLK_WIFIBB_22M_EN_MASK: u32 = 0x1;
 
-        /// The declared values of the `CLK_WIFIBB_22M_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb22mEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb22mEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits()
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFIBB_40M_EN` in bits.
         pub const CLK_WIFIBB_40M_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFIBB_40M_EN`.
         pub const CLK_WIFIBB_40M_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_WIFIBB_40M_EN`.
         pub const CLK_WIFIBB_40M_EN_MASK: u32 = 0x2;
-
-        /// The declared values of the `CLK_WIFIBB_40M_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb40mEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb40mEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 1
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_WIFIBB_44M_EN` in bits.
         pub const CLK_WIFIBB_44M_EN_WIDTH: u32 = 1;
@@ -148539,86 +147315,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIBB_44M_EN`.
         pub const CLK_WIFIBB_44M_EN_MASK: u32 = 0x4;
 
-        /// The declared values of the `CLK_WIFIBB_44M_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb44mEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb44mEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 2
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFIBB_80M_EN` in bits.
         pub const CLK_WIFIBB_80M_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFIBB_80M_EN`.
         pub const CLK_WIFIBB_80M_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_WIFIBB_80M_EN`.
         pub const CLK_WIFIBB_80M_EN_MASK: u32 = 0x8;
-
-        /// The declared values of the `CLK_WIFIBB_80M_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb80mEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb80mEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 3
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_WIFIBB_40X_EN` in bits.
         pub const CLK_WIFIBB_40X_EN_WIDTH: u32 = 1;
@@ -148627,86 +147329,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIBB_40X_EN`.
         pub const CLK_WIFIBB_40X_EN_MASK: u32 = 0x10;
 
-        /// The declared values of the `CLK_WIFIBB_40X_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb40xEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb40xEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 4
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFIBB_80X_EN` in bits.
         pub const CLK_WIFIBB_80X_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFIBB_80X_EN`.
         pub const CLK_WIFIBB_80X_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_WIFIBB_80X_EN`.
         pub const CLK_WIFIBB_80X_EN_MASK: u32 = 0x20;
-
-        /// The declared values of the `CLK_WIFIBB_80X_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb80xEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb80xEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 5
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_WIFIBB_40X1_EN` in bits.
         pub const CLK_WIFIBB_40X1_EN_WIDTH: u32 = 1;
@@ -148715,86 +147343,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIBB_40X1_EN`.
         pub const CLK_WIFIBB_40X1_EN_MASK: u32 = 0x40;
 
-        /// The declared values of the `CLK_WIFIBB_40X1_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb40x1En {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb40x1En {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 6
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFIBB_80X1_EN` in bits.
         pub const CLK_WIFIBB_80X1_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFIBB_80X1_EN`.
         pub const CLK_WIFIBB_80X1_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_WIFIBB_80X1_EN`.
         pub const CLK_WIFIBB_80X1_EN_MASK: u32 = 0x80;
-
-        /// The declared values of the `CLK_WIFIBB_80X1_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb80x1En {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb80x1En {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 7
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_WIFIBB_160X1_EN` in bits.
         pub const CLK_WIFIBB_160X1_EN_WIDTH: u32 = 1;
@@ -148803,43 +147357,6 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIBB_160X1_EN`.
         pub const CLK_WIFIBB_160X1_EN_MASK: u32 = 0x100;
 
-        /// The declared values of the `CLK_WIFIBB_160X1_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifibb160x1En {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifibb160x1En {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 8
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFIMAC_EN` in bits.
         pub const CLK_WIFIMAC_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFIMAC_EN`.
@@ -148847,86 +147364,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_WIFIMAC_EN`.
         pub const CLK_WIFIMAC_EN_MASK: u32 = 0x200;
 
-        /// The declared values of the `CLK_WIFIMAC_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifimacEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifimacEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 9
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_WIFI_APB_EN` in bits.
         pub const CLK_WIFI_APB_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_WIFI_APB_EN`.
         pub const CLK_WIFI_APB_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_WIFI_APB_EN`.
         pub const CLK_WIFI_APB_EN_MASK: u32 = 0x400;
-
-        /// The declared values of the `CLK_WIFI_APB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkWifiApbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkWifiApbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 10
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_FE_20M_EN` in bits.
         pub const CLK_FE_20M_EN_WIDTH: u32 = 1;
@@ -148970,43 +147413,6 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_BT_APB_EN`.
         pub const CLK_BT_APB_EN_MASK: u32 = 0x10000;
 
-        /// The declared values of the `CLK_BT_APB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkBtApbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkBtApbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 16
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_BTBB_EN` in bits.
         pub const CLK_BTBB_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_BTBB_EN`.
@@ -149014,86 +147420,12 @@ pub mod modem_syscon {
         /// Positioned bits of `CLK_BTBB_EN`.
         pub const CLK_BTBB_EN_MASK: u32 = 0x20000;
 
-        /// The declared values of the `CLK_BTBB_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkBtbbEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkBtbbEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 17
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
-
         /// Width of `CLK_BTMAC_EN` in bits.
         pub const CLK_BTMAC_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `CLK_BTMAC_EN`.
         pub const CLK_BTMAC_EN_MAX: u32 = 0x1;
         /// Positioned bits of `CLK_BTMAC_EN`.
         pub const CLK_BTMAC_EN_MASK: u32 = 0x40000;
-
-        /// The declared values of the `CLK_BTMAC_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum ClkBtmacEn {
-            /// The selected MODEM_SYSCON clock gate is disabled.
-            Disabled = 0x0,
-            /// The selected MODEM_SYSCON clock gate is enabled.
-            Enabled = 0x1,
-        }
-
-        impl ClkBtmacEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 18
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Disabled,
-                    _ => Self::Enabled,
-                }
-            }
-        }
 
         /// Width of `CLK_FE_PWDET_ADC_EN` in bits.
         pub const CLK_FE_PWDET_ADC_EN_WIDTH: u32 = 1;
@@ -149130,134 +147462,68 @@ pub mod modem_syscon {
         impl R {
             /// The `CLK_WIFIBB_22M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_22m_en(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `CLK_WIFIBB_22M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_22m_en_variant(self) -> ClkWifibb22mEn {
-                ClkWifibb22mEn::from_field(self.0)
+            pub const fn clk_wifibb_22m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0)
             }
 
             /// The `CLK_WIFIBB_40M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40m_en(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `CLK_WIFIBB_40M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40m_en_variant(self) -> ClkWifibb40mEn {
-                ClkWifibb40mEn::from_field(self.0 >> 1)
+            pub const fn clk_wifibb_40m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 1)
             }
 
             /// The `CLK_WIFIBB_44M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_44m_en(self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// The `CLK_WIFIBB_44M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_44m_en_variant(self) -> ClkWifibb44mEn {
-                ClkWifibb44mEn::from_field(self.0 >> 2)
+            pub const fn clk_wifibb_44m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 2)
             }
 
             /// The `CLK_WIFIBB_80M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80m_en(self) -> bool {
-                (self.0 & 0x00000008) != 0
-            }
-
-            /// The `CLK_WIFIBB_80M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80m_en_variant(self) -> ClkWifibb80mEn {
-                ClkWifibb80mEn::from_field(self.0 >> 3)
+            pub const fn clk_wifibb_80m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 3)
             }
 
             /// The `CLK_WIFIBB_40X_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40x_en(self) -> bool {
-                (self.0 & 0x00000010) != 0
-            }
-
-            /// The `CLK_WIFIBB_40X_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40x_en_variant(self) -> ClkWifibb40xEn {
-                ClkWifibb40xEn::from_field(self.0 >> 4)
+            pub const fn clk_wifibb_40x_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 4)
             }
 
             /// The `CLK_WIFIBB_80X_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80x_en(self) -> bool {
-                (self.0 & 0x00000020) != 0
-            }
-
-            /// The `CLK_WIFIBB_80X_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80x_en_variant(self) -> ClkWifibb80xEn {
-                ClkWifibb80xEn::from_field(self.0 >> 5)
+            pub const fn clk_wifibb_80x_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 5)
             }
 
             /// The `CLK_WIFIBB_40X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40x1_en(self) -> bool {
-                (self.0 & 0x00000040) != 0
-            }
-
-            /// The `CLK_WIFIBB_40X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40x1_en_variant(self) -> ClkWifibb40x1En {
-                ClkWifibb40x1En::from_field(self.0 >> 6)
+            pub const fn clk_wifibb_40x1_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 6)
             }
 
             /// The `CLK_WIFIBB_80X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80x1_en(self) -> bool {
-                (self.0 & 0x00000080) != 0
-            }
-
-            /// The `CLK_WIFIBB_80X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80x1_en_variant(self) -> ClkWifibb80x1En {
-                ClkWifibb80x1En::from_field(self.0 >> 7)
+            pub const fn clk_wifibb_80x1_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 7)
             }
 
             /// The `CLK_WIFIBB_160X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_160x1_en(self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// The `CLK_WIFIBB_160X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_160x1_en_variant(self) -> ClkWifibb160x1En {
-                ClkWifibb160x1En::from_field(self.0 >> 8)
+            pub const fn clk_wifibb_160x1_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 8)
             }
 
             /// The `CLK_WIFIMAC_EN` field.
             #[inline]
-            pub const fn clk_wifimac_en(self) -> bool {
-                (self.0 & 0x00000200) != 0
-            }
-
-            /// The `CLK_WIFIMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifimac_en_variant(self) -> ClkWifimacEn {
-                ClkWifimacEn::from_field(self.0 >> 9)
+            pub const fn clk_wifimac_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 9)
             }
 
             /// The `CLK_WIFI_APB_EN` field.
             #[inline]
-            pub const fn clk_wifi_apb_en(self) -> bool {
-                (self.0 & 0x00000400) != 0
-            }
-
-            /// The `CLK_WIFI_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifi_apb_en_variant(self) -> ClkWifiApbEn {
-                ClkWifiApbEn::from_field(self.0 >> 10)
+            pub const fn clk_wifi_apb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 10)
             }
 
             /// The `CLK_FE_20M_EN` field.
@@ -149292,38 +147558,20 @@ pub mod modem_syscon {
 
             /// The `CLK_BT_APB_EN` field.
             #[inline]
-            pub const fn clk_bt_apb_en(self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// The `CLK_BT_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_bt_apb_en_variant(self) -> ClkBtApbEn {
-                ClkBtApbEn::from_field(self.0 >> 16)
+            pub const fn clk_bt_apb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 16)
             }
 
             /// The `CLK_BTBB_EN` field.
             #[inline]
-            pub const fn clk_btbb_en(self) -> bool {
-                (self.0 & 0x00020000) != 0
-            }
-
-            /// The `CLK_BTBB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_btbb_en_variant(self) -> ClkBtbbEn {
-                ClkBtbbEn::from_field(self.0 >> 17)
+            pub const fn clk_btbb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 17)
             }
 
             /// The `CLK_BTMAC_EN` field.
             #[inline]
-            pub const fn clk_btmac_en(self) -> bool {
-                (self.0 & 0x00040000) != 0
-            }
-
-            /// The `CLK_BTMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_btmac_en_variant(self) -> ClkBtmacEn {
-                ClkBtmacEn::from_field(self.0 >> 18)
+            pub const fn clk_btmac_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 18)
             }
 
             /// The `CLK_FE_PWDET_ADC_EN` field.
@@ -149357,134 +147605,68 @@ pub mod modem_syscon {
         impl W {
             /// The `CLK_WIFIBB_22M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_22m_en(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `CLK_WIFIBB_22M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_22m_en_variant(&self) -> ClkWifibb22mEn {
-                ClkWifibb22mEn::from_field(self.0)
+            pub const fn clk_wifibb_22m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0)
             }
 
             /// The `CLK_WIFIBB_40M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40m_en(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `CLK_WIFIBB_40M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40m_en_variant(&self) -> ClkWifibb40mEn {
-                ClkWifibb40mEn::from_field(self.0 >> 1)
+            pub const fn clk_wifibb_40m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 1)
             }
 
             /// The `CLK_WIFIBB_44M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_44m_en(&self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// The `CLK_WIFIBB_44M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_44m_en_variant(&self) -> ClkWifibb44mEn {
-                ClkWifibb44mEn::from_field(self.0 >> 2)
+            pub const fn clk_wifibb_44m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 2)
             }
 
             /// The `CLK_WIFIBB_80M_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80m_en(&self) -> bool {
-                (self.0 & 0x00000008) != 0
-            }
-
-            /// The `CLK_WIFIBB_80M_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80m_en_variant(&self) -> ClkWifibb80mEn {
-                ClkWifibb80mEn::from_field(self.0 >> 3)
+            pub const fn clk_wifibb_80m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 3)
             }
 
             /// The `CLK_WIFIBB_40X_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40x_en(&self) -> bool {
-                (self.0 & 0x00000010) != 0
-            }
-
-            /// The `CLK_WIFIBB_40X_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40x_en_variant(&self) -> ClkWifibb40xEn {
-                ClkWifibb40xEn::from_field(self.0 >> 4)
+            pub const fn clk_wifibb_40x_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 4)
             }
 
             /// The `CLK_WIFIBB_80X_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80x_en(&self) -> bool {
-                (self.0 & 0x00000020) != 0
-            }
-
-            /// The `CLK_WIFIBB_80X_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80x_en_variant(&self) -> ClkWifibb80xEn {
-                ClkWifibb80xEn::from_field(self.0 >> 5)
+            pub const fn clk_wifibb_80x_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 5)
             }
 
             /// The `CLK_WIFIBB_40X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_40x1_en(&self) -> bool {
-                (self.0 & 0x00000040) != 0
-            }
-
-            /// The `CLK_WIFIBB_40X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_40x1_en_variant(&self) -> ClkWifibb40x1En {
-                ClkWifibb40x1En::from_field(self.0 >> 6)
+            pub const fn clk_wifibb_40x1_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 6)
             }
 
             /// The `CLK_WIFIBB_80X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_80x1_en(&self) -> bool {
-                (self.0 & 0x00000080) != 0
-            }
-
-            /// The `CLK_WIFIBB_80X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_80x1_en_variant(&self) -> ClkWifibb80x1En {
-                ClkWifibb80x1En::from_field(self.0 >> 7)
+            pub const fn clk_wifibb_80x1_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 7)
             }
 
             /// The `CLK_WIFIBB_160X1_EN` field.
             #[inline]
-            pub const fn clk_wifibb_160x1_en(&self) -> bool {
-                (self.0 & 0x00000100) != 0
-            }
-
-            /// The `CLK_WIFIBB_160X1_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifibb_160x1_en_variant(&self) -> ClkWifibb160x1En {
-                ClkWifibb160x1En::from_field(self.0 >> 8)
+            pub const fn clk_wifibb_160x1_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 8)
             }
 
             /// The `CLK_WIFIMAC_EN` field.
             #[inline]
-            pub const fn clk_wifimac_en(&self) -> bool {
-                (self.0 & 0x00000200) != 0
-            }
-
-            /// The `CLK_WIFIMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifimac_en_variant(&self) -> ClkWifimacEn {
-                ClkWifimacEn::from_field(self.0 >> 9)
+            pub const fn clk_wifimac_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 9)
             }
 
             /// The `CLK_WIFI_APB_EN` field.
             #[inline]
-            pub const fn clk_wifi_apb_en(&self) -> bool {
-                (self.0 & 0x00000400) != 0
-            }
-
-            /// The `CLK_WIFI_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_wifi_apb_en_variant(&self) -> ClkWifiApbEn {
-                ClkWifiApbEn::from_field(self.0 >> 10)
+            pub const fn clk_wifi_apb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 10)
             }
 
             /// The `CLK_FE_20M_EN` field.
@@ -149519,38 +147701,20 @@ pub mod modem_syscon {
 
             /// The `CLK_BT_APB_EN` field.
             #[inline]
-            pub const fn clk_bt_apb_en(&self) -> bool {
-                (self.0 & 0x00010000) != 0
-            }
-
-            /// The `CLK_BT_APB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_bt_apb_en_variant(&self) -> ClkBtApbEn {
-                ClkBtApbEn::from_field(self.0 >> 16)
+            pub const fn clk_bt_apb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 16)
             }
 
             /// The `CLK_BTBB_EN` field.
             #[inline]
-            pub const fn clk_btbb_en(&self) -> bool {
-                (self.0 & 0x00020000) != 0
-            }
-
-            /// The `CLK_BTBB_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_btbb_en_variant(&self) -> ClkBtbbEn {
-                ClkBtbbEn::from_field(self.0 >> 17)
+            pub const fn clk_btbb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 17)
             }
 
             /// The `CLK_BTMAC_EN` field.
             #[inline]
-            pub const fn clk_btmac_en(&self) -> bool {
-                (self.0 & 0x00040000) != 0
-            }
-
-            /// The `CLK_BTMAC_EN` field as its declared value.
-            #[inline]
-            pub const fn clk_btmac_en_variant(&self) -> ClkBtmacEn {
-                ClkBtmacEn::from_field(self.0 >> 18)
+            pub const fn clk_btmac_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 18)
             }
 
             /// The `CLK_FE_PWDET_ADC_EN` field.
@@ -149579,77 +147743,110 @@ pub mod modem_syscon {
 
             /// Set `CLK_WIFIBB_22M_EN`.
             #[inline]
-            pub fn set_clk_wifibb_22m_en(&mut self, value: ClkWifibb22mEn) -> &mut Self {
+            pub fn set_clk_wifibb_22m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
             /// Set `CLK_WIFIBB_40M_EN`.
             #[inline]
-            pub fn set_clk_wifibb_40m_en(&mut self, value: ClkWifibb40mEn) -> &mut Self {
+            pub fn set_clk_wifibb_40m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffd) | (value.bits() << 1);
                 self
             }
 
             /// Set `CLK_WIFIBB_44M_EN`.
             #[inline]
-            pub fn set_clk_wifibb_44m_en(&mut self, value: ClkWifibb44mEn) -> &mut Self {
+            pub fn set_clk_wifibb_44m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffffb) | (value.bits() << 2);
                 self
             }
 
             /// Set `CLK_WIFIBB_80M_EN`.
             #[inline]
-            pub fn set_clk_wifibb_80m_en(&mut self, value: ClkWifibb80mEn) -> &mut Self {
+            pub fn set_clk_wifibb_80m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffff7) | (value.bits() << 3);
                 self
             }
 
             /// Set `CLK_WIFIBB_40X_EN`.
             #[inline]
-            pub fn set_clk_wifibb_40x_en(&mut self, value: ClkWifibb40xEn) -> &mut Self {
+            pub fn set_clk_wifibb_40x_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffffffef) | (value.bits() << 4);
                 self
             }
 
             /// Set `CLK_WIFIBB_80X_EN`.
             #[inline]
-            pub fn set_clk_wifibb_80x_en(&mut self, value: ClkWifibb80xEn) -> &mut Self {
+            pub fn set_clk_wifibb_80x_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffffffdf) | (value.bits() << 5);
                 self
             }
 
             /// Set `CLK_WIFIBB_40X1_EN`.
             #[inline]
-            pub fn set_clk_wifibb_40x1_en(&mut self, value: ClkWifibb40x1En) -> &mut Self {
+            pub fn set_clk_wifibb_40x1_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffffffbf) | (value.bits() << 6);
                 self
             }
 
             /// Set `CLK_WIFIBB_80X1_EN`.
             #[inline]
-            pub fn set_clk_wifibb_80x1_en(&mut self, value: ClkWifibb80x1En) -> &mut Self {
+            pub fn set_clk_wifibb_80x1_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffffff7f) | (value.bits() << 7);
                 self
             }
 
             /// Set `CLK_WIFIBB_160X1_EN`.
             #[inline]
-            pub fn set_clk_wifibb_160x1_en(&mut self, value: ClkWifibb160x1En) -> &mut Self {
+            pub fn set_clk_wifibb_160x1_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffeff) | (value.bits() << 8);
                 self
             }
 
             /// Set `CLK_WIFIMAC_EN`.
             #[inline]
-            pub fn set_clk_wifimac_en(&mut self, value: ClkWifimacEn) -> &mut Self {
+            pub fn set_clk_wifimac_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
 
             /// Set `CLK_WIFI_APB_EN`.
             #[inline]
-            pub fn set_clk_wifi_apb_en(&mut self, value: ClkWifiApbEn) -> &mut Self {
+            pub fn set_clk_wifi_apb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffbff) | (value.bits() << 10);
                 self
             }
@@ -149691,21 +147888,24 @@ pub mod modem_syscon {
 
             /// Set `CLK_BT_APB_EN`.
             #[inline]
-            pub fn set_clk_bt_apb_en(&mut self, value: ClkBtApbEn) -> &mut Self {
+            pub fn set_clk_bt_apb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
 
             /// Set `CLK_BTBB_EN`.
             #[inline]
-            pub fn set_clk_btbb_en(&mut self, value: ClkBtbbEn) -> &mut Self {
+            pub fn set_clk_btbb_en(&mut self, value: super::dictionaries::ClockGate) -> &mut Self {
                 self.0 = (self.0 & 0xfffdffff) | (value.bits() << 17);
                 self
             }
 
             /// Set `CLK_BTMAC_EN`.
             #[inline]
-            pub fn set_clk_btmac_en(&mut self, value: ClkBtmacEn) -> &mut Self {
+            pub fn set_clk_btmac_en(&mut self, value: super::dictionaries::ClockGate) -> &mut Self {
                 self.0 = (self.0 & 0xfffbffff) | (value.bits() << 18);
                 self
             }
@@ -149975,25 +148175,13 @@ pub mod modem_syscon {
 
             /// The `WIFI_ENABLE` field.
             #[inline]
-            pub const fn wifi_enable(self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `WIFI_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn wifi_enable_variant(self) -> WifiEnable {
+            pub const fn wifi_enable(self) -> WifiEnable {
                 WifiEnable::from_field(self.0 >> 1)
             }
 
             /// Digital BSS 40 MHz channel-width control that complete phy_bb_bss_cbw40_dig publishes; zero disables and one enables the recovered path.
             #[inline]
-            pub const fn bss_cbw_40_digital(self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// The `BSS_CBW_40_DIGITAL` field as its declared value.
-            #[inline]
-            pub const fn bss_cbw_40_digital_variant(self) -> BssCbw40Digital {
+            pub const fn bss_cbw_40_digital(self) -> BssCbw40Digital {
                 BssCbw40Digital::from_field(self.0 >> 2)
             }
 
@@ -150029,13 +148217,7 @@ pub mod modem_syscon {
 
             /// Direct operation: ROM phy_mac_enable_bb performs a fresh-read RMW of bit 28 before its operations on WIFI_ENABLE (bit 1). MAC/BB interface enable is an inference (I) from that named sequence, not a proved electrical identity. SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
             #[inline]
-            pub const fn bit_28_opaque(self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// The `BIT_28_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_28_opaque_variant(self) -> Bit28Opaque {
+            pub const fn bit_28_opaque(self) -> Bit28Opaque {
                 Bit28Opaque::from_field(self.0 >> 28)
             }
 
@@ -150058,25 +148240,13 @@ pub mod modem_syscon {
 
             /// The `WIFI_ENABLE` field.
             #[inline]
-            pub const fn wifi_enable(&self) -> bool {
-                (self.0 & 0x00000002) != 0
-            }
-
-            /// The `WIFI_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn wifi_enable_variant(&self) -> WifiEnable {
+            pub const fn wifi_enable(&self) -> WifiEnable {
                 WifiEnable::from_field(self.0 >> 1)
             }
 
             /// Digital BSS 40 MHz channel-width control that complete phy_bb_bss_cbw40_dig publishes; zero disables and one enables the recovered path.
             #[inline]
-            pub const fn bss_cbw_40_digital(&self) -> bool {
-                (self.0 & 0x00000004) != 0
-            }
-
-            /// The `BSS_CBW_40_DIGITAL` field as its declared value.
-            #[inline]
-            pub const fn bss_cbw_40_digital_variant(&self) -> BssCbw40Digital {
+            pub const fn bss_cbw_40_digital(&self) -> BssCbw40Digital {
                 BssCbw40Digital::from_field(self.0 >> 2)
             }
 
@@ -150112,13 +148282,7 @@ pub mod modem_syscon {
 
             /// Direct operation: ROM phy_mac_enable_bb performs a fresh-read RMW of bit 28 before its operations on WIFI_ENABLE (bit 1). MAC/BB interface enable is an inference (I) from that named sequence, not a proved electrical identity. SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
             #[inline]
-            pub const fn bit_28_opaque(&self) -> bool {
-                (self.0 & 0x10000000) != 0
-            }
-
-            /// The `BIT_28_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_28_opaque_variant(&self) -> Bit28Opaque {
+            pub const fn bit_28_opaque(&self) -> Bit28Opaque {
                 Bit28Opaque::from_field(self.0 >> 28)
             }
 
@@ -254339,13 +252503,7 @@ pub mod tsens {
 
             /// Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_.
             #[inline]
-            pub const fn power_up(self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `POWER_UP` field as its declared value.
-            #[inline]
-            pub const fn power_up_variant(self) -> PowerUp {
+            pub const fn power_up(self) -> PowerUp {
                 PowerUp::from_field(self.0 >> 22)
             }
 
@@ -254423,13 +252581,7 @@ pub mod tsens {
 
             /// Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_.
             #[inline]
-            pub const fn power_up(&self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `POWER_UP` field as its declared value.
-            #[inline]
-            pub const fn power_up_variant(&self) -> PowerUp {
+            pub const fn power_up(&self) -> PowerUp {
                 PowerUp::from_field(self.0 >> 22)
             }
 
@@ -264679,13 +262831,7 @@ pub mod wifi_bb {
 
             /// Enables the forced receive-gain index in FORCED_GAIN_INDEX. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain replace it with the low bit of their enable argument; librftest clears it and waits 5 us after writing the index before setting it. Complete phy_enable_agc and the delayed tail of phy_pbus_force_mode pulse it.
             #[inline]
-            pub const fn forced_gain_enable(self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `FORCED_GAIN_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn forced_gain_enable_variant(self) -> ForcedGainEnable {
+            pub const fn forced_gain_enable(self) -> ForcedGainEnable {
                 ForcedGainEnable::from_field(self.0 >> 23)
             }
 
@@ -264720,13 +262866,7 @@ pub mod wifi_bb {
 
             /// Enables the forced receive-gain index in FORCED_GAIN_INDEX. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain replace it with the low bit of their enable argument; librftest clears it and waits 5 us after writing the index before setting it. Complete phy_enable_agc and the delayed tail of phy_pbus_force_mode pulse it.
             #[inline]
-            pub const fn forced_gain_enable(&self) -> bool {
-                (self.0 & 0x00800000) != 0
-            }
-
-            /// The `FORCED_GAIN_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn forced_gain_enable_variant(&self) -> ForcedGainEnable {
+            pub const fn forced_gain_enable(&self) -> ForcedGainEnable {
                 ForcedGainEnable::from_field(self.0 >> 23)
             }
 
@@ -266330,13 +264470,7 @@ pub mod wifi_bb {
 
             /// Complete phy_ant_dft_cfg writes zero to disable antenna diversity and one to enable it.
             #[inline]
-            pub const fn bit_11_opaque(self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `BIT_11_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_11_opaque_variant(self) -> Bit11Opaque {
+            pub const fn bit_11_opaque(self) -> Bit11Opaque {
                 Bit11Opaque::from_field(self.0 >> 11)
             }
 
@@ -266365,13 +264499,7 @@ pub mod wifi_bb {
 
             /// Complete phy_ant_dft_cfg writes zero to disable antenna diversity and one to enable it.
             #[inline]
-            pub const fn bit_11_opaque(&self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `BIT_11_OPAQUE` field as its declared value.
-            #[inline]
-            pub const fn bit_11_opaque_variant(&self) -> Bit11Opaque {
+            pub const fn bit_11_opaque(&self) -> Bit11Opaque {
                 Bit11Opaque::from_field(self.0 >> 11)
             }
 
@@ -267594,13 +265722,7 @@ pub mod wifi_bb {
         impl R {
             /// Enable argument published by phy_bb_txpwr_track at bit 0; it is independent of the opaque initialization and curve lanes. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
-            pub const fn track_enable(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `TRACK_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn track_enable_variant(self) -> TrackEnable {
+            pub const fn track_enable(self) -> TrackEnable {
                 TrackEnable::from_field(self.0)
             }
 
@@ -267623,13 +265745,7 @@ pub mod wifi_bb {
         impl W {
             /// Enable argument published by phy_bb_txpwr_track at bit 0; it is independent of the opaque initialization and curve lanes. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
-            pub const fn track_enable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `TRACK_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn track_enable_variant(&self) -> TrackEnable {
+            pub const fn track_enable(&self) -> TrackEnable {
                 TrackEnable::from_field(self.0)
             }
 
@@ -268103,13 +266219,7 @@ pub mod wifi_bb {
         impl R {
             /// Complete phy_config_hccfr writes zero to disable HCCFR and one to enable it.
             #[inline]
-            pub const fn enable(self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `ENABLE` field as its declared value.
-            #[inline]
-            pub const fn enable_variant(self) -> Enable {
+            pub const fn enable(self) -> Enable {
                 Enable::from_field(self.0 >> 22)
             }
 
@@ -268132,13 +266242,7 @@ pub mod wifi_bb {
         impl W {
             /// Complete phy_config_hccfr writes zero to disable HCCFR and one to enable it.
             #[inline]
-            pub const fn enable(&self) -> bool {
-                (self.0 & 0x00400000) != 0
-            }
-
-            /// The `ENABLE` field as its declared value.
-            #[inline]
-            pub const fn enable_variant(&self) -> Enable {
+            pub const fn enable(&self) -> Enable {
                 Enable::from_field(self.0 >> 22)
             }
 
@@ -268427,13 +266531,7 @@ pub mod wifi_bb {
         impl R {
             /// Complete phy_force_iccfr writes zero to disable the forced ICCFR value and one to enable it.
             #[inline]
-            pub const fn force_enable(self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `FORCE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn force_enable_variant(self) -> ForceEnable {
+            pub const fn force_enable(self) -> ForceEnable {
                 ForceEnable::from_field(self.0)
             }
 
@@ -268445,25 +266543,13 @@ pub mod wifi_bb {
 
             /// The `FORCE_MODE_LOW` field.
             #[inline]
-            pub const fn force_mode_low(self) -> bool {
-                (self.0 & 0x00002000) != 0
-            }
-
-            /// The `FORCE_MODE_LOW` field as its declared value.
-            #[inline]
-            pub const fn force_mode_low_variant(self) -> ForceModeLow {
+            pub const fn force_mode_low(self) -> ForceModeLow {
                 ForceModeLow::from_field(self.0 >> 13)
             }
 
             /// The `FORCE_MODE_HIGH` field.
             #[inline]
-            pub const fn force_mode_high(self) -> bool {
-                (self.0 & 0x00004000) != 0
-            }
-
-            /// The `FORCE_MODE_HIGH` field as its declared value.
-            #[inline]
-            pub const fn force_mode_high_variant(self) -> ForceModeHigh {
+            pub const fn force_mode_high(self) -> ForceModeHigh {
                 ForceModeHigh::from_field(self.0 >> 14)
             }
 
@@ -268480,13 +266566,7 @@ pub mod wifi_bb {
         impl W {
             /// Complete phy_force_iccfr writes zero to disable the forced ICCFR value and one to enable it.
             #[inline]
-            pub const fn force_enable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
-            }
-
-            /// The `FORCE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn force_enable_variant(&self) -> ForceEnable {
+            pub const fn force_enable(&self) -> ForceEnable {
                 ForceEnable::from_field(self.0)
             }
 
@@ -268498,25 +266578,13 @@ pub mod wifi_bb {
 
             /// The `FORCE_MODE_LOW` field.
             #[inline]
-            pub const fn force_mode_low(&self) -> bool {
-                (self.0 & 0x00002000) != 0
-            }
-
-            /// The `FORCE_MODE_LOW` field as its declared value.
-            #[inline]
-            pub const fn force_mode_low_variant(&self) -> ForceModeLow {
+            pub const fn force_mode_low(&self) -> ForceModeLow {
                 ForceModeLow::from_field(self.0 >> 13)
             }
 
             /// The `FORCE_MODE_HIGH` field.
             #[inline]
-            pub const fn force_mode_high(&self) -> bool {
-                (self.0 & 0x00004000) != 0
-            }
-
-            /// The `FORCE_MODE_HIGH` field as its declared value.
-            #[inline]
-            pub const fn force_mode_high_variant(&self) -> ForceModeHigh {
+            pub const fn force_mode_high(&self) -> ForceModeHigh {
                 ForceModeHigh::from_field(self.0 >> 14)
             }
 
@@ -273806,25 +271874,13 @@ pub mod wifi_bb_brx {
         impl R {
             /// First independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_first(self) -> bool {
-                (self.0 & 0x00000400) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE_FIRST` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_first_variant(self) -> LowRateEnableFirst {
+            pub const fn low_rate_enable_first(self) -> LowRateEnableFirst {
                 LowRateEnableFirst::from_field(self.0 >> 10)
             }
 
             /// Second independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_second(self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE_SECOND` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_second_variant(self) -> LowRateEnableSecond {
+            pub const fn low_rate_enable_second(self) -> LowRateEnableSecond {
                 LowRateEnableSecond::from_field(self.0 >> 11)
             }
 
@@ -273847,25 +271903,13 @@ pub mod wifi_bb_brx {
         impl W {
             /// First independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_first(&self) -> bool {
-                (self.0 & 0x00000400) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE_FIRST` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_first_variant(&self) -> LowRateEnableFirst {
+            pub const fn low_rate_enable_first(&self) -> LowRateEnableFirst {
                 LowRateEnableFirst::from_field(self.0 >> 10)
             }
 
             /// Second independently updated low-rate enable bit.
             #[inline]
-            pub const fn low_rate_enable_second(&self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE_SECOND` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_second_variant(&self) -> LowRateEnableSecond {
+            pub const fn low_rate_enable_second(&self) -> LowRateEnableSecond {
                 LowRateEnableSecond::from_field(self.0 >> 11)
             }
 
@@ -274076,13 +272120,7 @@ pub mod wifi_bb_brx {
         impl R {
             /// Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate.
             #[inline]
-            pub const fn low_rate_enable(self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_variant(self) -> LowRateEnable {
+            pub const fn low_rate_enable(self) -> LowRateEnable {
                 LowRateEnable::from_field(self.0 >> 11)
             }
 
@@ -274105,13 +272143,7 @@ pub mod wifi_bb_brx {
         impl W {
             /// Set by complete phy_enable_low_rate and cleared by complete phy_disable_low_rate.
             #[inline]
-            pub const fn low_rate_enable(&self) -> bool {
-                (self.0 & 0x00000800) != 0
-            }
-
-            /// The `LOW_RATE_ENABLE` field as its declared value.
-            #[inline]
-            pub const fn low_rate_enable_variant(&self) -> LowRateEnable {
+            pub const fn low_rate_enable(&self) -> LowRateEnable {
                 LowRateEnable::from_field(self.0 >> 11)
             }
 
@@ -279962,13 +277994,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(self) -> Interface {
+            pub const fn interface(self) -> Interface {
                 Interface::from_field(self.0 >> 16)
             }
 
@@ -279997,13 +278023,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(&self) -> Interface {
+            pub const fn interface(&self) -> Interface {
                 Interface::from_field(self.0 >> 16)
             }
 
@@ -295558,13 +293578,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(self) -> Interface {
+            pub const fn interface(self) -> Interface {
                 Interface::from_field(self.0 >> 22)
             }
 
@@ -295599,13 +293613,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 22)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(&self) -> Interface {
+            pub const fn interface(&self) -> Interface {
                 Interface::from_field(self.0 >> 22)
             }
 
@@ -299345,13 +297353,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(self) -> Interface {
+            pub const fn interface(self) -> Interface {
                 Interface::from_field(self.0 >> 16)
             }
 
@@ -299380,13 +297382,7 @@ pub mod wifi_mac {
 
             /// The `INTERFACE` field.
             #[inline]
-            pub const fn interface(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(&self) -> Interface {
+            pub const fn interface(&self) -> Interface {
                 Interface::from_field(self.0 >> 16)
             }
 
@@ -304968,13 +302964,7 @@ pub mod wifi_mac {
 
             /// The `GI_LTF` field.
             #[inline]
-            pub const fn gi_ltf(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 21)
-            }
-
-            /// The `GI_LTF` field as its declared value.
-            #[inline]
-            pub const fn gi_ltf_variant(self) -> GiLtf {
+            pub const fn gi_ltf(self) -> GiLtf {
                 GiLtf::from_field(self.0 >> 21)
             }
 
@@ -305071,13 +303061,7 @@ pub mod wifi_mac {
 
             /// The `GI_LTF` field.
             #[inline]
-            pub const fn gi_ltf(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 21)
-            }
-
-            /// The `GI_LTF` field as its declared value.
-            #[inline]
-            pub const fn gi_ltf_variant(&self) -> GiLtf {
+            pub const fn gi_ltf(&self) -> GiLtf {
                 GiLtf::from_field(self.0 >> 21)
             }
 
@@ -308735,13 +306719,7 @@ pub mod wifi_mac {
 
             /// Interface the key belongs to: 0 station, 1 access point.
             #[inline]
-            pub const fn interface(self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(self) -> Interface {
+            pub const fn interface(self) -> Interface {
                 Interface::from_field(self.0 >> 24)
             }
 
@@ -308818,13 +306796,7 @@ pub mod wifi_mac {
 
             /// Interface the key belongs to: 0 station, 1 access point.
             #[inline]
-            pub const fn interface(&self) -> oer_portable_mmio::Bits<2> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `INTERFACE` field as its declared value.
-            #[inline]
-            pub const fn interface_variant(&self) -> Interface {
+            pub const fn interface(&self) -> Interface {
                 Interface::from_field(self.0 >> 24)
             }
 

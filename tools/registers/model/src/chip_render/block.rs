@@ -28,6 +28,9 @@ pub(super) struct Values {
     pub(super) variants: Vec<(String, u32, Option<String>)>,
     /// Every value of the field's width is named.
     pub(super) complete: bool,
+    /// The values are a dictionary of the type's, shared by its fields:
+    /// the enum is the type module's, not the field's.
+    pub(super) shared: bool,
 }
 
 /// The type a field's writer takes.
@@ -197,9 +200,24 @@ impl FieldPlan<'_> {
                 Some(target) => format!("oer_portable_memory::DmaRef<{layouts}::{target}>"),
                 None => format!("{layouts}::DmaWindowAddress"),
             },
-            (Setter::Enum, Some(values), _) => qualify(&values.name),
+            (Setter::Enum, Some(_), _) => self.value_type(module),
             (Setter::Range, ..) => qualify(&self.range_name()),
             _ => self.native(),
+        }
+    }
+
+    /// The field's value enum, as seen from the type module (`module` is the
+    /// register module's name) or from the register module: a dictionary
+    /// of the type's lives in the type module's `dictionaries`.
+    pub(super) fn value_type(&self, module: Option<&str>) -> String {
+        let Some(values) = &self.values else {
+            return self.native();
+        };
+        match (values.shared, module) {
+            (true, Some(_)) => format!("dictionaries::{}", values.name),
+            (true, None) => format!("super::dictionaries::{}", values.name),
+            (false, Some(module)) => format!("{module}::{}", values.name),
+            (false, None) => values.name.clone(),
         }
     }
 
@@ -705,7 +723,7 @@ impl<'m> TypePlan<'m> {
             let mut methods: BTreeMap<String, &str> = BTreeMap::new();
             for field in template.fields.iter().filter(|field| field.family_first()) {
                 let mut names = vec![field.method()];
-                if field.values.is_some() {
+                if field.values.as_ref().is_some_and(|values| !values.complete) {
                     names.push(format!("{}_variant", field.stem));
                 }
                 if field.setter() {
@@ -841,9 +859,10 @@ fn field_plan<'m>(
         }
         let complete = width < 32 && seen.len() as u64 == 1_u64 << width;
         Some(Values {
-            name: names::camel(&stem),
+            name: names::camel(field.dictionary.as_deref().unwrap_or(&stem)),
             variants,
             complete,
+            shared: field.dictionary.is_some(),
         })
     };
     // A narrower write range wins over a complete enumeration: the
@@ -993,8 +1012,14 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
             field.field.name,
             field.mask()
         );
-        if let Some(values) = &field.values {
-            render_values(output, field, values);
+        if let Some(values) = field.values.as_ref().filter(|values| !values.shared) {
+            render_values(
+                output,
+                &format!("the `{}` field", field.field.name),
+                values,
+                field.ones(),
+                Some(field.low),
+            );
         }
         if field.setter == Setter::Range
             && let Some((min, max)) = field.range
@@ -1180,58 +1205,57 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
             let _ = writeln!(output, "/// The `{}` field.", field.field.name);
         }
     }
-    let _ = writeln!(
-        output,
-        "#[inline]\npub const fn {}({receiver}) -> {} {{\n{}\n}}\n",
-        field.method(),
-        field.native(),
-        field.read_expression("self.0")
-    );
-    if let Some(values) = &field.values {
-        let shifted = if field.low == 0 {
-            "self.0".to_owned()
-        } else {
-            format!("(self.0 >> {})", field.low)
-        };
-        let (result, body) = if values.complete {
-            (
-                values.name.clone(),
-                format!(
-                    "{}::from_field({})",
-                    values.name,
-                    shifted.trim_start_matches('(').trim_end_matches(')')
-                ),
-            )
-        } else if field.width == 32 {
-            (
-                format!("Option<{}>", values.name),
-                format!("{}::from_bits(self.0)", values.name),
-            )
-        } else {
-            (
-                format!("Option<{}>", values.name),
-                format!(
-                    "{}::from_bits({shifted} & 0x{:x})",
-                    values.name,
-                    field.ones()
-                ),
-            )
-        };
-        let _ = writeln!(
-            output,
-            "/// The `{}` field as its declared value{}.\n#[inline]\npub const fn {}_variant({receiver}) -> {result} {{\n{body}\n}}\n",
-            field.field.name,
-            if values.complete {
-                ""
-            } else {
-                ", if it is one"
-            },
-            field.stem,
-        );
+    let shifted = if field.low == 0 {
+        "self.0".to_owned()
+    } else {
+        format!("(self.0 >> {})", field.low)
+    };
+    // A field whose every value is named reads as its name; a field with a
+    // few named values reads as its number, and as a name if it is one.
+    match &field.values {
+        Some(values) if values.complete => {
+            let _ = writeln!(
+                output,
+                "#[inline]\npub const fn {}({receiver}) -> {} {{\n{}::from_field({})\n}}\n",
+                field.method(),
+                field.value_type(None),
+                field.value_type(None),
+                shifted.trim_start_matches('(').trim_end_matches(')')
+            );
+        }
+        partial => {
+            let _ = writeln!(
+                output,
+                "#[inline]\npub const fn {}({receiver}) -> {} {{\n{}\n}}\n",
+                field.method(),
+                field.native(),
+                field.read_expression("self.0")
+            );
+            if partial.is_some() {
+                let body = if field.width == 32 {
+                    format!("{}::from_bits(self.0)", field.value_type(None))
+                } else {
+                    format!(
+                        "{}::from_bits({shifted} & 0x{:x})",
+                        field.value_type(None),
+                        field.ones()
+                    )
+                };
+                let _ = writeln!(
+                    output,
+                    "/// The `{}` field as its declared value, if it is one.\n#[inline]\npub const fn {}_variant({receiver}) -> Option<{}> {{\n{body}\n}}\n",
+                    field.field.name,
+                    field.stem,
+                    field.value_type(None),
+                );
+            }
+        }
     }
 }
 
-fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
+/// The enum of `values`: a field's own (`low` its position) or a type's
+/// dictionary (no position: its fields lie at several).
+fn render_values(output: &mut String, label: &str, values: &Values, ones: u32, low: Option<u32>) {
     let name = &values.name;
     let repr = if values
         .variants
@@ -1244,11 +1268,10 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
     };
     let _ = writeln!(
         output,
-        "/// The declared values of the `{}` field.\n\
+        "/// The declared values of {label}.\n\
          #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n\
          #[allow(clippy::enum_variant_names, reason = \"the variants are the model's value names\")]\n\
-         {repr}pub enum {name} {{",
-        field.field.name
+         {repr}pub enum {name} {{"
     );
     let mut unique = BTreeMap::new();
     for (variant, value, description) in &values.variants {
@@ -1264,15 +1287,17 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
         output,
         "}}\n\nimpl {name} {{\n/// The value's field bits.\n#[inline]\npub const fn bits(self) -> u32 {{\nself as u32\n}}\n"
     );
-    let positioned = if field.low == 0 {
-        "self.bits()".to_owned()
-    } else {
-        format!("self.bits() << {}", field.low)
-    };
-    let _ = writeln!(
-        output,
-        "/// The value positioned in its register.\n#[inline]\npub const fn register_bits(self) -> u32 {{ {positioned} }}\n"
-    );
+    if let Some(low) = low {
+        let positioned = if low == 0 {
+            "self.bits()".to_owned()
+        } else {
+            format!("self.bits() << {low}")
+        };
+        let _ = writeln!(
+            output,
+            "/// The value positioned in its register.\n#[inline]\npub const fn register_bits(self) -> u32 {{ {positioned} }}\n"
+        );
+    }
     let mut canonical = BTreeMap::new();
     let mut variants = Vec::new();
     for (variant, value, description) in &values.variants {
@@ -1301,8 +1326,7 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
             "/// The value of the field in the low bits of `bits`; the field has\n\
              /// exactly the declared values.\n\
              #[inline]\npub const fn from_field(bits: u32) -> Self {{\n\
-             match bits & 0x{:x} {{\n{arms}_ => Self::{},\n}}\n}}\n",
-            field.ones(),
+             match bits & 0x{ones:x} {{\n{arms}_ => Self::{},\n}}\n}}\n",
             last.0
         );
     } else {
@@ -1318,6 +1342,58 @@ fn render_values(output: &mut String, field: &FieldPlan<'_>, values: &Values) {
         );
     }
     output.push_str("}\n\n");
+}
+
+/// The type's dictionaries, one enum each, in its `dictionaries` module.
+pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Result<(), Error> {
+    let dictionaries = &block.file.dictionaries;
+    if dictionaries.is_empty() {
+        return Ok(());
+    }
+    output.push_str(
+        "/// Value lists fields of one meaning share, each with its sources.\npub mod dictionaries {\n",
+    );
+    for dictionary in dictionaries {
+        let entity = format!("{}.{}", block.file.header.name, dictionary.name);
+        let mut variants: Vec<(String, u32, Option<String>)> = Vec::new();
+        let mut seen = BTreeSet::new();
+        for value in &dictionary.values {
+            let mut variant = names::camel(&value.name);
+            if variant.starts_with(|character: char| character.is_ascii_digit()) {
+                variant.insert(0, 'V');
+            }
+            if !names::valid(&variant) || variants.iter().any(|(other, ..)| *other == variant) {
+                return Err(Error::new(
+                    &entity,
+                    format!("value {} names no variant", value.name),
+                ));
+            }
+            seen.insert(value.value);
+            variants.push((variant, value.value, value.description.clone()));
+        }
+        let width = dictionary.width;
+        let values = Values {
+            name: names::camel(&dictionary.name),
+            variants,
+            complete: width < 32 && seen.len() as u64 == 1_u64 << width,
+            shared: true,
+        };
+        push_doc(output, &clean(&dictionary.description), "");
+        let _ = writeln!(
+            output,
+            "///\n/// SOURCE: {}.",
+            dictionary.sources.join(", ")
+        );
+        render_values(
+            output,
+            &format!("the `{}` dictionary", dictionary.name),
+            &values,
+            u32::MAX >> (32 - width),
+            None,
+        );
+    }
+    output.push_str("}\n\n");
+    Ok(())
 }
 
 fn render_range(output: &mut String, field: &FieldPlan<'_>, min: u32, max: u32) {

@@ -168,7 +168,10 @@ fn a_cold_cpu_clock_is_staged_with_its_pll_powered_and_waits_for_the_running_upd
     assert_active_power(&mut active_words, &active_before, true);
 
     let view = HpSysClkrst::host(&mut words.clkrst).expect("host memory holds it");
-    assert_eq!(view.read_soc_clk_sel().reg_soc_clk_sel().get(), 1, "CPLL");
+    assert_eq!(
+        view.read_soc_clk_sel().reg_soc_clk_sel(),
+        oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel::Cpll
+    );
     let cpu = view.read_cpu_freq_ctrl0();
     assert_eq!(cpu.reg_cpu_clk_div_num(), 1);
     assert_eq!(cpu.reg_cpu_clk_div_numerator().get(), 0);
@@ -202,7 +205,10 @@ fn a_cpll_that_never_calibrates_stops_the_boot_before_the_root_moves() {
     );
     drop(owner);
     let view = HpSysClkrst::host(&mut words.clkrst).expect("host memory holds it");
-    assert_eq!(view.read_soc_clk_sel().reg_soc_clk_sel().get(), 0, "XTAL");
+    assert_eq!(
+        view.read_soc_clk_sel().reg_soc_clk_sel(),
+        oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel::Xtal
+    );
     assert_eq!(view.read_cpu_freq_ctrl0().reg_cpu_clk_div_num(), 0);
     assert!(
         !view.read_ana_pll_ctrl0().reg_cpu_pll_cal_stop(),

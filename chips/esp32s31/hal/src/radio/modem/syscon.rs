@@ -6,14 +6,15 @@
 
 #![forbid(unsafe_code)]
 
-use oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset;
+use oer_chips_esp32s31_pac::modem_syscon::{
+    ModemSysconClockReset,
+    dictionaries::{ClockGate, Reset},
+    wifi_bb_cfg::{Bit28Opaque, WifiEnable},
+};
 use oer_portable_mmio::Placement;
 
 use crate::{
-    radio::modem::values::{
-        ModemSysconClockGateState, ModemSysconEnableState, ModemSysconResetState,
-        WifiBaseband40MhzState, WifiBasebandAgcUpdateMode,
-    },
+    radio::modem::values::{WifiBaseband40MhzState, WifiBasebandAgcUpdateMode},
     radio::phy::RadioPhyRegisters,
 };
 
@@ -22,21 +23,57 @@ use crate::{
 fn calibration_clocks<P: Placement>(registers: &ModemSysconClockReset<P>) -> [bool; 18] {
     let clk_conf1 = registers.read_clk_conf1();
     [
-        clk_conf1.clk_wifibb_22m_en(),
-        clk_conf1.clk_wifibb_40m_en(),
-        clk_conf1.clk_wifibb_44m_en(),
-        clk_conf1.clk_wifibb_80m_en(),
-        clk_conf1.clk_wifibb_40x_en(),
-        clk_conf1.clk_wifibb_80x_en(),
-        clk_conf1.clk_wifibb_40x1_en(),
-        clk_conf1.clk_wifibb_80x1_en(),
-        clk_conf1.clk_wifibb_160x1_en(),
-        clk_conf1.clk_wifi_apb_en(),
+        matches!(
+            clk_conf1.clk_wifibb_22m_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_40m_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_44m_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_80m_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_40x_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_80x_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_40x1_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_80x1_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifibb_160x1_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_wifi_apb_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
         clk_conf1.clk_fe_80m_en(),
         clk_conf1.clk_fe_160m_en(),
         clk_conf1.clk_fe_apb_en(),
-        clk_conf1.clk_bt_apb_en(),
-        clk_conf1.clk_btbb_en(),
+        matches!(
+            clk_conf1.clk_bt_apb_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
+        matches!(
+            clk_conf1.clk_btbb_en(),
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+        ),
         clk_conf1.clk_fe_pwdet_adc_en(),
         clk_conf1.clk_fe_adc_en(),
         clk_conf1.clk_fe_dac_en(),
@@ -51,67 +88,67 @@ fn restore_calibration_clocks<P: Placement>(
 ) {
     registers.modify_clk_conf1(|w| {
         w.set_clk_wifibb_22m_en(if clocks[0] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_40m_en(if clocks[1] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_44m_en(if clocks[2] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_80m_en(if clocks[3] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_40x_en(if clocks[4] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_80x_en(if clocks[5] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_40x1_en(if clocks[6] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_80x1_en(if clocks[7] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifibb_160x1_en(if clocks[8] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Disabled
+            ClockGate::Disabled
         })
         .set_clk_wifi_apb_en(if clocks[9] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_fe_80m_en(clocks[10])
         .set_clk_fe_160m_en(clocks[11])
         .set_clk_fe_apb_en(clocks[12])
         .set_clk_bt_apb_en(if clocks[13] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_btbb_en(if clocks[14] {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_fe_pwdet_adc_en(clocks[15])
         .set_clk_fe_adc_en(clocks[16])
@@ -127,29 +164,29 @@ fn restore_bluetooth_peripheral_clocks<P: Placement>(
 ) {
     registers.modify_clk_conf(|w| {
         w.set_clk_modem_sec_en(if security {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_modem_sec_ecb_en(if ecb {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecEcbEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_modem_sec_ccm_en(if ccm {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecCcmEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_modem_sec_bah_en(if bah {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkModemSecBahEn::Disabled
+            ClockGate::Disabled
         })
         .set_clk_ble_timer_en(if ble_timer {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled
+            ClockGate::Enabled
         } else {
-            oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkBleTimerEn::Disabled
+            ClockGate::Disabled
         });
     });
 }
@@ -162,14 +199,19 @@ pub struct ModemSysconPowerObservation {
     pub phy_i2c_160mhz_selected: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ModemSysconPowerBaseline {
     phy_calibration_clocks: [bool; 18],
-    phy_i2c_160mhz_selected: bool,
+    phy_i2c_160mhz: ClockGate,
 }
 
 impl ModemSysconPowerBaseline {
     pub(super) const BIT_COUNT: u32 = 19;
+    /// Every gate disabled: the baseline of a host test.
+    pub(super) const DISABLED: Self = Self {
+        phy_calibration_clocks: [false; 18],
+        phy_i2c_160mhz: ClockGate::Disabled,
+    };
 
     pub(super) fn bits(self) -> u32 {
         let mut bits = 0;
@@ -178,7 +220,8 @@ impl ModemSysconPowerBaseline {
             bits |= u32::from(self.phy_calibration_clocks[clock]) << clock;
             clock += 1;
         }
-        bits | (u32::from(self.phy_i2c_160mhz_selected) << self.phy_calibration_clocks.len())
+        bits | (u32::from(matches!(self.phy_i2c_160mhz, ClockGate::Enabled))
+            << self.phy_calibration_clocks.len())
     }
 
     pub(super) fn from_bits(bits: u32) -> Self {
@@ -190,7 +233,7 @@ impl ModemSysconPowerBaseline {
         }
         Self {
             phy_calibration_clocks,
-            phy_i2c_160mhz_selected: bits & (1 << phy_calibration_clocks.len()) != 0,
+            phy_i2c_160mhz: ClockGate::from_field(bits >> phy_calibration_clocks.len()),
         }
     }
 }
@@ -233,30 +276,6 @@ pub const BLUETOOTH_APB_CLOCKS: [ModemSysconBluetoothClock; 3] = [
     ModemSysconBluetoothClock::BluetoothMac,
     ModemSysconBluetoothClock::BluetoothApb,
 ];
-
-const fn modem_syscon_clock_gate_state(enabled: bool) -> ModemSysconClockGateState {
-    if enabled {
-        ModemSysconClockGateState::Enabled
-    } else {
-        ModemSysconClockGateState::Disabled
-    }
-}
-
-const fn modem_syscon_enable_state(enabled: bool) -> ModemSysconEnableState {
-    if enabled {
-        ModemSysconEnableState::Enabled
-    } else {
-        ModemSysconEnableState::Disabled
-    }
-}
-
-const fn modem_syscon_reset_state(asserted: bool) -> ModemSysconResetState {
-    if asserted {
-        ModemSysconResetState::Asserted
-    } else {
-        ModemSysconResetState::Released
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ModemSysconBluetoothObservation {
@@ -362,7 +381,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     pub(crate) fn modem_syscon_power_baseline(&self) -> ModemSysconPowerBaseline {
         ModemSysconPowerBaseline {
             phy_calibration_clocks: calibration_clocks(&self.peripherals.modem_syscon_clock_reset),
-            phy_i2c_160mhz_selected: self
+            phy_i2c_160mhz: self
                 .peripherals
                 .modem_syscon_clock_reset
                 .read_clk_conf()
@@ -375,10 +394,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         baseline: ModemSysconPowerBaseline,
     ) {
         let registers = &mut self.peripherals.modem_syscon_clock_reset;
-        super::ops::restore_phy_i2c_160mhz_source(
-            registers,
-            modem_syscon_clock_gate_state(baseline.phy_i2c_160mhz_selected),
-        );
+        super::ops::restore_phy_i2c_160mhz_source(registers, baseline.phy_i2c_160mhz);
         restore_calibration_clocks(registers, baseline.phy_calibration_clocks);
     }
 
@@ -430,19 +446,16 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_baseband_and_mac_reset(&mut self, asserted: bool) {
+    pub fn set_wifi_baseband_and_mac_reset(&mut self, reset: Reset) {
         super::ops::set_wifi_baseband_and_mac_reset(
             &mut self.peripherals.modem_syscon_clock_reset,
-            modem_syscon_reset_state(asserted),
+            reset,
         );
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_baseband_reset(&mut self, asserted: bool) {
-        super::ops::set_wifi_baseband_reset(
-            &mut self.peripherals.modem_syscon_clock_reset,
-            modem_syscon_reset_state(asserted),
-        );
+    pub fn set_wifi_baseband_reset(&mut self, reset: Reset) {
+        super::ops::set_wifi_baseband_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
     #[doc(hidden)]
@@ -504,31 +517,65 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             clk_conf1.clk_fe_dac_en(),
         );
         ModemSysconPowerObservation {
-            wifi_reset_released: !wifi_baseband_reset && !wifi_mac_reset,
+            wifi_reset_released: matches!(
+                wifi_baseband_reset,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            ) && matches!(
+                wifi_mac_reset,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            ),
             active_clock_map_configured: self.modem_syscon_clock_map_configured(),
-            phy_calibration_clocks_enabled: wifi_bb_22m
-                && wifi_bb_40m
-                && wifi_bb_44m
-                && wifi_bb_80m
-                && wifi_bb_40x
-                && wifi_bb_80x
-                && wifi_bb_40x1
-                && wifi_bb_80x1
-                && wifi_bb_160x1
-                && wifi_apb
-                && frontend_80m
+            phy_calibration_clocks_enabled: matches!(
+                wifi_bb_22m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_40m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_44m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_80m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_40x,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_80x,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_40x1,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_80x1,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_bb_160x1,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                wifi_apb,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && frontend_80m
                 && frontend_160m
                 && frontend_apb
-                && bluetooth_apb
-                && bluetooth_baseband
+                && matches!(
+                    bluetooth_apb,
+                    oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+                )
+                && matches!(
+                    bluetooth_baseband,
+                    oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+                )
                 && frontend_power_detector_adc
                 && frontend_adc
                 && frontend_dac,
-            phy_i2c_160mhz_selected: self
-                .peripherals
-                .modem_syscon_clock_reset
-                .read_clk_conf()
-                .clk_i2c_mst_sel_160m(),
+            phy_i2c_160mhz_selected: matches!(
+                self.peripherals
+                    .modem_syscon_clock_reset
+                    .read_clk_conf()
+                    .clk_i2c_mst_sel_160m(),
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         }
     }
 
@@ -538,11 +585,8 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        super::ops::set_wifi_mac_reset(
-            &mut self.peripherals.modem_syscon_clock_reset,
-            modem_syscon_reset_state(asserted),
-        );
+    pub fn set_wifi_mac_reset(&mut self, reset: Reset) {
+        super::ops::set_wifi_mac_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
     pub fn clear_cold_start_wifi_control(&mut self) {
@@ -550,17 +594,17 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     pub fn wifi_baseband_is_enabled(&self) -> bool {
-        self.peripherals
-            .modem_syscon_radio
-            .read_wifi_bb_cfg()
-            .wifi_enable()
+        matches!(
+            self.peripherals
+                .modem_syscon_radio
+                .read_wifi_bb_cfg()
+                .wifi_enable(),
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
+        )
     }
 
-    pub fn set_wifi_baseband_enabled(&mut self, enabled: bool) {
-        super::ops::set_wifi_baseband_enable(
-            &mut self.peripherals.modem_syscon_radio,
-            modem_syscon_enable_state(enabled),
-        );
+    pub fn set_wifi_baseband_enabled(&mut self, enable: WifiEnable) {
+        super::ops::set_wifi_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
     }
 
     pub fn set_bss_cbw_40_digital(&mut self, enabled: bool) {
@@ -585,33 +629,24 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         );
     }
 
-    pub fn set_mac_baseband_enabled(&mut self, enabled: bool) {
-        super::ops::set_mac_baseband_enable(
-            &mut self.peripherals.modem_syscon_radio,
-            modem_syscon_enable_state(enabled),
-        );
+    pub fn set_mac_baseband_enabled(&mut self, enable: Bit28Opaque) {
+        super::ops::set_mac_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
     }
 
     pub fn enable_mac_baseband(&mut self) {
-        self.set_mac_baseband_enabled(true);
-        self.set_wifi_baseband_enabled(false);
-        self.set_wifi_baseband_enabled(true);
+        self.set_mac_baseband_enabled(Bit28Opaque::Enabled);
+        self.set_wifi_baseband_enabled(WifiEnable::Disabled);
+        self.set_wifi_baseband_enabled(WifiEnable::Enabled);
     }
 
     #[doc(hidden)]
-    pub fn set_ieee802154_mac_reset(&mut self, asserted: bool) {
-        super::ops::set_ieee802154_mac_reset(
-            &mut self.peripherals.modem_syscon_clock_reset,
-            modem_syscon_reset_state(asserted),
-        );
+    pub fn set_ieee802154_mac_reset(&mut self, reset: Reset) {
+        super::ops::set_ieee802154_mac_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
     #[doc(hidden)]
-    pub fn set_ieee802154_apb_reset(&mut self, asserted: bool) {
-        super::ops::set_ieee802154_apb_reset(
-            &mut self.peripherals.modem_syscon_clock_reset,
-            modem_syscon_reset_state(asserted),
-        );
+    pub fn set_ieee802154_apb_reset(&mut self, reset: Reset) {
+        super::ops::set_ieee802154_apb_reset(&mut self.peripherals.modem_syscon_clock_reset, reset);
     }
 
     #[doc(hidden)]
@@ -622,8 +657,14 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             .read_modem_rst_conf();
         let (mac_reset, apb_reset) = (modem_rst_conf.rst_zbmac(), modem_rst_conf.rst_zbmac_apb());
         ModemSysconIeee802154ResetObservation {
-            mac_reset_released: !mac_reset,
-            apb_reset_released: !apb_reset,
+            mac_reset_released: matches!(
+                mac_reset,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            ),
+            apb_reset_released: matches!(
+                apb_reset,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            ),
         }
     }
 
@@ -663,35 +704,80 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         let mut baseline = BluetoothClockBaseline::default();
         baseline.record(
             BluetoothPhysicalClock::WifiBaseband80x1,
-            wifi_baseband_80x1_enabled,
+            matches!(
+                wifi_baseband_80x1_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
-        baseline.record(BluetoothPhysicalClock::Etm, etm_enabled);
-        baseline.record(BluetoothPhysicalClock::BluetoothMac, bluetooth_mac_enabled);
+        baseline.record(
+            BluetoothPhysicalClock::Etm,
+            matches!(
+                etm_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
+        );
+        baseline.record(
+            BluetoothPhysicalClock::BluetoothMac,
+            matches!(
+                bluetooth_mac_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
+        );
         baseline.record(
             BluetoothPhysicalClock::ModemSecurity,
-            modem_security_enabled,
+            matches!(
+                modem_security_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
         baseline.record(
             BluetoothPhysicalClock::ModemSecurityEcb,
-            modem_security_ecb_enabled,
+            matches!(
+                modem_security_ecb_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
         baseline.record(
             BluetoothPhysicalClock::ModemSecurityCcm,
-            modem_security_ccm_enabled,
+            matches!(
+                modem_security_ccm_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
         baseline.record(
             BluetoothPhysicalClock::ModemSecurityBah,
-            modem_security_bah_enabled,
+            matches!(
+                modem_security_bah_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
-        baseline.record(BluetoothPhysicalClock::BleTimer, ble_timer_enabled);
-        baseline.record(BluetoothPhysicalClock::BluetoothApb, bluetooth_apb_enabled);
+        baseline.record(
+            BluetoothPhysicalClock::BleTimer,
+            matches!(
+                ble_timer_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
+        );
+        baseline.record(
+            BluetoothPhysicalClock::BluetoothApb,
+            matches!(
+                bluetooth_apb_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
+        );
         baseline.record(
             BluetoothPhysicalClock::ModemSecurityApb,
-            modem_security_apb_enabled,
+            matches!(
+                modem_security_apb_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
         baseline.record(
             BluetoothPhysicalClock::BluetoothBaseband,
-            bluetooth_baseband_enabled,
+            matches!(
+                bluetooth_baseband_enabled,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
         );
         let mut baselines = [BluetoothClockBaseline::default(); BLUETOOTH_CLOCK_COUNT];
         for logical in BLUETOOTH_CONTROLLER_CLOCKS {
@@ -705,11 +791,10 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// Enable every physical gate of one Bluetooth clock group.
     #[doc(hidden)]
     pub fn enable_bluetooth_clock(&mut self, device: ModemSysconBluetoothClock) {
-        self.set_bluetooth_clock_enabled(device, true);
+        self.set_bluetooth_clock_enabled(device, ClockGate::Enabled);
     }
 
-    fn set_bluetooth_clock_enabled(&mut self, device: ModemSysconBluetoothClock, enabled: bool) {
-        let state = modem_syscon_clock_gate_state(enabled);
+    fn set_bluetooth_clock_enabled(&mut self, device: ModemSysconBluetoothClock, state: ClockGate) {
         let registers = &mut self.peripherals.modem_syscon_clock_reset;
         match device {
             ModemSysconBluetoothClock::WifiBaseband80x1 => {
@@ -757,18 +842,21 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             ModemSysconBluetoothClock::BluetoothApb => {
                 super::ops::set_bluetooth_apb_clock(
                     &mut self.peripherals.modem_syscon_clock_reset,
-                    modem_syscon_clock_gate_state(
+                    ClockGate::from_field(u32::from(
                         baseline.contains(BluetoothPhysicalClock::BluetoothApb),
-                    ),
+                    )),
                 );
                 super::ops::set_bluetooth_modem_security_apb_clock(
                     &mut self.peripherals.modem_syscon_clock_reset,
-                    modem_syscon_clock_gate_state(
+                    ClockGate::from_field(u32::from(
                         baseline.contains(BluetoothPhysicalClock::ModemSecurityApb),
-                    ),
+                    )),
                 );
             }
-            _ => self.set_bluetooth_clock_enabled(device, baseline.all_enabled(device)),
+            _ => self.set_bluetooth_clock_enabled(
+                device,
+                ClockGate::from_field(u32::from(baseline.all_enabled(device))),
+            ),
         }
     }
 
@@ -789,20 +877,20 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn reset_bluetooth_controller_domains(&mut self) {
         let registers = &mut self.peripherals.modem_syscon_clock_reset;
-        super::ops::set_bluetooth_mac_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_mac_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_mac_apb_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_mac_apb_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_timer_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_timer_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_modem_ecb_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_modem_ccm_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_modem_bah_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_modem_security_reset(registers, ModemSysconResetState::Asserted);
-        super::ops::set_bluetooth_modem_ecb_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_modem_ccm_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_modem_bah_reset(registers, ModemSysconResetState::Released);
-        super::ops::set_bluetooth_modem_security_reset(registers, ModemSysconResetState::Released);
+        super::ops::set_bluetooth_mac_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_mac_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_mac_apb_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_mac_apb_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_timer_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_timer_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_modem_ecb_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_modem_ccm_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_modem_bah_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_modem_security_reset(registers, Reset::Asserted);
+        super::ops::set_bluetooth_modem_ecb_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_modem_ccm_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_modem_bah_reset(registers, Reset::Released);
+        super::ops::set_bluetooth_modem_security_reset(registers, Reset::Released);
     }
 
     pub(crate) fn bluetooth_controller_resets_released(&self) -> bool {
@@ -827,12 +915,27 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             modem_rst_conf.rst_modem_bah(),
             modem_rst_conf.rst_modem_sec(),
         );
-        !bluetooth_mac_reset
-            && !bluetooth_mac_apb_reset
-            && !bluetooth_timer_reset
-            && !modem_ecb_reset
-            && !modem_ccm_reset
-            && !modem_bah_reset
-            && !modem_security_reset
+        matches!(
+            bluetooth_mac_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            bluetooth_mac_apb_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            bluetooth_timer_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            modem_ecb_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            modem_ccm_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            modem_bah_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        ) && matches!(
+            modem_security_reset,
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        )
     }
 }

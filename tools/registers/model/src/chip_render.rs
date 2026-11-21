@@ -53,7 +53,7 @@ mod owners;
 mod tests;
 mod unique;
 
-use block::{TypePlan, render_register_module};
+use block::{TypePlan, render_dictionaries, render_register_module};
 pub use linker::dma_window;
 
 /// Why the renderer refused the model or the policy: the entity and the
@@ -173,6 +173,7 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
                 value.value
             );
         }
+        render_dictionaries(&mut output, plan.block)?;
         for template in &plan.templates {
             render_register_module(&mut output, template);
         }

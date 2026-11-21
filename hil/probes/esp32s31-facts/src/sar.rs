@@ -122,14 +122,14 @@ impl Sar {
         let pll = self.boot.lp_aon_clkrst_cpll.read_cpll_div();
         emit(
             0x1400,
-            root.get(),
+            root.bits(),
             u32::from(cpu.reg_cpu_clk_div_num()),
             pll.cpll_fb_div().into(),
         );
         if cpu.reg_cpu_clk_div_numerator().get() != 0 {
             return false;
         }
-        let base = match pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel::from_field(root.get()) {
+        let base = match root {
             pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel::Xtal => 40_000_000_u32,
             pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel::Cpll => {
                 let Some(hz) = 40_000_000_u32
@@ -203,59 +203,35 @@ impl Sar {
         p.hp_sys_clkrst_radio.open_modem_pll_source_gate();
 
         p.modem_syscon_clock_reset.modify_modem_rst_conf(|w| {
-            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Asserted);
+            w.set_rst_wifibb(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
         p.modem_syscon_clock_reset.modify_modem_rst_conf(|w| {
-            w.set_rst_wifibb(pac::modem_syscon::modem_rst_conf::RstWifibb::Released);
+            w.set_rst_wifibb(pac::modem_syscon::dictionaries::Reset::Released);
         });
 
         p.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-            w.set_clk_wifibb_22m_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb22mEn::Enabled,
-            );
-            w.set_clk_wifibb_40m_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40mEn::Enabled,
-            );
-            w.set_clk_wifibb_44m_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb44mEn::Enabled,
-            );
-            w.set_clk_wifibb_80m_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80mEn::Enabled,
-            );
-            w.set_clk_wifibb_40x_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40xEn::Enabled,
-            );
-            w.set_clk_wifibb_80x_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80xEn::Enabled,
-            );
-            w.set_clk_wifibb_40x1_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb40x1En::Enabled,
-            );
-            w.set_clk_wifibb_80x1_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled,
-            );
-            w.set_clk_wifibb_160x1_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifibb160x1En::Enabled,
-            );
-            w.set_clk_wifi_apb_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled,
-            );
+            w.set_clk_wifibb_22m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_40m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_44m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_80m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_40x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_80x_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_40x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifibb_160x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_fe_80m_en(true);
             w.set_clk_fe_160m_en(true);
             w.set_clk_fe_apb_en(true);
-            w.set_clk_bt_apb_en(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled,
-            );
-            w.set_clk_btbb_en(oer_chips_esp32s31_pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
+            w.set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_btbb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_fe_pwdet_adc_en(true);
             w.set_clk_fe_adc_en(true);
             w.set_clk_fe_dac_en(true);
         });
 
         p.modem_syscon_clock_reset.modify_clk_conf(|w| {
-            w.set_clk_i2c_mst_sel_160m(
-                oer_chips_esp32s31_pac::modem_syscon::clk_conf::ClkI2cMstSel160m::Enabled,
-            );
+            w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::dictionaries::ClockGate::Enabled);
         });
 
         self.clocks

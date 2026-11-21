@@ -58,7 +58,7 @@ fn init(s: &mut Session<'_>) {
             .hp_sys_clkrst_boot_clock
             .read_soc_clk_sel()
             .reg_soc_clk_sel()
-            .get(),
+            .bits(),
         cpu.reg_cpu_clk_div_num().into(),
         cpu.reg_cpu_clk_div_numerator().get(),
     );

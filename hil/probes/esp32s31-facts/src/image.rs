@@ -1027,7 +1027,7 @@ fn geometry(s: &mut Session<'_>) {
             u32::from(clic.read_ip(i).ip())
                 | (u32::from(clic.read_ie(i).ie()) << 1)
                 | (u32::from(attributes.shv()) << 2)
-                | (attributes.trig().get() << 3),
+                | (attributes.trig().bits() << 3),
         );
     }
 }

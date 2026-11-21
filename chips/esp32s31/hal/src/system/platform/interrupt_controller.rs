@@ -839,7 +839,7 @@ impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> InterruptContr
     ) -> bool {
         let attributes = self.clic.read_attr(index);
         attributes.shv()
-            && attributes.trig_variant() == trigger
+            && attributes.trig() == trigger
             && self.clic.read_ctl(index).ctl() == control.bits()
     }
 

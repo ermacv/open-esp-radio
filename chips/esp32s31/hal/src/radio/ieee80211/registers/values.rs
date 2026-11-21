@@ -42,21 +42,6 @@ impl MacInterface {
         }
     }
 
-    /// The interface a two-bit interface field holds: every value is one.
-    pub const fn from_field(
-        value: oer_portable_mmio::Bits<
-            { oer_chips_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH },
-        >,
-    ) -> Self {
-        use oer_chips_esp32s31_pac::wifi_mac::config::Interface;
-        match Interface::from_field(value.get()) {
-            Interface::Station => Self::Station,
-            Interface::AccessPoint => Self::AccessPoint,
-            Interface::Context2 => Self::Context2,
-            Interface::Context3 => Self::Context3,
-        }
-    }
-
     /// The two-bit field value of the interface.
     pub const fn field(
         self,
@@ -65,6 +50,31 @@ impl MacInterface {
         oer_portable_mmio::Bits::truncate(self.bits())
     }
 }
+
+/// The interface each of the MAC's interface fields reads as: every value
+/// of the two bits is one.
+macro_rules! interface_of_field {
+    ($($register:ident),+) => {$(
+        impl From<oer_chips_esp32s31_pac::wifi_mac::$register::Interface> for MacInterface {
+            fn from(value: oer_chips_esp32s31_pac::wifi_mac::$register::Interface) -> Self {
+                use oer_chips_esp32s31_pac::wifi_mac::$register::Interface;
+                match value {
+                    Interface::Station => Self::Station,
+                    Interface::AccessPoint => Self::AccessPoint,
+                    Interface::Context2 => Self::Context2,
+                    Interface::Context3 => Self::Context3,
+                }
+            }
+        }
+    )+};
+}
+
+interface_of_field!(
+    config,
+    rx_block_ack_entry_peer_tail_and_policy,
+    extra_softap_rx_block_ack_peer_tail_and_policy,
+    entry_peer_control
+);
 
 /// Reviewed writable images for the MAC interrupt-enable register.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

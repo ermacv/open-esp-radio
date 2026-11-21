@@ -87,12 +87,12 @@ pub(super) fn clocks(s: &mut Session<'_>) {
             w.set_clk_bt_st_map(Bits::truncate(w.clk_bt_st_map().get() | 4));
         });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        w.set_clk_bt_apb_en(pac::modem_syscon::clk_conf1::ClkBtApbEn::Enabled);
-        w.set_clk_btmac_en(pac::modem_syscon::clk_conf1::ClkBtmacEn::Enabled);
-        w.set_clk_btbb_en(pac::modem_syscon::clk_conf1::ClkBtbbEn::Enabled);
+        w.set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+        w.set_clk_btmac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+        w.set_clk_btbb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_ble_timer_en(pac::modem_syscon::clk_conf::ClkBleTimerEn::Enabled);
+        w.set_clk_ble_timer_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_lpcon_power.modify_clk_conf_power_st(|w| {
         w.set_clk_wifipwr_st_map(Bits::truncate(w.clk_wifipwr_st_map().get() | 6));
@@ -126,13 +126,12 @@ pub(super) fn inherited(s: &mut Session<'_>) {
         0x200f,
         u32::from(m.modem_apb_clk_en()),
         u32::from(m.modem_rst_en()),
-        u32::from(
-            s.sar
-                .radio
-                .hp_sys_clkrst_radio
-                .read_modem_ctrl0()
-                .reg_modem_clk_en(),
-        ),
+        s.sar
+            .radio
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .reg_modem_clk_en()
+            .bits(),
     );
     enables(&s.ble, 0x2000);
     clocks(s);
@@ -143,13 +142,12 @@ pub(super) fn inherited(s: &mut Session<'_>) {
         0x201f,
         u32::from(m.modem_apb_clk_en()),
         u32::from(m.modem_rst_en()),
-        u32::from(
-            s.sar
-                .radio
-                .hp_sys_clkrst_radio
-                .read_modem_ctrl0()
-                .reg_modem_clk_en(),
-        ),
+        s.sar
+            .radio
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .reg_modem_clk_en()
+            .bits(),
     );
     baseline_on(&mut s.ble);
     enables(&s.ble, 0x2003);
@@ -382,13 +380,13 @@ pub(super) fn init_lp(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Asserted);
+            w.set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_ble_timer(pac::modem_syscon::modem_rst_conf::RstBleTimer::Released);
+            w.set_rst_ble_timer(pac::modem_syscon::dictionaries::Reset::Released);
         });
     // SOURCE: HAL modem LP-clock selectors. Divider 1, selected by the
     // counter-controls silicon observation, advances the counter. Divider 0
@@ -725,13 +723,13 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Asserted);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_btmac(pac::modem_syscon::modem_rst_conf::RstBtmac::Released);
+            w.set_rst_btmac(pac::modem_syscon::dictionaries::Reset::Released);
         });
     // SOURCE: BLOB_LIBBLE_PHY_INIT_REGISTERS and the HAL controller-init
     // latch prefix. These observed images do not imply a cause identity.

@@ -36,7 +36,11 @@ impl<P: PlatformClockProvider> oer_chips_family_radio_power::power::PowerSequenc
         self.phy.configure_modem_source_clocks();
     }
     fn set_wifi_baseband_reset(&mut self, asserted: bool) {
-        self.phy.set_wifi_baseband_reset(asserted);
+        self.phy.set_wifi_baseband_reset(if asserted {
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted
+        } else {
+            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+        });
     }
     fn configure_wifi_power_clock_map(&mut self) {
         self.phy.configure_wifi_power_clock_map();

@@ -18,13 +18,18 @@ impl Sar {
         let shared = p.modem_lpcon_power.read_clk_conf_power_st();
         let has = |bits: u32, expected: u32| bits & expected == expected;
         let observations = [
-            !p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifibb()
-                && !p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifimac(),
+            matches!(
+                p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifibb(),
+                pac::modem_syscon::dictionaries::Reset::Released
+            ) && matches!(
+                p.modem_syscon_clock_reset.read_modem_rst_conf().rst_wifimac(),
+                pac::modem_syscon::dictionaries::Reset::Released
+            ),
             p.pmu_radio
                 .read_hp_active_icg_modem()
                 .hp_active_dig_icg_modem_code_variant()
                 == Some(pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode::Active),
-            p.hp_sys_clkrst_radio.read_modem_ctrl0().reg_modem_clk_en(),
+            matches!(p.hp_sys_clkrst_radio.read_modem_ctrl0().reg_modem_clk_en(), oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled),
             has(maps.clk_zb_st_map().get(), 4)
                 && has(maps.clk_fe_st_map().get(), 6)
                 && has(maps.clk_bt_st_map().get(), 4)
@@ -41,25 +46,25 @@ impl Sar {
                 && hp.modem_clk_source_sel()
                 && hp.modem_pll_clk_en()
                 && !hp.modem_xtal_clk_en(),
-            clocks.clk_wifibb_22m_en()
-                && clocks.clk_wifibb_40m_en()
-                && clocks.clk_wifibb_44m_en()
-                && clocks.clk_wifibb_80m_en()
-                && clocks.clk_wifibb_40x_en()
-                && clocks.clk_wifibb_80x_en()
-                && clocks.clk_wifibb_40x1_en()
-                && clocks.clk_wifibb_80x1_en()
-                && clocks.clk_wifibb_160x1_en()
-                && clocks.clk_wifi_apb_en()
+            matches!(clocks.clk_wifibb_22m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_40m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_44m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_80m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_40x_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_80x_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_40x1_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_80x1_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifibb_160x1_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_wifi_apb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && clocks.clk_fe_80m_en()
                 && clocks.clk_fe_160m_en()
                 && clocks.clk_fe_apb_en()
-                && clocks.clk_bt_apb_en()
-                && clocks.clk_btbb_en()
+                && matches!(clocks.clk_bt_apb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_btbb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && clocks.clk_fe_pwdet_adc_en()
                 && clocks.clk_fe_adc_en()
                 && clocks.clk_fe_dac_en(),
-            p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(),
+            matches!(p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(), pac::modem_syscon::dictionaries::ClockGate::Enabled),
         ];
         observations
             .into_iter()
@@ -301,11 +306,11 @@ impl Sar {
         self.radio.phy_pbus.modify_mode(|w| {
             w.set_work_mode_enable(fe::mode::WorkModeEnable::Enabled);
         });
-        if self
+        if matches!(self
             .radio
             .modem_syscon_radio
             .read_wifi_bb_cfg()
-            .wifi_enable()
+            .wifi_enable(), pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled)
         {
             self.until(oer_portable_riscv::cycle32(), 1);
             let agc = &mut self.radio.phy_agc_oracle_wifi_bb;

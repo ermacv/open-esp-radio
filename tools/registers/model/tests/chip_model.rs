@@ -1805,3 +1805,67 @@ fn a_hart_local_instance_needs_hart_facts_sources_and_no_dim() -> TestResult {
 mod controls;
 #[path = "chip_model/facts.rs"]
 mod facts;
+
+/// The fixture's `timg` type with a one-bit dictionary `GATE` before its
+/// header.
+const GATE: &str = "schema = 3\n\n[[dictionaries]]\nname = \"GATE\"\n\
+                    description = \"A gate that is closed or open.\"\nwidth = 1\n\
+                    values = [{ name = \"CLOSED\", value = 0, sources = [\"SRC_HEADER\"] }, \
+                    { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+                    sources = [\"SRC_HEADER\"]\n";
+
+#[test]
+fn a_field_takes_the_values_of_the_dictionary_it_names() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit("types/timg.toml", "schema = 3\n", GATE)?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = { dictionary = \"GATE\" }",
+    )?;
+    fixture.load()?;
+    Ok(())
+}
+
+#[test]
+fn a_field_naming_no_dictionary_of_its_type_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit("types/timg.toml", "schema = 3\n", GATE)?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"\nvalues = { dictionary = \"LANE\" }",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    assert!(error.entity.ends_with("CONFIG.EN"), "{error}");
+    Ok(())
+}
+
+#[test]
+fn a_field_of_another_width_than_its_dictionary_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit("types/timg.toml", "schema = 3\n", GATE)?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"",
+        "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"\nvalues = { dictionary = \"GATE\" }",
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    assert!(error.to_string().contains("8 bits wide"), "{error}");
+    Ok(())
+}
+
+#[test]
+fn a_dictionary_without_sources_is_refused() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "schema = 3\n",
+        &GATE.replace("sources = [\"SRC_HEADER\"]\n", "sources = []\n"),
+    )?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::InvalidSources), "{error}");
+    Ok(())
+}

@@ -179,7 +179,10 @@ fn a_pairwise_station_key_is_written_validated_and_enabled() {
     assert_eq!(control.peer_high(), 0x5544);
     assert_eq!(control.algorithm().get(), 3);
     assert_eq!(control.direction().get(), 3);
-    assert_eq!(control.interface(), MacInterface::Station.field());
+    assert_eq!(
+        MacInterface::from(control.interface()),
+        MacInterface::Station
+    );
     assert!(control.logical_index_not_three());
     assert_eq!(control.logical_key_index().get(), 0);
     assert!(!(control.wep104() || control.bit_17_opaque() || control.gcmp_256_bit_key()));
@@ -211,7 +214,10 @@ fn a_group_access_point_key_uses_the_broadcast_peer_and_its_key_id() {
     let control = table.read_entry_peer_control(Index::constant::<1>());
     assert_eq!(control.peer_high(), u16::MAX);
     assert_eq!(control.direction().get(), 6);
-    assert_eq!(control.interface(), MacInterface::AccessPoint.field());
+    assert_eq!(
+        MacInterface::from(control.interface()),
+        MacInterface::AccessPoint
+    );
     // Logical key index three carries no flag.
     assert!(!control.logical_index_not_three());
     assert_eq!(control.logical_key_index().get(), 3);

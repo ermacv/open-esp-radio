@@ -59,28 +59,28 @@ fn prepare(s: &mut Session<'_>) {
             w.set_clk_wifi_st_map(Bits::truncate(w.clk_wifi_st_map().get() | 6));
         });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf1(|w| {
-        w.set_clk_wifimac_en(pac::modem_syscon::clk_conf1::ClkWifimacEn::Enabled)
-            .set_clk_wifi_apb_en(pac::modem_syscon::clk_conf1::ClkWifiApbEn::Enabled)
-            .set_clk_wifibb_80x1_en(pac::modem_syscon::clk_conf1::ClkWifibb80x1En::Enabled);
+        w.set_clk_wifimac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_etm_en(pac::modem_syscon::clk_conf::ClkEtmEn::Enabled)
-            .set_clk_modem_sec_apb_en(pac::modem_syscon::clk_conf::ClkModemSecApbEn::Enabled);
+        w.set_clk_etm_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_modem_sec_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_wifimac(pac::modem_syscon::modem_rst_conf::RstWifimac::Released);
+            w.set_rst_wifimac(pac::modem_syscon::dictionaries::Reset::Released);
         });
     oer_portable_riscv::fence();
     let c = s.sar.radio.modem_syscon_clock_reset.read_clk_conf1();
     let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
     emit(
         0x8201,
-        u32::from(c.clk_wifimac_en()),
-        u32::from(c.clk_wifibb_80x1_en()),
-        u32::from(r.rst_wifimac()),
+        c.clk_wifimac_en().bits(),
+        c.clk_wifibb_80x1_en().bits(),
+        r.rst_wifimac().bits(),
     );
     let m = s.sar.radio.hp_sys_clkrst_radio.read_modem_conf();
     emit(
@@ -209,27 +209,27 @@ fn ieee_prepare(s: &mut Session<'_>) {
             w.set_clk_zb_st_map(Bits::truncate(w.clk_zb_st_map().get() | 4));
         });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
-        w.set_clk_zb_apb_en(pac::modem_syscon::clk_conf::ClkZbApbEn::Enabled)
-            .set_clk_zbmac_en(pac::modem_syscon::clk_conf::ClkZbmacEn::Enabled);
+        w.set_clk_zb_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_zbmac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_zbmac(pac::modem_syscon::modem_rst_conf::RstZbmac::Asserted);
+            w.set_rst_zbmac(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_zbmac(pac::modem_syscon::modem_rst_conf::RstZbmac::Released)
-                .set_rst_zbmac_apb(pac::modem_syscon::modem_rst_conf::RstZbmacApb::Asserted);
+            w.set_rst_zbmac(pac::modem_syscon::dictionaries::Reset::Released)
+                .set_rst_zbmac_apb(pac::modem_syscon::dictionaries::Reset::Asserted);
         });
     s.sar
         .radio
         .modem_syscon_clock_reset
         .modify_modem_rst_conf(|w| {
-            w.set_rst_zbmac_apb(pac::modem_syscon::modem_rst_conf::RstZbmacApb::Released);
+            w.set_rst_zbmac_apb(pac::modem_syscon::dictionaries::Reset::Released);
         });
 }
 

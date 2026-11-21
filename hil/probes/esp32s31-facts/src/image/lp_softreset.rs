@@ -60,13 +60,12 @@ fn clocks(s: &Session<'_>, tag: u32) {
         tag + 1,
         u32::from(l.clk_lp_timer_sel_xtal()),
         l.clk_lp_timer_div_num().get(),
-        u32::from(
-            s.sar
-                .radio
-                .modem_syscon_clock_reset
-                .read_clk_conf()
-                .clk_ble_timer_en(),
-        ),
+        s.sar
+            .radio
+            .modem_syscon_clock_reset
+            .read_clk_conf()
+            .clk_ble_timer_en()
+            .bits(),
     );
 }
 fn window() {

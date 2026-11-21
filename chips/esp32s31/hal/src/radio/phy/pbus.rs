@@ -105,9 +105,12 @@ impl<T: SharedPhyAccess + ?Sized> oer_chips_family_radio_phy::pbus::PbusAccess f
 #[cfg(target_arch = "riscv32")]
 impl<T: SharedPhyContext + ?Sized> oer_chips_family_radio_phy::pbus::PbusContext for Port<'_, T> {
     fn wifi_baseband_enabled(&self) -> bool {
-        crate::phy_blocks(self.0)
-            .modem_syscon_radio
-            .read_wifi_bb_cfg()
-            .wifi_enable()
+        matches!(
+            crate::phy_blocks(self.0)
+                .modem_syscon_radio
+                .read_wifi_bb_cfg()
+                .wifi_enable(),
+            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
+        )
     }
 }

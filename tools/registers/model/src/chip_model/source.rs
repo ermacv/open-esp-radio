@@ -34,6 +34,23 @@ pub struct TypeFile {
     pub interrupt_pairs: Vec<InterruptPair>,
     #[serde(default)]
     pub doorbells: Vec<Doorbell>,
+    /// Value lists that fields of one meaning share, by the sources' word.
+    #[serde(default)]
+    pub dictionaries: Vec<Dictionary>,
+}
+
+/// A value list several fields of the type refer to: one meaning, stated by
+/// its sources, and one enum in the type's `dictionaries`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Dictionary {
+    pub name: String,
+    pub description: String,
+    /// The width of every field that refers to it.
+    pub width: u32,
+    pub values: Vec<Value>,
+    /// The sources that give its fields one meaning.
+    pub sources: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -227,8 +244,15 @@ pub struct Field {
     pub class: FieldClass,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
+    /// As written: a list, or a dictionary of the type.
+    #[serde(default, rename = "values")]
+    pub declared_values: DeclaredValues,
+    /// The field's named values, the dictionary's when it refers to one.
+    #[serde(skip)]
     pub values: Vec<Value>,
+    /// The dictionary the values are, if they are one.
+    #[serde(skip)]
+    pub dictionary: Option<String>,
     #[serde(default)]
     pub write_range: Option<WriteRange>,
     #[serde(default)]
@@ -320,6 +344,28 @@ impl FieldClass {
                 | Self::Unknown
         )
     }
+}
+
+/// A field's `values` as written.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum DeclaredValues {
+    /// Its own list.
+    List(Vec<Value>),
+    /// A dictionary of the type: `values = { dictionary = "NAME" }`.
+    Dictionary(DictionaryReference),
+}
+
+impl Default for DeclaredValues {
+    fn default() -> Self {
+        Self::List(Vec::new())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct DictionaryReference {
+    pub dictionary: String,
 }
 
 /// A named value of a field.

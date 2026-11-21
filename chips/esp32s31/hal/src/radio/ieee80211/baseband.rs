@@ -26,7 +26,11 @@ pub fn set_bss_cbw_40_digital(registers: &mut RadioPhyRegisters, enabled: bool) 
 
 /// Apply complete ROM `phy_wifi_enable_set`.
 pub fn set_wifi_enabled(registers: &mut RadioPhyRegisters, enabled: bool) {
-    registers.set_wifi_baseband_enabled(enabled);
+    registers.set_wifi_baseband_enabled(if enabled {
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
+    } else {
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
+    });
 }
 
 /// Apply the final system-register update from ROM `phy_bb_agc_reg_update`.

@@ -34,7 +34,7 @@ pub fn restore_read_configuration<P: PhyPlacement>(
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(saved.control.memory_address_low())
             .set_memory_address_high(saved.control.memory_address_high())
-            .set_hardware_frequency_disable(saved.control.hardware_frequency_disable_variant());
+            .set_hardware_frequency_disable(saved.control.hardware_frequency_disable());
     });
 }
 

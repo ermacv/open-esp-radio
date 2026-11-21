@@ -386,7 +386,7 @@ fn word(s: &Session<'_>, line: u32) -> u32 {
         u32::from(clic.read_ip(i).ip())
             | u32::from(clic.read_ie(i).ie()) << 8
             | u32::from(attributes.shv()) << 16
-            | attributes.trig().get() << 17
+            | attributes.trig().bits() << 17
             | attributes.mode().get() << 22
             | u32::from(clic.read_ctl(i).ctl()) << 24
     })

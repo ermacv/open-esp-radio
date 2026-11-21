@@ -5,10 +5,7 @@ use oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio;
 
 use oer_portable_mmio::Placement;
 
-use crate::{
-    radio::modem::syscon::ModemSysconPowerBaseline,
-    radio::modem::values::ModemSysconClockGateState, radio::phy::RadioPhyRegisters,
-};
+use crate::{radio::modem::syscon::ModemSysconPowerBaseline, radio::phy::RadioPhyRegisters};
 
 /// Semantic readback of the system-clock prerequisites shared by all radios.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -116,7 +113,7 @@ impl WifiPowerBaseline {
         Self::new(
             modem_register_bus_clock_enabled,
             PlatformPllSourceBaseline::default(),
-            ModemSysconPowerBaseline::default(),
+            ModemSysconPowerBaseline::DISABLED,
         )
     }
 
@@ -138,10 +135,13 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn capture_wifi_power_baseline(&self) -> WifiPowerBaseline {
         WifiPowerBaseline::new(
-            self.peripherals
-                .hp_sys_clkrst_radio
-                .read_modem_ctrl0()
-                .reg_modem_clk_en(),
+            matches!(
+                self.peripherals
+                    .hp_sys_clkrst_radio
+                    .read_modem_ctrl0()
+                    .reg_modem_clk_en(),
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
+            ),
             self.platform_pll_source_baseline(),
             self.modem_syscon_power_baseline(),
         )
@@ -208,7 +208,10 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
                 == Some(
                     oer_chips_esp32s31_pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode::Active,
                 ),
-            modem_register_bus_clock_enabled,
+            modem_register_bus_clock_enabled: matches!(
+                modem_register_bus_clock_enabled,
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
+            ),
             modem_source_clocks_configured: modem_source_clocks_configured(
                 &self.peripherals.hp_sys_clkrst_radio,
             ),
@@ -301,18 +304,20 @@ impl<P: crate::radio::phy::registers::RadioPlacement>
         super::ops::restore_modem_register_bus_clock(
             &mut self.peripherals.hp_sys_clkrst_radio,
             if baseline.modem_register_bus_clock_enabled() {
-                ModemSysconClockGateState::Enabled
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
             } else {
-                ModemSysconClockGateState::Disabled
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled
             },
         );
     }
     fn bus_matches(&self, baseline: WifiPowerBaseline) -> bool {
-        self.peripherals
-            .hp_sys_clkrst_radio
-            .read_modem_ctrl0()
-            .reg_modem_clk_en()
-            == baseline.modem_register_bus_clock_enabled()
+        matches!(
+            self.peripherals
+                .hp_sys_clkrst_radio
+                .read_modem_ctrl0()
+                .reg_modem_clk_en(),
+            oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
+        ) == baseline.modem_register_bus_clock_enabled()
     }
 }
 

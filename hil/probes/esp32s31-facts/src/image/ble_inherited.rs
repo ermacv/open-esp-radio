@@ -95,8 +95,8 @@ pub(super) fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag + 4,
         u32::from(c.modem_apb_clk_en()),
-        u32::from(r.rst_btmac()),
-        u32::from(r.rst_btmac_apb()),
+        r.rst_btmac().bits(),
+        r.rst_btmac_apb().bits(),
     );
 }
 pub(super) fn inherited(s: &mut Session<'_>) {
@@ -422,9 +422,9 @@ fn latch_state(s: &Session<'_>, tag: u32) {
     let r = s.sar.radio.modem_syscon_clock_reset.read_modem_rst_conf();
     emit(
         tag + 2,
-        u32::from(g.clk_bt_apb_en()),
-        u32::from(g.clk_btmac_en()),
-        u32::from(r.rst_btmac()) + 2 * u32::from(r.rst_btmac_apb()),
+        g.clk_bt_apb_en().bits(),
+        g.clk_btmac_en().bits(),
+        r.rst_btmac().bits() + 2 * r.rst_btmac_apb().bits(),
     );
 }
 pub(super) fn finish(s: &mut Session<'_>) {

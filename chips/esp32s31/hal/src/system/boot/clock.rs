@@ -79,9 +79,11 @@ impl CpuRoot {
             Self::PllF240m => RegSocClkSel::PllF240m,
         }
     }
-    const fn from_code(code: Bits<2>) -> Self {
+    const fn from_code(
+        code: oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel,
+    ) -> Self {
         use oer_chips_esp32s31_pac::hp_sys_clkrst::soc_clk_sel::RegSocClkSel;
-        match RegSocClkSel::from_field(code.get()) {
+        match code {
             RegSocClkSel::Xtal => Self::Xtal,
             RegSocClkSel::Cpll => Self::Cpll,
             RegSocClkSel::RcFast => Self::RcFast,
