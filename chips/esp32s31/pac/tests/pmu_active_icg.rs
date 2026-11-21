@@ -1,3 +1,12 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! Active modem selection changes its field and preserves the inherited word.
 use oer_chips_esp32s31_pac::{
     instances,

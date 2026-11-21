@@ -1,3 +1,12 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! The IRQ bank preserves sibling lanes when changing T0's enable.
 use oer_chips_esp32s31_pac::timg::{Timg0Timer0, int_ena_timers::T0IntEna};
 

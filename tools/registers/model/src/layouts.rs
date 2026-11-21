@@ -1071,8 +1071,8 @@ fn render_array(output: &mut String, layout: &MemoryLayout) {
     let _ = writeln!(
         output,
         "#[repr(C, align({}))]\n#[derive(bytemuck::Zeroable)]\npub struct {ty} {{ entries: [{element}; {count}] }}\n\
-        const _: () = {{ assert!(core::mem::size_of::<{ty}>() == {});\n\
-        assert!(core::mem::align_of::<{ty}>() == {}); }};\n\
+        const _: () = {{ if core::mem::size_of::<{ty}>() != {} {{ panic!(\"the layout's size is the hardware's\") }}\n\
+        if core::mem::align_of::<{ty}>() != {} {{ panic!(\"the layout's alignment is the hardware's\") }} }};\n\
         impl {ty} {{\n\
         pub const SIZE: usize = {};\n\
         pub const ALIGN: usize = {};\n\
@@ -1125,8 +1125,8 @@ fn render_words(output: &mut String, layout: &MemoryLayout) {
         output,
         "}}\n\n\
          const _: () = {{\n\
-         assert!(core::mem::size_of::<{ty}>() == {});\n\
-         assert!(core::mem::align_of::<{ty}>() == {});\n\
+         if core::mem::size_of::<{ty}>() != {} {{ panic!(\"the layout's size is the hardware's\") }}\n\
+         if core::mem::align_of::<{ty}>() != {} {{ panic!(\"the layout's alignment is the hardware's\") }}\n\
          }};\n",
         layout.size, layout.align
     );
@@ -1462,7 +1462,7 @@ fn render_field(
             output,
             "    /// This value with `{}` set to `VALUE`, checked at compile time.\n\
              pub const fn with_{name}_constant<const VALUE: {field_type}>(self) -> Self {{\n\
-             const {{ assert!(VALUE <= 0x{mask:x}, \"the constant fits the layout field\") }};\n\
+             const {{ if VALUE > 0x{mask:x} {{ panic!(\"the constant fits the layout field\") }} }};\n\
              let value = VALUE;\n\
              Self((self.0 & 0x{keep:x}) | {placed})\n\
              }}\n",

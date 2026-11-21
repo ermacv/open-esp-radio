@@ -62,7 +62,9 @@ fn window(cycles: u32) {
 }
 fn pack<const N: usize>(values: [bool; N]) -> u32 {
     const {
-        assert!(N <= u32::BITS as usize);
+        if N > u32::BITS as usize {
+            panic!("the values fit a word");
+        }
     }
     values
         .into_iter()

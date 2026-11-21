@@ -9,6 +9,15 @@
         reason = "R2 cleans a probe with the area it reads (tasks/312)"
     )
 )]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 #![cfg_attr(target_arch = "riscv32", no_main)]
 #![cfg_attr(target_arch = "riscv32", no_std)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]

@@ -31,9 +31,10 @@ pub async fn write_note<W: Write>(
     let mut length = 0;
     emit_note(note, |bytes: &[u8]| {
         let end = length + bytes.len();
-        line.get_mut(length..end)
-            .ok_or(NoteError::TooLong)?
-            .copy_from_slice(bytes);
+        let slot = line.get_mut(length..end).ok_or(NoteError::TooLong)?;
+        for (out, byte) in slot.iter_mut().zip(bytes) {
+            *out = *byte;
+        }
         length = end;
         Ok(())
     })?;

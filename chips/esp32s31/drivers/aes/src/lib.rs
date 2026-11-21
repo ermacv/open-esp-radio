@@ -1,3 +1,7 @@
+#![expect(
+    clippy::struct_excessive_bools,
+    reason = "the family's drivers and facts, in the stand campaign"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -208,10 +212,11 @@ fn to_words(bytes: &[u8; 16]) -> BlockWords {
 }
 
 fn from_words(words: &BlockWords, bytes: &mut Block) {
-    for (chunk, word) in bytes.chunks_exact_mut(4).zip(words) {
-        for (out, byte) in chunk.iter_mut().zip(word.to_le_bytes()) {
-            *out = byte;
-        }
+    for (out, byte) in bytes
+        .iter_mut()
+        .zip(words.iter().flat_map(|word| word.to_le_bytes()))
+    {
+        *out = byte;
     }
 }
 

@@ -339,7 +339,7 @@ oer_tools_probe_macros::probe! {
     /// Initialize captured mutable parameter memory during an explicit setup phase.
     /// This harness copy supplies scenario inputs; it performs no PHY computation.
     pub fn open_phy_trace_initialize_parameters(destination: &mut [u8; 400], source: &[u8; 400]) =>
-        destination.copy_from_slice(source);
+        *destination = *source;
 }
 
 oer_tools_probe_macros::probe! {

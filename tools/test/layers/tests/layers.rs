@@ -610,6 +610,18 @@ enum TruncateBan {
     Until(&'static str),
 }
 
+/// The common method bans: the root's entries that carry their reason. The
+/// rest of the root's list is the catalogue of methods that panic.
+fn common_method_bans(root: &toml::Value) -> BTreeSet<String> {
+    root.get("disallowed-methods")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("path").and_then(toml::Value::as_str))
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The common method bans a `clippy.toml` lacks, the one it may leave out
 /// aside.
 fn lost_method_bans(
@@ -625,7 +637,10 @@ fn lost_method_bans(
     let left_out = TRUNCATE_BAN_LEFT_OUT
         .iter()
         .any(|(listed, _)| package.as_deref() == Some(*listed));
-    let mut missing = missing_lints(config, common, "disallowed-methods");
+    let mut missing = common_method_bans(common)
+        .difference(&lint_paths(config, "disallowed-methods"))
+        .cloned()
+        .collect::<BTreeSet<_>>();
     if left_out {
         missing.remove(TRUNCATE_BAN);
     }
@@ -690,39 +705,30 @@ fn every_clippy_config_retains_all_common_method_bans() {
 }
 
 #[test]
-/// Every sans-IO package holds the complete canonical catalogue of banned
-/// methods and macros: the workspace table denies both lints for all of
-/// them. A testing package's code is a test's.
-fn every_sans_io_package_holds_the_complete_canonical_catalogue() {
+/// The root's `clippy.toml` holds the bans for every product crate: a
+/// sans-IO package has no configuration of its own, and a local file of
+/// another package names in its first line what removes it.
+fn a_local_clippy_configuration_is_the_exception_and_names_its_step() {
     let root = root();
-    let required: toml::Value =
-        toml::from_str(include_str!("../sans-io-lints.toml")).expect("canonical lint data");
-    let mut violations = Vec::new();
-    for (package, _) in packages(&root).iter().filter(|(package, _)| {
-        sans_io(package) && !package.split('/').any(|part| part == "testing")
-    }) {
-        let path = root.join(package).join("clippy.toml");
-        let config = if path.is_file() {
-            read_toml(&path)
-        } else {
-            read_toml(&root.join("clippy.toml"))
-        };
-        for key in ["disallowed-methods", "disallowed-macros"] {
-            let missing = missing_lints(&config, &required, key);
-            if !missing.is_empty() {
-                violations.push(format!(
-                    "{package}: {key}: {} missing, e.g. {:?}",
-                    missing.len(),
-                    missing.iter().take(3).collect::<Vec<_>>()
-                ));
-            }
+    let mut problems = Vec::new();
+    for (package, _) in packages(&root) {
+        let path = root.join(&package).join("clippy.toml");
+        if !path.is_file() {
+            continue;
+        }
+        if sans_io(&package) && !package.split('/').any(|part| part == "testing") {
+            problems.push(std::format!(
+                "{package}: a sans-IO package has no clippy.toml"
+            ));
+        }
+        let text = std::fs::read_to_string(&path).expect("read clippy.toml");
+        if !text.starts_with("# ") {
+            problems.push(std::format!(
+                "{package}: its clippy.toml does not name in its first line what removes it"
+            ));
         }
     }
-    assert!(
-        violations.is_empty(),
-        "incomplete sans-IO catalogue:\n{}",
-        violations.join("\n")
-    );
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
 #[test]
@@ -739,6 +745,17 @@ fn lint_catalogue_comparison_accepts_tables_and_strings_and_rejects_missing_path
     let empty: toml::Value = toml::from_str("").expect("empty config");
     assert_eq!(
         missing_lints(&empty, &common, "disallowed-methods"),
+        BTreeSet::from(["oer_portable_mmio::assume_owned".into()])
+    );
+    // The common bans are the reasoned entries; the catalogue's strings
+    // are not among them.
+    assert_eq!(
+        common_method_bans(&complete),
+        BTreeSet::new(),
+        "a plain catalogue entry is no common ban"
+    );
+    assert_eq!(
+        common_method_bans(&common),
         BTreeSet::from(["oer_portable_mmio::assume_owned".into()])
     );
 }
@@ -4646,10 +4663,10 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 /// it. The list only shrinks; under [`HAL_DECISION_FILE_ROOTS`] every
 /// production file has an entry of its own, so no new file joins there.
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
-    ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
+    ("radio/ieee80211/dma/descriptor.rs", 382, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
     ("radio/ieee80211/dma/receive.rs", 1028, RX_RING_ATOMS),
-    ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
+    ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
     ("radio/phy/i2c.rs", 685, PHY_DRIVER),
@@ -7644,9 +7661,9 @@ fn rust_files(directory: &Path, found: &mut Vec<PathBuf>) {
 }
 
 /// The packages outside the two lints: the developer's machine
-/// (`tools/`), but the layer tests, which are the check and keep the rule.
+/// (`tools/`), which reads `tools/clippy.toml`.
 fn outside_the_bool_lints(path: &str) -> bool {
-    path.starts_with("tools/") && path != "tools/test/layers"
+    path.starts_with("tools/")
 }
 
 /// The Wi-Fi path, never deferred: every package under
@@ -7661,12 +7678,13 @@ fn wifi_path(path: &str) -> bool {
 }
 
 /// The packages outside the Wi-Fi path and the tools not yet clean of the
-/// two lints, which read the thresholds that never fire: each with its
-/// sites of `struct_excessive_bools` and of `fn_params_excessive_bools`
-/// (one Clippy run of the branch, host and chip, the lints as warnings;
-/// a record, not checked) and what cleans it. An entry leaves in the
-/// change that cleans its package; none is added. The list is emptied
-/// after the stand campaign.
+/// two lints, which expect them at their crate root with the step that
+/// cleans them as the reason: each with its sites of
+/// `struct_excessive_bools` and of `fn_params_excessive_bools` (one Clippy
+/// run of the branch, host and chip, the lints as warnings; a record, not
+/// checked) and what cleans it. An entry leaves in the change that cleans
+/// its package; none is added. The list is emptied after the stand
+/// campaign.
 const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/esp32s31/drivers/aes", 2, 0, BY_FAMILY),
     ("chips/esp32s31/hal", 43, 15, BY_IMAGES),
@@ -7685,20 +7703,43 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
 ];
 
-/// The thresholds a package reads: the tools' and the deferred packages'
-/// never fire; every other package's are the rule's.
-fn loose_bool_thresholds(path: &str) -> bool {
-    outside_the_bool_lints(path) || DEFERRED_BOOL_LINTS.iter().any(|(entry, ..)| *entry == path)
-}
-
-/// The packages at `max-fn-params-bools = 1`: those of the layer tests'
-/// roles `Pac`, `Hal` and `HardwareDriver`, where one `bool` parameter is
-/// a bit's value.
+/// The packages whose one `bool` parameter is a bit's value: those of the
+/// layer tests' roles `Pac`, `Hal` and `HardwareDriver`. They may expect
+/// `fn_params_excessive_bools` at their crate root for it.
 fn bit_parameters(path: &str) -> bool {
     matches!(
         role(path),
         Some(Role::Pac | Role::Hal | Role::HardwareDriver)
     )
+}
+
+/// Whether `file` may expect the bool lints: the crate root of a deferred
+/// package, or of a package whose `bool` parameters are bits (that lint
+/// alone), by `expect` and never `allow`.
+fn may_expect_a_bool_lint(file: &str, source: &str) -> bool {
+    let Some(package) = file
+        .strip_suffix("/src/lib.rs")
+        .or_else(|| file.strip_suffix("/src/main.rs"))
+    else {
+        return false;
+    };
+    let [structs, _] = bool_lints();
+    let deferred = DEFERRED_BOOL_LINTS
+        .iter()
+        .any(|(entry, ..)| *entry == package);
+    let only_parameters = bit_parameters(package) && !source.contains(structs.as_str());
+    let expected_only = !["allow(", "warn("].iter().any(|attribute| {
+        source.match_indices(attribute).any(|(at, _)| {
+            let inside = source
+                .get(at..)
+                .and_then(|rest| rest.split(')').next())
+                .unwrap_or("");
+            bool_lint_names()
+                .iter()
+                .any(|name| inside.contains(name.as_str()))
+        })
+    });
+    (deferred || only_parameters) && expected_only
 }
 
 /// The Clippy configuration a package reads, as Clippy finds it: the
@@ -7727,14 +7768,15 @@ fn no_source_allows_or_expects_a_bool_lint() {
     rust_files(&root, &mut files);
     let silenced = files
         .into_iter()
-        .filter(|file| {
-            std::fs::read_to_string(file).is_ok_and(|source| silences_a_bool_lint(&source))
-        })
-        .map(|file| {
-            file.strip_prefix(&root)
+        .filter_map(|file| {
+            let source = std::fs::read_to_string(&file).ok()?;
+            let relative = file
+                .strip_prefix(&root)
                 .unwrap_or(&file)
                 .display()
-                .to_string()
+                .to_string();
+            (silences_a_bool_lint(&source) && !may_expect_a_bool_lint(&relative, &source))
+                .then_some(relative)
         })
         .collect::<Vec<_>>();
     assert!(
@@ -7742,6 +7784,45 @@ fn no_source_allows_or_expects_a_bool_lint() {
         "the bool lints are silenced in:\n{}",
         silenced.join("\n")
     );
+}
+
+#[test]
+fn only_a_crate_root_may_expect_a_bool_lint_and_only_for_its_reason() {
+    let [structs, parameters] = bool_lints();
+    let expect = |lint: &str| std::format!("#![expect(clippy::{lint}, reason = \"x\")]");
+    let allow = |lint: &str| std::format!("#![allow(clippy::{lint})]");
+    // A deferred package's root expects either lint.
+    assert!(may_expect_a_bool_lint(
+        "chips/family/boot/src/lib.rs",
+        &expect(&structs)
+    ));
+    assert!(may_expect_a_bool_lint(
+        "chips/family/boot/src/lib.rs",
+        &expect(&parameters)
+    ));
+    // Never by `allow`, and never below the root.
+    assert!(!may_expect_a_bool_lint(
+        "chips/family/boot/src/lib.rs",
+        &allow(&structs)
+    ));
+    assert!(!may_expect_a_bool_lint(
+        "chips/family/boot/src/model.rs",
+        &expect(&structs)
+    ));
+    // A package whose parameters are bits expects that lint alone.
+    assert!(may_expect_a_bool_lint(
+        "chips/esp32s31/pac/src/lib.rs",
+        &expect(&parameters)
+    ));
+    assert!(!may_expect_a_bool_lint(
+        "chips/esp32s31/pac/src/lib.rs",
+        &expect(&structs)
+    ));
+    // A package neither deferred nor of bits expects neither.
+    assert!(!may_expect_a_bool_lint(
+        "protocols/network/core/src/lib.rs",
+        &expect(&parameters)
+    ));
 }
 
 #[test]
@@ -7771,10 +7852,12 @@ fn every_clippy_config_holds_the_rules_thresholds() {
     let mut problems = Vec::new();
     for (path, _) in packages(&root) {
         let (file, config) = clippy_config_of(&path);
-        let (struct_bools, fn_bools) = if loose_bool_thresholds(&path) {
+        // One threshold for every package: the tools' file never fires;
+        // a package with sites left expects the lints at its root.
+        let (struct_bools, fn_bools) = if outside_the_bool_lints(&path) {
             (255, 255)
         } else {
-            (1, i64::from(bit_parameters(&path)))
+            (1, 0)
         };
         // The file the package reads keeps every common ban, wherever it
         // stands: one between the root and the package checks for each
@@ -8991,6 +9074,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
     (
+        "chips/esp32s31/drivers/aes/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9007,6 +9096,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the HAL's register images, in the stand campaign",
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
@@ -9037,6 +9132,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::panic",
         1,
         "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the HAL's register images, in the stand campaign",
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
@@ -9202,6 +9303,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/pac/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "generated: a field setter's one bool parameter is the bit's value",
+    ),
+    (
+        "chips/esp32s31/pac/src/lib.rs",
         "unsafe_code",
         1,
         "the PAC root takes its one claim",
@@ -9229,6 +9336,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the platform's step, in the stand campaign",
     ),
     (
         "chips/esp32s31/platform/runtime/src/sampler.rs",
@@ -9280,9 +9393,21 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the PHY, after the Wi-Fi path",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the PHY, after the Wi-Fi path",
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
@@ -9411,10 +9536,52 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
     ),
     (
+        "chips/family/boot/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
+        "chips/family/boot/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
+        "chips/family/drivers/pmu/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
+        "chips/family/drivers/pmu/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
         "chips/family/drivers/usb-serial-jtag/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
+        "chips/family/drivers/usb-serial-jtag/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
+        "chips/family/drivers/watchdog/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
+    ),
+    (
+        "chips/family/drivers/watchdog/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
     ),
     (
         "chips/family/facts/src/lib.rs",
@@ -9427,6 +9594,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/facts/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "the family's drivers and facts, in the stand campaign",
     ),
     (
         "chips/family/platform/bootstrap/src/app_descriptor.rs",
@@ -9508,6 +9681,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/executor/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the platform's step, in the stand campaign",
+    ),
+    (
+        "chips/family/platform/executor/src/lib.rs",
         "clippy::indexing_slicing",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/323)",
@@ -9553,6 +9732,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::disallowed_methods",
         5,
         "the entry's vector is its entry point's one caller / the table owns its handler and cell mapping / the table's once gate admits one token per entry and image",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the platform's step, in the stand campaign",
     ),
     (
         "chips/family/platform/interrupt-table/src/lib.rs",
@@ -9622,6 +9807,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/runtime/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the platform's step, in the stand campaign",
+    ),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
         "dead_code",
         1,
         "the host builds the chip-independent parts for their tests",
@@ -9681,6 +9872,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
     ),
     (
+        "chips/family/radio/coex/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "no package yet: the radio system and Bluetooth",
+    ),
+    (
+        "chips/family/radio/coex/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "no package yet: the radio system and Bluetooth",
+    ),
+    (
         "chips/family/radio/ieee80211/policy/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9712,6 +9915,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "chips/family/radio/modem-clock/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "a hardware driver's one bool parameter is a bit's value",
+    ),
+    (
+        "chips/family/radio/modem-clock/src/lib.rs",
         "clippy::result_large_err",
         4,
         "allocation-free failure retains the exact planner and lease owners / allocation-free failure retains the exact planner owner / the poisoned transaction retains the planner and lease without allocation / the poisoned transaction retains the planner without allocation",
@@ -9727,6 +9936,24 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::disallowed_methods",
         1,
         "a named settle of at most MAX_MICROS (20 µs), the one busy-wait the execution rules admit",
+    ),
+    (
+        "chips/family/radio/phy/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "the PHY, after the Wi-Fi path",
+    ),
+    (
+        "chips/family/radio/power/src/lib.rs",
+        "clippy::fn_params_excessive_bools",
+        1,
+        "no package yet: the radio system and Bluetooth",
+    ),
+    (
+        "chips/family/radio/power/src/lib.rs",
+        "clippy::struct_excessive_bools",
+        1,
+        "no package yet: the radio system and Bluetooth",
     ),
     (
         "chips/family/radio/power/src/modem.rs",

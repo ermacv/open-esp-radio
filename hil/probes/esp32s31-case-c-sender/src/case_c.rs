@@ -143,7 +143,7 @@ impl Case {
             Self::Provenance1500 => 1_500,
             _ => {
                 let last = SUBFRAME_HEADER + self.msdu();
-                QOS_HEADER + (self.subframes() - 1) * last.next_multiple_of(4) + last
+                QOS_HEADER + (self.subframes() - 1) * word_padded(last) + last
             }
         }
     }
@@ -175,7 +175,7 @@ impl Case {
             return None;
         }
         let at = offset - QOS_HEADER;
-        let padded = (SUBFRAME_HEADER + self.msdu()).next_multiple_of(4);
+        let padded = word_padded(SUBFRAME_HEADER + self.msdu());
         if self.subframes() == 1 || at < padded {
             Some((0, at))
         } else {
@@ -335,6 +335,12 @@ pub fn protected_expected(
         return None;
     }
     Some(protected_byte(case, sender, receiver, counter, 0, offset))
+}
+
+/// `bytes` rounded up to a whole word: a subframe's padding. A frame's
+/// lengths are a few kilobytes, far from the top of `usize`.
+const fn word_padded(bytes: usize) -> usize {
+    bytes.wrapping_add(3) & !3
 }
 
 #[cfg(test)]

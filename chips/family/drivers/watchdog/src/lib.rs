@@ -1,3 +1,8 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    clippy::struct_excessive_bools,
+    reason = "the family's drivers and facts, in the stand campaign"
+)]
 //! Espressif platform watchdog owners over a chip's typed watchdog registers.
 //!
 //! This platform crate owns hardware reset configuration and finite reset

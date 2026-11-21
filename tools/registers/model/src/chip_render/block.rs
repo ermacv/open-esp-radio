@@ -1487,7 +1487,7 @@ fn render_range(output: &mut String, field: &FieldPlan<'_>, min: u32, max: u32) 
          if {check} {{ Some(Self(value)) }} else {{ None }}\n}}\n\n\
          /// The constant `V`, checked at compile time.\n\
          #[inline]\npub const fn constant<const V: u32>() -> Self {{\n\
-         const {{ assert!(V >= 0x{min:x} && V <= 0x{max:x}, \"the value lies in the field's write range\") }};\n\
+         const {{ if V < 0x{min:x} || V > 0x{max:x} {{ panic!(\"the value lies in the field's write range\") }} }};\n\
          Self(V)\n}}\n\n\
          /// The value.\n\
          #[inline]\npub const fn get(self) -> u32 {{\nself.0\n}}\n}}\n",

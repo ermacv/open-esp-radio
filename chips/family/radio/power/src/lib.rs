@@ -1,3 +1,8 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    clippy::struct_excessive_bools,
+    reason = "no package yet: the radio system and Bluetooth"
+)]
 //! Shared RF membership, epoch, power and clock drivers over chip-owned ports.
 #![no_std]
 #![forbid(unsafe_code)]

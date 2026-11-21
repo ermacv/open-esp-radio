@@ -1,6 +1,14 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 //! The real sockets, service, core and policy on one shared medium.
 
-#![allow(clippy::disallowed_methods, reason = "a host test")]
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::expect_used,

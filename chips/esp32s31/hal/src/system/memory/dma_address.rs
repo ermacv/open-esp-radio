@@ -207,7 +207,9 @@ impl PlacementProjection {
         ),
     > {
         const {
-            assert!(F + H + T > 0 && F + H + T <= u32::MAX as usize);
+            if !(F + H + T > 0 && F + H + T <= u32::MAX as usize) {
+                panic!("build-time check: F + H + T > 0 && F + H + T <= u32::MAX as usize")
+            };
         }
         #[cfg(target_arch = "riscv32")]
         type Space = crate::radio::ieee80211::dma::space::ChipDma;
@@ -236,7 +238,11 @@ impl PlacementProjection {
     #[allow(unsafe_code, reason = "a checked layout within the consumed Placed")]
     fn link_at<L: DmaLayout>(&self, cpu: usize) -> Result<DmaRef<L>, ProjectionError> {
         const {
-            assert!(size_of::<L>() > 0 && size_of::<L>() <= u32::MAX as usize);
+            if !(size_of::<L>() > 0 && size_of::<L>() <= u32::MAX as usize) {
+                panic!(
+                    "build-time check: size_of::<L>() > 0 && size_of::<L>() <= u32::MAX as usize"
+                )
+            };
         }
         let address = self.checked(cpu, size_of::<L>(), align_of::<L>())?;
         // SAFETY: the caller supplies an initialized L (or a reviewed volatile
@@ -272,7 +278,9 @@ impl PlacementProjection {
 
     pub(crate) fn slots<B>(&self, fields: &[B]) -> Result<PlacedSlots, ProjectionError> {
         const {
-            assert!(size_of::<B>() <= u32::MAX as usize);
+            if !(size_of::<B>() <= u32::MAX as usize) {
+                panic!("build-time check: size_of::<B>() <= u32::MAX as usize")
+            };
         }
         if size_of::<B>() == 0 {
             return Err(ProjectionError::Empty);
@@ -342,10 +350,9 @@ impl<L: DmaLayout> PlacedTable<L> {
     /// The bytes between two elements: the layout's size.
     const STRIDE: u32 = {
         let size = core::mem::size_of::<L>();
-        assert!(
-            size > 0 && size <= u32::MAX as usize,
-            "a DMA layout has a size in the address width"
-        );
+        if !(size > 0 && size <= u32::MAX as usize) {
+            panic!("a DMA layout has a size in the address width")
+        };
         size as u32
     };
 
@@ -550,11 +557,11 @@ impl PlacedSlots {
 #[derive(bytemuck::Zeroable)]
 pub struct PlacedAddresses<const N: usize>([u32; N]);
 
-const _: () = assert!(
-    crate::layouts::DMA_WINDOW.start < crate::layouts::DMA_WINDOW.end
-        && crate::layouts::DMA_WINDOW.start != 0,
-    "zero lies outside the DMA window"
-);
+const _: () = if !(crate::layouts::DMA_WINDOW.start < crate::layouts::DMA_WINDOW.end
+    && crate::layouts::DMA_WINDOW.start != 0)
+{
+    panic!("zero lies outside the DMA window")
+};
 
 impl<const N: usize> PlacedAddresses<N> {
     /// No address recorded.

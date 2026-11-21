@@ -1,3 +1,12 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 use oer_chips_esp32s31_hal::peripherals::{
     timg0_alarm::Timg0AlarmInterrupt, timg1_alarm::Timg1AlarmInterrupt,
 };

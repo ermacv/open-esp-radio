@@ -1,4 +1,9 @@
 #![expect(
+    clippy::fn_params_excessive_bools,
+    clippy::struct_excessive_bools,
+    reason = "the HAL's register images, in the stand campaign"
+)]
+#![expect(
     clippy::cast_possible_truncation,
     reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
 )]

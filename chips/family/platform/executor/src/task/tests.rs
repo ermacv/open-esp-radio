@@ -120,9 +120,9 @@ macro_rules! probe_set {
         struct $set;
         std::thread_local! {
             static SLOTS: [&'static Task<Box<dyn FnOnce() -> $future $(+ $send)?>, $set>; 3] = [
-                Box::leak(Box::new(Task::new(0))),
-                Box::leak(Box::new(Task::new(1))),
-                Box::leak(Box::new(Task::new(2))),
+                Box::leak(Box::new(Task::new::<0>())),
+                Box::leak(Box::new(Task::new::<1>())),
+                Box::leak(Box::new(Task::new::<2>())),
             ];
         }
         impl $set {
@@ -430,7 +430,7 @@ impl Future for Local {
 }
 
 struct LocalSet;
-static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new(0);
+static LOCAL_TASK: Task<fn() -> Local, LocalSet> = Task::new::<0>();
 impl Tasks for LocalSet {
     type Binding = TestBinding;
     type Mode = Interrupt;

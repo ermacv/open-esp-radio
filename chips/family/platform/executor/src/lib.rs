@@ -1,3 +1,10 @@
+#![cfg_attr(
+    any(feature = "chip", test),
+    expect(
+        clippy::fn_params_excessive_bools,
+        reason = "the platform's step, in the stand campaign"
+    )
+)]
 #![expect(
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"

@@ -200,7 +200,7 @@ pub fn layout(
          \x20   flash_tuning_reference_bytes: {tuning:#x},\n\
          \x20   rom_script: {script:?},\n\
          }};\n\n\
-         const _: () = LAYOUT.check();\n\
+         const _: () = if let Some(fault) = LAYOUT.fault() {{ panic!(\"{{}}\", fault.message()); }};\n\
          const _: () = if LAYOUT.boot_hart as usize != oer_chips_family_platform_layout::boot::BOOT_HART {{ panic!(\"layout boot hart disagrees with the boot contract\"); }};\n",
         id = facts.id,
         board = facts
@@ -847,7 +847,7 @@ mod tests {
         ] {
             assert!(layout.contains(field), "{field}\n{layout}");
         }
-        assert!(layout.contains("const _: () = LAYOUT.check();"));
+        assert!(layout.contains("const _: () = if let Some(fault) = LAYOUT.fault() {"));
         // The same facts give the same text.
         assert_eq!(
             layout,

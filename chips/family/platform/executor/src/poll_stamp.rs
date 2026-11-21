@@ -15,7 +15,10 @@ pub(crate) struct Stamp<const HARTS: usize>;
 pub(crate) type ChipStamp = Stamp<{ oer_chips_family_platform_port::HARTS }>;
 
 impl<const HARTS: usize> Stamp<HARTS> {
-    const HART_BITS: u32 = HARTS.ilog2() + 1;
+    const HART_BITS: u32 = match HARTS.checked_ilog2() {
+        Some(bits) => bits + 1,
+        None => panic!("a chip has at least one hart"),
+    };
     const HART_MASK: usize = (1 << Self::HART_BITS) - 1;
     pub(crate) const STAMP_MASK: u32 = u32::MAX >> Self::HART_BITS;
     const GEOMETRY: () = {

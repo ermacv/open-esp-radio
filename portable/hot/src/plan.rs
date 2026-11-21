@@ -40,6 +40,7 @@ pub enum Token {
     Group(Delim, Vec<Token>),
 }
 
+#[cfg(test)]
 impl core::fmt::Display for Token {
     /// The tokens as source, one space between two.
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -63,6 +64,7 @@ impl core::fmt::Display for Token {
 }
 
 /// `tokens` as source, one space between two.
+#[cfg(test)]
 pub fn source(tokens: &[Token]) -> String {
     tokens
         .iter()

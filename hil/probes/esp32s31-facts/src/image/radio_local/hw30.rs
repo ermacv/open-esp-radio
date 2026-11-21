@@ -42,7 +42,9 @@ fn raw(s: &Session<'_>) -> u32 {
 }
 fn pack<const N: usize>(v: [bool; N]) -> u32 {
     const {
-        assert!(N <= u32::BITS as usize);
+        if N > u32::BITS as usize {
+            panic!("the values fit a word");
+        }
     }
     v.into_iter()
         .enumerate()

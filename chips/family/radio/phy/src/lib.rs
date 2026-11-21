@@ -1,3 +1,14 @@
+#![expect(
+    clippy::fn_params_excessive_bools,
+    reason = "the PHY, after the Wi-Fi path"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::struct_excessive_bools,
+        reason = "the PHY, after the Wi-Fi path"
+    )
+)]
 //! PHY analog and PBus operations over chip-owned register ports.
 #![expect(
     clippy::cast_possible_truncation,

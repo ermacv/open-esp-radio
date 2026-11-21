@@ -1,4 +1,9 @@
 #![expect(
+    clippy::fn_params_excessive_bools,
+    clippy::struct_excessive_bools,
+    reason = "the family's drivers and facts, in the stand campaign"
+)]
+#![expect(
     clippy::cast_possible_truncation,
     reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
 )]

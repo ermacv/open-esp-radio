@@ -659,7 +659,11 @@ impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> Controller
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {
-        const { assert!(clic::ip::COUNT == facts::LINES.count as usize) };
+        const {
+            if !(clic::ip::COUNT == facts::LINES.count as usize) {
+                panic!("build-time check: clic::ip::COUNT == facts::LINES.count as usize")
+            }
+        };
         let info = self.clic.read_int_info();
         // These fields fit their destination types (four, thirteen and four bits).
         let control_bits = info.ctlbits().get() as u8;

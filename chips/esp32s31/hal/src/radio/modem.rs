@@ -27,13 +27,17 @@ pub const BLUETOOTH_MAIN_XTAL_LOW_POWER_DIVIDER: values::ModemLowPowerClockDivid
 
 const fn field_byte<const WIDTH: u32>(value: oer_portable_mmio::Bits<WIDTH>) -> u8 {
     const {
-        assert!(WIDTH <= 8);
+        if WIDTH > 8 {
+            panic!("build-time check: WIDTH <= 8")
+        };
     }
     value.get().to_le_bytes()[0]
 }
 const fn field_halfword<const WIDTH: u32>(value: oer_portable_mmio::Bits<WIDTH>) -> u16 {
     const {
-        assert!(WIDTH <= 16);
+        if WIDTH > 16 {
+            panic!("build-time check: WIDTH <= 16")
+        };
     }
     let [a, b, _, _] = value.get().to_le_bytes();
     u16::from_le_bytes([a, b])

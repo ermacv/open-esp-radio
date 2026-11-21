@@ -208,10 +208,18 @@ pub const fn rates(root_hz: u32, dividers: BusDividers) -> ClockRates {
 pub const MAX_MEM_HZ: u32 = 160_000_000;
 
 const _: () = {
-    assert!(CpuProfile::Mhz160.clock().rates.cpu_hz == 160_000_000);
-    assert!(CpuProfile::Mhz320.clock().rates.cpu_hz == 320_000_000);
-    assert!(CpuProfile::Mhz160.clock().rates.mem_hz <= MAX_MEM_HZ);
-    assert!(CpuProfile::Mhz320.clock().rates.mem_hz <= MAX_MEM_HZ);
+    if CpuProfile::Mhz160.clock().rates.cpu_hz != 160_000_000 {
+        panic!("build-time check: CpuProfile::Mhz160.clock().rates.cpu_hz == 160_000_000")
+    };
+    if CpuProfile::Mhz320.clock().rates.cpu_hz != 320_000_000 {
+        panic!("build-time check: CpuProfile::Mhz320.clock().rates.cpu_hz == 320_000_000")
+    };
+    if CpuProfile::Mhz160.clock().rates.mem_hz > MAX_MEM_HZ {
+        panic!("build-time check: CpuProfile::Mhz160.clock().rates.mem_hz <= MAX_MEM_HZ")
+    };
+    if CpuProfile::Mhz320.clock().rates.mem_hz > MAX_MEM_HZ {
+        panic!("build-time check: CpuProfile::Mhz320.clock().rates.mem_hz <= MAX_MEM_HZ")
+    };
 };
 
 /// The RTC watchdog's timeout as the ESP-IDF bootloader arms it, counted
@@ -522,10 +530,9 @@ pub const fn octal_psram(size: u32) -> OctalPsramProfile<PsramSupplyLevel> {
     }
 }
 
-const _: () = assert!(
-    MPLL_HZ.is_multiple_of(PSRAM_HZ) && MPLL_HZ / PSRAM_HZ <= u8::MAX as u32,
-    "the PSRAM clock divides the memory PLL's"
-);
+const _: () = if !(MPLL_HZ.is_multiple_of(PSRAM_HZ) && MPLL_HZ / PSRAM_HZ <= u8::MAX as u32) {
+    panic!("the PSRAM clock divides the memory PLL's")
+};
 
 /// The PSRAM bring-up's waits.
 pub const PSRAM_WAITS: PsramWaits = PsramWaits {
@@ -545,16 +552,40 @@ pub const PSRAM_WAITS: PsramWaits = PsramWaits {
 
 const _: () = {
     let budget = BOOT_BUDGET;
-    assert!(budget.admits(COMMAND_WAIT));
-    assert!(budget.admits(PSRAM_WAITS.supply_settle));
-    assert!(budget.admits(CLOCK_WAITS.calibration));
-    assert!(budget.admits(CLOCK_WAITS.calibration_settle));
-    assert!(budget.admits(CLOCK_WAITS.update));
-    assert!(budget.admits(CACHE_SYNC));
-    assert!(budget.admits(SUSPEND_WAITS.autoload));
-    assert!(budget.admits(SUSPEND_WAITS.preload));
-    assert!(budget.admits(SUSPEND_WAITS.sync));
-    assert!(budget.admits(SUSPEND_WAITS.lock));
-    assert!(budget.admits(SUSPEND_WAITS.freeze));
-    assert!(budget.admits(SUSPEND_WAITS.thaw));
+    if !(budget.admits(COMMAND_WAIT)) {
+        panic!("build-time check: budget.admits(COMMAND_WAIT)")
+    };
+    if !(budget.admits(PSRAM_WAITS.supply_settle)) {
+        panic!("build-time check: budget.admits(PSRAM_WAITS.supply_settle)")
+    };
+    if !(budget.admits(CLOCK_WAITS.calibration)) {
+        panic!("build-time check: budget.admits(CLOCK_WAITS.calibration)")
+    };
+    if !(budget.admits(CLOCK_WAITS.calibration_settle)) {
+        panic!("build-time check: budget.admits(CLOCK_WAITS.calibration_settle)")
+    };
+    if !(budget.admits(CLOCK_WAITS.update)) {
+        panic!("build-time check: budget.admits(CLOCK_WAITS.update)")
+    };
+    if !(budget.admits(CACHE_SYNC)) {
+        panic!("build-time check: budget.admits(CACHE_SYNC)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.autoload)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.autoload)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.preload)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.preload)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.sync)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.sync)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.lock)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.lock)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.freeze)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.freeze)")
+    };
+    if !(budget.admits(SUSPEND_WAITS.thaw)) {
+        panic!("build-time check: budget.admits(SUSPEND_WAITS.thaw)")
+    };
 };
