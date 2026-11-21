@@ -471,12 +471,13 @@ impl<'registers> WifiMacHal<'registers> {
         index: u8,
         identity: crate::types::MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: crate::types::MacSppMode,
     ) -> MacKeyInstallOutcome {
         let Some(index) = MacKeyEntryIndex::new(u32::from(index)) else {
             return MacKeyInstallOutcome::Rejected;
         };
         self.pac_mut()
-            .install_sta_ccmp_key_entry(index, identity, temporal_key)
+            .install_sta_ccmp_key_entry(index, identity, temporal_key, spp)
     }
 
     /// Install one reviewed semantic access-point CCMP key. Association/key-ID
@@ -486,12 +487,13 @@ impl<'registers> WifiMacHal<'registers> {
         index: u8,
         identity: crate::types::MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: crate::types::MacSppMode,
     ) -> MacKeyInstallOutcome {
         let Some(index) = MacKeyEntryIndex::new(u32::from(index)) else {
             return MacKeyInstallOutcome::Rejected;
         };
         self.pac_mut()
-            .install_ap_ccmp_key_entry(index, identity, temporal_key)
+            .install_ap_ccmp_key_entry(index, identity, temporal_key, spp)
     }
 
     /// Clear one key-table entry when its generated index is valid.

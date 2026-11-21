@@ -156,6 +156,7 @@ fn a_pairwise_station_key_is_written_validated_and_enabled() {
         entry(2),
         MacCcmpKeyIdentity::Pairwise { peer: PEER },
         &KEY,
+        MacSppMode::Unauthenticated,
     );
     assert_eq!(outcome, MacKeyInstallOutcome::Installed);
 
@@ -223,6 +224,7 @@ fn a_group_access_point_key_uses_the_broadcast_peer_and_its_key_id() {
         entry(1),
         MacCcmpKeyIdentity::Group { key_id: 3 },
         &KEY,
+        MacSppMode::Unauthenticated,
     );
     assert_eq!(outcome, MacKeyInstallOutcome::Installed);
     let owners = words.owners();
@@ -251,6 +253,7 @@ fn an_occupied_entry_or_an_invalid_group_key_changes_nothing() {
         entry(0),
         MacCcmpKeyIdentity::Group { key_id: 4 },
         &KEY,
+        MacSppMode::Unauthenticated,
     );
     assert_eq!(outcome, MacKeyInstallOutcome::Rejected);
     assert_eq!(before.changes(&words), []);
@@ -261,6 +264,7 @@ fn an_occupied_entry_or_an_invalid_group_key_changes_nothing() {
         entry(24),
         MacCcmpKeyIdentity::Pairwise { peer: PEER },
         &KEY,
+        MacSppMode::Unauthenticated,
     );
     assert_eq!(outcome, MacKeyInstallOutcome::Occupied);
     assert_eq!(before.changes(&words), []);
@@ -291,4 +295,25 @@ fn clearing_an_entry_invalidates_it_and_zeroes_its_ten_words() {
         table.read_entry_key_word_7(Index::constant::<7>()).value(),
         0
     );
+}
+
+/// A key's installation writes the SPP decision it is given, as the vendor
+/// passes the association's: nothing is read back from the interface.
+#[test]
+fn a_key_installation_writes_the_spp_decision_it_is_given() {
+    let mut words = HostWords::filled(0);
+    let outcome = words.owners().registers.install_sta_ccmp_key_entry(
+        entry(2),
+        MacCcmpKeyIdentity::Pairwise { peer: PEER },
+        &KEY,
+        MacSppMode::Authenticated,
+    );
+    assert_eq!(outcome, MacKeyInstallOutcome::Installed);
+    let owners = words.owners();
+    let interface = owners
+        .registers
+        .mac
+        .wifi_mac_crypto_control
+        .read_interface_control(Index::constant::<0>());
+    assert_eq!(interface.spp_amsdu(), MacSppMode::Authenticated);
 }

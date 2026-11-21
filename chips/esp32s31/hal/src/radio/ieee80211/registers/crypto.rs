@@ -291,8 +291,9 @@ fn clear_key_entry_words<P: Placement>(
     });
 }
 
-// Complete ordinary CCMP enable leaf. Keys preserve the interface's prior SPP
-// decision; only configuring a new association supplies a different value.
+// Complete ordinary CCMP enable leaf. Each key installation passes the
+// association's SPP decision, as wDev_Insert_KeyEntry passes it to
+// hal_crypto_enable.
 fn enable_ccmp<P: Placement>(
     control: &mut WifiMacCryptoControl<P>,
     index: Index<3>,
@@ -358,7 +359,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
     /// Apply an association's SPP mode before installing any of its keys.
     /// The driver establishes removal of every previous key before changing
-    /// this per-interface field; installation itself preserves the decision.
+    /// this per-interface field; each installation passes the same decision.
     ///
     /// Context2 uses the bit-17-set profile. The vendor NAN key profile clears
     /// that bit independently of bit 16; this method does not implement that
@@ -383,14 +384,21 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// SOURCE: complete `libpp.a::hal_crypto_clr_key_entry`,
     /// `hal_crypto_set_key_entry`, `hal_crypto_is_key_valid`, and the reachable
-    /// `hal_crypto_enable` CCMP branch, retaining the association's SPP field.
+    /// `hal_crypto_enable` CCMP branch, with the association's SPP decision.
     pub fn install_sta_ccmp_key_entry(
         &mut self,
         index: MacKeyEntryIndex,
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: MacSppMode,
     ) -> MacKeyInstallOutcome {
-        self.install_ccmp_key_entry(MacCryptoInterface::Station, index, identity, temporal_key)
+        self.install_ccmp_key_entry(
+            MacCryptoInterface::Station,
+            index,
+            identity,
+            temporal_key,
+            spp,
+        )
     }
 
     /// Encode and install one semantic AP CCMP key into an invalid entry.
@@ -403,12 +411,14 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         index: MacKeyEntryIndex,
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: MacSppMode,
     ) -> MacKeyInstallOutcome {
         self.install_ccmp_key_entry(
             MacCryptoInterface::AccessPoint,
             index,
             identity,
             temporal_key,
+            spp,
         )
     }
 
@@ -418,6 +428,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         index: MacKeyEntryIndex,
         identity: MacCcmpKeyIdentity,
         temporal_key: &[u8; 16],
+        spp: MacSppMode,
     ) -> MacKeyInstallOutcome {
         let (peer, direction, logical_key_index) = match identity {
             MacCcmpKeyIdentity::Pairwise { peer } => (
@@ -474,27 +485,37 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 logical_key_index,
             },
         );
-        let (words, _) = temporal_key.as_chunks::<4>();
-        let [k0, k1, k2, k3] = words else {
-            unreachable!("a 16-byte key has four words");
-        };
+        let [
+            a0,
+            a1,
+            a2,
+            a3,
+            b0,
+            b1,
+            b2,
+            b3,
+            c0,
+            c1,
+            c2,
+            c3,
+            d0,
+            d1,
+            d2,
+            d3,
+        ] = *temporal_key;
         store_key_words(
             table,
             entry,
             [
-                u32::from_le_bytes(*k0),
-                u32::from_le_bytes(*k1),
-                u32::from_le_bytes(*k2),
-                u32::from_le_bytes(*k3),
+                u32::from_le_bytes([a0, a1, a2, a3]),
+                u32::from_le_bytes([b0, b1, b2, b3]),
+                u32::from_le_bytes([c0, c1, c2, c3]),
+                u32::from_le_bytes([d0, d1, d2, d3]),
             ],
         );
 
         let control = &mut self.mac.wifi_mac_crypto_control;
         publish_key_entry_validity(control, validity);
-        let spp = match Index::new(control_index.get()) {
-            Ok(sta_ap) => control.read_interface_control(sta_ap).spp_amsdu(),
-            Err(_) => control.read_context2_crypto_control().spp_amsdu(),
-        };
         enable_ccmp(control, control_index, spp);
         oer_portable_riscv::fence();
 
