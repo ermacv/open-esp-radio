@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 description = "Chip-neutral non-blocking analog register bus contract and field transactions of the Espressif PHY"
 
+[dependencies]
+oer-chips-family-registers-analog-i2c = { path = "../../registers/analog-i2c" }
 
 [lints]
 workspace = true

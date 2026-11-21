@@ -5,8 +5,9 @@ use crate::{
     wait::{BootDeadline, BootWait, WaitFailure},
 };
 use oer_chips_family_drivers_regi2c::{
-    AnalogField, AnalogRegisterBus, DriverError, FieldWrite, Step, ValueTooWide,
+    AnalogRegisterBus, DriverError, FieldWrite, Step, ValueTooWide,
 };
+use oer_chips_family_registers_analog_i2c::AnalogField;
 use oer_portable_time::Clock;
 
 /// The chip's detector cycles, actions and analog threshold.

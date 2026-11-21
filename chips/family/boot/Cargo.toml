@@ -10,6 +10,7 @@ description = "Espressif bootstrap sequences over a chip's typed register traits
 
 [dependencies]
 oer-chips-family-drivers-regi2c = { path = "../drivers/regi2c" }
+oer-chips-family-registers-analog-i2c = { path = "../registers/analog-i2c" }
 oer-portable-time = { path = "../../../portable/time" }
 oer-chips-family-drivers-watchdog = { path = "../drivers/watchdog" }
 oer-chips-family-platform-layout.workspace = true

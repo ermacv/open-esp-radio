@@ -27,6 +27,7 @@ static_cell = { workspace = true }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics", "zeroable_maybe_uninit"] }
 pin-project = "1.1.13"
 oer-chips-family-drivers-regi2c = { path = "../../family/drivers/regi2c" }
+oer-chips-family-registers-analog-i2c = { path = "../../family/registers/analog-i2c" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-portable-time = { path = "../../../portable/time" }

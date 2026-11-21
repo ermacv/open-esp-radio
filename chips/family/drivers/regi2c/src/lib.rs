@@ -43,6 +43,8 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
+use oer_chips_family_registers_analog_i2c::{AnalogField, Host};
+
 /// Why the bus did not take or finish a command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BusRefusal {
@@ -89,72 +91,6 @@ pub trait AnalogRegisterBus {
     ///
     /// The write is still executing.
     fn try_finish_write(&self, address: Self::Address) -> Result<(), BusRefusal>;
-}
-
-/// Bits `msb..=lsb` of one analog byte register.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AnalogField<Address> {
-    address: Address,
-    msb: u8,
-    lsb: u8,
-    mask: u8,
-}
-
-impl<Address: Copy> AnalogField<Address> {
-    /// The field, when `lsb <= msb <= 7`.
-    pub const fn new(address: Address, msb: u8, lsb: u8) -> Option<Self> {
-        if lsb <= msb && msb < 8 {
-            let Some(upper_shift) = 7_u8.checked_sub(msb) else {
-                return None;
-            };
-            let mask = (u8::MAX << lsb) & (u8::MAX >> upper_shift);
-            Some(Self {
-                address,
-                msb,
-                lsb,
-                mask,
-            })
-        } else {
-            None
-        }
-    }
-
-    pub const fn bit_range(self) -> (u8, u8) {
-        (self.msb, self.lsb)
-    }
-
-    pub const fn address(self) -> Address {
-        self.address
-    }
-
-    /// The field's bits in place.
-    const fn mask(self) -> u8 {
-        self.mask
-    }
-
-    /// The field's value in `byte`, as `phy_i2c_readReg_Mask` extracts it.
-    pub const fn extract(self, byte: u8) -> u8 {
-        (byte & self.mask()) >> self.lsb
-    }
-
-    /// `byte` with the field replaced, as `phy_i2c_writeReg_Mask` composes
-    /// it, when `value` fits the field; `None` otherwise.
-    ///
-    /// The vendor leaf ORs `value << lsb` in unmasked, so a wider value
-    /// would also set bits above the field; such values are rejected here.
-    pub const fn insert(self, byte: u8, value: u8) -> Option<u8> {
-        if value & !(self.mask >> self.lsb) != 0 {
-            return None;
-        }
-        Some((byte & !self.mask()) | (value << self.lsb))
-    }
-
-    /// Replace the field with the low bits of `value`, preserving every
-    /// other lane. Callers that explicitly truncate a byte input use this;
-    /// checked transactions and sampled-byte builders use [`Self::insert`].
-    pub const fn insert_truncated(self, byte: u8, value: u8) -> u8 {
-        (byte & !self.mask()) | ((value << self.lsb) & self.mask())
-    }
 }
 
 /// Progress of a polled transaction.
@@ -248,7 +184,7 @@ impl<Address: Copy + Eq> ByteTransition for FieldReadTransition<Address> {
     fn action(&self) -> Action<Address, u8> {
         match self.value {
             None => Action::Read {
-                address: self.field.address,
+                address: self.field.address(),
             },
             Some(value) => Action::Complete(value),
         }
@@ -257,7 +193,7 @@ impl<Address: Copy + Eq> ByteTransition for FieldReadTransition<Address> {
     fn advance(&mut self, completion: Completion<Address>) -> Result<(), TransitionError> {
         match (self.value, completion) {
             (Some(_), _) => Err(TransitionError::AlreadyComplete),
-            (None, Completion::Read { address, value }) if address == self.field.address => {
+            (None, Completion::Read { address, value }) if address == self.field.address() => {
                 self.value = Some(self.field.extract(value));
                 Ok(())
             }
@@ -311,7 +247,7 @@ impl<Address: Copy> FieldWriteTransition<Address> {
 
     /// The next byte transaction, or completion.
     pub const fn action(&self) -> Action<Address, ()> {
-        let address = self.field.address;
+        let address = self.field.address();
         match self.step {
             FieldWriteStep::Read => Action::Read { address },
             FieldWriteStep::Write(value) => Action::Write { address, value },
@@ -328,7 +264,7 @@ impl<Address: Copy + Eq> FieldWriteTransition<Address> {
     /// The completion does not answer the pending action; the transition is
     /// unchanged.
     pub fn advance(&mut self, completion: Completion<Address>) -> Result<(), TransitionError> {
-        let address = self.field.address;
+        let address = self.field.address();
         self.step = match (self.step, completion) {
             (
                 FieldWriteStep::Read,
@@ -472,7 +408,7 @@ where
             ConfigurationStep::Reading(_, address) => Action::Read { address },
             ConfigurationStep::Writing(_, address, value) => Action::Write { address, value },
             ConfigurationStep::Modifying(_, field, _) => Action::Read {
-                address: field.address,
+                address: field.address(),
             },
             ConfigurationStep::Invalid(index) => Action::Complete(Err(InvalidCommand { index })),
             ConfigurationStep::Complete => Action::Complete(Ok(())),
@@ -492,7 +428,7 @@ where
             (
                 ConfigurationStep::Modifying(index, field, bits),
                 Completion::Read { address, value },
-            ) if address == field.address => {
+            ) if address == field.address() => {
                 ConfigurationStep::Writing(index, address, (value & !field.mask()) | bits)
             }
             (ConfigurationStep::Complete | ConfigurationStep::Invalid(_), _) => {
@@ -649,7 +585,8 @@ impl<'bus, Bus: AnalogRegisterBus> FieldRead<'bus, Bus> {
 /// Polled `phy_i2c_writeReg_Mask` over a bus.
 ///
 /// ```compile_fail,E0499
-/// use oer_chips_family_drivers_regi2c::{AnalogField, AnalogRegisterBus, FieldWrite};
+/// use oer_chips_family_drivers_regi2c::{AnalogRegisterBus, FieldWrite};
+/// use oer_chips_family_registers_analog_i2c::AnalogField;
 /// fn interleave<B: AnalogRegisterBus>(bus: &mut B, field: AnalogField<B::Address>) {
 ///     let mut first = FieldWrite::new(bus, field, 0).ok().expect("fits");
 ///     let mut second = FieldWrite::new(bus, field, 0).ok().expect("fits");
@@ -734,13 +671,6 @@ where
     }
 }
 
-/// One of the two analog I2C hosts of a parallel write.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ParallelHost {
-    First,
-    Second,
-}
-
 /// Parallel writes on both analog I2C hosts, as `phy_i2c_paral_write`
 /// issues them: one command per host, then each host polled idle.
 pub trait ParallelAnalogBus {
@@ -757,7 +687,7 @@ pub trait ParallelAnalogBus {
     fn start_pair(&mut self, pair: Self::Pair);
 
     /// Whether `host` is executing its command.
-    fn is_busy(&self, host: ParallelHost) -> bool;
+    fn is_busy(&self, host: Host) -> bool;
 }
 
 /// The next step of a parallel write sequence.
@@ -768,7 +698,7 @@ pub enum ParallelAction<Pair> {
     /// Publish both commands of `pair`.
     StartPair(Pair),
     /// Wait until `host` is idle.
-    AwaitIdle(ParallelHost),
+    AwaitIdle(Host),
     /// Restore the normal host map.
     RestoreMap,
     /// The sequence completed.
@@ -779,7 +709,7 @@ pub enum ParallelAction<Pair> {
 enum ParallelPhase {
     Select,
     Start(usize),
-    Await(usize, ParallelHost),
+    Await(usize, Host),
     Done,
 }
 
@@ -838,13 +768,11 @@ impl<Pairs> ParallelTransition<Pairs> {
         self.phase = match self.phase {
             ParallelPhase::Select => ParallelPhase::Start(0),
             ParallelPhase::Start(index) => match (self.pairs)(index) {
-                Some(_) => ParallelPhase::Await(index, ParallelHost::First),
+                Some(_) => ParallelPhase::Await(index, Host::Host0),
                 None => ParallelPhase::Done,
             },
-            ParallelPhase::Await(index, ParallelHost::First) => {
-                ParallelPhase::Await(index, ParallelHost::Second)
-            }
-            ParallelPhase::Await(index, ParallelHost::Second) => ParallelPhase::Start(
+            ParallelPhase::Await(index, Host::Host0) => ParallelPhase::Await(index, Host::Host1),
+            ParallelPhase::Await(index, Host::Host1) => ParallelPhase::Start(
                 index
                     .checked_add(1)
                     .ok_or(TransitionError::IndexExhausted { index })?,
@@ -923,6 +851,3 @@ where
 #[cfg(test)]
 #[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests;
-
-/// Pure transport and sampled-value vocabulary of generated analog models.
-pub mod model;

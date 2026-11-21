@@ -9,6 +9,7 @@ description = "Family PHY analog and PBus operations over owned register ports"
 
 [dependencies]
 oer-chips-family-drivers-regi2c = { path = "../../drivers/regi2c" }
+oer-chips-family-registers-analog-i2c = { path = "../../registers/analog-i2c" }
 
 [dev-dependencies]
 oer-portable-time = { path = "../../../../portable/time" }

@@ -284,6 +284,7 @@ existing local entries.
 
 | Package | Directory |
 | --- | --- |
+| `oer-chips-family-registers-analog-i2c` | `chips/family/registers/analog-i2c` |
 | `oer-chips-family-drivers-regi2c` | `chips/family/drivers/regi2c` |
 | `oer-chips-family-boot` | `chips/family/boot` |
 | `oer-chips-family-radio-coex` | `chips/family/radio/coex` |

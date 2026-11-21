@@ -1105,10 +1105,10 @@ The PAC's `analog_i2c` module is the dictionary of these facts and performs
 no access: `blocks` (each code), `Profile`, `route(profile, code)`,
 `Request` (an original request code kept apart from the byte it reaches),
 a module per instance with a module per register holding its `ADDRESS` and
-a `Field` per field and view, `REGISTERS` (each byte's described, opaque
-and reserved bits and known reset), `READ_SAFE` (the bytes a finite
-reviewed epoch admits to a read) and `CAPTURE` (those with an explicit
-comparison mask). The value types are `chips/family/drivers/regi2c::model`'s.
+a `Field` per field and view, `READ_SAFE` (the bytes a finite reviewed
+epoch admits to a read) and `CAPTURE` (those with an explicit comparison
+mask). The value types are the analog register space's vocabulary,
+`chips/family/registers/analog-i2c`, a crate below the PAC.
 `AnalogAddress { block, index }` is a transport identity, never a CPU
 address.
 

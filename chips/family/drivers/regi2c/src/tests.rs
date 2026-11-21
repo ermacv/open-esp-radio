@@ -79,24 +79,6 @@ fn run<T>(clock: &Cell<u8>, mut poll: impl FnMut() -> Step<T>) -> T {
 }
 
 #[test]
-fn fields_are_bounded_to_one_byte() {
-    assert!(AnalogField::new(0_u8, 7, 0).is_some());
-    assert!(AnalogField::new(0_u8, 3, 4).is_none());
-    assert!(AnalogField::new(0_u8, 8, 0).is_none());
-}
-
-#[test]
-fn extraction_and_insertion_follow_the_vendor_leaves() {
-    let field = AnalogField::new(0_u8, 5, 2).expect("field");
-    assert_eq!(field.extract(0b1011_0110), 0b1101);
-    assert_eq!(field.insert(0b1111_1111, 0b0010), Some(0b1100_1011));
-    // A value wider than the field would leak above it in the vendor leaf.
-    assert_eq!(field.insert(0, 0b1_0000), None);
-    let whole = AnalogField::new(0_u8, 7, 0).expect("field");
-    assert_eq!(whole.insert(0x12, 0xab), Some(0xab));
-}
-
-#[test]
 fn a_field_read_extracts_after_the_completed_read() {
     let mut model = Model::new(3);
     model.registers[2] = 0b0110_0000;
@@ -187,7 +169,7 @@ impl ParallelAnalogBus for ParallelModel {
         self.operations.push(ParallelOperation::Pair(pair));
     }
 
-    fn is_busy(&self, host: ParallelHost) -> bool {
+    fn is_busy(&self, host: Host) -> bool {
         self.busy.get()[host as usize] != 0
     }
 }
@@ -444,7 +426,7 @@ fn configuration_index_exhaustion_returns_the_exact_index_without_wrapping() {
 fn parallel_index_exhaustion_is_latched_without_restarting_a_pair_or_restoring() {
     let pairs = |_: usize| Some(7_u8);
     let mut transition = ParallelTransition::new(pairs);
-    transition.phase = ParallelPhase::Await(usize::MAX, ParallelHost::Second);
+    transition.phase = ParallelPhase::Await(usize::MAX, Host::Host1);
     let error = TransitionError::IndexExhausted { index: usize::MAX };
     assert_eq!(transition.advance(), Err(error));
     assert_eq!(transition.pair_index(), Some(usize::MAX));
@@ -504,4 +486,23 @@ fn an_unrouted_address_ends_the_transaction_and_stays_refused() {
     assert_eq!(read.poll(), Err(DriverError::Unrouted));
     drop(read);
     assert_eq!(bus.asked.get(), 1, "no later poll reaches the bus");
+}
+
+#[test]
+fn a_configuration_field_write_refuses_the_read_of_another_byte() {
+    let commands = |index: usize| {
+        (index == 0).then(|| {
+            ConfigurationCommand::Modify(AnalogField::new(1_u8, 3, 0).expect("field"), 0x9)
+        })
+    };
+    let mut transition = ConfigurationTransition::new(commands);
+    assert_eq!(transition.action(), Action::Read { address: 1 });
+    assert_eq!(
+        transition.advance(Completion::Read {
+            address: 2,
+            value: 0xf0
+        }),
+        Err(TransitionError::WrongCompletion)
+    );
+    assert_eq!(transition.action(), Action::Read { address: 1 });
 }
