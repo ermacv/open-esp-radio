@@ -74,7 +74,7 @@ pub(in crate::image) fn usb_packet(s: &mut Session<'_>) {
     admit(s, 0x226d3);
     admit(s, 0x226d4);
     usb_mask_all(s);
-    route(s, pac::Interrupt::USB_SERIAL_JTAG, false);
+    unbind(s, pac::Interrupt::USB_SERIAL_JTAG);
 }
 
 fn init(s: &mut Session<'_>) {
@@ -99,8 +99,8 @@ fn init(s: &mut Session<'_>) {
         s.generic.systimer.systimer.modify_target_conf(i, |w| {
             w.set_period_mode(false).set_timer_unit_sel(false);
         });
-        sy_work(s, n, false);
-        sy_ena(s, n, true);
+        sy_work(s, n, ComparatorWork::Disabled);
+        sy_ena(s, n, ComparatorInterrupt::Enabled);
         sy_clear(s, n);
     }
 }
@@ -127,11 +127,11 @@ fn count(s: &Session<'_>, tag: u32) -> Option<u64> {
 }
 fn stop(s: &mut Session<'_>) {
     for n in 0..2 {
-        sy_work(s, n, false);
-        sy_ena(s, n, false);
+        sy_work(s, n, ComparatorWork::Disabled);
+        sy_ena(s, n, ComparatorInterrupt::Disabled);
         sy_clear(s, n);
     }
-    route(s, pac::Interrupt::SYSTIMER_TARGET0, false);
+    unbind(s, pac::Interrupt::SYSTIMER_TARGET0);
 }
 pub(in crate::image) fn expiry(s: &mut Session<'_>) {
     init(s);
@@ -199,7 +199,7 @@ pub(in crate::image) fn wrap(s: &mut Session<'_>) {
     // Derived from the modeled counter high-field width, not a local MMIO mask.
     const MODULUS: u64 = 1u64 << (32 + pac::systimer::unit0_value_hi::TIMER_UNIT0_VALUE_HI_WIDTH);
     for (tag, boundary) in [(0x22900, 1u64 << 32), (0x22980, MODULUS)] {
-        sy_work(s, 0, false);
+        sy_work(s, 0, ComparatorWork::Disabled);
         sy_clear(s, 0);
         seed(s, boundary - 16_000);
         count(s, tag);

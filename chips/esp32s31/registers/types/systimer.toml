@@ -143,18 +143,21 @@ description = "Configures whether or not to enable generation of ETM events.\\\\
 name = "TARGET2_WORK_EN"
 bits = "22"
 class = "plain"
+values = { dictionary = "COMPARATOR_WORK" }
 description = "Configures whether or not to enable COMP2.\\\\ 0: Disable\\\\ 1: Enable\\\\ Enables comparator 2."
 
 [[registers.fields]]
 name = "TARGET1_WORK_EN"
 bits = "23"
 class = "plain"
+values = { dictionary = "COMPARATOR_WORK" }
 description = "Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026."
 
 [[registers.fields]]
 name = "TARGET0_WORK_EN"
 bits = "24"
 class = "plain"
+values = { dictionary = "COMPARATOR_WORK" }
 description = "Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026."
 
 [[registers.fields]]
@@ -441,18 +444,21 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "TARGET0_INT_ENA"
 bits = "0"
 class = "plain"
+values = { dictionary = "COMPARATOR_INTERRUPT" }
 description = "Write 1 to enable SYSTIMER_TARGET0_INT. Enables comparator 0's interrupt."
 
 [[registers.fields]]
 name = "TARGET1_INT_ENA"
 bits = "1"
 class = "plain"
+values = { dictionary = "COMPARATOR_INTERRUPT" }
 description = "Write 1 to enable SYSTIMER_TARGET1_INT. Enables comparator 1's interrupt."
 
 [[registers.fields]]
 name = "TARGET2_INT_ENA"
 bits = "2"
 class = "plain"
+values = { dictionary = "COMPARATOR_INTERRUPT" }
 description = "Write 1 to enable SYSTIMER_TARGET2_INT. Enables comparator 2's interrupt."
 
 [[registers]]
@@ -616,3 +622,17 @@ name = "DATE"
 bits = "31:0"
 class = "plain"
 description = "Version control register."
+
+[[dictionaries]]
+name = "COMPARATOR_WORK"
+description = "A comparator's work enable (TARGETn_WORK_EN): 0 disables comparator n, 1 enables it."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "The comparator is disabled.", sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }, { name = "ENABLED", value = 0x1, description = "The comparator is enabled.", sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"]
+
+[[dictionaries]]
+name = "COMPARATOR_INTERRUPT"
+description = "A comparator's interrupt enable (TARGETn_INT_ENA): write 1 to enable SYSTIMER_TARGETn_INT."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "The comparator's interrupt is disabled.", sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }, { name = "ENABLED", value = 0x1, description = "The comparator's interrupt is enabled.", sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"] }]
+sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H"]

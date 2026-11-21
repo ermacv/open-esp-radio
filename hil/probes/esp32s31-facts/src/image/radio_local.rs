@@ -1,6 +1,7 @@
 //! Local timer causes only: no RF operation or DMA pointer publication.
 use super::{Session, contain, emit, pac};
 use oer_portable_mmio::{Bits, Index};
+use pac::modem_pwr::dictionaries::{EventEnable, Run, Snapshot};
 use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
 
 pub(super) struct Radio {
@@ -179,20 +180,20 @@ fn prepare(s: &mut Session<'_>) {
     }
 }
 
-fn wifi_mask(s: &mut Session<'_>, enabled: bool) {
+fn wifi_mask(s: &mut Session<'_>, enabled: EventEnable) {
     s.radio.power.modify_enable(|w| {
-        w.set_tbtt_0(false)
-            .set_tbtt_1(false)
-            .set_tbtt_2(false)
-            .set_tbtt_3(false)
+        w.set_tbtt_0(EventEnable::Disabled)
+            .set_tbtt_1(EventEnable::Disabled)
+            .set_tbtt_2(EventEnable::Disabled)
+            .set_tbtt_3(EventEnable::Disabled)
             .set_tsf_timer_0(enabled)
             .set_tsf_timer_1(enabled)
-            .set_tsf_timer_2(false)
-            .set_tsf_timer_3(false)
+            .set_tsf_timer_2(EventEnable::Disabled)
+            .set_tsf_timer_3(EventEnable::Disabled)
             .set_bits_8_16_opaque(Bits::constant::<0>())
-            .set_beacon_filter_wake(false)
+            .set_beacon_filter_wake(EventEnable::Disabled)
             .set_bit_18_opaque(false)
-            .set_beacon_miss(false)
+            .set_beacon_miss(EventEnable::Disabled)
             .set_bits_20_31_opaque(Bits::constant::<0>());
     });
     oer_portable_riscv::fence();
@@ -209,35 +210,64 @@ fn wifi_state(s: &mut Session<'_>, tag: u32) {
             .int_status_3(),
     );
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(true);
+        w.set_snapshot_station_tsf(Snapshot::Selected);
     });
     let low = s.radio.load.read_snapshot_low().value();
     let high = s.radio.load.read_snapshot_high().value();
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(false);
+        w.set_snapshot_station_tsf(Snapshot::Unselected);
     });
     let enable = s.radio.power.read_enable();
     emit(
         tag + 1,
         low,
         high,
-        u32::from(enable.tsf_timer_0()) + 2 * u32::from(enable.tsf_timer_1()),
+        enable.tsf_timer_0().bits() + 2 * enable.tsf_timer_1().bits(),
     );
 }
-fn wifi_start(s: &mut Session<'_>, second: bool) {
-    let i = if second { TIMER1 } else { TIMER0 };
+/// The TSF timer a start arms: timer 0 against the station TSF, timer 1
+/// against the SoftAP TSF, each with its own snapshot selector.
+#[derive(Clone, Copy)]
+enum TsfTimer {
+    First,
+    Second,
+}
+
+impl TsfTimer {
+    const fn index(self) -> Index<{ pac::modem_pwr::control::COUNT }> {
+        match self {
+            Self::First => TIMER0,
+            Self::Second => TIMER1,
+        }
+    }
+    const fn station_snapshot(self) -> Snapshot {
+        match self {
+            Self::First => Snapshot::Selected,
+            Self::Second => Snapshot::Unselected,
+        }
+    }
+    const fn softap_snapshot(self) -> Snapshot {
+        match self {
+            Self::First => Snapshot::Unselected,
+            Self::Second => Snapshot::Selected,
+        }
+    }
+}
+
+fn wifi_start(s: &mut Session<'_>, timer: TsfTimer) {
+    let i = timer.index();
     s.radio.timer.modify_control(i, |w| {
-        w.set_timer_enable(false).set_wakeup_enable(false);
+        w.set_timer_enable(Run::Stopped).set_wakeup_enable(false);
     });
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(!second)
-            .set_snapshot_softap_tsf(second);
+        w.set_snapshot_station_tsf(timer.station_snapshot())
+            .set_snapshot_softap_tsf(timer.softap_snapshot());
     });
     let low = s.radio.load.read_snapshot_low().value();
     let high = s.radio.load.read_snapshot_high().value();
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(false)
-            .set_snapshot_softap_tsf(false);
+        w.set_snapshot_station_tsf(Snapshot::Unselected)
+            .set_snapshot_softap_tsf(Snapshot::Unselected);
     });
     // The model exposes exactly the three high target bits. No raw MMIO mask.
     s.radio.timer.modify_target_n(i, |w| {
@@ -245,21 +275,21 @@ fn wifi_start(s: &mut Session<'_>, second: bool) {
     });
     s.radio.timer.modify_control(i, |w| {
         w.set_target_high(Bits::truncate(high))
-            .set_timer_enable(true);
+            .set_timer_enable(Run::Running);
     });
     let start = oer_portable_riscv::cycle32();
     while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let raw = s.radio.power.read_raw();
-        if if second {
-            raw.tsf_timer_1()
-        } else {
-            raw.tsf_timer_0()
-        } {
+        let fired = match timer {
+            TsfTimer::First => raw.tsf_timer_0(),
+            TsfTimer::Second => raw.tsf_timer_1(),
+        };
+        if fired {
             break;
         }
     }
     s.radio.timer.modify_control(i, |w| {
-        w.set_timer_enable(false);
+        w.set_timer_enable(Run::Stopped);
     });
     oer_portable_riscv::fence();
 }
@@ -322,7 +352,7 @@ fn wifi_prepare(s: &mut Session<'_>) {
     s.radio.rtc.modify_sta_tsf_control(|w| {
         w.set_sta_tsf_enable_low(true)
             .set_sta_tsf_enable_high(true)
-            .set_sta_tbtt_enable(false);
+            .set_sta_tbtt_enable(Run::Stopped);
     });
     s.radio.rtc.modify_sta_tsf_control(|w| {
         w.set_sta_tsf_mode(pac::modem_pwr::sta_tsf_control::StaTsfMode::Enabled);
@@ -360,26 +390,26 @@ fn wifi_prepare(s: &mut Session<'_>) {
 pub(super) fn wifi_timers(s: &mut Session<'_>) {
     wifi_prepare(s);
     wifi_state(s, 0x8310);
-    wifi_start(s, false);
+    wifi_start(s, TsfTimer::First);
     wifi_state(s, 0x8320); // RAW with ENA=0
-    wifi_mask(s, true);
+    wifi_mask(s, EventEnable::Enabled);
     wifi_state(s, 0x8330);
     let selected = s.radio.power.sample_mac_power_interrupt();
-    wifi_mask(s, false);
+    wifi_mask(s, EventEnable::Disabled);
     wifi_state(s, 0x8340);
     s.radio.power.acknowledge_mac_power_interrupt(selected);
     oer_portable_riscv::fence();
     wifi_state(s, 0x8350); // sampled W1C with mask=0
-    wifi_mask(s, true);
+    wifi_mask(s, EventEnable::Enabled);
     wifi_state(s, 0x8360);
-    wifi_start(s, true);
+    wifi_start(s, TsfTimer::Second);
     wifi_state(s, 0x8370);
     let selected = s.radio.power.sample_mac_power_interrupt();
     s.radio.power.acknowledge_mac_power_interrupt(selected);
     oer_portable_riscv::fence();
     wifi_state(s, 0x8380); // enabled W1C
-    wifi_mask(s, false);
-    wifi_start(s, false);
+    wifi_mask(s, EventEnable::Disabled);
+    wifi_start(s, TsfTimer::First);
     wifi_state(s, 0x8390);
     s.radio.power.clear_all_mac_power_interrupts();
     oer_portable_riscv::fence();

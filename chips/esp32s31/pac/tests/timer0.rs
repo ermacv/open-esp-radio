@@ -1,22 +1,23 @@
 //! The IRQ bank preserves sibling lanes when changing T0's enable.
-use oer_chips_esp32s31_pac::timg::Timg0Timer0;
+use oer_chips_esp32s31_pac::timg::{Timg0Timer0, int_ena_timers::T0IntEna};
 
 #[test]
 fn masking_timer0_preserves_the_timer1_and_watchdog_enables() {
     let mut words = [u32::MAX; 64];
     let mut timer = Timg0Timer0::host(&mut words).expect("host storage covers the owner");
     timer.modify_int_ena_timers(|w| {
-        w.set_t0_int_ena(false);
+        w.set_t0_int_ena(T0IntEna::Disabled);
     });
     let masked = timer.read_int_ena_timers();
-    assert!(!masked.t0_int_ena());
+    assert_eq!(masked.t0_int_ena(), T0IntEna::Disabled);
     assert!(masked.t1_int_ena());
     assert!(masked.wdt_int_ena());
     timer.modify_int_ena_timers(|w| {
-        w.set_t0_int_ena(true);
+        w.set_t0_int_ena(T0IntEna::Enabled);
     });
     let enabled = timer.read_int_ena_timers();
-    assert!(enabled.t0_int_ena() && enabled.t1_int_ena() && enabled.wdt_int_ena());
+    assert_eq!(enabled.t0_int_ena(), T0IntEna::Enabled);
+    assert!(enabled.t1_int_ena() && enabled.wdt_int_ena());
 }
 
 #[test]

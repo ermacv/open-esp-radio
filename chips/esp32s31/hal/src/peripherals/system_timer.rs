@@ -212,12 +212,16 @@ pub fn open_clock<P: Placement>(clock: &mut HpSysClkrstSystimer<P>) {
 
 impl<P: Placement> SystimerComparators<P> {
     #[inline(always)]
-    fn set_enabled(&mut self, comparator: Comparator, enabled: bool) {
+    fn set_work(
+        &mut self,
+        comparator: Comparator,
+        work: oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorWork,
+    ) {
         self.0.modify_conf(|conf| {
             match comparator {
-                Comparator::Zero => conf.set_target0_work_en(enabled),
-                Comparator::One => conf.set_target1_work_en(enabled),
-                Comparator::Two => conf.set_target2_work_en(enabled),
+                Comparator::Zero => conf.set_target0_work_en(work),
+                Comparator::One => conf.set_target1_work_en(work),
+                Comparator::Two => conf.set_target2_work_en(work),
             };
         });
     }
@@ -232,13 +236,22 @@ impl<P: Placement> Comparators for SystimerComparators<P> {
         self.0.modify_target_conf(index(comparator), |conf| {
             conf.set_period_mode(false).set_timer_unit_sel(false);
         });
-        self.set_enabled(comparator, false);
+        self.set_work(
+            comparator,
+            oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorWork::Disabled,
+        );
         alarm.acknowledge();
         self.0.modify_int_ena(|enable| {
             match comparator {
-                Comparator::Zero => enable.set_target0_int_ena(true),
-                Comparator::One => enable.set_target1_int_ena(true),
-                Comparator::Two => enable.set_target2_int_ena(true),
+                Comparator::Zero => enable.set_target0_int_ena(
+                    oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorInterrupt::Enabled,
+                ),
+                Comparator::One => enable.set_target1_int_ena(
+                    oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorInterrupt::Enabled,
+                ),
+                Comparator::Two => enable.set_target2_int_ena(
+                    oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorInterrupt::Enabled,
+                ),
             };
         });
     }
@@ -250,7 +263,10 @@ impl<P: Placement> Comparators for SystimerComparators<P> {
     /// SOURCE: ESP-IDF 4d80c1b2 `esp_hal_systimer/systimer_hal.c`
     /// (`systimer_hal_set_alarm_target`).
     fn program(&mut self, comparator: Comparator, ticks: Option<u64>) {
-        self.set_enabled(comparator, false);
+        self.set_work(
+            comparator,
+            oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorWork::Disabled,
+        );
         let Some(ticks) = ticks else { return };
         let index = index(comparator);
         // Both supported targets are little-endian; split the counter value
@@ -263,7 +279,10 @@ impl<P: Placement> Comparators for SystimerComparators<P> {
             target.set_lo(low);
         });
         self.0.trigger_comp_load_load(index);
-        self.set_enabled(comparator, true);
+        self.set_work(
+            comparator,
+            oer_chips_esp32s31_pac::systimer::dictionaries::ComparatorWork::Enabled,
+        );
     }
 }
 

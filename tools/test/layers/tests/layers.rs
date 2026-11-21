@@ -7536,7 +7536,6 @@ const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
     ("chips/family/radio/coex", 1, 0, BY_RADIO_SYSTEM),
     ("chips/family/radio/phy", 2, 1, BY_PHY),
     ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
-    ("hil/probes/esp32s31-facts", 0, 12, BY_HIL),
 ];
 
 /// The thresholds a package reads: the tools' and the deferred packages'

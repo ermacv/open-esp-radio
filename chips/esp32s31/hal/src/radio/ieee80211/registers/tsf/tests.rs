@@ -44,7 +44,11 @@ fn a_station_tsf_is_loaded_low_word_high_word_then_strobe() {
         .wifi_mac_tsf_load
         .read_tsf_load_control();
     assert!(control.load_station_tsf());
-    assert!(!(control.load_softap_tsf() || control.snapshot_station_tsf()));
+    assert!(!control.load_softap_tsf());
+    assert_eq!(
+        control.snapshot_station_tsf(),
+        oer_chips_esp32s31_pac::modem_pwr::dictionaries::Snapshot::Unselected
+    );
 }
 
 #[test]
@@ -88,7 +92,10 @@ fn the_station_tsf_scheduler_is_enabled_in_two_edges() {
         .read_sta_tsf_control();
     assert!(control.sta_tsf_enable_low() && control.sta_tsf_enable_high());
     assert_eq!(control.sta_tsf_mode_variant(), Some(StaTsfMode::Enabled));
-    assert!(!control.sta_tbtt_enable());
+    assert_eq!(
+        control.sta_tbtt_enable(),
+        oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Stopped
+    );
 }
 
 #[test]
@@ -123,7 +130,10 @@ fn a_tbtt_schedule_programs_every_word_of_hal_set_sta_tbtt() {
     let mac = &owners.registers.mac;
     let rtc = &mac.wifi_mac_rtc_timer_update;
     let control = rtc.read_sta_tsf_control();
-    assert!(control.sta_tbtt_enable());
+    assert_eq!(
+        control.sta_tbtt_enable(),
+        oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Running
+    );
     assert_eq!(control.sta_tbtt_ahead_time(), 0x1234);
     assert_eq!(rtc.read_sta_light_sleep_wake_ahead().time(), 0x0567);
     assert_eq!(
@@ -158,7 +168,10 @@ fn stopping_the_tbtt_clears_only_its_enable() {
         .mac
         .wifi_mac_rtc_timer_update
         .read_sta_tsf_control();
-    assert!(!control.sta_tbtt_enable());
+    assert_eq!(
+        control.sta_tbtt_enable(),
+        oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Stopped
+    );
     assert!(control.sta_tsf_enable_low() && control.sta_tsf_enable_high());
 }
 
@@ -174,7 +187,10 @@ fn the_tbtt_leads_and_interval_replace_their_fields() {
     let rtc = &owners.registers.mac.wifi_mac_rtc_timer_update;
     let control = rtc.read_sta_tsf_control();
     assert_eq!(control.sta_tbtt_ahead_time(), 0x0102);
-    assert!(control.sta_tbtt_enable());
+    assert_eq!(
+        control.sta_tbtt_enable(),
+        oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Running
+    );
     let wake = rtc.read_sta_light_sleep_wake_ahead();
     assert_eq!(wake.time(), 0x0304);
     assert_eq!(wake.bits_0_15_opaque(), 0xffff);

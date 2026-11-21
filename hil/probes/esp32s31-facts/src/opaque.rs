@@ -3,6 +3,9 @@
 //! irq-blobray-wifi.md (P0, P-BA, BB-L, P-TSENS).
 use super::{Bits, Index, Session, contain, emit, pac};
 use pac::pmu::hp_active_icg_modem::HpActiveDigIcgModemCode;
+use pac::wifi_bb::baseband_watchdog_enable::{
+    WatchdogInterruptEnable, WatchdogResetEnable, WatchdogTimeoutClearRequest,
+};
 
 /// Additional MAC owners; shared PHY/analog/clock owners are borrowed from
 /// `Session::sar`, like the BLE and local-timer leaves.
@@ -338,7 +341,12 @@ fn bb_snapshot(s: &Session<'_>, tag: u32) -> u32 {
     );
     status
 }
-fn set_bb(s: &mut Session<'_>, irq: bool, clear: bool, reset: bool) {
+fn set_bb(
+    s: &mut Session<'_>,
+    irq: WatchdogInterruptEnable,
+    clear: WatchdogTimeoutClearRequest,
+    reset: WatchdogResetEnable,
+) {
     s.sar
         .radio
         .phy_baseband_config_oracle_wifi_bb
@@ -391,7 +399,12 @@ pub(super) fn watchdog(s: &mut Session<'_>) {
     let b = &mut s.sar.radio.phy_baseband_config_oracle_wifi_bb;
     let old_control = b.read_baseband_watchdog_control();
     let old_enable = b.read_baseband_watchdog_enable();
-    set_bb(s, false, false, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Disabled,
+        WatchdogTimeoutClearRequest::Idle,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xd0);
     s.sar
         .radio
@@ -402,9 +415,19 @@ pub(super) fn watchdog(s: &mut Session<'_>) {
                 .set_bit_30_opaque(true)
                 .set_bit_31_opaque(true);
         });
-    set_bb(s, true, true, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Enabled,
+        WatchdogTimeoutClearRequest::Requested,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xd3);
-    set_bb(s, true, false, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Enabled,
+        WatchdogTimeoutClearRequest::Idle,
+        WatchdogResetEnable::Disabled,
+    );
     wait_cycles(4096);
     let positive = bb_snapshot(s, 0xd6);
     s.sar
@@ -416,14 +439,39 @@ pub(super) fn watchdog(s: &mut Session<'_>) {
                 .set_bit_30_opaque(old_control.bit_30_opaque())
                 .set_bit_31_opaque(old_control.bit_31_opaque());
         });
-    set_bb(s, false, false, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Disabled,
+        WatchdogTimeoutClearRequest::Idle,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xd9);
-    set_bb(s, true, false, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Enabled,
+        WatchdogTimeoutClearRequest::Idle,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xdc);
-    set_bb(s, true, true, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Enabled,
+        WatchdogTimeoutClearRequest::Requested,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xdf);
-    set_bb(s, false, false, false);
-    set_bb(s, false, true, false);
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Disabled,
+        WatchdogTimeoutClearRequest::Idle,
+        WatchdogResetEnable::Disabled,
+    );
+    set_bb(
+        s,
+        WatchdogInterruptEnable::Disabled,
+        WatchdogTimeoutClearRequest::Requested,
+        WatchdogResetEnable::Disabled,
+    );
     bb_snapshot(s, 0xe2);
     set_bb(
         s,
@@ -759,13 +807,13 @@ fn bb_control(r: pac::wifi_bb::baseband_watchdog_control::R) -> u32 {
 }
 
 fn bb_enable(r: pac::wifi_bb::baseband_watchdog_enable::R) -> u32 {
-    (u32::from(r.watchdog_timeout_clear_request())
+    (r.watchdog_timeout_clear_request().bits()
         << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_TIMEOUT_CLEAR_REQUEST_MASK
             .trailing_zeros())
-        | (u32::from(r.watchdog_interrupt_enable())
+        | (r.watchdog_interrupt_enable().bits()
             << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_INTERRUPT_ENABLE_MASK
                 .trailing_zeros())
-        | (u32::from(r.watchdog_reset_enable())
+        | (r.watchdog_reset_enable().bits()
             << pac::wifi_bb::baseband_watchdog_enable::WATCHDOG_RESET_ENABLE_MASK.trailing_zeros())
         | (r.bits_0_28_opaque().get()
             << pac::wifi_bb::baseband_watchdog_enable::BITS_0_28_OPAQUE_MASK.trailing_zeros())

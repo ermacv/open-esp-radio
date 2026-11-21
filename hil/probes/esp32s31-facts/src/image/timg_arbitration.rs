@@ -4,6 +4,7 @@
 use super::{CONTROLS, LINE, Session, emit, generic, pac, setup, wait_window};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use oer_portable_mmio::{Bits, Index};
+use pac::timg::int_ena_timers::T0IntEna;
 
 const LIMIT: u32 = 200_000;
 const LOW: Index<{ pac::clic::ip::COUNT }> = Index::constant::<LINE>();
@@ -52,7 +53,7 @@ pub(super) fn interrupt(clic: &mut pac::clic::Clic) -> bool {
     true
 }
 
-fn ena(s: &mut Session<'_>, value: bool) {
+fn ena(s: &mut Session<'_>, value: T0IntEna) {
     s.generic.timer.timg0_timer0.modify_int_ena_timers(|w| {
         w.set_t0_int_ena(value);
     });
@@ -116,7 +117,7 @@ fn state(s: &Session<'_>, tag: u32) {
         tag,
         u32::from(raw(s)),
         u32::from(bank.read_int_st_timers().t0_int_st()),
-        u32::from(timer.read_int_ena_timers().t0_int_ena())
+        timer.read_int_ena_timers().t0_int_ena().bits()
             | (u32::from(c.t_en()) << 1)
             | (u32::from(c.t_alarm_en()) << 2),
     );
@@ -149,7 +150,7 @@ fn begin(s: &mut Session<'_>) -> bool {
         .set_reg_timergrp0_t0_clk_en(true);
     });
     stop(s);
-    ena(s, false);
+    ena(s, T0IntEna::Disabled);
     clear(s);
     s.source.store_hp_cpu_int_from_cpu_2(false);
     let root = s.sar.boot.hp_sys_clkrst_boot_clock.read_soc_clk_sel();
@@ -178,7 +179,7 @@ fn begin(s: &mut Session<'_>) -> bool {
 }
 fn finish(s: &mut Session<'_>) {
     stop(s);
-    ena(s, false);
+    ena(s, T0IntEna::Disabled);
     clear(s);
     s.source.store_hp_cpu_int_from_cpu_2(false);
     for i in [LOW, HIGH] {
@@ -195,14 +196,14 @@ fn finish(s: &mut Session<'_>) {
 // SOURCE: hal/src/peripherals/timg0_alarm.rs and ESP_IDF_4D59230D_S31_TIMER0_LL.
 fn arm(s: &mut Session<'_>, us: u32) -> [u32; 2] {
     stop(s);
-    ena(s, false);
+    ena(s, T0IntEna::Disabled);
     oer_portable_riscv::fence();
     target(s, us);
     load(s, 0);
     let before = oer_portable_riscv::cycle32();
     s.generic.timer.timg0_timer0.configure_timg0_timer0_armed();
     oer_portable_riscv::fence();
-    ena(s, true);
+    ena(s, T0IntEna::Enabled);
     oer_portable_riscv::fence();
     [before, oer_portable_riscv::cycle32()]
 }
@@ -321,7 +322,7 @@ pub(super) fn equal_below(s: &mut Session<'_>) {
         clear(s);
         load(s, 10000);
         target(s, alarm);
-        ena(s, true);
+        ena(s, T0IntEna::Enabled);
         if let Some(c) = count(s) {
             emit(0x1940, alarm, c as u32, (c >> 32) as u32);
         }
@@ -348,7 +349,7 @@ pub(super) fn running_past(s: &mut Session<'_>) {
         .timer
         .timg0_timer0
         .configure_timg0_timer0_counting();
-    ena(s, true);
+    ena(s, T0IntEna::Enabled);
     clear(s);
     if let Some(c) = count(s) {
         emit(0x1950, c as u32, (c >> 32) as u32, 0);

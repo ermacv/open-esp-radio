@@ -329,7 +329,9 @@ pub fn configure_watchdog<P: PhyPlacement>(bb: &mut BasebandRegisters<P>) {
     });
     // SOURCE: ROM_REV0_PHY_REGISTER_INITIALIZATION, S31_ESP_PACS_SVD.
     bb.wifi_bb.modify_baseband_watchdog_enable(|w| {
-        w.set_watchdog_reset_enable(true);
+        w.set_watchdog_reset_enable(
+            oer_chips_esp32s31_pac::wifi_bb::baseband_watchdog_enable::WatchdogResetEnable::Enabled,
+        );
     });
 }
 

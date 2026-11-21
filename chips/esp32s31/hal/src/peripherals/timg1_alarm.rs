@@ -234,7 +234,10 @@ impl<P: Placement> Timg1AlarmProgram<P> {
 
     /// Whether T0's peripheral delivery lane is enabled.
     pub fn enabled(&self) -> bool {
-        self.0.read_int_ena_timers().t0_int_ena()
+        matches!(
+            self.0.read_int_ena_timers().t0_int_ena(),
+            oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled
+        )
     }
 
     /// Open T1's delivery lane in the group's enable word, which this
@@ -304,10 +307,10 @@ impl<P: Placement> ProgramRegisters for Timg1AlarmProgram<P> {
         self.0.configure_timg1_timer0_stopped();
     }
 
-    fn enable(&mut self, enabled: bool) {
+    fn enable(&mut self, lane: oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna) {
         // Preserve T1, WDT, reserved and unknown lanes. No RAW/CLR authority.
         self.0.modify_int_ena_timers(|w| {
-            w.set_t0_int_ena(enabled);
+            w.set_t0_int_ena(lane);
         });
     }
 
@@ -410,8 +413,14 @@ mod tests {
         let mut program = program(&mut words);
         program.open_timer1();
         assert!(program.timer1_open() && !program.enabled());
-        ProgramRegisters::enable(&mut program, true);
-        ProgramRegisters::enable(&mut program, false);
+        ProgramRegisters::enable(
+            &mut program,
+            oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled,
+        );
+        ProgramRegisters::enable(
+            &mut program,
+            oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Disabled,
+        );
         assert!(program.timer1_open(), "T0's lane writes keep T1's");
     }
 
