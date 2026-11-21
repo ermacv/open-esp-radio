@@ -2282,3 +2282,50 @@ fn main() {
     );
     assert_eq!(output.trim(), "[Shut, Open]");
 }
+
+#[test]
+fn a_named_value_of_a_field_open_for_writing_converts_into_its_setters_type() {
+    let rust = rendered_with(&[
+        (
+            "types/radio.toml",
+            "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"",
+            "name = \"ARGUMENT\"\nbits = \"15:8\"\nclass = \"write-only\"\n\
+             values = [{ name = \"FIRST\", value = 1 }, { name = \"LAST\", value = 0xff }]",
+        ),
+        (
+            "types/radio.toml",
+            "write-range = { min = 1, max = 5 }",
+            "write-range = { min = 1, max = 5 }\n\
+             values = [{ name = \"LOW\", value = 1 }, { name = \"HIGH\", value = 5 }]",
+        ),
+    ]);
+    // A native setter: the name becomes the field's number, untruncated.
+    assert!(rust.contains("impl From<Argument> for u8 {"), "{rust}");
+    // A bounded setter whose range holds every name: the range type.
+    assert!(rust.contains("impl From<Level> for LevelRange {"), "{rust}");
+    // A field written only by name takes the enum itself: no conversion.
+    assert!(!rust.contains("impl From<Mode> for"), "{rust}");
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let argument: u8 = radio::command::Argument::Last.into();
+    let level: radio::config::LevelRange = radio::config::Level::High.into();
+    println!("{argument} {}", level.get());
+}
+"#,
+    );
+    assert_eq!(output.trim(), "255 5");
+}
+
+#[test]
+fn a_named_value_outside_the_write_range_has_no_conversion() {
+    let rust = rendered_with(&[(
+        "types/radio.toml",
+        "write-range = { min = 1, max = 5 }",
+        "write-range = { min = 1, max = 5 }\n\
+         values = [{ name = \"OFF\", value = 0 }, { name = \"HIGH\", value = 5 }]",
+    )]);
+    assert!(rust.contains("pub enum Level {"), "{rust}");
+    assert!(!rust.contains("impl From<Level> for"), "{rust}");
+}

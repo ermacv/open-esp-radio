@@ -959,7 +959,11 @@ unless a narrower `write-range` bounds it: then it takes a bounded
 its getter returns the name, and no getter returns its number. A field with a
 few named values reads as its number, and its `<field>_variant()` getter
 returns `Option` of the name. A reader that wants one fact writes
-`matches!`; no predicate getter is generated. A
+`matches!`; no predicate getter is generated. A field with named values that stays open
+for writing (its setter takes the number, or a write range that holds every
+name) has `From` of its enum into the setter's type, so a writer passes a
+name without converting it to a number; a name outside the write range has
+no conversion. A
 field with a `pointer` fact takes `oer_portable_memory::DmaRef<Layout>` of its target
 layout, or the window's `DmaWindowAddress` for a raw buffer, and stores its
 encoding (`member-offset` added, shifted, its width kept), and
