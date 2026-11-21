@@ -27,20 +27,8 @@ pub(crate) fn restore_configuration<P: Placement>(
         w.set_bits_19_20_opaque(saved.control.bits_19_20_opaque())
             .set_bits_2_16_opaque(saved.control.bits_2_16_opaque());
     });
-    set_start_enabled(
-        estimator,
-        matches!(
-            saved.control.start_enable(),
-            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
-        ),
-    );
-    set_measurement_enabled(
-        estimator,
-        matches!(
-            saved.control.measurement_enable(),
-            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
-        ),
-    );
+    set_start_enabled(estimator, saved.control.start_enable());
+    set_measurement_enabled(estimator, saved.control.measurement_enable());
 }
 
 /// SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR, BLOB_LIBPHY_PHY_CHECK_RX_SAT.
@@ -76,28 +64,20 @@ pub(crate) fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, c
 /// Set or clear the first estimator-enable phase through one fresh RMW.
 pub(crate) fn set_start_enabled<P: Placement>(
     estimator: &mut PhyIqEstimatorOracle<P>,
-    enabled: bool,
+    start: crate::types::PhyEstimatorStart,
 ) {
     estimator.modify_estimator_control(|w| {
-        w.set_start_enable(if enabled {
-            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Disabled
-        });
+        w.set_start_enable(start);
     });
 }
 
 /// Set or clear the second estimator-enable phase through one fresh RMW.
 pub(crate) fn set_measurement_enabled<P: Placement>(
     estimator: &mut PhyIqEstimatorOracle<P>,
-    enabled: bool,
+    measurement: crate::types::PhyEstimatorMeasurement,
 ) {
     estimator.modify_estimator_control(|w| {
-        w.set_measurement_enable(if enabled {
-            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Disabled
-        });
+        w.set_measurement_enable(measurement);
     });
 }
 
@@ -106,10 +86,16 @@ pub(crate) fn set_measurement_enabled<P: Placement>(
 /// Complete ROM `phy_iq_est_enable` returns immediately from a ready
 /// observation. Its activity read belongs only to the not-ready branch.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn sample_readiness<P: Placement>(estimator: &PhyIqEstimatorOracle<P>) -> (bool, bool) {
-    let ready = estimator.read_estimator_ready_status().ready();
-    let activity = !ready && active(estimator);
-    (ready, activity)
+pub(crate) fn sample_readiness<P: Placement>(
+    estimator: &PhyIqEstimatorOracle<P>,
+) -> super::EstimatorReadiness {
+    if estimator.read_estimator_ready_status().ready() {
+        super::EstimatorReadiness::Ready
+    } else if active(estimator) {
+        super::EstimatorReadiness::Active
+    } else {
+        super::EstimatorReadiness::Quiet
+    }
 }
 
 /// Read I, Q and power accumulators in complete `phy_dc_iq_est` order.

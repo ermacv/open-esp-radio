@@ -1809,11 +1809,17 @@ impl PhyTxIqLoopbackMmioBinding {
     ) -> PhyTxIqLoopbackCompletion {
         match self.action {
             PhyTxIqLoopbackMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                    registers,
+                    crate::hardware::clock_pair(enabled),
+                );
                 PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
             }
             PhyTxIqLoopbackMmioAction::ConfigureRxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, enabled);
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
+                    registers,
+                    crate::hardware::clock_pair(enabled),
+                );
                 PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
             }
         }

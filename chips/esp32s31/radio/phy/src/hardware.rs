@@ -16,7 +16,11 @@ pub(crate) fn set_phy_register_calibration_clock(
     registers: &mut impl SharedPhyAccess,
     enabled: bool,
 ) {
-    registers.set_phy_calibration_clock(enabled);
+    if enabled {
+        registers.enable_phy_calibration_clock();
+    } else {
+        registers.disable_phy_calibration_clock();
+    }
 }
 
 /// Complete rev0 ROM `phy_bb_agc_reg_update`, size `0xa6`.
@@ -28,7 +32,7 @@ pub(crate) fn configure_phy_bb_agc_register_update(registers: &mut impl SharedPh
 /// Complete rev0 ROM `phy_enable_agc`, size `0x28`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn enable_phy_agc(registers: &mut impl SharedPhyAccess) {
-    oer_chips_esp32s31_hal::radio::phy::agc::set_enabled(registers, true);
+    oer_chips_esp32s31_hal::radio::phy::agc::enable(registers);
 }
 
 /// Select the exact AGC state used by `phy_chip_set_chan`.
@@ -39,13 +43,21 @@ pub(crate) fn enable_phy_agc(registers: &mut impl SharedPhyAccess) {
 /// sequence. Both branches are finite and touch no software state.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn set_phy_channel_agc(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    oer_chips_esp32s31_hal::radio::phy::agc::set_enabled(registers, enabled);
+    if enabled {
+        oer_chips_esp32s31_hal::radio::phy::agc::enable(registers);
+    } else {
+        oer_chips_esp32s31_hal::radio::phy::agc::disable(registers);
+    }
 }
 
 /// Complete both branches of rev0 ROM `phy_rx_11b_opt`, size `0xc4`.
 #[cfg(target_arch = "riscv32")]
 fn configure_phy_rx_11b_optimization(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    oer_chips_esp32s31_hal::radio::phy::agc::configure_rx_11b_optimization(registers, enabled);
+    if enabled {
+        oer_chips_esp32s31_hal::radio::phy::agc::enable_rx_11b_optimization(registers);
+    } else {
+        oer_chips_esp32s31_hal::radio::phy::agc::disable_rx_11b_optimization(registers);
+    }
 }
 
 /// Complete rev0 ROM `phy_reg_init` at `0x2f82_3ef8`, size `0x52`, with
@@ -181,9 +193,13 @@ pub(crate) fn configure_phy_rx_gain_dc_registers(
     enabled: bool,
 ) {
     if enabled {
-        registers.set_phy_calibration_clock(true);
+        registers.enable_phy_calibration_clock();
     }
-    registers.set_rx_gain_dc_calibration(enabled);
+    registers.set_rx_gain_dc_calibration(if enabled {
+        oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration::Enabled
+    } else {
+        oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration::Disabled
+    });
 }
 
 /// Program the complete crystal-duty calibration tone without `g_phyFuns`.
@@ -233,7 +249,11 @@ pub(crate) fn configure_phy_calibration_tone_wide(
     selector: u16,
     step: u8,
 ) {
-    registers.configure_calibration_tone(enabled, selector, step);
+    if enabled {
+        registers.start_calibration_tone(selector, step);
+    } else {
+        registers.stop_calibration_tone(selector, step);
+    }
 }
 
 /// Enter or leave the TX-IQ coefficient calibration register mode.
@@ -242,7 +262,11 @@ pub(crate) fn configure_phy_calibration_tone_wide(
 /// one finite read/modify/write and owns no software state.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_txiq_correction(registers: &mut impl SharedPhyAccess, begin: bool) {
-    registers.configure_tx_iq_correction(begin);
+    if begin {
+        registers.begin_tx_iq_correction();
+    } else {
+        registers.end_tx_iq_correction();
+    }
 }
 
 /// Capture tone control into the route TX-IQ restore slot.
@@ -275,7 +299,16 @@ pub(crate) fn configure_phy_txiq_mis_power(
     attenuation: u8,
     selector: u16,
 ) {
-    registers.configure_txiq_mismatch_power(first, polarity, attenuation, selector);
+    let polarity = if polarity {
+        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Inverted
+    } else {
+        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Normal
+    };
+    if first {
+        registers.configure_txiq_mismatch_power_first(polarity, attenuation, selector);
+    } else {
+        registers.configure_txiq_mismatch_power_second(polarity);
+    }
 }
 
 /// Publish one bounded TX-IQ gain or phase coefficient.
@@ -353,13 +386,13 @@ pub(crate) fn configure_phy_front_end_update(registers: &mut impl SharedPhyAcces
 /// Arm one PWDET tone sample before its one-microsecond minimum settle.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn arm_phy_power_detector_tone(registers: &mut impl SharedPhyAccess) {
-    registers.set_power_detector_tone_armed(true);
+    registers.set_power_detector_tone(oer_chips_esp32s31_hal::types::PhyTone::Armed);
 }
 
 /// Clear the temporary tone-arm bit selected by the vendor's `phy_param[0x1aa]`.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn clear_phy_power_detector_tone_arm(registers: &mut impl SharedPhyAccess) {
-    registers.set_power_detector_tone_armed(false);
+    registers.set_power_detector_tone(oer_chips_esp32s31_hal::types::PhyTone::Disarmed);
 }
 
 /// Stop the calibration tone exactly as `phy_stop_tx_tone(1)`.
@@ -550,3 +583,28 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
 
 #[cfg(test)]
 mod tests;
+
+/// The HAL's name of a recovered clock pair's state, from the PHY's own
+/// `bool` until the PHY's area names its actions.
+pub(crate) const fn clock_pair(enabled: bool) -> oer_chips_esp32s31_hal::types::PhyClockPair {
+    if enabled {
+        oer_chips_esp32s31_hal::types::PhyClockPair::Enabled
+    } else {
+        oer_chips_esp32s31_hal::types::PhyClockPair::Disabled
+    }
+}
+
+/// The force-TX/RX phase image `phy_force_txrx_off` writes, from the PHY's
+/// own enable and phase number until the PHY's area names its actions.
+pub(crate) const fn force_txrx_phase(
+    enabled: bool,
+    phase: u8,
+) -> oer_chips_esp32s31_hal::types::PhyForceTxRxPhase {
+    use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase as Phase;
+    match (enabled, phase == 0) {
+        (true, true) => Phase::EnableInitialPhase,
+        (true, false) => Phase::EnableFinalPhase,
+        (false, true) => Phase::DisableInitialPhase,
+        (false, false) => Phase::DisableFinalPhase,
+    }
+}

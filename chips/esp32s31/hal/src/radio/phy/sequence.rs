@@ -22,15 +22,14 @@ pub(crate) fn update_agc<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
         WifiBasebandAgcUpdateMode::RegisterUpdatesEnabled,
     );
 }
-pub(crate) fn configure_rxiq_root_correction<P: RadioPlacement>(
-    parts: &mut RadioPhyParts<P>,
-    begin: bool,
-) {
-    bb::configure_rxiq_root_correction(
-        &mut parts.phy_baseband_config_oracle,
-        &mut parts.phy_pbus,
-        begin,
-    );
+pub(crate) fn begin_rxiq_root_correction<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
+    bb::begin_rxiq_root_correction(&mut parts.phy_baseband_config_oracle);
+}
+
+/// Leave the RXIQ root correction mode.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn end_rxiq_root_correction<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {
+    bb::end_rxiq_root_correction(&mut parts.phy_baseband_config_oracle, &mut parts.phy_pbus);
 }
 // SOURCE: ROM_REV0_PHY_FE_REG_INIT. The table-base update stays between prefix and suffix.
 pub(crate) fn initialize_front_end<P: RadioPlacement>(parts: &mut RadioPhyParts<P>) {

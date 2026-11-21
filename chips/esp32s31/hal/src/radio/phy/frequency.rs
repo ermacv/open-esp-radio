@@ -30,7 +30,7 @@ pub struct ReadConfigurationFields {
     pub address_low: u16,
     pub high_address_or_reset: bool,
     pub read_mode: u8,
-    pub hardware_disabled: bool,
+    pub hardware: crate::types::PhyFrequencyControl,
 }
 
 impl ReadConfiguration {
@@ -39,10 +39,7 @@ impl ReadConfiguration {
             address_low: self.control.memory_address_low().get() as u16,
             high_address_or_reset: self.control.memory_address_high(),
             read_mode: self.number.memory_read_mode().get() as u8,
-            hardware_disabled: matches!(
-                self.control.hardware_frequency_disable(),
-                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
-            ),
+            hardware: self.control.hardware_frequency_disable(),
         }
     }
 }
@@ -109,19 +106,25 @@ pub fn reset_module(registers: &mut impl SharedPhyAccess) {
 
 /// Select whether hardware owns frequency updates.
 #[cfg(target_arch = "riscv32")]
-pub fn set_hardware_control(registers: &mut impl SharedPhyAccess, enabled: bool) {
+pub fn set_hardware_control(
+    registers: &mut impl SharedPhyAccess,
+    control: crate::types::PhyFrequencyControl,
+) {
     ops::set_hardware_control(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
-        enabled,
+        control,
     );
 }
 
 /// Apply complete rev0 ROM `phy_freq_reg_init(2, 4)`.
 #[cfg(target_arch = "riscv32")]
-pub fn initialize_registers(registers: &mut impl SharedPhyAccess, parameter_override: bool) {
+pub fn initialize_registers(
+    registers: &mut impl SharedPhyAccess,
+    mode: ops::FrequencyRegisterMode,
+) {
     ops::initialize_registers(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
-        parameter_override,
+        mode,
     );
 }
 
@@ -250,8 +253,14 @@ pub fn configure_channel_cbw(registers: &mut impl SharedPhyAccess, cbw: u32) {
 
 /// Apply complete rev0 ROM `phy_wifi_enable_set`.
 #[cfg(target_arch = "riscv32")]
-pub fn set_wifi_enabled(registers: &mut impl PhyInitializationAccess, enabled: bool) {
-    crate::radio::ieee80211::baseband::set_wifi_enabled(phy_pac_mut(registers), enabled);
+pub fn enable_wifi(registers: &mut impl PhyInitializationAccess) {
+    crate::radio::ieee80211::baseband::set_wifi_enabled(phy_pac_mut(registers), true);
+}
+
+/// Clear the Wi-Fi baseband enable.
+#[cfg(target_arch = "riscv32")]
+pub fn disable_wifi(registers: &mut impl PhyInitializationAccess) {
+    crate::radio::ieee80211::baseband::set_wifi_enabled(phy_pac_mut(registers), false);
 }
 
 /// Apply complete rev0 ROM `phy_mac_enable_bb`.

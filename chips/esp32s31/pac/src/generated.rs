@@ -72127,6 +72127,41 @@ pub mod fe {
         /// Positioned bits of `FORCE_DIGITAL_GAIN_ENABLE`.
         pub const FORCE_DIGITAL_GAIN_ENABLE_MASK: u32 = 0x10000;
 
+        /// The declared values of the `FORCE_DIGITAL_GAIN_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ForceDigitalGainEnable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl ForceDigitalGainEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 16
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `FORCED_POWER_INDEX` in bits.
         pub const FORCED_POWER_INDEX_WIDTH: u32 = 6;
         /// Greatest unsigned image of `FORCED_POWER_INDEX`.
@@ -72204,8 +72239,8 @@ pub mod fe {
 
             /// The `FORCE_DIGITAL_GAIN_ENABLE` field.
             #[inline]
-            pub const fn force_digital_gain_enable(self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn force_digital_gain_enable(self) -> ForceDigitalGainEnable {
+                ForceDigitalGainEnable::from_field(self.0 >> 16)
             }
 
             /// Complete phy_force_pwr_index replaces bits 22:17 with the low six bits of its second argument.
@@ -72245,8 +72280,8 @@ pub mod fe {
 
             /// The `FORCE_DIGITAL_GAIN_ENABLE` field.
             #[inline]
-            pub const fn force_digital_gain_enable(&self) -> bool {
-                (self.0 & 0x00010000) != 0
+            pub const fn force_digital_gain_enable(&self) -> ForceDigitalGainEnable {
+                ForceDigitalGainEnable::from_field(self.0 >> 16)
             }
 
             /// Complete phy_force_pwr_index replaces bits 22:17 with the low six bits of its second argument.
@@ -72283,8 +72318,11 @@ pub mod fe {
 
             /// Set `FORCE_DIGITAL_GAIN_ENABLE`.
             #[inline]
-            pub fn set_force_digital_gain_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffeffff) | (u32::from(value) << 16);
+            pub fn set_force_digital_gain_enable(
+                &mut self,
+                value: ForceDigitalGainEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
 
@@ -111569,6 +111607,43 @@ pub mod hp_sys_clkrst {
 ///
 /// The analog-I2C master that reaches the radio's analog blocks.
 pub mod i2c_ana_mst {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// The direction of one analog-I2C host command: the host's control word's READ_WRITE bit.
+        ///
+        /// SOURCE: S31_ESP_PACS_SVD.
+        /// The declared values of the `READ_WRITE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ReadWrite {
+            /// The command reads the addressed analog byte.
+            Read = 0x0,
+            /// The command writes the addressed analog byte.
+            Write = 0x1,
+        }
+
+        impl ReadWrite {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Read,
+                    _ => Self::Write,
+                }
+            }
+        }
+    }
+
     /// The `I2C0_CTRL` register.
     ///
     /// Analog-register I2C host-0 command and completion word. The ESP-IDF header declares bits 24:0 as one field I2C0_CTRL; the cited sources subdivide it.
@@ -111652,8 +111727,8 @@ pub mod i2c_ana_mst {
 
             /// The `READ_WRITE` field.
             #[inline]
-            pub const fn read_write(self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn read_write(self) -> super::dictionaries::ReadWrite {
+                super::dictionaries::ReadWrite::from_field(self.0 >> 24)
             }
 
             /// Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027.
@@ -111690,8 +111765,8 @@ pub mod i2c_ana_mst {
 
             /// Set `READ_WRITE`.
             #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
+            pub fn set_read_write(&mut self, value: super::dictionaries::ReadWrite) -> &mut Self {
+                self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
@@ -111790,8 +111865,8 @@ pub mod i2c_ana_mst {
 
             /// The `READ_WRITE` field.
             #[inline]
-            pub const fn read_write(self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn read_write(self) -> super::dictionaries::ReadWrite {
+                super::dictionaries::ReadWrite::from_field(self.0 >> 24)
             }
 
             /// Host bit polled by the ROM command and conditional-reset paths before accepting completion. Its relationship to interrupt source131 is unestablished. SOURCE: BX12_S31_I2C_HOST_PUBLICATION_20261027.
@@ -111834,8 +111909,8 @@ pub mod i2c_ana_mst {
 
             /// Set `READ_WRITE`.
             #[inline]
-            pub fn set_read_write(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
+            pub fn set_read_write(&mut self, value: super::dictionaries::ReadWrite) -> &mut Self {
+                self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
@@ -130111,6 +130186,41 @@ pub mod lp_peri_clkrst {
         /// Positioned bits of `LP_TSENS_RST_EN`.
         pub const LP_TSENS_RST_EN_MASK: u32 = 0x80000000;
 
+        /// The declared values of the `LP_TSENS_RST_EN` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum LpTsensRstEn {
+            Released = 0x0,
+            Asserted = 0x1,
+        }
+
+        impl LpTsensRstEn {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Released,
+                    _ => Self::Asserted,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -130124,8 +130234,8 @@ pub mod lp_peri_clkrst {
 
             /// Temperature-sensor peripheral reset enable, pulsed by its first resource owner.
             #[inline]
-            pub const fn lp_tsens_rst_en(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn lp_tsens_rst_en(self) -> LpTsensRstEn {
+                LpTsensRstEn::from_field(self.0 >> 31)
             }
         }
 
@@ -130141,8 +130251,8 @@ pub mod lp_peri_clkrst {
 
             /// Temperature-sensor peripheral reset enable, pulsed by its first resource owner.
             #[inline]
-            pub const fn lp_tsens_rst_en(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn lp_tsens_rst_en(&self) -> LpTsensRstEn {
+                LpTsensRstEn::from_field(self.0 >> 31)
             }
 
             /// Set `LP_TSENS_CLK_EN`.
@@ -130154,8 +130264,8 @@ pub mod lp_peri_clkrst {
 
             /// Set `LP_TSENS_RST_EN`.
             #[inline]
-            pub fn set_lp_tsens_rst_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_lp_tsens_rst_en(&mut self, value: LpTsensRstEn) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
         }
@@ -270122,6 +270232,41 @@ pub mod wifi_bb {
         /// Positioned bits of `ENABLE`.
         pub const ENABLE_MASK: u32 = 0x1;
 
+        /// The declared values of the `ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Enable {
+            Disabled = 0x0,
+            Enabled = 0x1,
+        }
+
+        impl Enable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -270129,8 +270274,8 @@ pub mod wifi_bb {
         impl R {
             /// One-bit FTM enable argument.
             #[inline]
-            pub const fn enable(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn enable(self) -> Enable {
+                Enable::from_field(self.0)
             }
         }
 
@@ -270140,14 +270285,14 @@ pub mod wifi_bb {
         impl W {
             /// One-bit FTM enable argument.
             #[inline]
-            pub const fn enable(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn enable(&self) -> Enable {
+                Enable::from_field(self.0)
             }
 
             /// Set `ENABLE`.
             #[inline]
-            pub fn set_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_enable(&mut self, value: Enable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
         }

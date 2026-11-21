@@ -20,8 +20,12 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
             ControlCommand::Debug => oer_chips_family_radio_phy::pbus::configure_debug_mode(
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),
             ),
-            ControlCommand::RxClock(enabled) => pbus::configure_rx_clock(self, enabled),
-            ControlCommand::TxClock(enabled) => pbus::configure_tx_clock(self, enabled),
+            ControlCommand::RxClock(enabled) => {
+                pbus::configure_rx_clock(self, crate::hardware::clock_pair(enabled))
+            }
+            ControlCommand::TxClock(enabled) => {
+                pbus::configure_tx_clock(self, crate::hardware::clock_pair(enabled))
+            }
             ControlCommand::WorkMode => {
                 if oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),

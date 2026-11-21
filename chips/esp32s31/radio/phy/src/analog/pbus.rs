@@ -633,8 +633,7 @@ impl PhyForceTxRxMmioBinding {
     ) -> PhyForceTxRxCompletion {
         oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
             registers,
-            self.enabled,
-            self.phase,
+            crate::hardware::force_txrx_phase(self.enabled, self.phase),
         );
         PhyForceTxRxCompletion::Configured {
             enabled: self.enabled,

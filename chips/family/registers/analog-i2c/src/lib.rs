@@ -61,33 +61,72 @@ impl<Address: Copy> AnalogField<Address> {
         self.address
     }
 
-    /// The field's bits in place.
-    pub const fn mask(self) -> u8 {
-        self.mask
+    /// Whether `other` lies in the same bits of its byte: a value of one
+    /// applies to the other.
+    pub const fn same_lanes<Other: Copy>(self, other: AnalogField<Other>) -> bool {
+        self.msb == other.msb && self.lsb == other.lsb
     }
 
     /// The field's value in `byte`, as `phy_i2c_readReg_Mask` extracts it.
     pub const fn extract(self, byte: u8) -> u8 {
-        (byte & self.mask()) >> self.lsb
+        (byte & self.mask) >> self.lsb
     }
 
-    /// `byte` with the field replaced, as `phy_i2c_writeReg_Mask` composes
-    /// it, when `value` fits the field; `None` otherwise.
+    /// `value` in the field's place, when it fits the field; `None`
+    /// otherwise. A constant is built in a const item, which then refuses
+    /// to build when the value does not fit.
     ///
-    /// The vendor leaf ORs `value << lsb` in unmasked, so a wider value
-    /// would also set bits above the field; such values are rejected here.
-    pub const fn insert(self, byte: u8, value: u8) -> Option<u8> {
+    /// The vendor leaf (`phy_i2c_writeReg_Mask`) ORs `value << lsb` in
+    /// unmasked, so a wider value would also set bits above the field; such
+    /// values are refused here.
+    pub const fn place(self, value: u8) -> Option<FieldValue> {
         if value & !(self.mask >> self.lsb) != 0 {
             return None;
         }
-        Some((byte & !self.mask()) | (value << self.lsb))
+        Some(FieldValue {
+            mask: self.mask,
+            lsb: self.lsb,
+            bits: value << self.lsb,
+        })
+    }
+
+    /// The field's value as `byte` holds it: it fits by construction.
+    pub const fn value_in(self, byte: u8) -> FieldValue {
+        FieldValue {
+            mask: self.mask,
+            lsb: self.lsb,
+            bits: byte & self.mask,
+        }
     }
 
     /// Replace the field with the low bits of `value`, preserving every
     /// other lane. Callers that explicitly truncate a byte input use this;
     /// checked transactions use [`Self::insert`].
     pub const fn insert_truncated(self, byte: u8, value: u8) -> u8 {
-        (byte & !self.mask()) | ((value << self.lsb) & self.mask())
+        (byte & !self.mask) | ((value << self.lsb) & self.mask)
+    }
+}
+
+/// A field's value in its place: the bits it holds in the field's lanes of
+/// a byte. Only a field makes one ([`AnalogField::place`],
+/// [`AnalogField::value_in`]), so it always fits its lanes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FieldValue {
+    mask: u8,
+    lsb: u8,
+    bits: u8,
+}
+
+impl FieldValue {
+    /// `byte` with the field's lanes replaced by this value and every other
+    /// lane kept, as `phy_i2c_writeReg_Mask` composes it.
+    pub const fn apply(self, byte: u8) -> u8 {
+        (byte & !self.mask) | self.bits
+    }
+
+    /// The value, unshifted.
+    pub const fn value(self) -> u8 {
+        self.bits >> self.lsb
     }
 }
 

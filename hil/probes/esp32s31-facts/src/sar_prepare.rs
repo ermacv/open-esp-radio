@@ -81,7 +81,7 @@ impl Sar {
             );
             return false;
         };
-        let Some(new) = field.insert(old, value) else {
+        let Some(new) = field.place(value).map(|placed| placed.apply(old)) else {
             emit(0x14ee, 3, old.into(), value.into());
             return false;
         };
@@ -448,10 +448,10 @@ impl Sar {
             w.set_lp_tsens_clk_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensClkEn::Enabled);
         });
         p.lp_periclkrst.modify_tsens_ctrl(|w| {
-            w.set_lp_tsens_rst_en(true);
+            w.set_lp_tsens_rst_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Asserted);
         });
         p.lp_periclkrst.modify_tsens_ctrl(|w| {
-            w.set_lp_tsens_rst_en(false);
+            w.set_lp_tsens_rst_en(pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Released);
         });
         p.lp_tsens.modify_ctrl(|w| {
             w.set_power_up(pac::tsens::ctrl::PowerUp::Enabled);

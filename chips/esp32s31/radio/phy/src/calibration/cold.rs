@@ -904,7 +904,12 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, enabled,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                    },
                 );
                 return self.into_completion();
             }
@@ -947,7 +952,11 @@ impl PhyColdMmioBinding {
                 PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
             ) => oer_chips_esp32s31_hal::radio::phy::frequency::initialize_registers(
                 registers,
-                parameter_override,
+                if parameter_override {
+                    oer_chips_esp32s31_hal::types::FrequencyRegisterMode::ParameterOverride
+                } else {
+                    oer_chips_esp32s31_hal::types::FrequencyRegisterMode::Default
+                },
             ),
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::Table(
                 PhyFrequencyTableAction::WriteMemory {
@@ -983,10 +992,16 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
+                registers,
+                crate::hardware::clock_pair(enabled),
+            ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                registers,
+                crate::hardware::clock_pair(enabled),
+            ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigurePbusDebugMode),
             )) => oer_chips_family_radio_phy::pbus::configure_debug_mode(
@@ -1031,10 +1046,16 @@ impl PhyColdMmioBinding {
                 )),
             )) => match clock {
                 crate::rx::signal_power::PhySignalPowerClock::Tx => {
-                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled)
+                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                        registers,
+                        crate::hardware::clock_pair(enabled),
+                    )
                 }
                 crate::rx::signal_power::PhySignalPowerClock::Rx => {
-                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, enabled)
+                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
+                        registers,
+                        crate::hardware::clock_pair(enabled),
+                    )
                 }
             },
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -1053,10 +1074,16 @@ impl PhyColdMmioBinding {
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
+                registers,
+                crate::hardware::clock_pair(enabled),
+            ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, enabled),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
+                registers,
+                crate::hardware::clock_pair(enabled),
+            ),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigurePbusWorkModePulse),
             )) => {

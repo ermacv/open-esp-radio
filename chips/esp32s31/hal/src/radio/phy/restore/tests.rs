@@ -137,8 +137,12 @@ fn bluetooth_tx_power_restore_owns_the_slot_until_finished() {
     assert!(slot.bluetooth_tx_power_control_values().is_err());
     slot.prepare_bluetooth_tx_power_control().unwrap();
     slot.capture_bluetooth_tx_power_control_low(3).unwrap();
-    slot.capture_bluetooth_tx_power_control_high(7).unwrap();
-    assert_eq!(slot.bluetooth_tx_power_control_values(), Ok((3, 7)));
+    let high = super::super::i2c::UNCAPTURED_HIGH;
+    let seven = oer_chips_esp32s31_pac::analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0
+        .value_in(7);
+    assert_ne!(seven, high);
+    slot.capture_bluetooth_tx_power_control_high(seven).unwrap();
+    assert_eq!(slot.bluetooth_tx_power_control_values(), Ok((3, seven)));
     assert!(slot.prepare_bluetooth_tx_power_control().is_err());
     let rejected = slot.prepare_txiq_with(|| panic!("Bluetooth owner must exclude TX-IQ"));
     assert_eq!(rejected, Err(TxIqToneControlPrepareError::RestorePending));

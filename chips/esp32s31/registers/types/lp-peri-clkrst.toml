@@ -295,6 +295,7 @@ write-values-only = true
 
 [[registers.fields]]
 name = "LP_TSENS_RST_EN"
+values = [{ name = "RELEASED", value = 0 }, { name = "ASSERTED", value = 1 }]
 bits = "31"
 class = "plain"
 description = "Temperature-sensor peripheral reset enable, pulsed by its first resource owner."

@@ -6,7 +6,10 @@ use super::commands::{
     PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cCommandMemoryInputs,
 };
 use super::{Address, Host, Profile, Route};
-use oer_chips_esp32s31_pac::{i2c_ana_mst::I2cAnaMst, i2c_ana_mst_mem::PhyI2cCommandRam};
+use oer_chips_esp32s31_pac::{
+    i2c_ana_mst::{I2cAnaMst, dictionaries::ReadWrite},
+    i2c_ana_mst_mem::PhyI2cCommandRam,
+};
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_mmio::{Bits, Index, Placement};
@@ -102,13 +105,18 @@ impl<P: Placement> Port for MasterPort<'_, P> {
         publish_read_mask(self.master, address.route);
     }
     fn publish_command(&mut self, address: MasterAddress, value: u8, write: bool) {
+        // The family bus trait's one translation into the bit's name.
         publish_command(
             self.master,
             address.route.host,
             address.address.block(),
             address.address.index(),
             value,
-            write,
+            if write {
+                ReadWrite::Write
+            } else {
+                ReadWrite::Read
+            },
         );
     }
 }
@@ -149,7 +157,7 @@ impl<P: Placement> oer_chips_family_radio_phy::i2c::PhyI2cParallelAccess for Mas
             address.block(),
             address.index(),
             value,
-            true,
+            ReadWrite::Write,
         );
         let (address, value) = pair.second;
         publish_command(
@@ -158,7 +166,7 @@ impl<P: Placement> oer_chips_family_radio_phy::i2c::PhyI2cParallelAccess for Mas
             address.block(),
             address.index(),
             value,
-            true,
+            ReadWrite::Write,
         );
     }
 }
@@ -202,21 +210,21 @@ fn publish_command<P: Placement>(
     block: u8,
     register: u8,
     value: u8,
-    write: bool,
+    direction: ReadWrite,
 ) {
     match host {
         Host::Host0 => master.write_i2c0_ctrl(|w| {
             w.set_slave_addr(block)
                 .set_slave_reg_addr(register)
                 .set_data(value)
-                .set_read_write(write)
+                .set_read_write(direction)
                 .set_start_or_reset(true);
         }),
         Host::Host1 => master.write_i2c1_ctrl(|w| {
             w.set_slave_addr(block)
                 .set_slave_reg_addr(register)
                 .set_data(value)
-                .set_read_write(write)
+                .set_read_write(direction)
                 .set_start_or_reset(true);
         }),
     }
@@ -267,13 +275,10 @@ pub(crate) fn configure_master_registers<P: Placement>(master: &mut I2cAnaMst<P>
 /// Select one of the two complete-ROM BBPLL calibration encodings.
 ///
 /// SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C.
-pub(crate) fn set_bbpll_calibration<P: Placement>(master: &mut I2cAnaMst<P>, enabled: bool) {
-    use oer_chips_esp32s31_pac::i2c_ana_mst::ana_conf0::BbpllCalMode;
-    let mode = if enabled {
-        BbpllCalMode::Enabled
-    } else {
-        BbpllCalMode::Disabled
-    };
+pub(crate) fn set_bbpll_calibration<P: Placement>(
+    master: &mut I2cAnaMst<P>,
+    mode: crate::types::PhyBbpllCalibration,
+) {
     master.modify_ana_conf0(|w| {
         w.set_bbpll_cal_mode(mode.into());
     });

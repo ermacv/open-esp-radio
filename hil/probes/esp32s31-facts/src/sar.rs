@@ -280,19 +280,23 @@ impl Sar {
         if write.is_none() {
             m.publish_phy_i2c_read_mask(Bits::truncate(route.complemented_read_select()));
         }
+        let direction = match write {
+            Some(_) => pac::i2c_ana_mst::dictionaries::ReadWrite::Write,
+            None => pac::i2c_ana_mst::dictionaries::ReadWrite::Read,
+        };
         match route.host {
             pac::analog_i2c::Host::Host0 => m.write_i2c0_ctrl(|w| {
                 w.set_slave_addr(route.command_code)
                     .set_slave_reg_addr(address.index())
                     .set_data(write.unwrap_or(0))
-                    .set_read_write(write.is_some())
+                    .set_read_write(direction)
                     .set_start_or_reset(true);
             }),
             pac::analog_i2c::Host::Host1 => m.write_i2c1_ctrl(|w| {
                 w.set_slave_addr(route.command_code)
                     .set_slave_reg_addr(address.index())
                     .set_data(write.unwrap_or(0))
-                    .set_read_write(write.is_some())
+                    .set_read_write(direction)
                     .set_start_or_reset(true);
             }),
         }

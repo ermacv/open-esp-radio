@@ -37,6 +37,16 @@ pub use crate::radio::ieee80211::registers::{
 /// The generated names the HAL's public functions and fields take, under
 /// the HAL's own names where the PAC's are generic.
 pub use oer_chips_esp32s31_pac::{
+    fe::estimator_control::{
+        MeasurementEnable as PhyEstimatorMeasurement, StartEnable as PhyEstimatorStart,
+    },
+    fe::frequency_control::HardwareFrequencyDisable as PhyFrequencyControl,
+    fe::rx_gain_dc_control::Bits5_6Opaque as PhyRxGainDcCalibration,
+    fe::status_clock_force::Bits8_11Opaque as PhyForceTxRxPhase,
+    fe::table_memory_index_source::ForceDigitalGainEnable as PhyForcedDigitalGain,
+    fe::tone_path_0_control::ToneEnableOrArm as PhyTone,
+    i2c_ana_mst::ana_conf0::BbpllCalMode as PhyBbpllCalibration,
+    wifi_bb::tx_power_track_control_0::TrackEnable as PhyTxPowerTracking,
     wifi_bb_brx::dictionaries::LowRate as PhyLowRate,
     wifi_mac::control::PowerSaveTxBlock as MacPowerSaveTxBlock,
     wifi_mac::dictionaries::{
@@ -70,13 +80,16 @@ pub use crate::radio::ieee80211::registers::WifiRxCsiControlMask;
 pub use crate::radio::ieee80211::station_wake::StaTbttScheduleError;
 
 pub use crate::radio::modem::values::{
-    CfrValue, CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource,
-    CoexTimerPtiValue, ForcedRxGain, PhyForcedPowerIndex,
+    CoexTimerClientValue, CoexTimerClockDividerMinusOne, CoexTimerClockSource, CoexTimerPtiValue,
+    PhyForcedPowerIndex,
 };
 pub use crate::radio::modem::{
     CoexTimerRegister, CoexistenceLowPowerClockObservation, CoexistenceLowPowerClockSource,
 };
 pub use crate::radio::phy::{
+    baseband::ops::TxIqMismatchPolarity,
+    frequency::ops::FrequencyRegisterMode,
     i2c::PhyAdcRate,
     memory::{PbusMemoryGroupBoundary, PhyGainMemoryEntry, PhyMemoryError},
+    pbus::PhyClockPair,
 };

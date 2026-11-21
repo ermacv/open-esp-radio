@@ -6,12 +6,10 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(target_arch = "riscv32")]
 use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
 pub mod ops;
-
-#[cfg(target_arch = "riscv32")]
-use crate::types::ForcedRxGain;
 
 /// Apply complete rev0 ROM `phy_bb_agc_reg_update`.
 ///
@@ -22,10 +20,16 @@ pub fn update_baseband_registers(registers: &mut impl SharedPhyAccess) {
     crate::radio::phy::sequence::update_agc(phy_blocks_mut(registers));
 }
 
-/// Select complete rev0 ROM `phy_enable_agc` or `phy_disable_agc`.
+/// Apply complete rev0 ROM `phy_enable_agc`.
 #[cfg(target_arch = "riscv32")]
-pub fn set_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::set_enabled(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled);
+pub fn enable(registers: &mut impl SharedPhyAccess) {
+    ops::enable(&mut phy_blocks_mut(registers).phy_agc_oracle);
+}
+
+/// Apply complete rev0 ROM `phy_disable_agc`.
+#[cfg(target_arch = "riscv32")]
+pub fn disable(registers: &mut impl SharedPhyAccess) {
+    ops::disable(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }
 
 /// Apply all ten fresh-read updates of complete `phy_agc_reg_init`.
@@ -72,20 +76,16 @@ pub fn configure_antenna(registers: &mut impl SharedPhyAccess) {
     ops::configure_antenna(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }
 
-/// Apply complete rev0 ROM `phy_force_rx_gain`.
+/// Apply the enabling branch of complete rev0 ROM `phy_rfrx_sat_rst`.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_forced_rx_gain(
-    registers: &mut impl SharedPhyAccess,
-    enabled: bool,
-    gain: ForcedRxGain,
-) {
-    ops::configure_forced_rx_gain(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled, gain);
+pub fn enable_rf_rx_saturation(registers: &mut impl SharedPhyAccess) {
+    ops::enable_rf_rx_saturation(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }
 
-/// Apply either complete branch of rev0 ROM `phy_rfrx_sat_rst`.
+/// Apply the disabling branch of complete rev0 ROM `phy_rfrx_sat_rst`.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_rf_rx_saturation(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::configure_rf_rx_saturation(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled);
+pub fn disable_rf_rx_saturation(registers: &mut impl SharedPhyAccess) {
+    ops::disable_rf_rx_saturation(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }
 
 /// Publish both final limits from complete pinned `phy_set_rx_gain_table`.
@@ -103,19 +103,20 @@ pub fn set_saturation_gain(registers: &mut impl SharedPhyAccess, value: u32) {
     ops::set_saturation_gain(&mut phy_blocks_mut(registers).phy_agc_oracle, value);
 }
 
-/// Apply complete pinned `libphy.a[phy_reg.o]::phy_set_ftm_en`.
-pub fn set_ftm_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::set_ftm_enabled(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled);
-}
-
 /// Apply complete pinned `phy_reg_update_new` and its finite children.
 #[cfg(target_arch = "riscv32")]
 pub fn update_post_initialization(registers: &mut impl SharedPhyAccess) {
     ops::update_post_initialization(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }
 
-/// Apply either complete branch of rev0 ROM `phy_rx_11b_opt`.
+/// Apply the enabling branch of complete rev0 ROM `phy_rx_11b_opt`.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_rx_11b_optimization(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::configure_rx_11b_optimization(&mut phy_blocks_mut(registers).phy_agc_oracle, enabled);
+pub fn enable_rx_11b_optimization(registers: &mut impl SharedPhyAccess) {
+    ops::enable_rx_11b_optimization(&mut phy_blocks_mut(registers).phy_agc_oracle);
+}
+
+/// Apply the disabling branch of complete rev0 ROM `phy_rx_11b_opt`.
+#[cfg(target_arch = "riscv32")]
+pub fn disable_rx_11b_optimization(registers: &mut impl SharedPhyAccess) {
+    ops::disable_rx_11b_optimization(&mut phy_blocks_mut(registers).phy_agc_oracle);
 }

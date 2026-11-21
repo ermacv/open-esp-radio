@@ -80,7 +80,8 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_portable_time::
             PhyRfCloseOperation::EnterCritical | PhyRfCloseOperation::ExitCritical => {}
             PhyRfCloseOperation::DisableHardwareFrequencyControl => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(
-                    registers, false,
+                    registers,
+                    oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software,
                 );
             }
             PhyRfCloseOperation::SettleOneMicrosecond => {
@@ -89,7 +90,7 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_portable_time::
                 }
             }
             PhyRfCloseOperation::DisableAgc => {
-                oer_chips_esp32s31_hal::radio::phy::agc::set_enabled(registers, false);
+                oer_chips_esp32s31_hal::radio::phy::agc::disable(registers);
             }
             PhyRfCloseOperation::ClearBasebandControl => {
                 oer_chips_esp32s31_hal::radio::phy::clock::clear_rf_baseband_control(registers);
@@ -112,7 +113,8 @@ pub(super) fn execute_rf_close_with_hal<D: PhyShortDelay, C: oer_portable_time::
             }
             PhyRfCloseOperation::EnableBbpllCalibration => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                    registers, true,
+                    registers,
+                    oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled,
                 );
             }
         }
@@ -195,7 +197,10 @@ fn force_wake_txrx<D: PhyShortDelay>(
     enabled: bool,
 ) -> Result<(), PhyTargetPortError> {
     for phase in 0..2 {
-        oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, enabled, phase);
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
+            registers,
+            crate::hardware::force_txrx_phase(enabled, phase),
+        );
         if !D::settle_micros(1) {
             return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
         }
@@ -417,7 +422,12 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 }
                 PhyRfWakeOperation::SetHardwareFrequencyControl { enabled } => {
                     oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(
-                        registers, enabled,
+                        registers,
+                        if enabled {
+                            oer_chips_esp32s31_hal::types::PhyFrequencyControl::Hardware
+                        } else {
+                            oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software
+                        },
                     );
                 }
                 PhyRfWakeOperation::ResetI2cMaster => reset_wake_i2c_master(timer, registers)?,
@@ -429,7 +439,12 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 }
                 PhyRfWakeOperation::SetBbpllCalibration { enabled } => {
                     oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
-                        registers, enabled,
+                        registers,
+                        if enabled {
+                            oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
+                        } else {
+                            oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
+                        },
                     );
                 }
                 PhyRfWakeOperation::ConfigureBiasRegisters => {
@@ -478,7 +493,11 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                 PhyRfWakeOperation::ConfigureFrequencyRegisters => {
                     oer_chips_esp32s31_hal::radio::phy::frequency::initialize_registers(
                         registers,
-                        frequency_control.frequency_register_parameter_override,
+                        if frequency_control.frequency_register_parameter_override {
+                            oer_chips_esp32s31_hal::types::FrequencyRegisterMode::ParameterOverride
+                        } else {
+                            oer_chips_esp32s31_hal::types::FrequencyRegisterMode::Default
+                        },
                     );
                 }
                 PhyRfWakeOperation::ConfigureFrontendRegisters => {
@@ -570,7 +589,7 @@ pub(super) async fn execute_rf_wake_with_hal<D: PhyShortDelay>(
                     );
                 }
                 PhyRfWakeOperation::EnableAgc => {
-                    oer_chips_esp32s31_hal::radio::phy::agc::set_enabled(registers, true);
+                    oer_chips_esp32s31_hal::radio::phy::agc::enable(registers);
                 }
                 PhyRfWakeOperation::WaitFrequencyReady => {
                     // This site already lives in the asynchronous wake transaction.

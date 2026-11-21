@@ -20,21 +20,26 @@ use {oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio, oer_portable_mmio::
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn clear_rf_baseband_control<P: Placement>(syscon: &mut ModemSysconRadio<P>) {
     syscon.modify_wifi_bb_cfg(|w| {
-        w.set_wifi_enable(if false {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
-        } else {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
-        });
+        w.set_wifi_enable(oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled);
     });
 }
 
-/// Enable or disable the recovered PHY calibration clock.
+/// Enable the recovered PHY calibration clock.
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_BB_INIT; the complete parent sets this bit
 /// before executing the baseband calibration sequence.
-pub fn set_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>, enabled: bool) {
+pub fn enable_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>) {
     clock.fe.modify_word_0800_opaque(|w| {
-        w.set_bit_2_opaque(enabled);
+        w.set_bit_2_opaque(true);
+    });
+}
+
+/// Disable the recovered PHY calibration clock.
+///
+/// SOURCE: BLOB_LIBPHY_PHY_BB_INIT.
+pub fn disable_calibration_clock<P: PhyPlacement>(clock: &mut ClockRegisters<P>) {
+    clock.fe.modify_word_0800_opaque(|w| {
+        w.set_bit_2_opaque(false);
     });
 }
 

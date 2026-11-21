@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(target_arch = "riscv32")]
-use crate::{phy_blocks_mut, system::owner::SharedPhyAccess, types::CfrValue};
+use crate::{phy_blocks_mut, system::owner::SharedPhyAccess};
 
 pub mod ops;
 
@@ -34,13 +34,18 @@ pub fn configure_rxiq_root_status(registers: &mut impl SharedPhyAccess) {
     );
 }
 
-/// Apply one complete RXIQ root correction-mode prefix or suffix.
-///
-/// Each branch retains the complete pinned parent's four separately ordered
-/// fresh-read field updates.
+/// Enter the RXIQ root correction mode: the complete pinned parent's
+/// prefix, its four separately ordered fresh-read field updates.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_rxiq_root_correction(registers: &mut impl SharedPhyAccess, begin: bool) {
-    crate::radio::phy::sequence::configure_rxiq_root_correction(phy_blocks_mut(registers), begin);
+pub fn begin_rxiq_root_correction(registers: &mut impl SharedPhyAccess) {
+    crate::radio::phy::sequence::begin_rxiq_root_correction(phy_blocks_mut(registers));
+}
+
+/// Leave the RXIQ root correction mode: the complete pinned parent's
+/// suffix, its four separately ordered fresh-read field updates.
+#[cfg(target_arch = "riscv32")]
+pub fn end_rxiq_root_correction(registers: &mut impl SharedPhyAccess) {
+    crate::radio::phy::sequence::end_rxiq_root_correction(phy_blocks_mut(registers));
 }
 
 /// Configure the fourteen-edge baseband TX-power tracking leaf.
@@ -48,45 +53,13 @@ pub fn configure_rxiq_root_correction(registers: &mut impl SharedPhyAccess, begi
 /// Basis: complete pinned
 /// `libphy.a[phy_reg.o]::phy_bb_txpwr_track`, size `0xf4`.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_tx_power_tracking(registers: &mut impl SharedPhyAccess, enabled: bool) {
+pub fn configure_tx_power_tracking(
+    registers: &mut impl SharedPhyAccess,
+    tracking: crate::types::PhyTxPowerTracking,
+) {
     ops::configure_tx_power_tracking(
         &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
-        enabled,
-    );
-}
-
-/// Apply complete pinned `libphy.a[phy_reg.o]::phy_config_hccfr`.
-#[cfg(target_arch = "riscv32")]
-pub fn configure_hccfr(registers: &mut impl SharedPhyAccess, enabled: bool, value: CfrValue) {
-    ops::configure_hccfr(
-        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
-        enabled,
-        value,
-    );
-}
-
-/// Apply either complete branch of pinned `libphy.a[phy_reg.o]::phy_iccfr_en`.
-#[cfg(target_arch = "riscv32")]
-pub fn configure_iccfr_gate(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::configure_iccfr_gate(
-        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
-        enabled,
-    );
-}
-
-/// Apply complete pinned `libphy.a[phy_reg.o]::phy_force_iccfr`.
-#[cfg(target_arch = "riscv32")]
-pub fn configure_forced_iccfr(
-    registers: &mut impl SharedPhyAccess,
-    mode: bool,
-    enabled: bool,
-    value: CfrValue,
-) {
-    ops::configure_forced_iccfr(
-        &mut phy_blocks_mut(registers).phy_baseband_config_oracle,
-        mode,
-        enabled,
-        value,
+        tracking,
     );
 }
 
@@ -169,13 +142,13 @@ pub fn configure_tx_pa_on(registers: &mut impl SharedPhyAccess) {
 #[cfg(target_arch = "riscv32")]
 pub fn configure_forced_digital_gain(
     registers: &mut impl SharedPhyAccess,
-    enabled: bool,
+    forcing: crate::types::PhyForcedDigitalGain,
     gain_0: i8,
     gain_1: i8,
 ) {
     ops::configure_forced_digital_gain(
         &mut phy_blocks_mut(registers).phy_clock_oracle,
-        enabled,
+        forcing,
         gain_0,
         gain_1,
     );

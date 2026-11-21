@@ -21,6 +21,7 @@ pub use commands::{
 use master::{ConfigurationBus, MasterPort};
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::AnalogBus;
+use oer_chips_family_registers_analog_i2c::FieldValue;
 
 pub use crate::radio::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
@@ -232,11 +233,33 @@ enum BluetoothTxPowerControlPhase {
     Complete,
 }
 
+/// The Bluetooth TX-power high field's value the calibration writes.
+const CALIBRATION_HIGH: FieldValue =
+    match analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0.place(2) {
+        Some(value) => value,
+        None => panic!("two fits the six-bit field"),
+    };
+
+/// The high field's value before a capture.
+pub(crate) const UNCAPTURED_HIGH: FieldValue =
+    analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0.value_in(0);
+
+// The value captured from the first high register restores both: they lie
+// in the same bits of their bytes.
+const _: () = if !analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0
+    .same_lanes(analog_i2c::bbtop::bluetooth_tx_power_high_1::BLUETOOTH_TX_POWER_HIGH_1)
+{
+    panic!("the two high fields share their lanes");
+};
+
 trait BluetoothTxPowerControlI2cAccess {
     fn reserve_restore(&mut self) -> Result<(), BluetoothTxPowerControlPrepareError>;
     fn capture_low(&mut self, value: u8) -> Result<(), BluetoothTxPowerControlRestoreError>;
-    fn capture_high(&mut self, value: u8) -> Result<(), BluetoothTxPowerControlRestoreError>;
-    fn restore_values(&self) -> Result<(u8, u8), BluetoothTxPowerControlRestoreError>;
+    fn capture_high(
+        &mut self,
+        value: FieldValue,
+    ) -> Result<(), BluetoothTxPowerControlRestoreError>;
+    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError>;
     fn finish_restore(&mut self) -> Result<(), BluetoothTxPowerControlRestoreError>;
     fn start_read(&mut self, register: BluetoothTxPowerControlRegister) -> Result<(), ()>;
     fn start_write(
@@ -388,14 +411,12 @@ impl BluetoothTxPowerControlTransaction {
             2 => access.start_read(BluetoothTxPowerControlRegister::High0),
             3 => access.start_write(
                 BluetoothTxPowerControlRegister::High0,
-                analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0
-                    .insert_truncated(self.scratch, self.high_value(access)?),
+                self.high_value(access)?.apply(self.scratch),
             ),
             4 => access.start_read(BluetoothTxPowerControlRegister::High1),
             5 => access.start_write(
                 BluetoothTxPowerControlRegister::High1,
-                analog_i2c::bbtop::bluetooth_tx_power_high_1::BLUETOOTH_TX_POWER_HIGH_1
-                    .insert_truncated(self.scratch, self.high_value(access)?),
+                self.high_value(access)?.apply(self.scratch),
             ),
             _ => return Err(BluetoothTxPowerControlError::WrongAction),
         })
@@ -416,7 +437,7 @@ impl BluetoothTxPowerControlTransaction {
             access
                 .capture_high(
                     analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0
-                        .extract(value),
+                        .value_in(value),
                 )
                 .map_err(map_restore_error)?;
             Ok(Some(true))
@@ -481,11 +502,11 @@ impl BluetoothTxPowerControlTransaction {
     fn high_value(
         &self,
         access: &impl BluetoothTxPowerControlI2cAccess,
-    ) -> Result<u8, BluetoothTxPowerControlError> {
+    ) -> Result<FieldValue, BluetoothTxPowerControlError> {
         match self.operation {
             BluetoothTxPowerControlOperation::ConfigureCalibration => {
                 self.require_restore(access)?;
-                Ok(2)
+                Ok(CALIBRATION_HIGH)
             }
             BluetoothTxPowerControlOperation::Restore => access
                 .restore_values()
@@ -563,11 +584,14 @@ impl<P: Placement> BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_,
         self.restore.capture_bluetooth_tx_power_control_low(value)
     }
 
-    fn capture_high(&mut self, value: u8) -> Result<(), BluetoothTxPowerControlRestoreError> {
+    fn capture_high(
+        &mut self,
+        value: FieldValue,
+    ) -> Result<(), BluetoothTxPowerControlRestoreError> {
         self.restore.capture_bluetooth_tx_power_control_high(value)
     }
 
-    fn restore_values(&self) -> Result<(u8, u8), BluetoothTxPowerControlRestoreError> {
+    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
         self.restore.bluetooth_tx_power_control_values()
     }
 
@@ -639,10 +663,14 @@ pub fn configure_master_registers(registers: &mut impl SharedPhyAccess) {
 ///
 /// The body at `0x2f82_7dbc`, size `0x1c`, performs one fresh-read
 /// replacement of `MASTER_CONTROL` bits 3:2. Zero selects encoded mode one;
-/// every nonzero input selects encoded mode two. The boolean API makes that
-/// two-state contract explicit while preserving all unrelated shared fields.
-pub fn configure_bbpll_calibration(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    master::set_bbpll_calibration(&mut phy_blocks_mut(registers).i2c_ana_mst, enabled);
+/// every nonzero input selects encoded mode two. The two names of the
+/// model's dictionary are that two-state contract; every unrelated shared
+/// field is preserved.
+pub fn configure_bbpll_calibration(
+    registers: &mut impl SharedPhyAccess,
+    mode: crate::types::PhyBbpllCalibration,
+) {
+    master::set_bbpll_calibration(&mut phy_blocks_mut(registers).i2c_ana_mst, mode);
 }
 
 /// Program the complete PHY-I²C command memory.

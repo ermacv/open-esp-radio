@@ -13,13 +13,18 @@ use super::{Address, Field, analog_i2c};
 // SOURCE: BLOB_LIBPHY_PHY_SET_RATE_CLASS; opaque-blobray-phy.md, TXRF.
 // Existing vendor initialization 0x08 selects class 1 with all other bits 0.
 const TXRF_INITIAL_RATE_CLASS: u8 = match analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS
-    .insert(
-        0,
-        analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8,
-    ) {
-    Some(value) => value,
+    .place(analog_i2c::txrf::byte_0a_opaque::PHY_SET_RATE_CLASS_ARGUMENT_AT_LEAST_8)
+{
+    Some(value) => value.apply(0),
     None => panic!("the named initial rate class fits the model field"),
 };
+
+/// The Bluetooth TX-power high byte's bit 6 set, in place.
+const BIT_6_SET: oer_chips_family_registers_analog_i2c::FieldValue =
+    match analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE.place(1) {
+        Some(value) => value,
+        None => panic!("one fits a bit"),
+    };
 
 pub(crate) const PHY_I2C_COMMAND_MEMORY_ENTRY_COUNT: usize =
     oer_chips_esp32s31_pac::i2c_ana_mst_mem::command_memory::COUNT;
@@ -147,8 +152,7 @@ impl PhyI2cCommandMemoryInputs {
             auxiliary,
             self.parameter_f0,
             self.parameter_f0,
-            analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE
-                .insert_truncated(self.parameter_f0, 1),
+            BIT_6_SET.apply(self.parameter_f0),
             self.parameter_f0,
         ]
     }
@@ -276,8 +280,7 @@ impl PhyFilterDcapInputs {
             )),
             8 => Some((
                 analog_i2c::bbtop::bluetooth_tx_power_high_0::ADDRESS,
-                analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE
-                    .insert_truncated(self.parameter_f0, 1),
+                BIT_6_SET.apply(self.parameter_f0),
             )),
             9 => Some((
                 analog_i2c::bbtop::bluetooth_tx_power_high_1::ADDRESS,

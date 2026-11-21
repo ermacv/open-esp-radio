@@ -13,6 +13,7 @@ use crate::radio::phy::{
     baseband::{TxDcPwdetFields, TxIqToneControlFields},
     rx_dco::RxDcoControlField,
 };
+use oer_chips_family_registers_analog_i2c::FieldValue;
 
 /// Preparing TX-DC PWDET was rejected before any register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -101,7 +102,7 @@ pub(super) enum Restore {
     RxDcoControlTwo(RxDcoControlField, RxDcoControlField),
     BluetoothTxPowerControl {
         low: u8,
-        high: u8,
+        high: FieldValue,
     },
 }
 
@@ -297,7 +298,10 @@ impl PhyRouteState {
         if self.restore != Restore::Empty {
             return Err(BluetoothTxPowerControlPrepareError::RestorePending);
         }
-        self.restore = Restore::BluetoothTxPowerControl { low: 0, high: 0 };
+        self.restore = Restore::BluetoothTxPowerControl {
+            low: 0,
+            high: super::i2c::UNCAPTURED_HIGH,
+        };
         Ok(())
     }
 
@@ -314,7 +318,7 @@ impl PhyRouteState {
 
     pub(crate) fn capture_bluetooth_tx_power_control_high(
         &mut self,
-        value: u8,
+        value: FieldValue,
     ) -> Result<(), BluetoothTxPowerControlRestoreError> {
         let Restore::BluetoothTxPowerControl { high, .. } = &mut self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
@@ -325,7 +329,7 @@ impl PhyRouteState {
 
     pub(crate) fn bluetooth_tx_power_control_values(
         &self,
-    ) -> Result<(u8, u8), BluetoothTxPowerControlRestoreError> {
+    ) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
         let Restore::BluetoothTxPowerControl { low, high } = self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
         };
@@ -360,7 +364,10 @@ impl PhyRouteState {
 
     #[cfg(test)]
     pub(crate) fn occupy_bluetooth_tx_power_control_for_test(&mut self) {
-        self.restore = Restore::BluetoothTxPowerControl { low: 0, high: 0 };
+        self.restore = Restore::BluetoothTxPowerControl {
+            low: 0,
+            high: super::i2c::UNCAPTURED_HIGH,
+        };
     }
 }
 

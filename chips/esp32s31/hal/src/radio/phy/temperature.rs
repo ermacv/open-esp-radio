@@ -8,6 +8,10 @@
 use super::restore::Restore;
 use crate::radio::phy::RadioPhyRegisters;
 use crate::system::owner::{SharedPhyAccess, phy_parts_mut};
+use oer_chips_esp32s31_pac::{
+    lp_peri_clkrst::tsens_ctrl::{LpTsensClkEn, LpTsensRstEn},
+    tsens::ctrl::PowerUp,
+};
 
 pub mod ops;
 
@@ -27,13 +31,24 @@ pub enum TemperaturePowerError {
     RestorePending,
 }
 
+/// Whether an acquisition first configures the cold readout path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Acquisition {
+    /// RF initialization: the readout path is configured first.
+    Cold,
+    /// After an RF close: the path is configured already.
+    Warm,
+}
+
 trait TemperaturePort {
     fn cold_readout_prefix(&mut self);
-    fn sar_reset_released(&mut self, released: bool);
-    fn sar_power(&mut self, enabled: bool);
-    fn sensor_clock(&mut self, enabled: bool);
-    fn sensor_reset(&mut self, asserted: bool);
-    fn sensor_power(&mut self, enabled: bool);
+    fn hold_sar_reset(&mut self);
+    fn release_sar_reset(&mut self);
+    fn power_on_sar(&mut self);
+    fn power_off_sar(&mut self);
+    fn sensor_clock(&mut self, clock: LpTsensClkEn);
+    fn sensor_reset(&mut self, reset: LpTsensRstEn);
+    fn sensor_power(&mut self, power: PowerUp);
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement> TemperaturePort for RadioPhyRegisters<P> {
@@ -42,24 +57,30 @@ impl<P: crate::radio::phy::registers::RadioPlacement> TemperaturePort for RadioP
         // linked IDF phy_set_tsens_power override. Preserve all four RMWs.
         let blocks = &mut self.peripherals;
         ops::enable_register_bank(&mut blocks.lp_tsens);
-        ops::set_clock(&mut blocks.lp_periclkrst, true);
+        ops::set_clock(&mut blocks.lp_periclkrst, LpTsensClkEn::Enabled);
         ops::enable_phy_readout(&mut blocks.lp_tsens);
         ops::enable_phy_conversion(&mut blocks.lp_tsens);
     }
-    fn sar_reset_released(&mut self, released: bool) {
-        self.set_analog_i2c_reset_released(released);
+    fn hold_sar_reset(&mut self) {
+        self.set_analog_i2c_reset_released(false);
     }
-    fn sar_power(&mut self, enabled: bool) {
-        self.set_analog_i2c_power(enabled);
+    fn release_sar_reset(&mut self) {
+        self.set_analog_i2c_reset_released(true);
     }
-    fn sensor_clock(&mut self, enabled: bool) {
-        ops::set_clock(&mut self.peripherals.lp_periclkrst, enabled);
+    fn power_on_sar(&mut self) {
+        self.set_analog_i2c_power(true);
     }
-    fn sensor_reset(&mut self, asserted: bool) {
-        ops::set_reset(&mut self.peripherals.lp_periclkrst, asserted);
+    fn power_off_sar(&mut self) {
+        self.set_analog_i2c_power(false);
     }
-    fn sensor_power(&mut self, enabled: bool) {
-        ops::set_power(&mut self.peripherals.lp_tsens, enabled);
+    fn sensor_clock(&mut self, clock: LpTsensClkEn) {
+        ops::set_clock(&mut self.peripherals.lp_periclkrst, clock);
+    }
+    fn sensor_reset(&mut self, reset: LpTsensRstEn) {
+        ops::set_reset(&mut self.peripherals.lp_periclkrst, reset);
+    }
+    fn sensor_power(&mut self, power: PowerUp) {
+        ops::set_power(&mut self.peripherals.lp_tsens, power);
     }
 }
 
@@ -75,7 +96,7 @@ impl Restore {
         &mut self,
         port: &mut impl TemperaturePort,
         settle_reset: impl FnOnce() -> bool,
-        cold: bool,
+        acquisition: Acquisition,
     ) -> Result<(), TemperaturePowerError> {
         match self {
             Self::TemperaturePoisoned => return Err(TemperaturePowerError::Poisoned),
@@ -83,19 +104,19 @@ impl Restore {
             _ => return Err(TemperaturePowerError::AlreadyAcquired),
         }
         *self = Self::TemperaturePoisoned;
-        if cold {
+        if acquisition == Acquisition::Cold {
             port.cold_readout_prefix();
         }
-        port.sar_reset_released(false);
+        port.hold_sar_reset();
         if !settle_reset() {
             return Err(TemperaturePowerError::ResetSettleFailed);
         }
-        port.sar_power(true);
-        port.sar_reset_released(true);
-        port.sensor_clock(true);
-        port.sensor_reset(true);
-        port.sensor_reset(false);
-        port.sensor_power(true);
+        port.power_on_sar();
+        port.release_sar_reset();
+        port.sensor_clock(LpTsensClkEn::Enabled);
+        port.sensor_reset(LpTsensRstEn::Asserted);
+        port.sensor_reset(LpTsensRstEn::Released);
+        port.sensor_power(PowerUp::Enabled);
         *self = Self::Empty;
         Ok(())
     }
@@ -110,9 +131,9 @@ impl Restore {
             Self::Empty => {}
             _ => return Err(TemperaturePowerError::RestorePending),
         }
-        port.sensor_power(false);
-        port.sensor_clock(false);
-        port.sar_power(false);
+        port.sensor_power(PowerUp::Disabled);
+        port.sensor_clock(LpTsensClkEn::Disabled);
+        port.power_off_sar();
         *self = Self::TemperatureIdle;
         Ok(())
     }
@@ -125,7 +146,9 @@ pub fn initialize(
     settle_reset: impl FnOnce() -> bool,
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
-    state.resources_mut().acquire_with(phy, settle_reset, true)
+    state
+        .resources_mut()
+        .acquire_with(phy, settle_reset, Acquisition::Cold)
 }
 
 /// First acquire after RF close: reset SAR-I2C, then clock/reset/enable TSENS.
@@ -134,7 +157,9 @@ pub fn acquire(
     settle_reset: impl FnOnce() -> bool,
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
-    state.resources_mut().acquire_with(phy, settle_reset, false)
+    state
+        .resources_mut()
+        .acquire_with(phy, settle_reset, Acquisition::Warm)
 }
 
 /// Last release after RF close: disable TSENS, its clock, then SAR-I2C power.

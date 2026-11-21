@@ -4669,11 +4669,11 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
-    ("radio/phy/i2c.rs", 685, PHY_DRIVER),
-    ("radio/phy/i2c/commands.rs", 571, PHY_DRIVER),
-    ("radio/phy/restore.rs", 368, PHY_DRIVER),
-    ("radio/phy/temperature.rs", 152, PHY_DRIVER),
-    ("radio/phy/temperature/", 78, PHY_DRIVER),
+    ("radio/phy/i2c.rs", 713, PHY_DRIVER),
+    ("radio/phy/i2c/commands.rs", 574, PHY_DRIVER),
+    ("radio/phy/restore.rs", 375, PHY_DRIVER),
+    ("radio/phy/temperature.rs", 177, PHY_DRIVER),
+    ("radio/phy/temperature/", 79, PHY_DRIVER),
     ("radio/domain/transaction.rs", 532, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
 ];
@@ -6520,12 +6520,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         1,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_R2_HAL_PHY),
-    (
-        "chips/esp32s31/hal/src/radio/phy/i2c/commands.rs",
-        2,
-        BY_R2_HAL_PHY,
-    ),
     (
         "chips/esp32s31/radio/phy/src/analog/frequency.rs",
         9,
@@ -6624,7 +6618,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/modem/values.rs",
-        16,
+        14,
         BY_RADIO_SYSTEM,
     ),
     (

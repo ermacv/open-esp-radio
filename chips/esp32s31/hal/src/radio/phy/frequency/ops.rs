@@ -288,13 +288,12 @@ pub fn observe_software_frequency_boundary<P: PhyPlacement>(frequency: &Frequenc
 }
 
 /// Select whether hardware owns frequency updates.
-pub fn set_hardware_control<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, enabled: bool) {
+pub fn set_hardware_control<P: PhyPlacement>(
+    frequency: &mut FrequencyRegisters<P>,
+    control: crate::types::PhyFrequencyControl,
+) {
     frequency.fe.modify_frequency_control(|w| {
-        w.set_hardware_frequency_disable(if !enabled {
-            oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
-        } else {
-            oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
-        });
+        w.set_hardware_frequency_disable(control);
     });
 }
 
@@ -309,28 +308,31 @@ const REGISTER_MODE_PARAMETER_OVERRIDE: u8 = 0x20;
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
 const REGISTER_MODE_DEFAULT: u8 = 0x42;
 
+/// The register mode `phy_freq_reg_init` writes: its default, or the one of
+/// the parameter override.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrequencyRegisterMode {
+    Default,
+    ParameterOverride,
+}
+
 /// Apply complete rev0 ROM `phy_freq_reg_init(2, 4)`.
 pub fn initialize_registers<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
-    parameter_override: bool,
+    mode: FrequencyRegisterMode,
 ) {
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.fe.modify_frequency_control(|w| {
         w.set_channel_switch_pulse(false)
-            .set_hardware_frequency_disable(if false {
-                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Software
-            } else {
-                oer_chips_esp32s31_pac::fe::frequency_control::HardwareFrequencyDisable::Hardware
-            });
+            .set_hardware_frequency_disable(crate::types::PhyFrequencyControl::Hardware);
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.fe.modify_frequency_control(|w| {
         w.set_bit_30_opaque(true);
     });
-    let mode = if parameter_override {
-        REGISTER_MODE_PARAMETER_OVERRIDE
-    } else {
-        REGISTER_MODE_DEFAULT
+    let mode = match mode {
+        FrequencyRegisterMode::ParameterOverride => REGISTER_MODE_PARAMETER_OVERRIDE,
+        FrequencyRegisterMode::Default => REGISTER_MODE_DEFAULT,
     };
     frequency.fe.modify_frequency_control(|w| {
         w.set_bits_22_29_opaque(mode);

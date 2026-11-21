@@ -34,20 +34,26 @@ impl TemperaturePort for Port<'_> {
     fn cold_readout_prefix(&mut self) {
         self.record(Edge::ColdReadout);
     }
-    fn sar_reset_released(&mut self, released: bool) {
-        self.record(Edge::SarResetReleased(released));
+    fn hold_sar_reset(&mut self) {
+        self.record(Edge::SarResetReleased(false));
     }
-    fn sar_power(&mut self, enabled: bool) {
-        self.record(Edge::SarPower(enabled));
+    fn release_sar_reset(&mut self) {
+        self.record(Edge::SarResetReleased(true));
     }
-    fn sensor_clock(&mut self, enabled: bool) {
-        self.record(Edge::SensorClock(enabled));
+    fn power_on_sar(&mut self) {
+        self.record(Edge::SarPower(true));
     }
-    fn sensor_reset(&mut self, asserted: bool) {
-        self.record(Edge::SensorReset(asserted));
+    fn power_off_sar(&mut self) {
+        self.record(Edge::SarPower(false));
     }
-    fn sensor_power(&mut self, enabled: bool) {
-        self.record(Edge::SensorPower(enabled));
+    fn sensor_clock(&mut self, clock: LpTsensClkEn) {
+        self.record(Edge::SensorClock(clock == LpTsensClkEn::Enabled));
+    }
+    fn sensor_reset(&mut self, reset: LpTsensRstEn) {
+        self.record(Edge::SensorReset(reset == LpTsensRstEn::Asserted));
+    }
+    fn sensor_power(&mut self, power: PowerUp) {
+        self.record(Edge::SensorPower(power == PowerUp::Enabled));
     }
 }
 
@@ -80,7 +86,7 @@ fn cold_prefix_precedes_the_linked_override_resource_acquire() {
     let mut resources = Restore::TemperatureIdle;
     let start = clock.now();
     assert_eq!(
-        resources.acquire_with(&mut port, || settle(&clock), true),
+        resources.acquire_with(&mut port, || settle(&clock), Acquisition::Cold),
         Ok(())
     );
     let mut expected = std::vec![(start, Edge::ColdReadout)];
@@ -95,7 +101,7 @@ fn close_releases_sensor_then_clock_then_the_last_sar_i2c_reference() {
     let mut port = Port::new(&clock);
     let mut resources = Restore::TemperatureIdle;
     resources
-        .acquire_with(&mut port, || settle(&clock), false)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
         .expect("first acquire");
     port.edges.clear();
     let close = clock.now();
@@ -117,13 +123,13 @@ fn wake_reacquires_in_source_order_after_the_full_named_reset_settle() {
     let mut port = Port::new(&clock);
     let mut resources = Restore::TemperatureIdle;
     resources
-        .acquire_with(&mut port, || settle(&clock), true)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Cold)
         .expect("cold acquire");
     resources.release_with(&mut port).expect("RF close");
     port.edges.clear();
     let start = clock.now();
     resources
-        .acquire_with(&mut port, || settle(&clock), false)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
         .expect("RF wake");
     assert_eq!(port.edges, expected_acquire(start));
 }
@@ -136,7 +142,7 @@ fn repeated_close_and_wake_cycles_do_not_retain_an_unreleased_power_reference() 
     for _ in 0..3 {
         let start = clock.now();
         resources
-            .acquire_with(&mut port, || settle(&clock), false)
+            .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
             .expect("cycle acquire");
         resources.release_with(&mut port).expect("cycle release");
         let mut expected = expected_acquire(start);
@@ -160,14 +166,14 @@ fn failed_reset_settle_never_enables_power_and_prevents_reuse_or_root_release() 
     assert_eq!(
         route
             .resources_mut()
-            .acquire_with(&mut port, || false, false),
+            .acquire_with(&mut port, || false, Acquisition::Warm),
         Err(TemperaturePowerError::ResetSettleFailed)
     );
     assert_eq!(port.edges, [(start, Edge::SarResetReleased(false))]);
     assert_eq!(
         route
             .resources_mut()
-            .acquire_with(&mut port, || settle(&clock), false),
+            .acquire_with(&mut port, || settle(&clock), Acquisition::Warm),
         Err(TemperaturePowerError::Poisoned)
     );
     assert_eq!(
@@ -193,12 +199,12 @@ fn duplicate_acquire_and_unowned_release_do_not_write_hardware() {
     );
     assert!(port.edges.is_empty());
     resources
-        .acquire_with(&mut port, || settle(&clock), false)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
         .expect("acquire");
     port.edges.clear();
     let now = clock.now();
     assert_eq!(
-        resources.acquire_with(&mut port, || false, true),
+        resources.acquire_with(&mut port, || false, Acquisition::Cold),
         Err(TemperaturePowerError::AlreadyAcquired)
     );
     assert!(port.edges.is_empty());
@@ -212,7 +218,7 @@ fn root_release_requires_the_temperature_resources_to_have_been_released() {
     let mut route = crate::radio::phy::restore::PhyRouteState::for_host_test();
     route
         .resources_mut()
-        .acquire_with(&mut port, || settle(&clock), false)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
         .expect("acquire");
     assert_eq!(
         crate::system::root::check_phy_restore_complete(&route),
@@ -235,7 +241,7 @@ fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
     let mut route = crate::radio::phy::restore::PhyRouteState::for_host_test();
     route
         .resources_mut()
-        .acquire_with(&mut port, || settle(&clock), false)
+        .acquire_with(&mut port, || settle(&clock), Acquisition::Warm)
         .expect("acquire");
     let fields = crate::radio::phy::rx_dco::RxDcoControlField::for_host_test(2);
     route.prepare_rx_dco_with(|| fields).expect("prepare");
@@ -247,7 +253,7 @@ fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
     assert_eq!(
         route
             .resources_mut()
-            .acquire_with(&mut port, || false, false),
+            .acquire_with(&mut port, || false, Acquisition::Warm),
         Err(TemperaturePowerError::AlreadyAcquired)
     );
     assert_eq!(
@@ -283,7 +289,7 @@ fn idle_and_poisoned_resources_reject_calibration_before_capturing_fields() {
             assert_eq!(
                 route
                     .resources_mut()
-                    .acquire_with(&mut port, || false, false),
+                    .acquire_with(&mut port, || false, Acquisition::Warm),
                 Err(TemperaturePowerError::ResetSettleFailed)
             );
         }

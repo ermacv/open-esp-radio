@@ -9,6 +9,13 @@ use crate::{
 #[cfg(any(test, target_arch = "riscv32"))]
 pub mod ops;
 
+/// Both clocks of one recovered pair: the ROM leaves never set them apart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PhyClockPair {
+    Enabled,
+    Disabled,
+}
+
 /// Apply one finite force-TX/RX phase around its caller-owned delay edge.
 ///
 /// Basis: complete rev0 ROM `phy_force_txrx_off` at `0x2f827bb0`, size
@@ -16,8 +23,11 @@ pub mod ops;
 /// a one-microsecond delay after each. This method owns exactly one
 /// replacement; the Rust transition owns phase order and both timers.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_force_txrx(registers: &mut impl SharedPhyAccess, enabled: bool, phase: u8) {
-    ops::set_force_txrx_mode(&mut phy_blocks_mut(registers).phy_pbus, enabled, phase == 0);
+pub fn configure_force_txrx(
+    registers: &mut impl SharedPhyAccess,
+    phase: crate::types::PhyForceTxRxPhase,
+) {
+    ops::set_force_txrx_mode(&mut phy_blocks_mut(registers).phy_pbus, phase);
 }
 
 /// Publish one PBus force-test command before the first busy sample.
@@ -65,8 +75,8 @@ pub fn read_result(registers: &mut impl SharedPhyAccess, selector: u8, path: u8)
 /// `0x20`. The body never distinguishes the two constituent clocks, so the
 /// PAC and HAL retain pair-level semantics.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::set_rx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, enabled);
+pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, pair: PhyClockPair) {
+    ops::set_rx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, pair);
 }
 
 /// Enable or disable both recovered TX clock bits as one indivisible pair.
@@ -75,8 +85,8 @@ pub fn configure_rx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
 /// `0x24`. The body never distinguishes the two constituent clocks, so the
 /// PAC and HAL retain pair-level semantics.
 #[cfg(target_arch = "riscv32")]
-pub fn configure_tx_clock(registers: &mut impl SharedPhyAccess, enabled: bool) {
-    ops::set_tx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, enabled);
+pub fn configure_tx_clock(registers: &mut impl SharedPhyAccess, pair: PhyClockPair) {
+    ops::set_tx_clock_pair(&mut phy_blocks_mut(registers).phy_pbus, pair);
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -90,11 +100,28 @@ pub fn port<T: SharedPhyAccess + ?Sized>(owner: &mut T) -> Port<'_, T> {
 
 #[cfg(target_arch = "riscv32")]
 impl<T: SharedPhyAccess + ?Sized> oer_chips_family_radio_phy::pbus::PbusAccess for Port<'_, T> {
+    // The family bus trait's one translation into the bits' names.
     fn set_work_mode(&mut self, enabled: bool) {
-        ops::set_work_mode(&mut phy_blocks_mut(self.0).phy_pbus, enabled);
+        use oer_chips_esp32s31_pac::fe::mode::WorkModeEnable;
+        ops::set_work_mode(
+            &mut phy_blocks_mut(self.0).phy_pbus,
+            if enabled {
+                WorkModeEnable::Enabled
+            } else {
+                WorkModeEnable::Disabled
+            },
+        );
     }
     fn set_debug_mode(&mut self, enabled: bool) {
-        ops::set_debug_mode(&mut phy_blocks_mut(self.0).phy_pbus, enabled);
+        use oer_chips_esp32s31_pac::fe::pbus_command::DebugModeEnable;
+        ops::set_debug_mode(
+            &mut phy_blocks_mut(self.0).phy_pbus,
+            if enabled {
+                DebugModeEnable::Enabled
+            } else {
+                DebugModeEnable::Disabled
+            },
+        );
     }
     fn is_busy(&self) -> bool {
         ops::is_busy(&crate::phy_blocks(self.0).phy_pbus)

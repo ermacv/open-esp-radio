@@ -280,14 +280,14 @@ fn start(s: &mut Session<'_>, host: Host, address: Address, seed: u8) {
             w.set_slave_addr(address.block())
                 .set_slave_reg_addr(address.index())
                 .set_data(seed)
-                .set_read_write(false)
+                .set_read_write(pac::i2c_ana_mst::dictionaries::ReadWrite::Read)
                 .set_start_or_reset(true);
         }),
         Host::Host1 => m.write_i2c1_ctrl(|w| {
             w.set_slave_addr(address.block())
                 .set_slave_reg_addr(address.index())
                 .set_data(seed)
-                .set_read_write(false)
+                .set_read_write(pac::i2c_ana_mst::dictionaries::ReadWrite::Read)
                 .set_start_or_reset(true);
         }),
     }

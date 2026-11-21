@@ -1402,6 +1402,7 @@ value-range = { min = 0x0, max = 0xff, sources = ["BLOB_LIBPHY_CALIBRATION_20260
 
 [[registers.fields]]
 name = "FORCE_DIGITAL_GAIN_ENABLE"
+values = [{ name = "DISABLED", value = 0 }, { name = "ENABLED", value = 1 }]
 bits = "16"
 class = "plain"
 

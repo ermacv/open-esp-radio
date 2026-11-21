@@ -23,8 +23,8 @@ pub struct ConfigurationFields {
     pub configuration_code: u8,
     pub control_code: u8,
     pub window: u16,
-    pub start_enabled: bool,
-    pub measurement_enabled: bool,
+    pub start: crate::types::PhyEstimatorStart,
+    pub measurement: crate::types::PhyEstimatorMeasurement,
 }
 
 impl Configuration {
@@ -33,14 +33,8 @@ impl Configuration {
             configuration_code: self.config.bits_26_27_opaque().get() as u8,
             control_code: self.control.bits_19_20_opaque().get() as u8,
             window: self.control.bits_2_16_opaque().get() as u16,
-            start_enabled: matches!(
-                self.control.start_enable(),
-                oer_chips_esp32s31_pac::fe::estimator_control::StartEnable::Enabled
-            ),
-            measurement_enabled: matches!(
-                self.control.measurement_enable(),
-                oer_chips_esp32s31_pac::fe::estimator_control::MeasurementEnable::Enabled
-            ),
+            start: self.control.start_enable(),
+            measurement: self.control.measurement_enable(),
         }
     }
     /// Whether either measurement phase was enabled at capture.
@@ -83,13 +77,17 @@ pub fn sample_indications(registers: &mut impl SharedPhyAccess) -> Indications {
     ops::sample_indications(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
 }
 
-/// Estimator readiness and the separately sampled opaque indication pair.
+/// Estimator readiness, and while READY is clear the separately sampled
+/// opaque indication pair (FE +0x8d0[21:20]); RX saturation is inferred
+/// from a nonzero pair, which is not an estimator-busy predicate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReadinessSnapshot {
-    pub ready: bool,
-    /// Nonzero FE +0x8d0[21:20], sampled only while READY is clear.
-    /// RX saturation is inferred; this is not an estimator-busy predicate.
-    pub activity: bool,
+pub enum EstimatorReadiness {
+    /// READY is set; the pair is not sampled.
+    Ready,
+    /// READY is clear and the pair is zero.
+    Quiet,
+    /// READY is clear and the pair is nonzero.
+    Active,
 }
 
 /// Three signed accumulators consumed by `phy_dc_iq_est`.
@@ -131,10 +129,13 @@ pub fn configure(registers: &mut impl SharedPhyAccess, control: u16) {
 /// one-microsecond delay. Complete `phy_iq_est_disable` at `0x2f82_8a88`,
 /// size `0x2c`, clears the same bit after its final delay.
 #[cfg(target_arch = "riscv32")]
-pub fn set_start_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
+pub fn set_start_enabled(
+    registers: &mut impl SharedPhyAccess,
+    start: crate::types::PhyEstimatorStart,
+) {
     ops::set_start_enabled(
         &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
-        enabled,
+        start,
     );
 }
 
@@ -144,10 +145,13 @@ pub fn set_start_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
 /// one-microsecond delay. Complete `phy_iq_est_disable` clears it before its
 /// one-microsecond delay.
 #[cfg(target_arch = "riscv32")]
-pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bool) {
+pub fn set_measurement_enabled(
+    registers: &mut impl SharedPhyAccess,
+    measurement: crate::types::PhyEstimatorMeasurement,
+) {
     ops::set_measurement_enabled(
         &mut phy_blocks_mut(registers).phy_iq_estimator_oracle,
-        enabled,
+        measurement,
     );
 }
 
@@ -157,10 +161,8 @@ pub fn set_measurement_enabled(registers: &mut impl SharedPhyAccess, enabled: bo
 /// it is clear, tests the opaque pair for diagnostic counting. Rust retains
 /// repeat policy outside this finite observation leaf.
 #[cfg(target_arch = "riscv32")]
-pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> ReadinessSnapshot {
-    let (ready, activity) =
-        ops::sample_readiness(&phy_blocks_mut(registers).phy_iq_estimator_oracle);
-    ReadinessSnapshot { ready, activity }
+pub fn sample_readiness(registers: &mut impl SharedPhyAccess) -> EstimatorReadiness {
+    ops::sample_readiness(&phy_blocks_mut(registers).phy_iq_estimator_oracle)
 }
 
 /// Read the three signed accumulators in complete `phy_dc_iq_est` order.

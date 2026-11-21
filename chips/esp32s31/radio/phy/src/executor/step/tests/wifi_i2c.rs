@@ -95,14 +95,17 @@ fn both_masked_writes_keep_order_and_unrelated_bits_across_real_pending_edges() 
             },
             PhyColdI2cAction::StartWrite {
                 address: first.address(),
-                value: first.insert(0xa5, 6).unwrap()
+                value: first.place(6).unwrap().apply(0xa5)
             },
             PhyColdI2cAction::StartRead {
                 address: second.address()
             },
             PhyColdI2cAction::StartWrite {
                 address: second.address(),
-                value: second.insert(first.insert(0xa5, 6).unwrap(), 15).unwrap()
+                value: second
+                    .place(15)
+                    .unwrap()
+                    .apply(first.place(6).unwrap().apply(0xa5))
             },
         ]
     );

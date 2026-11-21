@@ -1,5 +1,7 @@
 use std::{cell::RefCell, collections::VecDeque, vec::Vec};
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 use super::{
     Address, BluetoothTxPowerControlAction, BluetoothTxPowerControlCompletion,
     BluetoothTxPowerControlError, BluetoothTxPowerControlI2cAccess,
@@ -8,7 +10,7 @@ use super::{
     BluetoothTxPowerControlRestoreError, BluetoothTxPowerControlTransaction, PhyAdcRate,
     PhyFilterDcapInputs, PhyI2cConfigurationAction, PhyI2cConfigurationCommand,
     PhyI2cConfigurationError, PhyI2cConfigurationObservation, PhyI2cConfigurationOperation,
-    PhyI2cConfigurationTransaction, PhyI2cInitializationStageOneInputs,
+    PhyI2cConfigurationTransaction, PhyI2cInitializationStageOneInputs, UNCAPTURED_HIGH,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,7 +20,7 @@ enum Operation {
 }
 
 struct FakeI2c {
-    restore: Option<(u8, u8)>,
+    restore: Option<(u8, FieldValue)>,
     reads: RefCell<VecDeque<u8>>,
     operations: Vec<Operation>,
     busy_starts: u8,
@@ -49,7 +51,7 @@ impl BluetoothTxPowerControlI2cAccess for FakeI2c {
         if self.restore.is_some() {
             Err(BluetoothTxPowerControlPrepareError::RestorePending)
         } else {
-            self.restore = Some((0, 0));
+            self.restore = Some((0, UNCAPTURED_HIGH));
             Ok(())
         }
     }
@@ -62,7 +64,10 @@ impl BluetoothTxPowerControlI2cAccess for FakeI2c {
         Ok(())
     }
 
-    fn capture_high(&mut self, value: u8) -> Result<(), BluetoothTxPowerControlRestoreError> {
+    fn capture_high(
+        &mut self,
+        value: FieldValue,
+    ) -> Result<(), BluetoothTxPowerControlRestoreError> {
         let Some((low, _)) = self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
         };
@@ -70,7 +75,7 @@ impl BluetoothTxPowerControlI2cAccess for FakeI2c {
         Ok(())
     }
 
-    fn restore_values(&self) -> Result<(u8, u8), BluetoothTxPowerControlRestoreError> {
+    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
         self.restore
             .ok_or(BluetoothTxPowerControlRestoreError::RestoreNotPending)
     }
@@ -335,7 +340,10 @@ fn prepare_configure_and_restore_preserve_analog_order_and_snapshot() {
         drive(&mut prepare, &mut access),
         BluetoothTxPowerControlCompletion::RestorePrepared
     );
-    assert_eq!(access.restore, Some((0xa5, 0x15)));
+    assert_eq!(
+        access.restore.map(|(low, high)| (low, high.value())),
+        Some((0xa5, 0x15))
+    );
 
     access.operations.clear();
     *access.reads.borrow_mut() = [0xc0, 0x80].into_iter().collect();
@@ -383,7 +391,7 @@ fn prepare_configure_and_restore_preserve_analog_order_and_snapshot() {
 #[test]
 fn prepare_rejects_an_owned_restore_before_starting_i2c() {
     let mut access = FakeI2c::new([]);
-    access.restore = Some((0, 0));
+    access.restore = Some((0, UNCAPTURED_HIGH));
     let mut transaction =
         BluetoothTxPowerControlTransaction::new(BluetoothTxPowerControlOperation::PrepareRestore);
     assert_eq!(
@@ -414,5 +422,8 @@ fn prepare_retries_a_busy_first_command_without_reserving_restore_twice() {
         drive(&mut transaction, &mut access),
         BluetoothTxPowerControlCompletion::RestorePrepared
     );
-    assert_eq!(access.restore, Some((0xa5, 0x15)));
+    assert_eq!(
+        access.restore.map(|(low, high)| (low, high.value())),
+        Some((0xa5, 0x15))
+    );
 }

@@ -293,6 +293,21 @@ fn a_field_write_transition_asks_for_one_read_and_one_write() {
 }
 
 #[test]
+fn a_field_write_transition_rejects_a_read_of_another_address() {
+    let field = AnalogField::new(2_u8, 5, 3).unwrap();
+    let mut write = FieldWriteTransition::new(field, 0b101).unwrap();
+    assert_eq!(
+        write.advance(Completion::Read {
+            address: 3,
+            value: 0xff,
+        }),
+        Err(TransitionError::WrongCompletion)
+    );
+    // Refused, the transition still asks for its own read.
+    assert_eq!(write.action(), Action::Read { address: 2 });
+}
+
+#[test]
 fn a_field_read_transition_rejects_another_address() {
     let mut read = FieldReadTransition::new(AnalogField::new(1_u8, 3, 0).unwrap());
     assert_eq!(

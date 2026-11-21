@@ -2581,9 +2581,15 @@ impl PhyRxIqInitMmioBinding {
                 PhyRxIqInitCompletion::PbusDebugModeConfigured
             }
             PhyRxIqInitMmioAction::ConfigureCorrection { begin } => {
-                oer_chips_esp32s31_hal::radio::phy::baseband::configure_rxiq_root_correction(
-                    registers, begin,
-                );
+                if begin {
+                    oer_chips_esp32s31_hal::radio::phy::baseband::begin_rxiq_root_correction(
+                        registers,
+                    );
+                } else {
+                    oer_chips_esp32s31_hal::radio::phy::baseband::end_rxiq_root_correction(
+                        registers,
+                    );
+                }
                 PhyRxIqInitCompletion::CorrectionConfigured { begin }
             }
             PhyRxIqInitMmioAction::ConfigurePbusWorkMode => {

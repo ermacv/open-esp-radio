@@ -1398,7 +1398,14 @@ impl PhyCalibrationTrackingRegisterBinding {
         match self.action {
             RegisterAction::SetForcedDigitalGain { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
-                    registers, enabled, -120, -120,
+                    registers,
+                    if enabled {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Enabled
+                    } else {
+                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Disabled
+                    },
+                    -120,
+                    -120,
                 );
                 PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled }
             }
@@ -1468,7 +1475,7 @@ impl PhyCalibrationTrackingMacBasebandBinding {
         } else {
             // The pinned phy_cal_param_track clears Wi-Fi enable after
             // DCODE (RX) or PBus clear (TX), before the measurement children.
-            oer_chips_esp32s31_hal::radio::phy::frequency::set_wifi_enabled(registers, false);
+            oer_chips_esp32s31_hal::radio::phy::frequency::disable_wifi(registers);
             PhyCalibrationTrackingCompletion::WifiBasebandDisabled
         }
     }
