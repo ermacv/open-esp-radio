@@ -1,3 +1,7 @@
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 use oer_tools_analysis_riscv_model::{Ledger, WorkingMemory};
 use oer_tools_analysis_riscv_program::facts::ImageFacts;
 use oer_tools_image_stack::*;

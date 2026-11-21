@@ -2329,3 +2329,19 @@ fn a_named_value_outside_the_write_range_has_no_conversion() {
     assert!(rust.contains("pub enum Level {"), "{rust}");
     assert!(!rust.contains("impl From<Level> for"), "{rust}");
 }
+
+#[test]
+fn an_eight_or_sixteen_bit_field_is_masked_to_its_width_before_its_cast() {
+    let rust = rendered_with(&[(
+        "types/counter.toml",
+        "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"",
+        "name = \"STEP\"\nbits = \"23:16\"\nclass = \"plain\"\n\n\
+         [[registers.fields]]\nname = \"SPAN\"\nbits = \"15:0\"\nclass = \"plain\"",
+    )]);
+    // The cast keeps the field's bits only: the mask proves its range, to
+    // the cast lints as to a reader, and no unmasked cast is left.
+    assert!(rust.contains("((self.0 >> 16) & 0xff) as u8"), "{rust}");
+    assert!(rust.contains("(self.0 & 0xffff) as u16"), "{rust}");
+    assert!(!rust.contains("(self.0 >> 16) as u8"), "{rust}");
+    assert!(!rust.contains("self.0 as u16"), "{rust}");
+}

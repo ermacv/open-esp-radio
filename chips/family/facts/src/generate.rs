@@ -537,7 +537,14 @@ pub fn hart_geometry(harts: u32, boot_hart: u32) -> Result<String> {
 pub const fn constant<const ID: usize>() -> Self {
     const {
         if ID >= HARTS { panic!("the hart lies inside the chip geometry"); }
-        match Self::new(ID as u32) { Ok(hart) => hart, Err(_) => panic!("invalid fixed hart") }
+        match ID {
+"#,
+    );
+    for hart in 0..harts {
+        let _ = writeln!(rust, "{hart} => Self::H{hart},");
+    }
+    rust.push_str(
+        r#"_ => panic!("invalid fixed hart"), }
     }
 }
 pub const fn get(self) -> usize { self as usize }

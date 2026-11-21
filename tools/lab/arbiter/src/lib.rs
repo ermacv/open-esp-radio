@@ -7,6 +7,18 @@
 //! only once its driver confirmed an end state ([`readiness`]). The
 //! service's state, the lease history and the board journal live in one
 //! directory ([`Arbiter`], the stand model's `paths::arbiter`).
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod claims;

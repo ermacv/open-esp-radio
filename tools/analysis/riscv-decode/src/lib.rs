@@ -11,6 +11,21 @@
 //! dependency.
 //!
 //! Encodings: the unprivileged ISA, <https://docs.riscv.org/reference/isa/unpriv/>.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

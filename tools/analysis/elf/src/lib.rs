@@ -7,7 +7,18 @@
 //! parsing `llvm-nm` or `llvm-objdump` output or walking `object` itself.
 //! It depends on no other repository package, so Blobray's standalone
 //! extraction takes it by path.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use object::read::archive::ArchiveFile;

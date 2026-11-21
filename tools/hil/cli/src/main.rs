@@ -6,6 +6,20 @@
 //! is its verdict (0 pass, 1 fail, 2 incomplete). The program runs in a
 //! process group the tool owns: a signal to the tool stops the group after
 //! [`SCENARIO_SHUTDOWN`], and the group dies with the tool however it ends.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_wrap,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::let_underscore_must_use,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![forbid(unsafe_code)]
 
 use std::{

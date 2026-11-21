@@ -13,7 +13,28 @@
 //! policy, whatever the chip's boot kind. A requested check whose data is
 //! absent is a [`CheckResult::MissingContract`], which fails an enforced check: a
 //! missing table never proves that a property does not apply.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_wrap,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod codegen;

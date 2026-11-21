@@ -19,6 +19,17 @@
 //! whether the part of its interval it has not read lost a message. Every queue is bounded: the host's frames
 //! wait in [`OUTBOUND_CAPACITY`] places and a full queue refuses a request
 //! before it leaves.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use std::{

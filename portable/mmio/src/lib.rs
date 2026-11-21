@@ -1714,7 +1714,11 @@ impl<const WIDTH: u32> Bits<WIDTH> {
         Self(V)
     }
 
-    /// The low `WIDTH` bits of `value`: a field read back from its register.
+    /// The low `WIDTH` bits of `value`: a field cut out of a word the
+    /// PAC's generated getters read. It keeps the low bits of any value, so
+    /// a value too wide loses its top in silence; outside the PAC it is a
+    /// disallowed method (`clippy.toml`): `Bits::new`, `Bits::constant`, a
+    /// field's range type or a name's `From` instead.
     pub const fn truncate(value: u32) -> Self {
         Self(value & Self::MAX)
     }

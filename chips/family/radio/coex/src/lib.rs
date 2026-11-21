@@ -1,3 +1,14 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::let_underscore_must_use,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

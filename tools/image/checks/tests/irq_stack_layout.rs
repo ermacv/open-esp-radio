@@ -1,4 +1,11 @@
 //! Exercise the production SRAM layout with the pinned RISC-V linker.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 
 use std::{fs, process::Command};
 

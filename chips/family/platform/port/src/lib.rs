@@ -1,3 +1,10 @@
+#![cfg_attr(
+    all(test, chip_geometry),
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

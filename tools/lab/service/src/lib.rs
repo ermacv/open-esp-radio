@@ -5,6 +5,14 @@
 //! The service keeps the scheduler of `oer-tools-lab-arbiter`: who is granted
 //! what, and which resources must be recovered first. Its drivers
 //! ([`service::Drivers`]) run the operations and the recoveries.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod router;

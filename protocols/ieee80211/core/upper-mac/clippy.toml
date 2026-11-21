@@ -10,6 +10,9 @@ disallowed-methods = [
     { path = "oer_portable_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_portable_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
     { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
+    # `Bits::truncate` keeps the low bits of any value; only the PAC's
+    # generated getters cut a field out of a word with it (docs/unsafe.md).
+    { path = "oer_portable_mmio::Bits::truncate", reason = "keeps the low bits of any value: Bits::new, Bits::constant, a field's range type or a name's From instead" },
     "slice::split_at",
     "slice::split_at_mut",
     "slice::copy_from_slice",

@@ -1,4 +1,18 @@
 //! Pinned-toolchain RV32 fixtures through the public register-access API.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_wrap,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 use oer_tools_analysis_blobray_application::{
     in_process::Executable,
     library::{Assumptions, register_accesses},

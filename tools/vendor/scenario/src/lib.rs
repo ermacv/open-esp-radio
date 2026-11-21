@@ -7,7 +7,22 @@
 //! scenarios on them; chip addresses, pins and reviewed decisions stay
 //! there. [`report`] holds the reviewer reports and the command line the
 //! `oer-tools-vendor-scenario-cli` binary runs.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 pub mod artifacts;
 pub mod chip;

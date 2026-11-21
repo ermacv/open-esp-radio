@@ -1,7 +1,10 @@
 //! Streaming structural inventory over captured byte sources. No path access.
 //! Archive framing and ELF inspection have one implementation each; consumers
 //! choose storage or presentation through synchronous borrowed-record ports.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 use oer_tools_analysis_blobray_domain::*;
 use oer_tools_analysis_riscv_model::*;

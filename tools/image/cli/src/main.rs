@@ -2,7 +2,18 @@
 //! the stand's boards (README.md). This binary parses the
 //! command line; its modules hold the commands, over the image pipeline
 //! (`oer-tools-image-build`) and the stand's one board path (`oer-tools-lab-board`).
-
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use std::{process::ExitCode, time::Duration};

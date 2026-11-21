@@ -4,7 +4,18 @@
 //! Executables are identified by the SHA-256 of their content. Physical
 //! identities retain archive ordinals and ELF table section/index pairs; names
 //! are lossless metadata, never identity keys.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};

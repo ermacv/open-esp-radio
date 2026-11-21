@@ -1,3 +1,10 @@
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![deny(
     clippy::panic,
     clippy::unwrap_used,

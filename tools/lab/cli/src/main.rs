@@ -3,6 +3,18 @@
 //! host, the host fixtures and their software installation. HIL test
 //! commands are `cargo hil`, which builds on the stand's libraries; this
 //! binary links none of HIL.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 mod board;

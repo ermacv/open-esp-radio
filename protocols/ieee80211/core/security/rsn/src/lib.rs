@@ -1,3 +1,21 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R3 cleans the cores and the contracts (tasks/312)"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::let_underscore_must_use,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

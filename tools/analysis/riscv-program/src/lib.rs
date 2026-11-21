@@ -1,5 +1,8 @@
 //! Borrowed RV32 static ELF image. No loading, relocation or environment models.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 pub mod facts;
 pub mod mapping;

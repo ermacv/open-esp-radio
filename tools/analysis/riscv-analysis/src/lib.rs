@@ -1,5 +1,16 @@
 //! Bounded local control-flow exploration. No filesystem, project or ISA implementation.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 use oer_tools_analysis_riscv_model::*;
 mod dispatch;

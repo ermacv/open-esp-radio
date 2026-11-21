@@ -3,7 +3,13 @@
 //! This host-only tool owns verification ABI publication, never production
 //! behavior. Generated files live in Cargo's output directory. The catalog
 //! describes declared Rust boundary types; it does not infer private layouts.
-
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![forbid(unsafe_code)]
 
 use proc_macro2::TokenStream;

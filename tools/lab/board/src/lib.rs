@@ -11,7 +11,10 @@
 //! which invalidates the board's receipt before the flash changes and
 //! publishes the whole bundle's receipt after; `cargo fw` therefore leaves
 //! no stale image state for the stand or HIL, without depending on them.
-
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod power;

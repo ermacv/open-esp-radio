@@ -26,6 +26,22 @@ it:
   counterparts. An intentional use carries a local `allow` or `expect`
   with a reason. Every `clippy.toml` in the tree retains all common method
   bans; `every_clippy_config_retains_all_common_method_bans` checks this.
+  One ban has exceptions: `oer_portable_mmio::Bits::truncate`, which keeps
+  the low bits of any value. The PAC's `clippy.toml` leaves it out for
+  good, because its generated getters cut a field out of a word they read.
+  The HAL's and the facts probe's leave it out until the steps that remove
+  their calls (R2's area PRs; the probe's own PR after R2).
+  `TRUNCATE_BAN_LEFT_OUT` in the layer tests names the three, and
+  `a_package_without_the_truncate_ban_still_calls_it` fails once a
+  package with a temporary exception has no call left. The four lints
+  `cast_possible_truncation`, `cast_sign_loss`, `cast_possible_wrap` and
+  `let_underscore_must_use` are denied in the workspace. A crate root with
+  existing sites expects each lint once, naming the step that cleans it
+  (in a host tool, that the rule covers the code an image reaches; a
+  crate whose sites are only in its tests, under `cfg_attr(test, …)`).
+  Every attribute that silences a lint in built code outside tests is
+  listed in `SILENCED` (S8d) by file and lint, with its reason; the list
+  only shrinks.
   The root also sets `suppress-restriction-lint-in-const = false`: a
   runtime-callable `const fn` is not a compile-time-only check.
 - A clean panic lint is denied at the crate root while `[lints]` retains

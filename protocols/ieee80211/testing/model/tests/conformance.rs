@@ -1,5 +1,11 @@
 //! The conformance suite over the model port.
-
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![allow(
     clippy::disallowed_methods,
     clippy::disallowed_macros,

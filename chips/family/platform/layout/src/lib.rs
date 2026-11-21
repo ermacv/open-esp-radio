@@ -1,3 +1,10 @@
+#![cfg_attr(
+    feature = "build",
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    )
+)]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 #![deny(

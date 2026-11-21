@@ -4,7 +4,14 @@
 //! (`chips/<chip>/platform/layout/linker/dma-window.x`) from the chip root, its block
 //! types, layouts and evidence catalogs and its ownership policy
 //! (`chips/<chip>/registers/`).
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use std::path::{Path, PathBuf};

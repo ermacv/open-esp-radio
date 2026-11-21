@@ -31,9 +31,10 @@ impl Hart {
             if ID >= HARTS {
                 panic!("the hart lies inside the chip geometry");
             }
-            match Self::new(ID as u32) {
-                Ok(hart) => hart,
-                Err(_) => panic!("invalid fixed hart"),
+            match ID {
+                0 => Self::H0,
+                1 => Self::H1,
+                _ => panic!("invalid fixed hart"),
             }
         }
     }
@@ -6479,7 +6480,7 @@ pub mod ble_accelerator {
             /// The `RESULT_BYTE` field.
             #[inline]
             pub const fn result_byte(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
     }
@@ -7692,7 +7693,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -7721,7 +7722,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -7826,7 +7827,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -7855,7 +7856,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8253,7 +8254,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8282,7 +8283,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8387,7 +8388,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8416,7 +8417,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8571,7 +8572,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8600,7 +8601,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -8977,7 +8978,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -9006,7 +9007,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -10331,7 +10332,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -10342,7 +10343,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -10681,7 +10682,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -10692,7 +10693,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -11144,7 +11145,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -11155,7 +11156,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -11672,7 +11673,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -11689,7 +11690,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -11844,7 +11845,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -11855,7 +11856,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -11894,7 +11895,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -11905,7 +11906,7 @@ pub mod btdm {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -12984,7 +12985,7 @@ pub mod bt_bb {
             /// bt_bb_set_le_tx_on_delay stores argument 0 minus 10; bt_bb_get_le_tx_on_delay returns this field plus 10.
             #[inline]
             pub const fn encoded_value_minus_10(self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -13007,7 +13008,7 @@ pub mod bt_bb {
             /// bt_bb_set_le_tx_on_delay stores argument 0 minus 10; bt_bb_get_le_tx_on_delay returns this field plus 10.
             #[inline]
             pub const fn encoded_value_minus_10(&self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -13839,7 +13840,7 @@ pub mod bt_bb {
             /// Signed two's-complement RSSI in dBm of the most recent baseband reception, as ESP-IDF's ieee802154_get_recent_rssi truncates the complete image to int8_t.
             #[inline]
             pub const fn rssi(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -13968,7 +13969,7 @@ pub mod bt_bb {
             /// Eight-bit image of bt_bb_tx_cca_set argument 1.
             #[inline]
             pub const fn set_argument_1(self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// Eleven-bit image produced by bt_bb_tx_cca_period from argument 0 using the exact vendor arithmetic.
@@ -13986,7 +13987,7 @@ pub mod bt_bb {
             /// Eight-bit image produced by bt_bb_tx_cca_period from arguments 0 and 1 using the exact vendor arithmetic.
             #[inline]
             pub const fn period_argument_0_minus_argument_1_image(self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
 
             /// Boolean image of bt_bb_tx_cca_set argument 0.
@@ -14009,7 +14010,7 @@ pub mod bt_bb {
             /// Eight-bit image of bt_bb_tx_cca_set argument 1.
             #[inline]
             pub const fn set_argument_1(&self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// Eleven-bit image produced by bt_bb_tx_cca_period from argument 0 using the exact vendor arithmetic.
@@ -14027,7 +14028,7 @@ pub mod bt_bb {
             /// Eight-bit image produced by bt_bb_tx_cca_period from arguments 0 and 1 using the exact vendor arithmetic.
             #[inline]
             pub const fn period_argument_0_minus_argument_1_image(&self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
 
             /// Boolean image of bt_bb_tx_cca_set argument 0.
@@ -14330,7 +14331,7 @@ pub mod bt_bb {
             /// The `SET_ARGUMENT_6` field.
             #[inline]
             pub const fn set_argument_6(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `SET_ARGUMENT_5` field.
@@ -14377,7 +14378,7 @@ pub mod bt_bb {
             /// The `SET_ARGUMENT_6` field.
             #[inline]
             pub const fn set_argument_6(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `SET_ARGUMENT_5` field.
@@ -14659,7 +14660,7 @@ pub mod bt_bb {
             /// Sixteen-bit image of bt_bb_wdt_init argument 0.
             #[inline]
             pub const fn init_argument_0(self) -> u16 {
-                (self.0 >> 15) as u16
+                ((self.0 >> 15) & 0xffff) as u16
             }
 
             /// bt_bb_wdt_init sets this bit before writing both argument fields.
@@ -14688,7 +14689,7 @@ pub mod bt_bb {
             /// Sixteen-bit image of bt_bb_wdt_init argument 0.
             #[inline]
             pub const fn init_argument_0(&self) -> u16 {
-                (self.0 >> 15) as u16
+                ((self.0 >> 15) & 0xffff) as u16
             }
 
             /// bt_bb_wdt_init sets this bit before writing both argument fields.
@@ -14791,7 +14792,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x13.
             #[inline]
             pub const fn bits_2_9_opaque(self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 3.
@@ -14826,7 +14827,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x13.
             #[inline]
             pub const fn bits_2_9_opaque(&self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 3.
@@ -15225,7 +15226,7 @@ pub mod bt_bb {
             /// bt_bb_v2_tx_set replaces this field with 0xf5.
             #[inline]
             pub const fn tx_set_low_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// set_gauss_coeff_2m replaces this field with 0x67.
@@ -15237,7 +15238,7 @@ pub mod bt_bb {
             /// set_gauss_coeff_2m replaces this field with 7.
             #[inline]
             pub const fn gaussian_bits_17_24(self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// set_gauss_coeff_2m replaces this field with 0.
@@ -15254,7 +15255,7 @@ pub mod bt_bb {
             /// bt_bb_v2_tx_set replaces this field with 0xf5.
             #[inline]
             pub const fn tx_set_low_byte(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// set_gauss_coeff_2m replaces this field with 0x67.
@@ -15266,7 +15267,7 @@ pub mod bt_bb {
             /// set_gauss_coeff_2m replaces this field with 7.
             #[inline]
             pub const fn gaussian_bits_17_24(&self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// set_gauss_coeff_2m replaces this field with 0.
@@ -15495,7 +15496,7 @@ pub mod bt_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_11_18_opaque(self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -15530,7 +15531,7 @@ pub mod bt_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_11_18_opaque(&self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -16200,19 +16201,19 @@ pub mod bt_bb {
             /// The `DELAY_RX_AOD` field.
             #[inline]
             pub const fn delay_rx_aod(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// The `DELAY_RX_AOA` field.
             #[inline]
             pub const fn delay_rx_aoa(self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// The `ANTENNA_FORCE` field.
             #[inline]
             pub const fn antenna_force(self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
 
             /// The `ANTENNA_FORCE_ON` field.
@@ -16259,19 +16260,19 @@ pub mod bt_bb {
             /// The `DELAY_RX_AOD` field.
             #[inline]
             pub const fn delay_rx_aod(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// The `DELAY_RX_AOA` field.
             #[inline]
             pub const fn delay_rx_aoa(&self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// The `ANTENNA_FORCE` field.
             #[inline]
             pub const fn antenna_force(&self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
 
             /// The `ANTENNA_FORCE_ON` field.
@@ -16405,25 +16406,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `TX_AOD_2US` field.
             #[inline]
             pub const fn tx_aod_2us(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `TX_AOD_1US` field.
             #[inline]
             pub const fn tx_aod_1us(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -16434,25 +16435,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `TX_AOD_2US` field.
             #[inline]
             pub const fn tx_aod_2us(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `TX_AOD_1US` field.
             #[inline]
             pub const fn tx_aod_1us(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `RX_AOA_2US`.
@@ -16533,25 +16534,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD_2US` field.
             #[inline]
             pub const fn rx_aod_2us(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOD_1US` field.
             #[inline]
             pub const fn rx_aod_1us(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -16562,25 +16563,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD_2US` field.
             #[inline]
             pub const fn rx_aod_2us(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOD_1US` field.
             #[inline]
             pub const fn rx_aod_1us(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `RX_AOA_2US`.
@@ -16828,25 +16829,25 @@ pub mod bt_bb {
             /// The `RX_AOD_2M` field.
             #[inline]
             pub const fn rx_aod_2m(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_2M` field.
             #[inline]
             pub const fn rx_aoa_2m(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD` field.
             #[inline]
             pub const fn rx_aod(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOA` field.
             #[inline]
             pub const fn rx_aoa(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -16857,25 +16858,25 @@ pub mod bt_bb {
             /// The `RX_AOD_2M` field.
             #[inline]
             pub const fn rx_aod_2m(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_2M` field.
             #[inline]
             pub const fn rx_aoa_2m(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD` field.
             #[inline]
             pub const fn rx_aod(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOA` field.
             #[inline]
             pub const fn rx_aoa(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `RX_AOD_2M`.
@@ -16956,25 +16957,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD_2US` field.
             #[inline]
             pub const fn rx_aod_2us(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOD_1US` field.
             #[inline]
             pub const fn rx_aod_1us(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -16985,25 +16986,25 @@ pub mod bt_bb {
             /// The `RX_AOA_2US` field.
             #[inline]
             pub const fn rx_aoa_2us(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_1US` field.
             #[inline]
             pub const fn rx_aoa_1us(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD_2US` field.
             #[inline]
             pub const fn rx_aod_2us(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOD_1US` field.
             #[inline]
             pub const fn rx_aod_1us(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `RX_AOA_2US`.
@@ -17241,25 +17242,25 @@ pub mod bt_bb {
             /// The `RX_AOD_2M` field.
             #[inline]
             pub const fn rx_aod_2m(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_2M` field.
             #[inline]
             pub const fn rx_aoa_2m(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD` field.
             #[inline]
             pub const fn rx_aod(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOA` field.
             #[inline]
             pub const fn rx_aoa(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -17270,25 +17271,25 @@ pub mod bt_bb {
             /// The `RX_AOD_2M` field.
             #[inline]
             pub const fn rx_aod_2m(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RX_AOA_2M` field.
             #[inline]
             pub const fn rx_aoa_2m(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AOD` field.
             #[inline]
             pub const fn rx_aod(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_AOA` field.
             #[inline]
             pub const fn rx_aoa(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `RX_AOD_2M`.
@@ -17555,25 +17556,25 @@ pub mod bt_bb {
             /// Eight-bit SQI_DPHI_DB image; bit 6 of this field is also the independently addressable SQI_READY bit.
             #[inline]
             pub const fn sqi_dphi_db_or_ready(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `SQI_DPHI_MAX` field.
             #[inline]
             pub const fn sqi_dphi_max(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `SQI_DPHI_MIN` field.
             #[inline]
             pub const fn sqi_dphi_min(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -17584,25 +17585,25 @@ pub mod bt_bb {
             /// Eight-bit SQI_DPHI_DB image; bit 6 of this field is also the independently addressable SQI_READY bit.
             #[inline]
             pub const fn sqi_dphi_db_or_ready(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `SQI_DPHI_MAX` field.
             #[inline]
             pub const fn sqi_dphi_max(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `SQI_DPHI_MIN` field.
             #[inline]
             pub const fn sqi_dphi_min(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `SQI_DPHI_DB_OR_READY`.
@@ -17683,25 +17684,25 @@ pub mod bt_bb {
             /// The `INBAND_MAX` field.
             #[inline]
             pub const fn inband_max(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RSSI_MAX` field.
             #[inline]
             pub const fn rssi_max(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INBAND_MIN` field.
             #[inline]
             pub const fn inband_min(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RSSI_MIN` field.
             #[inline]
             pub const fn rssi_min(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -17712,25 +17713,25 @@ pub mod bt_bb {
             /// The `INBAND_MAX` field.
             #[inline]
             pub const fn inband_max(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RSSI_MAX` field.
             #[inline]
             pub const fn rssi_max(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INBAND_MIN` field.
             #[inline]
             pub const fn inband_min(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RSSI_MIN` field.
             #[inline]
             pub const fn rssi_min(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `INBAND_MAX`.
@@ -18363,7 +18364,7 @@ pub mod bt_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_23_30_opaque(self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
         }
 
@@ -18380,7 +18381,7 @@ pub mod bt_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_23_30_opaque(&self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
 
             /// Set `BIT_16_OPAQUE`.
@@ -18747,7 +18748,7 @@ pub mod bt_bb {
             /// Complete ROM phy_rx_gain_force and librftest force_rx_gain replace this byte with the caller's gain.
             #[inline]
             pub const fn force_gain(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -18788,7 +18789,7 @@ pub mod bt_bb {
             /// Complete ROM phy_rx_gain_force and librftest force_rx_gain replace this byte with the caller's gain.
             #[inline]
             pub const fn force_gain(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -19073,13 +19074,13 @@ pub mod bt_bb {
             /// The `GAIN_OFFSET_0` field.
             #[inline]
             pub const fn gain_offset_0(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `GAIN_OFFSET_1` field.
             #[inline]
             pub const fn gain_offset_1(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -19102,13 +19103,13 @@ pub mod bt_bb {
             /// The `GAIN_OFFSET_0` field.
             #[inline]
             pub const fn gain_offset_0(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `GAIN_OFFSET_1` field.
             #[inline]
             pub const fn gain_offset_1(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_4_OPAQUE`.
@@ -19652,13 +19653,13 @@ pub mod bt_bb {
             /// The `GAIN_OFFSET_0` field.
             #[inline]
             pub const fn gain_offset_0(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `GAIN_OFFSET_1` field.
             #[inline]
             pub const fn gain_offset_1(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -19705,13 +19706,13 @@ pub mod bt_bb {
             /// The `GAIN_OFFSET_0` field.
             #[inline]
             pub const fn gain_offset_0(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `GAIN_OFFSET_1` field.
             #[inline]
             pub const fn gain_offset_1(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -19811,7 +19812,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x0f.
             #[inline]
             pub const fn finite_bits_24_31(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -19822,7 +19823,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x0f.
             #[inline]
             pub const fn finite_bits_24_31(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `FINITE_BITS_24_31`.
@@ -19861,7 +19862,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xf4.
             #[inline]
             pub const fn finite_bits_24_31(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -19872,7 +19873,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xf4.
             #[inline]
             pub const fn finite_bits_24_31(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `FINITE_BITS_24_31`.
@@ -20397,7 +20398,7 @@ pub mod bt_bb {
             /// The `BITS_16_23_OPAQUE` field.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `BITS_24_27_OPAQUE` field.
@@ -20420,7 +20421,7 @@ pub mod bt_bb {
             /// The `BITS_16_23_OPAQUE` field.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `BITS_24_27_OPAQUE` field.
@@ -20525,7 +20526,7 @@ pub mod bt_bb {
             /// The `BITS_4_11_OPAQUE` field.
             #[inline]
             pub const fn bits_4_11_opaque(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// The `BITS_12_16_OPAQUE` field.
@@ -20537,7 +20538,7 @@ pub mod bt_bb {
             /// The `BITS_17_24_OPAQUE` field.
             #[inline]
             pub const fn bits_17_24_opaque(self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -20560,7 +20561,7 @@ pub mod bt_bb {
             /// The `BITS_4_11_OPAQUE` field.
             #[inline]
             pub const fn bits_4_11_opaque(&self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// The `BITS_12_16_OPAQUE` field.
@@ -20572,7 +20573,7 @@ pub mod bt_bb {
             /// The `BITS_17_24_OPAQUE` field.
             #[inline]
             pub const fn bits_17_24_opaque(&self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -20890,7 +20891,7 @@ pub mod bt_bb {
             /// The `BITS_12_19_OPAQUE` field.
             #[inline]
             pub const fn bits_12_19_opaque(self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -20913,7 +20914,7 @@ pub mod bt_bb {
             /// The `BITS_12_19_OPAQUE` field.
             #[inline]
             pub const fn bits_12_19_opaque(&self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -21188,7 +21189,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x9c.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -21229,7 +21230,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x9c.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -21357,7 +21358,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x9c.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -21386,7 +21387,7 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x9c.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_10_14_OPAQUE`.
@@ -21759,25 +21760,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x0f.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x0e.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x0e.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x14.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -21788,25 +21789,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0x0f.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x0e.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x0e.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x14.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -21887,25 +21888,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xf2.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xf2.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xec.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x1e.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -21916,25 +21917,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xf2.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xf2.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xec.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x1e.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -22014,13 +22015,13 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xe2.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xf1.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -22037,13 +22038,13 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xe2.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xf1.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_10_15_OPAQUE`.
@@ -22120,25 +22121,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xd8.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xd3.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x28.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x2d.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -22149,25 +22150,25 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xd8.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xd3.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x28.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0x2d.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -22234,13 +22235,13 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xa6.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xa6.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -22251,13 +22252,13 @@ pub mod bt_bb {
             /// The leaf replaces this field with 0xa6.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The leaf replaces this field with 0xa6.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_16_23_OPAQUE`.
@@ -22826,7 +22827,7 @@ pub mod bt_bb {
             /// The complete initializer replaces bits 13:20 with the finite image 0xA6.
             #[inline]
             pub const fn bits_13_20_opaque(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The complete initializer replaces bits 21:31 with the finite image 0x792.
@@ -22843,7 +22844,7 @@ pub mod bt_bb {
             /// The complete initializer replaces bits 13:20 with the finite image 0xA6.
             #[inline]
             pub const fn bits_13_20_opaque(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The complete initializer replaces bits 21:31 with the finite image 0x792.
@@ -23058,7 +23059,7 @@ pub mod bt_bb {
             /// The complete initializer replaces bits 0:7 with the finite image 0xF1.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The complete initializer replaces bits 8:31 with the finite image 0x07A120.
@@ -23075,7 +23076,7 @@ pub mod bt_bb {
             /// The complete initializer replaces bits 0:7 with the finite image 0xF1.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The complete initializer replaces bits 8:31 with the finite image 0x07A120.
@@ -27783,13 +27784,13 @@ pub mod bt_mac {
             /// The `VALUE_0` field.
             #[inline]
             pub const fn value_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `VALUE_1` field.
             #[inline]
             pub const fn value_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -27800,13 +27801,13 @@ pub mod bt_mac {
             /// The `VALUE_0` field.
             #[inline]
             pub const fn value_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `VALUE_1` field.
             #[inline]
             pub const fn value_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `VALUE_0`.
@@ -27852,7 +27853,7 @@ pub mod bt_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -27863,7 +27864,7 @@ pub mod bt_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -29812,13 +29813,13 @@ pub mod bt_mac {
             /// The `VALUE_2` field.
             #[inline]
             pub const fn value_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `VALUE_3` field.
             #[inline]
             pub const fn value_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// The `VALUE_0_HIGH_4` field.
@@ -30846,7 +30847,7 @@ pub mod bt_mac {
             /// The `CONFIG_BYTE_1` field.
             #[inline]
             pub const fn config_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `CONFIG_16_20` field.
@@ -30869,7 +30870,7 @@ pub mod bt_mac {
             /// The `CONFIG_BYTE_1` field.
             #[inline]
             pub const fn config_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `CONFIG_16_20` field.
@@ -31224,7 +31225,7 @@ pub mod bt_mac {
             /// The `HARDWARE_LIST_MASK` field.
             #[inline]
             pub const fn hardware_list_mask(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Mode bit published with the list mask and START. Insertion publishes zero; deletion of a whole running list publishes one. Its hardware effect is not established.
@@ -31271,7 +31272,7 @@ pub mod bt_mac {
             /// The `HARDWARE_LIST_MASK` field.
             #[inline]
             pub const fn hardware_list_mask(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Mode bit published with the list mask and START. Insertion publishes zero; deletion of a whole running list publishes one. Its hardware effect is not established.
@@ -31391,7 +31392,7 @@ pub mod bt_mac {
             /// The `FINISHED_LIST_MASK` field.
             #[inline]
             pub const fn finished_list_mask(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -31423,7 +31424,7 @@ pub mod bt_mac {
             /// The `FINISHED_LIST_MASK` field.
             #[inline]
             pub const fn finished_list_mask(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -31434,7 +31435,7 @@ pub mod bt_mac {
             /// The `FINISHED_LIST_MASK` field.
             #[inline]
             pub const fn finished_list_mask(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `FINISHED_LIST_MASK`.
@@ -31608,13 +31609,13 @@ pub mod bt_mac {
             /// The `CONFIG_LOW_16` field.
             #[inline]
             pub const fn config_low_16(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -31625,13 +31626,13 @@ pub mod bt_mac {
             /// The `CONFIG_LOW_16` field.
             #[inline]
             pub const fn config_low_16(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `CONFIG_LOW_16`.
@@ -35687,7 +35688,7 @@ pub mod bt_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -35785,25 +35786,25 @@ pub mod bt_mac {
             /// Low byte printed as lc_tx_on_delay by complete ble_tx_config_check. BLE PHY initialization stores a configuration byte minus one.
             #[inline]
             pub const fn lc_tx_on_delay(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// BLE PHY initialization receives the same configuration-byte-minus-one image as LC_TX_ON_DELAY. No independent semantic name is claimed.
             #[inline]
             pub const fn init_duplicate_byte(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -35814,25 +35815,25 @@ pub mod bt_mac {
             /// Low byte printed as lc_tx_on_delay by complete ble_tx_config_check. BLE PHY initialization stores a configuration byte minus one.
             #[inline]
             pub const fn lc_tx_on_delay(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// BLE PHY initialization receives the same configuration-byte-minus-one image as LC_TX_ON_DELAY. No independent semantic name is claimed.
             #[inline]
             pub const fn init_duplicate_byte(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `LC_TX_ON_DELAY`.
@@ -35913,13 +35914,13 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2_LOW_7` field.
@@ -35942,13 +35943,13 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2_LOW_7` field.
@@ -36197,7 +36198,7 @@ pub mod bt_mac {
             /// The `INIT_HIGH_HALF` field.
             #[inline]
             pub const fn init_high_half(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -36208,7 +36209,7 @@ pub mod bt_mac {
             /// The `INIT_HIGH_HALF` field.
             #[inline]
             pub const fn init_high_half(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `INIT_HIGH_HALF`.
@@ -36311,7 +36312,7 @@ pub mod bt_mac {
             /// Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries.
             #[inline]
             pub const fn entry_count(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The complete BLE PHY initialization body's selected branch sets this positional bit. No independent enable, allowlist, or directed-advertising hardware meaning is proven.
@@ -36334,7 +36335,7 @@ pub mod bt_mac {
             /// Number of entries of the Controller-SRAM eight-byte device table (filter accept list and periodic advertiser list entries; the IRK resolving list is a separate 64-byte table), valid or not; hardware walks this many entries.
             #[inline]
             pub const fn entry_count(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The complete BLE PHY initialization body's selected branch sets this positional bit. No independent enable, allowlist, or directed-advertising hardware meaning is proven.
@@ -36631,25 +36632,25 @@ pub mod bt_mac {
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -36660,25 +36661,25 @@ pub mod bt_mac {
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `OPCODE_0`.
@@ -36759,25 +36760,25 @@ pub mod bt_mac {
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_4(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_5(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_6(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_7(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -36788,25 +36789,25 @@ pub mod bt_mac {
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_4(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_5(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_6(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Aborted-opcode byte selector; the exact hardware matching behavior is unqualified.
             #[inline]
             pub const fn opcode_7(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `OPCODE_4`.
@@ -37056,19 +37057,19 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
 
@@ -37079,19 +37080,19 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set `INIT_BYTE_0`.
@@ -37165,25 +37166,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -37194,25 +37195,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `INIT_BYTE_0`.
@@ -37293,25 +37294,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -37322,25 +37323,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `INIT_BYTE_0`.
@@ -37421,25 +37422,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -37450,25 +37451,25 @@ pub mod bt_mac {
             /// The `INIT_BYTE_0` field.
             #[inline]
             pub const fn init_byte_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `INIT_BYTE_1` field.
             #[inline]
             pub const fn init_byte_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_2` field.
             #[inline]
             pub const fn init_byte_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `INIT_BYTE_3` field.
             #[inline]
             pub const fn init_byte_3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `INIT_BYTE_0`.
@@ -45231,7 +45232,7 @@ pub mod cache {
             /// Configures the size of the lock/unlock operation, which should be used together with CACHE_LOCK_ADDR_REG
             #[inline]
             pub const fn lock_size(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -45242,7 +45243,7 @@ pub mod cache {
             /// Configures the size of the lock/unlock operation, which should be used together with CACHE_LOCK_ADDR_REG
             #[inline]
             pub const fn lock_size(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `LOCK_SIZE`.
@@ -50901,13 +50902,13 @@ pub mod cache {
             /// The register records the ID of fail-access when cache0 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache0_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when cache0 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache0_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -50978,13 +50979,13 @@ pub mod cache {
             /// The register records the ID of fail-access when cache1 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache1_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when cache1 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache1_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -51055,13 +51056,13 @@ pub mod cache {
             /// The register records the ID of fail-access when cache2 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache2_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when cache2 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache2_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -51132,13 +51133,13 @@ pub mod cache {
             /// The register records the ID of fail-access when cache3 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache3_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when cache3 accesses L1-ICache.
             #[inline]
             pub const fn l1_icache3_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -51209,13 +51210,13 @@ pub mod cache {
             /// The register records the ID of fail-access when cache accesses L1-DCache.
             #[inline]
             pub const fn l1_dcache_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when cache accesses L1-DCache.
             #[inline]
             pub const fn l1_dcache_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -53627,13 +53628,13 @@ pub mod cache {
             /// Configures the size of the first section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT0_ADDR_REG
             #[inline]
             pub const fn l2_cache_prelock_sct0_size(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures the size of the second section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOCK_SCT1_ADDR_REG
             #[inline]
             pub const fn l2_cache_prelock_sct1_size(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -53789,7 +53790,7 @@ pub mod cache {
             /// Configures the size of the first section of prelock on L2-Cache, which should be used together with L2_CACHE_PRELOAD_ADDR_REG
             #[inline]
             pub const fn l2_cache_preload_size(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -56051,13 +56052,13 @@ pub mod cache {
             /// The register records the ID of fail-access when L1-Cache accesses L2-Cache.
             #[inline]
             pub const fn l2_cache_fail_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The register records the attribution of fail-access when L1-Cache accesses L2-Cache due to cache accessing L1-Cache.
             #[inline]
             pub const fn l2_cache_fail_attr(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -57898,7 +57899,7 @@ pub mod clic {
             /// Implementation revision in the low nibble, CLIC architecture version in the high nibble.
             #[inline]
             pub const fn version(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// Implemented high bits of each line's CLICINTCTL byte.
@@ -57936,7 +57937,7 @@ pub mod clic {
             /// Legacy machine interrupt threshold.
             #[inline]
             pub const fn cpu_int_thresh(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -57947,7 +57948,7 @@ pub mod clic {
             /// Legacy machine interrupt threshold.
             #[inline]
             pub const fn cpu_int_thresh(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `CPU_INT_THRESH`.
@@ -58257,7 +58258,7 @@ pub mod clic {
             /// Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) << 5.
             #[inline]
             pub const fn ctl(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The whole word as the hardware has it, for a diagnostic record
@@ -58275,7 +58276,7 @@ pub mod clic {
             /// Level and priority control; with three level bits a level-n line holds 0x1f | (n - 1) << 5.
             #[inline]
             pub const fn ctl(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `CTL`.
@@ -58903,7 +58904,7 @@ pub mod coex {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -58920,7 +58921,7 @@ pub mod coex {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `SECONDARY_TICK_IMAGE`.
@@ -61689,7 +61690,7 @@ pub mod efuse {
             /// Represents the version used by ESP-IDF anti-rollback feature.
             #[inline]
             pub const fn secure_version(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Represents whether FAST VERIFY ON WAKE is disabled or enabled when Secure Boot is enabled.\\ 1: disabled\\ 0: enabled\\
@@ -62136,13 +62137,13 @@ pub mod efuse {
             /// Represents MAC address. High 16-bit. MAC address bits 47:32; the first transmitted octet is bits 15:8.
             #[inline]
             pub const fn mac_1(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Represents the extended bits of MAC address. Extended bits of the MAC address.
             #[inline]
             pub const fn mac_ext(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -62392,7 +62393,7 @@ pub mod efuse {
             /// OCode calibration
             #[inline]
             pub const fn ocode(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Active HP DBIAS of fixed voltage
@@ -62775,19 +62776,19 @@ pub mod efuse {
             /// ADC1 bit 14 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit14(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// ADC1 bit 13 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit13(self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// ADC1 bit 12 weight fragment.
             #[inline]
             pub const fn adc1_weight_bit12(self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// ADC1 bit 11 weight fragment.
@@ -62947,13 +62948,13 @@ pub mod efuse {
             /// ADC2 bit 13 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit13(self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// ADC2 bit 12 weight fragment.
             #[inline]
             pub const fn adc2_weight_bit12(self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// ADC2 bit 11 weight fragment.
@@ -63862,13 +63863,13 @@ pub mod efuse {
             /// Power glitch monitor threthold.
             #[inline]
             pub const fn pvt_0_limit(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Power glitch monitor threthold.
             #[inline]
             pub const fn pvt_1_limit(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -64621,7 +64622,7 @@ pub mod efuse {
             /// Represents the programming error of EFUSE_SECURE_VERSION
             #[inline]
             pub const fn secure_version_err(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Represents the programming error of EFUSE_SECURE_BOOT_DISABLE_FAST_WAKE
@@ -65016,7 +65017,7 @@ pub mod efuse {
             /// Represents the programming error of EFUSE_REPEAT7_RSVD
             #[inline]
             pub const fn repeat7_rsvd_err(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -65514,7 +65515,7 @@ pub mod efuse {
             /// Configures operation command type.\\ 0x5A5A: Program operation command\\ 0x5AA5: Read operation command\\ Other values: No effect\\
             #[inline]
             pub const fn op_code(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -65525,7 +65526,7 @@ pub mod efuse {
             /// Configures operation command type.\\ 0x5A5A: Program operation command\\ 0x5AA5: Read operation command\\ Other values: No effect\\
             #[inline]
             pub const fn op_code(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `OP_CODE`.
@@ -66269,7 +66270,7 @@ pub mod efuse {
             /// Configures the division factor of the rising clock of the programming voltage (ramp-up slew rate be slower than 2.5V/250us, and ramp-up 10mV for one-cycle, so reg_dac_clk_div > fclk).
             #[inline]
             pub const fn dac_clk_div(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Don't care.
@@ -66281,7 +66282,7 @@ pub mod efuse {
             /// Configures clock cycles for programming voltage to rise (VDDQ 2.5V, ramp-up 10mV for one-cycle). Measurement unit: a clock cycle divided by EFUSE_DAC_CLK_DIV.
             #[inline]
             pub const fn dac_num(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Configures whether to reduce the power supply of programming voltage.\\ 0: Not reduce\\ 1: Reduce\\
@@ -66298,7 +66299,7 @@ pub mod efuse {
             /// Configures the division factor of the rising clock of the programming voltage (ramp-up slew rate be slower than 2.5V/250us, and ramp-up 10mV for one-cycle, so reg_dac_clk_div > fclk).
             #[inline]
             pub const fn dac_clk_div(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Don't care.
@@ -66310,7 +66311,7 @@ pub mod efuse {
             /// Configures clock cycles for programming voltage to rise (VDDQ 2.5V, ramp-up 10mV for one-cycle). Measurement unit: a clock cycle divided by EFUSE_DAC_CLK_DIV.
             #[inline]
             pub const fn dac_num(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Configures whether to reduce the power supply of programming voltage.\\ 0: Not reduce\\ 1: Reduce\\
@@ -66397,25 +66398,25 @@ pub mod efuse {
             /// Configures the read hold time (>=14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn thr_a(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the read time (>=52ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn trd(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures the read setup time (>=14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tsur_a(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Configures the waiting time of reading eFuse memory. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn read_init_num(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -66426,25 +66427,25 @@ pub mod efuse {
             /// Configures the read hold time (>=14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn thr_a(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the read time (>=52ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn trd(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures the read setup time (>=14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tsur_a(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Configures the waiting time of reading eFuse memory. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn read_init_num(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `THR_A`.
@@ -66518,19 +66519,19 @@ pub mod efuse {
             /// Configures the programming setup time (>14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tsup_a(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the power up time for VDDQ (>reg_dac_clk_div*reg_dac_clk_div). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn pwr_on_num(self) -> u16 {
-                (self.0 >> 8) as u16
+                ((self.0 >> 8) & 0xffff) as u16
             }
 
             /// Configures the programming hold time (>=11ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn thp_a(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -66541,19 +66542,19 @@ pub mod efuse {
             /// Configures the programming setup time (>14ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tsup_a(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the power up time for VDDQ (>reg_dac_clk_div*reg_dac_clk_div). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn pwr_on_num(&self) -> u16 {
-                (self.0 >> 8) as u16
+                ((self.0 >> 8) & 0xffff) as u16
             }
 
             /// Configures the programming hold time (>=11ns). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn thp_a(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `TSUP_A`.
@@ -66613,13 +66614,13 @@ pub mod efuse {
             /// Configures the power outage time for VDDQ. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn pwr_off_num(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures the active programming time (>10us). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tpgm(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -66630,13 +66631,13 @@ pub mod efuse {
             /// Configures the power outage time for VDDQ. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn pwr_off_num(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures the active programming time (>10us). Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tpgm(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `PWR_OFF_NUM`.
@@ -66723,7 +66724,7 @@ pub mod efuse {
             /// Configures the inactive programming time. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tpgm_inactive(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
         }
 
@@ -66746,7 +66747,7 @@ pub mod efuse {
             /// Configures the inactive programming time. Measurement unit: One cycle of the eFuse core clock.
             #[inline]
             pub const fn tpgm_inactive(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// Set `BYPASS_RS_CORRECTION`.
@@ -71146,7 +71147,7 @@ pub mod fe {
             /// Fixed 0x0010 image published by the second coex_pti_v2 RMW.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BITS_0_15_OPAQUE` field as its declared value, if it is one.
@@ -71158,7 +71159,7 @@ pub mod fe {
             /// Fixed 0x0640 image published by the first coex_pti_v2 RMW.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// The `BITS_16_31_OPAQUE` field as its declared value, if it is one.
@@ -71175,7 +71176,7 @@ pub mod fe {
             /// Fixed 0x0010 image published by the second coex_pti_v2 RMW.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BITS_0_15_OPAQUE` field as its declared value, if it is one.
@@ -71187,7 +71188,7 @@ pub mod fe {
             /// Fixed 0x0640 image published by the first coex_pti_v2 RMW.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// The `BITS_16_31_OPAQUE` field as its declared value, if it is one.
@@ -71332,7 +71333,7 @@ pub mod fe {
             /// Complete phy_freq_chan_en_sw replaces the low byte with the caller's frequency-table index.
             #[inline]
             pub const fn channel_index(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Low ten bits of the eleven-bit address published by phy_read_rf_freq_mem and phy_freq_i2c_mem_write.
@@ -71362,7 +71363,7 @@ pub mod fe {
             /// Complete phy_freq_reg_init replaces bits 29:22 with its two input nibbles; the electrical encoding is unknown.
             #[inline]
             pub const fn bits_22_29_opaque(self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
 
             /// Complete phy_freq_reg_init sets bit 30.
@@ -71398,7 +71399,7 @@ pub mod fe {
             /// Complete phy_freq_chan_en_sw replaces the low byte with the caller's frequency-table index.
             #[inline]
             pub const fn channel_index(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Low ten bits of the eleven-bit address published by phy_read_rf_freq_mem and phy_freq_i2c_mem_write.
@@ -71428,7 +71429,7 @@ pub mod fe {
             /// Complete phy_freq_reg_init replaces bits 29:22 with its two input nibbles; the electrical encoding is unknown.
             #[inline]
             pub const fn bits_22_29_opaque(&self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
 
             /// Complete phy_freq_reg_init sets bit 30.
@@ -72192,13 +72193,13 @@ pub mod fe {
             /// The `FORCED_DIGITAL_GAIN_0` field.
             #[inline]
             pub const fn forced_digital_gain_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `FORCED_DIGITAL_GAIN_1` field.
             #[inline]
             pub const fn forced_digital_gain_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `FORCE_DIGITAL_GAIN_ENABLE` field.
@@ -72222,7 +72223,7 @@ pub mod fe {
             /// Eight-bit table-memory base index; the complete front-end initializer writes 0xa0.
             #[inline]
             pub const fn base_index(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -72233,13 +72234,13 @@ pub mod fe {
             /// The `FORCED_DIGITAL_GAIN_0` field.
             #[inline]
             pub const fn forced_digital_gain_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `FORCED_DIGITAL_GAIN_1` field.
             #[inline]
             pub const fn forced_digital_gain_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `FORCE_DIGITAL_GAIN_ENABLE` field.
@@ -72263,7 +72264,7 @@ pub mod fe {
             /// Eight-bit table-memory base index; the complete front-end initializer writes 0xa0.
             #[inline]
             pub const fn base_index(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `FORCED_DIGITAL_GAIN_0`.
@@ -72437,25 +72438,25 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_16_23_OPAQUE` field.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -72466,25 +72467,25 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_16_23_OPAQUE` field.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -72853,7 +72854,7 @@ pub mod fe {
             /// Upper eight bits of the evidenced ten-bit selector; bits 1:0 are in TONE_SELECTOR_CONTROL.
             #[inline]
             pub const fn selector_high(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete tone writers clear these bits; their hardware meaning is unknown.
@@ -72865,7 +72866,7 @@ pub mod fe {
             /// Two's-complement negated eight-bit tone step or attenuation.
             #[inline]
             pub const fn negated_step_or_attenuation(self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup.
@@ -72906,7 +72907,7 @@ pub mod fe {
             /// Upper eight bits of the evidenced ten-bit selector; bits 1:0 are in TONE_SELECTOR_CONTROL.
             #[inline]
             pub const fn selector_high(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete tone writers clear these bits; their hardware meaning is unknown.
@@ -72918,7 +72919,7 @@ pub mod fe {
             /// Two's-complement negated eight-bit tone step or attenuation.
             #[inline]
             pub const fn negated_step_or_attenuation(&self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// Set by tone start and by each PWDET sample-arm edge; cleared by stop and sample cleanup.
@@ -73215,7 +73216,7 @@ pub mod fe {
             /// The `SELECTOR_HIGH` field.
             #[inline]
             pub const fn selector_high(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `SELECTOR_HIGH` field as its declared value, if it is one.
@@ -73239,7 +73240,7 @@ pub mod fe {
             /// The `NEGATED_STEP_OR_ATTENUATION` field.
             #[inline]
             pub const fn negated_step_or_attenuation(self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// The `NEGATED_STEP_OR_ATTENUATION` field as its declared value, if it is one.
@@ -73282,7 +73283,7 @@ pub mod fe {
             /// The `SELECTOR_HIGH` field.
             #[inline]
             pub const fn selector_high(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `SELECTOR_HIGH` field as its declared value, if it is one.
@@ -73306,7 +73307,7 @@ pub mod fe {
             /// The `NEGATED_STEP_OR_ATTENUATION` field.
             #[inline]
             pub const fn negated_step_or_attenuation(&self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// The `NEGATED_STEP_OR_ATTENUATION` field as its declared value, if it is one.
@@ -73773,7 +73774,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -73796,7 +73797,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_22_23_OPAQUE`.
@@ -73920,7 +73921,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -73961,7 +73962,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `RX_IQ_GAIN_COEFFICIENT`.
@@ -74934,7 +74935,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -75184,7 +75185,7 @@ pub mod fe {
             /// PWDET initialization selects 0x50. phy_txdc_cal_pwdet_init saves this byte, selects temporary 0x78 and restores the saved image after calibration. Electrical units remain unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_LIBPHY_PHY_TXDC_PWDET.
             #[inline]
             pub const fn bits_4_11_opaque(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// phy_tx_pwctrl_bg_init sets this bit after PWDET setup. Background power-control context is established; the individual electrical function is unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
@@ -75231,7 +75232,7 @@ pub mod fe {
             /// PWDET initialization selects 0x50. phy_txdc_cal_pwdet_init saves this byte, selects temporary 0x78 and restores the saved image after calibration. Electrical units remain unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR, BLOB_LIBPHY_PHY_TXDC_PWDET.
             #[inline]
             pub const fn bits_4_11_opaque(&self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// phy_tx_pwctrl_bg_init sets this bit after PWDET setup. Background power-control context is established; the individual electrical function is unknown. SOURCE: ROM_REV0_PHY_POWER_DETECTOR.
@@ -75486,7 +75487,7 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -75497,7 +75498,7 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -75990,7 +75991,7 @@ pub mod fe {
             /// Low eight bits of the PBUS command and complete CFR/gain memory index.
             #[inline]
             pub const fn memory_index(self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// Gain-memory write selector or PBUS command bit 8.
@@ -76031,7 +76032,7 @@ pub mod fe {
             /// Low eight bits of the PBUS command and complete CFR/gain memory index.
             #[inline]
             pub const fn memory_index(&self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// Gain-memory write selector or PBUS command bit 8.
@@ -76257,25 +76258,25 @@ pub mod fe {
             /// The `EVEN_GROUP_FIRST_ENTRY` field.
             #[inline]
             pub const fn even_group_first_entry(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `EVEN_GROUP_LAST_ENTRY` field.
             #[inline]
             pub const fn even_group_last_entry(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `ODD_GROUP_FIRST_ENTRY` field.
             #[inline]
             pub const fn odd_group_first_entry(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `ODD_GROUP_LAST_ENTRY` field.
             #[inline]
             pub const fn odd_group_last_entry(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -76286,25 +76287,25 @@ pub mod fe {
             /// The `EVEN_GROUP_FIRST_ENTRY` field.
             #[inline]
             pub const fn even_group_first_entry(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `EVEN_GROUP_LAST_ENTRY` field.
             #[inline]
             pub const fn even_group_last_entry(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `ODD_GROUP_FIRST_ENTRY` field.
             #[inline]
             pub const fn odd_group_first_entry(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `ODD_GROUP_LAST_ENTRY` field.
             #[inline]
             pub const fn odd_group_last_entry(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `EVEN_GROUP_FIRST_ENTRY`.
@@ -76371,13 +76372,13 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -76388,13 +76389,13 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -76454,19 +76455,19 @@ pub mod fe {
             /// Eight-bit RF-on delay code printed by the vendor checker after integer division by 80. The electrical time unit of the raw code is not otherwise assumed.
             #[inline]
             pub const fn rf_on_bt_delay_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Bluetooth PA-on delay.
             #[inline]
             pub const fn pa_on_bt_delay(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_16_31_OPAQUE` field.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -76477,19 +76478,19 @@ pub mod fe {
             /// Eight-bit RF-on delay code printed by the vendor checker after integer division by 80. The electrical time unit of the raw code is not otherwise assumed.
             #[inline]
             pub const fn rf_on_bt_delay_code(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Bluetooth PA-on delay.
             #[inline]
             pub const fn pa_on_bt_delay(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_16_31_OPAQUE` field.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `RF_ON_BT_DELAY_CODE`.
@@ -77350,7 +77351,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -77415,7 +77416,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -77946,13 +77947,13 @@ pub mod fe {
             /// First update writes parameter byte 0x121 into bits 11:4.
             #[inline]
             pub const fn bits_4_11_opaque(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// Second update writes the low eight bits of parameter byte 0x120 plus 0x50 into bits 19:12.
             #[inline]
             pub const fn bits_12_19_opaque(self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -77975,13 +77976,13 @@ pub mod fe {
             /// First update writes parameter byte 0x121 into bits 11:4.
             #[inline]
             pub const fn bits_4_11_opaque(&self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// Second update writes the low eight bits of parameter byte 0x120 plus 0x50 into bits 19:12.
             #[inline]
             pub const fn bits_12_19_opaque(&self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -78162,25 +78163,25 @@ pub mod fe {
             /// One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -78191,25 +78192,25 @@ pub mod fe {
             /// One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// One byte-wide DAC-scale lane controlled by phy_dac_scale_set. ROM tone start clears it in the power-control path; phy_stop_tx_tone(1) restores 0xff through a fresh-read update. Physical units and relative path assignment remain unknown. SOURCE: ROM_REV0_PHY_START_STOP_TX_TONE, VENDOR_PHY_DAC_SCALE.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_8_15_OPAQUE`.
@@ -78468,7 +78469,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -78509,7 +78510,7 @@ pub mod fe {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `TX_IQ_GAIN_COEFFICIENT`.
@@ -78774,7 +78775,7 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -78785,7 +78786,7 @@ pub mod fe {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -84575,13 +84576,13 @@ pub mod hp_system {
             /// Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in a mode
             #[inline]
             pub const fn hp_reg_probe_a_mod_sel(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Tihs field is used to selec module's probe_out[31:0] as probe out in a mode
             #[inline]
             pub const fn hp_reg_probe_a_top_sel(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Tihs field is used to selec probe_out[31:16]
@@ -84610,13 +84611,13 @@ pub mod hp_system {
             /// Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in a mode
             #[inline]
             pub const fn hp_reg_probe_a_mod_sel(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Tihs field is used to selec module's probe_out[31:0] as probe out in a mode
             #[inline]
             pub const fn hp_reg_probe_a_top_sel(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Tihs field is used to selec probe_out[31:16]
@@ -84725,13 +84726,13 @@ pub mod hp_system {
             /// Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in b mode.
             #[inline]
             pub const fn hp_reg_probe_b_mod_sel(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Tihs field is used to select module's probe_out[31:0] as probe_out in b mode
             #[inline]
             pub const fn hp_reg_probe_b_top_sel(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set this bit to enable b mode for debug probe. 1: b mode, 0: a mode.
@@ -84748,13 +84749,13 @@ pub mod hp_system {
             /// Tihs field is used to selec probe_group from probe_group0 to probe_group15 for module's probe_out[31:0] in b mode.
             #[inline]
             pub const fn hp_reg_probe_b_mod_sel(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Tihs field is used to select module's probe_out[31:0] as probe_out in b mode
             #[inline]
             pub const fn hp_reg_probe_b_top_sel(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set this bit to enable b mode for debug probe. 1: b mode, 0: a mode.
@@ -84859,7 +84860,8 @@ pub mod hp_system {
                 self,
                 index: oer_portable_mmio::Index<2>,
             ) -> bool {
-                let shift = 0u32.wrapping_add((index.get() as u32).wrapping_mul(1u32));
+                let shift =
+                    0u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul(1u32));
                 let bits = self.0.wrapping_shr(shift);
                 (bits & 1) != 0
             }
@@ -85343,19 +85345,19 @@ pub mod hp_system {
             /// need_des
             #[inline]
             pub const fn hp_reg_ac_mem_fo(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_reg_ic_mem_fo(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_reg_dc_mem_fo(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
 
@@ -85366,19 +85368,19 @@ pub mod hp_system {
             /// need_des
             #[inline]
             pub const fn hp_reg_ac_mem_fo(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_reg_ic_mem_fo(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_reg_dc_mem_fo(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set `HP_REG_AC_MEM_FO`.
@@ -85635,7 +85637,7 @@ pub mod hp_system {
             /// This field used to set hp core0&1 ibus timeout threshold
             #[inline]
             pub const fn hp_core_ibus_timeout_thres(self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
         }
 
@@ -85652,7 +85654,7 @@ pub mod hp_system {
             /// This field used to set hp core0&1 ibus timeout threshold
             #[inline]
             pub const fn hp_core_ibus_timeout_thres(&self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
 
             /// Set `HP_CORE_IBUS_TIMEOUT_PROTECT_EN`.
@@ -85715,7 +85717,7 @@ pub mod hp_system {
             /// This field used to set hp core0&1 dbus timeout threshold
             #[inline]
             pub const fn hp_core_dbus_timeout_thres(self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
         }
 
@@ -85732,7 +85734,7 @@ pub mod hp_system {
             /// This field used to set hp core0&1 dbus timeout threshold
             #[inline]
             pub const fn hp_core_dbus_timeout_thres(&self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
 
             /// Set `HP_CORE_DBUS_TIMEOUT_PROTECT_EN`.
@@ -87435,7 +87437,7 @@ pub mod hp_system {
             /// chain clk div num to pad for debug
             #[inline]
             pub const fn hp_rng_chain_clk_div_num(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
 
@@ -87446,7 +87448,7 @@ pub mod hp_system {
             /// chain clk div num to pad for debug
             #[inline]
             pub const fn hp_rng_chain_clk_div_num(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set `HP_RNG_CHAIN_CLK_DIV_NUM`.
@@ -89773,7 +89775,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral0 register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn cpu_peri0_timeout_thres(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral0 registers.\\ 0: Disable\\ 1: Enable\\
@@ -89790,7 +89792,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral0 register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn cpu_peri0_timeout_thres(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral0 registers.\\ 0: Disable\\ 1: Enable\\
@@ -89878,7 +89880,7 @@ pub mod hp_system {
             /// Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared.
             #[inline]
             pub const fn cpu_peri0_timeout_uid(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -89932,7 +89934,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn hp_peri0_timeout_thres(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\ 0: Disable\\ 1: Enable\\
@@ -89949,7 +89951,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn hp_peri0_timeout_thres(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\ 0: Disable\\ 1: Enable\\
@@ -90037,7 +90039,7 @@ pub mod hp_system {
             /// Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared.
             #[inline]
             pub const fn hp_peri0_timeout_uid(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -90091,7 +90093,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn hp_peri1_timeout_thres(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\ 0: Disable\\ 1: Enable\\
@@ -90108,7 +90110,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn hp_peri1_timeout_thres(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral registers.\\ 0: Disable\\ 1: Enable\\
@@ -90196,7 +90198,7 @@ pub mod hp_system {
             /// Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared.
             #[inline]
             pub const fn hp_peri1_timeout_uid(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -91007,7 +91009,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn cpu_peri1_timeout_thres(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral11 registers.\\ 0: Disable\\ 1: Enable\\
@@ -91024,7 +91026,7 @@ pub mod hp_system {
             /// Configures the timeout threshold for bus access for accessing CPU peripheral register in the number of clock cycles of the clock domain.
             #[inline]
             pub const fn cpu_peri1_timeout_thres(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Configures whether or not to enable timeout protection for accessing CPU peripheral11 registers.\\ 0: Disable\\ 1: Enable\\
@@ -91112,7 +91114,7 @@ pub mod hp_system {
             /// Represents the master id[5:0] and master permission[6:5] when trigger timeout. This register will be cleared after the interrupt is cleared.
             #[inline]
             pub const fn cpu_peri1_timeout_uid(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -92843,7 +92845,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cpu_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -92866,7 +92868,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cpu_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -93009,7 +93011,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_sys_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -93032,7 +93034,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_sys_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -93121,7 +93123,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_apb_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -93144,7 +93146,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_apb_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -95405,7 +95407,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_pvt0_clk_div_num(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -95440,7 +95442,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_pvt0_clk_div_num(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -96623,7 +96625,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_flash_core_clk_div_num(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
 
@@ -96682,7 +96684,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_flash_core_clk_div_num(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Set `REG_FLASH_SYS_CLK_EN`.
@@ -96888,7 +96890,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_psram_core_clk_div_num(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
 
@@ -96947,7 +96949,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_psram_core_clk_div_num(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Set `REG_PSRAM_SYS_CLK_EN`.
@@ -97141,13 +97143,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_gpspi2_hs_clk_div_num(self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_gpspi2_mst_clk_div_num(self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// need_des
@@ -97200,13 +97202,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_gpspi2_hs_clk_div_num(&self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_gpspi2_mst_clk_div_num(&self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// need_des
@@ -97406,13 +97408,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_gpspi3_hs_clk_div_num(self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_gpspi3_mst_clk_div_num(self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// need_des
@@ -97465,13 +97467,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_gpspi3_hs_clk_div_num(&self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_gpspi3_mst_clk_div_num(&self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// need_des
@@ -98158,19 +98160,19 @@ pub mod hp_sys_clkrst {
             /// Integral part of the function clock divider; zero divides by one.
             #[inline]
             pub const fn reg_uart0_sclk_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Numerator of the function clock divider's fractional part.
             #[inline]
             pub const fn reg_uart0_sclk_div_numerator(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Denominator of the function clock divider's fractional part.
             #[inline]
             pub const fn reg_uart0_sclk_div_denominator(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -98223,19 +98225,19 @@ pub mod hp_sys_clkrst {
             /// Integral part of the function clock divider; zero divides by one.
             #[inline]
             pub const fn reg_uart0_sclk_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Numerator of the function clock divider's fractional part.
             #[inline]
             pub const fn reg_uart0_sclk_div_numerator(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Denominator of the function clock divider's fractional part.
             #[inline]
             pub const fn reg_uart0_sclk_div_denominator(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `REG_UART0_SYS_CLK_EN`.
@@ -98445,19 +98447,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_numerator(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_denominator(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -98510,19 +98512,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_numerator(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart1_sclk_div_denominator(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `REG_UART1_SYS_CLK_EN`.
@@ -98732,19 +98734,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_numerator(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_denominator(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -98797,19 +98799,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_numerator(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart2_sclk_div_denominator(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `REG_UART2_SYS_CLK_EN`.
@@ -99019,19 +99021,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_numerator(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_denominator(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -99084,19 +99086,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_numerator(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_uart3_sclk_div_denominator(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `REG_UART3_SYS_CLK_EN`.
@@ -99403,19 +99405,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_num(self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_numerator(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_denominator(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
         }
 
@@ -99450,19 +99452,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_num(&self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_rx_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// Set `REG_PARLIO_RX_RST_EN`.
@@ -99616,19 +99618,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_num(self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_numerator(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_denominator(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
         }
 
@@ -99663,19 +99665,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_num(&self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_parlio_tx_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// Set `REG_PARLIO_TX_RST_EN`.
@@ -100663,19 +100665,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_num(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_numerator(self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_denominator(self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
         }
 
@@ -100716,19 +100718,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_num(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_rmt_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 22) as u8
+                ((self.0 >> 22) & 0xff) as u8
             }
 
             /// Set `REG_RMT_SYS_CLK_EN`.
@@ -100849,7 +100851,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_sdio_ls_clk_div_num(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
         }
 
@@ -100872,7 +100874,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_sdio_ls_clk_div_num(&self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// Set `REG_SDMMC_SYS_CLK_EN`.
@@ -101463,7 +101465,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mipi_dsi_dpiclk_div_num(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
         }
 
@@ -101486,7 +101488,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mipi_dsi_dpiclk_div_num(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// Set `REG_MIPI_DSI_DPICLK_SRC_SEL`.
@@ -101731,19 +101733,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_num(self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_numerator(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_denominator(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
         }
 
@@ -101784,19 +101786,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_num(&self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c0_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// Set `REG_I2C0_APB_CLK_EN`.
@@ -101967,19 +101969,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_num(self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_numerator(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_denominator(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
         }
 
@@ -102020,19 +102022,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_num(&self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_i2c1_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// Set `REG_I2C1_APB_CLK_EN`.
@@ -102263,7 +102265,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s0_rx_div_n(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -102292,7 +102294,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s0_rx_div_n(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -102532,7 +102534,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s0_tx_div_n(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
         }
 
@@ -102555,7 +102557,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s0_tx_div_n(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// Set `REG_I2S0_TX_CLK_EN`.
@@ -102895,7 +102897,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s1_rx_div_n(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -102924,7 +102926,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s1_rx_div_n(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
@@ -103164,7 +103166,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s1_tx_div_n(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
         }
 
@@ -103187,7 +103189,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_i2s1_tx_div_n(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// Set `REG_I2S1_TX_CLK_EN`.
@@ -104064,7 +104066,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_timergrp0_tgrt_clk_div_num(self) -> u16 {
-                (self.0 >> 5) as u16
+                ((self.0 >> 5) & 0xffff) as u16
             }
         }
 
@@ -104087,7 +104089,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_timergrp0_tgrt_clk_div_num(&self) -> u16 {
-                (self.0 >> 5) as u16
+                ((self.0 >> 5) & 0xffff) as u16
             }
 
             /// Set `REG_TIMERGRP0_TGRT_CLK_EN`.
@@ -104755,7 +104757,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm0_clk_div_num(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
         }
 
@@ -104796,7 +104798,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm0_clk_div_num(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// Set `REG_MCPWM0_APB_CLK_EN`.
@@ -104942,7 +104944,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm1_clk_div_num(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
         }
 
@@ -104983,7 +104985,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm1_clk_div_num(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// Set `REG_MCPWM1_APB_CLK_EN`.
@@ -105129,7 +105131,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm2_clk_div_num(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
         }
 
@@ -105170,7 +105172,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm2_clk_div_num(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// Set `REG_MCPWM2_APB_CLK_EN`.
@@ -105316,7 +105318,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm3_clk_div_num(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
         }
 
@@ -105357,7 +105359,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_mcpwm3_clk_div_num(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// Set `REG_MCPWM3_APB_CLK_EN`.
@@ -106274,19 +106276,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_num(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_numerator(self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_denominator(self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
         }
 
@@ -106309,19 +106311,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_num(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcd_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
 
             /// Set `REG_LCD_CLK_SRC_SEL`.
@@ -106435,19 +106437,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_num(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_numerator(self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_denominator(self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
         }
 
@@ -106470,19 +106472,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_num(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_lcdcam_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
 
             /// Set `REG_LCDCAM_CLK_SRC_SEL`.
@@ -106596,19 +106598,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_num(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_numerator(self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_denominator(self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
         }
 
@@ -106631,19 +106633,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_num(&self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 11) as u8
+                ((self.0 >> 11) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cam_clk_div_denominator(&self) -> u8 {
-                (self.0 >> 19) as u8
+                ((self.0 >> 19) & 0xff) as u8
             }
 
             /// Set `REG_CAM_CLK_SRC_SEL`.
@@ -106782,7 +106784,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_iomux_clk_div_num(self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
         }
 
@@ -106823,7 +106825,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_iomux_clk_div_num(&self) -> u8 {
-                (self.0 >> 5) as u8
+                ((self.0 >> 5) & 0xff) as u8
             }
 
             /// Set `REG_IOMUX_APB_CLK_EN`.
@@ -106921,13 +106923,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_hpcore0_stall_wait_num(self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_wdt_hpcore0_rst_len(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
 
@@ -106944,13 +106946,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_hpcore0_stall_wait_num(&self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_wdt_hpcore0_rst_len(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Set `REG_HPCORE0_STALL_EN`.
@@ -107027,13 +107029,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_hpcore1_stall_wait_num(self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_wdt_hpcore1_rst_len(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
 
@@ -107050,13 +107052,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_hpcore1_stall_wait_num(&self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_wdt_hpcore1_rst_len(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// Set `REG_HPCORE1_STALL_EN`.
@@ -107198,7 +107200,7 @@ pub mod hp_sys_clkrst {
             /// cpu current div number
             #[inline]
             pub const fn reg_cpu_div_num_cur(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// cpu current div numerator
@@ -107659,7 +107661,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_240m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107676,7 +107678,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_240m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107739,7 +107741,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_160m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107756,7 +107758,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_160m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107819,7 +107821,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_120m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107836,7 +107838,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_120m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107913,7 +107915,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_80m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -107942,7 +107944,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_80m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108031,7 +108033,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_60m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108048,7 +108050,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_60m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108111,7 +108113,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_20m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108128,7 +108130,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_20m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108191,7 +108193,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_50m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108208,7 +108210,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_50m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108271,7 +108273,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_25m_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108288,7 +108290,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_ref_25m_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -108620,13 +108622,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch0_sel(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch0_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -108643,13 +108645,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch0_sel(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch0_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -108726,13 +108728,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch1_sel(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch1_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -108749,13 +108751,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch1_sel(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch1_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -108832,13 +108834,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch2_sel(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch2_div_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -108855,13 +108857,13 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch2_sel(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_dbg_ch2_div_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
@@ -109453,7 +109455,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_zero_det_clk_div_num(self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
         }
 
@@ -109500,7 +109502,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_zero_det_clk_div_num(&self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// Set `REG_ZERO_DET_APB_CLK_EN`.
@@ -109602,19 +109604,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_numerator(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_denonimator(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
 
@@ -109625,19 +109627,19 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_numerator(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn reg_cordic_clk_div_denonimator(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set `REG_CORDIC_CLK_DIV_NUM`.
@@ -109701,7 +109703,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_apb_hw_decrease_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -109718,7 +109720,7 @@ pub mod hp_sys_clkrst {
             /// need_des
             #[inline]
             pub const fn reg_apb_hw_decrease_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -111633,19 +111635,19 @@ pub mod i2c_ana_mst {
             /// The `SLAVE_ADDR` field.
             #[inline]
             pub const fn slave_addr(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `SLAVE_REG_ADDR` field.
             #[inline]
             pub const fn slave_reg_addr(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `DATA` field.
             #[inline]
             pub const fn data(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `READ_WRITE` field.
@@ -111771,19 +111773,19 @@ pub mod i2c_ana_mst {
             /// The `SLAVE_ADDR` field.
             #[inline]
             pub const fn slave_addr(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `SLAVE_REG_ADDR` field.
             #[inline]
             pub const fn slave_reg_addr(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `DATA` field.
             #[inline]
             pub const fn data(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `READ_WRITE` field.
@@ -111894,7 +111896,7 @@ pub mod i2c_ana_mst {
             /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c0_status(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -111911,7 +111913,7 @@ pub mod i2c_ana_mst {
             /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c0_status(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `I2C0_CONF`.
@@ -111961,7 +111963,7 @@ pub mod i2c_ana_mst {
             /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c1_status(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -111978,7 +111980,7 @@ pub mod i2c_ana_mst {
             /// Short sourced reads observe this byte changing from7 during idle to0x4a while BUSY and back to7; individual status-bit meanings and IRQ123/131 wiring remain unqualified. SOURCE: HW30_S31_I2C_READ_OBSERVER_20261027.
             #[inline]
             pub const fn i2c1_status(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `I2C1_CONF`.
@@ -112364,7 +112366,7 @@ pub mod i2c_ana_mst {
             /// The `ANA_STATUS0` field.
             #[inline]
             pub const fn ana_status0(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -112429,7 +112431,7 @@ pub mod i2c_ana_mst {
             /// The `ANA_STATUS0` field.
             #[inline]
             pub const fn ana_status0(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_1_OPAQUE`.
@@ -112529,7 +112531,7 @@ pub mod i2c_ana_mst {
             /// High byte of the complete complemented PHY-I2C read-mask publication. Reads zero in the scoped s31-b transport probe despite the sourced publication writing ones to this lane; this does not establish ignored writes versus a transient effect.
             #[inline]
             pub const fn ana_status1(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -112546,7 +112548,7 @@ pub mod i2c_ana_mst {
             /// High byte of the complete complemented PHY-I2C read-mask publication. Reads zero in the scoped s31-b transport probe despite the sourced publication writing ones to this lane; this does not establish ignored writes versus a transient effect.
             #[inline]
             pub const fn ana_status1(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `ANA_CONF1`.
@@ -112754,7 +112756,7 @@ pub mod i2c_ana_mst {
             /// The `ANA_STATUS2` field.
             #[inline]
             pub const fn ana_status2(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -112843,7 +112845,7 @@ pub mod i2c_ana_mst {
             /// The `ANA_STATUS2` field.
             #[inline]
             pub const fn ana_status2(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_3_OPAQUE`.
@@ -113337,13 +113339,13 @@ pub mod i2c_ana_mst {
             /// The `EXT_I2C_SDA_I_MASK` field.
             #[inline]
             pub const fn ext_i2c_sda_i_mask(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `EXT_I2C_SDA_O_MASK` field.
             #[inline]
             pub const fn ext_i2c_sda_o_mask(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -113354,13 +113356,13 @@ pub mod i2c_ana_mst {
             /// The `EXT_I2C_SDA_I_MASK` field.
             #[inline]
             pub const fn ext_i2c_sda_i_mask(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `EXT_I2C_SDA_O_MASK` field.
             #[inline]
             pub const fn ext_i2c_sda_o_mask(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `EXT_I2C_SDA_I_MASK`.
@@ -113411,13 +113413,13 @@ pub mod i2c_ana_mst {
             /// The `I2C_SDA_I_MASK` field.
             #[inline]
             pub const fn i2c_sda_i_mask(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `I2C_SDA_O_MASK` field.
             #[inline]
             pub const fn i2c_sda_o_mask(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -113428,13 +113430,13 @@ pub mod i2c_ana_mst {
             /// The `I2C_SDA_I_MASK` field.
             #[inline]
             pub const fn i2c_sda_i_mask(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `I2C_SDA_O_MASK` field.
             #[inline]
             pub const fn i2c_sda_o_mask(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `I2C_SDA_I_MASK`.
@@ -113853,7 +113855,7 @@ pub mod i2c_ana_mst_mem {
         impl From<Block> for u8 {
             #[inline]
             fn from(value: Block) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -114314,7 +114316,7 @@ pub mod ieee802154 {
             /// Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn coex_arb_delay(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Open vendor conf.bit_order field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -114439,7 +114441,7 @@ pub mod ieee802154 {
             /// Open vendor conf.coex_arb_delay field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn coex_arb_delay(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Open vendor conf.bit_order field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -114643,7 +114645,7 @@ pub mod ieee802154 {
             /// The `ADDRESS` field.
             #[inline]
             pub const fn address(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -114654,7 +114656,7 @@ pub mod ieee802154 {
             /// The `ADDRESS` field.
             #[inline]
             pub const fn address(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `ADDRESS`.
@@ -114701,7 +114703,7 @@ pub mod ieee802154 {
             /// The `PAN_ID` field.
             #[inline]
             pub const fn pan_id(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -114712,7 +114714,7 @@ pub mod ieee802154 {
             /// The `PAN_ID` field.
             #[inline]
             pub const fn pan_id(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `PAN_ID`.
@@ -114919,13 +114921,13 @@ pub mod ieee802154 {
             /// Eight-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number.
             #[inline]
             pub const fn frequency_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Open vendor channel.sec_ch_freq field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn sec_ch_freq(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Open vendor channel.rx_multi_ch_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -114978,13 +114980,13 @@ pub mod ieee802154 {
             /// Eight-bit code read and written by ieee802154_ll_get_freq/set_freq; this register model does not equate it to an IEEE channel number.
             #[inline]
             pub const fn frequency_code(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Open vendor channel.sec_ch_freq field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn sec_ch_freq(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Open vendor channel.rx_multi_ch_en field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
@@ -115131,7 +115133,7 @@ pub mod ieee802154 {
             /// Raw eight-bit hardware code; no dBm conversion is claimed at the register boundary.
             #[inline]
             pub const fn power_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -115142,7 +115144,7 @@ pub mod ieee802154 {
             /// Raw eight-bit hardware code; no dBm conversion is claimed at the register boundary.
             #[inline]
             pub const fn power_code(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `POWER_CODE`.
@@ -115413,7 +115415,7 @@ pub mod ieee802154 {
             /// Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL.
             #[inline]
             pub const fn cca_threshold_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `ED_SAMPLE_RATE` field.
@@ -115437,7 +115439,7 @@ pub mod ieee802154 {
             /// Eight-bit result returned as int8_t by the public common LL.
             #[inline]
             pub const fn ed_rss_code(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `CCA_BUSY` field.
@@ -115454,7 +115456,7 @@ pub mod ieee802154 {
             /// Eight-bit code written from an int8_t; signed physical units are intentionally left to the HAL.
             #[inline]
             pub const fn cca_threshold_code(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `ED_SAMPLE_RATE` field.
@@ -115478,7 +115480,7 @@ pub mod ieee802154 {
             /// Eight-bit result returned as int8_t by the public common LL.
             #[inline]
             pub const fn ed_rss_code(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `CCA_BUSY` field.
@@ -115548,7 +115550,7 @@ pub mod ieee802154 {
             /// The `TIMEOUT` field.
             #[inline]
             pub const fn timeout(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -115559,7 +115561,7 @@ pub mod ieee802154 {
             /// The `TIMEOUT` field.
             #[inline]
             pub const fn timeout(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `TIMEOUT`.
@@ -116962,7 +116964,7 @@ pub mod ieee802154 {
             /// Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn pending_timeout(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -116979,7 +116981,7 @@ pub mod ieee802154 {
             /// Open vendor pending_cfg.pending_timeout field. SOURCE: ESP_IDF_7B9CC1AC_S31_IEEE802154_STRUCT. No reset or additional access semantics are inferred.
             #[inline]
             pub const fn pending_timeout(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `FRAME_PENDING`.
@@ -118243,7 +118245,7 @@ pub mod ieee802154 {
             /// The `DTM_TX_LENGTH` field.
             #[inline]
             pub const fn dtm_tx_length(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `DTM_TX_PAYLOAD_TYPE` field.
@@ -118255,7 +118257,7 @@ pub mod ieee802154 {
             /// The `DTM_HOP_FREQ` field.
             #[inline]
             pub const fn dtm_hop_freq(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `DTM_CONT_RX_EN` field.
@@ -119019,13 +119021,13 @@ pub mod ieee802154 {
             /// Delay before the DC-DC raise.
             #[inline]
             pub const fn dcdc_pre_up_delay(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Delay before the DC-DC drop.
             #[inline]
             pub const fn dcdc_down_delay(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The MAC controls the DC-DC converter.
@@ -119048,13 +119050,13 @@ pub mod ieee802154 {
             /// Delay before the DC-DC raise.
             #[inline]
             pub const fn dcdc_pre_up_delay(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Delay before the DC-DC drop.
             #[inline]
             pub const fn dcdc_down_delay(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The MAC controls the DC-DC converter.
@@ -119313,13 +119315,13 @@ pub mod ieee802154 {
             /// The `SFD_TIMEOUT_COUNT` field.
             #[inline]
             pub const fn sfd_timeout_count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `RX_FILTER_NOT_WORK_COUNT` field.
             #[inline]
             pub const fn rx_filter_not_work_count(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -119358,13 +119360,13 @@ pub mod ieee802154 {
             /// The `CRC_ERROR_COUNT` field.
             #[inline]
             pub const fn crc_error_count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `RX_PREAMBLE_DETECT_ERROR_COUNT` field.
             #[inline]
             pub const fn rx_preamble_detect_error_count(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -119394,7 +119396,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119424,7 +119426,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119454,7 +119456,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119484,7 +119486,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119514,7 +119516,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119544,7 +119546,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119574,7 +119576,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119604,7 +119606,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119634,7 +119636,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119664,7 +119666,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119694,7 +119696,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119724,7 +119726,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -119754,7 +119756,7 @@ pub mod ieee802154 {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -127747,7 +127749,7 @@ pub mod lp_aonclkrst {
             /// cpll fb div value
             #[inline]
             pub const fn cpll_fb_div(self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
         }
 
@@ -127764,7 +127766,7 @@ pub mod lp_aonclkrst {
             /// cpll fb div value
             #[inline]
             pub const fn cpll_fb_div(&self) -> u8 {
-                (self.0 >> 4) as u8
+                ((self.0 >> 4) & 0xff) as u8
             }
 
             /// Set `LP_AONCLKRST_CPLL_REF_DIV`.
@@ -129298,7 +129300,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_uart_clk_div_num(self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// need_des
@@ -129327,7 +129329,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_uart_clk_div_num(&self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// need_des
@@ -129430,7 +129432,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_i2c_clk_div_num(self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// need_des
@@ -129459,7 +129461,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_i2c_clk_div_num(&self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// need_des
@@ -129722,7 +129724,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_adc_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -129751,7 +129753,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_adc_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -130671,7 +130673,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_dac_div_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -130700,7 +130702,7 @@ pub mod lp_peri_clkrst {
             /// need_des
             #[inline]
             pub const fn lp_dac_div_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
@@ -131141,7 +131143,7 @@ pub mod lp_system_reg {
             /// The `LP_SYSTEM_REG_DIG_FIB` field.
             #[inline]
             pub const fn dig_fib(self) -> u8 {
-                (self.0 >> 3) as u8
+                ((self.0 >> 3) & 0xff) as u8
             }
 
             /// The `LP_SYSTEM_REG_IO_MUX_RESET_DISABLE` field.
@@ -131159,7 +131161,7 @@ pub mod lp_system_reg {
             /// The `LP_SYSTEM_REG_LP_FIB_SEL` field.
             #[inline]
             pub const fn lp_fib_sel(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// The `LP_SYSTEM_REG_LP_CORE_ETM_WAKEUP_FLAG` field.
@@ -131658,7 +131660,7 @@ pub mod modem_datadump {
             /// Read by complete adctrig after the completion wait; it prints the low sixteen bits.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Dump source: one selector path of complete adctrig replaces these bits with its selector argument.
@@ -131693,7 +131695,7 @@ pub mod modem_datadump {
             /// Read by complete adctrig after the completion wait; it prints the low sixteen bits.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Dump source: one selector path of complete adctrig replaces these bits with its selector argument.
@@ -133668,7 +133670,7 @@ pub mod modem_lpcon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -133709,7 +133711,7 @@ pub mod modem_lpcon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `CLK_COEX_LP_SEL_OSC_SLOW`.
@@ -134399,7 +134401,7 @@ pub mod modem_lpcon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization.
@@ -134434,7 +134436,7 @@ pub mod modem_lpcon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization.
@@ -135249,7 +135251,7 @@ pub mod modem_lpcon {
             /// The `PWR_MEM_BASE` field.
             #[inline]
             pub const fn pwr_mem_base(self) -> u16 {
-                (self.0 >> 4) as u16
+                ((self.0 >> 4) & 0xffff) as u16
             }
         }
 
@@ -135284,7 +135286,7 @@ pub mod modem_lpcon {
             /// The `PWR_MEM_BASE` field.
             #[inline]
             pub const fn pwr_mem_base(&self) -> u16 {
-                (self.0 >> 4) as u16
+                ((self.0 >> 4) & 0xffff) as u16
             }
 
             /// Set `CHAN_FREQ_MEM_EN`.
@@ -136844,7 +136846,7 @@ pub mod modem_pwr {
             /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 and CONTROL0/4=0/0, a fresh target64=origin+2048 crossed by4096 ticks left this byte0 while sleep16 was disabled; a fresh enabled control produced1 SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep16_flag_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -136855,7 +136857,7 @@ pub mod modem_pwr {
             /// Sleep-enable samples this low byte in near-boundary decisions and polling after a whole-word zero and the sleep-bank bit16 command. A future +0x64 crossing produces the tested local flag. Whole-word-zero acknowledgement is distinct from the sleep command and CPU/PMU delivery. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW9_S31_LP_SLEEP16_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 and CONTROL0/4=0/0, a fresh target64=origin+2048 crossed by4096 ticks left this byte0 while sleep16 was disabled; a fresh enabled control produced1 SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep16_flag_byte(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `SLEEP16_FLAG_BYTE`.
@@ -136894,7 +136896,7 @@ pub mod modem_pwr {
             /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 with the advancing BTLC/ETM prefix, a fresh target68 crossing produced1; the separate disable17 retained1 and whole-zero20 cleared it. Cause38/source127/LPCON vector stayed0 in this awake condition; no PMU wake equation follows SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep17_flag_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -136905,7 +136907,7 @@ pub mod modem_pwr {
             /// Sleep-disable issues the sleep-bank bit17 disable command, samples this low byte and zeroes the whole word before disabling ETM channels6/7. Sleep-enabled and related consumers branch on this byte. This is a local flag and acknowledgement, without a CPU/PMU delivery contract. SOURCE: BX4_S31_LP_SLEEP_FLAG_CONSUMERS_20261027; HW16_S31_LP_SLEEP_LANES_20261026. At XTAL/divider399 with the advancing BTLC/ETM prefix, a fresh target68 crossing produced1; the separate disable17 retained1 and whole-zero20 cleared it. Cause38/source127/LPCON vector stayed0 in this awake condition; no PMU wake equation follows SOURCE: HW29_S31_LP_SLEEP_20261027.
             #[inline]
             pub const fn sleep17_flag_byte(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `SLEEP17_FLAG_BYTE`.
@@ -136973,7 +136975,7 @@ pub mod modem_pwr {
         impl From<LowByte> for u8 {
             #[inline]
             fn from(value: LowByte) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -136985,7 +136987,7 @@ pub mod modem_pwr {
             /// At XTAL/divider399 on s31-a, complete software image1 produced byte1/cause0x40000/source127 with delivery18 enabled; masking retained byte1 and unmasking delivered it. Whole-zero24 cleared the positive byte/cause/output. All sampled complete24 images had upper31:8 zero, without establishing upper-lane semantics SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LOW_BYTE` field as its declared value, if it is one.
@@ -137009,7 +137011,7 @@ pub mod modem_pwr {
             /// At XTAL/divider399 on s31-a, complete software image1 produced byte1/cause0x40000/source127 with delivery18 enabled; masking retained byte1 and unmasking delivered it. Whole-zero24 cleared the positive byte/cause/output. All sampled complete24 images had upper31:8 zero, without establishing upper-lane semantics SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LOW_BYTE` field as its declared value, if it is one.
@@ -137054,7 +137056,7 @@ pub mod modem_pwr {
             /// At XTAL/divider399 on s31-a with compare disabled, two natural LP wraps produced rollover byte1/cause2/source127; one whole-zero2c acknowledgement cleared each episode. All sampled complete2c images had upper31:8 zero, without establishing upper-lane semantics or multi-period service capacity SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The whole word as the hardware has it, for a diagnostic record
@@ -137072,7 +137074,7 @@ pub mod modem_pwr {
             /// At XTAL/divider399 on s31-a with compare disabled, two natural LP wraps produced rollover byte1/cause2/source127; one whole-zero2c acknowledgement cleared each episode. All sampled complete2c images had upper31:8 zero, without establishing upper-lane semantics or multi-period service capacity SOURCE: HW29_S31_LP_WHOLE_20261027.
             #[inline]
             pub const fn low_byte(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `LOW_BYTE`.
@@ -137215,7 +137217,7 @@ pub mod modem_pwr {
             /// Individual cause identities unknown. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
             #[inline]
             pub const fn bits_2_17_opaque(self) -> u16 {
-                (self.0 >> 2) as u16
+                ((self.0 >> 2) & 0xffff) as u16
             }
 
             /// Status observed for the tested compare/software pending cause under its matching delivery enable. No exhaustive cause or output equation is established. SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027; HW_BLE_LP_CAUSES_2026_10_26; HW2_S31_LP_GATES_20261026; HW2_S31_LP_PENDING_20261026.
@@ -137399,7 +137401,7 @@ pub mod modem_pwr {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -137719,7 +137721,7 @@ pub mod modem_pwr {
             /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -137736,7 +137738,7 @@ pub mod modem_pwr {
             /// Upper byte used by sourced complete runtime-image publications. Each bit individually and all together read back0 and leave the future low24 compare positive with XTAL/divider1, CONTROL4=0 and CONTROL0=0/1. No storage, other-mode or reserved-bit meaning is established. SOURCE: BLOB_LIBBTDM_MODEM_LP_TIMER_RUNTIME; HW22_S31_LP_COMPARE_WIDTH_20261027. Both observed target publications use 32-bit stores: the normal deadline masks low24 and clears upper8; the checkpoint stores the selected counter+0x800000 without final truncation. The ISR compares the complete read word to zero. These bus transactions establish no 32-bit physical comparator. SOURCE: BX4_S31_LP_COMPARE_PUBLICATIONS_20261027. On s31-a at XTAL/divider399 in the sourced CONTROL0/4=0/0 and1/1 states, upper0, each upper bit24-31 and upperff read back0 with20 fresh positive low24 compares. Each trial began byte24=0 and reached byte24=1/cause0x40000/source127 high. Latch2 may already be1 in the1/1 state and is not a new-edge witness. No other-mode or reserved/storage meaning follows SOURCE: HW29_S31_LP_WIDTH_20261027.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `COMPARE_TARGET`.
@@ -138557,7 +138559,7 @@ pub mod modem_pwr {
             /// The `DEVIATION` field.
             #[inline]
             pub const fn deviation(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `RX_BEACON_ABORT_SYNC_ENABLE` field.
@@ -138592,7 +138594,7 @@ pub mod modem_pwr {
             /// The `DEVIATION` field.
             #[inline]
             pub const fn deviation(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `RX_BEACON_ABORT_SYNC_ENABLE` field.
@@ -139357,7 +139359,7 @@ pub mod modem_pwr {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -139392,7 +139394,7 @@ pub mod modem_pwr {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `BEACON_MISS_LIMIT`.
@@ -139527,7 +139529,7 @@ pub mod modem_pwr {
             /// libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_early_time replaces the low sixteen bits.
             #[inline]
             pub const fn modem_wakeup_protect_early_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BIT_16_OPAQUE` field.
@@ -139568,7 +139570,7 @@ pub mod modem_pwr {
             /// libpp[hal_pwr.o]::pwr_hal_set_mac_modem_state_wakeup_protect_early_time replaces the low sixteen bits.
             #[inline]
             pub const fn modem_wakeup_protect_early_time(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BIT_16_OPAQUE` field.
@@ -139675,13 +139677,13 @@ pub mod modem_pwr {
             /// The `TIME` field.
             #[inline]
             pub const fn time(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -139692,13 +139694,13 @@ pub mod modem_pwr {
             /// The `TIME` field.
             #[inline]
             pub const fn time(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `TIME`.
@@ -139924,7 +139926,7 @@ pub mod modem_pwr {
             /// The `VALUE` field.
             #[inline]
             pub const fn value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -139936,7 +139938,7 @@ pub mod modem_pwr {
             /// Project-assigned name. Eight-bit tag-offset code supplied by pwr_hal_set_mac_beacon_memory_tag_start_offset. The beacon-memory helper derives it from a byte count in four-byte units.
             #[inline]
             pub const fn beacon_memory_tag_start_offset(self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// Project-assigned name. Set-one tag-offset reset request used after tag enable. Self-clear and hardware replay semantics are unestablished; the existing ordinary RMW classification is retained.
@@ -139965,7 +139967,7 @@ pub mod modem_pwr {
             /// The `VALUE` field.
             #[inline]
             pub const fn value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -139977,7 +139979,7 @@ pub mod modem_pwr {
             /// Project-assigned name. Eight-bit tag-offset code supplied by pwr_hal_set_mac_beacon_memory_tag_start_offset. The beacon-memory helper derives it from a byte count in four-byte units.
             #[inline]
             pub const fn beacon_memory_tag_start_offset(&self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// Project-assigned name. Set-one tag-offset reset request used after tag enable. Self-clear and hardware replay semantics are unestablished; the existing ordinary RMW classification is retained.
@@ -140184,7 +140186,7 @@ pub mod modem_pwr {
             /// hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed.
             #[inline]
             pub const fn sta_tbtt_ahead_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them.
@@ -140267,7 +140269,7 @@ pub mod modem_pwr {
             /// hal_set_sta_tbtt_ahead_time and the index-0 TBTT early-time leaf replace bits 15:0 with their argument's low sixteen bits. The hardware unit remains unnamed.
             #[inline]
             pub const fn sta_tbtt_ahead_time(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// hal_enable_sta_tsf replaces bits 22:19 with one; hal_disable_sta_tsf clears them.
@@ -140608,7 +140610,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain1 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -140667,7 +140669,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain1 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -141012,7 +141014,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain2 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -141089,7 +141091,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain2 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -141457,7 +141459,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain3 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -141534,7 +141536,7 @@ pub mod modem_pwr {
             /// Project-assigned name. TSF-domain3 TBTT Ahead-time low16 replaced by the selected early-time leaf; physical units are unestablished.
             #[inline]
             pub const fn tbtt_ahead_time(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -142174,7 +142176,7 @@ pub mod modem_pwr {
             /// The `VALUE` field.
             #[inline]
             pub const fn value(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -142191,7 +142193,7 @@ pub mod modem_pwr {
             /// The `VALUE` field.
             #[inline]
             pub const fn value(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -142253,7 +142255,7 @@ pub mod modem_pwr {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -142270,7 +142272,7 @@ pub mod modem_pwr {
             /// The `BITS_0_7_OPAQUE` field.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -142430,7 +142432,7 @@ pub mod modem_pwr {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -142453,7 +142455,7 @@ pub mod modem_pwr {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `PTI`.
@@ -146058,7 +146060,7 @@ pub mod modem_syscon {
             /// The `PWDET_CLK_DIV_NUM` field.
             #[inline]
             pub const fn pwdet_clk_div_num(self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// The `CLK_TX_DAC_INV_ENA` field.
@@ -146088,7 +146090,7 @@ pub mod modem_syscon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_13_20_opaque(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `CLK_DATA_DUMP_MUX` field.
@@ -146171,7 +146173,7 @@ pub mod modem_syscon {
             /// The `PWDET_CLK_DIV_NUM` field.
             #[inline]
             pub const fn pwdet_clk_div_num(&self) -> u8 {
-                (self.0 >> 1) as u8
+                ((self.0 >> 1) & 0xff) as u8
             }
 
             /// The `CLK_TX_DAC_INV_ENA` field.
@@ -146201,7 +146203,7 @@ pub mod modem_syscon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_13_20_opaque(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `CLK_DATA_DUMP_MUX` field.
@@ -146878,7 +146880,7 @@ pub mod modem_syscon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization.
@@ -146925,7 +146927,7 @@ pub mod modem_syscon {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization.
@@ -158007,25 +158009,25 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn dg_lp_iso_wait_timer(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_lp_rst_wait_timer(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_hp_iso_wait_timer(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_hp_rst_wait_timer(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -158036,25 +158038,25 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn dg_lp_iso_wait_timer(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_lp_rst_wait_timer(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_hp_iso_wait_timer(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn dg_hp_rst_wait_timer(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `DG_LP_ISO_WAIT_TIMER`.
@@ -160259,13 +160261,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn pmu_wait_xtl_stable(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// need_des
             #[inline]
             pub const fn pmu_wait_pll_stable(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -160276,13 +160278,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn pmu_wait_xtl_stable(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// need_des
             #[inline]
             pub const fn pmu_wait_pll_stable(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `PMU_WAIT_XTL_STABLE`.
@@ -160545,13 +160547,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_min_slp_val(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_min_slp_val(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Which sleep the PMU's minimum-sleep protection covers.
@@ -160574,13 +160576,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_min_slp_val(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn hp_min_slp_val(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Which sleep the PMU's minimum-sleep protection covers.
@@ -160690,7 +160692,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_ana_wait_target(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -160707,7 +160709,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_ana_wait_target(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `MODEM_WAIT_TARGET`.
@@ -160843,7 +160845,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn ana_wait_target(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -160854,7 +160856,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn ana_wait_target(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `ANA_WAIT_TARGET`.
@@ -160961,7 +160963,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn i2c_por_wait_target(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -160972,7 +160974,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn i2c_por_wait_target(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `I2C_POR_WAIT_TARGET`.
@@ -161022,13 +161024,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn modify_icg_cntl_wait(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn switch_icg_cntl_wait(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -161039,13 +161041,13 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn modify_icg_cntl_wait(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// need_des
             #[inline]
             pub const fn switch_icg_cntl_wait(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `MODIFY_ICG_CNTL_WAIT`.
@@ -161168,7 +161170,7 @@ pub mod pmu {
             /// Sixteen RF circuit power-control bits.
             #[inline]
             pub const fn xpd_rf_circuit(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// The `XPD_RF_CIRCUIT` field as its declared value, if it is one.
@@ -161185,7 +161187,7 @@ pub mod pmu {
             /// Sixteen RF circuit power-control bits.
             #[inline]
             pub const fn xpd_rf_circuit(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// The `XPD_RF_CIRCUIT` field as its declared value, if it is one.
@@ -162977,7 +162979,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_cpu_slp_stall_wait(self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// need_des
@@ -163036,7 +163038,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn lp_cpu_slp_stall_wait(&self) -> u8 {
-                (self.0 >> 21) as u8
+                ((self.0 >> 21) & 0xff) as u8
             }
 
             /// need_des
@@ -164233,9 +164235,11 @@ pub mod pmu {
             /// Read one indexed field.
             #[inline]
             pub const fn hpcore_sw_stall_code(self, index: oer_portable_mmio::Index<2>) -> u8 {
-                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let shift = 24u32.wrapping_add(
+                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
+                );
                 let bits = self.0.wrapping_shr(shift);
-                bits as u8
+                (bits & 0xff) as u8
             }
         }
 
@@ -164246,9 +164250,11 @@ pub mod pmu {
             /// Read one indexed field.
             #[inline]
             pub const fn hpcore_sw_stall_code(&self, index: oer_portable_mmio::Index<2>) -> u8 {
-                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let shift = 24u32.wrapping_add(
+                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
+                );
                 let bits = self.0.wrapping_shr(shift);
-                bits as u8
+                (bits & 0xff) as u8
             }
             /// Set one indexed field, preserving every other lane.
             #[inline]
@@ -164257,7 +164263,9 @@ pub mod pmu {
                 index: oer_portable_mmio::Index<2>,
                 value: u8,
             ) -> &mut Self {
-                let shift = 24u32.wrapping_add((index.get() as u32).wrapping_mul(4294967288u32));
+                let shift = 24u32.wrapping_add(
+                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
+                );
                 let mask = 255u32.wrapping_shl(shift);
                 self.0 = (self.0 & !mask) | (u32::from(value)).wrapping_shl(shift);
                 self
@@ -164595,7 +164603,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn touch_sleep_cycles(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// need_des
@@ -164624,7 +164632,7 @@ pub mod pmu {
             /// need_des
             #[inline]
             pub const fn touch_sleep_cycles(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// need_des
@@ -166959,7 +166967,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_tar_high0(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -166970,7 +166978,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_tar_high0(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `MAIN_TIMER_TAR_HIGH0`.
@@ -167074,7 +167082,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_tar_high1(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -167085,7 +167093,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_tar_high1(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `MAIN_TIMER_TAR_HIGH1`.
@@ -167329,7 +167337,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_buf0_high(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -167397,7 +167405,7 @@ pub mod rtc_timer {
             /// need_des
             #[inline]
             pub const fn main_timer_buf1_high(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -206447,19 +206455,19 @@ pub mod spi1_mem_c {
             /// The clock low period; equal to SPI_MEM_CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The clock high period: floor((SPI_MEM_CLKCNT_N + 1) / 2 - 1).
             #[inline]
             pub const fn clkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1.
             #[inline]
             pub const fn clkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The clock is the system clock, undivided.
@@ -206476,19 +206484,19 @@ pub mod spi1_mem_c {
             /// The clock low period; equal to SPI_MEM_CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The clock high period: floor((SPI_MEM_CLKCNT_N + 1) / 2 - 1).
             #[inline]
             pub const fn clkcnt_h(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The divider: the flash command port's clock runs at the system clock over SPI_MEM_CLKCNT_N + 1.
             #[inline]
             pub const fn clkcnt_n(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The clock is the system clock, undivided.
@@ -207032,7 +207040,7 @@ pub mod spi1_mem_c {
         impl From<UsrCommandValue> for u16 {
             #[inline]
             fn from(value: UsrCommandValue) -> Self {
-                value.bits() as u16
+                (value.bits() & 0xffff) as u16
             }
         }
 
@@ -207051,7 +207059,7 @@ pub mod spi1_mem_c {
             /// The value of command.
             #[inline]
             pub const fn usr_command_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `SPI_MEM_USR_COMMAND_VALUE` field as its declared value, if it is one.
@@ -207074,7 +207082,7 @@ pub mod spi1_mem_c {
             /// The value of command.
             #[inline]
             pub const fn usr_command_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `SPI_MEM_USR_COMMAND_VALUE` field as its declared value, if it is one.
@@ -207274,13 +207282,13 @@ pub mod spi1_mem_c {
             /// The value is stored when set spi_mem_flash_rdsr bit and spi_mem_flash_res bit.
             #[inline]
             pub const fn status(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Mode bits in the flash fast read mode it is combined with spi_mem_fastrd_mode bit.
             #[inline]
             pub const fn wb_mode(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Mode bits length for flash fast read mode.
@@ -208196,7 +208204,7 @@ pub mod spi1_mem_c {
             /// The command value to wait flash idle(RDSR).
             #[inline]
             pub const fn waiti_cmd(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -208243,7 +208251,7 @@ pub mod spi1_mem_c {
             /// The command value to wait flash idle(RDSR).
             #[inline]
             pub const fn waiti_cmd(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `SPI_MEM_WAITI_EN`.
@@ -208436,7 +208444,7 @@ pub mod spi1_mem_c {
             /// The mask value when check SUS/SUS1/SUS2 status bit. If the read status value is status_in[15:0](only status_in[7:0] is valid when only one byte of data is read out, status_in[15:0] is valid when two bytes of data are read out), SUS/SUS1/SUS2 = status_in[15:0]^ SPI_MEM_PESR_END_MSK[15:0].
             #[inline]
             pub const fn pesr_end_msk(self) -> u16 {
-                (self.0 >> 6) as u16
+                ((self.0 >> 6) & 0xffff) as u16
             }
 
             /// 1: Read two bytes when check flash SUS/SUS1/SUS2 status bit. 0: Read one byte when check flash SUS/SUS1/SUS2 status bit
@@ -208499,13 +208507,13 @@ pub mod spi1_mem_c {
             /// Program/Erase suspend command.
             #[inline]
             pub const fn flash_pes_command(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Flash SUS/SUS1/SUS2 status bit read command. The command should be sent when SUS/SUS1/SUS2 bit should be checked to insure the suspend or resume status of flash.
             #[inline]
             pub const fn wait_pesr_command(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -208516,13 +208524,13 @@ pub mod spi1_mem_c {
             /// Program/Erase suspend command.
             #[inline]
             pub const fn flash_pes_command(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Flash SUS/SUS1/SUS2 status bit read command. The command should be sent when SUS/SUS1/SUS2 bit should be checked to insure the suspend or resume status of flash.
             #[inline]
             pub const fn wait_pesr_command(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `SPI_MEM_FLASH_PES_COMMAND`.
@@ -208689,7 +208697,7 @@ pub mod spi1_mem_c {
             /// Program/Erase resume command.
             #[inline]
             pub const fn flash_per_command(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -211167,19 +211175,19 @@ pub mod spi1_mem_s {
             /// The clock low period; equal to CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The clock high period: floor((CLKCNT_N + 1) / 2 - 1).
             #[inline]
             pub const fn clkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1.
             #[inline]
             pub const fn clkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The clock is the system clock, undivided.
@@ -211196,19 +211204,19 @@ pub mod spi1_mem_s {
             /// The clock low period; equal to CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The clock high period: floor((CLKCNT_N + 1) / 2 - 1).
             #[inline]
             pub const fn clkcnt_h(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The divider: the PSRAM command port's clock runs at the system clock over CLKCNT_N + 1.
             #[inline]
             pub const fn clkcnt_n(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The clock is the system clock, undivided.
@@ -211734,7 +211742,7 @@ pub mod spi1_mem_s {
             /// The value of  command.
             #[inline]
             pub const fn usr_command_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -211751,7 +211759,7 @@ pub mod spi1_mem_s {
             /// The value of  command.
             #[inline]
             pub const fn usr_command_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -211945,13 +211953,13 @@ pub mod spi1_mem_s {
             /// The value is stored when set SPI1_MEM_S_flash_rdsr bit and SPI1_MEM_S_flash_res bit.
             #[inline]
             pub const fn status(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Mode bits in the flash fast read mode  it is combined with SPI1_MEM_S_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn wb_mode(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Mode bits length for flash fast read mode. This field is only for internal debugging purposes. Do not use it in applications.
@@ -212445,7 +212453,7 @@ pub mod spi1_mem_s {
             /// The command value to wait flash idle(RDSR).
             #[inline]
             pub const fn waiti_cmd(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -212492,7 +212500,7 @@ pub mod spi1_mem_s {
             /// The command value to wait flash idle(RDSR).
             #[inline]
             pub const fn waiti_cmd(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `WAITI_EN`.
@@ -212685,7 +212693,7 @@ pub mod spi1_mem_s {
             /// The mask value when check SUS/SUS1/SUS2 status bit. If the read status value is status_in[15:0](only status_in[7:0] is valid when only one byte of data is read out, status_in[15:0] is valid when two bytes of data are read out), SUS/SUS1/SUS2 = status_in[15:0]^ SPI1_MEM_S_PESR_END_MSK[15:0].
             #[inline]
             pub const fn pesr_end_msk(self) -> u16 {
-                (self.0 >> 6) as u16
+                ((self.0 >> 6) & 0xffff) as u16
             }
 
             /// 1: Read two bytes when check flash SUS/SUS1/SUS2 status bit. 0:  Read one byte when check flash SUS/SUS1/SUS2 status bit
@@ -212748,13 +212756,13 @@ pub mod spi1_mem_s {
             /// Program/Erase suspend command.
             #[inline]
             pub const fn flash_pes_command(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Flash SUS/SUS1/SUS2 status bit read command. The command should be sent when SUS/SUS1/SUS2 bit should be checked to insure the suspend or resume status of flash.
             #[inline]
             pub const fn wait_pesr_command(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -212765,13 +212773,13 @@ pub mod spi1_mem_s {
             /// Program/Erase suspend command.
             #[inline]
             pub const fn flash_pes_command(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Flash SUS/SUS1/SUS2 status bit read command. The command should be sent when SUS/SUS1/SUS2 bit should be checked to insure the suspend or resume status of flash.
             #[inline]
             pub const fn wait_pesr_command(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `FLASH_PES_COMMAND`.
@@ -212938,7 +212946,7 @@ pub mod spi1_mem_s {
             /// Program/Erase resume command.
             #[inline]
             pub const fn flash_per_command(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -215571,19 +215579,19 @@ pub mod spi_mem_c {
             /// In the master mode it must be equal to SPI_MEM_CLKCNT_N.
             #[inline]
             pub const fn spi_mem_clkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// In the master mode it must be floor((SPI_MEM_CLKCNT_N+1)/2-1).
             #[inline]
             pub const fn spi_mem_clkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_CLKCNT_N+1)
             #[inline]
             pub const fn spi_mem_clkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// 1: 1-division mode, the frequency of SPI bus clock equals to that of MSPI module clock.
@@ -215600,19 +215608,19 @@ pub mod spi_mem_c {
             /// In the master mode it must be equal to SPI_MEM_CLKCNT_N.
             #[inline]
             pub const fn spi_mem_clkcnt_l(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// In the master mode it must be floor((SPI_MEM_CLKCNT_N+1)/2-1).
             #[inline]
             pub const fn spi_mem_clkcnt_h(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_CLKCNT_N+1)
             #[inline]
             pub const fn spi_mem_clkcnt_n(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// 1: 1-division mode, the frequency of SPI bus clock equals to that of MSPI module clock.
@@ -215952,7 +215960,7 @@ pub mod spi_mem_c {
             /// The value of command.
             #[inline]
             pub const fn spi_mem_usr_command_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -215969,7 +215977,7 @@ pub mod spi_mem_c {
             /// The value of command.
             #[inline]
             pub const fn spi_mem_usr_command_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -216042,7 +216050,7 @@ pub mod spi_mem_c {
             /// Mode bits in the flash fast read mode it is combined with spi_mem_fastrd_mode bit.
             #[inline]
             pub const fn spi_mem_wb_mode(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Mode bits length for flash fast read mode.
@@ -216896,7 +216904,7 @@ pub mod spi_mem_c {
             /// Mode bits in the external RAM fast read mode it is combined with spi_mem_fastrd_mode bit.
             #[inline]
             pub const fn spi_mem_swb_mode(self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// For SPI0 external RAM , din phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio.
@@ -217041,7 +217049,7 @@ pub mod spi_mem_c {
             /// For SPI0,When cache mode is enable it is the read command value of command phase for sram.
             #[inline]
             pub const fn spi_mem_cache_sram_usr_rd_cmd_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// For SPI0,When cache mode is enable it is the length in bits of command phase for sram. The register value shall be (bit_num-1).
@@ -217090,7 +217098,7 @@ pub mod spi_mem_c {
             /// For SPI0,When cache mode is enable it is the write command value of command phase for sram.
             #[inline]
             pub const fn spi_mem_cache_sram_usr_wr_cmd_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// For SPI0,When cache mode is enable it is the in bits of command phase for sram. The register value shall be (bit_num-1).
@@ -217153,19 +217161,19 @@ pub mod spi_mem_c {
             /// For SPI0 external RAM interface, it must be equal to SPI_MEM_SCLKCNT_N.
             #[inline]
             pub const fn spi_mem_sclkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// For SPI0 external RAM interface, it must be floor((SPI_MEM_SCLKCNT_N+1)/2-1).
             #[inline]
             pub const fn spi_mem_sclkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// For SPI0 external RAM interface, it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_SCLKCNT_N+1)
             #[inline]
             pub const fn spi_mem_sclkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// For SPI0 external RAM interface, 1: spi_mem_clk is eqaul to system 0: spi_mem_clk is divided from system clock.
@@ -218803,7 +218811,7 @@ pub mod spi_mem_c {
             /// Configures the end time of the debug window.
             #[inline]
             pub const fn spi_mem_dll_db_cfg_vld_cnt(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// [3]:1-spi_din[15:8]. 0-spi_din[7:0]. [2]:1-only shift wptr or rptr. 0-both shft wptr and rptr. [1]:1-wprt[3:0] and rptr[3:0]. 0-rptr[3:0] and wprt[3:0]. [0]:1-neg_ptr[3:0]. 0-pos_prt[3:0].
@@ -222329,25 +222337,25 @@ pub mod spi_mem_c {
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -222358,25 +222366,25 @@ pub mod spi_mem_c {
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn spi_mem_nand_flash_sr_addr3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `SPI_MEM_NAND_FLASH_SR_ADDR0`.
@@ -222457,25 +222465,25 @@ pub mod spi_mem_c {
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn spi_mem_nand_flash_sr_din0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn spi_mem_nand_flash_sr_din1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn spi_mem_nand_flash_sr_din2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn spi_mem_nand_flash_sr_din3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -222514,13 +222522,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data0(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data1(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -222531,13 +222539,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data0(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data1(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `SPI_MEM_NAND_FLASH_CFG_DATA0`.
@@ -222590,13 +222598,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data2(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data3(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -222607,13 +222615,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data2(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data3(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `SPI_MEM_NAND_FLASH_CFG_DATA2`.
@@ -222666,13 +222674,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data4(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data5(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -222683,13 +222691,13 @@ pub mod spi_mem_c {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data4(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn spi_mem_nand_flash_cfg_data5(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `SPI_MEM_NAND_FLASH_CFG_DATA4`.
@@ -222774,7 +222782,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 0.
             #[inline]
             pub const fn spi_mem_nand_flash_lut_cmd_value0(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 0.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -222815,7 +222823,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 0.
             #[inline]
             pub const fn spi_mem_nand_flash_lut_cmd_value0(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 0.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -222970,7 +222978,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 1.
             #[inline]
             pub const fn nand_flash_lut_cmd_value1(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 1.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223011,7 +223019,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 1.
             #[inline]
             pub const fn nand_flash_lut_cmd_value1(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 1.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223166,7 +223174,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 2.
             #[inline]
             pub const fn nand_flash_lut_cmd_value2(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 2.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223207,7 +223215,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 2.
             #[inline]
             pub const fn nand_flash_lut_cmd_value2(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 2.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223362,7 +223370,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 3.
             #[inline]
             pub const fn nand_flash_lut_cmd_value3(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 3.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223403,7 +223411,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 3.
             #[inline]
             pub const fn nand_flash_lut_cmd_value3(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 3.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223558,7 +223566,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 4.
             #[inline]
             pub const fn nand_flash_lut_cmd_value4(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 4.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223599,7 +223607,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 4.
             #[inline]
             pub const fn nand_flash_lut_cmd_value4(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 4.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223754,7 +223762,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 5.
             #[inline]
             pub const fn nand_flash_lut_cmd_value5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 5.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223795,7 +223803,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 5.
             #[inline]
             pub const fn nand_flash_lut_cmd_value5(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 5.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223950,7 +223958,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 6.
             #[inline]
             pub const fn nand_flash_lut_cmd_value6(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 6.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -223991,7 +223999,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 6.
             #[inline]
             pub const fn nand_flash_lut_cmd_value6(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 6.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224146,7 +224154,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 7.
             #[inline]
             pub const fn nand_flash_lut_cmd_value7(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 7.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224187,7 +224195,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 7.
             #[inline]
             pub const fn nand_flash_lut_cmd_value7(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 7.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224342,7 +224350,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 8.
             #[inline]
             pub const fn nand_flash_lut_cmd_value8(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 8.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224383,7 +224391,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 8.
             #[inline]
             pub const fn nand_flash_lut_cmd_value8(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 8.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224538,7 +224546,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 9.
             #[inline]
             pub const fn nand_flash_lut_cmd_value9(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 9.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224579,7 +224587,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 9.
             #[inline]
             pub const fn nand_flash_lut_cmd_value9(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 9.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224734,7 +224742,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 10.
             #[inline]
             pub const fn nand_flash_lut_cmd_value10(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 10.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224775,7 +224783,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 10.
             #[inline]
             pub const fn nand_flash_lut_cmd_value10(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 10.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224930,7 +224938,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 11.
             #[inline]
             pub const fn nand_flash_lut_cmd_value11(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 11.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -224971,7 +224979,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 11.
             #[inline]
             pub const fn nand_flash_lut_cmd_value11(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 11.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225126,7 +225134,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 12.
             #[inline]
             pub const fn nand_flash_lut_cmd_value12(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 12.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225167,7 +225175,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 12.
             #[inline]
             pub const fn nand_flash_lut_cmd_value12(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 12.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225322,7 +225330,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 13.
             #[inline]
             pub const fn nand_flash_lut_cmd_value13(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 13.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225363,7 +225371,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 13.
             #[inline]
             pub const fn nand_flash_lut_cmd_value13(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 13.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225518,7 +225526,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 14.
             #[inline]
             pub const fn nand_flash_lut_cmd_value14(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 14.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225559,7 +225567,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 14.
             #[inline]
             pub const fn nand_flash_lut_cmd_value14(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 14.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225714,7 +225722,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 15.
             #[inline]
             pub const fn nand_flash_lut_cmd_value15(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 15.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -225755,7 +225763,7 @@ pub mod spi_mem_c {
             /// MSPI NAND FLASH config cmd value at cmd lut address 15.
             #[inline]
             pub const fn nand_flash_lut_cmd_value15(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 15.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -234385,19 +234393,19 @@ pub mod spi_mem_s {
             /// In the master mode it must be equal to SPI_MEM_S_CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// In the master mode it must be floor((SPI_MEM_S_CLKCNT_N+1)/2-1).
             #[inline]
             pub const fn clkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_CLKCNT_N+1)
             #[inline]
             pub const fn clkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// 1: 1-division mode, the frequency of SPI bus clock equals to that of MSPI module clock.
@@ -234414,19 +234422,19 @@ pub mod spi_mem_s {
             /// In the master mode it must be equal to SPI_MEM_S_CLKCNT_N.
             #[inline]
             pub const fn clkcnt_l(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// In the master mode it must be floor((SPI_MEM_S_CLKCNT_N+1)/2-1).
             #[inline]
             pub const fn clkcnt_h(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// In the master mode it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_CLKCNT_N+1)
             #[inline]
             pub const fn clkcnt_n(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// 1: 1-division mode, the frequency of SPI bus clock equals to that of MSPI module clock.
@@ -234763,7 +234771,7 @@ pub mod spi_mem_s {
             /// The value of  command.
             #[inline]
             pub const fn usr_command_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -234780,7 +234788,7 @@ pub mod spi_mem_s {
             /// The value of  command.
             #[inline]
             pub const fn usr_command_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The length in bits of command phase. The register value shall be (bit_num-1)
@@ -234853,7 +234861,7 @@ pub mod spi_mem_s {
             /// Mode bits in the flash fast read mode  it is combined with spi_mem_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn wb_mode(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Mode bits length for flash fast read mode. This field is only for internal debugging purposes. Do not use it in applications.
@@ -235937,7 +235945,7 @@ pub mod spi_mem_s {
             /// Mode bits in the external RAM fast read mode  it is combined with spi_mem_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn swb_mode(self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// For SPI0 external RAM , din phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio. This field is only for internal debugging purposes. Do not use it in applications.
@@ -236068,7 +236076,7 @@ pub mod spi_mem_s {
             /// Mode bits in the external RAM fast read mode  it is combined with spi_mem_fastrd_mode bit. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn swb_mode(&self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// For SPI0 external RAM , din phase apply 2 signals. 1: enable 0: disable. The bit is the same with spi_mem_usr_sram_dio. This field is only for internal debugging purposes. Do not use it in applications.
@@ -236324,7 +236332,7 @@ pub mod spi_mem_s {
         impl From<CacheSramUsrRdCmdValue> for u16 {
             #[inline]
             fn from(value: CacheSramUsrRdCmdValue) -> Self {
-                value.bits() as u16
+                (value.bits() & 0xffff) as u16
             }
         }
 
@@ -236343,7 +236351,7 @@ pub mod spi_mem_s {
             /// For SPI0,When cache mode is enable it is the read command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn cache_sram_usr_rd_cmd_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `CACHE_SRAM_USR_RD_CMD_VALUE` field as its declared value, if it is one.
@@ -236368,7 +236376,7 @@ pub mod spi_mem_s {
             /// For SPI0,When cache mode is enable it is the read command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn cache_sram_usr_rd_cmd_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `CACHE_SRAM_USR_RD_CMD_VALUE` field as its declared value, if it is one.
@@ -236464,7 +236472,7 @@ pub mod spi_mem_s {
         impl From<CacheSramUsrWrCmdValue> for u16 {
             #[inline]
             fn from(value: CacheSramUsrWrCmdValue) -> Self {
-                value.bits() as u16
+                (value.bits() & 0xffff) as u16
             }
         }
 
@@ -236483,7 +236491,7 @@ pub mod spi_mem_s {
             /// For SPI0,When cache mode is enable it is the write command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn cache_sram_usr_wr_cmd_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `CACHE_SRAM_USR_WR_CMD_VALUE` field as its declared value, if it is one.
@@ -236508,7 +236516,7 @@ pub mod spi_mem_s {
             /// For SPI0,When cache mode is enable it is the write command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn cache_sram_usr_wr_cmd_value(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `CACHE_SRAM_USR_WR_CMD_VALUE` field as its declared value, if it is one.
@@ -236596,19 +236604,19 @@ pub mod spi_mem_s {
             /// For SPI0 external RAM  interface, it must be equal to SPI_MEM_S_SCLKCNT_N. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_l(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, it must be floor((SPI_MEM_S_SCLKCNT_N+1)/2-1). This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_h(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_SCLKCNT_N+1) This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_n(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, 1: spi_mem_clk is equal to system 0: spi_mem_clk is divided from system clock. This field is only for internal debugging purposes. Do not use it in applications.
@@ -236625,19 +236633,19 @@ pub mod spi_mem_s {
             /// For SPI0 external RAM  interface, it must be equal to SPI_MEM_S_SCLKCNT_N. This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_l(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, it must be floor((SPI_MEM_S_SCLKCNT_N+1)/2-1). This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_h(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, it is the divider of spi_mem_clk. So spi_mem_clk frequency is system/(SPI_MEM_S_SCLKCNT_N+1) This field is only for internal debugging purposes. Do not use it in applications.
             #[inline]
             pub const fn sclkcnt_n(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// For SPI0 external RAM  interface, 1: spi_mem_clk is equal to system 0: spi_mem_clk is divided from system clock. This field is only for internal debugging purposes. Do not use it in applications.
@@ -238969,7 +238977,7 @@ pub mod spi_mem_s {
             /// Configures the end time of the debug window.
             #[inline]
             pub const fn dll_db_cfg_vld_cnt(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// [3]:1-spi_din[15:8]. 0-spi_din[7:0]. [2]:1-only shift wptr or rptr. 0-both shift wptr and rptr. [1]:1-wprt[3:0] and rptr[3:0]. 0-rptr[3:0] and wprt[3:0]. [0]:1-neg_ptr[3:0]. 0-pos_prt[3:0].
@@ -238998,7 +239006,7 @@ pub mod spi_mem_s {
             /// Configures the end time of the debug window.
             #[inline]
             pub const fn dll_db_cfg_vld_cnt(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// [3]:1-spi_din[15:8]. 0-spi_din[7:0]. [2]:1-only shift wptr or rptr. 0-both shift wptr and rptr. [1]:1-wprt[3:0] and rptr[3:0]. 0-rptr[3:0] and wprt[3:0]. [0]:1-neg_ptr[3:0]. 0-pos_prt[3:0].
@@ -243908,25 +243916,25 @@ pub mod spi_mem_s {
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn sr_addr0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn sr_addr1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn sr_addr2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// configure state register address for SPI SEQ need. If OIP is in address C0H , user could configure C0H into this register
             #[inline]
             pub const fn sr_addr3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -243979,25 +243987,25 @@ pub mod spi_mem_s {
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn sr_din0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn sr_din1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn sr_din2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// spi read state register data to this register for SPI SEQ need. SPI_MEM_S_NAND_FLASH_SR_DIN0_REG corresponds to SPI_MEM_S_NAND_FLASH_SR_ADDR0_REG.
             #[inline]
             pub const fn sr_din3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -244036,13 +244044,13 @@ pub mod spi_mem_s {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data0(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data1(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -244081,13 +244089,13 @@ pub mod spi_mem_s {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data2(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data3(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -244126,13 +244134,13 @@ pub mod spi_mem_s {
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data4(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// configure data for SPI SEQ din/dout need. The data could be use to configure NAND FLASH or compare read data
             #[inline]
             pub const fn cfg_data5(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -244203,7 +244211,7 @@ pub mod spi_mem_s {
             /// MSPI NAND FLASH config cmd value at cmd lut address 0.
             #[inline]
             pub const fn lut_cmd_value(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// MSPI NAND FLASH config sfsm_st_en at cmd lut address 0.[3]-ADDR period enable; [2]-DUMMY period enable; [1]-DIN period; [0]-DOUT period.
@@ -247980,7 +247988,7 @@ pub mod timg {
             /// Represents the timer 0 clock (T0_clk) prescaler value. SOURCE: HW23_S31_TIMG0_RELOAD_20261027 observes 1002 ticks in 40076 CPU cycles at XTAL/divider40 and nominal 40 MHz CPU, consistent with 1 MHz T0; no general source/divider equation is measured.
             #[inline]
             pub const fn t_divider(self) -> u16 {
-                (self.0 >> 13) as u16
+                ((self.0 >> 13) & 0xffff) as u16
             }
 
             /// Configures whether or not to enable the timer 0 auto-reload function at the time of alarm. \\ 0: No effect \\ 1: Enable \\
@@ -248415,7 +248423,7 @@ pub mod timg {
             /// Represents the timer 1 clock (T1_clk) prescaler value.
             #[inline]
             pub const fn t_divider(self) -> u16 {
-                (self.0 >> 13) as u16
+                ((self.0 >> 13) & 0xffff) as u16
             }
 
             /// Configures whether or not to enable the timer 1 auto-reload function at the time of alarm. \\ 0: No effect \\ 1: Enable \\
@@ -249121,7 +249129,7 @@ pub mod timg {
             /// Configures MWDT clock prescaler value. Valid only when write protection is disabled. \\ MWDT clock period = MWDT's clock source period * TIMG_WDT_CLK_PRESCALE. \\ Watchdog tick = source clock period times this prescaler.
             #[inline]
             pub const fn wdt_clk_prescale(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -249132,7 +249140,7 @@ pub mod timg {
             /// Configures MWDT clock prescaler value. Valid only when write protection is disabled. \\ MWDT clock period = MWDT's clock source period * TIMG_WDT_CLK_PRESCALE. \\ Watchdog tick = source clock period times this prescaler.
             #[inline]
             pub const fn wdt_clk_prescale(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `WDT_CLK_PRESCALE`.
@@ -251585,13 +251593,13 @@ pub mod trng {
             /// startup limit Number of samples the startup health test takes.
             #[inline]
             pub const fn startup_test_limit(self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
 
             /// debug data Debug output data.
             #[inline]
             pub const fn debug_data(self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// 1 for debug mode 0 for nomarl mode Debug mode enable.
@@ -251620,13 +251628,13 @@ pub mod trng {
             /// startup limit Number of samples the startup health test takes.
             #[inline]
             pub const fn startup_test_limit(&self) -> u16 {
-                (self.0 >> 1) as u16
+                ((self.0 >> 1) & 0xffff) as u16
             }
 
             /// debug data Debug output data.
             #[inline]
             pub const fn debug_data(&self) -> u8 {
-                (self.0 >> 17) as u8
+                ((self.0 >> 17) & 0xff) as u8
             }
 
             /// 1 for debug mode 0 for nomarl mode Debug mode enable.
@@ -252953,7 +252961,7 @@ pub mod tsens {
             /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample. HW31 forced-power DAC15/11/15 steps produce fresh bidirectional OUT response with READY0 in separate cold and timed-injection arms; this is not FSM-power or exact conversion-latency qualification. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn out(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
@@ -252995,7 +253003,7 @@ pub mod tsens {
             /// Temperature sensor clock divider. Temperature-sensor clock divider; modeled for exact geometry but not written by this slice.
             #[inline]
             pub const fn clk_div(self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_.
@@ -253013,7 +253021,7 @@ pub mod tsens {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// The whole word as the hardware has it, for a diagnostic record
@@ -253031,7 +253039,7 @@ pub mod tsens {
             /// Unsigned temperature-sensor code. ROM phy_tsens_code_read samples CTRL once at +0x04 and returns bits7:0; phy_tsens_temp_read_local samples it once at +0x2c for temperature computation. Neither direct body polls READY before that sample. HW31 forced-power DAC15/11/15 steps produce fresh bidirectional OUT response with READY0 in separate cold and timed-injection arms; this is not FSM-power or exact conversion-latency qualification. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
             #[inline]
             pub const fn out(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Indicate temperature sensor out ready. Temperature-sensor ready observation; not consumed by this slice. HW31 forced-power cold-DAC and timed-injection captures observed READY0 while OUT followed verified DAC15/11/15 steps; this does not qualify FSM-power readiness. SOURCE: HW31_S31_TSENS_COLD_DAC_20261027, HW31_S31_TSENS_INJECTION_20261027.
@@ -253073,7 +253081,7 @@ pub mod tsens {
             /// Temperature sensor clock divider. Temperature-sensor clock divider; modeled for exact geometry but not written by this slice.
             #[inline]
             pub const fn clk_div(&self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// Temperature sensor power up. Temperature-sensor power control set by complete ROM phy_set_tsens_power_.
@@ -253091,7 +253099,7 @@ pub mod tsens {
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `SAMPLE_EN`.
@@ -253577,13 +253585,13 @@ pub mod tsens {
             /// Lower threshold.
             #[inline]
             pub const fn wakeup_th_low(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Upper threshold.
             #[inline]
             pub const fn wakeup_th_high(self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// Indicates that this wakeup event arose from exceeding upper threshold.
@@ -253612,13 +253620,13 @@ pub mod tsens {
             /// Lower threshold.
             #[inline]
             pub const fn wakeup_th_low(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Upper threshold.
             #[inline]
             pub const fn wakeup_th_high(&self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// Indicates that this wakeup event arose from exceeding upper threshold.
@@ -253700,7 +253708,7 @@ pub mod tsens {
             /// Hardware automatic sampling rate.
             #[inline]
             pub const fn sample_rate(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -253711,7 +253719,7 @@ pub mod tsens {
             /// Hardware automatic sampling rate.
             #[inline]
             pub const fn sample_rate(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `SAMPLE_RATE`.
@@ -253956,7 +253964,7 @@ pub mod uart {
             /// Represents the data UART 0 read from FIFO.\\ Measurement unit: byte.
             #[inline]
             pub const fn rxfifo_rd_byte(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
     }
@@ -255812,7 +255820,7 @@ pub mod uart {
             /// Configures the width of a pulse to be filtered.\\Measurement unit: UART Core's clock cycle.\\Pulses whose width is lower than this value will be ignored.
             #[inline]
             pub const fn glitch_filt(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures whether or not to enable RX signal filter.\\ 0: Disable\\ 1: Enable
@@ -255829,7 +255837,7 @@ pub mod uart {
             /// Configures the width of a pulse to be filtered.\\Measurement unit: UART Core's clock cycle.\\Pulses whose width is lower than this value will be ignored.
             #[inline]
             pub const fn glitch_filt(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures whether or not to enable RX signal filter.\\ 0: Disable\\ 1: Enable
@@ -255934,7 +255942,7 @@ pub mod uart {
             /// Represents the number of valid data bytes in RX FIFO.
             #[inline]
             pub const fn rxfifo_cnt(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Represents the level of the internal UART DSR signal.
@@ -255958,7 +255966,7 @@ pub mod uart {
             /// Represents the number of valid data bytes in RX FIFO.
             #[inline]
             pub const fn txfifo_cnt(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Represents the level of the internal UART DTR signal.
@@ -256661,13 +256669,13 @@ pub mod uart {
             /// Configures the threshold for RX FIFO being full.\\Measurement unit: byte.
             #[inline]
             pub const fn rxfifo_full_thrhd(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the threshold for TX FIFO being empty.\\Measurement unit: byte.
             #[inline]
             pub const fn txfifo_empty_thrhd(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures whether or not to invert the level of UART CTS signal.\\ 0: Not invert\\ 1: Invert\\
@@ -256714,13 +256722,13 @@ pub mod uart {
             /// Configures the threshold for RX FIFO being full.\\Measurement unit: byte.
             #[inline]
             pub const fn rxfifo_full_thrhd(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the threshold for TX FIFO being empty.\\Measurement unit: byte.
             #[inline]
             pub const fn txfifo_empty_thrhd(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures whether or not to invert the level of UART CTS signal.\\ 0: Not invert\\ 1: Invert\\
@@ -256855,7 +256863,7 @@ pub mod uart {
             /// Configures the maximum number of data bytes that can be received during hardware flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn rx_flow_thrhd(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures whether or not to enable the UART receiver.\\ 0: Disable\\ 1: Enable\\
@@ -256872,7 +256880,7 @@ pub mod uart {
             /// Configures the maximum number of data bytes that can be received during hardware flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn rx_flow_thrhd(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures whether or not to enable the UART receiver.\\ 0: Disable\\ 1: Enable\\
@@ -256945,25 +256953,25 @@ pub mod uart {
             /// Configures wakeup character 1.
             #[inline]
             pub const fn wk_char1(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures wakeup character 2.
             #[inline]
             pub const fn wk_char2(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures wakeup character 3.
             #[inline]
             pub const fn wk_char3(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Configures wakeup character 4.
             #[inline]
             pub const fn wk_char4(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -256974,25 +256982,25 @@ pub mod uart {
             /// Configures wakeup character 1.
             #[inline]
             pub const fn wk_char1(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures wakeup character 2.
             #[inline]
             pub const fn wk_char2(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures wakeup character 3.
             #[inline]
             pub const fn wk_char3(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Configures wakeup character 4.
             #[inline]
             pub const fn wk_char4(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `WK_CHAR1`.
@@ -257056,7 +257064,7 @@ pub mod uart {
             /// Configures wakeup character 0.
             #[inline]
             pub const fn wk_char0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -257067,7 +257075,7 @@ pub mod uart {
             /// Configures wakeup character 0.
             #[inline]
             pub const fn wk_char0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `WK_CHAR0`.
@@ -257144,7 +257152,7 @@ pub mod uart {
             /// Configures the number of received data bytes to wake up the chip in wakeup mode 1.
             #[inline]
             pub const fn rx_wake_up_thrhd(self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// Configures the number of wakeup characters.
@@ -257179,7 +257187,7 @@ pub mod uart {
             /// Configures the number of received data bytes to wake up the chip in wakeup mode 1.
             #[inline]
             pub const fn rx_wake_up_thrhd(&self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// Configures the number of wakeup characters.
@@ -257327,13 +257335,13 @@ pub mod uart {
             /// Configures the XON character for flow control.
             #[inline]
             pub const fn xon_char(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the XOFF character for flow control.
             #[inline]
             pub const fn xoff_char(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Configures whether the UART transmitter can send XON or XOFF characters when it is disabled.\\ 0: Cannot send\\ 1: Can send\\
@@ -257418,13 +257426,13 @@ pub mod uart {
             /// Configures the threshold for data in RX FIFO to send XON characters in software flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn xon_threshold(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the threshold for data in RX FIFO to send XOFF characters in software flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn xoff_threshold(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -257435,13 +257443,13 @@ pub mod uart {
             /// Configures the threshold for data in RX FIFO to send XON characters in software flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn xon_threshold(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the threshold for data in RX FIFO to send XOFF characters in software flow control.\\Measurement unit: byte.
             #[inline]
             pub const fn xoff_threshold(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `XON_THRESHOLD`.
@@ -257491,7 +257499,7 @@ pub mod uart {
             /// Configures the number of NULL characters to be sent after finishing data transmission.\\Valid only when UART_TXD_BRK is 1.
             #[inline]
             pub const fn tx_brk_num(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -257502,7 +257510,7 @@ pub mod uart {
             /// Configures the number of NULL characters to be sent after finishing data transmission.\\Valid only when UART_TXD_BRK is 1.
             #[inline]
             pub const fn tx_brk_num(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `TX_BRK_NUM`.
@@ -257835,7 +257843,7 @@ pub mod uart {
             /// Configures the idle time before the receiver receives the first AT_CMD.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn pre_idle_num(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -257846,7 +257854,7 @@ pub mod uart {
             /// Configures the idle time before the receiver receives the first AT_CMD.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn pre_idle_num(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `PRE_IDLE_NUM`.
@@ -257889,7 +257897,7 @@ pub mod uart {
             /// Configures the interval between the last AT_CMD and subsequent data.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn post_idle_num(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -257900,7 +257908,7 @@ pub mod uart {
             /// Configures the interval between the last AT_CMD and subsequent data.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn post_idle_num(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `POST_IDLE_NUM`.
@@ -257943,7 +257951,7 @@ pub mod uart {
             /// Configures the interval between two AT_CMD characters.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn rx_gap_tout(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -257954,7 +257962,7 @@ pub mod uart {
             /// Configures the interval between two AT_CMD characters.\\Measurement unit: bit time (the time to transmit 1 bit).
             #[inline]
             pub const fn rx_gap_tout(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `RX_GAP_TOUT`.
@@ -258004,13 +258012,13 @@ pub mod uart {
             /// Configures the AT_CMD character.
             #[inline]
             pub const fn at_cmd_char(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the number of continuous AT_CMD characters a receiver can receive.
             #[inline]
             pub const fn char_num(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -258021,13 +258029,13 @@ pub mod uart {
             /// Configures the AT_CMD character.
             #[inline]
             pub const fn at_cmd_char(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Configures the number of continuous AT_CMD characters a receiver can receive.
             #[inline]
             pub const fn char_num(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `AT_CMD_CHAR`.
@@ -258270,13 +258278,13 @@ pub mod uart {
             /// Represents the offset address to write TX FIFO.
             #[inline]
             pub const fn tx_sram_waddr(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Represents the offset address to read TX FIFO.
             #[inline]
             pub const fn tx_sram_raddr(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
     }
@@ -258319,13 +258327,13 @@ pub mod uart {
             /// Represents the offset address to read RX FIFO.
             #[inline]
             pub const fn rx_sram_raddr(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Represents the offset address to write RX FIFO.
             #[inline]
             pub const fn rx_sram_waddr(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
         }
     }
@@ -261961,19 +261969,19 @@ pub mod usb_serial_jtag {
             /// The value of bCharFormat set by host through SET_LINE_CODING command.
             #[inline]
             pub const fn bchar_format(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The value of bParityTpye set by host through SET_LINE_CODING command.
             #[inline]
             pub const fn bparity_type(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The value of bDataBits set by host through SET_LINE_CODING command.
             #[inline]
             pub const fn bdata_bits(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
     }
@@ -262073,19 +262081,19 @@ pub mod usb_serial_jtag {
             /// The value of bCharFormat set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bdata_bits(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The value of bParityTpye set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bparity_type(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The value of bDataBits set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bchar_format(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
         }
 
@@ -262096,19 +262104,19 @@ pub mod usb_serial_jtag {
             /// The value of bCharFormat set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bdata_bits(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The value of bParityTpye set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bparity_type(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The value of bDataBits set by software which is requested by GET_LINE_CODING command.
             #[inline]
             pub const fn get_bchar_format(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Set `GET_BDATA_BITS`.
@@ -262547,7 +262555,7 @@ pub mod usb_serial_jtag {
         #[inline]
         pub fn pop_ep1(&mut self) -> u8 {
             let value = self.0.read::<0x0>();
-            value as u8
+            (value & 0xff) as u8
         }
 
         /// Put one element into the FIFO port `EP1`; every other bit is zero.
@@ -263180,7 +263188,7 @@ pub mod wifi_bb {
             /// Signed clear-channel-assessment threshold that complete phy_set_cca publishes (0xbf, -65, by default) and complete phy_get_cca returns.
             #[inline]
             pub const fn cca_threshold(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -263197,7 +263205,7 @@ pub mod wifi_bb {
             /// Signed clear-channel-assessment threshold that complete phy_set_cca publishes (0xbf, -65, by default) and complete phy_get_cca returns.
             #[inline]
             pub const fn cca_threshold(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -263317,7 +263325,7 @@ pub mod wifi_bb {
             /// Complete phy_set_rx_comp_new writes 0xed into bits 7:0.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Highest Wi-Fi receive-gain table index: librftest rx_max_gain returns these bits for its Wi-Fi path. Complete phy_agc_reg_init writes parameter byte 0x121 and phy_set_rx_gain_table the final Wi-Fi RX gain index after table publication.
@@ -263335,13 +263343,13 @@ pub mod wifi_bb {
             /// Receive-gain table index applied while FORCED_GAIN_ENABLE is set. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain write their gain argument here before the enable bit; complete phy_agc_reg_init and the delayed phy_pbus_force_mode tail write 0x32 into bits 31:24 before pulsing bit 23, so a PBus work-mode transition replaces any previously forced index.
             #[inline]
             pub const fn forced_gain_index(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_15_22_opaque(self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
         }
 
@@ -263352,7 +263360,7 @@ pub mod wifi_bb {
             /// Complete phy_set_rx_comp_new writes 0xed into bits 7:0.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Highest Wi-Fi receive-gain table index: librftest rx_max_gain returns these bits for its Wi-Fi path. Complete phy_agc_reg_init writes parameter byte 0x121 and phy_set_rx_gain_table the final Wi-Fi RX gain index after table publication.
@@ -263370,13 +263378,13 @@ pub mod wifi_bb {
             /// Receive-gain table index applied while FORCED_GAIN_ENABLE is set. Complete phy_force_rx_gain and the Wi-Fi path of librftest force_rx_gain write their gain argument here before the enable bit; complete phy_agc_reg_init and the delayed phy_pbus_force_mode tail write 0x32 into bits 31:24 before pulsing bit 23, so a PBus work-mode transition replaces any previously forced index.
             #[inline]
             pub const fn forced_gain_index(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_15_22_opaque(&self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -263713,7 +263721,7 @@ pub mod wifi_bb {
             /// Receive-sensitivity setting complete phy_rx_sense_set publishes.
             #[inline]
             pub const fn rx_sense(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete phy_rx_11b_opt replaces bits 13:8.
@@ -263748,7 +263756,7 @@ pub mod wifi_bb {
             /// Receive-sensitivity setting complete phy_rx_sense_set publishes.
             #[inline]
             pub const fn rx_sense(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete phy_rx_11b_opt replaces bits 13:8.
@@ -264182,7 +264190,7 @@ pub mod wifi_bb {
             /// Received signal strength above the noise floor: complete phy_get_rssi adds it to the noise floor shifted right by two.
             #[inline]
             pub const fn rssi_above_noise_floor(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
     }
@@ -264417,7 +264425,7 @@ pub mod wifi_bb {
             /// Complete phy_set_rx_comp_new writes 0xed into bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -264428,7 +264436,7 @@ pub mod wifi_bb {
             /// Complete phy_set_rx_comp_new writes 0xed into bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_24_31_OPAQUE`.
@@ -264493,7 +264501,7 @@ pub mod wifi_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -264516,7 +264524,7 @@ pub mod wifi_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `FORCE_LLTF`.
@@ -265082,13 +265090,13 @@ pub mod wifi_bb {
             /// Complete phy_ant_init writes 0x1e into bits 15:8.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Complete phy_ant_init writes 0x1e into bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -265099,13 +265107,13 @@ pub mod wifi_bb {
             /// Complete phy_ant_init writes 0x1e into bits 15:8.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Complete phy_ant_init writes 0x1e into bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_8_15_OPAQUE`.
@@ -265190,7 +265198,7 @@ pub mod wifi_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -265219,7 +265227,7 @@ pub mod wifi_bb {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `BITS_0_3_OPAQUE`.
@@ -265282,7 +265290,7 @@ pub mod wifi_bb {
             /// Instruction-exact 0xd2 value in bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -265293,7 +265301,7 @@ pub mod wifi_bb {
             /// Instruction-exact 0xd2 value in bits 31:24.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_24_31_OPAQUE`.
@@ -266348,19 +266356,19 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_7_14_opaque(self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_15_22_opaque(self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_23_30_opaque(self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
         }
 
@@ -266383,19 +266391,19 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_7_14_opaque(&self) -> u8 {
-                (self.0 >> 7) as u8
+                ((self.0 >> 7) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_15_22_opaque(&self) -> u8 {
-                (self.0 >> 15) as u8
+                ((self.0 >> 15) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_23_30_opaque(&self) -> u8 {
-                (self.0 >> 23) as u8
+                ((self.0 >> 23) & 0xff) as u8
             }
 
             /// Set `BIT_0_OPAQUE`.
@@ -266483,25 +266491,25 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_16_23_opaque(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -266512,25 +266520,25 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_16_23_opaque(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -266597,13 +266605,13 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
         }
 
@@ -266614,13 +266622,13 @@ pub mod wifi_bb {
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Packed TX-power-tracking curve entry published through a separate fresh-read RMW by phy_bb_txpwr_track. The configuration/curve role is direct; a threshold or correction-knot interpretation is inference. Signedness, scale and physical units remain unknown. SOURCE: BLOB_LIBPHY_PHY_BASEBAND_CONFIG.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -267281,7 +267289,7 @@ pub mod wifi_bb {
             /// FFT scale complete phy_fft_scale_force publishes from its second argument.
             #[inline]
             pub const fn fft_scale(self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -267310,7 +267318,7 @@ pub mod wifi_bb {
             /// FFT scale complete phy_fft_scale_force publishes from its second argument.
             #[inline]
             pub const fn fft_scale(&self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -268810,7 +268818,7 @@ pub mod wifi_bb {
             /// The `BITS_12_19_OPAQUE` field.
             #[inline]
             pub const fn bits_12_19_opaque(self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
         }
 
@@ -268827,7 +268835,7 @@ pub mod wifi_bb {
             /// The `BITS_12_19_OPAQUE` field.
             #[inline]
             pub const fn bits_12_19_opaque(&self) -> u8 {
-                (self.0 >> 12) as u8
+                ((self.0 >> 12) & 0xff) as u8
             }
 
             /// Set `BITS_0_9_OPAQUE`.
@@ -268894,7 +268902,7 @@ pub mod wifi_bb {
             /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BIT_30_OPAQUE` field.
@@ -268923,7 +268931,7 @@ pub mod wifi_bb {
             /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BIT_30_OPAQUE` field.
@@ -273380,7 +273388,7 @@ pub mod wifi_mac {
             /// The `BSSID_HIGH` field.
             #[inline]
             pub const fn bssid_high(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Eleven-bit AID printed by dbg_read_rx_misc.
@@ -273415,7 +273423,7 @@ pub mod wifi_mac {
             /// The `BSSID_HIGH` field.
             #[inline]
             pub const fn bssid_high(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Eleven-bit AID printed by dbg_read_rx_misc.
@@ -273627,7 +273635,7 @@ pub mod wifi_mac {
             /// The `BSSID_BYTE_5` field.
             #[inline]
             pub const fn bssid_byte_5(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `MULTI_BSSID_ENABLE` field.
@@ -273639,7 +273647,7 @@ pub mod wifi_mac {
             /// The `MULTI_BSSID_MASK` field.
             #[inline]
             pub const fn multi_bssid_mask(self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// The `CO_HOSTED_ENABLE` field.
@@ -273710,7 +273718,7 @@ pub mod wifi_mac {
             /// The `BSSID_BYTE_5` field.
             #[inline]
             pub const fn bssid_byte_5(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `MULTI_BSSID_ENABLE` field.
@@ -273722,7 +273730,7 @@ pub mod wifi_mac {
             /// The `MULTI_BSSID_MASK` field.
             #[inline]
             pub const fn multi_bssid_mask(&self) -> u8 {
-                (self.0 >> 9) as u8
+                ((self.0 >> 9) & 0xff) as u8
             }
 
             /// The `CO_HOSTED_ENABLE` field.
@@ -273905,13 +273913,13 @@ pub mod wifi_mac {
             /// Project-assigned nontransmitted BSSID profile index, passed as an eight-bit value by sta_update_mbssid to hal_he_set_multi_bssid.
             #[inline]
             pub const fn bssid_index(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -273922,13 +273930,13 @@ pub mod wifi_mac {
             /// Project-assigned nontransmitted BSSID profile index, passed as an eight-bit value by sta_update_mbssid to hal_he_set_multi_bssid.
             #[inline]
             pub const fn bssid_index(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BSSID_INDEX`.
@@ -274613,7 +274621,7 @@ pub mod wifi_mac {
             /// The `BYTES_4_5` field.
             #[inline]
             pub const fn bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
@@ -274636,7 +274644,7 @@ pub mod wifi_mac {
             /// The `BYTES_4_5` field.
             #[inline]
             pub const fn bytes_4_5(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set by a separate fresh-read RMW in hal_mac_set_addr and by the reachable associated-STA policy branch.
@@ -274711,7 +274719,7 @@ pub mod wifi_mac {
             /// Byte displacement added to the RX buffer address to locate RX control.
             #[inline]
             pub const fn rx_control_buffer_offset(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -274728,7 +274736,7 @@ pub mod wifi_mac {
             /// Byte displacement added to the RX buffer address to locate RX control.
             #[inline]
             pub const fn rx_control_buffer_offset(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -274863,7 +274871,7 @@ pub mod wifi_mac {
             /// Project-assigned name. Eight-bit mapping code passed to hal_mac_set_rx_beacon_memory_addr_map; the beacon initializer writes 0xf0. This is not a general address encoding.
             #[inline]
             pub const fn beacon_memory_address_map(self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -274922,7 +274930,7 @@ pub mod wifi_mac {
             /// Project-assigned name. Eight-bit mapping code passed to hal_mac_set_rx_beacon_memory_addr_map; the beacon initializer writes 0xf0. This is not a general address encoding.
             #[inline]
             pub const fn beacon_memory_address_map(&self) -> u8 {
-                (self.0 >> 2) as u8
+                ((self.0 >> 2) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -275392,7 +275400,7 @@ pub mod wifi_mac {
             /// Complete hal_init replaces bits 7:0 with one.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_0_7_OPAQUE` field as its declared value, if it is one.
@@ -275404,7 +275412,7 @@ pub mod wifi_mac {
             /// Complete hal_init replaces bits 15:8 with one through a separate RMW.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field as its declared value, if it is one.
@@ -275445,7 +275453,7 @@ pub mod wifi_mac {
             /// Complete hal_init replaces bits 7:0 with one.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BITS_0_7_OPAQUE` field as its declared value, if it is one.
@@ -275457,7 +275465,7 @@ pub mod wifi_mac {
             /// Complete hal_init replaces bits 15:8 with one through a separate RMW.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BITS_8_15_OPAQUE` field as its declared value, if it is one.
@@ -275715,7 +275723,7 @@ pub mod wifi_mac {
             /// The `FE_FREQUENCY_HOP_TIME` field.
             #[inline]
             pub const fn fe_frequency_hop_time(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `RX_PHY_SIGNAL_DELAY` field.
@@ -275780,7 +275788,7 @@ pub mod wifi_mac {
             /// The `FE_FREQUENCY_HOP_TIME` field.
             #[inline]
             pub const fn fe_frequency_hop_time(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// The `RX_PHY_SIGNAL_DELAY` field.
@@ -276021,13 +276029,13 @@ pub mod wifi_mac {
             /// The `LOW_STATE` field.
             #[inline]
             pub const fn low_state(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `HIGH_STATE` field.
             #[inline]
             pub const fn high_state(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -276700,13 +276708,13 @@ pub mod wifi_mac {
             /// Project-assigned name. The observed BB_ERRCODE byte. Its update lifecycle and code meanings are unestablished; the vendor configuration RMWs replay it unchanged.
             #[inline]
             pub const fn bb_error_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
             #[inline]
             pub const fn bits_8_15_opaque(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Project-assigned name. BB_ERRCODE_ENA set by the vendor configuration RMW and sampled by hal_ifc_get_bb_err_bitmap; it is not established as a hardware error-status flag.
@@ -276735,13 +276743,13 @@ pub mod wifi_mac {
             /// Project-assigned name. The observed BB_ERRCODE byte. Its update lifecycle and code meanings are unestablished; the vendor configuration RMWs replay it unchanged.
             #[inline]
             pub const fn bb_error_code(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed reads and unchanged replay in dbg_dump_rx_errors; individual meanings are unestablished.
             #[inline]
             pub const fn bits_8_15_opaque(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Project-assigned name. BB_ERRCODE_ENA set by the vendor configuration RMW and sampled by hal_ifc_get_bb_err_bitmap; it is not established as a hardware error-status flag.
@@ -276819,7 +276827,7 @@ pub mod wifi_mac {
             /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BIT_16_OPAQUE` field.
@@ -276898,7 +276906,7 @@ pub mod wifi_mac {
             /// Eight independent class-enable bits used by the working open scan/STA receive path; every eight-bit mask is representable.
             #[inline]
             pub const fn open_misc_packet_classes(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Project-assigned name. Nonzero input to hal_sniffer_set_promis_misc_pkt sets this bit; zero clears it. The bitmap getter does not establish a hardware error-status meaning.
@@ -276910,7 +276918,7 @@ pub mod wifi_mac {
             /// The vendor misc setter publishes 0x78 when enabled and zero when disabled. Units and individual hardware meaning remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Constant lanes of the vendor misc-packet-dump profile; individual functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
@@ -276939,7 +276947,7 @@ pub mod wifi_mac {
             /// Eight independent class-enable bits used by the working open scan/STA receive path; every eight-bit mask is representable.
             #[inline]
             pub const fn open_misc_packet_classes(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Project-assigned name. Nonzero input to hal_sniffer_set_promis_misc_pkt sets this bit; zero clears it. The bitmap getter does not establish a hardware error-status meaning.
@@ -276951,7 +276959,7 @@ pub mod wifi_mac {
             /// The vendor misc setter publishes 0x78 when enabled and zero when disabled. Units and individual hardware meaning remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Constant lanes of the vendor misc-packet-dump profile; individual functions remain unknown. SOURCE: BLOB_MAC_MISC_FCS_FILTER_20261104.
@@ -277123,7 +277131,7 @@ pub mod wifi_mac {
             /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BITS_16_22_OPAQUE` field.
@@ -277194,7 +277202,7 @@ pub mod wifi_mac {
             /// The `BITS_0_15_OPAQUE` field.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BITS_16_22_OPAQUE` field.
@@ -277580,7 +277588,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -277603,7 +277611,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `BIT_0_OPAQUE`.
@@ -277677,7 +277685,7 @@ pub mod wifi_mac {
             /// The `BITS_20_27_OPAQUE` field.
             #[inline]
             pub const fn bits_20_27_opaque(self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// The `BIT_31_OPAQUE` field.
@@ -277706,7 +277714,7 @@ pub mod wifi_mac {
             /// The `BITS_20_27_OPAQUE` field.
             #[inline]
             pub const fn bits_20_27_opaque(&self) -> u8 {
-                (self.0 >> 20) as u8
+                ((self.0 >> 20) & 0xff) as u8
             }
 
             /// The `BIT_31_OPAQUE` field.
@@ -277946,7 +277954,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -278029,7 +278037,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `FORCE_LLTF`.
@@ -278178,7 +278186,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -278201,7 +278209,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `BITS_1_6_OPAQUE`.
@@ -278619,7 +278627,7 @@ pub mod wifi_mac {
             /// The `PEER_ADDRESS_TAIL` field.
             #[inline]
             pub const fn peer_address_tail(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `INTERFACE` field.
@@ -278648,7 +278656,7 @@ pub mod wifi_mac {
             /// The `PEER_ADDRESS_TAIL` field.
             #[inline]
             pub const fn peer_address_tail(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `INTERFACE` field.
@@ -279074,7 +279082,7 @@ pub mod wifi_mac {
             /// One update bit per reverse-addressed ordinary receive BlockAck bank. Complete add/reset performs a fresh-read OR with one shifted by the logical hardware index.
             #[inline]
             pub const fn ordinary_entry_update(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete extra-SoftAP add/reset/delete pulses this bit high then low after filling the shared staging words.
@@ -279103,7 +279111,7 @@ pub mod wifi_mac {
             /// One update bit per reverse-addressed ordinary receive BlockAck bank. Complete add/reset performs a fresh-read OR with one shifted by the logical hardware index.
             #[inline]
             pub const fn ordinary_entry_update(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Complete extra-SoftAP add/reset/delete pulses this bit high then low after filling the shared staging words.
@@ -279531,7 +279539,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -279572,7 +279580,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `BEACON_FILTER_ENABLE`.
@@ -279917,13 +279925,13 @@ pub mod wifi_mac {
             /// The `MPDU_COUNT` field.
             #[inline]
             pub const fn mpdu_count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `CFO_ACCUMULATOR` field.
             #[inline]
             pub const fn cfo_accumulator(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -280457,7 +280465,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280549,7 +280557,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280586,13 +280594,13 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `FCS_PASS_COUNT` field.
             #[inline]
             pub const fn fcs_pass_count(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -280622,7 +280630,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280652,7 +280660,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280682,7 +280690,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280712,7 +280720,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280742,7 +280750,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280772,7 +280780,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280802,7 +280810,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280832,7 +280840,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280894,7 +280902,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280924,7 +280932,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280954,7 +280962,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -280991,13 +280999,13 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -281027,7 +281035,7 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
     }
@@ -281098,13 +281106,13 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `BITS_16_31_OPAQUE` field.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -281143,13 +281151,13 @@ pub mod wifi_mac {
             /// The `COUNT` field.
             #[inline]
             pub const fn count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `QOS_NULL_COUNT` field.
             #[inline]
             pub const fn qos_null_count(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -281559,7 +281567,7 @@ pub mod wifi_mac {
         impl From<Rate0> for u8 {
             #[inline]
             fn from(value: Rate0) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -281609,7 +281617,7 @@ pub mod wifi_mac {
         impl From<Rate1> for u8 {
             #[inline]
             fn from(value: Rate1) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -281659,7 +281667,7 @@ pub mod wifi_mac {
         impl From<Rate2> for u8 {
             #[inline]
             fn from(value: Rate2) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -281709,7 +281717,7 @@ pub mod wifi_mac {
         impl From<Rate3> for u8 {
             #[inline]
             fn from(value: Rate3) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -281721,7 +281729,7 @@ pub mod wifi_mac {
             /// First byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_0(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_0` field as its declared value, if it is one.
@@ -281733,7 +281741,7 @@ pub mod wifi_mac {
             /// Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_1(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_1` field as its declared value, if it is one.
@@ -281745,7 +281753,7 @@ pub mod wifi_mac {
             /// Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_2(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2` field as its declared value, if it is one.
@@ -281757,7 +281765,7 @@ pub mod wifi_mac {
             /// Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_3(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// The `RATE_3` field as its declared value, if it is one.
@@ -281774,7 +281782,7 @@ pub mod wifi_mac {
             /// First byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_0(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_0` field as its declared value, if it is one.
@@ -281786,7 +281794,7 @@ pub mod wifi_mac {
             /// Second byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_1(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_1` field as its declared value, if it is one.
@@ -281798,7 +281806,7 @@ pub mod wifi_mac {
             /// Third byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_2(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2` field as its declared value, if it is one.
@@ -281810,7 +281818,7 @@ pub mod wifi_mac {
             /// Fourth byte written by libpp[hal_mac_ctl.o]::hal_he_set_ersu_ack_rate.
             #[inline]
             pub const fn rate_3(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// The `RATE_3` field as its declared value, if it is one.
@@ -282045,7 +282053,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -282057,7 +282065,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -282098,7 +282106,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_7_opaque(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -282110,7 +282118,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `POWER_INDEX`.
@@ -282643,7 +282651,7 @@ pub mod wifi_mac {
         impl From<BpskRate> for u8 {
             #[inline]
             fn from(value: BpskRate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -282691,7 +282699,7 @@ pub mod wifi_mac {
         impl From<QpskRate> for u8 {
             #[inline]
             fn from(value: QpskRate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -282739,7 +282747,7 @@ pub mod wifi_mac {
         impl From<Qam16Rate> for u8 {
             #[inline]
             fn from(value: Qam16Rate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -282758,7 +282766,7 @@ pub mod wifi_mac {
             /// The `BPSK_RATE` field.
             #[inline]
             pub const fn bpsk_rate(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BPSK_RATE` field as its declared value, if it is one.
@@ -282770,7 +282778,7 @@ pub mod wifi_mac {
             /// The `QPSK_RATE` field.
             #[inline]
             pub const fn qpsk_rate(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `QPSK_RATE` field as its declared value, if it is one.
@@ -282782,7 +282790,7 @@ pub mod wifi_mac {
             /// The `QAM16_RATE` field.
             #[inline]
             pub const fn qam16_rate(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `QAM16_RATE` field as its declared value, if it is one.
@@ -282794,7 +282802,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -282805,7 +282813,7 @@ pub mod wifi_mac {
             /// The `BPSK_RATE` field.
             #[inline]
             pub const fn bpsk_rate(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BPSK_RATE` field as its declared value, if it is one.
@@ -282817,7 +282825,7 @@ pub mod wifi_mac {
             /// The `QPSK_RATE` field.
             #[inline]
             pub const fn qpsk_rate(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `QPSK_RATE` field as its declared value, if it is one.
@@ -282829,7 +282837,7 @@ pub mod wifi_mac {
             /// The `QAM16_RATE` field.
             #[inline]
             pub const fn qam16_rate(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `QAM16_RATE` field as its declared value, if it is one.
@@ -282841,7 +282849,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BPSK_RATE`.
@@ -282930,7 +282938,7 @@ pub mod wifi_mac {
         impl From<Rate1m> for u8 {
             #[inline]
             fn from(value: Rate1m) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -282978,7 +282986,7 @@ pub mod wifi_mac {
         impl From<Rate2m> for u8 {
             #[inline]
             fn from(value: Rate2m) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283026,7 +283034,7 @@ pub mod wifi_mac {
         impl From<Rate2mShortPreamble> for u8 {
             #[inline]
             fn from(value: Rate2mShortPreamble) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283052,7 +283060,7 @@ pub mod wifi_mac {
             /// The `RATE_1M` field.
             #[inline]
             pub const fn rate_1m(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_1M` field as its declared value, if it is one.
@@ -283064,7 +283072,7 @@ pub mod wifi_mac {
             /// The `RATE_2M` field.
             #[inline]
             pub const fn rate_2m(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_2M` field as its declared value, if it is one.
@@ -283076,7 +283084,7 @@ pub mod wifi_mac {
             /// The `RATE_2M_SHORT_PREAMBLE` field.
             #[inline]
             pub const fn rate_2m_short_preamble(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2M_SHORT_PREAMBLE` field as its declared value, if it is one.
@@ -283105,7 +283113,7 @@ pub mod wifi_mac {
             /// The `RATE_1M` field.
             #[inline]
             pub const fn rate_1m(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_1M` field as its declared value, if it is one.
@@ -283117,7 +283125,7 @@ pub mod wifi_mac {
             /// The `RATE_2M` field.
             #[inline]
             pub const fn rate_2m(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_2M` field as its declared value, if it is one.
@@ -283129,7 +283137,7 @@ pub mod wifi_mac {
             /// The `RATE_2M_SHORT_PREAMBLE` field.
             #[inline]
             pub const fn rate_2m_short_preamble(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2M_SHORT_PREAMBLE` field as its declared value, if it is one.
@@ -283238,25 +283246,25 @@ pub mod wifi_mac {
             /// The `LR0_RATE` field.
             #[inline]
             pub const fn lr0_rate(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LR1_RATE` field.
             #[inline]
             pub const fn lr1_rate(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `LR2_RATE` field.
             #[inline]
             pub const fn lr2_rate(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `LR3_RATE` field.
             #[inline]
             pub const fn lr3_rate(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -283267,25 +283275,25 @@ pub mod wifi_mac {
             /// The `LR0_RATE` field.
             #[inline]
             pub const fn lr0_rate(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LR1_RATE` field.
             #[inline]
             pub const fn lr1_rate(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `LR2_RATE` field.
             #[inline]
             pub const fn lr2_rate(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `LR3_RATE` field.
             #[inline]
             pub const fn lr3_rate(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `LR0_RATE`.
@@ -283374,7 +283382,7 @@ pub mod wifi_mac {
         impl From<BpskRate> for u8 {
             #[inline]
             fn from(value: BpskRate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283422,7 +283430,7 @@ pub mod wifi_mac {
         impl From<QpskRate> for u8 {
             #[inline]
             fn from(value: QpskRate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283470,7 +283478,7 @@ pub mod wifi_mac {
         impl From<Qam16Rate> for u8 {
             #[inline]
             fn from(value: Qam16Rate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283489,7 +283497,7 @@ pub mod wifi_mac {
             /// The `BPSK_RATE` field.
             #[inline]
             pub const fn bpsk_rate(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BPSK_RATE` field as its declared value, if it is one.
@@ -283501,7 +283509,7 @@ pub mod wifi_mac {
             /// The `QPSK_RATE` field.
             #[inline]
             pub const fn qpsk_rate(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `QPSK_RATE` field as its declared value, if it is one.
@@ -283513,7 +283521,7 @@ pub mod wifi_mac {
             /// The `QAM16_RATE` field.
             #[inline]
             pub const fn qam16_rate(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `QAM16_RATE` field as its declared value, if it is one.
@@ -283525,7 +283533,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -283536,7 +283544,7 @@ pub mod wifi_mac {
             /// The `BPSK_RATE` field.
             #[inline]
             pub const fn bpsk_rate(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `BPSK_RATE` field as its declared value, if it is one.
@@ -283548,7 +283556,7 @@ pub mod wifi_mac {
             /// The `QPSK_RATE` field.
             #[inline]
             pub const fn qpsk_rate(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `QPSK_RATE` field as its declared value, if it is one.
@@ -283560,7 +283568,7 @@ pub mod wifi_mac {
             /// The `QAM16_RATE` field.
             #[inline]
             pub const fn qam16_rate(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `QAM16_RATE` field as its declared value, if it is one.
@@ -283572,7 +283580,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BPSK_RATE`.
@@ -283661,7 +283669,7 @@ pub mod wifi_mac {
         impl From<Rate1m> for u8 {
             #[inline]
             fn from(value: Rate1m) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283709,7 +283717,7 @@ pub mod wifi_mac {
         impl From<Rate2m> for u8 {
             #[inline]
             fn from(value: Rate2m) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283757,7 +283765,7 @@ pub mod wifi_mac {
         impl From<Rate2mShortPreamble> for u8 {
             #[inline]
             fn from(value: Rate2mShortPreamble) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -283769,7 +283777,7 @@ pub mod wifi_mac {
             /// The `RATE_1M` field.
             #[inline]
             pub const fn rate_1m(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_1M` field as its declared value, if it is one.
@@ -283781,7 +283789,7 @@ pub mod wifi_mac {
             /// The `RATE_2M` field.
             #[inline]
             pub const fn rate_2m(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_2M` field as its declared value, if it is one.
@@ -283793,7 +283801,7 @@ pub mod wifi_mac {
             /// The `RATE_2M_SHORT_PREAMBLE` field.
             #[inline]
             pub const fn rate_2m_short_preamble(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2M_SHORT_PREAMBLE` field as its declared value, if it is one.
@@ -283810,7 +283818,7 @@ pub mod wifi_mac {
             /// The `RATE_1M` field.
             #[inline]
             pub const fn rate_1m(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `RATE_1M` field as its declared value, if it is one.
@@ -283822,7 +283830,7 @@ pub mod wifi_mac {
             /// The `RATE_2M` field.
             #[inline]
             pub const fn rate_2m(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RATE_2M` field as its declared value, if it is one.
@@ -283834,7 +283842,7 @@ pub mod wifi_mac {
             /// The `RATE_2M_SHORT_PREAMBLE` field.
             #[inline]
             pub const fn rate_2m_short_preamble(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RATE_2M_SHORT_PREAMBLE` field as its declared value, if it is one.
@@ -283914,25 +283922,25 @@ pub mod wifi_mac {
             /// The `LR0_RATE` field.
             #[inline]
             pub const fn lr0_rate(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LR1_RATE` field.
             #[inline]
             pub const fn lr1_rate(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `LR2_RATE` field.
             #[inline]
             pub const fn lr2_rate(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `LR3_RATE` field.
             #[inline]
             pub const fn lr3_rate(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -283943,25 +283951,25 @@ pub mod wifi_mac {
             /// The `LR0_RATE` field.
             #[inline]
             pub const fn lr0_rate(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `LR1_RATE` field.
             #[inline]
             pub const fn lr1_rate(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `LR2_RATE` field.
             #[inline]
             pub const fn lr2_rate(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `LR3_RATE` field.
             #[inline]
             pub const fn lr3_rate(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `LR0_RATE`.
@@ -284823,7 +284831,7 @@ pub mod wifi_mac {
             /// The `BITS_18_25_OPAQUE` field.
             #[inline]
             pub const fn bits_18_25_opaque(self) -> u8 {
-                (self.0 >> 18) as u8
+                ((self.0 >> 18) & 0xff) as u8
             }
         }
 
@@ -284840,7 +284848,7 @@ pub mod wifi_mac {
             /// The `BITS_18_25_OPAQUE` field.
             #[inline]
             pub const fn bits_18_25_opaque(&self) -> u8 {
-                (self.0 >> 18) as u8
+                ((self.0 >> 18) & 0xff) as u8
             }
 
             /// Set `BITS_0_1_OPAQUE`.
@@ -285329,7 +285337,7 @@ pub mod wifi_mac {
             /// The `TX_TIME` field.
             #[inline]
             pub const fn tx_time(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `SYMBOL_COUNT` field.
@@ -285794,13 +285802,13 @@ pub mod wifi_mac {
             /// The `SYMBOL_COUNT` field.
             #[inline]
             pub const fn symbol_count(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `TB_APEP_LENGTH` field.
             #[inline]
             pub const fn tb_apep_length(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -285839,13 +285847,13 @@ pub mod wifi_mac {
             /// The `TB_BYTES` field.
             #[inline]
             pub const fn tb_bytes(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `SU_BYTES` field.
             #[inline]
             pub const fn su_bytes(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -286054,7 +286062,7 @@ pub mod wifi_mac {
             /// The `BFRP_FEEDBACK_BITMAP` field.
             #[inline]
             pub const fn bfrp_feedback_bitmap(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `BASIC_TARGET_RSSI` field.
@@ -286156,7 +286164,7 @@ pub mod wifi_mac {
             /// The `RU_ALLOCATION_RAW` field.
             #[inline]
             pub const fn ru_allocation_raw(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `RX_AID` field.
@@ -286272,7 +286280,7 @@ pub mod wifi_mac {
             /// The `SPATIAL_REUSE` field.
             #[inline]
             pub const fn spatial_reuse(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
     }
@@ -286449,7 +286457,7 @@ pub mod wifi_mac {
             /// The `RU_ALLOCATION` field.
             #[inline]
             pub const fn ru_allocation(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `MCS` field.
@@ -287152,7 +287160,7 @@ pub mod wifi_mac {
             /// All sixteen bits are set for the inspected SMS4 profile and cleared otherwise; their individual hardware functions are not established.
             #[inline]
             pub const fn bits_6_21_opaque(self) -> u16 {
-                (self.0 >> 6) as u16
+                ((self.0 >> 6) & 0xffff) as u16
             }
         }
 
@@ -287163,7 +287171,7 @@ pub mod wifi_mac {
             /// All sixteen bits are set for the inspected SMS4 profile and cleared otherwise; their individual hardware functions are not established.
             #[inline]
             pub const fn bits_6_21_opaque(&self) -> u16 {
-                (self.0 >> 6) as u16
+                ((self.0 >> 6) & 0xffff) as u16
             }
 
             /// Set `BITS_6_21_OPAQUE`.
@@ -289484,7 +289492,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
         }
 
@@ -289495,7 +289503,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_0_15_opaque(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -289956,13 +289964,13 @@ pub mod wifi_mac {
             /// The `TX_COUNT` field.
             #[inline]
             pub const fn tx_count(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// The `RX_COUNT` field.
             #[inline]
             pub const fn rx_count(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -290272,7 +290280,7 @@ pub mod wifi_mac {
             /// The `HE_BEAM_NDP_TIME` field.
             #[inline]
             pub const fn he_beam_ndp_time(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `HE_BEAM_HW_SEQUENCE_SELECT` field.
@@ -290349,7 +290357,7 @@ pub mod wifi_mac {
             /// The `HE_BEAM_NDP_TIME` field.
             #[inline]
             pub const fn he_beam_ndp_time(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// The `HE_BEAM_HW_SEQUENCE_SELECT` field.
@@ -291202,7 +291210,7 @@ pub mod wifi_mac {
             /// The `NFRP_BUFFER_THRESHOLD` field.
             #[inline]
             pub const fn nfrp_buffer_threshold(self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// Complete dbg_read_bsr_info names bit 26 TX_ACK_ENABLED_AMPDU_EN.
@@ -291267,7 +291275,7 @@ pub mod wifi_mac {
             /// The `NFRP_BUFFER_THRESHOLD` field.
             #[inline]
             pub const fn nfrp_buffer_threshold(&self) -> u8 {
-                (self.0 >> 13) as u8
+                ((self.0 >> 13) & 0xff) as u8
             }
 
             /// Complete dbg_read_bsr_info names bit 26 TX_ACK_ENABLED_AMPDU_EN.
@@ -292056,7 +292064,7 @@ pub mod wifi_mac {
             /// Project-assigned name. CCA SND20 configuration byte; upper word bits are preserved by the vendor setter.
             #[inline]
             pub const fn configuration(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
         }
 
@@ -292067,7 +292075,7 @@ pub mod wifi_mac {
             /// Project-assigned name. CCA SND20 configuration byte; upper word bits are preserved by the vendor setter.
             #[inline]
             pub const fn configuration(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Set `CONFIGURATION`.
@@ -292817,7 +292825,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -292878,7 +292886,7 @@ pub mod wifi_mac {
             /// The `BITS_24_31_OPAQUE` field.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `BITS_0_11_OPAQUE`.
@@ -295692,7 +295700,7 @@ pub mod wifi_mac {
             /// The `TIMER_8TU` field.
             #[inline]
             pub const fn timer_8tu(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `ENABLE` field.
@@ -295710,7 +295718,7 @@ pub mod wifi_mac {
             /// The `CURRENT_COUNT_8TU` field.
             #[inline]
             pub const fn current_count_8tu(self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// The `REACHED` field.
@@ -295739,7 +295747,7 @@ pub mod wifi_mac {
             /// The `TIMER_8TU` field.
             #[inline]
             pub const fn timer_8tu(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `ENABLE` field.
@@ -295757,7 +295765,7 @@ pub mod wifi_mac {
             /// The `CURRENT_COUNT_8TU` field.
             #[inline]
             pub const fn current_count_8tu(&self) -> u8 {
-                (self.0 >> 10) as u8
+                ((self.0 >> 10) & 0xff) as u8
             }
 
             /// The `REACHED` field.
@@ -296798,7 +296806,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -296845,7 +296853,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `AUXILIARY_ARGUMENT_LOW`.
@@ -296980,7 +296988,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
         }
 
@@ -297009,7 +297017,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_16_31_opaque(&self) -> u16 {
-                (self.0 >> 16) as u16
+                ((self.0 >> 16) & 0xffff) as u16
             }
 
             /// Set `CLEAR_14`.
@@ -298276,7 +298284,7 @@ pub mod wifi_mac {
             /// The `PEER_ADDRESS_TAIL` field.
             #[inline]
             pub const fn peer_address_tail(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `INTERFACE` field.
@@ -298305,7 +298313,7 @@ pub mod wifi_mac {
             /// The `PEER_ADDRESS_TAIL` field.
             #[inline]
             pub const fn peer_address_tail(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `INTERFACE` field.
@@ -300311,7 +300319,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -300806,7 +300814,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -301301,7 +301309,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -301796,7 +301804,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -302562,7 +302570,7 @@ pub mod wifi_mac {
             /// Low sixteen bits of hal_he_set_tx_protection argument a4. Complete libpp[pp_he.o]::ppCalTxHEAMPDULength stores the libpp[if_hwctrl.o]::ic_get_he_rts_threshold_bytes result at descriptor offset 0x34; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 loads the same word into a4. This is a PHY-specific length threshold in bytes, not a frame Duration/NAV value.
             #[inline]
             pub const fn rts_threshold_bytes(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set by the complete whole-word byte-threshold publication when argument a3 is nonzero.
@@ -302585,7 +302593,7 @@ pub mod wifi_mac {
             /// Low sixteen bits of hal_he_set_tx_protection argument a4. Complete libpp[pp_he.o]::ppCalTxHEAMPDULength stores the libpp[if_hwctrl.o]::ic_get_he_rts_threshold_bytes result at descriptor offset 0x34; libpp[hal_mac_tx.o]::mac_tx_set_plcp0 loads the same word into a4. This is a PHY-specific length threshold in bytes, not a frame Duration/NAV value.
             #[inline]
             pub const fn rts_threshold_bytes(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Set by the complete whole-word byte-threshold publication when argument a3 is nonzero.
@@ -303106,7 +303114,7 @@ pub mod wifi_mac {
             /// Sixteen-bit HT length printed by complete dbg_read_tx_sig.
             #[inline]
             pub const fn length(self) -> u16 {
-                (self.0 >> 8) as u16
+                ((self.0 >> 8) & 0xffff) as u16
             }
 
             /// Standard HT-SIG2 smoothing bit; the reviewed formatter publishes one.
@@ -303183,7 +303191,7 @@ pub mod wifi_mac {
             /// Sixteen-bit HT length printed by complete dbg_read_tx_sig.
             #[inline]
             pub const fn length(&self) -> u16 {
-                (self.0 >> 8) as u16
+                ((self.0 >> 8) & 0xffff) as u16
             }
 
             /// Standard HT-SIG2 smoothing bit; the reviewed formatter publishes one.
@@ -304321,7 +304329,7 @@ pub mod wifi_mac {
             /// Sixteen-bit assembled HE APEP byte count produced by libpp[pp_he.o]::ppCalTxHEAMPDULength or libpp[pp_he.o]::ppCalTxHESMPDULength and copied by libpp[hal_mac_tx.o]::mac_tx_set_hesig. For A-MPDU, DMA metadata byte seven bit zero contributes the four-byte hardware HE-Control insertion without changing the low fourteen-bit MPDU length. The qualified S-MPDU value is 32 bytes: four-byte delimiter plus 24-byte MPDU, four-byte hardware FCS slot and alignment.
             #[inline]
             pub const fn apep_length(self) -> u16 {
-                (self.0 >> 11) as u16
+                ((self.0 >> 11) & 0xffff) as u16
             }
 
             /// Copy of frame-state bit 12; set in live HE A-MPDU images and clear in the acknowledged HE S-MPDU image.
@@ -304380,7 +304388,7 @@ pub mod wifi_mac {
             /// Sixteen-bit assembled HE APEP byte count produced by libpp[pp_he.o]::ppCalTxHEAMPDULength or libpp[pp_he.o]::ppCalTxHESMPDULength and copied by libpp[hal_mac_tx.o]::mac_tx_set_hesig. For A-MPDU, DMA metadata byte seven bit zero contributes the four-byte hardware HE-Control insertion without changing the low fourteen-bit MPDU length. The qualified S-MPDU value is 32 bytes: four-byte delimiter plus 24-byte MPDU, four-byte hardware FCS slot and alignment.
             #[inline]
             pub const fn apep_length(&self) -> u16 {
-                (self.0 >> 11) as u16
+                ((self.0 >> 11) & 0xffff) as u16
             }
 
             /// Copy of frame-state bit 12; set in live HE A-MPDU images and clear in the acknowledged HE S-MPDU image.
@@ -304619,25 +304627,25 @@ pub mod wifi_mac {
             /// Primary calibrated data-power gain-table index.
             #[inline]
             pub const fn data_primary(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Alternate calibrated data-power gain-table index.
             #[inline]
             pub const fn data_alternate(self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Primary calibrated RTS-power gain-table index.
             #[inline]
             pub const fn rts_primary(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Alternate calibrated RTS-power gain-table index.
             #[inline]
             pub const fn rts_alternate(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
 
@@ -304648,25 +304656,25 @@ pub mod wifi_mac {
             /// Primary calibrated data-power gain-table index.
             #[inline]
             pub const fn data_primary(&self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Alternate calibrated data-power gain-table index.
             #[inline]
             pub const fn data_alternate(&self) -> u8 {
-                (self.0 >> 8) as u8
+                ((self.0 >> 8) & 0xff) as u8
             }
 
             /// Primary calibrated RTS-power gain-table index.
             #[inline]
             pub const fn rts_primary(&self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Alternate calibrated RTS-power gain-table index.
             #[inline]
             pub const fn rts_alternate(&self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
 
             /// Set `DATA_PRIMARY`.
@@ -305169,7 +305177,7 @@ pub mod wifi_mac {
         impl From<RtsRate> for u8 {
             #[inline]
             fn from(value: RtsRate) -> Self {
-                value.bits() as u8
+                (value.bits() & 0xff) as u8
             }
         }
 
@@ -305289,7 +305297,7 @@ pub mod wifi_mac {
             /// The `RTS_RATE` field.
             #[inline]
             pub const fn rts_rate(self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// The `RTS_RATE` field as its declared value, if it is one.
@@ -305301,7 +305309,7 @@ pub mod wifi_mac {
             /// The `BITS_14_21_OPAQUE` field.
             #[inline]
             pub const fn bits_14_21_opaque(self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// The `HT20_EOF_COUNT` field.
@@ -305378,7 +305386,7 @@ pub mod wifi_mac {
             /// The `RTS_RATE` field.
             #[inline]
             pub const fn rts_rate(&self) -> u8 {
-                (self.0 >> 6) as u8
+                ((self.0 >> 6) & 0xff) as u8
             }
 
             /// The `RTS_RATE` field as its declared value, if it is one.
@@ -305390,7 +305398,7 @@ pub mod wifi_mac {
             /// The `BITS_14_21_OPAQUE` field.
             #[inline]
             pub const fn bits_14_21_opaque(&self) -> u8 {
-                (self.0 >> 14) as u8
+                ((self.0 >> 14) & 0xff) as u8
             }
 
             /// The `HT20_EOF_COUNT` field.
@@ -305781,7 +305789,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -305895,7 +305903,7 @@ pub mod wifi_mac {
             /// Low completion detail byte passed by complete libpp[lmac.o]::lmacProcessTxComplete to the status-one/status-four secondary dispatchers when PRIMARY is selected.
             #[inline]
             pub const fn detail(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Four-bit top-level completion status selected by complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete and dispatched by complete libpp[lmac.o]::lmacProcessTxComplete.
@@ -305907,7 +305915,7 @@ pub mod wifi_mac {
             /// Complete libpp[hal_mac_tx.o]::hal_mac_get_txq_complete copies PRIMARY bits 23:16 to result byte two. Complete libpp[lmac.o]::lmacProcessTxSuccess passes that byte into the descriptor ACK-SNR slot. Complete libpp[trc.o]::rcUpdateTxDone adds the pinned wDevCtrl byte 0x60 and narrows to a signed byte before libpp[trc.o]::rcUpdateAckSnr. This field is meaningful only for a successful completion.
             #[inline]
             pub const fn ack_snr_encoded(self) -> u8 {
-                (self.0 >> 16) as u8
+                ((self.0 >> 16) & 0xff) as u8
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -305919,7 +305927,7 @@ pub mod wifi_mac {
             /// Observed source use; the individual hardware meaning is unknown.
             #[inline]
             pub const fn bits_24_31_opaque(self) -> u8 {
-                (self.0 >> 24) as u8
+                ((self.0 >> 24) & 0xff) as u8
             }
         }
     }
@@ -305976,7 +305984,7 @@ pub mod wifi_mac {
             /// Low completion detail byte used by the status-one/status-four secondary dispatchers when the auxiliary selector chooses ALTERNATE.
             #[inline]
             pub const fn detail(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// Four-bit top-level completion status used when the auxiliary selector chooses ALTERNATE.
@@ -306385,7 +306393,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -306764,7 +306772,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -307143,7 +307151,7 @@ pub mod wifi_mac {
             /// The `ADDRESS_BYTES_4_5` field.
             #[inline]
             pub const fn address_bytes_4_5(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// The `ACK_TID` field.
@@ -307755,7 +307763,7 @@ pub mod wifi_mac {
             /// Peer MAC address bytes 4 and 5, or 0xffff for a group key.
             #[inline]
             pub const fn peer_high(self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Project-assigned name. WEP104 key-format flag: API key type 5 uses hardware WEP code 1 with this bit set; the inspected WEP40 path supplies five bytes and WEP104 thirteen.
@@ -307832,7 +307840,7 @@ pub mod wifi_mac {
             /// Peer MAC address bytes 4 and 5, or 0xffff for a group key.
             #[inline]
             pub const fn peer_high(&self) -> u16 {
-                self.0 as u16
+                (self.0 & 0xffff) as u16
             }
 
             /// Project-assigned name. WEP104 key-format flag: API key type 5 uses hardware WEP code 1 with this bit set; the inspected WEP40 path supplies five bytes and WEP104 thirteen.
@@ -308461,7 +308469,7 @@ pub mod wifi_mac {
             /// Unsigned raw code. Values other than 0x7f convert to quarter-dB units after adding 88.
             #[inline]
             pub const fn stream_0_code(self) -> u8 {
-                self.0 as u8
+                (self.0 & 0xff) as u8
             }
 
             /// The `STREAM_0_CODE` field as its declared value, if it is one.

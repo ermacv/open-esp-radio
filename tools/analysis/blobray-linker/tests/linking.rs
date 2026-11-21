@@ -1,5 +1,12 @@
 //! In-process linking of captured objects named by content, with real ELF
 //! linkers and adversarial test linkers.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 #[path = "../../cli/tests/support/mod.rs"]

@@ -10,6 +10,13 @@
 //! `cargo test -p oer-tools-analysis-riscv-decode --test llvm_reference -- --ignored`.
 //! It uses only the pinned toolchain's llvm-tools component, with no
 //! environment override, and writes probes into its own temporary directory.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 
 use oer_tools_analysis_riscv_decode::{Extensions, decode};
 use std::{fs, path::PathBuf, process::Command};

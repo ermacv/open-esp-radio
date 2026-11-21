@@ -1,4 +1,11 @@
 //! End-to-end callers and argument queries over synthetic captured ELF inputs.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 #[allow(dead_code)]
 mod support;

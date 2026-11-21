@@ -4,7 +4,10 @@
 //! Every value of the stand file that is secret (an SSID, the SSH target, an
 //! interface name, a passphrase) and every full MAC address stays out of
 //! messages, errors and `Debug`.
-
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod fixtures;

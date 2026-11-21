@@ -2,7 +2,14 @@
 //! checks provenance, runs the typed scenarios, builds the comparison probes
 //! and checks host stands, carries
 //! symbol lineage and audits the PHY archive. The gate runs it as a process.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 use std::ffi::OsString;
 use std::path::PathBuf;
