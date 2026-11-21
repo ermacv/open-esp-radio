@@ -5798,6 +5798,28 @@ fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     raw.then_some(word)
 }
 
+/// S8c: a value cut to a field's width: a call of `Bits::truncate`, or of
+/// the HAL's `bits` helper, which is one. Each is to become a type that
+/// carries the bound, a checked constructor, or a listed boundary.
+fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    let before_dot = at
+        .checked_sub(1)
+        .is_some_and(|before| punct_at(tokens, before, '.'));
+    let after_fn = at
+        .checked_sub(1)
+        .and_then(|before| ident_at(tokens, before))
+        .is_some_and(|before| before == "fn");
+    let called =
+        group_at(tokens, at + 1, Delimiter::Parenthesis).is_some() || punct_at(tokens, at + 1, ':');
+    let truncate = word == "truncate"
+        && at
+            .checked_sub(1)
+            .is_some_and(|before| punct_at(tokens, before, ':'));
+    let helper = word == "bits" && !before_dot && !after_fn;
+    ((truncate || helper) && called).then_some(word)
+}
+
 /// S8b: the protocol packages, the wire crates among them: the one place a
 /// frame's bytes are reached by hand is `oer-portable-wire`, outside them.
 fn protocol_code(path: &str) -> bool {
@@ -5847,6 +5869,7 @@ const BY_PHY: &str = "the PHY, after the Wi-Fi path";
 const BY_RADIO_SYSTEM: &str = "no package yet: the radio system and Bluetooth";
 const BY_PHASE_C: &str = "phase C, the network owner in the network runtime";
 const BY_NONE: &str = "no package yet";
+const BY_R2: &str = "R2, the area PR that holds the file";
 const BY_IMAGES: &str = "the HAL's register images, in the stand campaign";
 const BY_IEEE802154: &str = "the IEEE 802.15.4 step, in the stand campaign";
 const BY_PLATFORM: &str = "the platform's step, in the stand campaign";
@@ -6335,6 +6358,168 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
 /// it guards. The list only shrinks; a variant without an entry fails.
 const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[];
 
+/// S8c: the values cut to a field's width (`Bits::truncate` and the HAL's
+/// `bits` helper) in the HAL, the radio crates and the platform, by file
+/// with their count. The list only shrinks.
+const TRUNCATIONS: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/hal/src/peripherals/aes.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 2, BY_R2),
+    (
+        "chips/esp32s31/hal/src/peripherals/system_timer.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/peripherals/timg0_alarm.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/peripherals/timg1_alarm.rs",
+        2,
+        BY_R2,
+    ),
+    ("chips/esp32s31/hal/src/radio/coex/external.rs", 24, BY_R2),
+    ("chips/esp32s31/hal/src/radio/coex/ports.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/radio/coex/timer_bank.rs", 4, BY_R2),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
+        21,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/channel.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/init.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
+        3,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/crypto.rs",
+        5,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/hal_init_tail.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init.rs",
+        6,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
+        9,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
+        6,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/interface_address.rs",
+        1,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/last_rx_buffer.rs",
+        3,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/dma.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
+        5,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/txrx_init.rs",
+        2,
+        BY_R2,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
+        16,
+        BY_R2,
+    ),
+    ("chips/esp32s31/hal/src/radio/modem/ops.rs", 19, BY_R2),
+    ("chips/esp32s31/hal/src/radio/modem/platform.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/radio/modem/syscon.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/radio/modem/values.rs", 12, BY_R2),
+    ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 5, BY_R2),
+    (
+        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
+        13,
+        BY_R2,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 2, BY_R2),
+    (
+        "chips/esp32s31/hal/src/radio/phy/iq_estimator/ops.rs",
+        1,
+        BY_R2,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 4, BY_R2),
+    ("chips/esp32s31/hal/src/set.rs", 7, BY_R2),
+    ("chips/esp32s31/hal/src/system/boot.rs", 5, BY_R2),
+    ("chips/esp32s31/hal/src/system/boot/cache.rs", 1, BY_R2),
+    ("chips/esp32s31/hal/src/system/boot/flash.rs", 3, BY_R2),
+    ("chips/esp32s31/hal/src/system/boot/psram.rs", 11, BY_R2),
+    (
+        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
+        1,
+        BY_R2,
+    ),
+    ("chips/esp32s31/radio/phy/src/state/client.rs", 3, BY_R2),
+    (
+        "chips/family/platform/interrupt-table/src/router.rs",
+        1,
+        BY_R2,
+    ),
+    ("chips/family/radio/coex/src/executor.rs", 2, BY_R2),
+    ("chips/family/radio/coex/src/schedule.rs", 2, BY_R2),
+    (
+        "chips/family/radio/ieee80211/policy/src/he_txop.rs",
+        1,
+        BY_R2,
+    ),
+];
+
 /// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
 /// a value reaches a register by hand only through these. An entry that is
@@ -6431,7 +6616,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        23,
+        22,
         BY_P3,
     ),
     (
@@ -6834,6 +7019,14 @@ fn raw_register_calls_are_listed_and_only_shrink() {
     assert_scan(
         &scan_hits(&register_code, &raw_register_at, NO_ATTRIBUTE),
         RAW_REGISTERS,
+    );
+}
+
+#[test]
+fn truncations_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&register_code, &truncation_at, NO_ATTRIBUTE),
+        TRUNCATIONS,
     );
 }
 

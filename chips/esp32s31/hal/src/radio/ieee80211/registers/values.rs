@@ -58,7 +58,12 @@ impl MacInterface {
         self,
     ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::INTERFACE_WIDTH }>
     {
-        oer_portable_mmio::Bits::truncate(self.bits())
+        match self {
+            Self::Station => oer_portable_mmio::Bits::constant::<0>(),
+            Self::AccessPoint => oer_portable_mmio::Bits::constant::<1>(),
+            Self::Context2 => oer_portable_mmio::Bits::constant::<2>(),
+            Self::Context3 => oer_portable_mmio::Bits::constant::<3>(),
+        }
     }
 }
 
@@ -237,7 +242,11 @@ impl WifiDescriptorAddressLow {
 
 /// One reviewed four-bit Wi-Fi packet-traffic-information value. Its scheduling policy remains outside the PAC.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacPti(u32);
+pub struct MacPti(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_WIDTH },
+    >,
+);
 
 impl MacPti {
     pub const MIN: u32 = 0x00000000;
@@ -251,15 +260,15 @@ impl MacPti {
                 panic!("the coexistence priority domain must fit the MAC PTI field");
             }
         };
-        Self(pti.value() as u32)
+        // The domain fits the field (checked above, at build): nothing is cut.
+        Self(oer_portable_mmio::Bits::truncate(pti.value() as u32))
     }
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_mmio::Bits::new(value) {
+            Ok(bits) => Some(Self(bits)),
+            Err(_) => None,
         }
     }
 
@@ -269,11 +278,20 @@ impl MacPti {
             { oer_chips_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The priority as the four-bit PTI fields hold it.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::default_control::WIFI_DEFAULT_PTI_WIDTH },
+    > {
         self.0
     }
 }
@@ -526,7 +544,9 @@ const _: () = {
 
 /// Twelve-bit descriptor metadata count published by complete hal_set_tx_pti.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacTxPtiCount(u32);
+pub struct MacTxPtiCount(
+    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }>,
+);
 
 impl MacTxPtiCount {
     pub const MIN: u32 = 0x00000000;
@@ -534,10 +554,9 @@ impl MacTxPtiCount {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_mmio::Bits::new(value) {
+            Ok(bits) => Some(Self(bits)),
+            Err(_) => None,
         }
     }
 
@@ -545,11 +564,18 @@ impl MacTxPtiCount {
     pub const fn from_bits(
         bits: oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }>,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+
+    /// The count as the PTI word's `COUNT` field holds it.
+    pub const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::pti::COUNT_WIDTH }> {
         self.0
     }
 }

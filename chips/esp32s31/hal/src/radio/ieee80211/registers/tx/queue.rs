@@ -8,10 +8,10 @@ use oer_chips_esp32s31_pac::wifi_mac::{
     AcknowledgeMacTxCompletionConsumed, WifiMacTxCommon, WifiMacTxQueueControl,
     WifiMacTxQueueVector,
 };
-use oer_portable_mmio::{Index, Placement};
+use oer_portable_mmio::{Bits, Index, Placement};
 
 use super::MacTxProtection;
-use crate::radio::ieee80211::registers::{MacInterface, bits};
+use crate::radio::ieee80211::registers::MacInterface;
 
 /// The register-array element of an ordinary logical queue.
 #[inline(always)]
@@ -80,9 +80,12 @@ pub(crate) fn disable_he_rts_threshold<P: Placement>(vector: &mut WifiMacTxQueue
 }
 
 #[inline(always)]
-pub(crate) fn set_cca_force<P: Placement>(registers: &mut WifiMacTxCommon<P>, value: u8) -> u32 {
+pub(crate) fn set_cca_force<P: Placement>(
+    registers: &mut WifiMacTxCommon<P>,
+    value: Bits<{ oer_chips_esp32s31_pac::wifi_mac::cca_control::FORCE_WIDTH }>,
+) -> u32 {
     registers.modify_cca_control(|writer| {
-        writer.set_force(bits(u32::from(value)));
+        writer.set_force(value);
     });
     0
 }
@@ -248,16 +251,16 @@ pub(crate) fn publish_queue<P: Placement>(
 pub(crate) fn configure_edca<P: Placement>(
     registers: &mut WifiMacTxQueueControl<P>,
     queue: MacTxQueueIndex,
-    aifsn: u8,
-    contention_window: u16,
+    aifsn: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::AIFSN_WIDTH }>,
+    contention_window: Bits<{ oer_chips_esp32s31_pac::wifi_mac::config::CONTENTION_WINDOW_WIDTH }>,
     interface: MacInterface,
 ) {
     let bank = bank(queue);
     registers.modify_config(bank, |writer| {
-        writer.set_aifsn(bits(u32::from(aifsn)));
+        writer.set_aifsn(aifsn);
     });
     registers.modify_config(bank, |writer| {
-        writer.set_contention_window(bits(u32::from(contention_window)));
+        writer.set_contention_window(contention_window);
     });
     registers.modify_config(bank, |writer| {
         writer.set_interface(interface.config());

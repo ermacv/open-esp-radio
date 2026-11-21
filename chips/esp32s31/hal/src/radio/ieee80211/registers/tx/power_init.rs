@@ -1,6 +1,6 @@
 //! Generated-PAC ownership for the complete cold MAC TX-power publication.
 
-use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, bits, byte, element};
+use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, bits, element};
 
 /// Number of two-byte rate entries produced by complete `hal_init_tx_pwr`.
 pub const MAC_TX_POWER_RATE_COUNT: usize = 43;
@@ -10,18 +10,30 @@ pub const MAC_TX_POWER_RATE_COUNT: usize = 43;
 /// This is not dBm. The private field prevents safe upper layers from
 /// truncating an arbitrary byte into a six-bit MMIO field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacTxPowerIndex(u8);
+pub struct MacTxPowerIndex(
+    oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::tb_ru_power_tail::POWER_INDEX_WIDTH },
+    >,
+);
 
 impl MacTxPowerIndex {
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= 0x3f {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_mmio::Bits::new(value as u32) {
+            Ok(bits) => Some(Self(bits)),
+            Err(_) => None,
         }
     }
 
     pub const fn value(self) -> u8 {
+        self.0.get() as u8
+    }
+
+    /// The index as the six-bit RU power fields hold it.
+    const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<
+        { oer_chips_esp32s31_pac::wifi_mac::tb_ru_power_tail::POWER_INDEX_WIDTH },
+    > {
         self.0
     }
 }
@@ -140,31 +152,6 @@ const fn partial_ru_power_slot(selector: MacPartialRuPowerSelector) -> PartialRu
 }
 
 impl<M: MacPlacement> WifiRadioRegisters<M> {
-    /// Read the runtime maximum TX-power index for one partial RU.
-    ///
-    /// SOURCE: complete `hal_mac_get_tb_max_pwr` including both relocation
-    /// jump tables. The returned six-bit value is a PHY gain-table index, not
-    /// a radiated dBm value.
-    pub fn partial_ru_max_tx_power(&self, selector: MacPartialRuPowerSelector) -> MacTxPowerIndex {
-        let init = &self.mac.wifi_mac_tx_power_init;
-        let value = match partial_ru_power_slot(selector) {
-            PartialRuPowerSlot::Packed { word, lane } => {
-                let register = init.read_tb_ru_power(element::<3>(word));
-                match lane {
-                    0 => register.power_0(),
-                    1 => register.power_1(),
-                    2 => register.power_2(),
-                    3 => register.power_3(),
-                    4 => register.power_4(),
-                    _ => unreachable!("a packed RU power lane is below five"),
-                }
-            }
-            PartialRuPowerSlot::Tail => init.read_tb_ru_power_tail().power_index(),
-        };
-        // Every field read above is exactly six bits wide.
-        MacTxPowerIndex(byte(value))
-    }
-
     /// Replace the runtime maximum TX-power index for one partial RU.
     ///
     /// SOURCE: complete `hal_mac_set_tb_max_pwr` including both relocation
@@ -176,7 +163,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         power: MacTxPowerIndex,
     ) {
         let init = &mut self.mac.wifi_mac_tx_power_init;
-        let value = bits::<6>(u32::from(power.value()));
+        let value = power.field();
         match partial_ru_power_slot(selector) {
             PartialRuPowerSlot::Packed { word, lane } => {
                 init.modify_tb_ru_power(element::<3>(word), |w| {
