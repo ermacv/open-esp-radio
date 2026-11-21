@@ -17,11 +17,11 @@ fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
 
 #[test]
 fn bss_offsets_retain_complete_rom_branches() {
-    assert_eq!(bss_tx_offset(0), 0);
-    assert_eq!(bss_tx_offset(1), 0);
-    assert_eq!(bss_tx_offset(2), 2);
-    assert_eq!(bss_tx_offset(3), 1);
-    assert_eq!(bss_tx_offset(4), 0);
+    assert_eq!(bss_tx_offset(0).get(), 0);
+    assert_eq!(bss_tx_offset(1).get(), 0);
+    assert_eq!(bss_tx_offset(2).get(), 2);
+    assert_eq!(bss_tx_offset(3).get(), 1);
+    assert_eq!(bss_tx_offset(4).get(), 0);
 }
 
 #[test]

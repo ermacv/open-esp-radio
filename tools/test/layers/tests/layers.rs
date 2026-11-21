@@ -6479,13 +6479,13 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
     ),
     ("chips/esp32s31/hal/src/radio/modem/ops.rs", 19, BY_R2),
     ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 5, BY_R2),
+    ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        13,
+        8,
         BY_R2,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 2, BY_R2),
+    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_R2),
     (
         "chips/esp32s31/hal/src/radio/phy/iq_estimator/ops.rs",
         1,
@@ -6609,16 +6609,10 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/phy/baseband/ops.rs",
-        2,
-        BY_PHY,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
         1,
         BY_PHY,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_PHY),
     ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
     (
         "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
@@ -9137,8 +9131,8 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/radio/phy/restore.rs",
         "dead_code",
-        5,
-        "unknown, to read",
+        1,
+        "the chip's calibrations alone make the restore variants; a host build without tests makes none",
     ),
     (
         "chips/esp32s31/hal/src/set.rs",

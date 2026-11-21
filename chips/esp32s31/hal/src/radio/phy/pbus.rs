@@ -105,6 +105,10 @@ impl<T: SharedPhyAccess + ?Sized> oer_chips_family_radio_phy::pbus::PbusAccess f
 }
 #[cfg(target_arch = "riscv32")]
 impl<T: SharedPhyContext + ?Sized> oer_chips_family_radio_phy::pbus::PbusContext for Port<'_, T> {
+    /// SOURCE: ROM_REV0_PHY_PBUS: complete `phy_pbus_force_mode` loads
+    /// `MODEM_SYSCON.WIFI_BB_CFG` and branches on `WIFI_ENABLE` (bit 1):
+    /// the vendor's own read of the bit (Blobray `register-accesses`, the
+    /// rev0 ROM).
     fn wifi_baseband_enabled(&self) -> bool {
         matches!(
             crate::phy_blocks(self.0)

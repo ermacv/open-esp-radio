@@ -193,7 +193,7 @@ impl PhyRouteState {
     /// The slot is filled before either temporary field is published. A
     /// second caller is rejected without touching MMIO, so it cannot steal
     /// the first caller's restore authority.
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    #[cfg(any(test, target_arch = "riscv32"))]
     pub(crate) fn prepare_txdc_with<Port: ?Sized>(
         &mut self,
         port: &mut Port,
@@ -212,7 +212,7 @@ impl PhyRouteState {
     }
 
     /// Restore the saved TX-DC fields and only then release the slot.
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    #[cfg(any(test, target_arch = "riscv32"))]
     pub(crate) fn restore_txdc_with(
         &mut self,
         restore: impl FnOnce(TxDcPwdetFields),
@@ -255,7 +255,7 @@ impl PhyRouteState {
     ///
     /// The crystal-duty operation masks this field around a nested RX-DCO
     /// calibration which independently performs the same sequence.
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    #[cfg(any(test, target_arch = "riscv32"))]
     pub(crate) fn prepare_rx_dco_with(
         &mut self,
         capture: impl FnOnce() -> RxDcoControlField,
@@ -273,7 +273,7 @@ impl PhyRouteState {
     }
 
     /// Restore the most recent RX-DCO control capture.
-    #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+    #[cfg(any(test, target_arch = "riscv32"))]
     pub(crate) fn restore_rx_dco_with(
         &mut self,
         restore: impl FnOnce(RxDcoControlField),

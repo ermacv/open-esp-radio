@@ -389,17 +389,18 @@ impl PhyForcedPowerIndex {
 // SOURCE: complete libphy phy_config_hccfr, phy_iccfr_en and phy_force_iccfr.
 /// Complete twelve-bit value accepted by reviewed HCCFR and forced-ICCFR transactions.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct CfrValue(u32);
+pub struct CfrValue(
+    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH }>,
+);
 impl CfrValue {
     pub const MIN: u32 = 0x00000000;
     pub const MAX: u32 = oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_MAX;
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_mmio::Bits::new(value) {
+            Ok(field) => Some(Self(field)),
+            Err(_) => None,
         }
     }
 
@@ -409,12 +410,20 @@ impl CfrValue {
             { oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH },
         >,
     ) -> Self {
-        Self(bits.get())
+        Self(bits)
+    }
+
+    /// The value's field.
+    pub(crate) const fn field(
+        self,
+    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_bb::hccfr_value::VALUE_WIDTH }>
+    {
+        self.0
     }
 
     /// Return the checked numeric value.
     pub const fn get(self) -> u32 {
-        self.0
+        self.0.get()
     }
 }
 
