@@ -213,8 +213,8 @@ oer_tools_probe_macros::probe! {
 oer_tools_probe_macros::probe! {
     pub fn open_libpp_crypto_trace_hal_crypto_enable(interface: u32, _algorithm: u32, _management: u32, spp: u32) {
         let interface = match interface {
-            0 => oer_chips_esp32s31_hal::types::MacInterface::Station,
-            1 => oer_chips_esp32s31_hal::types::MacInterface::AccessPoint,
+            0 => oer_chips_esp32s31_hal::types::MacCryptoInterface::Station,
+            1 => oer_chips_esp32s31_hal::types::MacCryptoInterface::AccessPoint,
             _ => return,
         };
         let spp = match spp {
