@@ -62,43 +62,47 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag + 1,
         pack([
-            e.tbtt_3(),
-            e.tbtt_2(),
-            e.tbtt_1(),
-            e.tbtt_0(),
-            e.tsf_timer_3(),
-            e.tsf_timer_2(),
-            e.tsf_timer_1(),
-            e.tsf_timer_0(),
+            matches!(e.tbtt_3(), EventEnable::Enabled),
+            matches!(e.tbtt_2(), EventEnable::Enabled),
+            matches!(e.tbtt_1(), EventEnable::Enabled),
+            matches!(e.tbtt_0(), EventEnable::Enabled),
+            matches!(e.tsf_timer_3(), EventEnable::Enabled),
+            matches!(e.tsf_timer_2(), EventEnable::Enabled),
+            matches!(e.tsf_timer_1(), EventEnable::Enabled),
+            matches!(e.tsf_timer_0(), EventEnable::Enabled),
         ]),
         pack([
             s.radio
                 .timer
                 .read_control(Index::constant::<0>())
-                .timer_enable(),
+                .timer_enable()
+                == Run::Running,
             s.radio
                 .timer
                 .read_control(Index::constant::<1>())
-                .timer_enable(),
+                .timer_enable()
+                == Run::Running,
             s.radio
                 .timer
                 .read_control(Index::constant::<2>())
-                .timer_enable(),
+                .timer_enable()
+                == Run::Running,
             s.radio
                 .timer
                 .read_control(Index::constant::<3>())
-                .timer_enable(),
+                .timer_enable()
+                == Run::Running,
         ]),
         pack([
-            s.radio.rtc.read_sta_tsf_control().sta_tbtt_enable(),
-            s.radio.aux.read_softap_control().tbtt_enable(),
-            s.radio.aux.read_nan_control().tbtt_enable(),
-            s.radio.aux.read_btwt_control().tbtt_enable(),
+            s.radio.rtc.read_sta_tsf_control().sta_tbtt_enable() == Run::Running,
+            s.radio.aux.read_softap_control().tbtt_enable() == Run::Running,
+            s.radio.aux.read_nan_control().tbtt_enable() == Run::Running,
+            s.radio.aux.read_btwt_control().tbtt_enable() == Run::Running,
         ]),
     );
 }
-fn enable(s: &mut Session<'_>, c: Cause, on: bool) {
-    wifi_mask(s, false);
+fn enable(s: &mut Session<'_>, c: Cause, on: EventEnable) {
+    wifi_mask(s, EventEnable::Disabled);
     s.radio.power.modify_enable(|w| match c {
         Cause::Timer(2) => {
             w.set_tsf_timer_2(on);
@@ -121,7 +125,7 @@ fn enable(s: &mut Session<'_>, c: Cause, on: bool) {
     });
     oer_portable_riscv::fence();
 }
-fn run(s: &mut Session<'_>, c: Cause, on: bool) {
+fn run(s: &mut Session<'_>, c: Cause, on: Run) {
     match c {
         Cause::Timer(n) => {
             if let Ok(i) = Index::new(usize::from(n)) {
@@ -145,20 +149,36 @@ fn run(s: &mut Session<'_>, c: Cause, on: bool) {
     }
     oer_portable_riscv::fence();
 }
+/// The snapshot selector of TSF counter `counter` when counter `n` is read.
+const fn selected(n: u8, counter: u8) -> Snapshot {
+    if n == counter {
+        Snapshot::Selected
+    } else {
+        Snapshot::Unselected
+    }
+}
+/// The enable of TBTT lane `lane` when domain `n` is the one enabled.
+const fn lane(n: u8, lane: u8) -> EventEnable {
+    if n == lane {
+        EventEnable::Enabled
+    } else {
+        EventEnable::Disabled
+    }
+}
 fn snapshot(s: &mut Session<'_>, n: u8, tag: u32) -> u64 {
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(n == 0)
-            .set_snapshot_softap_tsf(n == 1)
-            .set_snapshot_tsf2(n == 2)
-            .set_snapshot_tsf3(n == 3);
+        w.set_snapshot_station_tsf(selected(n, 0))
+            .set_snapshot_softap_tsf(selected(n, 1))
+            .set_snapshot_tsf2(selected(n, 2))
+            .set_snapshot_tsf3(selected(n, 3));
     });
     let low = s.radio.load.read_snapshot_low().value();
     let high = s.radio.load.read_snapshot_high().value();
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(false)
-            .set_snapshot_softap_tsf(false)
-            .set_snapshot_tsf2(false)
-            .set_snapshot_tsf3(false);
+        w.set_snapshot_station_tsf(Snapshot::Unselected)
+            .set_snapshot_softap_tsf(Snapshot::Unselected)
+            .set_snapshot_tsf2(Snapshot::Unselected)
+            .set_snapshot_tsf3(Snapshot::Unselected);
     });
     emit(tag, low, high, u32::from(n));
     (u64::from(high) << 32) | u64::from(low)
@@ -187,10 +207,10 @@ fn init(s: &mut Session<'_>) -> bool {
         w.set_tsf_mode(pac::modem_pwr::btwt_control::TsfMode::Enabled);
     });
     for n in 0..4 {
-        run(s, Cause::Tbtt(n), false);
+        run(s, Cause::Tbtt(n), Run::Stopped);
         if let Ok(i) = Index::new(usize::from(n)) {
             s.radio.timer.modify_control(i, |w| {
-                w.set_timer_enable(false).set_wakeup_enable(false);
+                w.set_timer_enable(Run::Stopped).set_wakeup_enable(false);
             });
         }
     }
@@ -223,9 +243,9 @@ enum Tbtt {
 }
 
 fn stage(s: &mut Session<'_>, c: Cause, tag: u32, running_tbtt: Tbtt) -> u64 {
-    run(s, c, false);
+    run(s, c, Run::Stopped);
     if running_tbtt == Tbtt::Running {
-        run(s, c, true);
+        run(s, c, Run::Running);
     }
     let now = snapshot(s, c.domain(), tag);
     let target = match c {
@@ -307,12 +327,12 @@ fn wait(s: &Session<'_>, c: Cause, tag: u32) -> bool {
     );
     positive
 }
-fn fresh(s: &mut Session<'_>, c: Cause, on: bool, tag: u32) -> bool {
+fn fresh(s: &mut Session<'_>, c: Cause, on: EventEnable, tag: u32) -> bool {
     let target = program(s, c, tag);
     enable(s, c, on);
-    run(s, c, true);
+    run(s, c, Run::Running);
     let positive = wait(s, c, tag + 2);
-    run(s, c, false);
+    run(s, c, Run::Stopped);
     let end = snapshot(s, c.domain(), tag + 3);
     state(s, tag + 4);
     if !positive || end < target {
@@ -335,32 +355,32 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
         return;
     }
     state(s, 0x3104);
-    if !fresh(s, c, true, 0x3110) {
+    if !fresh(s, c, EventEnable::Enabled, 0x3110) {
         return;
     }
     let retained = s.radio.power.sample_mac_power_interrupt();
-    enable(s, c, false);
+    enable(s, c, EventEnable::Disabled);
     state(s, 0x3120);
-    enable(s, c, true);
+    enable(s, c, EventEnable::Enabled);
     state(s, 0x3130);
-    enable(s, c, false);
+    enable(s, c, EventEnable::Disabled);
     s.radio.power.acknowledge_mac_power_interrupt(retained);
     oer_portable_riscv::fence();
     state(s, 0x3140);
-    enable(s, c, true);
+    enable(s, c, EventEnable::Enabled);
     window();
     state(s, 0x3150);
-    if !fresh(s, c, true, 0x3160) {
+    if !fresh(s, c, EventEnable::Enabled, 0x3160) {
         return;
     }
     let sample = s.radio.power.sample_mac_power_interrupt();
     s.radio.power.acknowledge_mac_power_interrupt(sample);
     oer_portable_riscv::fence();
     state(s, 0x3170);
-    if !fresh(s, c, false, 0x3180) {
+    if !fresh(s, c, EventEnable::Disabled, 0x3180) {
         return;
     }
-    enable(s, c, true);
+    enable(s, c, EventEnable::Enabled);
     state(s, 0x3190);
     s.radio.power.clear_all_mac_power_interrupts();
     oer_portable_riscv::fence();
@@ -372,17 +392,17 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
     let end = snapshot(s, c.domain(), 0x31b2);
     state(s, 0x31b4);
     emit(0x31b6, u32::from(end >= target), raw(s), c.bit());
-    if !fresh(s, c, true, 0x31c0) {
+    if !fresh(s, c, EventEnable::Enabled, 0x31c0) {
         return;
     }
     s.radio.power.clear_all_mac_power_interrupts();
     state(s, 0x31d0);
     // Deliberately leave the producer running through the real project policy.
     program(s, c, 0x31e0);
-    enable(s, c, true);
-    run(s, c, true);
+    enable(s, c, EventEnable::Enabled);
+    run(s, c, Run::Running);
     if !wait(s, c, 0x31e2) {
-        run(s, c, false);
+        run(s, c, Run::Stopped);
         return;
     }
     s.radio.power.clear_all_mac_power_interrupts();
@@ -401,8 +421,8 @@ fn leaf(s: &mut Session<'_>, c: Cause) {
     }
     let _ = wait(s, c, 0x31e8);
     state(s, 0x31ea);
-    run(s, c, false);
-    enable(s, c, true);
+    run(s, c, Run::Stopped);
+    enable(s, c, EventEnable::Enabled);
     state(s, 0x31ec);
     s.radio.power.clear_all_mac_power_interrupts();
     state(s, 0x31f0);
@@ -433,16 +453,17 @@ pub(in crate::image) fn distinct(s: &mut Session<'_>) {
     for n in [2, 3] {
         load(s, n);
         program(s, Cause::Timer(n), 0x3200 + u32::from(n) * 8);
-        run(s, Cause::Timer(n), true);
+        run(s, Cause::Timer(n), Run::Running);
     }
     s.radio.power.modify_enable(|w| {
-        w.set_tsf_timer_2(true).set_tsf_timer_3(true);
+        w.set_tsf_timer_2(EventEnable::Enabled)
+            .set_tsf_timer_3(EventEnable::Enabled);
     });
     for n in [2, 3] {
         if !wait(s, Cause::Timer(n), 0x3220 + u32::from(n)) {
             return;
         }
-        run(s, Cause::Timer(n), false);
+        run(s, Cause::Timer(n), Run::Stopped);
     }
     state(s, 0x3230);
     let selected = s
@@ -464,24 +485,24 @@ pub(in crate::image) fn distinct_tbtt(s: &mut Session<'_>) {
         for n in [a, b] {
             load(s, n);
             program(s, Cause::Tbtt(n), tag + u32::from(n) * 4);
-            run(s, Cause::Tbtt(n), true);
+            run(s, Cause::Tbtt(n), Run::Running);
         }
         s.radio.power.modify_enable(|w| {
-            w.set_tbtt_0(a == 0)
-                .set_tbtt_1(b == 1)
-                .set_tbtt_2(a == 2)
-                .set_tbtt_3(b == 3);
+            w.set_tbtt_0(lane(a, 0))
+                .set_tbtt_1(lane(b, 1))
+                .set_tbtt_2(lane(a, 2))
+                .set_tbtt_3(lane(b, 3));
         });
         for n in [a, b] {
             if !wait(s, Cause::Tbtt(n), tag + 0x20 + u32::from(n)) {
                 for k in [a, b] {
-                    run(s, Cause::Tbtt(k), false);
+                    run(s, Cause::Tbtt(k), Run::Stopped);
                 }
                 return;
             }
         }
         for n in [a, b] {
-            run(s, Cause::Tbtt(n), false);
+            run(s, Cause::Tbtt(n), Run::Stopped);
         }
         state(s, tag + 0x30);
         let sample = s.radio.power.sample_mac_power_interrupt();
@@ -513,7 +534,7 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
         let c = Cause::Tbtt(n);
         let tag = 0x3800 + u32::from(n) * 0x100;
         load(s, n);
-        if !fresh(s, c, true, tag) {
+        if !fresh(s, c, EventEnable::Enabled, tag) {
             return;
         }
         s.radio.power.clear_all_mac_power_interrupts();
@@ -529,7 +550,7 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
         state(s, tag + 0x22);
         // Explicit project stale-event discard while every IRQ is masked.
         s.radio.power.clear_all_mac_power_interrupts();
-        enable(s, c, true);
+        enable(s, c, EventEnable::Enabled);
         state(s, tag + 0x24);
         let positive = wait(s, c, tag + 0x26);
         let now = snapshot(s, n, tag + 0x27);
@@ -541,7 +562,7 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
                 u32::from(positive),
                 u32::from(now >= target),
             );
-            run(s, c, false);
+            run(s, c, Run::Stopped);
             return;
         }
         s.radio.power.clear_all_mac_power_interrupts();
@@ -549,8 +570,8 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
         let _ = wait(s, c, tag + 0x32);
         snapshot(s, n, tag + 0x33);
         state(s, tag + 0x34);
-        run(s, c, false);
-        enable(s, c, true);
+        run(s, c, Run::Stopped);
+        enable(s, c, EventEnable::Enabled);
         state(s, tag + 0x36);
         s.radio.power.clear_all_mac_power_interrupts();
         state(s, tag + 0x38);
@@ -565,11 +586,11 @@ pub(in crate::image) fn timer_run(s: &mut Session<'_>) {
         let tag = 0x3c00 + u32::from(n) * 0x100;
         load(s, n);
         let target = program(s, c, tag);
-        enable(s, c, true);
-        run(s, c, true);
+        enable(s, c, EventEnable::Enabled);
+        run(s, c, Run::Running);
         state(s, tag + 2);
         if !wait(s, c, tag + 4) {
-            run(s, c, false);
+            run(s, c, Run::Stopped);
             return;
         }
         let end = snapshot(s, n, tag + 5);
@@ -579,12 +600,12 @@ pub(in crate::image) fn timer_run(s: &mut Session<'_>) {
         state(s, tag + 0x10);
         // Explicitly rearm run after positively witnessing its post-expiry readback.
         program(s, c, tag + 0x12);
-        run(s, c, true);
+        run(s, c, Run::Running);
         let _ = wait(s, c, tag + 0x14);
         state(s, tag + 0x16);
-        enable(s, c, true);
+        enable(s, c, EventEnable::Enabled);
         state(s, tag + 0x18);
-        run(s, c, false);
+        run(s, c, Run::Stopped);
         s.radio.power.clear_all_mac_power_interrupts();
         state(s, tag + 0x1a);
     }

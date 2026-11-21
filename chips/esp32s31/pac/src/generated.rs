@@ -136310,6 +136310,111 @@ pub mod modem_lpcon {
 /// Words 0x89c-0x8ac: Runtime receive-beacon and individual-TWT COEX/PTI words recovered from five complete hal_coex.o leaves. Register addresses, masks and RMW order are exact; fields whose electrical meaning is not established retain UNKNOWN names.
 /// Words 0x8b4-0x8c0: WDEVPWR interrupt bank named by complete print_isr_regs. Complete hal_pwr_interrupt_get_event and hal_pwr_interrupt_clr_event independently prove the masked STATUS read and full-width CLEAR acknowledgement transaction. Complete TSF timer enable/disable leaves update the timer interrupt masks in ENABLE and clear stale events through CLEAR.
 pub mod modem_pwr {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// A lane of WDEVPWR_ENABLE, the writable event mask: the lane's event is masked or delivered.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_TSF_TIMER, BLOB_LIBPP_HAL_TSF_TBTT_20260927, BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027, BLOB_LIBPP_S31_PWR17_19_CONTROL_20261027.
+        /// The declared values of the `EVENT_ENABLE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum EventEnable {
+            /// The lane's event is masked.
+            Disabled = 0x0,
+            /// The lane's event is enabled.
+            Enabled = 0x1,
+        }
+
+        impl EventEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
+        /// The run gate of a TSF timer or of a TSF domain's TBTT: set to run, cleared to stop.
+        ///
+        /// SOURCE: BLOB_LIBPP_HAL_TSF_TIMER, BLOB_LIBPP_S31_TSF_TIMER_GATES_20261027, BLOB_LIBPP_HAL_TSF_TBTT_20260927, BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027.
+        /// The declared values of the `RUN` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Run {
+            /// The timer or TBTT producer is stopped.
+            Stopped = 0x0,
+            /// The timer or TBTT producer runs.
+            Running = 0x1,
+        }
+
+        impl Run {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Stopped,
+                    _ => Self::Running,
+                }
+            }
+        }
+
+        /// A TSF counter's snapshot selector: asserted around the shared SNAPSHOT_HIGH/LOW readback, then cleared.
+        ///
+        /// SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027, ROM_REV0_HAL_GET_STA_TSF, BLOB_LIBPP_AP_TSF_SNAPSHOT_20261015.
+        /// The declared values of the `SNAPSHOT` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum Snapshot {
+            /// The counter is not selected for the snapshot.
+            Unselected = 0x0,
+            /// The counter is selected for the snapshot.
+            Selected = 0x1,
+        }
+
+        impl Snapshot {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Unselected,
+                    _ => Self::Selected,
+                }
+            }
+        }
+    }
+
     /// The `RUNTIME_TIMER_START_COMMAND` register.
     ///
     /// Complete current leaf writes finite image 1; an instruction-identical public same-chip predecessor identifies the operation as r_btdm_hal_rtc_start.
@@ -137840,14 +137945,14 @@ pub mod modem_pwr {
         impl R {
             /// Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads.
             #[inline]
-            pub const fn snapshot_station_tsf(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn snapshot_station_tsf(self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0)
             }
 
             /// SoftAP TSF-1 snapshot selector. Complete libpp[hal_mac.o]::hal_get_tsf_time with a nonzero argument sets this bit, reads SNAPSHOT_HIGH then SNAPSHOT_LOW, and clears this bit through a fresh-read RMW. Both readback words are shared with the station snapshot; this selector does not establish on-air beacon or probe-response timestamp insertion.
             #[inline]
-            pub const fn snapshot_softap_tsf(self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn snapshot_softap_tsf(self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 1)
             }
 
             /// Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf.
@@ -137870,14 +137975,14 @@ pub mod modem_pwr {
 
             /// Generic counter-index 2 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn snapshot_tsf2(self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn snapshot_tsf2(self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 2)
             }
 
             /// Generic counter-index 3 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn snapshot_tsf3(self) -> bool {
-                (self.0 & 0x00000008) != 0
+            pub const fn snapshot_tsf3(self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 3)
             }
 
             /// Generic counter-index 2 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
@@ -137923,14 +138028,14 @@ pub mod modem_pwr {
         impl W {
             /// Complete libpp[hal_tsf.o]::hal_get_sta_tsf sets this bit before either station TSF word is sampled and clears it after the optional reads.
             #[inline]
-            pub const fn snapshot_station_tsf(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn snapshot_station_tsf(&self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0)
             }
 
             /// SoftAP TSF-1 snapshot selector. Complete libpp[hal_mac.o]::hal_get_tsf_time with a nonzero argument sets this bit, reads SNAPSHOT_HIGH then SNAPSHOT_LOW, and clears this bit through a fresh-read RMW. Both readback words are shared with the station snapshot; this selector does not establish on-air beacon or probe-response timestamp insertion.
             #[inline]
-            pub const fn snapshot_softap_tsf(&self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn snapshot_softap_tsf(&self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 1)
             }
 
             /// Station TSF load request asserted by the final fresh-read RMW in hal_set_sta_tsf.
@@ -137953,14 +138058,14 @@ pub mod modem_pwr {
 
             /// Generic counter-index 2 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn snapshot_tsf2(&self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn snapshot_tsf2(&self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 2)
             }
 
             /// Generic counter-index 3 snapshot selector, asserted around the shared readback then cleared. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
             #[inline]
-            pub const fn snapshot_tsf3(&self) -> bool {
-                (self.0 & 0x00000008) != 0
+            pub const fn snapshot_tsf3(&self) -> super::dictionaries::Snapshot {
+                super::dictionaries::Snapshot::from_field(self.0 >> 3)
             }
 
             /// Generic counter-index 2 load request, asserted after staging the shared low/high values. SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027.
@@ -138001,15 +138106,21 @@ pub mod modem_pwr {
 
             /// Set `SNAPSHOT_STATION_TSF`.
             #[inline]
-            pub fn set_snapshot_station_tsf(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_snapshot_station_tsf(
+                &mut self,
+                value: super::dictionaries::Snapshot,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
             /// Set `SNAPSHOT_SOFTAP_TSF`.
             #[inline]
-            pub fn set_snapshot_softap_tsf(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+            pub fn set_snapshot_softap_tsf(
+                &mut self,
+                value: super::dictionaries::Snapshot,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (value.bits() << 1);
                 self
             }
 
@@ -138036,15 +138147,15 @@ pub mod modem_pwr {
 
             /// Set `SNAPSHOT_TSF2`.
             #[inline]
-            pub fn set_snapshot_tsf2(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+            pub fn set_snapshot_tsf2(&mut self, value: super::dictionaries::Snapshot) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (value.bits() << 2);
                 self
             }
 
             /// Set `SNAPSHOT_TSF3`.
             #[inline]
-            pub fn set_snapshot_tsf3(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+            pub fn set_snapshot_tsf3(&mut self, value: super::dictionaries::Snapshot) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (value.bits() << 3);
                 self
             }
 
@@ -139928,8 +140039,8 @@ pub mod modem_pwr {
 
             /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn sta_tbtt_enable(self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn sta_tbtt_enable(self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
@@ -140011,8 +140122,8 @@ pub mod modem_pwr {
 
             /// hal_enable_sta_tbtt sets bit 26 and hal_disable_sta_tbtt clears only this bit. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn sta_tbtt_enable(&self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn sta_tbtt_enable(&self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// hal_enable_sta_tsf sets this bit and hal_disable_sta_tsf clears it.
@@ -140086,8 +140197,8 @@ pub mod modem_pwr {
 
             /// Set `STA_TBTT_ENABLE`.
             #[inline]
-            pub fn set_sta_tbtt_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+            pub fn set_sta_tbtt_enable(&mut self, value: super::dictionaries::Run) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
@@ -140346,8 +140457,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// The generic tsf_hal_set_tsf_enable/disable domain-one path changes this bit with bit 31. The dedicated SoftAP reset/start and stop paths instead change bits 30/31. Its individual hardware function and relation to bit 30 remain unknown. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
@@ -140405,8 +140516,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain1 TBTT Run gate independently changed from interrupt bit 2; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(&self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(&self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// The generic tsf_hal_set_tsf_enable/disable domain-one path changes this bit with bit 31. The dedicated SoftAP reset/start and stop paths instead change bits 30/31. Its individual hardware function and relation to bit 30 remain unknown. SOURCE: BLOB_MAC_TSF_ROLE_API_MASKS_20261104.
@@ -140467,8 +140578,8 @@ pub mod modem_pwr {
 
             /// Set `TBTT_ENABLE`.
             #[inline]
-            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+            pub fn set_tbtt_enable(&mut self, value: super::dictionaries::Run) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
@@ -140756,8 +140867,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// Project-assigned name. TSF-domain2 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
@@ -140833,8 +140944,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain2 TBTT Run gate independently changed from interrupt bit 1; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(&self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(&self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// Project-assigned name. TSF-domain2 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
@@ -140912,8 +141023,8 @@ pub mod modem_pwr {
 
             /// Set `TBTT_ENABLE`.
             #[inline]
-            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+            pub fn set_tbtt_enable(&mut self, value: super::dictionaries::Run) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
@@ -141201,8 +141312,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// Project-assigned name. TSF-domain3 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
@@ -141278,8 +141389,8 @@ pub mod modem_pwr {
 
             /// Project-assigned name. TSF-domain3 TBTT Run gate independently changed from interrupt bit 0; stopping run does not establish pending removal. In the tested local domain, run26 remains set across mask/all-ones bank CLEAR; the next interval produces fresh RAW under mask and redelivers on unmask. A stopped target crossing stays quiet; a later future restart is positive with run-before-schedule ordering and explicit stale discard. This does not prove arbitrary restart ordering or beacon synchronization. SOURCE: HW30_S31_TBTT_PERIODIC_POLICY_20261027.
             #[inline]
-            pub const fn tbtt_enable(&self) -> bool {
-                (self.0 & 0x04000000) != 0
+            pub const fn tbtt_enable(&self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 26)
             }
 
             /// Project-assigned name. TSF-domain3 TBTT Modem-wakeup gate independently set/cleared by the dedicated TBTT modem-wakeup leaves.
@@ -141357,8 +141468,8 @@ pub mod modem_pwr {
 
             /// Set `TBTT_ENABLE`.
             #[inline]
-            pub fn set_tbtt_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfbffffff) | (u32::from(value) << 26);
+            pub fn set_tbtt_enable(&mut self, value: super::dictionaries::Run) -> &mut Self {
+                self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
@@ -141616,8 +141727,8 @@ pub mod modem_pwr {
 
             /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal. For indices2/3, run31 reads one after arm and zero after a witnessed positive expiry, before any explicit stop or bank-clear policy. Explicitly setting run again gives a fresh masked expiry. This observation does not qualify automatic clearing for indices0/1 or every control bit. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn timer_enable(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn timer_enable(self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 31)
             }
 
             /// Project-assigned name. Per-timer RF-control gate set and cleared by the dedicated timer RF-control leaves; distinct from TIMER_ENABLE and the interrupt bank.
@@ -141651,8 +141762,8 @@ pub mod modem_pwr {
 
             /// Set by libpp[hal_tsf.o]::hal_enable_tsf_timer and cleared by hal_disable_tsf_timer. The run-only tsf_hal_set_timer enable/disable leaves do not change ENABLE or CLEAR; hal_enable_tsf_timer additionally clears/enables IRQ bit 7-index before setting this field. Stopping run does not establish pending removal. For indices2/3, run31 reads one after arm and zero after a witnessed positive expiry, before any explicit stop or bank-clear policy. Explicitly setting run again gives a fresh masked expiry. This observation does not qualify automatic clearing for indices0/1 or every control bit. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn timer_enable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn timer_enable(&self) -> super::dictionaries::Run {
+                super::dictionaries::Run::from_field(self.0 >> 31)
             }
 
             /// Project-assigned name. Per-timer RF-control gate set and cleared by the dedicated timer RF-control leaves; distinct from TIMER_ENABLE and the interrupt bank.
@@ -141683,8 +141794,8 @@ pub mod modem_pwr {
 
             /// Set `TIMER_ENABLE`.
             #[inline]
-            pub fn set_timer_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_timer_enable(&mut self, value: super::dictionaries::Run) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
 
@@ -142305,50 +142416,50 @@ pub mod modem_pwr {
         impl R {
             /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_3(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn tbtt_3(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0)
             }
 
             /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_2(self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn tbtt_2(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 1)
             }
 
             /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_1(self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn tbtt_1(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 2)
             }
 
             /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_0(self) -> bool {
-                (self.0 & 0x00000008) != 0
+            pub const fn tbtt_0(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 3)
             }
 
             /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn tsf_timer_3(self) -> bool {
-                (self.0 & 0x00000010) != 0
+            pub const fn tsf_timer_3(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 4)
             }
 
             /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn tsf_timer_2(self) -> bool {
-                (self.0 & 0x00000020) != 0
+            pub const fn tsf_timer_2(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 5)
             }
 
             /// Enable the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
-            pub const fn tsf_timer_1(self) -> bool {
-                (self.0 & 0x00000040) != 0
+            pub const fn tsf_timer_1(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 6)
             }
 
             /// Enable the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
-            pub const fn tsf_timer_0(self) -> bool {
-                (self.0 & 0x00000080) != 0
+            pub const fn tsf_timer_0(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 7)
             }
 
             /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
@@ -142359,8 +142470,8 @@ pub mod modem_pwr {
 
             /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
-            pub const fn beacon_filter_wake(self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn beacon_filter_wake(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 17)
             }
 
             /// Independent event identity unknown. Inspected guarded TBTT/TSF and dedicated beacon interrupt writers preserve ENABLE18. The vendor beacon-memory RX selector tests RAW17/18 with MAC STATUS14, not ENABLE18; its hardware relation to this lane is unqualified. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027; BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
@@ -142371,8 +142482,8 @@ pub mod modem_pwr {
 
             /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
-            pub const fn beacon_miss(self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn beacon_miss(self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 19)
             }
 
             /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
@@ -142388,50 +142499,50 @@ pub mod modem_pwr {
         impl W {
             /// Enable the TSF-3 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_3(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn tbtt_3(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0)
             }
 
             /// Enable the TSF-2 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_2(&self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn tbtt_2(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 1)
             }
 
             /// Enable the TSF-1 TBTT event. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_1(&self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn tbtt_1(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 2)
             }
 
             /// Enable the TSF-0 TBTT event. TSF 0 is the station TSF. Masking a positive local TBTT0 lowers STATUS/output122 while retaining RAW. SOURCE: HW26_S31_LOCAL_TBTT_20261027. Static accessor mapping is bit 3-domain for TBTT domains 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A positive locally loaded TBTT in this domain qualifies mask retention/output suppression, retained-positive masked clear, fresh enabled clear and a new masked expiry. Its selected TSF is independently advancing; other domains and upper power-bank lanes are not inferred from this lane. SOURCE: HW30_S31_TBTT_DOMAINS_20261027.
             #[inline]
-            pub const fn tbtt_0(&self) -> bool {
-                (self.0 & 0x00000008) != 0
+            pub const fn tbtt_0(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 3)
             }
 
             /// Enable the guarded TSF timer-three event. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn tsf_timer_3(&self) -> bool {
-                (self.0 & 0x00000010) != 0
+            pub const fn tsf_timer_3(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 4)
             }
 
             /// Enable the guarded TSF timer-two event. Positive local timer2 pending is retained under mask while STATUS/output122 fall; a retained positive sample acknowledges under mask, and unmask stays quiet in the tested configuration. SOURCE: HW26_S31_TSF_TIMER2_20261027. With a positively observed selected-counter expiry, masking retains RAW and lowers STATUS/output122; retained-sample acknowledgement clears while masked, and re-enable stays quiet for4096 cycles. SOURCE: HW26_S31_TSF_TIMERS23_20261027. Static accessor mapping is bit 7-index for timer indices 0..3. HW8 hardware mask/clear qualification covers timer0/1 only; it does not qualify this lane. A short selected-counter +1024 crossing positively qualifies this cause: masking retains RAW and suppresses STATUS/output122; unmask restores delivery; a saved positive sample clears while masked; fresh enabled clear and new masked expiry are positive. Stopping run retains already-pending RAW; the tested stopped target crossing stays quiet with fresh liveness controls. SOURCE: HW30_S31_TSF_TIMERS23_20261027.
             #[inline]
-            pub const fn tsf_timer_2(&self) -> bool {
-                (self.0 & 0x00000020) != 0
+            pub const fn tsf_timer_2(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 5)
             }
 
             /// Enable the guarded TSF timer-one event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
-            pub const fn tsf_timer_1(&self) -> bool {
-                (self.0 & 0x00000040) != 0
+            pub const fn tsf_timer_1(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 6)
             }
 
             /// Enable the guarded TSF timer-zero event. Static accessor mapping is bit 7-index for timer indices 0..3. Hardware mask/clear claims remain limited to the cited HW8 timer0/1 observations.
             #[inline]
-            pub const fn tsf_timer_0(&self) -> bool {
-                (self.0 & 0x00000080) != 0
+            pub const fn tsf_timer_0(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 7)
             }
 
             /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
@@ -142442,8 +142553,8 @@ pub mod modem_pwr {
 
             /// Beacon-filter SoC wake/interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
-            pub const fn beacon_filter_wake(&self) -> bool {
-                (self.0 & 0x00020000) != 0
+            pub const fn beacon_filter_wake(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 17)
             }
 
             /// Independent event identity unknown. Inspected guarded TBTT/TSF and dedicated beacon interrupt writers preserve ENABLE18. The vendor beacon-memory RX selector tests RAW17/18 with MAC STATUS14, not ENABLE18; its hardware relation to this lane is unqualified. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027; BLOB_WIFI_PWR_RAW18_BEACON_SERVICE_20261027.
@@ -142454,8 +142565,8 @@ pub mod modem_pwr {
 
             /// Modem beacon-miss interrupt carrier. SOURCE: BLOB_LIBPP_WIFI_IRQ_FACTS_20261026. The dedicated enable leaf forwards CLEAR readback with this selected bit set before enabling it; the disable leaf masks ENABLE only. This does not prove masked-clear behavior or a filter/counter reset.
             #[inline]
-            pub const fn beacon_miss(&self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn beacon_miss(&self) -> super::dictionaries::EventEnable {
+                super::dictionaries::EventEnable::from_field(self.0 >> 19)
             }
 
             /// Event identities unknown. The inspected guarded TBTT/TSF interrupt writers select only lanes 0..7 and dedicated beacon writers select17/19; they preserve this range. No individual producer is established. SOURCE: BLOB_S31_PWR_ENABLE_LANE_BOUNDS_20261027.
@@ -142466,57 +142577,69 @@ pub mod modem_pwr {
 
             /// Set `TBTT_3`.
             #[inline]
-            pub fn set_tbtt_3(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_tbtt_3(&mut self, value: super::dictionaries::EventEnable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
             /// Set `TBTT_2`.
             #[inline]
-            pub fn set_tbtt_2(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+            pub fn set_tbtt_2(&mut self, value: super::dictionaries::EventEnable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (value.bits() << 1);
                 self
             }
 
             /// Set `TBTT_1`.
             #[inline]
-            pub fn set_tbtt_1(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+            pub fn set_tbtt_1(&mut self, value: super::dictionaries::EventEnable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (value.bits() << 2);
                 self
             }
 
             /// Set `TBTT_0`.
             #[inline]
-            pub fn set_tbtt_0(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffff7) | (u32::from(value) << 3);
+            pub fn set_tbtt_0(&mut self, value: super::dictionaries::EventEnable) -> &mut Self {
+                self.0 = (self.0 & 0xfffffff7) | (value.bits() << 3);
                 self
             }
 
             /// Set `TSF_TIMER_3`.
             #[inline]
-            pub fn set_tsf_timer_3(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffffef) | (u32::from(value) << 4);
+            pub fn set_tsf_timer_3(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffffef) | (value.bits() << 4);
                 self
             }
 
             /// Set `TSF_TIMER_2`.
             #[inline]
-            pub fn set_tsf_timer_2(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffffdf) | (u32::from(value) << 5);
+            pub fn set_tsf_timer_2(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffffdf) | (value.bits() << 5);
                 self
             }
 
             /// Set `TSF_TIMER_1`.
             #[inline]
-            pub fn set_tsf_timer_1(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffffbf) | (u32::from(value) << 6);
+            pub fn set_tsf_timer_1(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffffbf) | (value.bits() << 6);
                 self
             }
 
             /// Set `TSF_TIMER_0`.
             #[inline]
-            pub fn set_tsf_timer_0(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffff7f) | (u32::from(value) << 7);
+            pub fn set_tsf_timer_0(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffff7f) | (value.bits() << 7);
                 self
             }
 
@@ -142529,8 +142652,11 @@ pub mod modem_pwr {
 
             /// Set `BEACON_FILTER_WAKE`.
             #[inline]
-            pub fn set_beacon_filter_wake(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffdffff) | (u32::from(value) << 17);
+            pub fn set_beacon_filter_wake(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffdffff) | (value.bits() << 17);
                 self
             }
 
@@ -142543,8 +142669,11 @@ pub mod modem_pwr {
 
             /// Set `BEACON_MISS`.
             #[inline]
-            pub fn set_beacon_miss(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
+            pub fn set_beacon_miss(
+                &mut self,
+                value: super::dictionaries::EventEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfff7ffff) | (value.bits() << 19);
                 self
             }
 
@@ -245370,6 +245499,77 @@ pub mod spi_mem_s {
 ///
 /// The system timer: two counter units and three comparators.
 pub mod systimer {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// A comparator's work enable (TARGETn_WORK_EN): 0 disables comparator n, 1 enables it.
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H.
+        /// The declared values of the `COMPARATOR_WORK` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ComparatorWork {
+            /// The comparator is disabled.
+            Disabled = 0x0,
+            /// The comparator is enabled.
+            Enabled = 0x1,
+        }
+
+        impl ComparatorWork {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
+        /// A comparator's interrupt enable (TARGETn_INT_ENA): write 1 to enable SYSTIMER_TARGETn_INT.
+        ///
+        /// SOURCE: ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_SYSTIMER_REG_H.
+        /// The declared values of the `COMPARATOR_INTERRUPT` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ComparatorInterrupt {
+            /// The comparator's interrupt is disabled.
+            Disabled = 0x0,
+            /// The comparator's interrupt is enabled.
+            Enabled = 0x1,
+        }
+
+        impl ComparatorInterrupt {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+    }
+
     /// The `CONF` register.
     ///
     /// Configure system timer clock Clock, unit and comparator enables.
@@ -245476,20 +245676,20 @@ pub mod systimer {
 
             /// Configures whether or not to enable COMP2.\\ 0: Disable\\ 1: Enable\\ Enables comparator 2.
             #[inline]
-            pub const fn target2_work_en(self) -> bool {
-                (self.0 & 0x00400000) != 0
+            pub const fn target2_work_en(self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 22)
             }
 
             /// Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
-            pub const fn target1_work_en(self) -> bool {
-                (self.0 & 0x00800000) != 0
+            pub const fn target1_work_en(self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 23)
             }
 
             /// Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
-            pub const fn target0_work_en(self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn target0_work_en(self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 24)
             }
 
             /// Configures whether or not UNIT1 is stalled when CORE1 is stalled. \\ 0: UNIT1 is not stalled. \\ 1: UNIT1 is stalled.\\ Stalls unit 1 while core 1 is stalled.
@@ -245547,20 +245747,20 @@ pub mod systimer {
 
             /// Configures whether or not to enable COMP2.\\ 0: Disable\\ 1: Enable\\ Enables comparator 2.
             #[inline]
-            pub const fn target2_work_en(&self) -> bool {
-                (self.0 & 0x00400000) != 0
+            pub const fn target2_work_en(&self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 22)
             }
 
             /// Enables comparator 1. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
-            pub const fn target1_work_en(&self) -> bool {
-                (self.0 & 0x00800000) != 0
+            pub const fn target1_work_en(&self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 23)
             }
 
             /// Enables comparator 0. Clearing WORK_EN stops the producer but retains an already-pending RAW/ST and interrupt output in the tested one-shot. Masking INT_ENA and acknowledging CLR are separate operations. SOURCE: HW7_S31_SYSTIMER_20261026.
             #[inline]
-            pub const fn target0_work_en(&self) -> bool {
-                (self.0 & 0x01000000) != 0
+            pub const fn target0_work_en(&self) -> super::dictionaries::ComparatorWork {
+                super::dictionaries::ComparatorWork::from_field(self.0 >> 24)
             }
 
             /// Configures whether or not UNIT1 is stalled when CORE1 is stalled. \\ 0: UNIT1 is not stalled. \\ 1: UNIT1 is stalled.\\ Stalls unit 1 while core 1 is stalled.
@@ -245614,22 +245814,31 @@ pub mod systimer {
 
             /// Set `TARGET2_WORK_EN`.
             #[inline]
-            pub fn set_target2_work_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffbfffff) | (u32::from(value) << 22);
+            pub fn set_target2_work_en(
+                &mut self,
+                value: super::dictionaries::ComparatorWork,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffbfffff) | (value.bits() << 22);
                 self
             }
 
             /// Set `TARGET1_WORK_EN`.
             #[inline]
-            pub fn set_target1_work_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xff7fffff) | (u32::from(value) << 23);
+            pub fn set_target1_work_en(
+                &mut self,
+                value: super::dictionaries::ComparatorWork,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff7fffff) | (value.bits() << 23);
                 self
             }
 
             /// Set `TARGET0_WORK_EN`.
             #[inline]
-            pub fn set_target0_work_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfeffffff) | (u32::from(value) << 24);
+            pub fn set_target0_work_en(
+                &mut self,
+                value: super::dictionaries::ComparatorWork,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
@@ -246482,20 +246691,20 @@ pub mod systimer {
         impl R {
             /// Write 1 to enable SYSTIMER_TARGET0_INT. Enables comparator 0's interrupt.
             #[inline]
-            pub const fn target0_int_ena(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn target0_int_ena(self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0)
             }
 
             /// Write 1 to enable SYSTIMER_TARGET1_INT. Enables comparator 1's interrupt.
             #[inline]
-            pub const fn target1_int_ena(self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn target1_int_ena(self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0 >> 1)
             }
 
             /// Write 1 to enable SYSTIMER_TARGET2_INT. Enables comparator 2's interrupt.
             #[inline]
-            pub const fn target2_int_ena(self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn target2_int_ena(self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0 >> 2)
             }
         }
 
@@ -246505,40 +246714,49 @@ pub mod systimer {
         impl W {
             /// Write 1 to enable SYSTIMER_TARGET0_INT. Enables comparator 0's interrupt.
             #[inline]
-            pub const fn target0_int_ena(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn target0_int_ena(&self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0)
             }
 
             /// Write 1 to enable SYSTIMER_TARGET1_INT. Enables comparator 1's interrupt.
             #[inline]
-            pub const fn target1_int_ena(&self) -> bool {
-                (self.0 & 0x00000002) != 0
+            pub const fn target1_int_ena(&self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0 >> 1)
             }
 
             /// Write 1 to enable SYSTIMER_TARGET2_INT. Enables comparator 2's interrupt.
             #[inline]
-            pub const fn target2_int_ena(&self) -> bool {
-                (self.0 & 0x00000004) != 0
+            pub const fn target2_int_ena(&self) -> super::dictionaries::ComparatorInterrupt {
+                super::dictionaries::ComparatorInterrupt::from_field(self.0 >> 2)
             }
 
             /// Set `TARGET0_INT_ENA`.
             #[inline]
-            pub fn set_target0_int_ena(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_target0_int_ena(
+                &mut self,
+                value: super::dictionaries::ComparatorInterrupt,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
             /// Set `TARGET1_INT_ENA`.
             #[inline]
-            pub fn set_target1_int_ena(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffd) | (u32::from(value) << 1);
+            pub fn set_target1_int_ena(
+                &mut self,
+                value: super::dictionaries::ComparatorInterrupt,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffd) | (value.bits() << 1);
                 self
             }
 
             /// Set `TARGET2_INT_ENA`.
             #[inline]
-            pub fn set_target2_int_ena(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffb) | (u32::from(value) << 2);
+            pub fn set_target2_int_ena(
+                &mut self,
+                value: super::dictionaries::ComparatorInterrupt,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffb) | (value.bits() << 2);
                 self
             }
         }
@@ -249189,6 +249407,43 @@ pub mod timg {
         /// Positioned bits of `T0_INT_ENA`.
         pub const T0_INT_ENA_MASK: u32 = 0x1;
 
+        /// The declared values of the `T0_INT_ENA` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum T0IntEna {
+            /// The TIMG_T0_INT interrupt is disabled.
+            Disabled = 0x0,
+            /// Write 1 to enable the TIMG_T0_INT interrupt.
+            Enabled = 0x1,
+        }
+
+        impl T0IntEna {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `T1_INT_ENA` in bits.
         pub const T1_INT_ENA_WIDTH: u32 = 1;
         /// Greatest unsigned image of `T1_INT_ENA`.
@@ -249210,8 +249465,8 @@ pub mod timg {
         impl R {
             /// Write 1 to enable the TIMG_T0_INT interrupt.
             #[inline]
-            pub const fn t0_int_ena(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn t0_int_ena(self) -> T0IntEna {
+                T0IntEna::from_field(self.0)
             }
 
             /// Write 1 to enable the TIMG_T1_INT interrupt.
@@ -249233,8 +249488,8 @@ pub mod timg {
         impl W {
             /// Write 1 to enable the TIMG_T0_INT interrupt.
             #[inline]
-            pub const fn t0_int_ena(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn t0_int_ena(&self) -> T0IntEna {
+                T0IntEna::from_field(self.0)
             }
 
             /// Write 1 to enable the TIMG_T1_INT interrupt.
@@ -249251,8 +249506,8 @@ pub mod timg {
 
             /// Set `T0_INT_ENA`.
             #[inline]
-            pub fn set_t0_int_ena(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_t0_int_ena(&mut self, value: T0IntEna) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
@@ -268533,6 +268788,43 @@ pub mod wifi_bb {
         /// Positioned bits of `WATCHDOG_TIMEOUT_CLEAR_REQUEST`.
         pub const WATCHDOG_TIMEOUT_CLEAR_REQUEST_MASK: u32 = 0x20000000;
 
+        /// The declared values of the `WATCHDOG_TIMEOUT_CLEAR_REQUEST` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WatchdogTimeoutClearRequest {
+            /// No clear of the watchdog timeout is requested.
+            Idle = 0x0,
+            /// Request clearing the watchdog timeout.
+            Requested = 0x1,
+        }
+
+        impl WatchdogTimeoutClearRequest {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 29
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Idle,
+                    _ => Self::Requested,
+                }
+            }
+        }
+
         /// Width of `WATCHDOG_INTERRUPT_ENABLE` in bits.
         pub const WATCHDOG_INTERRUPT_ENABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `WATCHDOG_INTERRUPT_ENABLE`.
@@ -268540,12 +268832,86 @@ pub mod wifi_bb {
         /// Positioned bits of `WATCHDOG_INTERRUPT_ENABLE`.
         pub const WATCHDOG_INTERRUPT_ENABLE_MASK: u32 = 0x40000000;
 
+        /// The declared values of the `WATCHDOG_INTERRUPT_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WatchdogInterruptEnable {
+            /// The BB watchdog interrupt is disabled.
+            Disabled = 0x0,
+            /// The BB watchdog interrupt is enabled (phy_bb_wdt_int_enable).
+            Enabled = 0x1,
+        }
+
+        impl WatchdogInterruptEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 30
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+
         /// Width of `WATCHDOG_RESET_ENABLE` in bits.
         pub const WATCHDOG_RESET_ENABLE_WIDTH: u32 = 1;
         /// Greatest unsigned image of `WATCHDOG_RESET_ENABLE`.
         pub const WATCHDOG_RESET_ENABLE_MAX: u32 = 0x1;
         /// Positioned bits of `WATCHDOG_RESET_ENABLE`.
         pub const WATCHDOG_RESET_ENABLE_MASK: u32 = 0x80000000;
+
+        /// The declared values of the `WATCHDOG_RESET_ENABLE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum WatchdogResetEnable {
+            /// A watchdog timeout does not reset the BB.
+            Disabled = 0x0,
+            /// A watchdog timeout resets the BB.
+            Enabled = 0x1,
+        }
+
+        impl WatchdogResetEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 31
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
 
         /// Width of `BITS_0_28_OPAQUE` in bits.
         pub const BITS_0_28_OPAQUE_WIDTH: u32 = 29;
@@ -268561,20 +268927,20 @@ pub mod wifi_bb {
         impl R {
             /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
-            pub const fn watchdog_timeout_clear_request(self) -> bool {
-                (self.0 & 0x20000000) != 0
+            pub const fn watchdog_timeout_clear_request(self) -> WatchdogTimeoutClearRequest {
+                WatchdogTimeoutClearRequest::from_field(self.0 >> 29)
             }
 
             /// Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027.
             #[inline]
-            pub const fn watchdog_interrupt_enable(self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn watchdog_interrupt_enable(self) -> WatchdogInterruptEnable {
+                WatchdogInterruptEnable::from_field(self.0 >> 30)
             }
 
             /// Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_reset_enable(self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn watchdog_reset_enable(self) -> WatchdogResetEnable {
+                WatchdogResetEnable::from_field(self.0 >> 31)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -268590,20 +268956,20 @@ pub mod wifi_bb {
         impl W {
             /// Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027.
             #[inline]
-            pub const fn watchdog_timeout_clear_request(&self) -> bool {
-                (self.0 & 0x20000000) != 0
+            pub const fn watchdog_timeout_clear_request(&self) -> WatchdogTimeoutClearRequest {
+                WatchdogTimeoutClearRequest::from_field(self.0 >> 29)
             }
 
             /// Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027.
             #[inline]
-            pub const fn watchdog_interrupt_enable(&self) -> bool {
-                (self.0 & 0x40000000) != 0
+            pub const fn watchdog_interrupt_enable(&self) -> WatchdogInterruptEnable {
+                WatchdogInterruptEnable::from_field(self.0 >> 30)
             }
 
             /// Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026.
             #[inline]
-            pub const fn watchdog_reset_enable(&self) -> bool {
-                (self.0 & 0x80000000) != 0
+            pub const fn watchdog_reset_enable(&self) -> WatchdogResetEnable {
+                WatchdogResetEnable::from_field(self.0 >> 31)
             }
 
             /// Observed source use; the individual hardware meaning is unknown.
@@ -268614,22 +268980,28 @@ pub mod wifi_bb {
 
             /// Set `WATCHDOG_TIMEOUT_CLEAR_REQUEST`.
             #[inline]
-            pub fn set_watchdog_timeout_clear_request(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xdfffffff) | (u32::from(value) << 29);
+            pub fn set_watchdog_timeout_clear_request(
+                &mut self,
+                value: WatchdogTimeoutClearRequest,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xdfffffff) | (value.bits() << 29);
                 self
             }
 
             /// Set `WATCHDOG_INTERRUPT_ENABLE`.
             #[inline]
-            pub fn set_watchdog_interrupt_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xbfffffff) | (u32::from(value) << 30);
+            pub fn set_watchdog_interrupt_enable(
+                &mut self,
+                value: WatchdogInterruptEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
 
             /// Set `WATCHDOG_RESET_ENABLE`.
             #[inline]
-            pub fn set_watchdog_reset_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0x7fffffff) | (u32::from(value) << 31);
+            pub fn set_watchdog_reset_enable(&mut self, value: WatchdogResetEnable) -> &mut Self {
+                self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
 

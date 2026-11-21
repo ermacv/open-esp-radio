@@ -116,7 +116,10 @@ impl<P: Placement> Timg0AlarmProgram<P> {
 
     /// Whether T0's peripheral delivery lane is enabled.
     pub fn enabled(&self) -> bool {
-        self.0.read_int_ena_timers().t0_int_ena()
+        matches!(
+            self.0.read_int_ena_timers().t0_int_ena(),
+            oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled
+        )
     }
 }
 
@@ -141,7 +144,7 @@ impl<P: Placement> Timg0AlarmInterrupt<P> {
 // TIMG1 T0 (`timg1_alarm`) runs the same operations on its own group's words.
 pub(super) trait ProgramRegisters {
     fn stop(&mut self);
-    fn enable(&mut self, enabled: bool);
+    fn enable(&mut self, lane: oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna);
     fn load_interval(&mut self, micros: u64);
     fn start(&mut self);
 }
@@ -164,14 +167,14 @@ pub(super) fn arm_after(
     // An expiry under the mask remains in RAW for ENA to deliver (HW7).
     registers.start();
     oer_portable_riscv::fence();
-    registers.enable(true);
+    registers.enable(oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled);
     oer_portable_riscv::fence();
     Ok(())
 }
 
 pub(super) fn disarm(registers: &mut impl ProgramRegisters) {
     registers.stop();
-    registers.enable(false);
+    registers.enable(oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Disabled);
     oer_portable_riscv::fence();
 }
 
@@ -189,10 +192,10 @@ impl<P: Placement> ProgramRegisters for Timg0AlarmProgram<P> {
         self.0.configure_timg0_timer0_stopped();
     }
 
-    fn enable(&mut self, enabled: bool) {
+    fn enable(&mut self, lane: oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna) {
         // Preserve T1, WDT, reserved and unknown lanes. No RAW/CLR authority.
         self.0.modify_int_ena_timers(|w| {
-            w.set_t0_int_ena(enabled);
+            w.set_t0_int_ena(lane);
         });
     }
 

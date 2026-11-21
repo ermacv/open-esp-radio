@@ -49,6 +49,7 @@ fn a_reset_from_zero_requests_the_softap_load_and_enables_both_bits() {
     assert!(
         !(control.tbtt_rf_control_enable()
             || control.tbtt_enable()
+                == oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Running
             || control.bit_27_opaque()
             || control.tbtt_modem_wakeup_enable()
             || control.tbtt_soc_wakeup_enable())
@@ -81,6 +82,7 @@ fn a_stop_clears_both_high_control_bits() {
     assert!(
         control.tbtt_rf_control_enable()
             && control.tbtt_enable()
+                == oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Running
             && control.bit_27_opaque()
             && control.tbtt_modem_wakeup_enable()
             && control.tbtt_soc_wakeup_enable()

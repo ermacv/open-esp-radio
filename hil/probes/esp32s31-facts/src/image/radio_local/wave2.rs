@@ -1,12 +1,20 @@
 //! Isolated local producers, RF gates closed and no DMA publication.
 use super::*;
 
-fn wifi_enable(s: &mut Session<'_>, lane: u32, enabled: bool) {
-    wifi_mask(s, false);
+/// `enabled` for the lane `own` when it is the one chosen, else disabled.
+const fn only(lane: u32, own: u32, enabled: EventEnable) -> EventEnable {
+    if lane == own {
+        enabled
+    } else {
+        EventEnable::Disabled
+    }
+}
+fn wifi_enable(s: &mut Session<'_>, lane: u32, enabled: EventEnable) {
+    wifi_mask(s, EventEnable::Disabled);
     s.radio.power.modify_enable(|w| {
-        w.set_tsf_timer_2(lane == 2 && enabled)
-            .set_tsf_timer_3(lane == 3 && enabled)
-            .set_tbtt_0(lane == 4 && enabled);
+        w.set_tsf_timer_2(only(lane, 2, enabled))
+            .set_tsf_timer_3(only(lane, 3, enabled))
+            .set_tbtt_0(only(lane, 4, enabled));
     });
     oer_portable_riscv::fence();
 }
@@ -27,24 +35,34 @@ fn wifi_observe(s: &Session<'_>, tag: u32) -> u32 {
 }
 fn station(s: &mut Session<'_>, tag: u32) -> u64 {
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(true);
+        w.set_snapshot_station_tsf(Snapshot::Selected);
     });
     let low = s.radio.load.read_snapshot_low().value();
     let high = s.radio.load.read_snapshot_high().value();
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(false);
+        w.set_snapshot_station_tsf(Snapshot::Unselected);
     });
     emit(tag, low, high, s.radio.local_time.read_counter().value());
     (u64::from(high) << 32) | u64::from(low)
 }
 fn timer_counter(s: &mut Session<'_>, n: u32, tag: u32) -> u64 {
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_tsf2(n == 2).set_snapshot_tsf3(n == 3);
+        w.set_snapshot_tsf2(if n == 2 {
+            Snapshot::Selected
+        } else {
+            Snapshot::Unselected
+        })
+        .set_snapshot_tsf3(if n == 3 {
+            Snapshot::Selected
+        } else {
+            Snapshot::Unselected
+        });
     });
     let low = s.radio.load.read_snapshot_low().value();
     let high = s.radio.load.read_snapshot_high().value();
     s.radio.load.modify_tsf_load_control(|w| {
-        w.set_snapshot_tsf2(false).set_snapshot_tsf3(false);
+        w.set_snapshot_tsf2(Snapshot::Unselected)
+            .set_snapshot_tsf3(Snapshot::Unselected);
     });
     emit(tag, low, high, n);
     (u64::from(high) << 32) | u64::from(low)
@@ -53,20 +71,20 @@ fn wifi_pending(s: &mut Session<'_>, lane: u32) {
     // Both acknowledgement paths require a positive enabled sample. Preserve
     // that affine sample across mask; no fabricated raw clear transaction.
     let sample = s.radio.power.sample_mac_power_interrupt();
-    wifi_enable(s, lane, false);
+    wifi_enable(s, lane, EventEnable::Disabled);
     wifi_observe(s, 0x22030);
     s.radio.power.acknowledge_mac_power_interrupt(sample);
     oer_portable_riscv::fence();
     wifi_observe(s, 0x22040);
-    wifi_enable(s, lane, true);
+    wifi_enable(s, lane, EventEnable::Enabled);
     window();
     wifi_observe(s, 0x22050);
 }
 fn timer(s: &mut Session<'_>, n: u32) {
     wifi_prepare(s);
-    wifi_enable(s, n, true);
+    wifi_enable(s, n, EventEnable::Enabled);
     s.radio.power.clear_all_mac_power_interrupts(); // Also masks every lane.
-    wifi_enable(s, n, true);
+    wifi_enable(s, n, EventEnable::Enabled);
     // SOURCE: BLOB_S31_TSF_DOMAIN_MODES_20261027. These are two-stage
     // vendor gate/mode transactions, with NAN mode4 and BTWT mode1.
     s.radio.load.write_value_low(|w| {
@@ -95,10 +113,10 @@ fn timer(s: &mut Session<'_>, n: u32) {
         return;
     };
     s.radio.timer.modify_control(i, |w| {
-        w.set_timer_enable(false).set_wakeup_enable(false);
+        w.set_timer_enable(Run::Stopped).set_wakeup_enable(false);
     });
     s.radio.power.clear_all_mac_power_interrupts();
-    wifi_enable(s, n, true);
+    wifi_enable(s, n, EventEnable::Enabled);
     wifi_observe(s, 0x22000);
     // SOURCE: BLOB_S31_TSF_COUNTER_SELECT_20261027. Load and observe the
     // selected generic counter itself, rather than using station time as a proxy.
@@ -118,14 +136,14 @@ fn timer(s: &mut Session<'_>, n: u32) {
     });
     s.radio.timer.modify_control(i, |w| {
         w.set_target_high(Bits::truncate((target >> 32) as u32))
-            .set_timer_enable(true);
+            .set_timer_enable(Run::Running);
     });
     let control = s.radio.timer.read_control(i);
     emit(
         0x22006,
         s.radio.timer.read_target_n(i).value(),
         control.target_high().get(),
-        u32::from(control.timer_enable()) + 2 * u32::from(control.wakeup_enable()),
+        control.timer_enable().bits() + 2 * u32::from(control.wakeup_enable()),
     );
     let start = oer_portable_riscv::cycle32();
     let mut r = s.radio.power.read_raw();
@@ -145,12 +163,12 @@ fn timer(s: &mut Session<'_>, n: u32) {
     );
     timer_counter(s, n, 0x22014);
     s.radio.timer.modify_control(i, |w| {
-        w.set_timer_enable(false);
+        w.set_timer_enable(Run::Stopped);
     });
     if wifi_observe(s, 0x22020) != 0 {
         wifi_pending(s, n);
     }
-    wifi_enable(s, n, false);
+    wifi_enable(s, n, EventEnable::Disabled);
     s.radio.power.clear_all_mac_power_interrupts();
     wifi_observe(s, 0x220f0);
 }
@@ -162,16 +180,16 @@ pub(in crate::image) fn wifi3(s: &mut Session<'_>) {
 }
 pub(in crate::image) fn tbtt(s: &mut Session<'_>) {
     wifi_prepare(s);
-    wifi_enable(s, 4, false);
+    wifi_enable(s, 4, EventEnable::Disabled);
     s.radio.power.clear_all_mac_power_interrupts();
     // SOURCE: HAL start_station_tbtt / BLOB_LIBPP_HAL_TSF_TBTT_20260927.
     // Follow the complete local schedule order, with a fresh future TSF.
     let target = station(s, 0x22004).wrapping_add(3072);
     s.radio.rtc.modify_sta_tsf_control(|w| {
-        w.set_sta_tbtt_enable(false);
+        w.set_sta_tbtt_enable(Run::Stopped);
     });
     s.radio.rtc.modify_sta_tsf_control(|w| {
-        w.set_sta_tbtt_enable(true);
+        w.set_sta_tbtt_enable(Run::Running);
     });
     s.radio.rtc.modify_sta_tbtt_interval(|w| {
         w.set_interval_tsf_bits_35_10(Bits::constant::<16>());
@@ -194,7 +212,7 @@ pub(in crate::image) fn tbtt(s: &mut Session<'_>) {
     s.radio.status.modify_wakeup_signal_clear(|w| {
         w.set_clear(true);
     });
-    wifi_enable(s, 4, true);
+    wifi_enable(s, 4, EventEnable::Enabled);
     wifi_observe(s, 0x22000);
     let start = oer_portable_riscv::cycle32();
     while !s.radio.power.read_raw().tbtt_0()
@@ -208,12 +226,12 @@ pub(in crate::image) fn tbtt(s: &mut Session<'_>) {
     );
     station(s, 0x22014);
     s.radio.rtc.modify_sta_tsf_control(|w| {
-        w.set_sta_tbtt_enable(false);
+        w.set_sta_tbtt_enable(Run::Stopped);
     });
     if wifi_observe(s, 0x22020) != 0 {
         wifi_pending(s, 4);
     }
-    wifi_enable(s, 4, false);
+    wifi_enable(s, 4, EventEnable::Disabled);
     s.radio.power.clear_all_mac_power_interrupts();
     wifi_observe(s, 0x220f0);
 }

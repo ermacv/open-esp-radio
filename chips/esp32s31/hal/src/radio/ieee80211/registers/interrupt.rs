@@ -394,18 +394,20 @@ fn publish_mac_interrupt_mask<P: Placement>(
 /// SOURCE: `BLOB_LIBPP_HAL_TSF_TIMER` (`mask_mac_power_interrupts`).
 fn mask_mac_power_interrupts<P: Placement>(power: &mut WifiMacPowerInterrupt<P>) {
     power.modify_enable(|w| {
-        w.set_tbtt_3(false)
-            .set_tbtt_2(false)
-            .set_tbtt_1(false)
-            .set_tbtt_0(false)
-            .set_tsf_timer_3(false)
-            .set_tsf_timer_2(false)
-            .set_tsf_timer_1(false)
-            .set_tsf_timer_0(false)
+        w.set_tbtt_3(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tbtt_2(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tbtt_1(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tbtt_0(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tsf_timer_3(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tsf_timer_2(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tsf_timer_1(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
+            .set_tsf_timer_0(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
             .set_bits_8_16_opaque(Bits::constant::<0>())
-            .set_beacon_filter_wake(false)
+            .set_beacon_filter_wake(
+                oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled,
+            )
             .set_bit_18_opaque(false)
-            .set_beacon_miss(false)
+            .set_beacon_miss(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Disabled)
             .set_bits_20_31_opaque(Bits::constant::<0>());
     });
 }
@@ -495,7 +497,7 @@ impl<M: MacPlacement> MacPowerInterruptRegisters<M> {
     /// sets, gates it.
     pub fn enable_station_tbtt_interrupt(&mut self) {
         self.power.modify_enable(|w| {
-            w.set_tbtt_0(true);
+            w.set_tbtt_0(oer_chips_esp32s31_pac::modem_pwr::dictionaries::EventEnable::Enabled);
         });
         oer_portable_riscv::fence();
     }

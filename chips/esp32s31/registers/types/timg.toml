@@ -595,6 +595,7 @@ reserved = { mask = 0xfffffff8, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGIST
 name = "T0_INT_ENA"
 bits = "0"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "The TIMG_T0_INT interrupt is disabled." }, { name = "ENABLED", value = 0x1, description = "Write 1 to enable the TIMG_T0_INT interrupt." }]
 description = "Write 1 to enable the TIMG_T0_INT interrupt."
 
 [[registers.fields]]

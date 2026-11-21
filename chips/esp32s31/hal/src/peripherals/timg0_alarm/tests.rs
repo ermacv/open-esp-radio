@@ -87,7 +87,11 @@ impl ProgramRegisters for Program<'_> {
         self.0.record(Operation::Stop);
     }
 
-    fn enable(&mut self, enabled: bool) {
+    fn enable(&mut self, lane: oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna) {
+        let enabled = matches!(
+            lane,
+            oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled
+        );
         self.0.enabled.set(enabled);
         self.0.record(Operation::Enable(enabled));
     }
@@ -157,14 +161,14 @@ fn program_stop_and_mask_retain_raw_for_permanent_irq_owner() {
     hardware.advance(1);
     program.stop();
     assert!(irq.observe().asserted, "stop is no acknowledgement");
-    program.enable(false);
+    program.enable(oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Disabled);
     assert!(irq.observe().pending && !irq.observe().asserted);
-    program.enable(true);
+    program.enable(oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled);
     assert!(irq.observe().asserted, "unmask redelivers retained RAW");
     disarm(&mut program);
     assert!(irq.observe().pending && !irq.observe().asserted);
     assert!(acknowledge(&mut irq).pending);
-    program.enable(true);
+    program.enable(oer_chips_esp32s31_pac::timg::int_ena_timers::T0IntEna::Enabled);
     assert!(!irq.observe().asserted);
 }
 

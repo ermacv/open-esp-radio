@@ -8,6 +8,8 @@ use core::{
 };
 use oer_chips_esp32s31_pac as pac;
 use oer_portable_mmio::{Bits, Index};
+use pac::systimer::dictionaries::{ComparatorInterrupt, ComparatorWork};
+use pac::timg::int_ena_timers::T0IntEna;
 
 pub(super) struct Hardware {
     pub usb: pac::usb_serial_jtag::UsbSerialJtagTask,
@@ -77,14 +79,20 @@ pub(super) fn feed(s: &mut Session<'_>) {
         w.set_wdt_wkey(pac::rtc_wdt::wprotect::WdtWkey::Lock.bits());
     });
 }
-fn route(s: &mut Session<'_>, source: pac::Interrupt, bound: bool) {
+/// Route `source` to the probe's CPU line.
+fn bind(s: &mut Session<'_>, source: pac::Interrupt) {
     if let Ok(i) = Index::new(source as usize) {
         s.interrupt_matrix.interrupt_core0.modify_route(i, |w| {
-            if bound {
-                w.set_map(Bits::constant::<{ LINE as u32 }>());
-            } else {
-                w.set_map(Bits::constant::<0>());
-            }
+            w.set_map(Bits::constant::<{ LINE as u32 }>());
+        });
+    }
+    oer_portable_riscv::fence();
+}
+/// Disconnect `source` from every CPU line (MAP 0).
+fn unbind(s: &mut Session<'_>, source: pac::Interrupt) {
+    if let Ok(i) = Index::new(source as usize) {
+        s.interrupt_matrix.interrupt_core0.modify_route(i, |w| {
+            w.set_map(Bits::constant::<0>());
         });
     }
     oer_portable_riscv::fence();
@@ -144,7 +152,7 @@ fn begin(s: &mut Session<'_>, source: pac::Interrupt) {
     setup(s);
     feed(s);
     line(s, CONTROLS[1], pac::clic::attr::Trig::PositiveLevel);
-    route(s, source, true);
+    bind(s, source);
 }
 
 pub(super) fn matrix(s: &mut Session<'_>) {
@@ -176,7 +184,7 @@ pub(super) fn matrix(s: &mut Session<'_>) {
     wait_window();
     matrix_state(s, 0x4020);
     admit(s, 0x4021);
-    route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, true);
+    bind(s, pac::Interrupt::CPU_INTR_FROM_CPU_2);
     s.interrupt_matrix.clic[0].modify_ie(CPU_LINE, |w| {
         w.set_ie(false);
     });
@@ -185,11 +193,11 @@ pub(super) fn matrix(s: &mut Session<'_>) {
     admit(s, 0x4031); // Intentionally leaves the peripheral high.
     matrix_state(s, 0x4032);
     admit(s, 0x4033);
-    route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, false);
+    unbind(s, pac::Interrupt::CPU_INTR_FROM_CPU_2);
     wait_window();
     matrix_state(s, 0x4040);
     admit(s, 0x4041);
-    route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, true);
+    bind(s, pac::Interrupt::CPU_INTR_FROM_CPU_2);
     wait_window();
     matrix_state(s, 0x4050);
     admit(s, 0x4051);
@@ -217,7 +225,7 @@ pub(super) fn matrix(s: &mut Session<'_>) {
         .modify_route(SOFTWARE_SOURCE, |w| {
             w.set_pass_level(inherited);
         });
-    route(s, pac::Interrupt::CPU_INTR_FROM_CPU_2, false);
+    unbind(s, pac::Interrupt::CPU_INTR_FROM_CPU_2);
     matrix_state(s, 0x41ff);
 }
 
@@ -377,10 +385,10 @@ pub(super) fn usb(s: &mut Session<'_>) {
     wait_window();
     usb_state(s, 0x50f0);
     admit(s, 0x50f3);
-    route(s, pac::Interrupt::USB_SERIAL_JTAG, false);
+    unbind(s, pac::Interrupt::USB_SERIAL_JTAG);
 }
 
-fn sy_work(s: &mut Session<'_>, n: usize, enable: bool) {
+fn sy_work(s: &mut Session<'_>, n: usize, enable: ComparatorWork) {
     s.generic.systimer.systimer.modify_conf(|w| {
         if n == 0 {
             w.set_target0_work_en(enable);
@@ -389,7 +397,7 @@ fn sy_work(s: &mut Session<'_>, n: usize, enable: bool) {
         }
     });
 }
-fn sy_ena(s: &mut Session<'_>, n: usize, enable: bool) {
+fn sy_ena(s: &mut Session<'_>, n: usize, enable: ComparatorInterrupt) {
     s.generic.systimer.systimer.modify_int_ena(|w| {
         if n == 0 {
             w.set_target0_int_ena(enable);
@@ -470,7 +478,7 @@ fn sy_program(s: &mut Session<'_>, n: usize, ticks: u64) {
     } else {
         Index::constant::<1>()
     };
-    sy_work(s, n, false);
+    sy_work(s, n, ComparatorWork::Disabled);
     let timer = &mut s.generic.systimer.systimer;
     timer.modify_target_hi(i, |w| {
         w.set_hi(Bits::truncate((ticks >> 32) as u32));
@@ -479,7 +487,7 @@ fn sy_program(s: &mut Session<'_>, n: usize, ticks: u64) {
         w.set_lo(ticks as u32);
     });
     timer.trigger_comp_load_load(i);
-    sy_work(s, n, true);
+    sy_work(s, n, ComparatorWork::Enabled);
 }
 fn sy_state(s: &Session<'_>, tag: u32) {
     let timer = &s.generic.systimer.systimer;
@@ -495,9 +503,9 @@ fn sy_state(s: &Session<'_>, tag: u32) {
         ]),
         pack([t.target0_int_st(), t.target1_int_st(), t.target2_int_st()]),
         pack([
-            e.target0_int_ena(),
-            e.target1_int_ena(),
-            e.target2_int_ena(),
+            matches!(e.target0_int_ena(), ComparatorInterrupt::Enabled),
+            matches!(e.target1_int_ena(), ComparatorInterrupt::Enabled),
+            matches!(e.target2_int_ena(), ComparatorInterrupt::Enabled),
         ]),
     );
     matrix_state(s, tag + 1);
@@ -505,9 +513,9 @@ fn sy_state(s: &Session<'_>, tag: u32) {
     emit(
         tag + 2,
         pack([
-            c.target0_work_en(),
-            c.target1_work_en(),
-            c.target2_work_en(),
+            matches!(c.target0_work_en(), ComparatorWork::Enabled),
+            matches!(c.target1_work_en(), ComparatorWork::Enabled),
+            matches!(c.target2_work_en(), ComparatorWork::Enabled),
         ]),
         u32::from(c.timer_unit0_work_en()),
         0,
@@ -548,8 +556,8 @@ fn systimer(s: &mut Session<'_>, n: usize) {
     s.generic.systimer.systimer.modify_target_conf(i, |w| {
         w.set_period_mode(false).set_timer_unit_sel(false);
     });
-    sy_work(s, n, false);
-    sy_ena(s, n, true);
+    sy_work(s, n, ComparatorWork::Disabled);
+    sy_ena(s, n, ComparatorInterrupt::Enabled);
     sy_clear(s, n);
     emit(0x6000, n as u32, 0, 0);
     sy_state(s, 0x6010);
@@ -557,13 +565,13 @@ fn systimer(s: &mut Session<'_>, n: usize) {
         sy_state(s, 0x6030);
         admit(s, 0x6033);
         admit(s, 0x6034);
-        sy_ena(s, n, false);
+        sy_ena(s, n, ComparatorInterrupt::Disabled);
         sy_state(s, 0x6110); // Mask an already-positive enabled pending cause.
         admit(s, 0x6113);
-        sy_ena(s, n, true);
+        sy_ena(s, n, ComparatorInterrupt::Enabled);
         sy_state(s, 0x6120);
         admit(s, 0x6123);
-        sy_work(s, n, false);
+        sy_work(s, n, ComparatorWork::Disabled);
         sy_state(s, 0x6040);
         admit(s, 0x6043);
         sy_clear(s, n);
@@ -571,7 +579,7 @@ fn systimer(s: &mut Session<'_>, n: usize) {
         sy_state(s, 0x6050);
         admit(s, 0x6053);
     }
-    sy_ena(s, n, false);
+    sy_ena(s, n, ComparatorInterrupt::Disabled);
     if sy_future(s, n, 0x6060) {
         sy_state(s, 0x6070);
         admit(s, 0x6073);
@@ -582,14 +590,14 @@ fn systimer(s: &mut Session<'_>, n: usize) {
         if !sy_future(s, n, 0x6133) {
             emit(0x6134, 0, 0, 1);
         }
-        sy_work(s, n, false);
+        sy_work(s, n, ComparatorWork::Disabled);
         sy_clear(s, n);
         wait_window();
         sy_state(s, 0x6080);
     }
     if sy_future(s, n, 0x6090) {
         sy_state(s, 0x60a0);
-        sy_ena(s, n, true);
+        sy_ena(s, n, ComparatorInterrupt::Enabled);
         sy_state(s, 0x60b0);
         admit(s, 0x60b3);
         sy_clear(s, n);
@@ -597,32 +605,31 @@ fn systimer(s: &mut Session<'_>, n: usize) {
         sy_state(s, 0x60c0);
     }
     // One phased masked-clear/reprogram example, not a race qualification.
-    sy_ena(s, n, false);
-    sy_work(s, n, false);
+    sy_ena(s, n, ComparatorInterrupt::Disabled);
+    sy_work(s, n, ComparatorWork::Disabled);
     sy_clear(s, n);
     if let Some(now) = sy_now(s) {
         sy_program(s, n, now.saturating_sub(16));
         sy_state(s, 0x60d0);
         wait_window();
         sy_state(s, 0x60e0);
-        sy_ena(s, n, true);
+        sy_ena(s, n, ComparatorInterrupt::Enabled);
         admit(s, 0x60e3);
         sy_state(s, 0x60e4);
     }
-    sy_work(s, n, false);
-    sy_ena(s, n, false);
+    sy_work(s, n, ComparatorWork::Disabled);
+    sy_ena(s, n, ComparatorInterrupt::Disabled);
     sy_clear(s, n);
     wait_window();
     sy_state(s, 0x60f0);
     admit(s, 0x60f3);
-    route(
+    unbind(
         s,
         if n == 0 {
             pac::Interrupt::SYSTIMER_TARGET0
         } else {
             pac::Interrupt::SYSTIMER_TARGET1
         },
-        false,
     );
 }
 pub(super) fn systimer0(s: &mut Session<'_>) {
@@ -653,7 +660,11 @@ fn t0_state(s: &Session<'_>, tag: u32) {
         tag,
         pack([r.t0_int_raw(), r.t1_int_raw(), r.wdt_int_raw()]),
         pack([t.t0_int_st(), t.t1_int_st(), t.wdt_int_st()]),
-        pack([e.t0_int_ena(), e.t1_int_ena(), e.wdt_int_ena()]),
+        pack([
+            matches!(e.t0_int_ena(), T0IntEna::Enabled),
+            e.t1_int_ena(),
+            e.wdt_int_ena(),
+        ]),
     );
     matrix_state(s, tag + 1);
     let c = timer.read_t0config();
@@ -664,7 +675,7 @@ fn t0_state(s: &Session<'_>, tag: u32) {
         0,
     );
 }
-fn t0_ena(s: &mut Session<'_>, enable: bool) {
+fn t0_ena(s: &mut Session<'_>, enable: T0IntEna) {
     s.generic.timer.timg0_timer0.modify_int_ena_timers(|w| {
         w.set_t0_int_ena(enable);
     });
@@ -738,7 +749,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
     );
     if clock.reg_timergrp0_rst_en() || !clock.reg_timergrp0_apb_clk_en() {
         emit(0x70ee, 0, 0, 1);
-        route(s, pac::Interrupt::TIMERGRP0_T0, false);
+        unbind(s, pac::Interrupt::TIMERGRP0_T0);
         return;
     }
     // Startup uses the watchdog-side clock owner, not the T0 partition.
@@ -752,7 +763,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         .timer
         .timg0_timer0
         .configure_timg0_timer0_stopped();
-    t0_ena(s, false);
+    t0_ena(s, T0IntEna::Disabled);
     t0_clear(s);
     s.generic.timer.timg0_timer0.modify_t0loadlo(|w| {
         w.set_t_load_lo(0);
@@ -777,7 +788,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
             );
         }
     }
-    t0_ena(s, true);
+    t0_ena(s, T0IntEna::Enabled);
     if t0_future(s, 0x7020) {
         t0_state(s, 0x7030);
         admit(s, 0x7033);
@@ -787,10 +798,10 @@ pub(super) fn timer0(s: &mut Session<'_>) {
             .timg0_timer0
             .configure_timg0_timer0_stopped();
         t0_state(s, 0x7040);
-        t0_ena(s, false);
+        t0_ena(s, T0IntEna::Disabled);
         t0_state(s, 0x7050);
         admit(s, 0x7053);
-        t0_ena(s, true);
+        t0_ena(s, T0IntEna::Enabled);
         t0_state(s, 0x7060);
         admit(s, 0x7063);
         t0_clear(s);
@@ -801,16 +812,16 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         .timer
         .timg0_timer0
         .configure_timg0_timer0_counting();
-    t0_ena(s, false);
+    t0_ena(s, T0IntEna::Disabled);
     if t0_future(s, 0x7080) {
         t0_state(s, 0x7090);
         t0_clear(s);
         wait_window();
         t0_state(s, 0x70a0);
-        t0_ena(s, true);
+        t0_ena(s, T0IntEna::Enabled);
         admit(s, 0x70a3);
     }
-    t0_ena(s, true);
+    t0_ena(s, T0IntEna::Enabled);
     if t0_future(s, 0x70b0) {
         t0_state(s, 0x70c0);
         admit(s, 0x70c3);
@@ -826,7 +837,7 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         .timer
         .timg0_timer0
         .configure_timg0_timer0_stopped();
-    t0_ena(s, false);
+    t0_ena(s, T0IntEna::Disabled);
     t0_clear(s);
     let a = t0_count(s);
     wait_window();
@@ -863,5 +874,5 @@ pub(super) fn timer0(s: &mut Session<'_>) {
         ]),
         0,
     );
-    route(s, pac::Interrupt::TIMERGRP0_T0, false);
+    unbind(s, pac::Interrupt::TIMERGRP0_T0);
 }

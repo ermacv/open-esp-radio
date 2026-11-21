@@ -2425,18 +2425,21 @@ description = "BB watchdog reset-enable (31), interrupt-enable (30), and timeout
 name = "WATCHDOG_TIMEOUT_CLEAR_REQUEST"
 bits = "29"
 class = "plain"
+values = [{ name = "IDLE", value = 0x0, description = "No clear of the watchdog timeout is requested." }, { name = "REQUESTED", value = 0x1, description = "Request clearing the watchdog timeout." }]
 description = "Request clearing the watchdog timeout. In the cited quiet stand mode a set reads back zero; self-clear versus read-zero and clearing a positively pending timeout remain unresolved. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, HW11_S31_BB_20261027."
 
 [[registers.fields]]
 name = "WATCHDOG_INTERRUPT_ENABLE"
 bits = "30"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "The BB watchdog interrupt is disabled." }, { name = "ENABLED", value = 0x1, description = "The BB watchdog interrupt is enabled (phy_bb_wdt_int_enable)." }]
 description = "Lane replaced by the named phy_bb_wdt_int_enable helper, independently of reset-enable31. Its source123 output relationship, pending retention and complete output-stop effect are unestablished. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026, BX12_S31_BB_WATCHDOG_API_LANES_20261027."
 
 [[registers.fields]]
 name = "WATCHDOG_RESET_ENABLE"
 bits = "31"
 class = "plain"
+values = [{ name = "DISABLED", value = 0x0, description = "A watchdog timeout does not reset the BB." }, { name = "ENABLED", value = 0x1, description = "A watchdog timeout resets the BB." }]
 description = "Enable hardware BB reset on watchdog timeout; this is not a counter run gate. SOURCE: ROM_REV0_BB_WATCHDOG_LANES_20261026."
 
 [[registers.fields]]

@@ -27,7 +27,9 @@ pub(crate) fn snapshot_station_tsf<P: Placement>(
     high: Option<&mut u32>,
 ) {
     registers.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(true);
+        w.set_snapshot_station_tsf(
+            oer_chips_esp32s31_pac::modem_pwr::dictionaries::Snapshot::Selected,
+        );
     });
     if let Some(low) = low {
         *low = registers.read_snapshot_low().value();
@@ -36,7 +38,9 @@ pub(crate) fn snapshot_station_tsf<P: Placement>(
         *high = registers.read_snapshot_high().value();
     }
     registers.modify_tsf_load_control(|w| {
-        w.set_snapshot_station_tsf(false);
+        w.set_snapshot_station_tsf(
+            oer_chips_esp32s31_pac::modem_pwr::dictionaries::Snapshot::Unselected,
+        );
     });
 }
 
@@ -65,12 +69,16 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     pub fn access_point_tsf(&mut self) -> u64 {
         let registers = &mut self.mac.wifi_mac_tsf_load;
         registers.modify_tsf_load_control(|w| {
-            w.set_snapshot_softap_tsf(true);
+            w.set_snapshot_softap_tsf(
+                oer_chips_esp32s31_pac::modem_pwr::dictionaries::Snapshot::Selected,
+            );
         });
         let high = registers.read_snapshot_high().value();
         let low = registers.read_snapshot_low().value();
         registers.modify_tsf_load_control(|w| {
-            w.set_snapshot_softap_tsf(false);
+            w.set_snapshot_softap_tsf(
+                oer_chips_esp32s31_pac::modem_pwr::dictionaries::Snapshot::Unselected,
+            );
         });
         u64::from(low) | (u64::from(high) << 32)
     }
@@ -145,7 +153,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_rtc_timer_update
             .modify_sta_tsf_control(|w| {
-                w.set_sta_tbtt_enable(true);
+                w.set_sta_tbtt_enable(
+                    oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Running,
+                );
             });
 
         self.set_station_tbtt_interval(schedule.interval_micros);
@@ -185,7 +195,9 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         self.mac
             .wifi_mac_rtc_timer_update
             .modify_sta_tsf_control(|w| {
-                w.set_sta_tbtt_enable(false);
+                w.set_sta_tbtt_enable(
+                    oer_chips_esp32s31_pac::modem_pwr::dictionaries::Run::Stopped,
+                );
             });
         oer_portable_riscv::fence();
     }
