@@ -1,3 +1,15 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

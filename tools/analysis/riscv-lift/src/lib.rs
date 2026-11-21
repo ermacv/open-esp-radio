@@ -1,5 +1,22 @@
 //! ISA-only function decoder and relocation interpretation; no I/O authority.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_wrap,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![forbid(unsafe_code)]
 use oer_tools_analysis_elf::rv32::{self, Role};
 pub use oer_tools_analysis_riscv_decode::register_name;

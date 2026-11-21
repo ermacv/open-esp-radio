@@ -2,6 +2,10 @@
 //! the library's synchronous product hardware engine; the host checks every answer against the RFC's
 //! known answer and against its own reference wrap, which shares no code
 //! with the image's.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use std::{process::ExitCode, time::Duration};

@@ -383,6 +383,15 @@ struct_excessive_bools = "deny"
 fn_params_excessive_bools = "deny"
 # Panics are visible but do not block yet: each crate moves to `deny` once
 # its sites are fixed, air-input parsers first.
+# A cast that drops bits, a sign or wraps loses a value in silence, as a
+# dropped `must_use` result loses an error: `try_from` with the refusal
+# handled, or a type whose range makes the conversion lossless. A package
+# with existing sites expects the lint at its crate root, naming the step
+# that cleans it (tasks/312).
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+let_underscore_must_use = "deny"
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"

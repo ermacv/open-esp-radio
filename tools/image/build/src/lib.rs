@@ -14,7 +14,17 @@
 //! the application, the bootloader, the partition table and the OTA
 //! selection, at the offsets of the chip's [`FlashMap`]. A flash only writes
 //! a bundle's files (`ImageBundle::segments`).
-
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 mod around;

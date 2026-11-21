@@ -7,6 +7,14 @@
 //! parses the requests and reports of `open-radio-bluetooth` and
 //! `open-radio-probe` (`tools/lab/fixture-helpers`) with the same types. The programs
 //! are packages without a library.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 mod admission;

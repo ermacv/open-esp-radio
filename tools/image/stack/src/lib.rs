@@ -21,7 +21,18 @@
 //! Bounds fail closed: a root has a number only when nothing it reaches is
 //! unresolved. Otherwise [`Bound::reasons`] counts what is, by reason, and
 //! [`Reason::needs`] names the proof that would close it.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 mod cha;

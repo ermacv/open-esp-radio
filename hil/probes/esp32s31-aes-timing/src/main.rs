@@ -1,3 +1,17 @@
+#![cfg_attr(
+    any(test, target_arch = "riscv32"),
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "R2 cleans a probe with the area it reads (tasks/312)"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]

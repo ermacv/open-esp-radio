@@ -1,3 +1,10 @@
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! The chip facts that two sources state: each pair is held equal by value,
 //! so the one that changes alone fails here.

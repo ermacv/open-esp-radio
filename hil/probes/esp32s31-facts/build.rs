@@ -1,3 +1,11 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans a probe with the area it reads (tasks/312)"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "R2 cleans a probe with the area it reads (tasks/312)"
+)]
 fn fact<'a>(value: &'a toml::Value, path: &[&str]) -> Result<&'a toml::Value, &'static str> {
     path.iter().try_fold(value, |value, key| {
         value.get(*key).ok_or("missing chip fact")

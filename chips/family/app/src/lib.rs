@@ -6,7 +6,10 @@
 //! library keeps of its own work ([`observe`]). A chip's application
 //! crate (`chips/<chip>/app`) builds on them; `oer` re-exports what an image
 //! uses.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 #![deny(

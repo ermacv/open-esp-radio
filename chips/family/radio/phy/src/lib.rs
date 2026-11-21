@@ -1,4 +1,8 @@
 //! PHY analog and PBus operations over chip-owned register ports.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

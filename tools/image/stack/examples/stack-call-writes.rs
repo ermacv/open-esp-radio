@@ -1,5 +1,13 @@
 //! Reproduce stack-word noninterference, including companion machine facts.
 //! PCs and a slot select diagnostic input; they do not select summary semantics.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #[path = "support/stack_context.rs"]
 mod checked_stack;
 #[path = "support/cli.rs"]

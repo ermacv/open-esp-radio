@@ -1,5 +1,13 @@
 //! Inspect the common engine's records for one linked function, independently
 //! of callback policy. Numerical addresses only select diagnostic input.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #[path = "support/cli.rs"]
 mod cli;
 mod support;

@@ -1,5 +1,8 @@
 //! Comparison of explicitly selected concrete observations; no execution/store authority.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 use oer_tools_analysis_blobray_domain::*;
 use oer_tools_analysis_riscv_model::*;

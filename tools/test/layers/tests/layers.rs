@@ -578,6 +578,90 @@ fn clippy_configs(directory: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
+/// The ban of `Bits::truncate` (it keeps the low bits of any value).
+const TRUNCATE_BAN: &str = "oer_portable_mmio::Bits::truncate";
+
+/// The packages whose `clippy.toml` leaves the ban of `Bits::truncate`
+/// out, each with its reason: the PAC for good (its generated getters cut
+/// a field out of a word they read), the others until the step that
+/// removes their calls; `TRUNCATIONS` keeps their counts from growing.
+const TRUNCATE_BAN_LEFT_OUT: &[(&str, TruncateBan)] = &[
+    ("chips/esp32s31/pac", TruncateBan::Generated),
+    ("chips/esp32s31/hal", TruncateBan::Until("R2's area PRs")),
+    (
+        "hil/probes/esp32s31-facts",
+        TruncateBan::Until("the facts probe's own PR after R2"),
+    ),
+];
+
+/// Why a package's `clippy.toml` leaves the ban of `Bits::truncate` out.
+#[derive(Clone, Copy)]
+enum TruncateBan {
+    /// Generated code calls it: the PAC's getters.
+    Generated,
+    /// Calls the named step removes.
+    Until(&'static str),
+}
+
+/// The common method bans a `clippy.toml` lacks, the one it may leave out
+/// aside.
+fn lost_method_bans(
+    root: &Path,
+    file: &Path,
+    config: &toml::Value,
+    common: &toml::Value,
+) -> BTreeSet<String> {
+    let package = file
+        .parent()
+        .and_then(|directory| directory.strip_prefix(root).ok())
+        .map(|directory| directory.display().to_string());
+    let left_out = TRUNCATE_BAN_LEFT_OUT
+        .iter()
+        .any(|(listed, _)| package.as_deref() == Some(*listed));
+    let mut missing = missing_lints(config, common, "disallowed-methods");
+    if left_out {
+        missing.remove(TRUNCATE_BAN);
+    }
+    missing
+}
+
+/// A call of `Bits::truncate` (`truncate` after `::`, called).
+fn truncate_call_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    (ident_at(tokens, at)? == "truncate"
+        && at
+            .checked_sub(1)
+            .is_some_and(|before| punct_at(tokens, before, ':'))
+        && group_at(tokens, at + 1, Delimiter::Parenthesis).is_some())
+    .then(|| "truncate".to_owned())
+}
+
+/// A package whose `clippy.toml` leaves the ban out until a step still
+/// calls `Bits::truncate`: once its last call goes, its exception goes
+/// and its `clippy.toml` takes the ban.
+#[test]
+fn a_package_without_the_truncate_ban_still_calls_it() {
+    let root = root();
+    assert!(
+        lint_paths(&read_toml(&root.join("clippy.toml")), "disallowed-methods")
+            .contains(TRUNCATE_BAN)
+    );
+    for (package, why) in TRUNCATE_BAN_LEFT_OUT {
+        let calls = scan_hits(
+            &|path: &str| path == *package,
+            &truncate_call_at,
+            NO_ATTRIBUTE,
+        );
+        let step = match why {
+            TruncateBan::Generated => "the generated getters",
+            TruncateBan::Until(step) => step,
+        };
+        assert!(
+            !calls.is_empty() || matches!(why, TruncateBan::Generated),
+            "{package} calls Bits::truncate no more ({step} is done): drop its exception and ban it in its clippy.toml"
+        );
+    }
+}
+
 #[test]
 fn every_clippy_config_retains_all_common_method_bans() {
     let root = root();
@@ -587,7 +671,7 @@ fn every_clippy_config_retains_all_common_method_bans() {
     let missing = configs
         .into_iter()
         .filter_map(|path| {
-            let missing = missing_lints(&read_toml(&path), &common, "disallowed-methods");
+            let missing = lost_method_bans(&root, &path, &read_toml(&path), &common);
             (!missing.is_empty()).then(|| format!("{}: {missing:?}", path.display()))
         })
         .collect::<Vec<_>>();
@@ -2008,6 +2092,11 @@ fn walk(tokens: TokenStream, directory: &Path, file: &Path, nesting: Nesting, vi
             TokenTree::Ident(word) if word == "mod" => {
                 let test = attributes.iter().any(test_only);
                 let path = attributes.iter().find_map(path_attribute);
+                if !test {
+                    for attribute in &attributes {
+                        visit(file, Seen::Attribute(attribute));
+                    }
+                }
                 attributes.clear();
                 let (Some(TokenTree::Ident(name)), Some(body)) =
                     (tokens.get(index), tokens.get(index + 1))
@@ -7810,7 +7899,7 @@ fn every_clippy_config_holds_the_rules_thresholds() {
         // The file the package reads keeps every common ban, wherever it
         // stands: one between the root and the package checks for each
         // package below it.
-        let missing = missing_lints(&config, &common, "disallowed-methods");
+        let missing = lost_method_bans(&root, &file, &config, &common);
         if !missing.is_empty() {
             problems.push(std::format!(
                 "{path}: {} lost common bans: {missing:?}",
@@ -8819,5 +8908,2486 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/radio/port/src/slot.rs::SlotRegistration.owner",
         BY_RADIO_SYSTEM,
+    ),
+];
+
+// ---- S8d: an attribute that silences a lint is listed --------------------
+
+/// The lints one attribute silences, each with the attribute's `reason`
+/// when it gives one: `allow(…)`, `expect(…)`, and either inside a
+/// `cfg_attr` that is not for tests. `None` for any other attribute.
+fn silenced_lints(attribute: &TokenStream) -> Option<Vec<(String, Option<String>)>> {
+    let tokens = attribute.clone().into_iter().collect::<Vec<_>>();
+    let mut silenced = Vec::new();
+    match (tokens.first(), tokens.get(1)) {
+        (Some(TokenTree::Ident(word)), Some(TokenTree::Group(arguments)))
+            if (word == "allow" || word == "expect")
+                && arguments.delimiter() == Delimiter::Parenthesis =>
+        {
+            silenced.extend(lint_arguments(&arguments.stream()));
+        }
+        (Some(TokenTree::Ident(word)), Some(TokenTree::Group(arguments)))
+            if word == "cfg_attr" && arguments.delimiter() == Delimiter::Parenthesis =>
+        {
+            let parts = split_commas(&arguments.stream());
+            let (condition, attributes) = parts.split_first()?;
+            if is_test_condition(condition) {
+                return None;
+            }
+            for attribute in attributes {
+                if let Some(lints) = silenced_lints(&attribute.iter().cloned().collect()) {
+                    silenced.extend(lints);
+                }
+            }
+        }
+        _ => {}
+    }
+    (!silenced.is_empty()).then_some(silenced)
+}
+
+/// `test`, or `all(test, …)`: a condition only tests meet.
+fn is_test_condition(condition: &[TokenTree]) -> bool {
+    match condition {
+        [TokenTree::Ident(word)] => word == "test",
+        [TokenTree::Ident(word), TokenTree::Group(inner)] if word == "all" => {
+            split_commas(&inner.stream())
+                .iter()
+                .any(|part| is_test_condition(part))
+        }
+        _ => false,
+    }
+}
+
+fn split_commas(stream: &TokenStream) -> Vec<Vec<TokenTree>> {
+    let mut parts = vec![Vec::new()];
+    for token in stream.clone() {
+        match &token {
+            TokenTree::Punct(comma) if comma.as_char() == ',' => parts.push(Vec::new()),
+            _ => {
+                if let Some(last) = parts.last_mut() {
+                    last.push(token);
+                }
+            }
+        }
+    }
+    parts.retain(|part| !part.is_empty());
+    parts
+}
+
+/// The lints of `allow(…)`/`expect(…)`'s arguments, each with the
+/// arguments' `reason`.
+fn lint_arguments(arguments: &TokenStream) -> Vec<(String, Option<String>)> {
+    let parts = split_commas(arguments);
+    let reason = parts.iter().find_map(|part| match part.as_slice() {
+        [
+            TokenTree::Ident(word),
+            TokenTree::Punct(equals),
+            TokenTree::Literal(text),
+        ] if word == "reason" && equals.as_char() == '=' => {
+            // A string continued over lines (`\` at a line's end) is one line.
+            let text = text.to_string();
+            let text = text.trim_matches('"').split("\\\n").map(str::trim_start);
+            Some(text.collect::<Vec<_>>().join(""))
+        }
+        _ => None,
+    });
+    parts
+        .iter()
+        .filter(|part| !matches!(part.first(), Some(TokenTree::Ident(word)) if word == "reason"))
+        .map(|part| {
+            let lint = part.iter().map(ToString::to_string).collect::<String>();
+            (lint, reason.clone())
+        })
+        .collect()
+}
+
+/// Every lint an attribute silences in the built code outside tests, one
+/// hit a lint, `file: lint`, with the attribute's reason. Outer attributes
+/// come from the walk; an inner one (`#![…]`) is a `#` token followed by
+/// `!` and its bracket.
+fn silencing_hits() -> Vec<(String, String, Option<String>)> {
+    // A hit carries its lints as lines of `lint` and `reason`, tab apart.
+    fn encode(lints: Vec<(String, Option<String>)>) -> String {
+        lints
+            .into_iter()
+            .map(|(lint, reason)| format!("{lint}\t{}", reason.unwrap_or_default()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+    let inner: &Finder = &|tokens, at| {
+        if !punct_at(tokens, at, '#') || !punct_at(tokens, at + 1, '!') {
+            return None;
+        }
+        let attribute = group_at(tokens, at + 2, Delimiter::Bracket)?;
+        silenced_lints(&attribute.stream()).map(encode)
+    };
+    let outer: &AttributeFinder = &|attribute| silenced_lints(attribute).map(encode);
+    scan_hits(&|_| true, inner, outer)
+        .into_iter()
+        .flat_map(|(file, lints)| {
+            lints
+                .lines()
+                .map(|line| {
+                    let (lint, reason) = line.split_once('\t').unwrap_or((line, ""));
+                    (
+                        file.clone(),
+                        lint.to_owned(),
+                        (!reason.is_empty()).then(|| reason.to_owned()),
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Every attribute that silences a lint (`allow`, `expect`, and either
+/// under a `cfg_attr` not for tests) in the built code outside tests is
+/// listed by file and lint with its reason; the list only shrinks.
+#[test]
+fn attributes_that_silence_a_lint_are_listed_and_only_shrink() {
+    let hits = silencing_hits()
+        .into_iter()
+        .map(|(file, lint, _)| (format!("{file}: {lint}"), String::new()))
+        .collect::<Vec<_>>();
+    let known = SILENCED
+        .iter()
+        .map(|(file, lint, count, _)| (format!("{file}: {lint}"), *count))
+        .collect::<Vec<_>>();
+    let known = known
+        .iter()
+        .map(|(key, count)| (key.as_str(), *count))
+        .collect::<Vec<_>>();
+    let differences = count_differences(&by_file(&hits), &known);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    for (file, lint, _, reason) in SILENCED {
+        assert!(!reason.is_empty(), "{file}: {lint}");
+    }
+}
+
+#[test]
+fn a_silencing_attribute_is_found_in_each_of_its_forms() {
+    let lints = |source: &str| {
+        silenced_lints(&source.parse().expect("an attribute"))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(lint, reason)| format!("{lint}|{}", reason.unwrap_or_default()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(lints("allow(dead_code)"), ["dead_code|"]);
+    assert_eq!(
+        lints("expect(clippy::cast_sign_loss, unsafe_code, reason = \"R2\")"),
+        ["clippy::cast_sign_loss|R2", "unsafe_code|R2"]
+    );
+    assert_eq!(
+        lints("cfg_attr(target_arch = \"riscv32\", allow(clippy::panic))"),
+        ["clippy::panic|"]
+    );
+    assert!(lints("cfg_attr(test, allow(clippy::panic))").is_empty());
+    assert!(lints("cfg_attr(all(test, feature = \"x\"), allow(clippy::panic))").is_empty());
+    assert!(lints("deny(clippy::panic)").is_empty());
+    assert!(lints("forbid(unsafe_code)").is_empty());
+    assert!(lints("doc = \"allow(dead_code)\"").is_empty());
+}
+
+/// S8d: every attribute that silences a lint in the built code outside
+/// tests: file, lint, count, reason.
+const SILENCED: &[(&str, &str, usize, &str)] = &[
+    (
+        "chips/esp32s31/app/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/app/src/lib.rs",
+        "dead_code",
+        1,
+        "only a trace build asks a task set for its observer",
+    ),
+    (
+        "chips/esp32s31/app/src/lib.rs",
+        "unused_variables",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/hal/src/peripherals/aes_dma.rs",
+        "unsafe_code",
+        1,
+        "DMA storage is placed through the HAL macro",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/domain.rs",
+        "clippy::result_large_err",
+        1,
+        "the parts, or the unchanged domain, are returned exactly as held",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/domain.rs",
+        "clippy::type_complexity",
+        1,
+        "the parts, or the unchanged domain, are returned exactly as held",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
+        "clippy::result_large_err",
+        1,
+        "refusal retains the exact affine inputs",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
+        "unsafe_code",
+        1,
+        "the HAL owns its PHY fault reporter ABI",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/channel.rs",
+        "dead_code",
+        4,
+        "unknown, to read",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/client.rs",
+        "clippy::result_large_err",
+        1,
+        "failure must retain both stopped registers and the clock obligation",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/client.rs",
+        "clippy::type_complexity",
+        1,
+        "the failure returns the owner beside its power proof",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/receive.rs",
+        "unsafe_code",
+        3,
+        "the receive ring's borrowed release: a completed unit / the receive ring's release proof: a completed unit / the receive ring's release proof: the block's reset",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        "clippy::mem_forget",
+        1,
+        "a backing the hardware may still read is leaked, never returned or freed",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        "clippy::result_large_err",
+        2,
+        "a refused pin returns its placement whole / unknown, to read",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        "unsafe_code",
+        3,
+        "publication token is coupled to the owner retaining every external lease / publication token retains a validated internal aggregate chain / start token exists only after aggregate hardware ownership is recorded",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        "clippy::result_large_err",
+        1,
+        "a refused pin returns its placement whole",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        "unsafe_code",
+        2,
+        "publication token retains the initialized software-owned descriptor / start token is exposed only after the owner records hardware ownership",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/phy/restore.rs",
+        "dead_code",
+        5,
+        "unknown, to read",
+    ),
+    (
+        "chips/esp32s31/hal/src/set.rs",
+        "private_bounds",
+        1,
+        "the seal is this crate's alone",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/boot/psram.rs",
+        "unsafe_code",
+        1,
+        "the consumed HAL partition owns this PSRAM mapping",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/cores.rs",
+        "clippy::disallowed_methods",
+        2,
+        "the host has no WFI; this fatal path is terminal / the host has no WFI; this reset path is terminal",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/memory/dma_address.rs",
+        "clippy::disallowed_methods",
+        1,
+        "the one module that makes typed DMA addresses",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/memory/dma_address.rs",
+        "unsafe_code",
+        10,
+        "a byte of a placed region / a checked layout within the consumed Placed / a slot of placed storage / an address recorded from a typed one / an element of a placed table / host model addresses are recorded, never dereferenced / synthetic host identities are never dereferenced / the checked subrange of the consumed Placed / the placed source of typed DMA addresses",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/memory/dma_static.rs",
+        "unsafe_code",
+        5,
+        "the caller promises the placement / the consumed Placed proves static DMA storage / the placed source of the claimed value's address / the placement constructor's claim: a DMA static gives its value once, with its address / the stability is the wrapped lease's",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/root.rs",
+        "clippy::disallowed_methods",
+        1,
+        "a host-test root claims the typed blocks of its fictitious chip",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/root.rs",
+        "clippy::result_large_err",
+        1,
+        "rejection returns the domain and every partition without allocation",
+    ),
+    (
+        "chips/esp32s31/hal/src/system/root.rs",
+        "unsafe_code",
+        1,
+        "a host-test root claims the typed blocks of its fictitious chip",
+    ),
+    (
+        "chips/esp32s31/knowledge/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/pac/src/lib.rs",
+        "clippy::disallowed_methods",
+        1,
+        "the PAC root takes its one claim",
+    ),
+    (
+        "chips/esp32s31/pac/src/lib.rs",
+        "unsafe_code",
+        1,
+        "the PAC root takes its one claim",
+    ),
+    (
+        "chips/esp32s31/platform/board/src/lib.rs",
+        "unsafe_code",
+        1,
+        "adopting the bootstrap's PSRAM mapping",
+    ),
+    (
+        "chips/esp32s31/platform/bootstrap/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/platform/bootstrap/src/main.rs",
+        "dead_code",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/sampler.rs",
+        "unused_variables",
+        1,
+        "only a trace build reports samples",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/baseband.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the allocation-free PHY transition owns exactly one recovered child phase",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/estimator.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/registration.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the heap-free registration owner retains exactly one complete calibration phase",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/registration.rs",
+        "clippy::result_large_err",
+        1,
+        "failure must return the unique allocation-free registration owner",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/312)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "dead_code",
+        1,
+        "host builds type-check the graphs that only chip target ports drive",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "unused_imports",
+        1,
+        "host builds type-check the graphs that only chip target ports drive",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the allocation-free failure retains the exact registration transition",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
+        "clippy::result_large_err",
+        2,
+        "fail-stop error retains the allocation-free PHY transition / failure retains the unique transition",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/concurrent/operations.rs",
+        "clippy::result_large_err",
+        1,
+        "fail-stop error retains the allocation-free PHY transition",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/domain.rs",
+        "clippy::result_large_err",
+        2,
+        "fail-stop error retains the allocation-free PHY transition / failure retains the unique transition",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/domain.rs",
+        "private_bounds",
+        1,
+        "the sealed physical routes use the private shared engine",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/rfpll.rs",
+        "private_bounds",
+        1,
+        "probe entries use the closed transport engine routes",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/calibration.rs",
+        "clippy::result_large_err",
+        3,
+        "the pending variant must return the allocation-free bounded calibration owner / the pending variant must return the allocation-free complete channel owner / the pending variant must return the non-allocating linear table owner",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/parameters.rs",
+        "clippy::result_large_err",
+        1,
+        "the pending variant must retain the allocation-free calibration outcome and live state owner",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/parameters.rs",
+        "dead_code",
+        1,
+        "the pinned ESP32-S31 policy disables diagnostic printing",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the allocation-free calibration root retains one bounded search transition",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tx/power.rs",
+        "clippy::enum_variant_names",
+        1,
+        "each completion names the tone action it answers: ConfigureTone, ToneSar, StopTone",
+    ),
+    (
+        "chips/family/app/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/app/src/lib.rs",
+        "dead_code",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "chips/family/boot/src/flash.rs",
+        "clippy::too_many_arguments",
+        1,
+        "one sweep over the owners, the references and its waits",
+    ),
+    (
+        "chips/family/boot/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/facts/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/facts/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/app_descriptor.rs",
+        "unsafe_code",
+        1,
+        "application descriptor export and linker placement",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/lib.rs",
+        "unsafe_code",
+        1,
+        "reset entry before the Rust stack exists",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/runtime.rs",
+        "unsafe_code",
+        1,
+        "publishes and enters the stage-two image",
+    ),
+    (
+        "chips/family/platform/executor/src/binding.rs",
+        "clippy::new_without_default",
+        2,
+        "the one driver is a static, built in a const context / the one storage is a static, built in a const context",
+    ),
+    (
+        "chips/family/platform/executor/src/executor.rs",
+        "clippy::too_many_arguments",
+        1,
+        "each is one capability the run consumes",
+    ),
+    (
+        "chips/family/platform/executor/src/executor.rs",
+        "unsafe_code",
+        6,
+        "board linker owns this exported executor core-state section / the executor's signal context contract / zero wake flags are zero bytes",
+    ),
+    (
+        "chips/family/platform/executor/src/installations.rs",
+        "clippy::disallowed_methods",
+        1,
+        "the unique static claim constructs only invariant PhantomData in a zero-sized SlotClaim",
+    ),
+    (
+        "chips/family/platform/executor/src/installations.rs",
+        "unsafe_code",
+        1,
+        "the declaration establishes a unique static identity",
+    ),
+    (
+        "chips/family/platform/executor/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/executor/src/software_line.rs",
+        "dead_code",
+        1,
+        "the chip's executor and doorbell raise",
+    ),
+    (
+        "chips/family/platform/executor/src/task.rs",
+        "unsafe_code",
+        1,
+        "task slots hold their futures in static storage polled in place, and the executor's one waker vtable",
+    ),
+    (
+        "chips/family/platform/executor/src/task.rs",
+        "unused_doc_comments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "chips/family/platform/executor/src/task.rs",
+        "unused_variables",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "chips/family/platform/executor/src/time_driver.rs",
+        "unsafe_code",
+        1,
+        "the slot access proof replaces its Sync promise",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/here.rs",
+        "unsafe_code",
+        1,
+        "the promise of an entry's vector, which runs on its hart by construction",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "clippy::disallowed_methods",
+        5,
+        "the entry's vector is its entry point's one caller / the table owns its handler and cell mapping / the table's once gate admits one token per entry and image",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "dead_code",
+        3,
+        "an image without bindings takes no token / no build binds the absent part",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "non_upper_case_globals",
+        1,
+        "image contexts are named by role",
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "unsafe_code",
+        3,
+        "the interrupt table owns its existing exemption ABI / the interrupt table owns its existing table ABIs / the interrupt table owns its existing vector ABI",
+    ),
+    (
+        "chips/family/platform/layout/src/handoff.rs",
+        "unsafe_code",
+        3,
+        "minting the entry is the runtime's generated-entry promise / minting the proof is the runtime entry's promise / the trait carries the board's adoption promise",
+    ),
+    (
+        "chips/family/platform/layout/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/runtime/src/default_handlers.rs",
+        "clippy::panic",
+        1,
+        "fail-stop: an interrupt without a handler is an image defect; the panic handler records it",
+    ),
+    (
+        "chips/family/platform/runtime/src/layout.rs",
+        "unsafe_code",
+        1,
+        "the linker script symbols",
+    ),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
+        "dead_code",
+        1,
+        "the host builds the chip-independent parts for their tests",
+    ),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
+        "unsafe_code",
+        8,
+        "per-hart interrupt stacks and the trap entries switching onto them / terminal election is placed in boot-initialized SRAM / the critical-section implementation contract / the default trap handlers export linker-visible symbols / the panic record lives in a fixed SRAM section the next boot reads / the runtime defines the stack-protector guard symbol / the stage-two reset entry is assembly / volatile reads of the installed vector table",
+    ),
+    (
+        "chips/family/platform/runtime/src/secondary.rs",
+        "clippy::new_without_default",
+        1,
+        "the one mailbox is a static, built in a const context",
+    ),
+    (
+        "chips/family/platform/runtime/src/secondary.rs",
+        "clippy::too_many_arguments",
+        2,
+        "the launch's ordered steps / the launch's owners and waits",
+    ),
+    (
+        "chips/family/platform/runtime/src/secondary.rs",
+        "dead_code",
+        3,
+        "the chip's launch hands over / the hart's code alone reports",
+    ),
+    (
+        "chips/family/platform/runtime/src/secondary.rs",
+        "unsafe_code",
+        1,
+        "the handshake is placed in internal SRAM",
+    ),
+    (
+        "chips/family/platform/runtime/src/stacks.rs",
+        "clippy::panic",
+        1,
+        "fail-stop on a corrupt `mhartid` read before the interrupt stack exists; no caller input",
+    ),
+    (
+        "chips/family/platform/runtime/src/stacks.rs",
+        "dead_code",
+        3,
+        "the hart's code alone guards / the hart's code alone paints / the hart's vectors alone take the shift",
+    ),
+    (
+        "chips/family/radio/coex/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/modem-clock/src/execution.rs",
+        "clippy::result_large_err",
+        2,
+        "poison retains planner and lease without allocation / poison retains the allocation-free planner",
+    ),
+    (
+        "chips/family/radio/modem-clock/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/modem-clock/src/lib.rs",
+        "clippy::result_large_err",
+        4,
+        "allocation-free failure retains the exact planner and lease owners / allocation-free failure retains the exact planner owner / the poisoned transaction retains the planner and lease without allocation / the poisoned transaction retains the planner without allocation",
+    ),
+    (
+        "chips/family/radio/phy/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/radio/phy/src/lib.rs",
+        "clippy::disallowed_methods",
+        1,
+        "a named settle of at most MAX_MICROS (20 µs), the one busy-wait the execution rules admit",
+    ),
+    (
+        "chips/family/radio/power/src/modem.rs",
+        "clippy::large_enum_variant",
+        1,
+        "retain the planner or poisoned transaction without allocation",
+    ),
+    (
+        "hil/probes/esp32s31-aes-timing/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-boot-smoke/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-boot-smoke/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/main.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/main.rs",
+        "dead_code",
+        1,
+        "the receiver's half is esp32s31-rx-ring's",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/radio.rs",
+        "clippy::too_many_arguments",
+        2,
+        "each is one owner the preparation borrows / each is one owner the start takes or borrows",
+    ),
+    (
+        "hil/probes/esp32s31-case-c-sender/src/radio.rs",
+        "dead_code",
+        2,
+        "the receive ring's probe stops; the sender holds its ring / the receive ring's probe's phase",
+    ),
+    (
+        "hil/probes/esp32s31-facts/src/image.rs",
+        "unsafe_code",
+        1,
+        "standalone probe entry, handler export and retained SRAM",
+    ),
+    (
+        "hil/probes/esp32s31-facts/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-facts/src/main.rs",
+        "unsafe_code",
+        1,
+        "the probe owns its trap entry/exit ABI",
+    ),
+    (
+        "hil/probes/esp32s31-level-wake/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-mcycle/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-peer-overdue/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio-root/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/hardware.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/hardware.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/hardware.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/hardware.rs",
+        "dead_code",
+        1,
+        "shared session also contains the comparison-only entry and retained MAC owner",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/lib.rs",
+        "clippy::disallowed_methods",
+        1,
+        "isolated verification image terminal failure",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/main.rs",
+        "clippy::disallowed_methods",
+        1,
+        "verification image idle entry is never a production runtime",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/session.rs",
+        "dead_code",
+        2,
+        "the staged companion calls this shared session path",
+    ),
+    (
+        "hil/probes/esp32s31-register/src/lib.rs",
+        "clippy::disallowed_methods",
+        1,
+        "isolated verification image terminal failure",
+    ),
+    (
+        "hil/probes/esp32s31-register/src/main.rs",
+        "clippy::disallowed_methods",
+        1,
+        "verification image idle entry is never a production runtime",
+    ),
+    (
+        "hil/probes/esp32s31-rx-ring/src/../../esp32s31-case-c-sender/src/radio.rs",
+        "clippy::too_many_arguments",
+        2,
+        "each is one owner the preparation borrows / each is one owner the start takes or borrows",
+    ),
+    (
+        "hil/probes/esp32s31-rx-ring/src/../../esp32s31-case-c-sender/src/radio.rs",
+        "dead_code",
+        2,
+        "the receive ring's probe stops; the sender holds its ring / the receive ring's probe's phase",
+    ),
+    (
+        "hil/probes/esp32s31-rx-ring/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-rx-ring/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-rx-ring/src/main.rs",
+        "dead_code",
+        1,
+        "the sender's half is esp32s31-case-c-sender's",
+    ),
+    (
+        "hil/scenarios/aes/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::disallowed_macros",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::disallowed_methods",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::expect_used",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::indexing_slicing",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::panic",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/crypto/src/conformance.rs",
+        "clippy::unwrap_used",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/diagnostics/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/diagnostics/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/diagnostics/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/diagnostics/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/diagnostics/src/note.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/memory/src/affine_spsc.rs",
+        "clippy::indexing_slicing",
+        1,
+        "internal invariant: a cursor reduced modulo DEPTH is below DEPTH",
+    ),
+    (
+        "portable/memory/src/affine_spsc.rs",
+        "unsafe_code",
+        5,
+        "bounded SPSC cursor ownership serializes every value slot / queue drop releases every still-published affine value / the audited placement macro initializes every queue field / the single consumer owns this published SPSC slot / the sole producer's permit retains its proven vacant cell",
+    ),
+    (
+        "portable/memory/src/affine_spsc/batched.rs",
+        "unsafe_code",
+        2,
+        "the sole consumer reads a published cell past its released cursor / the sole producer writes a vacant cell past its published cursor",
+    ),
+    (
+        "portable/memory/src/affine_spsc/indexed.rs",
+        "unsafe_code",
+        4,
+        "implementors prove unique affine cell ownership / one published index owns one initialized value / the affine index owns this vacant cell / unique indexed cells use the audited SPSC publication ring",
+    ),
+    (
+        "portable/memory/src/arena.rs",
+        "clippy::mut_from_ref",
+        1,
+        "a claim-once static: the claim makes this the only reference",
+    ),
+    (
+        "portable/memory/src/arena.rs",
+        "unsafe_code",
+        8,
+        "a brand names its one place and its one set / a held buffer's CPU bytes / a held buffer's floor, copied out / a release proof is a claim about the hardware / the borrowed release proof's one constructor / the place's bytes are reached only by custody / the placement proves the address of its static",
+    ),
+    (
+        "portable/memory/src/claim_cell.rs",
+        "unsafe_code",
+        1,
+        "the cell lends or moves its value under one winning exchange",
+    ),
+    (
+        "portable/memory/src/context_cell.rs",
+        "unsafe_code",
+        3,
+        "the owner proves serialization of each cell / the private proof confines access to one context / the proof and borrow flag admit one reference",
+    ),
+    (
+        "portable/memory/src/dma_address.rs",
+        "unsafe_code",
+        2,
+        "the caller promises a placed address / the caller promises a placed layout",
+    ),
+    (
+        "portable/memory/src/dma_bytes.rs",
+        "unsafe_code",
+        1,
+        "memory a DMA engine writes is reached only by volatile copies",
+    ),
+    (
+        "portable/memory/src/execution_context.rs",
+        "unsafe_code",
+        4,
+        "an unavailable context admits no cell access / checked execution entry proves cell access / execution owners establish memory exclusion / non-shareable cells stay on their creating thread",
+    ),
+    (
+        "portable/memory/src/handler_cell.rs",
+        "unsafe_code",
+        3,
+        "the cell carries a reference to its value / the cell lends its value to one call at a time / the winning exchange lends the only reference",
+    ),
+    (
+        "portable/memory/src/indexed_custody.rs",
+        "unsafe_code",
+        10,
+        "affine names serialize each retained cell / consume the sole initialized-cell name / each initialized cell is moved out once / exclusive destruction quarantines retained values / move the cells out of a store whose destructor never runs / retention preserves the same affine index / the affine initialized name owns this cell / the binding proves the private name domain / the domain owns this vacant bounded cell / the quarantine destructor relies on the implementation",
+    ),
+    (
+        "portable/memory/src/init_in_place.rs",
+        "unsafe_code",
+        3,
+        "only the placement macro creates field guards / the guard owns this initialized field / the placement macro owns this field's storage",
+    ),
+    (
+        "portable/memory/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/memory/src/lib.rs",
+        "unsafe_code",
+        5,
+        "TX prepare authority is implemented only by audited DMA owners / TX start authority is implemented only by audited DMA owners / constructor is the audited DMA-address authority boundary / constructor is the single stable-address proof boundary / implementing the stable-address invariant requires an audited pinned pool",
+    ),
+    (
+        "portable/memory/src/link.rs",
+        "unsafe_code",
+        1,
+        "slot owners attest symbol names, kinds and exact ABI types",
+    ),
+    (
+        "portable/memory/src/occupied.rs",
+        "unsafe_code",
+        1,
+        "the handle's borrow of its place is the proof that the place holds a value",
+    ),
+    (
+        "portable/memory/src/once_value.rs",
+        "unsafe_code",
+        4,
+        "Acquire observed the immutable initialized payload / exclusive reset owns the initialized retained value / one immutable value follows Release publication / the winning writer owns the unpublished cell",
+    ),
+    (
+        "portable/memory/src/pinned_tx.rs",
+        "unsafe_code",
+        8,
+        "TX slot exposes its contiguous storage to a typed lease / TX slot state machine is its Sync boundary / metadata wrapper retains the same audited stable DMA owner / network lease uniquely initializes its TX slot / radio lease proves the stable DMA backing contract / radio lease retains the pinned allocation / radio lease uniquely owns its pinned TX slot / wrapper retains the same audited stable DMA owner",
+    ),
+    (
+        "portable/memory/src/placed.rs",
+        "clippy::expect_used",
+        1,
+        "internal invariant: the placement macros project fields of a live parent, whose pointers are non-null",
+    ),
+    (
+        "portable/memory/src/placed.rs",
+        "unsafe_code",
+        1,
+        "the owner tracks initialization of borrowed storage",
+    ),
+    (
+        "portable/memory/src/request_slot.rs",
+        "unsafe_code",
+        7,
+        "ANSWERED grants the unique client the completed exchange / WORKING grants the server exclusive in-place access / the IDLE slot's token holder owns the request place / the WORKING slot's server owns the answer place / the slot's client owns the answer place after ANSWERED / the slot's state protocol gives each payload place one accessor at a time / the state protocol grants exclusive access to the initialized request",
+    ),
+    (
+        "portable/memory/src/retained.rs",
+        "clippy::new_without_default",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/memory/src/retained.rs",
+        "unsafe_code",
+        1,
+        "reading retained memory as a value needs the any-bits promise",
+    ),
+    (
+        "portable/memory/src/return_bank.rs",
+        "unsafe_code",
+        4,
+        "exclusive destruction owns the still-available value / the available cell or its affine return token owns each value / the successful CAS transfers the initialized value / the unique token owns this unavailable cell",
+    ),
+    (
+        "portable/memory/src/rx_external_handoff.rs",
+        "unsafe_code",
+        15,
+        "a non-free slot holds its binding / affine external buffer may cross executor cores / affine external buffer owns this range / affine lease uniquely owns external bytes / an adopter returns the slot it took out of its affine lease / chip DMA storage establishes the stable detached-buffer proof / free slot exclusively owns binding removal / live lease retains external slot ownership / non-free slot retains its external binding / slot owner exclusively mutates range metadata / slot state exclusively owns binding mutation / slot state machine is the external pool Sync boundary",
+    ),
+    (
+        "portable/memory/src/rx_handoff.rs",
+        "unsafe_code",
+        4,
+        "RX handoff state machine is its Sync boundary / network lease uniquely owns its RX slot / network lease uniquely retains its RX slot / radio lease uniquely owns its RX slot",
+    ),
+    (
+        "portable/memory/src/static_place.rs",
+        "unsafe_code",
+        1,
+        "static backing is claimed permanently before its type is lent",
+    ),
+    (
+        "portable/memory/src/static_ref.rs",
+        "unsafe_code",
+        1,
+        "an atomic pointer is the lock-free form of a static reference",
+    ),
+    (
+        "portable/memory/src/volatile.rs",
+        "unsafe_code",
+        2,
+        "a volatile load of a shared borrow / a volatile store through an exclusive borrow",
+    ),
+    (
+        "portable/memory/src/volatile_cell.rs",
+        "unsafe_code",
+        1,
+        "the volatile accesses of a cell's own value",
+    ),
+    (
+        "portable/memory/src/zeroed.rs",
+        "clippy::expect_used",
+        1,
+        "documented panic: a second claim of a once-claimed static is a defect of the caller",
+    ),
+    (
+        "portable/memory/src/zeroed.rs",
+        "clippy::mut_from_ref",
+        1,
+        "a take-once cell: the swap of `taken` makes this the only reference",
+    ),
+    (
+        "portable/memory/src/zeroed.rs",
+        "unsafe_code",
+        6,
+        "a ready cell owns its value / the cell hands its value to one claimant / the first claimant receives the only reference / the value is read only after its publication / the value is shared only once written / the winning exchange is the only writer",
+    ),
+    (
+        "portable/mmio/src/lib.rs",
+        "clippy::type_complexity",
+        1,
+        "the refusal returns both parts unchanged",
+    ),
+    (
+        "portable/mmio/src/lib.rs",
+        "non_snake_case",
+        1,
+        "one binding per part type",
+    ),
+    (
+        "portable/mmio/src/lib.rs",
+        "unsafe_code",
+        3,
+        "the caller promises exclusive registers / the two volatile operations on checked register bytes / the two volatile operations on checked register words",
+    ),
+    (
+        "portable/riscv/src/hart.rs",
+        "unsafe_code",
+        1,
+        "the promise of code that runs on its hart by construction",
+    ),
+    (
+        "portable/riscv/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/riscv/src/lib.rs",
+        "unsafe_code",
+        4,
+        "an ordering instruction / architectural CSR and wait instructions",
+    ),
+    (
+        "portable/time/src/connected_tasks.rs",
+        "async_fn_in_trait",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "portable/time/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/trace-recorder/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/trace-recorder/src/store.rs",
+        "dead_code",
+        3,
+        "only recording images write",
+    ),
+    (
+        "portable/trace/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "portable/waker/src/lib.rs",
+        "unsafe_code",
+        6,
+        "the caller holds the cell / the destructor holds the cell exclusively / the waker is reached only under the state word / the winning exchange holds the waker / the winning fetch holds the waker",
+    ),
+    (
+        "portable/wire/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R4 cleans the wire (tasks/312)",
+    ),
+    (
+        "protocols/bluetooth/hci/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/hil/agent/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/hil/agent/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/hil/protocol/src/key.rs",
+        "unused_doc_comments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/hil/protocol/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/lib.rs",
+        "missing_docs",
+        3,
+        "preserve the carried service vocabulary's documentation coverage",
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/owner.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the fields of a MAC header",
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the owned transition retains the arbiter inline without requiring an allocator",
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs",
+        "clippy::result_large_err",
+        1,
+        "a missing gate terminal returns the complete affine bank without allocation",
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/engine/receive.rs",
+        "clippy::too_many_arguments",
+        2,
+        "the round, the reorder, the network's room and end, the controller and the links / the round, the unit, the network's room and end, the controller, the links, the clock and its place",
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/engine/receive/pressure.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the unit, its need, link and place, the port's places, the clock and the room",
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/datapath/src/plane.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the port, its facts, its gate and instant, the next plan, the network's return and the events",
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/beacon.rs",
+        "clippy::too_many_arguments",
+        2,
+        "each beacon field is an independent 802.11 input the caller owns",
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs",
+        "clippy::large_enum_variant",
+        2,
+        "the next message moves once, by value, to its transmission / the retransmission moves once, by value, to its transmission",
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs",
+        "clippy::result_large_err",
+        3,
+        "refusal returns the complete affine session without allocation / scheduling refusal retains the complete session / validation returns the original requester",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the link moves by value from the station to its holder once per connection; the station has no allocator",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        "clippy::large_enum_variant",
+        4,
+        "one bounded EAPOL response is owned in place; the station has no allocator / phase payloads stay resident and are never passed through transitions by value / sub-limit variant initializers stay affine without an allocator / the key-unwrap request owns its bounded buffer by value; the station has no allocator",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        "clippy::new_without_default",
+        1,
+        "the proof is made in a const item, not by a default value",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        "clippy::result_large_err",
+        1,
+        "a refused profile returns by value so its secrets stay with their owner",
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/deferred_eapol.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the two affine frame places are bounded and owned in place without allocation",
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/frames/transmit.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",
+        "clippy::too_many_arguments",
+        3,
+        "the frame's owner, view and metadata, the caller's room and event sink / the validated action's fields, the caller's event sink and where released frames go",
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::disallowed_macros",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::disallowed_methods",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::panic",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/conformance/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "the suite's checks are assertions over a test's port",
+    ),
+    (
+        "protocols/ieee80211/testing/model/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the frame writer keeps each independently reviewed 802.11 field explicit at its boundary",
+    ),
+    (
+        "protocols/ieee80211/wire/src/beacon.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the frame writer keeps the caller-owned local profile and independent 802.11 fields explicit",
+    ),
+    (
+        "protocols/ieee80211/wire/src/beacon.rs",
+        "unused_assignments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/ieee80211/wire/src/data.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the fields of a MAC header",
+    ),
+    (
+        "protocols/ieee80211/wire/src/ftm.rs",
+        "clippy::too_many_arguments",
+        1,
+        "the constructor mirrors the finite standard element fields",
+    ),
+    (
+        "protocols/ieee80211/wire/src/fuzz.rs",
+        "clippy::should_implement_trait",
+        1,
+        "an endless generator, not an iterator",
+    ),
+    (
+        "protocols/ieee80211/wire/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R4 cleans the wire (tasks/312)",
+    ),
+    (
+        "protocols/ieee80211/wire/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "R4 cleans the wire (tasks/312)",
+    ),
+    (
+        "protocols/network/core/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/network/runtime/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/network/runtime/src/service.rs",
+        "clippy::type_complexity",
+        1,
+        "the service's end hands on each owner it held",
+    ),
+    (
+        "protocols/network/wire/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R4 cleans the wire (tasks/312)",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::disallowed_macros",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::disallowed_methods",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::expect_used",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::panic",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::unreachable",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/conformance.rs",
+        "clippy::unwrap_used",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "protocols/radio/port/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/radio/port/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "protocols/radio/port/src/pool.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "a pool holds at most 256 tokens",
+    ),
+    (
+        "protocols/radio/port/src/work.rs",
+        "clippy::should_implement_trait",
+        1,
+        "the allocator never ends and yields any identity type",
+    ),
+    (
+        "protocols/radio/regulatory/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "R3 cleans the cores and the contracts (tasks/312)",
+    ),
+    (
+        "tools/analysis/blobray-analysis/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-analysis/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-analysis/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/code_coverage.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/library.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/library/queries.rs",
+        "clippy::too_many_arguments",
+        3,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/library/summaries.rs",
+        "clippy::too_many_arguments",
+        6,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/linking.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/linking/proposal.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/mmio_diff.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-application/src/registers.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/blobray-artifacts/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-linker/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-riscv/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-riscv/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-riscv/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-verification/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/elf/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/elf/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/elf/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/stack_context.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/tables.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/values.rs",
+        "clippy::too_many_arguments",
+        4,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/values/alignment.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/values/alignment/relations.rs",
+        "clippy::too_many_arguments",
+        4,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/values/contextual.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/values/word.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/writes.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/writes/context.rs",
+        "clippy::too_many_arguments",
+        3,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/writes/word.rs",
+        "clippy::too_many_arguments",
+        5,
+        "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-lift/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-program/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/hil/harness/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/hil/link/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/build/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/checks/src/interrupts/code.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/image/checks/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/checks/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/cli/src/main.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/cli/src/main.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/cli/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/large-values/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/large-values/src/main.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/cha.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/image/stack/src/cha/audit.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/image/stack/src/dwarf.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/image/stack/src/dwarf/locations.rs",
+        "clippy::too_many_arguments",
+        2,
+        "unknown, to read",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::too_many_arguments",
+        3,
+        "unknown, to read",
+    ),
+    (
+        "tools/lab/arbiter/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/arbiter/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/arbiter/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/board/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/cli/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/cli/src/main.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/cli/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/client/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/dtm.rs",
+        "unexpected_cfgs",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-probe/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-probe/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/router/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/service/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/service/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/durable/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/process/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/process/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/process/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/process/src/lib.rs",
+        "unsafe_code",
+        4,
+        "adopts the inherited lease descriptor and clears its variable / forks the guardian process over a pipe / pre-exec child setup calls async-signal-safe libc / signals the owned process group",
+    ),
+    (
+        "tools/os/process/src/linux_socket.rs",
+        "unsafe_code",
+        6,
+        "rustix binds foreign address types through SocketAddrArg / rustix has no Bluetooth socket options / rustix has no SO_BINDTODEVICE option / rustix has no SO_MEMINFO option",
+    ),
+    (
+        "tools/os/serial/src/lib.rs",
+        "unsafe_code",
+        1,
+        "adopts the port descriptor serialport hands over",
+    ),
+    (
+        "tools/pins/artifacts/src/artifacts/conformance.rs",
+        "dead_code",
+        1,
+        "the test assembles each suite for it",
+    ),
+    (
+        "tools/pins/artifacts/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/generate/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/generate/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/model/src/chip_model/facts.rs",
+        "clippy::too_many_arguments",
+        1,
+        "one pointer fact and the facts it is checked against",
+    ),
+    (
+        "tools/registers/model/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/model/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/model/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/regulatory/generate/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/regulatory/generate/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/test/ui-cases/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "a test runner reports a broken case by panicking with its name",
+    ),
+    (
+        "tools/test/ui-cases/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/test/ui-cases/src/lib.rs",
+        "clippy::panic",
+        1,
+        "a test runner reports a broken case by panicking with its name",
+    ),
+    (
+        "tools/vendor/cli/src/copies.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/vendor/cli/src/main.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/cli/src/main.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/provenance/src/registry.rs",
+        "clippy::type_complexity",
+        1,
+        "read once and split by the survey",
+    ),
+    (
+        "tools/vendor/scenario/src/esp32s31/phy/i2c.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::cast_possible_truncation",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::cast_possible_wrap",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::cast_sign_loss",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::let_underscore_must_use",
+        1,
+        "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/phy/mod.rs",
+        "clippy::too_many_arguments",
+        1,
+        "unknown, to read",
     ),
 ];

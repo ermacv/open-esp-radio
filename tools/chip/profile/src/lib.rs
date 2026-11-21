@@ -11,7 +11,13 @@
 //! where its directory does.
 //! Host tools resolve a chip through [`Profile::load`] instead of matching
 //! chip names, so an unknown chip is refused with the supported ones.
-
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![forbid(unsafe_code)]
 
 use std::{

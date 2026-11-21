@@ -1,4 +1,8 @@
 //! Narrow privileged entry point: no shell, arbitrary opcodes or output paths.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 #[cfg(target_os = "linux")]

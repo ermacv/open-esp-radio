@@ -2,7 +2,10 @@
 //! `chips/<chip>/vendor/artifacts.toml` (sources, artifacts, the SHA-256 of
 //! each fetched one) and where a pinned artifact lies in a checkout.
 //! Fetching and the host-wide store are `oer-tools-pins-artifacts`.
-
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 pub mod artifacts;
 pub mod provenance;

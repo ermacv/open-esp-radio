@@ -22,7 +22,10 @@
 //!
 //! `ui_reject` needs no check-cfg registration: case files are no target of
 //! any ordinary build, and both generated copies have the cfg rewritten.
-
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 #![allow(
     clippy::panic,

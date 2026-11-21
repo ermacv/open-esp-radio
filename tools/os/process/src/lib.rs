@@ -1,3 +1,15 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 //! Direct subprocess arguments and owned command lifetimes, without a shell;

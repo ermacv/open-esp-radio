@@ -1,5 +1,16 @@
 //! Command-line adapter for Blobray operations that run in this process.
-
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use clap::{Parser, Subcommand, ValueEnum};

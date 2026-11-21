@@ -1,3 +1,7 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R4 cleans the wire (tasks/312)"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(

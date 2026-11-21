@@ -1,3 +1,7 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R3 cleans the cores and the contracts (tasks/312)"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]

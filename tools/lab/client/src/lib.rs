@@ -3,6 +3,10 @@
 //! holds its lease by ([`client`]). `cargo fw`, `cargo hil` and `cargo
 //! stand` depend on this crate alone; the service's scheduler and drivers
 //! stay out of their builds.
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 pub mod client;

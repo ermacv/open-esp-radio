@@ -1,3 +1,10 @@
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::let_underscore_must_use,
+        reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+    )
+)]
 #![cfg(target_arch = "riscv32")]
 #![no_std]
 #![feature(type_alias_impl_trait)]

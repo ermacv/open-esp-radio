@@ -1,3 +1,19 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+)]
+#![expect(
+    clippy::cast_possible_wrap,
+    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "R2 cleans the HAL and the PHY by area (tasks/312)"
+)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]

@@ -1,3 +1,7 @@
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/312)"
+)]
 #![deny(
     clippy::panic,
     clippy::unwrap_used,

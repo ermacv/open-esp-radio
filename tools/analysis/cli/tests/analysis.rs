@@ -1,5 +1,12 @@
 //! Function analysis of captured libraries in process: graphs, values,
 //! references, gaps and budgets of one function `entry`.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 #![cfg(target_os = "linux")]
 #[allow(dead_code)]
 mod support;

@@ -17,6 +17,17 @@
 //! the scenario's verdict: 0 when every case passed, 1 when one failed, 2
 //! when one could not finish (the stand, the link, an unconfirmed request
 //! or a cancellation) and none failed, or when the finish was not clean.
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 
 use std::{process::ExitCode, time::Duration};

@@ -1,3 +1,10 @@
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::cast_possible_truncation,
+        reason = "R2 cleans a probe with the area it reads (tasks/312)"
+    )
+)]
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 #![forbid(unsafe_code)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]

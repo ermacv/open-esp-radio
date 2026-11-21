@@ -1,4 +1,12 @@
 //! Privileged, finite probe generator. It never reconfigures the managed peer.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::let_underscore_must_use,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![forbid(unsafe_code)]
 #[cfg(any(target_os = "linux", test))]
 use oer_tools_lab_fixture::probe::frame;

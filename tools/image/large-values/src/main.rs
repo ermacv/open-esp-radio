@@ -1,4 +1,12 @@
 //! A workspace compiler wrapper. Reporting never changes the compiler verdict.
+#![expect(
+    clippy::cast_possible_truncation,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
+#![expect(
+    clippy::cast_sign_loss,
+    reason = "host tool: the rule covers the code an image reaches"
+)]
 #![feature(rustc_private)]
 #![forbid(unsafe_code)]
 

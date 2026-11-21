@@ -1,3 +1,17 @@
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_possible_wrap,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::cast_sign_loss,
+        reason = "test code: a cast or a dropped result in a test loses no product's value"
+    )
+)]
 use oer_tools_probe_macros::probe;
 
 fn with_owner<R>(call: impl FnOnce(&mut [u32; 2]) -> R) -> R {
