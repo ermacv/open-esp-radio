@@ -125,28 +125,29 @@ impl MacHeTbLinkReservation {
     /// `libpp[hal_he_common.o]::hal_he_get_mplen_addr_start,libpp[hal_he_common.o]::hal_he_get_mplen_addr_end` and the
     /// corresponding ROM leaves. The single-TID layout differs from all
     /// other policies.
-    pub const fn for_queue(policy: MacHeTbTidLimit, queue: u8, count: u8) -> Option<Self> {
+    pub const fn for_queue(
+        policy: MacHeTbTidLimit,
+        queue: Index<{ ORDINARY_QUEUE_COUNT as usize }>,
+        count: u8,
+    ) -> Option<Self> {
         if count == 0 {
             return None;
         }
-        let (first, last) = match (policy, queue) {
-            (MacHeTbTidLimit::One, 0) => (64, 81),
-            (MacHeTbTidLimit::One, 1) => (82, 99),
-            (MacHeTbTidLimit::One, 2) => (0, 63),
-            (MacHeTbTidLimit::One, 3) => (100, 117),
-            (_, 0) => (32, 63),
-            (_, 1) => (64, 95),
-            (_, 2) => (0, 31),
-            (_, 3) => (96, 119),
-            _ => return None,
+        let single = matches!(policy, MacHeTbTidLimit::One);
+        // Each range's first entry and its capacity, by the blob's tables.
+        let (first, capacity): (MacHeTbLink, u8) = match (single, queue.get()) {
+            (true, 0) => (Index::constant::<64>(), 18),
+            (true, 1) => (Index::constant::<82>(), 18),
+            (true, 2) => (Index::constant::<0>(), 64),
+            (true, _) => (Index::constant::<100>(), 18),
+            (false, 0) => (Index::constant::<32>(), 32),
+            (false, 1) => (Index::constant::<64>(), 32),
+            (false, 2) => (Index::constant::<0>(), 32),
+            (false, _) => (Index::constant::<96>(), 24),
         };
-        if count > last - first + 1 {
+        if count > capacity {
             return None;
         }
-        let (Ok(queue), Ok(first)) = (Index::new(queue as usize), Index::new(first as usize))
-        else {
-            return None;
-        };
         Some(Self {
             queue,
             first,
@@ -154,9 +155,8 @@ impl MacHeTbLinkReservation {
         })
     }
 
-    pub const fn queue(self) -> u8 {
-        // Below four: the low byte is the whole index.
-        self.queue.get().to_le_bytes()[0]
+    pub const fn queue(self) -> Index<{ ORDINARY_QUEUE_COUNT as usize }> {
+        self.queue
     }
 
     pub const fn first(self) -> u8 {
@@ -503,7 +503,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let control = status.read_he_buffer_status_control();
 
         MacHeTriggerTxQueueSnapshot {
-            logical_queue: reservation.queue(),
+            logical_queue: reservation.queue.get().to_le_bytes()[0],
             tid: byte(queue_control.tid()),
             trigger_based_enabled: queue_control.trigger_based_enable(),
             mu_edca_timer_select: byte(queue_control.mu_edca_timer_select()),

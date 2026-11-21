@@ -10,6 +10,17 @@ pub use oer_chips_esp32s31_pac::wifi_mac::dictionaries::Interface as MacInterfac
 
 /// The interface's selector in a TX queue's `PLCP1.BSSID_SELECT`, which the
 /// model leaves a number: the HAL writes the interface's own value there.
+///
+/// SOURCE: `libpp[hal_mac_tx.o]::mac_tx_set_plcp1+0x38..0x46` (pinned
+/// `esp32-wifi-lib@f856b5db`, `libpp.a` SHA-256 `4b9cd74b…`) stores bits
+/// 24:17 from one byte of the frame's control block (`+0x10`): the key
+/// entry index in its low six bits, this selector in its top two;
+/// `libpp[hal_debug.o]::dbg_read_key_entry` prints bits 24:23 as
+/// `bssid_sel`. The vendor's station frames carry zero there
+/// (`HIL_VENDOR_HE20_MCS0_DCM_RAW_2026_07_29`, PLCP1 `0x0401a000`). That
+/// the selector is the interface's value for every interface is the HAL's
+/// reading, not a vendor record: no capture of an access point's frame
+/// establishes selector one.
 pub(crate) const fn interface_bssid_select(
     interface: MacInterface,
 ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::wifi_mac::plcp1::BSSID_SELECT_WIDTH }> {

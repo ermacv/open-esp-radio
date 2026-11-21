@@ -44,9 +44,12 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
     let expected = [(32, 32), (64, 32), (0, 32), (96, 24)];
     let mut seen = [false; 120];
     for (queue, (first, capacity)) in expected.into_iter().enumerate() {
-        let reservation =
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, queue as u8, capacity)
-                .unwrap();
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::Three,
+            Index::new(queue).unwrap(),
+            capacity,
+        )
+        .unwrap();
         assert_eq!(reservation.first(), first);
         assert_eq!(reservation.count(), capacity);
         for position in 0..capacity {
@@ -70,13 +73,21 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
 fn single_tid_trigger_link_ranges_match_the_blob_tables() {
     let expected = [(64, 18), (82, 18), (0, 64), (100, 18)];
     for (queue, (first, capacity)) in expected.into_iter().enumerate() {
-        let reservation =
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::One, queue as u8, capacity).unwrap();
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::One,
+            Index::new(queue).unwrap(),
+            capacity,
+        )
+        .unwrap();
         assert_eq!(reservation.first(), first);
         assert_eq!(reservation.count(), capacity);
         assert!(
-            MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::One, queue as u8, capacity + 1)
-                .is_none()
+            MacHeTbLinkReservation::for_queue(
+                MacHeTbTidLimit::One,
+                Index::new(queue).unwrap(),
+                capacity + 1
+            )
+            .is_none()
         );
     }
 }
@@ -84,7 +95,8 @@ fn single_tid_trigger_link_ranges_match_the_blob_tables() {
 use crate::radio::ieee80211::registers::{HostWords, element};
 
 fn reservation() -> MacHeTbLinkReservation {
-    MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, 1, 3).expect("a queue-one range")
+    MacHeTbLinkReservation::for_queue(MacHeTbTidLimit::Three, Index::constant::<1>(), 3)
+        .expect("a queue-one range")
 }
 
 #[test]
@@ -614,4 +626,23 @@ fn a_tid_holds_the_eight_values_of_its_field() {
         assert_eq!(MacHeTid::new(value).map(MacHeTid::value), Some(value));
     }
     assert_eq!(MacHeTid::new(8), None);
+}
+
+/// Logical queue `q` lives in physical bank `3 - q`: each queue's
+/// reservation publishes its tail in its own bank and no other.
+#[test]
+fn each_ordinary_queues_reservation_uses_the_bank_of_its_queue() {
+    for (queue, bank) in [(0, 3), (1, 2), (2, 1), (3, 0)] {
+        let reservation = MacHeTbLinkReservation::for_queue(
+            MacHeTbTidLimit::Three,
+            Index::new(queue).unwrap(),
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            super::reservation_bank(reservation).get(),
+            bank,
+            "queue {queue}"
+        );
+    }
 }
