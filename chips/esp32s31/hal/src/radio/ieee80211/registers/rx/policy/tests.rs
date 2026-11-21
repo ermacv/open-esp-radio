@@ -1,6 +1,7 @@
 //! The receive-policy transitions over host memory: what each writes and
 //! what it keeps.
 
+use crate::radio::ieee80211::registers::interface_index;
 use oer_chips_esp32s31_pac::{instances, wifi_mac::WifiMacInterfaceAddress};
 
 use super::{
@@ -25,7 +26,7 @@ fn the_cold_policy_clears_the_first_three_interfaces_and_keeps_their_high_bits()
         MacInterface::AccessPoint,
         MacInterface::Context2,
     ] {
-        let high = block.read_address_high(interface.index());
+        let high = block.read_address_high(interface_index(interface));
         assert_eq!(high.bytes_4_5(), 0, "{interface:?} address bytes cleared");
         assert!(high.rx_policy_enable(), "{interface:?} enable kept");
         assert_ne!(
@@ -34,7 +35,7 @@ fn the_cold_policy_clears_the_first_three_interfaces_and_keeps_their_high_bits()
             "{interface:?} opaque bits kept"
         );
     }
-    let fourth = block.read_address_high(MacInterface::Context3.index());
+    let fourth = block.read_address_high(interface_index(MacInterface::Context3));
     assert_eq!(fourth.bytes_4_5(), u16::MAX, "queue three has no context");
     drop(block);
     // Each of the first three high words lost only its address bytes.
@@ -245,7 +246,7 @@ fn ap_receive_policy_snapshot<M: MacPlacement>(
         interface_is_soft_ap: bssid_high.interface_is_soft_ap(),
         interface_rx_policy_enabled: registers
             .interface
-            .read_address_high(MacInterface::AccessPoint.index())
+            .read_address_high(interface_index(MacInterface::AccessPoint))
             .rx_policy_enable(),
     }
 }
@@ -259,7 +260,7 @@ fn sta_receive_policy_snapshot<M: MacPlacement>(
     let bssid_high = bssids.read_bssid_high(STATION);
     let interface = registers
         .interface
-        .read_address_high(MacInterface::Station.index());
+        .read_address_high(interface_index(MacInterface::Station));
 
     let bssid = bssid(bssids, STATION);
     let beacon_filter = registers

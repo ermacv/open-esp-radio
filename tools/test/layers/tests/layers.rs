@@ -5807,9 +5807,14 @@ fn kept_out_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     found.then_some(word)
 }
 
-/// S7: a compatibility layer: a renamed re-export, `pub use … as …`.
+/// S7: a compatibility layer: a renamed re-export, `pub use … as …`. A
+/// publication of a generated name (a path from a PAC crate, `…_pac::`) is
+/// the HAL's API taking that name, not a layer kept for old callers.
 fn compatibility_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     if ident_at(tokens, at)? != "use" {
+        return None;
+    }
+    if ident_at(tokens, at + 1).is_some_and(|root| root.ends_with("_pac")) {
         return None;
     }
     let public = ident_at(tokens, at.checked_sub(1)?).is_some_and(|word| word == "pub")
@@ -6419,12 +6424,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 1, BY_PHY),
-    (
-        "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
-        1,
-        BY_NONE,
-    ),
     ("chips/esp32s31/radio/phy/src/lib.rs", 1, BY_PHY),
     ("chips/esp32s31/radio/phy/src/target_port.rs", 1, BY_PHY),
     ("chips/esp32s31/radio/phy/src/tracking.rs", 2, BY_PHY),
@@ -6485,18 +6484,8 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         BY_R2,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/init.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        4,
-        BY_R2,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
-        2,
+        1,
         BY_R2,
     ),
     (
@@ -6612,7 +6601,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        3,
+        1,
         BY_P3,
     ),
     (
@@ -7113,6 +7102,7 @@ pub enum StartError { AlreadyRunning, NotStarted, Device }
 pub enum PollStep { Done, Failed }
 pub enum Quiet { Running }
 pub use inner::Thing as Other;
+pub use oer_chips_esp32s31_pac::wifi_mac::dictionaries::Interface as MacInterface;
 #[serde(default)]
 pub struct Config { #[deprecated] old: u8 }
 fn f(cell: &mut Option<u8>, r: Result<u8, ()>) -> Result<u8, ()> {

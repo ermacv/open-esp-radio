@@ -460,17 +460,6 @@ pub(crate) fn interrupt_banks(
 pub(crate) const ORDINARY_QUEUE_COUNT: u8 =
     oer_chips_esp32s31_pac::wifi_mac::control_n::COUNT as u8;
 
-/// The physical bank of ordinary logical queue `queue`, if it is one.
-pub(crate) const fn ordinary_bank(queue: u8) -> Option<Index<4>> {
-    match queue {
-        0 => Some(Index::constant::<3>()),
-        1 => Some(Index::constant::<2>()),
-        2 => Some(Index::constant::<1>()),
-        3 => Some(Index::constant::<0>()),
-        _ => None,
-    }
-}
-
 /// Element `position` of an `N`-element register array; `position` is below
 /// `N` by its caller's loop or table.
 pub(crate) const fn element<const N: usize>(position: usize) -> Index<N> {

@@ -2,7 +2,7 @@
 
 use oer_portable_mmio::Bits;
 
-use super::super::{MacPlacement, MacPti, WifiRadioRegisters, bits, byte};
+use super::super::{MacPlacement, MacPti, WifiRadioRegisters, byte};
 
 /// Live value-only projection of the cold MAC coexistence priorities.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,7 +105,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_multi_target_1(pti(multi_target_1));
         });
         coex.modify_beamforming(|w| {
-            w.set_multi_target_0(bits(u32::from(multi_target_0)));
+            w.set_multi_target_0(Bits::from(multi_target_0));
         });
     }
 }

@@ -7776,7 +7776,7 @@ write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
 name = "INTERFACE"
-values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
+values = { dictionary = "INTERFACE" }
 bits = "17:16"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -11475,7 +11475,7 @@ write-range = { min = 0x0, max = 0x3ff }
 
 [[registers.fields]]
 name = "INTERFACE"
-values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
+values = { dictionary = "INTERFACE" }
 bits = "23:22"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -12345,7 +12345,7 @@ write-range = { min = 0x0, max = 0xffff }
 
 [[registers.fields]]
 name = "INTERFACE"
-values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
+values = { dictionary = "INTERFACE" }
 bits = "17:16"
 class = "plain"
 write-range = { min = 0x0, max = 0x3 }
@@ -14960,7 +14960,7 @@ write-range = { min = 0x0, max = 0x7 }
 
 [[registers.fields]]
 name = "INTERFACE"
-values = [{ name = "STATION", value = 0 }, { name = "ACCESS_POINT", value = 1 }, { name = "CONTEXT_2", value = 2 }, { name = "CONTEXT_3", value = 3 }]
+values = { dictionary = "INTERFACE" }
 bits = "25:24"
 class = "plain"
 description = "Interface the key belongs to: 0 station, 1 access point."
@@ -15128,3 +15128,10 @@ description = "An ER-SU ACK rate byte: the ordinary rate, or the extended-range 
 width = 8
 values = [{ name = "ORDINARY", value = 0x80, description = "The ordinary ACK rate (hal_he_set_ersu_ack_rate argument zero).", sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }, { name = "EXTENDED_RANGE", value = 0xa0, description = "The extended-range ACK rate (hal_he_set_ersu_ack_rate argument nonzero).", sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"] }]
 sources = ["BLOB_LIBPP_HAL_HE_INIT_SUFFIX", "BLOB_LIBPP_HAL_BF_CONFIG"]
+
+[[dictionaries]]
+name = "INTERFACE"
+description = "A MAC interface selector: the hardware context a TX queue, a receive BlockAck agreement or a key belongs to. The address, BSSID, crypto, TX and receive BlockAck transactions share it."
+width = 2
+values = [{ name = "STATION", value = 0x0, description = "The infrastructure-station context, traced from the vendor's station callers.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"] }, { name = "ACCESS_POINT", value = 0x1, description = "The SoftAP context, traced from the vendor's access-point callers.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"] }, { name = "CONTEXT_2", value = 0x2, description = "The third selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }, { name = "CONTEXT_3", value = 0x3, description = "The fourth selector the EDCA and receive BlockAck leaves accept; its protocol role is not assigned.", sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"] }]
+sources = ["BLOB_LIBPP_HAL_MAC_TX", "BLOB_LIBCOEX_PTI_TABLE", "BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK", "BLOB_LIBPP_HAL_CRYPTO"]

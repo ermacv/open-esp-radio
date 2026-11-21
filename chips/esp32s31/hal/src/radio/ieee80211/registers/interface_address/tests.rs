@@ -1,5 +1,6 @@
 //! The receive-interface address publication over host memory.
 
+use crate::radio::ieee80211::registers::interface_index;
 use oer_chips_esp32s31_pac::wifi_mac::{address_high, address_low};
 
 use crate::radio::ieee80211::registers::{HostWords, MacInterface};
@@ -36,7 +37,7 @@ fn an_interface_address_is_stored_whole_and_then_enabled() {
     let high = owners
         .registers
         .interface
-        .read_address_high(MacInterface::AccessPoint.index());
+        .read_address_high(interface_index(MacInterface::AccessPoint));
     assert_eq!(high.bytes_4_5(), 0x5544);
     assert!(high.rx_policy_enable());
     assert_eq!(high.bits_17_31_opaque().get(), 0);

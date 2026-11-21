@@ -263,7 +263,7 @@ pub(crate) fn configure_edca<P: Placement>(
         writer.set_contention_window(contention_window);
     });
     registers.modify_config(bank, |writer| {
-        writer.set_interface(interface.config());
+        writer.set_interface(interface);
     });
 }
 
