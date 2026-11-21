@@ -4,29 +4,13 @@
 )]
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 #![cfg_attr(
     test,
     allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::indexing_slicing,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects,
+        clippy::disallowed_methods,
         clippy::disallowed_macros,
-        clippy::disallowed_methods
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
     )
 )]
 //! Target-neutral control and evidence protocol for hardware-in-the-loop tests.

@@ -8,6 +8,11 @@
     reason = "host tool: the rule covers the code an image reaches"
 )]
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 #[cfg(any(target_os = "linux", test))]
 use oer_tools_lab_fixture::probe::frame;
 #[cfg(target_os = "linux")]

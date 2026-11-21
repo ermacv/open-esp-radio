@@ -2,7 +2,11 @@
 //! owner with points compiles, for the firmware target and with the firmware
 //! profile's code generation, to the same assembly as the owner without them.
 #![forbid(unsafe_code)]
-#![allow(clippy::disallowed_macros, clippy::expect_used)]
+#![allow(
+    clippy::disallowed_macros,
+    clippy::expect_used,
+    reason = "test code: a test may panic"
+)]
 
 use std::{fs, path::Path, process::Command};
 

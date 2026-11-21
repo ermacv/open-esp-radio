@@ -5,18 +5,6 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![deny(
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 //! The vocabulary of the Espressif analog register space: a field of one
 //! byte register, the block codes, the byte addresses, the two hosts of the
 //! analog I2C master and the routes a chip's model gives each block.
@@ -27,6 +15,15 @@
 
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 /// Bits `msb..=lsb` of one analog byte register.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

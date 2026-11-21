@@ -1,9 +1,3 @@
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    clippy::unreachable
-)]
 use super::*;
 
 fn rsn(pairwise: u8, akm: u8, capabilities: u16) -> [u8; 22] {

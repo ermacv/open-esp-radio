@@ -7,13 +7,19 @@
 )]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
 )]
 
 //! Staged-boot layout contract of the Espressif chips.

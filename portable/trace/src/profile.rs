@@ -329,12 +329,6 @@ impl<const N: usize> Default for Thinning<N> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::disallowed_methods,
-    clippy::disallowed_macros
-)]
 mod tests {
     extern crate std;
     use super::*;

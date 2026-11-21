@@ -140,13 +140,18 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   overflow, invalid division and panicking core methods return typed errors
   instead. They never depend on fatal, reset or retained-record owners and
   never reset.
-- **Panic lints.** New panic-lint `allow` and `expect` attributes are
-  test-only. A crate moves each clean panic lint to crate-root `deny` in the
-  PR that clears it, keeping workspace lint inheritance. Workspace
-  `disallowed_methods` stays `deny`; `disallowed_macros` keeps its default
-  level. Every local Clippy configuration retains all common method bans; a
-  cleaned sans-IO crate's `clippy.toml` holds the union described in
-  [docs/unsafe.md](docs/unsafe.md) before it denies both lints at its root.
+- **Panic lints.** The workspace lint table denies the panic lints for every
+  package, and no crate states them again. A package with sites left expects
+  a lint at its crate root, naming the step that removes them; a host tool
+  expects with the reason "host tool"; a change adds no expectation to a
+  clean package. Tests may panic: a crate root carries one `cfg_attr(test,
+  allow(…))` line for what Clippy's in-tests options do not cover.
+  `disallowed_methods` is never allowed or expected at a crate root or for a
+  module: tests take it by the one test line, and a production site allows
+  it only at the method's own home, with its reason. Every local Clippy
+  configuration retains all common method bans; a cleaned sans-IO crate's
+  `clippy.toml` holds the union described in
+  [docs/unsafe.md](docs/unsafe.md).
 - **Terminal decisions.** A reset or a runtime panic exists only at the
   hardware level, behind a proof marked `HW_PANIC_SOURCE: <name>` at the site
   and named in `[proofs]` of `tools/test/layers/terminal-sites.toml`. The

@@ -1,3 +1,9 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test code: a test may panic"
+)]
 //! Structural rules read from package manifests and sources: names, the
 //! unsafe boundary, layer roles and their dependencies, protocol core/runtime
 //! isolation from backends, and the HAL's atoms (`README.md`).
@@ -683,50 +689,18 @@ fn every_clippy_config_retains_all_common_method_bans() {
     );
 }
 
-fn requires_sans_io_catalogue(source: &str) -> bool {
-    ["clippy::disallowed_methods", "clippy::disallowed_macros"]
-        .iter()
-        .all(|lint| root_lint(source, "deny", lint))
-}
-
 #[test]
-fn both_explicit_root_denies_mark_a_cleaned_sans_io_crate() {
-    for source in [
-        "#![deny(clippy::disallowed_methods, clippy::disallowed_macros)]",
-        "#![deny(clippy::disallowed_methods)] #![deny(clippy::disallowed_macros)]",
-    ] {
-        assert!(requires_sans_io_catalogue(source));
-    }
-    for source in [
-        "",
-        "#![deny(clippy::disallowed_methods)]",
-        "#![deny(clippy::disallowed_macros)]",
-        "#![deny(clippy::disallowed_macros)] // #![deny(clippy::disallowed_methods)]",
-        "#![deny(clippy::disallowed_macros)] mod nested { #![deny(clippy::disallowed_methods)] }",
-    ] {
-        assert!(!requires_sans_io_catalogue(source));
-    }
-}
-
-#[test]
-fn sans_io_crate_root_denies_require_the_complete_canonical_catalogue() {
+/// Every sans-IO package holds the complete canonical catalogue of banned
+/// methods and macros: the workspace table denies both lints for all of
+/// them. A testing package's code is a test's.
+fn every_sans_io_package_holds_the_complete_canonical_catalogue() {
     let root = root();
     let required: toml::Value =
         toml::from_str(include_str!("../sans-io-lints.toml")).expect("canonical lint data");
     let mut violations = Vec::new();
-    for (package, manifest) in packages(&root)
-        .iter()
-        .filter(|(package, _)| sans_io(package))
-    {
-        let opted_in = crate_roots(&root.join(package), manifest)
-            .into_iter()
-            .any(|path| {
-                let source = std::fs::read_to_string(path).expect("crate root");
-                requires_sans_io_catalogue(&source)
-            });
-        if !opted_in {
-            continue;
-        }
+    for (package, _) in packages(&root).iter().filter(|(package, _)| {
+        sans_io(package) && !package.split('/').any(|part| part == "testing")
+    }) {
         let path = root.join(package).join("clippy.toml");
         let config = if path.is_file() {
             read_toml(&path)
@@ -9047,6 +9021,36 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans the HAL and the PHY by area (tasks/312)",
     ),
     (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::panic",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/hal/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
         "chips/esp32s31/hal/src/peripherals/aes_dma.rs",
         "unsafe_code",
         1,
@@ -9299,6 +9303,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host builds type-check the graphs that only chip target ports drive",
     ),
     (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lib.rs",
+        "clippy::panic",
+        1,
+        "R2 cleans the HAL and the PHY by area (tasks/323)",
+    ),
+    (
         "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
         "clippy::large_enum_variant",
         1,
@@ -9389,6 +9417,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
     ),
     (
+        "chips/family/drivers/usb-serial-jtag/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
         "chips/family/facts/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9417,6 +9451,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         1,
         "reset entry before the Rust stack exists",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
+        "chips/family/platform/bootstrap/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
     ),
     (
         "chips/family/platform/bootstrap/src/runtime.rs",
@@ -9459,6 +9505,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/executor/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
+        "chips/family/platform/executor/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
     ),
     (
         "chips/family/platform/executor/src/software_line.rs",
@@ -9521,6 +9579,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the interrupt table owns its existing exemption ABI / the interrupt table owns its existing table ABIs / the interrupt table owns its existing vector ABI",
     ),
     (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
         "chips/family/platform/layout/src/handoff.rs",
         "unsafe_code",
         3,
@@ -9531,6 +9595,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
+    ),
+    (
+        "chips/family/platform/layout/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
+    ),
+    (
+        "chips/family/platform/layout/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
     ),
     (
         "chips/family/platform/runtime/src/default_handlers.rs",
@@ -9561,6 +9637,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         8,
         "per-hart interrupt stacks and the trap entries switching onto them / terminal election is placed in boot-initialized SRAM / the critical-section implementation contract / the default trap handlers export linker-visible symbols / the panic record lives in a fixed SRAM section the next boot reads / the runtime defines the stack-protector guard symbol / the stage-two reset entry is assembly / volatile reads of the installed vector table",
+    ),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans the chip layers: family drivers and boot (tasks/323)",
     ),
     (
         "chips/family/platform/runtime/src/secondary.rs",
@@ -9665,6 +9747,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans a probe with the area it reads (tasks/312)",
     ),
     (
+        "hil/probes/esp32s31-aes-timing/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/probes/esp32s31-boot-smoke/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9701,6 +9789,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the receiver's half is esp32s31-rx-ring's",
     ),
     (
+        "hil/probes/esp32s31-case-c-sender/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/probes/esp32s31-case-c-sender/src/radio.rs",
         "clippy::too_many_arguments",
         2,
@@ -9731,10 +9825,22 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the probe owns its trap entry/exit ABI",
     ),
     (
+        "hil/probes/esp32s31-facts/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/probes/esp32s31-level-wake/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-light-sleep/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
     ),
     (
         "hil/probes/esp32s31-mcycle/src/main.rs",
@@ -9743,10 +9849,22 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans a probe with the area it reads (tasks/312)",
     ),
     (
+        "hil/probes/esp32s31-mcycle/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/probes/esp32s31-peer-overdue/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans a probe with the area it reads (tasks/312)",
+    ),
+    (
+        "hil/probes/esp32s31-peer-overdue/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
     ),
     (
         "hil/probes/esp32s31-radio-root/src/main.rs",
@@ -9779,6 +9897,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "shared session also contains the comparison-only entry and retained MAC owner",
     ),
     (
+        "hil/probes/esp32s31-radio/src/hardware.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/probes/esp32s31-radio/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -9795,6 +9919,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::disallowed_methods",
         1,
         "isolated verification image terminal failure",
+    ),
+    (
+        "hil/probes/esp32s31-radio/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
     ),
     (
         "hil/probes/esp32s31-radio/src/main.rs",
@@ -9851,10 +9981,34 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the sender's half is esp32s31-case-c-sender's",
     ),
     (
+        "hil/probes/esp32s31-rx-ring/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R2 cleans a probe with the area it reads (tasks/323)",
+    ),
+    (
         "hil/scenarios/aes/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "hil/scenarios/aes/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R3 cleans the cores and the contracts (tasks/323)",
+    ),
+    (
+        "hil/scenarios/sdk-station/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R3 cleans the cores and the contracts (tasks/323)",
+    ),
+    (
+        "hil/scenarios/wifi-access-point/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R3 cleans the cores and the contracts (tasks/323)",
     ),
     (
         "portable/crypto/src/conformance.rs",
@@ -10017,6 +10171,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unsafe_code",
         5,
         "TX prepare authority is implemented only by audited DMA owners / TX start authority is implemented only by audited DMA owners / constructor is the audited DMA-address authority boundary / constructor is the single stable-address proof boundary / implementing the stable-address invariant requires an audited pinned pool",
+    ),
+    (
+        "portable/memory/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "R3 cleans the cores and the contracts (tasks/323)",
     ),
     (
         "portable/memory/src/link.rs",
@@ -10619,6 +10779,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/blobray-analysis/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-analysis/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/blobray-application/src/code_coverage.rs",
         "clippy::too_many_arguments",
         1,
@@ -10641,6 +10813,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-application/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/blobray-application/src/library.rs",
@@ -10691,6 +10887,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/blobray-artifacts/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-artifacts/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-artifacts/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-artifacts/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/blobray-domain/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -10701,6 +10921,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-domain/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/blobray-linker/src/lib.rs",
@@ -10709,6 +10953,24 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/blobray-linker/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-linker/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-linker/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/blobray-riscv/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -10725,6 +10987,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-riscv/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-riscv/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/blobray-verification/src/lib.rs",
@@ -10733,6 +11007,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/blobray-verification/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-verification/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-verification/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/blobray-verification/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/cli/src/lib.rs",
         "clippy::cast_possible_wrap",
         1,
@@ -10743,6 +11041,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/cli/src/main.rs",
@@ -10763,6 +11067,24 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/cli/src/main.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/elf/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -10779,6 +11101,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/elf/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/elf/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/riscv-analysis/src/lib.rs",
@@ -10803,6 +11137,36 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         2,
         "unknown, to read",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-analysis/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/riscv-analysis/src/stack_context.rs",
@@ -10877,10 +11241,46 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-decode/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/riscv-lift/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-lift/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-lift/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-lift/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/analysis/riscv-model/src/lib.rs",
@@ -10901,10 +11301,64 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-model/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/analysis/riscv-program/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-program/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-program/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/analysis/riscv-program/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/chip/profile/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/chip/profile/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/hil/harness/src/lib.rs",
@@ -10913,16 +11367,64 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/hil/harness/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/hil/link/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/hil/link/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/hil/link/src/test_support.rs",
+        "clippy::expect_used",
+        1,
+        "test support: a test may panic",
+    ),
+    (
+        "tools/hil/link/src/test_support.rs",
+        "clippy::indexing_slicing",
+        1,
+        "test support: a test may panic",
+    ),
+    (
         "tools/image/build/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/build/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/build/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/build/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/bundle/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/image/checks/src/interrupts/code.rs",
@@ -10943,6 +11445,24 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/image/checks/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/checks/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/checks/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/image/cli/src/main.rs",
         "clippy::cast_possible_wrap",
         1,
@@ -10961,6 +11481,36 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/image/cli/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/cli/src/main.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/compare/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/compare/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/esp-idf/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/image/large-values/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -10971,6 +11521,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/image/large-values/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/large-values/src/main.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/image/stack/src/cha.rs",
@@ -11021,6 +11583,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
     (
+        "tools/image/stack/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/image/stack/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/arbiter/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11039,10 +11625,34 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/arbiter/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/board/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/board/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/board/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/board/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/lab/cli/src/main.rs",
@@ -11063,10 +11673,34 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/cli/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/cli/src/main.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/cli/src/main.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/client/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/client/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/dtm.rs",
@@ -11081,6 +11715,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-bluetooth/main.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/fixture-helpers/src/bin/open-radio-probe/main.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11093,6 +11739,24 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/fixture-helpers/src/bin/open-radio-probe/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-helpers/src/bin/open-radio-probe/main.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture-install/src/bin/open-radio-net-client.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/fixture/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11103,6 +11767,30 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/fixture/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/model/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/lab/router/src/lib.rs",
@@ -11111,6 +11799,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/router/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/lab/router/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/lab/service/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11123,10 +11823,34 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/lab/service/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/os/command-tree/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/os/durable/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/os/durable/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/os/durable/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/os/process/src/lib.rs",
@@ -11153,6 +11877,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "adopts the inherited lease descriptor and clears its variable / forks the guardian process over a pipe / pre-exec child setup calls async-signal-safe libc / signals the owned process group",
     ),
     (
+        "tools/os/process/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/os/process/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/os/process/src/linux_socket.rs",
         "unsafe_code",
         6,
@@ -11177,6 +11913,36 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/pins/artifacts/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/pins/artifacts/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/probe/codegen/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/probe/codegen/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/registers/contracts/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/registers/generate/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11187,6 +11953,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_sign_loss",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/registers/generate/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/registers/generate/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/registers/model/src/chip_model/facts.rs",
@@ -11213,6 +11991,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "host tool: the rule covers the code an image reaches",
     ),
     (
+        "tools/registers/model/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/registers/model/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/regulatory/generate/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -11223,6 +12013,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/regulatory/generate/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/test/ui-cases/src/lib.rs",
@@ -11243,6 +12039,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "a test runner reports a broken case by panicking with its name",
     ),
     (
+        "tools/test/ui-cases/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
         "tools/vendor/cli/src/copies.rs",
         "clippy::too_many_arguments",
         1,
@@ -11259,6 +12061,48 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/cli/src/main.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/cli/src/main.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/lineage/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/lineage/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/provenance/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/provenance/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/provenance/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/vendor/provenance/src/registry.rs",
@@ -11295,6 +12139,42 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::let_underscore_must_use",
         1,
         "host tool: the rule covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::arithmetic_side_effects",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::expect_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::indexing_slicing",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::panic",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::unreachable",
+        1,
+        "host tool: the ban covers the code an image reaches",
+    ),
+    (
+        "tools/vendor/scenario/src/lib.rs",
+        "clippy::unwrap_used",
+        1,
+        "host tool: the ban covers the code an image reaches",
     ),
     (
         "tools/vendor/scenario/src/phy/mod.rs",

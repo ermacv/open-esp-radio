@@ -8,6 +8,13 @@
     clippy::let_underscore_must_use,
     reason = "host tool: the rule covers the code an image reaches"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 #[path = "support/cli.rs"]
 mod cli;
 mod support;

@@ -533,14 +533,6 @@ impl ApAssociationSecurityObservation<'_> {
 /// Beacons, responses, foreign BSS traffic and unsupported authentication
 /// algorithms are intentionally ignored rather than being promoted into AP
 /// state transitions.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn parse_ap_management_request<'a>(
     profile: &Advertisement,
     frame: &'a [u8],
@@ -712,14 +704,6 @@ pub enum ApManagementSubtype {
     Deauthentication,
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 impl ApManagementSubtype {
     const fn frame_control(self) -> u16 {
         match self {
@@ -812,14 +796,6 @@ impl ApProtectedManagementFrame<'_> {
     }
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn supports_wmm(bytes: &[u8]) -> bool {
     let mut remaining = oer_portable_wire::Reader::new(bytes);
     while let [_, length, ..] = *remaining.remaining() {
@@ -837,14 +813,6 @@ fn supports_wmm(bytes: &[u8]) -> bool {
     false
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn association_security_observation(
     bytes: &[u8],
     capability: crate::management::CapabilityInformation,
@@ -887,14 +855,6 @@ fn association_security_observation(
     observation
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn maximum_ap_legacy_rate(profile: &Advertisement, bytes: &[u8]) -> u8 {
     let mut maximum = 0;
     let mut remaining = oer_portable_wire::Reader::new(bytes);
@@ -1113,27 +1073,11 @@ pub enum ApPowerSaveObservation {
 ///
 /// Association validation is intentionally separate: the AP peer table must
 /// confirm that `peer` currently owns the reported association ID.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
     observe_power_save(frame).map(|(observation, _)| observation)
 }
 
 /// A power-save edge and the Receiver Address of the frame that carried it.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
     let mut reader = oer_portable_wire::Reader::new(frame);
     let &[fc0, fc1] = reader.array().ok()?;
@@ -1208,14 +1152,6 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
 /// active BSSID. Protected data admission validates its address mapping in the
 /// data owner; the unprotected control frame needs this explicit check before
 /// its TA/AID tuple can reserve buffered traffic.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn observe_ap_power_save_for_access_point(
     frame: &[u8],
     access_point: [u8; 6],
@@ -1237,14 +1173,6 @@ pub fn observe_ap_power_save_for_access_point(
 /// BSSID address fields must name the active AP, the transmitter must be a
 /// valid unicast address, and fragmentation is rejected. Only the Retry and
 /// Power Management flag bits may vary.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn observe_ap_null_data_power_save_for_access_point(
     frame: &[u8],
     access_point: [u8; 6],

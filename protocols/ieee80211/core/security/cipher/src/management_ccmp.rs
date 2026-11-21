@@ -1,14 +1,5 @@
 //! Stateless validation and decryption of protected management MPDUs.
 
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
-
 use crate::ccmp_mpdu::{CcmpAssociation, CcmpMpduError};
 use oer_portable_crypto::block::{Aes128Engine, BlockError};
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;

@@ -24,14 +24,6 @@
 //! same header requirements for protected management reception.
 //!
 //! Received frames reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use oer_portable_crypto::block::Aes128Engine;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;

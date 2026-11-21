@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![allow(clippy::disallowed_macros, reason = "compiler-test assertions")]
+#![allow(clippy::disallowed_macros, reason = "test code: a test may panic")]
 
 use std::{fs, path::Path, process::Command};
 

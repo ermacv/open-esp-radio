@@ -1,4 +1,4 @@
-#![cfg_attr(test, allow(clippy::disallowed_macros))]
+#![allow(clippy::disallowed_macros, reason = "test code: a test may panic")]
 //! Exercise the target's real event completion future with a host waker.
 use oer_protocols_hil_agent::console::progress;
 use std::{

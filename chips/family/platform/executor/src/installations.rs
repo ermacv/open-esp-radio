@@ -23,7 +23,7 @@ pub use static_cell::StaticCell;
     unsafe_code,
     reason = "the declaration establishes a unique static identity"
 )]
-#[expect(
+#[allow(
     clippy::disallowed_methods,
     reason = "the unique static claim constructs only invariant PhantomData in a zero-sized SlotClaim"
 )]

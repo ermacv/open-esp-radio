@@ -1,3 +1,8 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 //! `linker/hot-code.x` selects functions by name: a rename would leave a
 //! pattern matching nothing, and the code in PSRAM, without any error.
 

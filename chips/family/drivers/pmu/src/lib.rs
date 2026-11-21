@@ -1,13 +1,3 @@
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
-)]
 //! Espressif PMU light sleep over a chip's typed register traits.
 //!
 //! The chips with a PMU (the ESP32-C5, C6, P4 and S31) put the HP system to
@@ -32,6 +22,15 @@
 //! ```
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 pub mod sleep;
 

@@ -6,14 +6,6 @@
 //! sequence control, FCS, protection policy and physical publication.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 pub const PUBLIC_ACTION_CATEGORY: u8 = 4;
 pub const FTM_REQUEST_PUBLIC_ACTION: u8 = 32;

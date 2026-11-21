@@ -1,3 +1,7 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 // Exercise the runtime's exact NAPOT encoding without an ESP target.
 use oer_chips_family_platform_runtime::BootError;
 

@@ -8,10 +8,14 @@
 )]
 #![allow(
     clippy::disallowed_methods,
-    clippy::disallowed_macros,
-    clippy::unwrap_used,
-    clippy::indexing_slicing,
     reason = "a test: its harness polls with a no-op waker and fails by panicking"
+)]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::disallowed_macros,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
 )]
 
 use oer_protocols_ieee80211_contracts_port::{

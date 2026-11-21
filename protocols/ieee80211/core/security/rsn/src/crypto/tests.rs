@@ -1,9 +1,3 @@
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    clippy::unreachable
-)]
 use super::*;
 use crate::{EapolKeyFrame, EapolKeyMessage, frames};
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;

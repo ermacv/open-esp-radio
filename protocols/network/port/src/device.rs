@@ -223,12 +223,6 @@ pub trait NetDevice {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::indexing_slicing,
-    reason = "tests assert on fixed fixtures built with slice copies"
-)]
 mod tests {
     use super::*;
 

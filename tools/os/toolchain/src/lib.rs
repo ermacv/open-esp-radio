@@ -10,6 +10,15 @@
 //! [`versions`] records the tools a build ran.
 
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 use std::{
     ffi::{OsStr, OsString},

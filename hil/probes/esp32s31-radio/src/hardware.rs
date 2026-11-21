@@ -23,14 +23,21 @@
 #![cfg_attr(target_arch = "riscv32", no_main)]
 #![cfg_attr(target_arch = "riscv32", feature(type_alias_impl_trait))]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![cfg_attr(
+    target_arch = "riscv32",
+    expect(
+        clippy::arithmetic_side_effects,
+        reason = "R2 cleans a probe with the area it reads (tasks/323)"
+    )
 )]
 
 #[cfg(target_arch = "riscv32")]

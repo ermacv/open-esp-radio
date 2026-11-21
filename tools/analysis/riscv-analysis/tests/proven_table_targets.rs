@@ -5,6 +5,12 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unreachable,
+    reason = "test code: a test may panic"
+)]
 use oer_tools_analysis_riscv_analysis::*;
 use oer_tools_analysis_riscv_model::*;
 

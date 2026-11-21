@@ -4,17 +4,14 @@
 )]
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
 )]
 
 //! Which channels a country permits, and at what power.
@@ -35,12 +32,6 @@
 pub mod generated;
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    reason = "tests assert behavior and compare against standard-library arithmetic"
-)]
 mod tests;
 
 /// An ISO 3166-1 alpha-2 country code, two uppercase ASCII letters.

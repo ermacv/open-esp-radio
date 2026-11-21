@@ -1,3 +1,8 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 use object::{
     Architecture, BinaryFormat, Endianness, LittleEndian, SectionKind, SymbolFlags, SymbolKind,
     SymbolScope, elf,

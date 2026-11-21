@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 use super::*;
 use object::{
     Architecture, BinaryFormat, Endianness, RelocationFlags, SectionKind, SymbolFlags, SymbolKind,

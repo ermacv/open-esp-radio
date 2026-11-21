@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::panic)]
 use super::*;
 #[path = "../../../../boot/tests/support/adoption.rs"]
 mod support;

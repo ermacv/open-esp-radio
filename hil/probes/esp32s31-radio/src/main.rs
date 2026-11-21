@@ -1,6 +1,15 @@
 #![cfg_attr(target_arch = "riscv32", no_main)]
 #![cfg_attr(target_arch = "riscv32", no_std)]
 #![deny(clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 #[cfg(target_arch = "riscv32")]
 extern crate oer_hil_probes_esp32s31_radio as _;

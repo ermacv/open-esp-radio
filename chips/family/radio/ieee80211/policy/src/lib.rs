@@ -12,35 +12,18 @@
 )]
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::let_underscore_must_use,
-    clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
+#![deny(clippy::let_underscore_must_use, clippy::let_underscore_untyped)]
+#![cfg_attr(
+    test,
+    allow(clippy::let_underscore_must_use, clippy::let_underscore_untyped)
 )]
 #![cfg_attr(
     test,
     allow(
-        clippy::let_underscore_must_use,
-        clippy::let_underscore_untyped,
-        clippy::arithmetic_side_effects,
-        clippy::indexing_slicing,
-        clippy::panic,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::unreachable,
-        clippy::todo,
-        clippy::unimplemented,
-        clippy::disallowed_macros,
         clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
     )
 )]
 

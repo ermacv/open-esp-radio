@@ -9,16 +9,22 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented
-)]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+)]
 //! Staged bootstrap entry, application descriptor and payload relocation.
 #[cfg(test)]
 extern crate std;

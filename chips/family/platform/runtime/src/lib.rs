@@ -11,13 +11,18 @@
     )
 )]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
 )]
 //! Stage-two entry, relocation, traps and interrupt-stack ownership of the
 //! Espressif staged boot.

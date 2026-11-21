@@ -1,14 +1,13 @@
 //! The real sockets, service, core and policy on one shared medium.
 
+#![allow(clippy::disallowed_methods, reason = "a host test")]
 #![allow(
     clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
     clippy::expect_used,
     clippy::indexing_slicing,
     clippy::panic,
     clippy::unwrap_used,
-    reason = "a host test"
+    reason = "test code: a test may panic"
 )]
 
 use std::cell::{Cell, RefCell};

@@ -413,14 +413,6 @@ impl<'payload> EspNowV1Action<'payload> {
     }
 
     /// Parse one complete v1 Action body and reject trailing or partial IEs.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn parse(input: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
         let mut reader = oer_portable_wire::Reader::new(input);
         let Ok(

@@ -5,18 +5,6 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![deny(
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods
-)]
 //! Chip-neutral analog register bus of the Espressif PHY.
 //!
 //! The PHY reaches its analog blocks (PLLs, bias, regulators, the RF front
@@ -42,6 +30,15 @@
 
 #![no_std]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
 
 use oer_chips_family_registers_analog_i2c::{AnalogField, Host};
 
@@ -849,5 +846,4 @@ where
 }
 
 #[cfg(test)]
-#[allow(clippy::arithmetic_side_effects, clippy::disallowed_macros)]
 mod tests;

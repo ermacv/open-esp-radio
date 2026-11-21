@@ -9,25 +9,13 @@
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
-#![deny(
-    clippy::panic,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::unwrap_used,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
-)]
 #![cfg_attr(
     test,
     allow(
         clippy::disallowed_methods,
         clippy::disallowed_macros,
-        clippy::arithmetic_side_effects,
-        clippy::unreachable
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
     )
 )]
 

@@ -1,9 +1,3 @@
-#![allow(
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
-    clippy::arithmetic_side_effects,
-    clippy::unreachable
-)]
 //! Every entry point that takes received bytes returns, on any input.
 //!
 //! Each test drives one entry point with [`QUICK`] inputs (random and

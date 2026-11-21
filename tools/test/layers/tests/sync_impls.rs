@@ -1,3 +1,8 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "test code: a test may panic"
+)]
 //! Unsafe Sync/Send implementations belong to the memory core.
 use std::{
     collections::BTreeMap,

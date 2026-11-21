@@ -1,3 +1,8 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    reason = "test code: a test may panic"
+)]
 //! No esp-* or vendor PAC dependency in the S31 workspace. Host espflash stays.
 use std::{
     collections::BTreeMap,

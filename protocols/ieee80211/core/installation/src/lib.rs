@@ -3,16 +3,6 @@
 #![deny(
     clippy::let_underscore_must_use,
     clippy::let_underscore_untyped,
-    clippy::arithmetic_side_effects,
-    clippy::indexing_slicing,
-    clippy::panic,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::disallowed_macros,
-    clippy::disallowed_methods,
     clippy::struct_excessive_bools,
     clippy::fn_params_excessive_bools,
     clippy::wildcard_enum_match_arm
@@ -22,18 +12,17 @@
     allow(
         clippy::let_underscore_must_use,
         clippy::let_underscore_untyped,
-        clippy::arithmetic_side_effects,
-        clippy::indexing_slicing,
-        clippy::panic,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::unreachable,
-        clippy::todo,
-        clippy::unimplemented,
-        clippy::disallowed_macros,
-        clippy::disallowed_methods,
         clippy::wildcard_enum_match_arm,
-        clippy::type_complexity,
+        clippy::type_complexity
+    )
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
     )
 )]
 

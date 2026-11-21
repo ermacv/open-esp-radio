@@ -148,11 +148,6 @@ impl Control {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::expect_used,
-    clippy::arithmetic_side_effects,
-    reason = "test assertions and bounded input enumeration"
-)]
 mod tests {
     use super::*;
 

@@ -1,8 +1,3 @@
-#![allow(
-    clippy::arithmetic_side_effects,
-    reason = "test fixtures frame elements of a few known bytes"
-)]
-
 use super::*;
 
 const CCMP: [u8; 4] = ieee_suite(RSN_CIPHER_CCMP);

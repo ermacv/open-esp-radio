@@ -201,14 +201,6 @@ impl TxBlockAckSession {
         })
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn on_response(&mut self, body: &[u8]) -> Result<TxBlockAckResponse, TxBlockAckError> {
         // The nine-byte ADDBA response is a fixed prefix, not the complete
         // action-body length. An HE peer may append an ADDBA Extension IE
@@ -225,14 +217,6 @@ impl TxBlockAckSession {
     }
 
     /// Apply the fixed fields of an already parsed ADDBA response.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn on_response_action(
         &mut self,
         action: BlockAckAction,
@@ -412,14 +396,6 @@ impl TxBlockAckSession {
     }
 }
 
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 const fn next_generation(current: u32) -> u32 {
     let next = current.wrapping_add(1);
     if next == 0 { 1 } else { next }

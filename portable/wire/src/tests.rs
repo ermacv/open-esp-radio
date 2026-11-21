@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_macros, clippy::disallowed_methods)]
-
 extern crate std;
 
 use std::vec::Vec;

@@ -1,12 +1,5 @@
 //! The sleep sequence over a model of the PMU and the LP timer.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::arithmetic_side_effects
-)]
-
 extern crate std;
 use std::vec::Vec;
 

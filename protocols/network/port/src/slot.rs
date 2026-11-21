@@ -73,8 +73,4 @@ impl<'s> Slot<'s> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::disallowed_macros,
-    reason = "tests assert on what a room holds"
-)]
 mod tests;

@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use super::{Line, Outcome, Tally};
 
 #[test]

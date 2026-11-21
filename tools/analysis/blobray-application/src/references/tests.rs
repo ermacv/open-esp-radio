@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 use super::{StoredScan, Targets};
 use crate::in_process::Executable;
 use oer_tools_analysis_riscv_model::{Error, ErrorCode, Result, RunControl, WorkingMemory};

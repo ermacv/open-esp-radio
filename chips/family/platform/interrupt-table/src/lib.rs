@@ -5,15 +5,6 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
-#![cfg_attr(not(test), deny(clippy::expect_used))]
-#![deny(
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
-)]
 //! Each image's static table of its interrupt bindings: for every bound
 //! peripheral interrupt part its source, CPU line, level, hart, handler and
 //! handler class, declared once with [`interrupt_table!`].
@@ -73,6 +64,19 @@
 //! ```
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    reason = "R2 cleans the chip layers: family drivers and boot (tasks/323)"
+)]
 
 mod binding;
 pub use binding::{BindFault, BindFaultCode, BindFaultKind, Quarantined};

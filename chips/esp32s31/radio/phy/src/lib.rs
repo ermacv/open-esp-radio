@@ -16,7 +16,6 @@
 )]
 #![no_std]
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_used, clippy::todo, clippy::unimplemented)]
 // A forgotten owner never releases what it holds, such as a modem clock lease,
 // so radio ownership must end in `Drop`.
 #![deny(clippy::mem_forget)]
@@ -31,6 +30,22 @@
         unused_imports,
         reason = "host builds type-check the graphs that only chip target ports drive"
     )
+)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "R2 cleans the HAL and the PHY by area (tasks/323)"
 )]
 
 //! Source-only ESP32-S31 shared RF/PHY ownership frontier.

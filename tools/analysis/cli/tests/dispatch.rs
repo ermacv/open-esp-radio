@@ -6,6 +6,12 @@
         reason = "test code: a cast or a dropped result in a test loses no product's value"
     )
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test code: a test may panic"
+)]
 use object::{
     Architecture, BinaryFormat, Endianness, RelocationFlags, SectionKind, SymbolFlags, SymbolKind,
     SymbolScope,

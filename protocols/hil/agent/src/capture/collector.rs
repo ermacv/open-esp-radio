@@ -264,7 +264,6 @@ impl<C, const R: usize, const K: usize> Reader for Collector<C, R, K> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::capture::tests::{ID, Step, Virtual};
@@ -305,7 +304,6 @@ mod tests {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod merge_tests {
     use super::*;
     #[test]

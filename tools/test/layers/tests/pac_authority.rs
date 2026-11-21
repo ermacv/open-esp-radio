@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used, reason = "test code: a test may panic")]
 //! Direct PAC authority is admitted by exact package path, never by suffix.
 use std::path::Path;
 

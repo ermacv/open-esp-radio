@@ -1,8 +1,4 @@
-#![allow(
-    clippy::disallowed_methods,
-    clippy::disallowed_macros,
-    clippy::arithmetic_side_effects
-)]
+#![allow(clippy::disallowed_methods)]
 //! Each `tests/ui` case compiles as written and fails with its marked errors
 //! when `ui_reject` is set.
 

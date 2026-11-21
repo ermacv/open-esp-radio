@@ -1,3 +1,7 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 //! The ownership policy over a chip root on synthetic fixtures: one policy
 //! that uses every construct, and one rejection per load-time rule.
 

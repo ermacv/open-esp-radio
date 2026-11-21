@@ -1,14 +1,6 @@
 //! Association/peer-scoped receive retry history.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 /// The Retry subfield of an MPDU's Frame Control (IEEE Std 802.11-2020,
 /// 9.2.4.1.4): set in a retransmission.

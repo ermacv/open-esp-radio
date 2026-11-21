@@ -32,7 +32,6 @@ pub(super) fn bank0(a: irq_enable_0::R) -> [[u32; 3]; 5] {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, reason = "host register fixture construction")]
 mod tests {
     use super::*;
     use oer_chips_esp32s31_pac::{bt_mac::BluetoothInterruptBank, instances};

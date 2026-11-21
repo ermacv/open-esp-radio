@@ -5,14 +5,6 @@
 //! chip node pointers are deliberately outside this crate.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use oer_protocols_ieee80211_wire::security::ManagementProtection;
 use oer_protocols_ieee80211_wire::security::rsn::{

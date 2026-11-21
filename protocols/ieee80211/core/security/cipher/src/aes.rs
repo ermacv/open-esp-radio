@@ -4,14 +4,6 @@
 //! [`SoftwareAes128`] implements `oer_portable_crypto::block::Aes128Blocks` with the
 //! RustCrypto cipher, so `oer_portable_crypto::block::unwrap_now` runs the shared
 //! RFC 3394 unwrap over it. WPA2 key data is bounded by [`RSN_KEY_DATA_CAPACITY`].
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 use ::aes::{
     Aes128,

@@ -43,5 +43,4 @@ impl WifiStandaloneEspNowPlan {
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests;

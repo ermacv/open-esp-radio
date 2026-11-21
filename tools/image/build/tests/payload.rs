@@ -1,3 +1,9 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 use oer_tools_image_build::encode::stage_two::{pack_runtime, payload_crc32};
 
 /// A stage-two contract shaped like a staged chip's profile.

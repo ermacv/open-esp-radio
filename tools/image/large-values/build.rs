@@ -1,5 +1,9 @@
 //! The driver loads the exact compiler libraries of its build toolchain.
 #![forbid(unsafe_code)]
+#![expect(
+    clippy::expect_used,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 fn main() {
     let rustc = std::env::var_os("RUSTC").expect("Cargo supplies its compiler");

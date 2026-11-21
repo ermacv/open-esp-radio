@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_macros)]
-
 use super::*;
 use crate::{DependencyIndex, DependencySet, ModemClockPlannerIdentity};
 use oer_portable_time::{Clock, Duration, Instant};

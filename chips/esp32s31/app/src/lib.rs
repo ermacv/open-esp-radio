@@ -9,15 +9,6 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 #![forbid(unsafe_code)]
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::todo,
-    clippy::unimplemented,
-    clippy::indexing_slicing
-)]
 //! The ESP32-S31 implementation: the default interrupt layout, executors,
 //! service tasks and boot sequence behind the application entry's `entry!`
 //! (`oer`), which re-exports this crate for an image built for the ESP32-S31.

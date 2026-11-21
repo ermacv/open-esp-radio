@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, reason = "test code: a test may panic")]
 //! The generated memory layouts as values and cells: the builders and
 //! getters agree, a value wider than its field is refused, cells keep what
 //! they were given, and typed addresses round-trip. Field positions are the
@@ -39,11 +40,7 @@ fn a_value_that_does_not_fit_its_field_is_refused() {
 fn descriptor_cells_hold_what_was_written() {
     // SAFETY: host descriptors no hardware reads; the addresses only
     // round-trip through the cells.
-    #[allow(
-        unsafe_code,
-        clippy::disallowed_methods,
-        reason = "host-only typed addresses"
-    )]
+    #[allow(unsafe_code, reason = "host-only typed addresses")]
     let (buffer, next) = unsafe {
         let next = DmaWindowAddress::new_unchecked(0x2f00_2000);
         (
@@ -78,11 +75,7 @@ fn descriptor_cells_hold_what_was_written() {
 #[test]
 fn a_reference_keeps_its_address() {
     // SAFETY: as above.
-    #[allow(
-        unsafe_code,
-        clippy::disallowed_methods,
-        reason = "host-only typed addresses"
-    )]
+    #[allow(unsafe_code, reason = "host-only typed addresses")]
     let reference = unsafe {
         DmaRef::<WifiTxDmaDescriptor>::new_unchecked(DmaWindowAddress::new_unchecked(0x2f00_4000))
     };

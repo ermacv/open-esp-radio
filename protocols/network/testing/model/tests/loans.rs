@@ -1,3 +1,10 @@
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::panic,
+    clippy::unwrap_used,
+    reason = "test code: a test may panic"
+)]
 //! Receive loans over a radio with a finite pool, before the service lends:
 //! a slow consumer deprives neither others nor control traffic of buffers, and
 //! a full stop handles a buffer held for ever. The pool, the arrivals and the

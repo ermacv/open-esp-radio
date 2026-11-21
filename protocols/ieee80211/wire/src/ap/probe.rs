@@ -16,14 +16,6 @@ pub enum ResponseError {
 ///
 /// A received probe request's elements reach this function; it does not
 /// panic on them.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
     let mut found = None;
     while !elements.is_empty() {
@@ -46,14 +38,6 @@ pub(super) fn ssid(mut elements: &[u8]) -> Option<&[u8]> {
 
 /// Whether a probe request's `requested` SSID, received bytes, selects the
 /// advertisement `beacon`; it does not panic on either.
-#[deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 pub fn matches_ssid(beacon: &[u8], requested: &[u8]) -> bool {
     let mut reader = oer_portable_wire::Reader::new(beacon);
     if reader.array::<36>().is_err() {

@@ -53,14 +53,6 @@ impl EspNowRxPeerSlot {
     };
 
     /// Remember `fingerprint` in place of the oldest entry.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     fn remember(&mut self, fingerprint: EspNowRxFingerprint) {
         // Newest first: moving the displaced entry along the fixed array
         // evicts exactly the oldest fingerprint without a separate cursor.
@@ -852,14 +844,6 @@ impl<const N: usize> EspNowRxEpoch<N> {
     /// both on-air collision domains: the opaque random value and the
     /// management sequence number. Suppression happens before any borrowed
     /// payload is published to an integration callback.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn receive_v1<'frame>(
         &mut self,
         bytes: &'frame [u8],
@@ -897,14 +881,6 @@ impl<const N: usize> EspNowRxEpoch<N> {
     /// with v1, so a live epoch cannot publish a duplicate merely because the
     /// sender changed its wire version. Capability is checked before the
     /// fingerprint is committed.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn receive_v2<'frame>(
         &mut self,
         bytes: &'frame [u8],
@@ -1144,14 +1120,6 @@ pub struct EspNowOwnedReceivedV1 {
 impl EspNowOwnedReceivedV1 {
     /// Copy one already-admitted borrowed datagram into fixed-capacity owned
     /// storage. The wire codec proves the payload length is at most 250.
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn copy_from(received: EspNowReceivedV1<'_>) -> Self {
         let frame = received.frame();
         let payload = frame.action().payload().bytes();
@@ -1195,14 +1163,6 @@ impl EspNowOwnedReceivedV1 {
         self.retry
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn payload(&self) -> &[u8] {
         self.payload
             .get(..usize::from(self.payload_length))
@@ -1267,14 +1227,6 @@ impl EspNowOwnedReceivedV2 {
         self.retry
     }
 
-    #[deny(
-        clippy::indexing_slicing,
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::unreachable,
-        clippy::arithmetic_side_effects
-    )]
     pub fn payload(&self) -> &[u8] {
         self.payload
             .get(..usize::from(self.payload_length))
@@ -1416,5 +1368,4 @@ impl fmt::Display for EspNowV2ReceiveError {
 impl core::error::Error for EspNowV2ReceiveError {}
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests;

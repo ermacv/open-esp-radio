@@ -2,8 +2,6 @@
 //! the descriptors in a leaked table and the buffers in an arena whose
 //! place the test, as the hardware, writes.
 
-#![allow(clippy::unwrap_used, reason = "tests")]
-
 extern crate std;
 
 use core::mem::MaybeUninit;

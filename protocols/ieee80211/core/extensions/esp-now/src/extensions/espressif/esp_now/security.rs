@@ -1374,5 +1374,4 @@ pub const fn encrypted_peer_destination(address: EspNowUnicastAddress) -> EspNow
 }
 
 #[cfg(test)]
-#[allow(clippy::disallowed_macros)]
 mod tests;

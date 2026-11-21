@@ -3,6 +3,10 @@
     clippy::let_underscore_must_use,
     reason = "host tool: the rule covers the code an image reaches"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code: a test may panic"
+)]
 #[path = "support/cli.rs"]
 mod cli;
 mod support;

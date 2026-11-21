@@ -19,6 +19,20 @@
     )
 )]
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    test,
+    allow(
+        clippy::disallowed_methods,
+        clippy::disallowed_macros,
+        clippy::unreachable,
+        clippy::arithmetic_side_effects
+    )
+)]
+#![expect(
+    clippy::arithmetic_side_effects,
+    clippy::unreachable,
+    reason = "host tool: the ban covers the code an image reaches"
+)]
 
 use std::{
     collections::BTreeMap,

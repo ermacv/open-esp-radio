@@ -13,14 +13,6 @@
 //! bits 5..=6 and Teardown All TWT in bit 7.
 //!
 //! Received bytes reach this module; nothing here panics on them.
-#![deny(
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unreachable,
-    clippy::arithmetic_side_effects
-)]
 
 pub const TWT_ACTION_CATEGORY: u8 = 22;
 pub const TWT_SETUP_ACTION: u8 = 6;
