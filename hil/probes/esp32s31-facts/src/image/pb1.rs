@@ -431,7 +431,14 @@ fn width_modes(s: &mut Session<'_>, modes: &[bool], first: u32) {
     }
     stop(s);
 }
-fn natural_wrap(s: &mut Session<'_>, tag: u32, observe_reference: bool) -> bool {
+/// Whether a natural wrap also records the reference near the counter's top.
+#[derive(Clone, Copy, PartialEq)]
+enum Reference {
+    Skipped,
+    Observed,
+}
+
+fn natural_wrap(s: &mut Session<'_>, tag: u32, observe_reference: Reference) -> bool {
     let mut last_cycle = oer_portable_riscv::cycle32();
     let mut elapsed = 0_u64;
     let mut last_feed = 0_u64;
@@ -451,7 +458,7 @@ fn natural_wrap(s: &mut Session<'_>, tag: u32, observe_reference: bool) -> bool 
             emit(tag + 1, (elapsed >> 32) as u32, 190, u32::from(observed));
             return true;
         }
-        if observe_reference && !observed && now >= MAX - 64 {
+        if observe_reference == Reference::Observed && !observed && now >= MAX - 64 {
             command_observation(s, tag + 0x10, true);
             command_observation(s, tag + 0x20, false);
             observed = true;
@@ -499,7 +506,7 @@ pub(super) fn whole(s: &mut Session<'_>) {
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
     state(s, 0x2a200);
     // Exactly two permitted natural divider399 wraps; no counter seeding.
-    if !natural_wrap(s, 0x2a2f0, true) {
+    if !natural_wrap(s, 0x2a2f0, Reference::Observed) {
         stop(s);
         return;
     }
@@ -507,7 +514,7 @@ pub(super) fn whole(s: &mut Session<'_>) {
     s.ble.timer.clear_bluetooth_modem_lp_timer_state_002c();
     window();
     state(s, 0x2a220);
-    if !natural_wrap(s, 0x2a3f0, false) {
+    if !natural_wrap(s, 0x2a3f0, Reference::Skipped) {
         stop(s);
         return;
     }
@@ -524,7 +531,7 @@ pub(super) fn reference_wrap(s: &mut Session<'_>) {
     if !init(s) {
         return;
     }
-    if !natural_wrap(s, 0x2b0f0, true) {
+    if !natural_wrap(s, 0x2b0f0, Reference::Observed) {
         stop(s);
         return;
     }

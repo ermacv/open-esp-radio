@@ -10,16 +10,16 @@ mod reset;
 pub(super) use arrival::{compare_ack, two_wraps};
 
 pub(super) fn timer_reset_on(s: &mut Session<'_>) {
-    reset::run(s, false, false);
+    reset::run(s, reset::Reset::Timer, reset::Clocks::Running);
 }
 pub(super) fn timer_reset_off(s: &mut Session<'_>) {
-    reset::run(s, false, true);
+    reset::run(s, reset::Reset::Timer, reset::Clocks::Gated);
 }
 pub(super) fn controller_reset_on(s: &mut Session<'_>) {
-    reset::run(s, true, false);
+    reset::run(s, reset::Reset::Controller, reset::Clocks::Running);
 }
 pub(super) fn controller_reset_off(s: &mut Session<'_>) {
-    reset::run(s, true, true);
+    reset::run(s, reset::Reset::Controller, reset::Clocks::Gated);
 }
 
 pub(super) struct Ble {
@@ -151,9 +151,9 @@ pub(super) fn inherited(s: &mut Session<'_>) {
                 .reg_modem_clk_en(),
         ),
     );
-    baseline(&mut s.ble, true);
+    baseline_on(&mut s.ble);
     enables(&s.ble, 0x2003);
-    baseline(&mut s.ble, false);
+    baseline_off(&mut s.ble);
     enables(&s.ble, 0x2004);
 }
 
@@ -196,11 +196,11 @@ pub(super) fn bit_one(s: &mut Session<'_>) {
         w.set_controller_time_overflow(true);
     });
     enables(&s.ble, 0x2700);
-    timer_stimulus(&mut s.ble, false);
+    timer_stimulus(&mut s.ble, Compare::First);
     nrt_state(s, 0x2701);
     clear(&mut s.ble);
     nrt_state(s, 0x2702);
-    timer_stimulus(&mut s.ble, true);
+    timer_stimulus(&mut s.ble, Compare::Second);
     nrt_state(s, 0x2703);
     clear(&mut s.ble);
     s.ble.bank.modify_irq_enable_1(|w| {
@@ -212,14 +212,27 @@ pub(super) fn bit_one(s: &mut Session<'_>) {
     nrt_state(s, 0x2704);
 }
 
-fn baseline(b: &mut Ble, enabled: bool) {
+/// Enable the baseline interrupt sources: 15 of bank 0, 8, 9 and 12 of
+/// bank 1.
+fn baseline_on(b: &mut Ble) {
     b.bank.modify_irq_enable_0(|w| {
-        w.set_source_15(enabled);
+        w.set_source_15(true);
     });
     b.bank.modify_irq_enable_1(|w| {
-        w.set_source_8(enabled)
-            .set_source_9(enabled)
-            .set_source_12(enabled);
+        w.set_source_8(true).set_source_9(true).set_source_12(true);
+    });
+    oer_portable_riscv::fence();
+}
+
+/// Disable the baseline interrupt sources.
+fn baseline_off(b: &mut Ble) {
+    b.bank.modify_irq_enable_0(|w| {
+        w.set_source_15(false);
+    });
+    b.bank.modify_irq_enable_1(|w| {
+        w.set_source_8(false)
+            .set_source_9(false)
+            .set_source_12(false);
     });
     oer_portable_riscv::fence();
 }
@@ -232,10 +245,17 @@ fn clear(b: &mut Ble) {
     oer_portable_riscv::fence();
 }
 
-fn timer_stimulus(b: &mut Ble, second: bool) {
+/// Which of the BT_MAC timer's two compare channels a stimulus arms.
+#[derive(Clone, Copy, PartialEq)]
+enum Compare {
+    First,
+    Second,
+}
+
+fn timer_stimulus(b: &mut Ble, compare: Compare) {
     // SOURCE: BT_MAC timer model. This is a local candidate producer, not an
     // assumed cause identity. No scheduler RUN or controller pointer is used.
-    if second {
+    if compare == Compare::Second {
         b.core.write_btlc_timer_cc_1(|w| {
             w.set_value(64);
         });
@@ -276,15 +296,15 @@ pub(super) fn nrt_controls(s: &mut Session<'_>) {
     contain(s);
     clocks(s);
     enables(&s.ble, 0x2100);
-    baseline(&mut s.ble, true);
+    baseline_on(&mut s.ble);
     s.ble.bank.write_irq_control_0(|w| {
         w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
     });
-    timer_stimulus(&mut s.ble, false);
+    timer_stimulus(&mut s.ble, Compare::First);
     nrt_state(s, 0x2101);
-    baseline(&mut s.ble, false);
+    baseline_off(&mut s.ble);
     nrt_state(s, 0x2102);
-    baseline(&mut s.ble, true);
+    baseline_on(&mut s.ble);
     nrt_state(s, 0x2103);
     s.ble.bank.write_irq_control_1(|w| {
         w.set_command(pac::bt_mac::irq_control_1::Command::Command1.bits());
@@ -299,27 +319,27 @@ pub(super) fn nrt_controls(s: &mut Session<'_>) {
     s.ble.bank.write_irq_control_0(|w| {
         w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
     });
-    timer_stimulus(&mut s.ble, false);
+    timer_stimulus(&mut s.ble, Compare::First);
     nrt_state(s, 0x2107);
     s.ble.bank.write_irq_control_2(|w| {
         w.set_command(pac::bt_mac::irq_control_2::Command::Command1.bits());
     });
     nrt_state(s, 0x2108);
     clear(&mut s.ble);
-    baseline(&mut s.ble, false);
+    baseline_off(&mut s.ble);
 }
 
 pub(super) fn nrt_arrivals(s: &mut Session<'_>) {
     contain(s);
     clocks(s);
     clear(&mut s.ble);
-    timer_stimulus(&mut s.ble, false);
+    timer_stimulus(&mut s.ble, Compare::First);
     let a = s.ble.bank.sample_bluetooth_interrupt_bank_0();
-    timer_stimulus(&mut s.ble, true);
+    timer_stimulus(&mut s.ble, Compare::Second);
     let b = s.ble.bank.sample_bluetooth_interrupt_bank_1();
     emit(0x2200, a.bits(), b.bits(), 0);
     nrt_state(s, 0x2201);
-    timer_stimulus(&mut s.ble, false);
+    timer_stimulus(&mut s.ble, Compare::First);
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_0(a);
     s.ble.bank.acknowledge_bluetooth_interrupt_bank_1(b);
     nrt_state(s, 0x2202);
@@ -732,7 +752,7 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     b.core.modify_hal_init_latch(|w| {
         w.set_enable_31(true);
     });
-    baseline(b, true);
+    baseline_on(b);
     b.bank.modify_irq_enable_1(|w| {
         w.set_controller_time_overflow(true);
     });
@@ -742,7 +762,7 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     b.bank.write_irq_control_0(|w| {
         w.set_command(pac::bt_mac::irq_control_0::Command::Command1.bits());
     });
-    timer_stimulus(b, false);
+    timer_stimulus(b, Compare::First);
     nrt_state(s, 0x3100);
     clear(&mut s.ble);
     nrt_state(s, 0x3101);
@@ -752,5 +772,5 @@ pub(super) fn btlc_prefix(s: &mut Session<'_>) {
     s.ble.bank.modify_irq_enable_0(|w| {
         w.set_source_0(false).set_source_1(false);
     });
-    baseline(&mut s.ble, false);
+    baseline_off(&mut s.ble);
 }

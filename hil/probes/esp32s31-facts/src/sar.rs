@@ -17,10 +17,78 @@ pub(super) struct Sar {
     ticks_per_us: u32,
     trigger_window: [u32; 2],
     observations: [(u32, u32); 99],
-    powered: bool,
-    temperature_acquired: bool,
-    usable: bool,
-    distinct: bool,
+    power: Power,
+    temperature: Temperature,
+    samples: Samples,
+}
+
+/// Which samples a hold or an edge case takes: every one, or only the
+/// last, at 100 us.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Timing {
+    Every,
+    Delayed,
+}
+
+impl Timing {
+    /// The record's code: 1 when delayed.
+    const fn code(self) -> u32 {
+        match self {
+            Self::Every => 0,
+            Self::Delayed => 1,
+        }
+    }
+}
+
+/// Whether a hold case disarms the tone before its samples.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum ToneClear {
+    Kept,
+    Cleared,
+}
+
+impl ToneClear {
+    /// The record's code: 1 when cleared.
+    const fn code(self) -> u32 {
+        match self {
+            Self::Kept => 0,
+            Self::Cleared => 1,
+        }
+    }
+}
+
+/// Whether the power detector was powered up.
+#[derive(Clone, Copy, PartialEq)]
+enum Power {
+    Off,
+    On,
+}
+
+/// Whether this image holds the temperature sensor's power and clock.
+#[derive(Clone, Copy, PartialEq)]
+enum Temperature {
+    Released,
+    Acquired,
+}
+
+/// What the readiness samples showed: a zero among them, two equal
+/// non-zero ones, or two distinct ones.
+#[derive(Clone, Copy, PartialEq)]
+enum Samples {
+    Unusable,
+    Same,
+    Distinct,
+}
+
+impl Samples {
+    /// The record's codes: usable, then distinct.
+    const fn codes(self) -> (u32, u32) {
+        match self {
+            Self::Unusable => (0, 0),
+            Self::Same => (1, 0),
+            Self::Distinct => (1, 1),
+        }
+    }
 }
 impl Sar {
     pub fn new(
@@ -38,10 +106,9 @@ impl Sar {
             ticks_per_us: 0,
             trigger_window: [0; 2],
             observations: [(0, 0); 99],
-            powered: false,
-            temperature_acquired: false,
-            usable: false,
-            distinct: false,
+            power: Power::Off,
+            temperature: Temperature::Released,
+            samples: Samples::Unusable,
         }
     }
     pub(super) fn clock(&mut self) -> bool {
@@ -198,7 +265,7 @@ impl Sar {
             .modem_lpcon_chip_clocks
             .set_i2c_ana_mst_master_clock(true);
 
-        self.powered = true;
+        self.power = Power::On;
         self.power_readback()
     }
     pub(super) fn analog_byte(
@@ -293,15 +360,11 @@ impl Sar {
             .get()
     }
     #[inline(always)]
-    fn arm(&mut self, armed: bool) {
+    fn arm(&mut self, state: fe::tone_path_0_control::ToneEnableOrArm) {
         self.radio
             .phy_baseband_config_oracle_fe
             .modify_tone_path_0_control(|w| {
-                w.set_tone_enable_or_arm(if armed {
-                    fe::tone_path_0_control::ToneEnableOrArm::Armed
-                } else {
-                    fe::tone_path_0_control::ToneEnableOrArm::Disarmed
-                });
+                w.set_tone_enable_or_arm(state);
             });
     }
     #[inline(always)]
@@ -333,7 +396,7 @@ impl Sar {
     }
     fn begin(&mut self) -> Option<u32> {
         self.observations.fill((0, 0));
-        self.arm(true);
+        self.arm(fe::tone_path_0_control::ToneEnableOrArm::Armed);
         let arm = oer_portable_riscv::cycle32();
         self.until(arm, 1);
         let trigger = self.trigger();
@@ -504,20 +567,21 @@ impl Sar {
                 return;
             }
         }
-        self.usable = samples.iter().all(|v| *v != 0);
-        self.distinct = self.usable && samples[0] != samples[1];
-        emit(
-            0x1405,
-            u32::from(self.usable),
-            u32::from(self.distinct),
-            self.ready(),
-        );
-        if !self.usable {
+        self.samples = if !samples.iter().all(|v| *v != 0) {
+            Samples::Unusable
+        } else if samples[0] != samples[1] {
+            Samples::Distinct
+        } else {
+            Samples::Same
+        };
+        let (usable, distinct) = self.samples.codes();
+        emit(0x1405, usable, distinct, self.ready());
+        if self.samples == Samples::Unusable {
             self.cleanup();
         }
     }
-    pub fn hold(&mut self, delayed: bool, clear: bool) {
-        if !self.usable {
+    pub fn hold(&mut self, timing: Timing, clear: ToneClear) {
+        if self.samples == Samples::Unusable {
             emit(0x14ee, 5, 0, 0);
             return;
         }
@@ -528,11 +592,11 @@ impl Sar {
             self.cleanup();
             return;
         };
-        if clear {
-            self.arm(false);
+        if clear == ToneClear::Cleared {
+            self.arm(fe::tone_path_0_control::ToneEnableOrArm::Disarmed);
         }
         for (us, out) in [0, 1, 10, 100].into_iter().zip(captures.iter_mut()) {
-            if delayed && us != 100 {
+            if timing == Timing::Delayed && us != 100 {
                 continue;
             }
             self.until(ready_at, us);
@@ -549,17 +613,17 @@ impl Sar {
             ];
         }
         self.publish_poll(0x1410);
-        emit(0x1412, u32::from(delayed), u32::from(clear), ready_at);
+        emit(0x1412, timing.code(), clear.code(), ready_at);
         for (us, out) in [0, 1, 10, 100].into_iter().zip(captures) {
-            if delayed && us != 100 {
+            if timing == Timing::Delayed && us != 100 {
                 continue;
             }
             emit(0x1413, us, out[0], out[4]);
             emit(0x1414, out[1], out[2], out[3]);
         }
     }
-    pub fn edge(&mut self, delayed: bool) {
-        if !self.distinct {
+    pub fn edge(&mut self, timing: Timing) {
+        if self.samples != Samples::Distinct {
             emit(0x14ee, 6, 0, 0);
             return;
         }
@@ -570,7 +634,7 @@ impl Sar {
             let after = self.sample();
             let ready_after_reference = self.ready();
             let mut observations = [[0_u32; 5]; 8];
-            self.arm(true);
+            self.arm(fe::tone_path_0_control::ToneEnableOrArm::Armed);
             self.until(oer_portable_riscv::cycle32(), 1);
             let ready_after_arm = self.ready();
             let trigger = self.trigger();
@@ -581,7 +645,7 @@ impl Sar {
                 self.until(trigger, us);
                 let begin = oer_portable_riscv::cycle32().wrapping_sub(trigger);
                 let ready = self.ready();
-                let sample = if !delayed || us == 100 {
+                let sample = if timing == Timing::Every || us == 100 {
                     self.sample()
                 } else {
                     u32::MAX
@@ -601,7 +665,7 @@ impl Sar {
                 ready_after_reference,
                 ready_after_arm,
             );
-            emit(0x1451, self.trigger_window[0], trigger, u32::from(delayed));
+            emit(0x1451, self.trigger_window[0], trigger, timing.code());
             for out in observations {
                 emit(0x1452, out[0], out[1], out[4]);
                 emit(0x1453, out[2], out[3], 0);
@@ -609,14 +673,14 @@ impl Sar {
         }
     }
     pub fn cleanup(&mut self) {
-        if !self.powered {
+        if self.power == Power::Off {
             emit(0x1490, u32::MAX, u32::MAX, 0);
             return;
         }
         // SOURCE: production baseband/ops.rs::stop_power_detector_tone,
         // and the ROM stop-tone DAC-scale restores. Clock ownership stays
         // in this image until the ROM-download reset; no background control.
-        self.arm(false);
+        self.arm(fe::tone_path_0_control::ToneEnableOrArm::Disarmed);
         let fe = &mut self.radio.phy_baseband_config_oracle_fe;
         fe.modify_tone_path_1_control(|w| {
             w.set_tone_enable_or_arm(false);
@@ -630,11 +694,10 @@ impl Sar {
         fe.modify_dac_scale_control(|w| {
             w.set_bits_8_15_opaque(0xff);
         });
-        self.usable = false;
-        self.distinct = false;
+        self.samples = Samples::Unusable;
         emit(0x1490, self.ready(), self.sample(), 0);
         // SOURCE: temperature.rs::Restore::release_with, sole owner.
-        if self.temperature_acquired {
+        if self.temperature == Temperature::Acquired {
             self.radio.lp_tsens.modify_ctrl(|w| {
                 w.set_power_up(pac::tsens::ctrl::PowerUp::Disabled);
             });
@@ -644,7 +707,7 @@ impl Sar {
             self.radio.pmu_radio.modify_ana_peri_pwr_ctrl(|w| {
                 w.set_xpd_perif_i2c(false);
             });
-            self.temperature_acquired = false;
+            self.temperature = Temperature::Released;
         }
         self.radio.phy_clock_oracle_fe.modify_word_0800_opaque(|w| {
             w.set_bit_2_opaque(false);

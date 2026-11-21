@@ -348,15 +348,26 @@ fn park(s: &mut Session<'_>) {
 }
 
 pub(super) fn main_path(s: &mut Session<'_>) {
-    run(s, false);
+    run(s, Path::Normal);
 }
 
 pub(super) fn direct_path(s: &mut Session<'_>) {
-    run(s, true);
+    run(s, Path::Direct);
 }
 
-fn run(s: &mut Session<'_>, direct: bool) {
-    let tag = if direct { 0x2330 } else { 0x2320 };
+/// Whether hart 1 starts by the ROM's direct jump or the normal boot path.
+#[derive(Clone, Copy, PartialEq)]
+enum Path {
+    Normal,
+    Direct,
+}
+
+fn run(s: &mut Session<'_>, direct: Path) {
+    let tag = if direct == Path::Direct {
+        0x2330
+    } else {
+        0x2320
+    };
     feed(s);
     park(s);
     boot_inputs(s, tag);
@@ -426,9 +437,9 @@ fn revoke() {
 
 /// Release hart 1 into the probe's entry in ESP-IDF's order: the entry's
 /// address, the stall polls and the cycle of the release.
-fn release(s: &mut Session<'_>, direct: bool) -> (u32, u32, u32) {
+fn release(s: &mut Session<'_>, direct: Path) -> (u32, u32, u32) {
     let entry = ptr::addr_of!(facts_hart1_entry) as u32;
-    if direct {
+    if direct == Path::Direct {
         set_boot_address(s, entry | 0x8000_0000);
     }
     let c = &mut s.core_control;
@@ -456,7 +467,7 @@ fn release(s: &mut Session<'_>, direct: bool) -> (u32, u32, u32) {
     });
     oer_portable_riscv::fence();
     let start = oer_portable_riscv::cycle32();
-    if !direct {
+    if direct == Path::Normal {
         set_boot_address(s, entry);
     }
     (entry, polls, start)
@@ -500,7 +511,7 @@ pub(super) fn stores_stay_their_harts(s: &mut Session<'_>) {
     edge_disabled(&mut s.interrupt_matrix.clic[0], i);
     let state0 = before | line_state(&s.interrupt_matrix.clic[0], i) << 8;
     lend(s, CROSS);
-    let (_entry, polls, released) = release(s, false);
+    let (_entry, polls, released) = release(s, Path::Normal);
     // Hart 1's entry runs the ROM's path first: wait for its ready word
     // within the release's own bound.
     let mut ready = 0;

@@ -29,5 +29,5 @@ allow-indexing-slicing-in-tests = true
 suppress-restriction-lint-in-const = false
 
 # Deferred until clean of the two bool lints (DEFERRED_BOOL_LINTS, layer tests).
-max-struct-bools = 255
-max-fn-params-bools = 255
+max-struct-bools = 1
+max-fn-params-bools = 0

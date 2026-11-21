@@ -155,10 +155,17 @@ fn zb_clear(s: &mut Session<'_>) {
         .acknowledge_event_status(snapshot);
     oer_portable_riscv::fence();
 }
-fn zb_start(s: &mut Session<'_>, second: bool) {
+/// Which of the IEEE 802.15.4 timers a start arms.
+#[derive(Clone, Copy, PartialEq)]
+enum ZbTimer {
+    First,
+    Second,
+}
+
+fn zb_start(s: &mut Session<'_>, second: ZbTimer) {
     use pac::ieee802154::command::Opcode;
     let mac = &mut s.radio.zb.ieee802154_mac_task;
-    if second {
+    if second == ZbTimer::Second {
         mac.write_timer1_threshold(|w| {
             w.set_threshold(32);
         });
@@ -172,7 +179,7 @@ fn zb_start(s: &mut Session<'_>, second: bool) {
     let start = oer_portable_riscv::cycle32();
     while oer_portable_riscv::cycle32().wrapping_sub(start) < LOCAL_LIMIT {
         let status = s.radio.zb.ieee802154_mac_irq.read_event_status();
-        if if second {
+        if if second == ZbTimer::Second {
             status.timer1_overflow()
         } else {
             status.timer0_overflow()
@@ -181,7 +188,7 @@ fn zb_start(s: &mut Session<'_>, second: bool) {
         }
     }
     s.radio.zb.ieee802154_mac_task.write_command(
-        if second {
+        if second == ZbTimer::Second {
             Opcode::Timer1Stop
         } else {
             Opcode::Timer0Stop
@@ -231,7 +238,7 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
     zb_mask(s, false);
     zb_clear(s);
     zb_state(s, 0x8210);
-    zb_start(s, false);
+    zb_start(s, ZbTimer::First);
     zb_state(s, 0x8220); // expiry while ENA=0
     zb_mask(s, true);
     zb_state(s, 0x8230); // retained cause delivers while matrix route is parked
@@ -252,9 +259,9 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
     oer_portable_riscv::fence();
     zb_mask(s, true);
     zb_state(s, 0x8264);
-    zb_start(s, true);
+    zb_start(s, ZbTimer::Second);
     zb_state(s, 0x8270); // timer1 enabled expiry
-    zb_start(s, false);
+    zb_start(s, ZbTimer::First);
     zb_state(s, 0x8280); // distinct pending bits
     let selected = s
         .radio
@@ -271,7 +278,7 @@ pub(super) fn ieee_timers(s: &mut Session<'_>) {
     zb_clear(s);
     zb_state(s, 0x82a0); // enabled W1C
     zb_mask(s, false);
-    zb_start(s, true);
+    zb_start(s, ZbTimer::Second);
     zb_state(s, 0x82b0); // timer1 also latches while masked
     zb_clear(s);
     zb_state(s, 0x82c0);

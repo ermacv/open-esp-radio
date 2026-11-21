@@ -213,11 +213,18 @@ fn load(s: &mut Session<'_>, n: u8) {
     window();
 }
 fn program(s: &mut Session<'_>, c: Cause, tag: u32) -> u64 {
-    stage(s, c, tag, false)
+    stage(s, c, tag, Tbtt::Stopped)
 }
-fn stage(s: &mut Session<'_>, c: Cause, tag: u32, running_tbtt: bool) -> u64 {
+/// Whether the TBTT timer runs while the target is staged.
+#[derive(Clone, Copy, PartialEq)]
+enum Tbtt {
+    Stopped,
+    Running,
+}
+
+fn stage(s: &mut Session<'_>, c: Cause, tag: u32, running_tbtt: Tbtt) -> u64 {
     run(s, c, false);
-    if running_tbtt {
+    if running_tbtt == Tbtt::Running {
         run(s, c, true);
     }
     let now = snapshot(s, c.domain(), tag);
@@ -458,7 +465,7 @@ pub(in crate::image) fn route132(s: &mut Session<'_>) {
     zb_mask(s, false);
     zb_clear(s);
     zb_state(s, 0x3300);
-    zb_start(s, false);
+    zb_start(s, ZbTimer::First);
     zb_state(s, 0x3310);
     zb_mask(s, true);
     zb_state(s, 0x3320); // route132 remains parked, CPU MIE stays zero.
@@ -543,7 +550,7 @@ fn tbtt_recovery(s: &mut Session<'_>, domains: core::ops::Range<u8>) {
         emit(tag + 0x16, u32::from(end >= stopped), raw(s), c.bit());
         // SOURCE: HAL start_station_tbtt / HW26 complete ordering, plus
         // BLOB_LIBPP_S31_TBTT_DOMAIN_CONTROLS_20261027 for domain selection.
-        let target = stage(s, c, tag + 0x20, true);
+        let target = stage(s, c, tag + 0x20, Tbtt::Running);
         state(s, tag + 0x22);
         // Explicit project stale-event discard while every IRQ is masked.
         s.radio.power.clear_all_mac_power_interrupts();
