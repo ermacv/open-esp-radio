@@ -18,6 +18,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         harts,
         irq_stacks,
         panics,
+        hot,
         output,
         log,
     } = *input;
@@ -51,6 +52,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
             irq_stack_margin_percent: irq_stacks.margin_percent,
             irq_stack_guard: irq_stacks.guard,
             task_stack_reserve_bytes: task_stack_reserve,
+            hot,
         };
         let specification = strict::configure(&mut runtime, &analysis, output, strict)?;
         crate::cargo::ensure_fetched(root)?;

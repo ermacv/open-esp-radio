@@ -360,6 +360,7 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
                 harts: Vec::new(),
                 irq_stack_guard: oer_tools_chip_profile::policy::IrqStackGuard::Placed,
                 task_stack_reserve_bytes: None,
+                hot: None,
             })
             .unwrap(),
         )
@@ -383,6 +384,61 @@ fn the_analysis_only_first_pass_omits_guards_until_the_bound_is_known() {
             }
             // Stop here: this test checks the contract handoff before any
             // analysis or output ELF is available.
+            17
+        })
+        .unwrap();
+        assert_eq!(status, 17);
+    }
+}
+
+#[test]
+fn the_first_pass_links_the_hot_levels_the_image_takes() {
+    for (chip, hot, expected) in [
+        ("esp32s31", Some(2), [true, true, false]),
+        ("esp32s31", None, [false, false, false]),
+    ] {
+        let directory = tempdir();
+        let root = directory.path();
+        for (path, text) in oer_chips_family_facts::tracked::FILES {
+            let path = root.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        }
+        let spec = root.join(strict::SPEC_FILE);
+        fs::write(
+            &spec,
+            toml::to_string(&strict::Spec {
+                root: root.to_owned(),
+                chip: chip.to_owned(),
+                stack_policy: root.join("unused.toml"),
+                irq_stacks: Vec::new(),
+                irq_stack_margin_percent: None,
+                task_stack_proven: false,
+                harts: Vec::new(),
+                irq_stack_guard: oer_tools_chip_profile::policy::IrqStackGuard::Placed,
+                task_stack_reserve_bytes: None,
+                hot: hot.map(|level| hot::Level::try_from(level).unwrap()),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let mut arguments = vec![
+            OsString::from("-Truntime/link.x"),
+            "-o".into(),
+            root.join("runtime.elf").into(),
+        ];
+        let fragment = root.join(hot::FRAGMENT);
+        let status = link(&mut arguments, &[], Some(&spec), |_| {
+            // The fragment is in the linker's search path before the first
+            // pass: the levels the image takes, and no other.
+            let text = fs::read_to_string(&fragment).unwrap();
+            for (level, taken) in (1..).zip(expected) {
+                assert_eq!(
+                    text.contains(&format!(".hot.{level}.text :")),
+                    taken,
+                    "{text}"
+                );
+            }
             17
         })
         .unwrap();

@@ -54,3 +54,5 @@ oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The PHY engine's poll (`#[hot(1)]`) runs from SRAM.
+hot = 1

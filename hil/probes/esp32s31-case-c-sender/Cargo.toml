@@ -52,6 +52,8 @@ workspace = true
 
 [package.metadata.open-radio]
 critical-section-hart = "boot"
+# The PHY engine's poll (`#[hot(1)]`) runs from SRAM.
+hot = 1
 
 [package.metadata.open-radio.panic-budget]
 # Initial composition inventory: existing production/macro sites, no new

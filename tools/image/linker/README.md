@@ -61,6 +61,11 @@ unused (`[core.N.interrupt_stack] unused = true`), or a launch template the
 image does not declare in its `harts`, gets 0 bytes in both links and takes
 no part in the sizing.
 
+Before the first link it writes `hot-text.x` beside the specification from
+the image's `hot` level (`oer_tools_image_checks::linker::hot`): an output
+section `.hot.<N>.text` in SRAM a level the image takes, the same in both
+links ([code placement](../../../docs/memory.md#code-placement)).
+
 One second link supplies `IRQ_STACK_HART<N>_BYTES` for each used hart
 alongside `strict-text.x`. The final ELF's bound must equal the first
 link's: nothing the second link does changes a frame or an edge, so a

@@ -25,6 +25,7 @@ pub(crate) fn configure(
         irq_stack_margin_percent: spec.irq_stack_margin_percent,
         irq_stack_guard: spec.irq_stack_guard,
         task_stack_reserve_bytes: spec.task_stack_reserve_bytes,
+        hot: spec.hot,
     };
     let path = std::path::absolute(output.join(SPEC_FILE))?;
     std::fs::write(&path, toml::to_string(&analysis)?)?;
@@ -121,6 +122,7 @@ mod tests {
             irq_stack_margin_percent: None,
             irq_stack_guard: oer_tools_chip_profile::policy::IrqStackGuard::Placed,
             task_stack_reserve_bytes: None,
+            hot: None,
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();

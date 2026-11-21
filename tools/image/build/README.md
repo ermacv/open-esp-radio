@@ -127,6 +127,13 @@ The chip profile's boot kind selects the pipeline:
 | `staged` (esp32s31) | `staged` | The ROM-readable DIO bootloader from the `espflash` library's resources, the partition table of the flash map's CSV, the `ota_0` selection |
 | `esp-idf-bootloader` (an ESP-IDF catalog image) | `esp_idf` | The catalog project's own bootloader and partition table, built against the pinned ESP-IDF (`esp_idf::catalog`, `esp_idf::idf`); its `flasher_args.json` must place them at the flash map's offsets; the flash map is the chip profile's, or for an ESP-IDF peer chip without a profile (`esp32c5`) its `chips/<chip>/facts/flash.toml` |
 
+An application package names the highest hot level it takes,
+`[package.metadata.open-radio] hot = N` (1 to 3, the levels `#[hot(N)]`
+takes; absent, none). A probe declares it the same way. The pipeline
+passes it to the image linker, which places those levels in SRAM
+([code placement](../../../docs/memory.md#code-placement)); the image's
+`sizes.json` gives each level's bytes as the section `.hot.<N>.text`.
+
 An application package may declare instrumentation classes in its manifest,
 `[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
 happened and execution cost: values and events collected by the image),

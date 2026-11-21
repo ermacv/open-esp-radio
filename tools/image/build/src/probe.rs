@@ -241,6 +241,7 @@ fn analysis(
         // A probe's task stacks are never declared proven: its reserve is the
         // policy's.
         task_stack_reserve_bytes: None,
+        hot: crate::hot::of_metadata(metadata, package)?,
     })
 }
 

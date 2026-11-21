@@ -224,7 +224,9 @@ limits them. A second-pass bound that differs from the first, or a bound plus
 margin that no longer fits, fails without another link.
 Strict code has no manual function-section annotations. The staged platform
 places its assembly entry and trap code in SRAM;
-`.hot.text` selects code for performance. The post-build interrupt check
+hot code (`#[hot(N)]`) is the image's choice of levels, written by the image
+linker as `hot-text.x` ([code placement](../../../docs/memory.md#code-placement)).
+The post-build interrupt check
 verifies the final ELF.
 
 Analysis runs if and only if the link uses the staged runtime script
