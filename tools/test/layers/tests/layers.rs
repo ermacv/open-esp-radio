@@ -6618,7 +6618,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/modem/values.rs",
-        16,
+        14,
         BY_RADIO_SYSTEM,
     ),
     (
