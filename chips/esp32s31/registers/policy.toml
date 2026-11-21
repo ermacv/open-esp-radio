@@ -1,7 +1,7 @@
-# The ESP32-S31 ownership policy (schema 6) over the chip root `chip.toml`:
-# partitions of parts, unclaimed words, value domains and transactions.
+# The ESP32-S31 ownership policy (schema 7) over the chip root `chip.toml`:
+# partitions of parts, unclaimed words and the transactions the PAC renders.
 # Format: tools/registers/model/README.md, "Ownership policy".
-schema = 6
+schema = 7
 chip = "esp32s31"
 
 [[partitions]]
@@ -1603,26 +1603,6 @@ partition = "RadioPhyPeripherals"
 sources = ["HIL_VENDOR_CALIBRATION_REGISTERS_2026_09_27"]
 
 [[zero-based-field-writes]]
-name = "extra_softap_rx_block_ack_peer_head"
-fields = ["WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_HEAD.PEER_ADDRESS_HEAD"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "extra_softap_rx_block_ack_peer_tail_and_policy"
-fields = ["WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.PEER_ADDRESS_TAIL", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.INTERFACE", "WIFI_MAC.EXTRA_SOFTAP_RX_BLOCK_ACK_PEER_TAIL_AND_POLICY.WINDOW"]
-sources = ["BLOB_LIBPP_HAL_MAC_RX_BLOCK_ACK"]
-
-[[zero-based-field-writes]]
-name = "frequency_memory_data"
-fields = ["FE.FREQUENCY_MEMORY_DATA.DATA", "FE.FREQUENCY_MEMORY_DATA.MODE"]
-sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
-
-[[zero-based-field-writes]]
-name = "power_detector_reference"
-fields = ["FE.POWER_DETECTOR_REFERENCE.REFERENCE_CODE"]
-sources = ["ROM_REV0_PHY_POWER_DETECTOR"]
-
-[[zero-based-field-writes]]
 name = "publish_phy_i2c_read_mask"
 fields = ["I2C_ANA_MST.ANA_CONF1.ANA_CONF1"]
 whole-word-bits = { value = 0xff000000, sources = ["ROM_REV0_PHY_I2C"] }
@@ -1733,7 +1713,7 @@ sources = ["BLOB_LIBPP_HAL_MAC_INTERRUPT_CLR_EVENT"]
 
 [[fixed-register-sequences]]
 name = "clear_he_mpdu_length_links"
-steps = [{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0, whole-word = true }]
+steps = [{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0 }]
 sources = ["BLOB_LIBPP_HAL_HE_INIT_PIN_20261108"]
 
 [[fixed-register-images]]
@@ -2023,7 +2003,7 @@ sources = ["BLOB_LIBBTDM_CONTROLLER_IRQ", "BLOB_LIBBTDM_SCHEDULER_CANCELLATION",
 
 [[fixed-register-sequences]]
 name = "initialize_mac_last_rx_buffer_entries"
-steps = [{ register = "WIFI_MAC.ENTRY_CONTROL0", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A0", value = 0x00000608 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL1", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A1", value = 0x00000808 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL2", value = 0x00023006 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A2", value = 0x00008e88 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL3", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A3", value = 0x44004300 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL4", value = 0x0002301c }, { register = "WIFI_MAC.ENTRY_PARAMETER_A4", value = 0x43004400 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff, whole-word = true }, { register = "WIFI_MAC.ENTRY_CONTROL5", value = 0x00023011 }, { register = "WIFI_MAC.ENTRY_PARAMETER_A5", value = 1 }, { register = "WIFI_MAC.ENTRY_PARAMETER_B5", value = 0x000000ff }]
+steps = [{ register = "WIFI_MAC.ENTRY_PARAMETER_B0", value = 0x0000ffff }, { register = "WIFI_MAC.ENTRY_PARAMETER_B1", value = 0x0000ffff }, { register = "WIFI_MAC.ENTRY_PARAMETER_B2", value = 0x0000ffff }, { register = "WIFI_MAC.ENTRY_PARAMETER_B3", value = 0xffffffff }, { register = "WIFI_MAC.ENTRY_PARAMETER_B4", value = 0xffffffff }]
 sources = ["BLOB_LIBPP_MAC_LAST_RXBUF_INIT", "BLOB_BX16_LIBPP_LAST_RX_IMAGES_20261027"]
 
 [[field-or-modifies]]

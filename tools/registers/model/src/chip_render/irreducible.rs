@@ -2,7 +2,7 @@
 //! of the part the policy gives them to:
 //!
 //! - a fixed image marked `whole-word` (the vendor's store of a whole word,
-//!   undeclared and read-only bits included), and each such step of a fixed
+//!   undeclared and read-only bits included), and each step of a fixed
 //!   sequence, one method per image; the HAL orders the steps;
 //! - a fixed image acknowledging write-one-to-clear events with its proof:
 //!   the enable word it masks first (`masks`) or the event the caller
@@ -18,8 +18,10 @@
 //!   diagnostic image of the part's readable, side-effect-free words, raw.
 //! - a sourced zero publication to a read-observed word, without a load.
 //!
-//! Every other transaction of the policy is a sequence of field accessors
-//! and belongs to the HAL.
+//! Every other write is a sequence of field accessors and belongs to the
+//! HAL: the policy keeps no record of it. A fixed image of none of the forms
+//! above renders nothing and is refused; the loader refuses the other
+//! kinds' such records, or their types cannot write them.
 
 use std::fmt::Write as _;
 
@@ -309,14 +311,6 @@ pub(super) fn render(
         .filter(|zero| mine(&zero.name))
     {
         let entity = zero.name.as_str();
-        if !model.register(&zero.register).is_some_and(|register| {
-            register
-                .fields
-                .iter()
-                .any(|field| field.class == FieldClass::ReadObserved)
-        }) {
-            continue;
-        }
         let target = element(entity, plan, owner, model, &zero.register)?;
         doc(
             body,
@@ -349,12 +343,18 @@ pub(super) fn render(
                     FieldClass::HardwareWritten | FieldClass::SelfClearing
                 )
             });
+        // Any other image is a write of the word's fields, which the
+        // generic accessors express: the policy keeps no record that
+        // renders nothing.
         if !(configuration
             || image.whole_word
             || image.masks.is_some()
             || image.consumed_event.is_some())
         {
-            continue;
+            return Err(Error::new(
+                entity,
+                "a fixed image of fields the word's accessors write renders nothing",
+            ));
         }
         if target
             .template
@@ -471,7 +471,7 @@ pub(super) fn render(
     for modify in file
         .field_or_modifies
         .iter()
-        .filter(|modify| modify.domain.is_none() && modify.value.is_none() && mine(&modify.name))
+        .filter(|modify| mine(&modify.name))
     {
         render_pointer_or(body, plan, owner, model, modify)?;
     }
@@ -480,7 +480,7 @@ pub(super) fn render(
         .iter()
         .filter(|sequence| mine(&sequence.name))
     {
-        for step in sequence.steps.iter().filter(|step| step.whole_word) {
+        for step in &sequence.steps {
             let entity = sequence.name.as_str();
             if step.first.is_some() || step.count.is_some() {
                 render_element_range(body, plan, owner, model, sequence, step)?;
@@ -531,12 +531,10 @@ pub(super) fn render(
     for write in file
         .zero_based_field_writes
         .iter()
-        .filter(|write| write.whole_word_bits.is_some() && mine(&write.name))
+        .filter(|write| mine(&write.name))
     {
         let entity = write.name.as_str();
-        let Some(bits) = &write.whole_word_bits else {
-            continue;
-        };
+        let bits = &write.whole_word_bits;
         let Some((register, _)) = write
             .fields
             .first()
@@ -647,7 +645,7 @@ fn render_pointer_or(
     plan: &TypePlan<'_>,
     owner: &Owner<'_>,
     model: &ChipModel,
-    modify: &crate::chip_policy::FieldBitModify,
+    modify: &crate::chip_policy::FieldOrModify,
 ) -> Result<(), Error> {
     let entity = modify.name.as_str();
     let [projection] = modify.fields.as_slice() else {

@@ -62,14 +62,6 @@ id = "S31_MMIO_USE_201014B4"
 description = "esp32s31 pinned vendor word0x201014b4. Reviewed source-use facts: libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::r_sym_ble_nENHlP4KBuQYlFVffaR5+0x34, mask0xfffdbfff, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
-id = "S31_MMIO_USE_201040E8"
-description = "esp32s31 pinned vendor word0x201040e8. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_dump_rx_errors+0x5a, mask0x07fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_agreement_add_rx_ba+0x9a, mask0x80000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_set_rxq_policy+0x14, mask0x00000100, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_ba_session_restore_by_hw_index+0x12, mask0x7800febd, read Exact Branch. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_20104100"
-description = "esp32s31 pinned vendor word0x20104100. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_rx_set_promis+0x48, mask0x0000ffff, read May Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
 id = "S31_MMIO_USE_20109C18"
 description = "esp32s31 pinned vendor word0x20109c18. Reviewed source-use facts: librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::phy_11p_set_1+0x26, mask0xefffc7f0, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
@@ -116,10 +108,6 @@ description = "esp32s31 pinned vendor word0x20107018. Reviewed source-use facts:
 [[sources]]
 id = "S31_MMIO_USE_20107400"
 description = "esp32s31 pinned vendor word0x20107400. Reviewed source-use facts: librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::force_tx_seed+0x14, mask0x0000007f, explicit write-replacement; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::WifiTxStart+0x8a, mask0x00200000, explicit write-replacement; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::force_tx_seed+0x26, mask0x00000080, explicit write-replacement; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::force_tx_seed+0x18, mask0xffdf9f00, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_2010D854"
-description = "esp32s31 pinned vendor word0x2010d854. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_mac_beacon_memory_tag_start_offset+0x1c, mask0x01fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_reset_mac_beacon_memory_tag_start_offset+0x10, mask0x02000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_mac_beacon_memory_tag_disable+0x12, mask0x04000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_mac_beacon_memory_tag_start_offset+0x8, mask0xf8010000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
 id = "S31_MMIO_USE_20102840"
@@ -170,20 +158,8 @@ id = "S31_MMIO_USE_20104038"
 description = "esp32s31 pinned vendor word0x20104038. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_he_set_bcast_ru+0x10, mask0xff800000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
-id = "S31_MMIO_USE_201040EC"
-description = "esp32s31 pinned vendor word0x201040ec. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_dump_rx_errors+0xd4, mask0x07fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_set_rxq_policy+0x14, mask0x00000100, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0xbc, mask0xf800febd, read Exact Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_201040F0"
-description = "esp32s31 pinned vendor word0x201040f0. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_set_rxq_policy+0x14, mask0x00000100, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0xbc, mask0xfffefebd, read Exact Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
 id = "S31_MMIO_USE_201040F4"
 description = "esp32s31 pinned vendor word0x201040f4. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_set_promis_misc_pkt+0x1a, mask0x07fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0xbc, mask0xf80000bd, read Exact Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_201040FC"
-description = "esp32s31 pinned vendor word0x201040fc. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_rx_set_promis+0x3e, mask0x0000ffff, read May Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
 id = "S31_MMIO_USE_201042A8"
@@ -290,10 +266,6 @@ id = "S31_MMIO_USE_201013E0"
 description = "esp32s31 pinned vendor word0x201013e0. Reviewed source-use facts: libbredr_app sha256 08301519c231a02a797c47a69b3eacec2be2f31080581d688a2f749da4f42c80::r_obh_link_global_rxlink_curr_ptr_get+0x5e, mask0x000fffff, read Exact Branch; libbredr_app sha256 08301519c231a02a797c47a69b3eacec2be2f31080581d688a2f749da4f42c80::r_obh_link_global_rxvalid_set+0xe, mask0xffe00000, read Exact Return; libbredr_app sha256 08301519c231a02a797c47a69b3eacec2be2f31080581d688a2f749da4f42c80::r_obh_link_global_rxlink_curr_ptr_set+0xe, mask0x00100000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
-id = "S31_MMIO_USE_20104108"
-description = "esp32s31 pinned vendor word0x20104108. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_rx_set_promis+0x34, mask0x0000ffff, read May Store. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
 id = "S31_MMIO_USE_20104114"
 description = "esp32s31 pinned vendor word0x20104114. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_set_dump_ctrl_frame_cfg+0x78, mask0xffff0000, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
@@ -356,10 +328,6 @@ description = "esp32s31 pinned vendor word0x20101294. Reviewed source-use facts:
 [[sources]]
 id = "S31_MMIO_USE_201014C8"
 description = "esp32s31 pinned vendor word0x201014c8. Reviewed source-use facts: libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::sym_ble_0wtBkddQkBRXe0aX1yV6+0x22, mask0x00000400, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_20101800"
-description = "esp32s31 pinned vendor word0x20101800. Reviewed source-use facts: libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::sym_ble_0QLTh7jLx8xIT9qMwPJP+0x14, mask0x00200000, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
 id = "S31_MMIO_USE_201028A8"
@@ -550,10 +518,6 @@ id = "S31_MMIO_USE_2010D834"
 description = "esp32s31 pinned vendor word0x2010d834. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_beacon_filter_force_dump_limit+0x22, mask0x001c0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_clear_mac_modem_beacon_miss_intr_filter+0x10, mask0x02000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_beacon_filter_force_dump_limit+0xc, mask0x0dc00000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
-id = "S31_MMIO_USE_201042B4"
-description = "esp32s31 pinned vendor word0x201042b4. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_beacon_filter_abort_length+0x1a, mask0x0000fff0, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_beacon_filter_abort_disable+0xc, mask0x00000008, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_set_beacon_filter_abort_length+0xa, mask0xffff0000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
 id = "S31_MMIO_USE_20102124"
 description = "esp32s31 pinned vendor word0x20102124. Reviewed source-use facts: libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::ble_bb_cte_set_cte_iq_sel_1us+0x4, mask0x00000001, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
@@ -714,10 +678,6 @@ id = "S31_MMIO_USE_20104120"
 description = "esp32s31 pinned vendor word0x20104120. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_set_dump_ctrl_frame_cfg+0x78, mask0xffff0000, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
-id = "S31_MMIO_USE_20104318"
-description = "esp32s31 pinned vendor word0x20104318. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x46, mask0x0001fc00, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x18, mask0x00020000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x34, mask0xfffc0000, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
 id = "S31_MMIO_USE_20104CA0"
 description = "esp32s31 pinned vendor word0x20104ca0. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::mac_txrx_init+0xca, mask0xfffffffc, read May CallArgument. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
@@ -772,10 +732,6 @@ description = "esp32s31 pinned vendor word0x201042fc. Reviewed source-use facts:
 [[sources]]
 id = "S31_MMIO_USE_20104408"
 description = "esp32s31 pinned vendor word0x20104408. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_read_imrsp_power+0x36, mask0xff00c0ff, read May CallArgument. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_20106000"
-description = "esp32s31 pinned vendor word0x20106000. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x40, mask0x00003fff, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x50, mask0x0fffc000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x5a, mask0x80000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x64, mask0x40000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x70, mask0x20000000, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
 id = "S31_MMIO_USE_20107094"
@@ -1352,10 +1308,6 @@ description = "esp32s31 pinned vendor word0x201021b0. Reviewed source-use facts:
 [[sources]]
 id = "S31_MMIO_USE_20102464"
 description = "esp32s31 pinned vendor word0x20102464. Reviewed source-use facts: libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_fifo_read+0x4, mask0xffffffff, read Exact Return. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_201040A4"
-description = "esp32s31 pinned vendor word0x201040a4. Reviewed source-use facts: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_dump_rx_errors+0x44, mask0x0000f000, explicit write-replacement. The integer ABI and merged call summaries qualify the analysis. May remains conservative use, not exact consumption; unknown bits are excluded. Indexed sites qualify candidate addresses under the reported bounds. No reset, field meaning, read safety, or modified-write semantics is inferred."
 
 [[sources]]
 id = "S31_MMIO_USE_20104494"
@@ -2082,14 +2034,6 @@ id = "S31_MMIO_MANUAL_20107C80"
 description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20107c80, mask0xffffffff: ROM phy_open_fe_bb_clk at 0x2f823ee6 writes 0xffffffff; libphy phy_close_fe_bb_clk+0x1a writes zero. Every lane therefore has both observed values independently of an unknown reset. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
 
 [[sources]]
-id = "S31_MMIO_MANUAL_20104800"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20104800, mask0xd0030103: libpp hal_crypto_enable+0x16..0x34 publishes the finite profiles 0x10103, 0x10303, 0x30103, 0x30303 and their bit28 variants; hal_crypto_init+0xc/+0x12/+0x18 supplies 0x30000 or zero at the three instances. Variable profiles establish bits0/1/8/16/17/28, while hal_crypto_enable+0x52..0x76 explicitly replaces both high2. Other constant padding lanes have no field. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
-id = "S31_MMIO_MANUAL_20105804"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20105804, mask0x4000000: libpp hal_crypto_set_key_entry+0x19a..0x1a6 selects mask0x04000000 on the 32-byte key path and the other length path omits it before the final word store at +0x13c; hal_crypto_clr_key_entry supplies zero. Bits28/29 have no established use: the unpacker selects bits24:25 and 30:31, not those lanes. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
 id = "S31_MMIO_MANUAL_20104CB0"
 description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20104cb0, mask0xffffffff: Complete libpp hal_mac_clr_txq_state+0xe/+0x16 and +0x1e..0x28 explicitly select and store a one-hot acknowledgement mask from the queue-index argument (including the timeout selector offset16). The leaf contains no index bound and RV32 shifts use the low5 count bits. This conservative mask-domain witness does not assert32 valid hardware queues or name the extra flags. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
 
@@ -2106,28 +2050,12 @@ id = "S31_MMIO_MANUAL_20104450"
 description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20104450, mask0x4f000000: Complete librftest ack_rate_tab+0x0..0x24 selects input low4, adds0x40 on the greater-than15 branch, and replicates that byte into each word lane. Bits24:27 and30 vary with that source input independently of reset. The ordinary hal_he_set_ack_rate+0x3c exact image0x50100 alone does not establish high-byte fields. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
 
 [[sources]]
-id = "S31_MMIO_MANUAL_20104C1C"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20104c1c, mask0xfff: Complete libpp hal_he_set_bbrxhung_time+0x8..0x1c explicitly replaces low12 with 0x00f or 0x03a while preserving high20. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
 id = "S31_MMIO_MANUAL_2010D8A4"
 description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x2010d8a4, mask0xf8: Complete libpp hal_set_itwt_pti+0x8..0x18 explicitly clears low8 and inserts the Boolean image at bit0. This is an explicit low-byte replacement, including bits3:7, not their preservation. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
 
 [[sources]]
 id = "S31_MMIO_MANUAL_201070B8"
 description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x201070b8, mask0x7: Complete librftest set_dump_mode+0x18..0x24 explicitly replaces low3 with zero or one. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
-id = "S31_MMIO_MANUAL_20101538"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x20101538, mask0xffffffff: Complete libble_app ble_70.o r_sym_ble_vHULMldSyvel0pWz9dUd+0x4 publishes its complete word argument here without truncation. The current direct leaf therefore has a parametric word-image domain; the independent initializer r_sym_ble_nENHlP4KBuQYlFVffaR5+0x6a writes0x65b. This argument-dependent witness does not infer reset or inner bit meaning. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
-id = "S31_MMIO_MANUAL_201018A4"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x201018a4, mask0xffffffff: libble_app connSim_1.o sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x1a..0x44 replicates its runtime opcode argument at shifts0,8,16,24 and publishes the result to both words. Even the byte subdomain can select both values of every lane, independently of unknown reset. The independent complete sym_ble_tIbS1PldTbHv6CFi0318+0x2a/+0x2e also publishes finite profiles different from0x02020202. No opcode interpretation is inferred. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
-
-[[sources]]
-id = "S31_MMIO_MANUAL_201018A8"
-description = "libphy sha256 116c7c3a55e2ddfd7937edad2667b5d64717f1967519a0201ca6354246f0b1a2; librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6; libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0; rom sha256 a52ad7513deb656a910a5740125f1cce2c7941f11ce57213b7b43aea93d5ab87. Direct bit-use review at 0x201018a8, mask0xffffffff: libble_app connSim_1.o sym_connSim_Dzx5u6gHUrhrEF6GLX1p+0x1a..0x44 replicates its runtime opcode argument at shifts0,8,16,24 and publishes the result to both words. Even the byte subdomain can select both values of every lane, independently of unknown reset. The independent complete sym_ble_tIbS1PldTbHv6CFi0318+0x2a/+0x2e also publishes finite profiles different from0x02020202. No opcode interpretation is inferred. The automated report keeps its unresolved or partial witnesses unchanged; this separately cited source proof neither converts unknown observations to uses nor asserts read safety."
 
 [[sources]]
 id = "S31_MMIO_MANUAL_20101258"
@@ -2515,10 +2443,6 @@ id = "S31_MMIO_DECLARED_20104094"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wdev_record_rx_linked_list+0x54, word0x20104094 mask0xffffffff, read Exact Store. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
-id = "S31_MMIO_DECLARED_201040A4"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_dump_rx_errors+0x44, word0x201040a4 mask0x0000f000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
 id = "S31_MMIO_DECLARED_201040AC"
 description = "esp32s31 existing-field use evidence from current pinned corpus: librftest sha256 c76dfc7e80bdbe29dbdafe68f1a09eb18db66ca392a2d66f1c5ddb169d9a2c5a::beacon_print+0xb8, word0x201040ac mask0xffffffff, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
@@ -2845,10 +2769,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_20105550"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::lmac_record_txtime+0x144, word0x20105550 mask0xfffc0000, read May CallArgument; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::lmac_record_txtime+0x14c, word0x20105550 mask0x0000007f, read May CallArgument. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20106000"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x40, word0x20106000 mask0x00003fff, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x50, word0x20106000 mask0x0fffc000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x5a, word0x20106000 mask0x80000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x64, word0x20106000 mask0x40000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::wDev_BeaconMemory_Init+0x70, word0x20106000 mask0x20000000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_201070DC"
@@ -3233,10 +3153,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104110"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_set_dump_ctrl_frame_cfg+0x78, word0x20104110 mask0xfff30000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20104318"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x46, word0x20104318 mask0x0001fc00, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x18, word0x20104318 mask0x00020000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_bb_count_fixed_err_code+0x34, word0x20104318 mask0xfffc0000, read Exact Return. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104394"
@@ -3667,10 +3583,6 @@ id = "S31_MMIO_DECLARED_201040D8"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0xbc, word0x201040d8 mask0xfff00020, read Exact Store. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
-id = "S31_MMIO_DECLARED_201040E8"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::dbg_dump_rx_errors+0x5a, word0x201040e8 mask0x07fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_agreement_add_rx_ba+0x9a, word0x201040e8 mask0x80000000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, word0x201040e8 mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_set_rxq_policy+0x14, word0x201040e8 mask0x00000100, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, word0x201040e8 mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_ba_session_restore_by_hw_index+0x12, word0x201040e8 mask0x7800febd, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
 id = "S31_MMIO_DECLARED_201040F4"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_set_promis_misc_pkt+0x1a, word0x201040f4 mask0x07fe0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0x42, word0x201040f4 mask0x00000040, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_rx_disable_bssid_check+0x10, word0x201040f4 mask0x00000002, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_mac_rx_set_policy+0xbc, word0x201040f4 mask0xf80000bd, read Exact Store. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
@@ -3681,18 +3593,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_2010D83C"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::pwr_hal_clear_mac_modem_state_wakeup_protect_signal+0xe, word0x2010d83c mask0x00010000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20104800"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_crypto_mgmt_rx_enabled+0xe, word0x20104800 mask0x00020000, read Exact Return. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20104810"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_crypto_enable+0x50, word0x20104810 mask0x003fffc0, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20105804"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_crypto_get_key_entry+0x56, word0x20105804 mask0x00130000, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104C5C"
@@ -3753,10 +3653,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104480"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_init_bf+0x80, word0x20104480 mask0x80000000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_20104C2C"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_he_init+0x60, word0x20104c2c mask0x00001000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104C38"
@@ -3929,10 +3825,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_2010D870"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_tsf_timer_get_target+0x12, word0x2010d870 mask0x7787ffff, read Exact Store. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_201040FC"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_set_dump_ctrl_frame_cfg+0x78, word0x201040fc mask0xffff0000, explicit write-replacement; libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_sniffer_rx_set_promis+0x34, word0x20104108 mask0x0000ffff, read May Store. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_20104114"
@@ -4363,10 +4255,6 @@ id = "S31_MMIO_DECLARED_20101858"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::r_sym_ble_nENHlP4KBuQYlFVffaR5+0x20a, word0x20101858 mask0xffff0000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
-id = "S31_MMIO_DECLARED_2010185C"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libbttestmode sha256 2d8151fd417b34cf8de716f503d212223f652b06f2defae439f915ccdf661118::bt_testmode_init+0xb2, word0x2010185c mask0x00100000, explicit write-replacement; libbttestmode sha256 2d8151fd417b34cf8de716f503d212223f652b06f2defae439f915ccdf661118::bt_testmode_init+0xc0, word0x2010185c mask0x00080000, explicit write-replacement; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::sym_ble_H2YnFWtQL1AZhlNAxiD6+0x8, word0x2010185c mask0xffe7ffff, read May Return. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
 id = "S31_MMIO_DECLARED_20101870"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::esp_enable_ignore_wl_for_direct_adv+0x38, word0x20101870 mask0x00040000, explicit write-replacement; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::r_sym_ble_vNVoB3u8sNalnntugADe+0x40, word0x20101870 mask0x00100000, explicit write-replacement; libble_app sha256 e9f0b462e5deaca7da82d91d0cbeaca54d9b3f97e25b033a8597eca72a06ebc6::r_sym_ble_vNVoB3u8sNalnntugADe+0x56, word0x20101870 mask0x00080000, explicit write-replacement. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
@@ -4505,14 +4393,6 @@ description = "esp32s31 existing-field use evidence from current pinned corpus: 
 [[sources]]
 id = "S31_MMIO_DECLARED_2010D020"
 description = "esp32s31 existing-field use evidence from current pinned corpus: libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0::r_sym_bt_0eozxYq5hbG5r38u4fdy+0x82, word0x2010d020 mask0x000000ff, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_2010D024"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0::r_sym_bt_atiitVoBKMplOJVvjTHP+0x4, word0x2010d024 mask0x000000ff, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_DECLARED_2010D02C"
-description = "esp32s31 existing-field use evidence from current pinned corpus: libbtdm_common sha256 838d19fe086c016d18729255716274b2df6145d01fffec8f6de1648194e7f6d0::r_sym_bt_86dRVPWrmTMQpChjYeWi+0x10, word0x2010d02c mask0x000000ff, read Exact Branch. A template combines its explicitly declared instances; an indexed site is a conservative candidate address under the inventory declared-run policy. May is use; unknown observations are excluded. Where a field also needs a direct manual proof, its other SOURCE remains attached. No reset, field meaning, read safety or write-side effect is inferred."
 
 [[sources]]
 id = "S31_MMIO_DECLARED_2010D038"
@@ -4825,7 +4705,3 @@ description = "esp32s31 word0x2010a86c. Positive pinned source-use facts exposed
 [[sources]]
 id = "S31_MMIO_USE_20102454_TWO_DOMAIN"
 description = "esp32s31 word0x20102454. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0x46, mask0x40000000, explicit write-replacement; libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0x88, mask0x10000000, explicit write-replacement; libbtbb sha256 9bd762f68df0c894d27c542f01591aad21ee800b69fd6403c8ec6226ceaa8895::bredr_tx_cca_set+0xbc, mask0x20000000, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."
-
-[[sources]]
-id = "S31_MMIO_USE_20104C94_TWO_DOMAIN"
-description = "esp32s31 word0x20104c94. Positive pinned source-use facts exposed by the two-domain stored-bit analysis in main #319: libpp sha256 4b9cd74b26de88e3964ae02f75446a28be827c166eda120dab11b3f045b77391::hal_cca_set_snd20_cfg+0x18, mask0x000000ff, explicit write-replacement. These are explicit replacement lanes, not same-word preservation or unknown-reset initialization images. Integer ABI and merged call summaries qualify the facts; indexed sites retain the inventory candidate-address bounds. No hardware meaning, reset, read safety or modified-write effect is inferred."

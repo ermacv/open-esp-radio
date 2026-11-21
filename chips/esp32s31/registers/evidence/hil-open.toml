@@ -37,11 +37,6 @@ kind = "unattested-hil-observation"
 description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. After HE association, WPA2, successful TID0 AddBA window 32 and one complete 30-profile HE matrix round, the typed snapshot observed MPDU 6216, end 6197, data-success 286, FCS 42, power-drop 42, HT-SIG error 8, HE-SIG-A CRC 1, ACK interrupt 25 and RTS interrupt 6. FIFO overflow, buffer full, TKIP, abort and all four hang/panic counters were zero. The color bitmap had bit 25 set, threshold one and timeout 60 seconds. Four subsequent 30-profile matrix rounds remained clean."
 
 [[sources]]
-id = "HIL_OPEN_HE_RX_CONFIGURATION_BASELINE_2026_07_29"
-kind = "unattested-hil-observation"
-description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled AX211 HE20 WPA2 AP on channel 11, 2026-07-29. After HE association, WPA2, TID0 AddBA and one clean 30-profile matrix round, the allocation-free dbg_read_rx_misc snapshot observed MPDU length offset 380, NFRP threshold 8, hardware TXOP, BSR update, TB stop, TRS, UL MU and UL MU data both enabled, HE response ACK enabled, RX frequency-hop time 50, PHY signal delay 20, intra-BSS-color and intra-PPDU power save enabled, and HE beamforming with BFRP time 16, NDP time 113, hardware sequence selector 5. RX power-save itself and all three custom RX types were disabled. Trigger/TB counters and all hang/panic counters remained zero."
-
-[[sources]]
 id = "HIL_OPEN_HE_TB_COUNTER_BASELINE_2026_07_29"
 kind = "unattested-hil-observation"
 description = "../esp32s31_rust open-radio-phy-prelude-hil on ESP32-S31 rev0 against the controlled Linux AX211 HE20 AP, 2026-07-29. After HE association, WPA2/CCMP setup and more than nineteen complete three-profile DCM A-MPDU rounds, two independent ten-second snapshots both reported RX_TRIGGER_COUNT=0, TB_TRANSMISSION_COUNT=0 and TB_QOS_NULL_COUNT=0. WDEVAXTBDIAG0..3 also remained all zero. This proves the typed read path and a no-Trigger baseline; it does not qualify OFDMA because this ordinary AP configuration did not schedule uplink Trigger frames."
@@ -102,11 +97,6 @@ kind = "unattested-hil-observation"
 description = "SOURCE: S31 rev0, open-radio-phy-prelude-hil, Linux WPA2 HT40- channel11, 2026-07-29: peer exponent3 admitted 32 MPDUs/48448 aggregate bytes and full32 BlockAck. PTI 0x00111110 count1 is independent of HT_DESCRIPTOR_COUNTS. Retained ppResortTxAMPDU-style aggregate retry completed without hardware timeout; observations do not establish universal throughput or timing. Details: oer-notes/evidence/chips-notes/chips/esp32s31/registers/evidence/hil-open.toml (source HIL_OPEN_HT_AMPDU_32_RETRY_2026_07_29)."
 
 [[sources]]
-id = "HIL_OPEN_HT_AMPDU_RAW_CADENCE_2026_07_29"
-kind = "unattested-hil-observation"
-description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. A raw protected-QoS profile retained real CCMP, Sequence Control, DMA, 30-MPDU A-MPDU and BlockAck handling but removed Embassy UDP/IP production. It delivered 63.6-76.8 Mbit/s of 1472-byte Ethernet payload at MCS7 40MHz short GI. Across 3811 original aggregates, cadence averaged 5194 us per original and 3201 us from each hardware-submit edge to completion; 5087 aggregate attempts give 1.335 attempts per original. This matches the separately retained vendor direct-TX range 59.3-75.5 Mbit/s and localizes the remaining 100-Mbit/s gap to serialized preparation/completion plus missing-BlockAck retries rather than the former 21-MPDU byte ceiling."
-
-[[sources]]
 id = "HIL_OPEN_HT_SINGLE_EXTREMES_2026_07_29"
 kind = "unattested-hil-observation"
 description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, standard psram-code-psram-data profile with ISR and DMA audited in internal SRAM, complete open PHY and MAC, controlled Linux WPA2 AP on channel 11. HT20 MCS0 LGI completed first-attempt Authentication, Association, WPA2 and DHCP; 200/200 ICMP replies completed at 2.483-ms average RTT, while the open TX counters recorded 210 immediate successes, two recovered ACK retries, zero other failures and zero hardware timeouts over 212 attempts. HT40 MCS7 SGI then negotiated 150 Mbit/s in both directions; 500/500 ICMP replies completed at 2.203-ms average RTT, while open TX recorded 510 immediate successes and two recovered ACK retries over 512 attempts. These are single-MPDU results. They hardware-qualify PLCP format one and both extreme MCS/CBW/GI encodings; they do not qualify the separate A-MPDU constructor."
@@ -125,16 +115,6 @@ description = "Open-radio connected RX classification on ESP32-S31 rev0, 2026-08
 id = "HIL_OPEN_AUTH_PLCP_FORMAT_2026_07_28"
 kind = "unattested-hil-observation"
 description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on connected ESP32-S31 rev0, open PHY and MAC, 2026-07-28. Controlled A/B kept the 30-byte authentication MPDU, descriptor, PLCP1 0x22, power, rate, channel and RX policy fixed. Format one yielded completion status five with no response; format zero yielded status zero and one addressed authentication response, but later format-zero repetitions failed. Earlier repeated format-one runs had completed authentication through DHCP. Therefore this experiment proves that TX completion status is not by itself a protocol-success oracle; it does not supersede the instruction-exact libpp[hal_mac_tx.o]::mac_tx_set_plcp0 mapping."
-
-[[sources]]
-id = "HIL_OPEN_TX_POWER_CONNECTIVITY_2026_07_28"
-kind = "unattested-hil-observation"
-description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, psram-code-psram-data, open PHY and MAC, 2026-07-28. With the HIL API limit 80 quarter-dBm and resulting ordinary queue power code 20, three consecutive reset-to-network runs completed Authentication and Association on their first MAC attempts, WPA2 and DHCP. A host test then received 200 of 200 ICMP replies with 4.613 ms average RTT; the device observed four raw ACK timeouts among 215 attempts and recovered all four by retrying the same encoded MPDU. With limit 20 quarter-dBm and resulting code 5, repeated runs included complete twelve-attempt Authentication failures. This is connectivity evidence for the current open profile, not proof that the open and vendor power/gain-table encodings are equivalent; the complete vendor driver also succeeds with queue code 5, so that mismatch remains localized for investigation."
-
-[[sources]]
-id = "HIL_OPEN_LEGACY_RTS_RATE_2026_07_29"
-kind = "unattested-hil-observation"
-description = "../esp32s31_rust/firmware/esp32s31/app/src/open_radio_phy_prelude_hil.rs on ESP32-S31 rev0, psram-code-psram-data, open PHY and MAC, controlled Linux WPA2 AP on channel 11 HT40-, 2026-07-29. Before the vendor basic-rate mapping, fixed 54-Mbit/s data with LENGTH_CONTROL incorrectly carrying rate 54 lost 25 to 39 percent of ICMP samples. Fixed 6M and 24M each completed 200/200, while 48M completed 199/200. After restoring complete mac_tx_get_rts_rate semantics so 54M publishes basic rate 24M and derives RTS power separately, 54M completed 197/200 followed by 495/500, with 1.975-ms and 2.353-ms average RTT. Linux reported the station RX bitrate as 54.0 Mbit/s, five AP-side TX retries and one AP-side TX failure over 709 packets. This qualifies the rate-dependent LENGTH_CONTROL field and strongly localizes the former loss to the wrong basic-rate image."
 
 [[sources]]
 id = "hil-open-ieee802154-ed-done-selected-write-2026-08-25"

@@ -154,11 +154,34 @@ fn only_the_irreducible_policy_items_render() {
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
-    // A plain fixed image, a plain sequence step and a zero write are HAL
-    // code over accessors.
-    assert!(!rust.contains("set_slow_mode"), "{rust}");
-    assert!(!rust.contains("initialize_vendor_words_rad_slot"), "{rust}");
-    assert!(!rust.contains("clear_command"), "{rust}");
+}
+
+/// A record that would render nothing is refused, by its name: a fixed
+/// image of fields the word's accessors write, and a zero register write
+/// of a word that is not read-observed.
+#[test]
+fn a_policy_record_that_renders_nothing_is_refused() {
+    let plain_image = edited(&[(
+        "policy.toml",
+        "[[fixed-register-sequences]]",
+        "[[fixed-register-images]]\nname = \"set_slow_mode\"\nregister = \"RADIO0.RAD_ENABLE\"\nvalue = 0x00000001\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]",
+    )]);
+    let (model, policy) = load(plain_image.path());
+    let error = render(&model, &policy).expect_err("a plain image renders nothing");
+    assert!(error.to_string().contains("set_slow_mode"), "{error}");
+
+    let plain_zero = edited(&[(
+        "policy.toml",
+        "[[fixed-register-sequences]]",
+        "[[zero-register-writes]]\nname = \"clear_command\"\nregister = \"RADIO0.RAD_COMMAND\"\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]",
+    )]);
+    let evidence = RegisterEvidenceSet::load_all(&[plain_zero.path().join("evidence.toml")])
+        .expect("the fixture evidence loads");
+    let model = ChipModel::load(&plain_zero.path().join("chip.toml"), &evidence)
+        .expect("the fixture root loads");
+    let error = ChipPolicy::load(&plain_zero.path().join("policy.toml"), &model, &evidence)
+        .expect_err("a zero write of a plain word renders nothing");
+    assert!(error.to_string().contains("clear_command"), "{error}");
 }
 
 #[test]
@@ -360,7 +383,7 @@ fn observed_words_reject_other_policy_writes_even_in_mixed_words() {
         for publication in [
             "[[fixed-register-images]]\nname = \"other_write\"\nregister = \"RADIO0.RAD_VAGUE\"\nvalue = 0\nwhole-word = true\nsources = [\"SRC_DRIVER\"]",
             "[[fixed-register-images]]\nname = \"other_write\"\nregister = \"RADIO0.RAD_VAGUE\"\nvalue = 1\nwhole-word = true\nsources = [\"SRC_DRIVER\"]",
-            "[[fixed-register-sequences]]\nname = \"other_write\"\nsteps = [{ register = \"RADIO0.RAD_VAGUE\", value = 0, whole-word = true }]\nsources = [\"SRC_DRIVER\"]",
+            "[[fixed-register-sequences]]\nname = \"other_write\"\nsteps = [{ register = \"RADIO0.RAD_VAGUE\", value = 0 }]\nsources = [\"SRC_DRIVER\"]",
             "[[field-clear-modifies]]\nname = \"other_write\"\nfield = \"RADIO0.RAD_VAGUE.VAGUE\"\nsources = [\"SRC_DRIVER\"]",
             "[[field-clear-modifies]]\nname = \"other_write\"\nfield = \"RADIO0.RAD_VAGUE.CFG\"\nsources = [\"SRC_DRIVER\"]",
             "[[zero-based-field-writes]]\nname = \"other_write\"\nfields = [\"RADIO0.RAD_VAGUE.CFG\"]\nsources = [\"SRC_DRIVER\"]",
@@ -895,11 +918,6 @@ const SHAPES: &[(&str, &str, &str)] = &[
         "masks = \"RADIO0.RAD_ENABLE\"\n",
         "masks = \"RADIO0.RAD_ENABLE\"\nwhole-word = true\n",
     ),
-    (
-        "policy.toml",
-        "[[zero-register-writes]]\nname = \"clear_command\"\nregister = \"RADIO0.RAD_COMMAND\"\nsources = [\"SRC_DRIVER\"]\n",
-        "",
-    ),
 ];
 
 /// The shapes' accessors on host memory.
@@ -1037,11 +1055,6 @@ fn the_reviewed_shapes_refuse_unadmitted_values() {
         .iter()
         .copied()
         .chain([
-            (
-                "policy.toml",
-                "[[pointer-fields]]\nname = \"descriptor\"",
-                "[[full-register-writes]]\nname = \"descriptor\"\npointer = true",
-            ),
             (
                 "types/radio.toml",
                 "name = \"RAD_DESC\"\noffset = 0x5c\n",
@@ -1207,8 +1220,8 @@ fn with_trigger_word_and_pointer_or() -> std::vec::Vec<(&'static str, &'static s
         ),
         (
             "policy.toml",
-            "[[pointer-fields]]\nname = \"descriptor\"\nfield = \"RADIO0.RAD_DESC.PTR\"",
-            "[[field-or-modifies]]\nname = \"or_descriptor\"\nfields = [{ field = \"RADIO0.RAD_DESC.PTR\", source-bit-offset = 0 }]",
+            "[[fixed-register-sequences]]",
+            "[[field-or-modifies]]\nname = \"or_descriptor\"\nfields = [{ field = \"RADIO0.RAD_DESC.PTR\", source-bit-offset = 0 }]\nsources = [\"SRC_DRIVER\"]\n\n[[fixed-register-sequences]]",
         ),
     ]);
     edits
@@ -1320,7 +1333,7 @@ fn with_element_range() -> String {
     rendered_with(&[(
         "policy.toml",
         "[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
-        "[[fixed-register-sequences]]\nname = \"store_slots\"\nsteps = [{ register = \"RADIO0.RAD_SLOT%s\", first = 1, count = 2, value = 0xdeadbeef, whole-word = true }]\nsources = [\"SRC_VENDOR\"]\n\n[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
+        "[[fixed-register-sequences]]\nname = \"store_slots\"\nsteps = [{ register = \"RADIO0.RAD_SLOT%s\", first = 1, count = 2, value = 0xdeadbeef }]\nsources = [\"SRC_VENDOR\"]\n\n[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
     )])
 }
 
@@ -1364,13 +1377,8 @@ fn an_element_range_over_a_part_s_share_of_an_array_writes_only_that_share() {
         ),
         (
             "policy.toml",
-            "{ register = \"RADIO0.RAD_SLOT2\", value = 0x00001234 }",
-            "{ register = \"RADIO0.RAD_SLOT1\", value = 0x00001234 }",
-        ),
-        (
-            "policy.toml",
             "[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
-            "[[fixed-register-sequences]]\nname = \"store_slots\"\nsteps = [{ register = \"RADIO0.RAD_SLOT%s\", first = 0, count = 2, value = 0xdeadbeef, whole-word = true }]\nsources = [\"SRC_VENDOR\"]\n\n[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
+            "[[fixed-register-sequences]]\nname = \"store_slots\"\nsteps = [{ register = \"RADIO0.RAD_SLOT%s\", first = 0, count = 2, value = 0xdeadbeef }]\nsources = [\"SRC_VENDOR\"]\n\n[[fixed-register-sequences]]\nname = \"initialize_vendor_words\"",
         ),
     ]);
     let output = run(

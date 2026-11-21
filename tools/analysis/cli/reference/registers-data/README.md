@@ -281,7 +281,7 @@ unresolved values are never discarded. The summary does not promise complete
 hardware coverage or absence of register accesses.
 
 The independent [register tool](../../../../registers/generate/README.md)
-validates the chip model and its schema-6 policy and renders the thin PAC
+validates the chip model and its schema-7 policy and renders the thin PAC
 and DMA-window linker fragment. Hardware facts and their applicability live
 in the [chip register model](../../../../../chips/esp32s31/registers/README.md).
 A Blobray observation is research evidence, not an automatic hardware-source

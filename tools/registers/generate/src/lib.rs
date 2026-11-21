@@ -43,10 +43,12 @@ impl Outputs {
 }
 
 /// Load `chip`'s model and policy below the checkout `root`, checking every
-/// rule of both.
+/// rule of both, and render the PAC in memory: a policy record that renders
+/// nothing is refused there.
 pub fn validate(root: &Path, chip: &str) -> Result<()> {
     let chip = Chip::load(root, chip)?;
-    chip.policy()?;
+    let policy = chip.policy()?;
+    oer_tools_registers_model::chip_render::render(&chip.model, &policy)?;
     Ok(())
 }
 
