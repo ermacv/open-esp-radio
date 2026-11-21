@@ -1,17 +1,18 @@
 //! TSF transactions serialized by the single Wi-Fi register owner.
 
 use oer_chips_esp32s31_pac::modem_pwr::{WifiMacTsfLoad, sta_tsf_control::StaTsfMode};
-use oer_portable_mmio::Placement;
+use oer_portable_mmio::{Bits, Placement};
 
-use super::{MacPlacement, WifiRadioRegisters, bits};
+use super::{MacPlacement, WifiRadioRegisters};
 
 /// One station TBTT schedule, as the vendor power manager programs it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaTbttSchedule {
     /// Station TSF of the first TBTT.
     pub first_tbtt_tsf: u64,
-    /// Interval between TBTT events, in microseconds.
-    pub interval_micros: u32,
+    /// Interval between TBTT events, in time units of 1024 µs (IEEE
+    /// 802.11-2020 9.4.1.3, the Beacon Interval field's unit).
+    pub interval_tu: u16,
     /// How long before each TBTT the event fires, in microseconds.
     pub ahead_micros: u16,
     /// Light-sleep wake lead published beside the schedule, in microseconds.
@@ -163,7 +164,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 );
             });
 
-        self.set_station_tbtt_interval(schedule.interval_micros);
+        self.set_station_tbtt_interval(schedule.interval_tu);
         // SOURCE: the masked `publish_station_tbtt_target` transaction keeps
         // bits 31:26 and replaces TSF bits 35:10 (BLOB_LIBPP_HAL_TSF).
         let target = tsf_bits_35_10(schedule.first_tbtt_tsf);
@@ -227,13 +228,13 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// coexistence period changes.
     ///
     /// SOURCE: complete pinned `libpp[hal_tsf.o]::hal_set_sta_tbtt_interval`
-    /// replaces bits 25:0 at `0x2010_d85c` with the interval shifted right by
-    /// ten.
-    pub fn set_station_tbtt_interval(&mut self, interval_micros: u32) {
+    /// replaces bits 25:0 at `0x2010_d85c` with the interval in microseconds
+    /// shifted right by ten: the interval in time units.
+    pub fn set_station_tbtt_interval(&mut self, interval_tu: u16) {
         self.mac
             .wifi_mac_rtc_timer_update
             .modify_sta_tbtt_interval(|w| {
-                w.set_interval_tsf_bits_35_10(bits(interval_micros >> 10));
+                w.set_interval_tsf_bits_35_10(Bits::from(interval_tu));
             });
     }
 }

@@ -6482,18 +6482,8 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         BY_R2,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/init.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        4,
-        BY_R2,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
-        2,
+        1,
         BY_R2,
     ),
     (
@@ -6609,7 +6599,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        3,
+        1,
         BY_P3,
     ),
     (

@@ -3,8 +3,7 @@
 use oer_portable_mmio::{Bits, Index};
 
 use crate::radio::ieee80211::registers::{
-    MacPlacement, ORDINARY_QUEUE_COUNT, WifiRadioRegisters, bits, byte, element, halfword,
-    ordinary_bank,
+    MacPlacement, ORDINARY_QUEUE_COUNT, WifiRadioRegisters, byte, element, halfword,
 };
 
 /// One IEEE 802.11 traffic identifier accepted by the recovered HE BSR block.
@@ -102,10 +101,20 @@ impl MacHeTbTidLimit {
 /// The open owner permits one live aggregate per hardware queue, so the
 /// vendor allocator's disjoint queue ranges can be used deterministically
 /// without a global bitmap or dynamic allocation.
+/// One entry of the 120-entry HE MPDU-length table: its link index.
+pub type MacHeTbLink = Index<{ oer_chips_esp32s31_pac::wifi_mac::he_scratch::COUNT }>;
+
+/// The entry an MPDU-length entry links to: another entry, or the end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MacHeTbNextLink {
+    Link(MacHeTbLink),
+    End,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeTbLinkReservation {
-    queue: u8,
-    first: u8,
+    queue: Index<{ ORDINARY_QUEUE_COUNT as usize }>,
+    first: MacHeTbLink,
     count: u8,
 }
 
@@ -117,7 +126,7 @@ impl MacHeTbLinkReservation {
     /// corresponding ROM leaves. The single-TID layout differs from all
     /// other policies.
     pub const fn for_queue(policy: MacHeTbTidLimit, queue: u8, count: u8) -> Option<Self> {
-        if queue >= ORDINARY_QUEUE_COUNT || count == 0 {
+        if count == 0 {
             return None;
         }
         let (first, last) = match (policy, queue) {
@@ -134,6 +143,10 @@ impl MacHeTbLinkReservation {
         if count > last - first + 1 {
             return None;
         }
+        let (Ok(queue), Ok(first)) = (Index::new(queue as usize), Index::new(first as usize))
+        else {
+            return None;
+        };
         Some(Self {
             queue,
             first,
@@ -142,32 +155,41 @@ impl MacHeTbLinkReservation {
     }
 
     pub const fn queue(self) -> u8 {
-        self.queue
+        // Below four: the low byte is the whole index.
+        self.queue.get().to_le_bytes()[0]
     }
 
     pub const fn first(self) -> u8 {
-        self.first
+        // Below 120: the low byte is the whole index.
+        self.first.get().to_le_bytes()[0]
     }
 
     pub const fn count(self) -> u8 {
         self.count
     }
 
-    const fn index(self, position: u8) -> Option<u8> {
-        if position < self.count {
-            Some(self.first + position)
-        } else {
-            None
+    /// The entry of `position`, inside the reservation.
+    const fn index(self, position: u8) -> Option<MacHeTbLink> {
+        if position >= self.count {
+            return None;
+        }
+        match Index::new(self.first.get().wrapping_add(position as usize)) {
+            Ok(link) => Some(link),
+            Err(_) => None,
         }
     }
 
-    const fn next(self, position: u8) -> Option<u8> {
+    /// The entry `position` links to: the next one, or the end for the last.
+    const fn next(self, position: u8) -> Option<MacHeTbNextLink> {
         if position >= self.count {
             None
-        } else if position + 1 == self.count {
-            Some(oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8)
+        } else if position as usize + 1 == self.count as usize {
+            Some(MacHeTbNextLink::End)
         } else {
-            Some(self.first + position + 1)
+            match self.index(position + 1) {
+                Some(link) => Some(MacHeTbNextLink::Link(link)),
+                None => None,
+            }
         }
     }
 }
@@ -280,17 +302,25 @@ impl MacBeamformingAverageSnr {
     }
 }
 
-/// The CONF1 element of logical trigger queue `queue`: the eight physical
-/// words are addressed in reverse logical order.
-const fn trigger_queue_element(queue: u8) -> Index<8> {
-    element(7 - (queue as usize & 7))
+/// The CONF1 element of logical trigger queue `queue`: the four ordinary
+/// queues' words are the last four of eight, in reverse logical order.
+const fn trigger_queue_element(queue: Index<{ ORDINARY_QUEUE_COUNT as usize }>) -> Index<8> {
+    match queue.get() {
+        0 => Index::constant::<7>(),
+        1 => Index::constant::<6>(),
+        2 => Index::constant::<5>(),
+        _ => Index::constant::<4>(),
+    }
 }
 
-/// The physical bank of a reservation's ordinary queue.
+/// The physical bank of a reservation's ordinary queue: the banks are in
+/// reverse logical order.
 const fn reservation_bank(reservation: MacHeTbLinkReservation) -> Index<4> {
-    match ordinary_bank(reservation.queue) {
-        Some(bank) => bank,
-        None => panic!("a reservation owns an ordinary queue"),
+    match reservation.queue.get() {
+        0 => Index::constant::<3>(),
+        1 => Index::constant::<2>(),
+        2 => Index::constant::<1>(),
+        _ => Index::constant::<0>(),
     }
 }
 
@@ -344,7 +374,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // the first MPDU-length entry.
         self.mac
             .wifi_mac_he_mu_edca_timer
-            .modify_timer(element(usize::from(queue)), |w| {
+            .modify_timer(element(queue.get()), |w| {
                 w.set_enable(true);
             });
 
@@ -361,8 +391,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_low_cleared_by_tb_setup(Bits::constant::<0>())
                 .set_qos_null_to_translated_bss(qos_null_to_translated_bss)
                 .set_trigger_based_enable(true)
-                .set_mu_edca_timer_select(bits(u32::from(queue)))
-                .set_mpdu_length_link_address(bits(u32::from(reservation.first)))
+                .set_mu_edca_timer_select(Bits::from(queue))
+                .set_mpdu_length_link_address(Bits::from(reservation.first))
                 .set_tid(tid.field())
                 .set_minimum_tx_power(Bits::constant::<0>())
                 .set_high_cleared_by_tb_setup(Bits::constant::<0>());
@@ -375,7 +405,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
 
         let status = &mut self.mac.wifi_mac_he_buffer_status;
-        status.modify_software_bsr(element(usize::from(queue)), |w| {
+        status.modify_software_bsr(element(queue.get()), |w| {
             w.set_value(queued);
         });
         // Do not add a fence or diagnostic read here. The complete blob and
@@ -383,12 +413,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         // hardware update is live, so lengthening the interval before the
         // validity RMW changes observable behavior.
         status.modify_he_buffer_status_control(|w| {
-            match queue {
+            match queue.get() {
                 0 => w.set_valid_0(true),
                 1 => w.set_valid_1(true),
                 2 => w.set_valid_2(true),
-                3 => w.set_valid_3(true),
-                _ => unreachable!("ordinary queue validation precedes publication"),
+                _ => w.set_valid_3(true),
             };
         });
         let mut snapshot = self.he_trigger_based_queue_snapshot(reservation);
@@ -414,15 +443,19 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             .expect("each linked position lies inside the reservation");
         self.mac
             .wifi_mac_he_init_suffix
-            .modify_he_scratch(element(usize::from(index)), |w| {
-                w.set_mpdu_length(length.field())
-                    .set_next_link(bits(u32::from(next)));
+            .modify_he_scratch(index, |w| {
+                w.set_mpdu_length(length.field()).set_next_link(match next {
+                    MacHeTbNextLink::Link(link) => Bits::from(link),
+                    MacHeTbNextLink::End => {
+                        oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.into()
+                    }
+                });
             });
-        if next == oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8 {
+        if next == MacHeTbNextLink::End {
             self.mac
                 .wifi_mac_tx_queue_vector
                 .modify_he_mpdu_length_tail(reservation_bank(reservation), |w| {
-                    w.set_link_index(bits(u32::from(index)));
+                    w.set_link_index(Bits::from(index));
                 });
         }
     }
@@ -459,18 +492,18 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         let timer = self
             .mac
             .wifi_mac_he_mu_edca_timer
-            .read_timer(element(usize::from(queue)));
-        let first = suffix.read_he_scratch(element(usize::from(reservation.first)));
+            .read_timer(element(queue.get()));
+        let first = suffix.read_he_scratch(reservation.first);
         let tail = self
             .mac
             .wifi_mac_tx_queue_vector
             .read_he_mpdu_length_tail(reservation_bank(reservation));
         let status = &self.mac.wifi_mac_he_buffer_status;
-        let bsr = status.read_software_bsr(element(usize::from(queue)));
+        let bsr = status.read_software_bsr(element(queue.get()));
         let control = status.read_he_buffer_status_control();
 
         MacHeTriggerTxQueueSnapshot {
-            logical_queue: queue,
+            logical_queue: reservation.queue(),
             tid: byte(queue_control.tid()),
             trigger_based_enabled: queue_control.trigger_based_enable(),
             mu_edca_timer_select: byte(queue_control.mu_edca_timer_select()),
@@ -481,12 +514,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             tail_link: byte(tail.link_index()),
             programmed_msdu_bytes: bsr.value().get(),
             queued_msdu_bytes: bsr.value().get(),
-            queue_valid: match queue {
+            queue_valid: match queue.get() {
                 0 => control.valid_0(),
                 1 => control.valid_1(),
                 2 => control.valid_2(),
-                3 => control.valid_3(),
-                _ => unreachable!("reservation owns an ordinary queue"),
+                _ => control.valid_3(),
             },
         }
     }

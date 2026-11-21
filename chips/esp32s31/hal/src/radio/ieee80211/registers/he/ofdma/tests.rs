@@ -50,15 +50,15 @@ fn default_trigger_link_ranges_partition_all_120_entries() {
         assert_eq!(reservation.first(), first);
         assert_eq!(reservation.count(), capacity);
         for position in 0..capacity {
-            let index = reservation.index(position).unwrap();
-            assert!(!seen[usize::from(index)]);
-            seen[usize::from(index)] = true;
+            let index = reservation.index(position).unwrap().get();
+            assert!(!seen[index]);
+            seen[index] = true;
             assert_eq!(
                 reservation.next(position).unwrap(),
                 if position + 1 == capacity {
-                    oer_chips_esp32s31_pac::wifi_mac::he_scratch::NextLink::End.bits() as u8
+                    MacHeTbNextLink::End
                 } else {
-                    index + 1
+                    MacHeTbNextLink::Link(MacHeTbLink::new(index + 1).unwrap())
                 }
             );
         }

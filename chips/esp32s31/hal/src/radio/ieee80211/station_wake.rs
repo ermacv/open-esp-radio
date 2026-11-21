@@ -72,13 +72,13 @@ impl<'registers> StationWakeHal<'registers> {
     /// No station TBTT schedule runs.
     pub fn set_station_tbtt_interval(
         &mut self,
-        interval_micros: u32,
+        interval_tu: u16,
     ) -> Result<(), StaTbttScheduleError> {
         let (registers, state) = self.registers.parts_mut();
         if !state.tbtt_scheduled {
             return Err(StaTbttScheduleError::NotScheduled);
         }
-        registers.set_station_tbtt_interval(interval_micros);
+        registers.set_station_tbtt_interval(interval_tu);
         Ok(())
     }
 

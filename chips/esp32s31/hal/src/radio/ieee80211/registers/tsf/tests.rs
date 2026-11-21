@@ -107,7 +107,7 @@ fn a_tbtt_schedule_programs_every_word_of_hal_set_sta_tbtt() {
         .registers
         .start_station_tbtt(StaTbttSchedule {
             first_tbtt_tsf: 0x0000_000f_ffff_fc00 | 0x3ff,
-            interval_micros: 102_400,
+            interval_tu: 100,
             ahead_micros: 0x1234,
             wake_ahead_micros: 0x0567,
         });
@@ -181,7 +181,7 @@ fn the_tbtt_leads_and_interval_replace_their_fields() {
     {
         let mut owners = words.owners();
         owners.registers.set_station_tbtt_ahead(0x0102, 0x0304);
-        owners.registers.set_station_tbtt_interval(0x0040_0000);
+        owners.registers.set_station_tbtt_interval(0x1000);
     }
     let owners = words.owners();
     let rtc = &owners.registers.mac.wifi_mac_rtc_timer_update;
@@ -195,6 +195,27 @@ fn the_tbtt_leads_and_interval_replace_their_fields() {
     assert_eq!(wake.time(), 0x0304);
     assert_eq!(wake.bits_0_15_opaque(), 0xffff);
     let interval = rtc.read_sta_tbtt_interval();
-    assert_eq!(interval.interval_tsf_bits_35_10().get(), 0x0040_0000 >> 10);
+    assert_eq!(interval.interval_tsf_bits_35_10().get(), 0x1000);
     assert_eq!(interval.bits_30_31_opaque().get(), 0b11);
+}
+
+#[test]
+fn the_tbtt_target_takes_tsf_bits_35_to_10() {
+    // Ones below bit 10 and above bit 35, a pattern between: the target
+    // holds the pattern alone.
+    let pattern = 0x0123_4567_u64;
+    let tsf = (0xf_u64 << 36) | (pattern << 10) | 0x3ff;
+    let mut words = HostWords::filled(0);
+    words
+        .owners()
+        .registers
+        .start_station_tbtt(StaTbttSchedule {
+            first_tbtt_tsf: tsf,
+            interval_tu: 100,
+            ahead_micros: 0,
+            wake_ahead_micros: 0,
+        });
+    let owners = words.owners();
+    let target = owners.registers.mac.wifi_mac_sta_tbtt_target.read_target();
+    assert_eq!(u64::from(target.tsf_bits_35_10().get()), pattern);
 }
