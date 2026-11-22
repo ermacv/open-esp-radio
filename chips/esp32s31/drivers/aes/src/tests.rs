@@ -1,11 +1,16 @@
 extern crate std;
 use super::*;
 use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit, generic_array::GenericArray};
+use oer_chips_esp32s31_hal::peripherals::aes::{AesState, AesStateField};
 use oer_portable_crypto::{
     KeyData, KeyUnwrapError, KeyUnwrapRequest,
     conformance::{self, RFC3394_4_1_CIPHERTEXT, RFC3394_4_1_KEK, RFC3394_4_1_KEY_DATA},
 };
 use std::{cell::RefCell, rc::Rc};
+
+/// The `STATE` codes the fake answers, by their generated names.
+const IDLE: AesStateField = AesStateField::constant::<{ AesState::Idle.bits() }>();
+const WORK: AesStateField = AesStateField::constant::<{ AesState::Work.bits() }>();
 
 #[derive(Default)]
 struct Port {
@@ -21,40 +26,64 @@ struct Port {
     busy_reads: usize,
     busy_left: usize,
     stuck: bool,
-    invalid: Option<u32>,
+    invalid: Option<AesStateField>,
+    /// Every atom called, in order.
+    calls: std::vec::Vec<&'static str>,
 }
 struct Fake(Rc<RefCell<Port>>);
 impl Registers for Fake {
-    fn clock(&mut self, on: bool) {
-        self.0.borrow_mut().clocked = on;
+    fn enable_clock(&mut self) {
+        self.0.borrow_mut().calls.push("enable_clock");
+        self.0.borrow_mut().clocked = true;
     }
-    fn reset(&mut self, asserted: bool) {
-        if asserted {
-            let mut p = self.0.borrow_mut();
-            p.key = [0; 8];
-            p.input = [0; 4];
-            p.output = [0; 4];
-            p.started = false;
-        }
+    fn disable_clock(&mut self) {
+        self.0.borrow_mut().calls.push("disable_clock");
+        self.0.borrow_mut().clocked = false;
     }
-    fn release_parent_resets(&mut self) {}
-    fn disable_interrupt(&mut self) {}
-    fn disable_dma(&mut self) {}
+    fn assert_reset(&mut self) {
+        self.0.borrow_mut().calls.push("assert_reset");
+        let mut p = self.0.borrow_mut();
+        p.key = [0; 8];
+        p.input = [0; 4];
+        p.output = [0; 4];
+        p.started = false;
+    }
+    fn release_reset(&mut self) {
+        self.0.borrow_mut().calls.push("release_reset");
+    }
+    fn release_parent_resets(&mut self) {
+        self.0.borrow_mut().calls.push("release_parent_resets");
+    }
+    fn disable_interrupt(&mut self) {
+        self.0.borrow_mut().calls.push("disable_interrupt");
+    }
+    fn disable_dma(&mut self) {
+        self.0.borrow_mut().calls.push("disable_dma");
+    }
     fn decrypt128(&mut self) {
+        self.0.borrow_mut().calls.push("decrypt128");
         self.0.borrow_mut().encrypting = false;
     }
     fn encrypt128(&mut self) {
+        self.0.borrow_mut().calls.push("encrypt128");
         self.0.borrow_mut().encrypting = true;
     }
-    fn disable_pseudo_rounds(&mut self) {}
-    fn hold(&mut self) {}
+    fn disable_pseudo_rounds(&mut self) {
+        self.0.borrow_mut().calls.push("disable_pseudo_rounds");
+    }
+    fn hold(&mut self) {
+        self.0.borrow_mut().calls.push("hold");
+    }
     fn write_key(&mut self, words: &KeyWords) {
+        self.0.borrow_mut().calls.push("write_key");
         self.0.borrow_mut().key = *words;
     }
     fn write_block(&mut self, words: &BlockWords) {
+        self.0.borrow_mut().calls.push("write_block");
         self.0.borrow_mut().input = *words;
     }
     fn start(&mut self) {
+        self.0.borrow_mut().calls.push("start");
         let mut p = self.0.borrow_mut();
         assert!(p.clocked);
         p.starts += 1;
@@ -80,7 +109,8 @@ impl Registers for Fake {
             u32::from_le_bytes(block[index * 4..index * 4 + 4].try_into().unwrap())
         });
     }
-    fn state(&self) -> u32 {
+    fn state(&self) -> AesStateField {
+        self.0.borrow_mut().calls.push("state");
         let mut p = self.0.borrow_mut();
         p.reads += 1;
         if !p.started {
@@ -99,6 +129,7 @@ impl Registers for Fake {
         IDLE
     }
     fn read_block(&self) -> BlockWords {
+        self.0.borrow_mut().calls.push("read_block");
         self.0.borrow().output
     }
 }
@@ -182,8 +213,18 @@ fn encryption_and_decryption_select_their_mode_and_agree_with_the_cipher() {
 #[test]
 fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
     for (stuck, invalid, error) in [
-        (true, None, BlockError::Timeout { observation: WORK }),
-        (false, Some(3), BlockError::InvalidState { observation: 3 }),
+        (
+            true,
+            None,
+            BlockError::Timeout {
+                observation: WORK.get(),
+            },
+        ),
+        (
+            false,
+            Some(AesStateField::constant::<3>()),
+            BlockError::InvalidState { observation: 3 },
+        ),
     ] {
         let port = Rc::new(RefCell::new(Port {
             stuck,
@@ -225,7 +266,7 @@ fn a_not_idle_accelerator_refuses_the_key_and_is_erased() {
     assert_eq!(
         response.plaintext(),
         Err(KeyUnwrapError::Engine(BlockError::InvalidState {
-            observation: WORK
+            observation: WORK.get()
         }))
     );
     assert_eq!(port.borrow().starts, 0);
@@ -235,11 +276,17 @@ fn a_not_idle_accelerator_refuses_the_key_and_is_erased() {
 /// A port whose `STATE` reads `WORK` before any start.
 struct StuckSetup(Fake);
 impl Registers for StuckSetup {
-    fn clock(&mut self, on: bool) {
-        self.0.clock(on);
+    fn enable_clock(&mut self) {
+        self.0.enable_clock();
     }
-    fn reset(&mut self, asserted: bool) {
-        self.0.reset(asserted);
+    fn disable_clock(&mut self) {
+        self.0.disable_clock();
+    }
+    fn assert_reset(&mut self) {
+        self.0.assert_reset();
+    }
+    fn release_reset(&mut self) {
+        self.0.release_reset();
     }
     fn release_parent_resets(&mut self) {}
     fn disable_interrupt(&mut self) {}
@@ -261,10 +308,47 @@ impl Registers for StuckSetup {
     fn start(&mut self) {
         self.0.start();
     }
-    fn state(&self) -> u32 {
+    fn state(&self) -> AesStateField {
         WORK
     }
     fn read_block(&self) -> BlockWords {
         self.0.read_block()
     }
+}
+
+/// A key's load clocks and resets the accelerator before its configuration
+/// and checks `STATE` before the key; the clear erases, then gates.
+#[test]
+fn the_load_and_the_clear_call_the_atoms_in_the_vendor_order() {
+    let port = Rc::new(RefCell::new(Port::default()));
+    let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
+    let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+    let keyed = engine.load(&key).expect("an idle accelerator");
+    assert_eq!(
+        port.borrow().calls,
+        [
+            "enable_clock",
+            "assert_reset",
+            "release_reset",
+            "release_parent_resets",
+            "disable_interrupt",
+            "disable_dma",
+            "disable_pseudo_rounds",
+            "hold",
+            "state",
+            "write_key",
+        ]
+    );
+    port.borrow_mut().calls.clear();
+    drop(keyed);
+    assert_eq!(
+        port.borrow().calls,
+        [
+            "assert_reset",
+            "release_reset",
+            "write_key",
+            "write_block",
+            "disable_clock",
+        ]
+    );
 }

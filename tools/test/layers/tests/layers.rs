@@ -6406,7 +6406,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/app/src/console.rs", 1, BY_P2),
     ("chips/esp32s31/app/src/cpu.rs", 1, BY_P2),
     ("chips/esp32s31/app/src/lib.rs", 2, BY_P2),
-    ("chips/esp32s31/hal/src/peripherals/aes.rs", 1, BY_NONE),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
         1,
@@ -6451,8 +6450,6 @@ const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[];
 /// `bits` helper) in the HAL, the radio crates and the platform, by file
 /// with their count. The list only shrinks.
 const TRUNCATIONS: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/hal/src/peripherals/aes.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 2, BY_R2),
     (
         "chips/esp32s31/hal/src/peripherals/system_timer.rs",
         1,
@@ -6546,8 +6543,7 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
 /// a policy `whole-word` image or a hardware-consumed layout says so. The
 /// list only shrinks.
 const RAW_REGISTERS: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/hal/src/peripherals/aes.rs", 4, BY_NONE),
-    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 6, BY_NONE),
+    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 4, BY_NONE),
     (
         "chips/esp32s31/hal/src/peripherals/watchdog/registers.rs",
         3,

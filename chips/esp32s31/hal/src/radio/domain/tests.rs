@@ -292,3 +292,70 @@ fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
         ]
     );
 }
+
+/// The domain gives the planner its Wi-Fi initialization: while Wi-Fi is
+/// initialized, disabling the Wi-Fi module keeps the Wi-Fi clock group.
+#[test]
+fn wifi_initialization_reaches_the_planner_and_keeps_the_wifi_clocks() {
+    use crate::power::clock::ModemClockPort;
+    use crate::radio::ieee80211::client::WifiInitialization;
+    use crate::radio::modem::ModemClockDevice;
+
+    #[derive(Default)]
+    struct Port(std::vec::Vec<(ModemClockDevice, bool)>);
+    impl ModemClockPort for Port {
+        fn prepare_power_state(&mut self) {}
+        fn enable_device(&mut self, device: ModemClockDevice) {
+            self.0.push((device, true));
+        }
+        fn disable_device(&mut self, device: ModemClockDevice) {
+            self.0.push((device, false));
+        }
+    }
+
+    for (initialization, mac_disabled) in [
+        (WifiInitialization::Uninitialized, true),
+        (WifiInitialization::Initialized, false),
+    ] {
+        let wifi = WifiRadioRegisters::new(RadioPartitions::for_host_test().wifi.into_parts().0);
+        let mut radio = radio_domain();
+        assert_eq!(radio.set_wifi_initialized(&wifi, initialization), Ok(()));
+        let platform = crate::power::test_clocks::CountingPlatformClocks::new();
+        let mut port = Port::default();
+        let state = radio.state_mut();
+        let index = client_index(RadioClient::Wifi);
+        assert!(
+            state
+                .clocks
+                .enable(
+                    index,
+                    crate::power::clock::module_dependencies(ModemClockModule::Wifi),
+                    &mut ModemExecution {
+                        port: &mut port,
+                        held: &mut state.modem_platform_clocks,
+                        platform: &platform,
+                    },
+                )
+                .is_ok()
+        );
+        port.0.clear();
+        assert!(
+            state
+                .clocks
+                .disable(
+                    index,
+                    &mut ModemExecution {
+                        port: &mut port,
+                        held: &mut state.modem_platform_clocks,
+                        platform: (),
+                    },
+                )
+                .is_ok()
+        );
+        assert_eq!(
+            port.0.contains(&(ModemClockDevice::WifiMac, false)),
+            mac_disabled,
+            "{initialization:?}"
+        );
+    }
+}

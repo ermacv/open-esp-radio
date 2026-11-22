@@ -10,17 +10,22 @@ use oer_chips_esp32s31_pac::{
     ownership::{AesPeripherals, AxiDmaPeripherals, CryptoClockPeripherals},
 };
 use oer_chips_family_platform_interrupt_table::Silent;
-use oer_portable_mmio::{Bits, Index, InterruptSource};
+use oer_portable_mmio::InterruptSource;
+
+mod ops;
+#[cfg(test)]
+mod ops_tests;
 
 use super::aes_dma::{AesDma, AesDmaChannel, DmaLengthError};
 
 /// The block modes of a DMA-AES transfer.
-pub use aes::block_mode::BlockMode as DmaBlockMode;
+pub use oer_chips_esp32s31_pac::aes::block_mode::BlockMode as DmaBlockMode;
 
-/// The generated Typical/DMA status codes; the driver rejects other values.
-pub const IDLE: u32 = aes::state::State::Idle.bits();
-pub const WORK: u32 = aes::state::State::Work.bits();
-pub const DONE: u32 = aes::state::State::Done.bits();
+/// The generated Typical/DMA status names; a code without one is no state
+/// the driver accepts.
+pub use oer_chips_esp32s31_pac::aes::state::State as AesState;
+/// The `STATE` field as read: a code of [`AesState`] or an unnamed one.
+pub type AesStateField = oer_portable_mmio::Bits<2>;
 
 /// One CPU block, with geometry checked against the generated register model.
 pub type BlockWords = [u32; aes::text_in::COUNT];
@@ -28,8 +33,10 @@ pub type KeyWords = [u32; aes::key::COUNT];
 
 /// Hardware atoms used by the S31 driver and its fake register port.
 pub trait Registers {
-    fn clock(&mut self, enabled: bool);
-    fn reset(&mut self, asserted: bool);
+    fn enable_clock(&mut self);
+    fn disable_clock(&mut self);
+    fn assert_reset(&mut self);
+    fn release_reset(&mut self);
     fn release_parent_resets(&mut self);
     fn disable_interrupt(&mut self);
     fn disable_dma(&mut self);
@@ -40,7 +47,7 @@ pub trait Registers {
     fn write_key(&mut self, words: &KeyWords);
     fn write_block(&mut self, words: &BlockWords);
     fn start(&mut self);
-    fn state(&self) -> u32;
+    fn state(&self) -> AesStateField;
     fn read_block(&self) -> BlockWords;
 }
 
@@ -108,7 +115,7 @@ pub struct AesInterrupt {
 impl AesInterrupt {
     /// Acknowledge the interrupt (`INT_CLEAR`).
     pub fn clear(&mut self) {
-        self.part.trigger_int_clear_int_clear();
+        ops::clear_interrupt(&mut self.part);
     }
 }
 impl InterruptSource for AesInterrupt {
@@ -132,19 +139,10 @@ pub struct InterruptingAes {
     dma: AesDmaChannel,
 }
 
-const IV_WORDS: [Index<{ aes::iv::COUNT }>; 4] = [
-    Index::constant::<0>(),
-    Index::constant::<1>(),
-    Index::constant::<2>(),
-    Index::constant::<3>(),
-];
-
 impl InterruptingAes {
     /// Enable the AES interrupt (`INT_ENA`).
     pub fn enable_interrupt(&mut self) {
-        self.program.modify_int_ena(|w| {
-            w.set_int_ena(true);
-        });
+        ops::enable_interrupt(&mut self.program);
     }
 
     /// Clock and reset the AES's AXI-DMA, open its access ranges and connect
@@ -156,11 +154,7 @@ impl InterruptingAes {
     /// Write the IV (CBC) or initial counter block (CTR), as little-endian
     /// words of its bytes.
     pub fn write_iv(&mut self, words: &BlockWords) {
-        for (index, word) in IV_WORDS.into_iter().zip(words) {
-            self.program.modify_iv(index, |w| {
-                w.set_data(*word);
-            });
-        }
+        ops::write_iv(&mut self.program, words);
     }
 
     /// Start a transfer of the input `storage` holds through the AES in
@@ -177,130 +171,73 @@ impl InterruptingAes {
         let length = storage.arm().ok_or(DmaLengthError(0))?;
         let (input, output) = storage.links();
         self.dma.start(input, output);
-        self.program.modify_block_mode(|w| {
-            w.set_block_mode(Bits::truncate(mode.bits()));
-        });
-        // SOURCE: ESP_IDF_4D80C1B2_S31_AES_DMA: INC_SEL 0 increments the
-        // counter block's last 32 bits.
-        self.program.modify_inc_sel(|w| {
-            w.set_inc_sel(false);
-        });
-        self.program.modify_dma_enable(|w| {
-            w.set_dma_enable(true);
-        });
-        self.program.modify_block_num(|w| {
-            w.set_block_num(u32::from(length / 16));
-        });
-        self.program.trigger_trigger_trigger();
+        ops::start_dma(&mut self.program, mode, length);
         Ok(())
     }
 
     /// Whether the started transfer is complete: `STATE` reads `DONE` and
     /// the DMA handed the output descriptor back.
     pub fn dma_done(&self, storage: &AesDma) -> bool {
-        self.program.read_state().state().get() == DONE && storage.output_returned()
+        ops::is_done(&self.program) && storage.output_returned()
     }
 
     /// End the complete transfer: `DMA_EXIT`, then `DMA_ENABLE` cleared.
     pub fn finish_dma(&mut self) {
-        self.program.trigger_dma_exit_dma_exit();
-        self.program.modify_dma_enable(|w| {
-            w.set_dma_enable(false);
-        });
+        ops::finish_dma(&mut self.program);
     }
 }
-
-const WORDS: [Index<{ aes::text_in::COUNT }>; 4] = [
-    Index::constant::<0>(),
-    Index::constant::<1>(),
-    Index::constant::<2>(),
-    Index::constant::<3>(),
-];
-const KEY_WORDS: [Index<{ aes::key::COUNT }>; aes::key::COUNT] = [
-    Index::constant::<0>(),
-    Index::constant::<1>(),
-    Index::constant::<2>(),
-    Index::constant::<3>(),
-    Index::constant::<4>(),
-    Index::constant::<5>(),
-    Index::constant::<6>(),
-    Index::constant::<7>(),
-];
-const _: () = if aes::text_in::COUNT != 4 || aes::text_out::COUNT != 4 || aes::key::COUNT != 8 {
-    panic!("AES block/key geometry");
-};
 
 /// The atoms over an owner's program and clock words, for each owner.
 macro_rules! typical_atoms {
     ($owner:ty) => {
         impl Registers for $owner {
-            fn clock(&mut self, enabled: bool) {
-                self.clock.set_aes_bus_clock(enabled);
+            fn enable_clock(&mut self) {
+                ops::enable_clock(&mut self.clock);
             }
-            fn reset(&mut self, asserted: bool) {
-                self.clock.set_aes_module_reset(asserted);
+            fn disable_clock(&mut self) {
+                ops::disable_clock(&mut self.clock);
             }
-            /// SOURCE: S31 aes_ll_reset_register: parent crypto and DS resets hold AES.
+            fn assert_reset(&mut self) {
+                ops::assert_reset(&mut self.clock);
+            }
+            fn release_reset(&mut self) {
+                ops::release_reset(&mut self.clock);
+            }
             fn release_parent_resets(&mut self) {
-                self.clock.modify_crypto_ctrl0(|w| {
-                    w.set_reg_crypto_rst_en(false);
-                    w.set_reg_crypto_ds_rst_en(false);
-                });
+                ops::release_parent_resets(&mut self.clock);
             }
             fn disable_interrupt(&mut self) {
-                self.program.modify_int_ena(|w| {
-                    w.set_int_ena(false);
-                });
+                ops::disable_interrupt(&mut self.program);
             }
             fn disable_dma(&mut self) {
-                self.program.modify_dma_enable(|w| {
-                    w.set_dma_enable(false);
-                });
+                ops::disable_dma(&mut self.program);
             }
             fn decrypt128(&mut self) {
-                self.program.modify_mode(|w| {
-                    w.set_mode(aes::mode::Mode::Decrypt128);
-                    w.set_use_hardware_key(false);
-                });
+                ops::decrypt128(&mut self.program);
             }
             fn encrypt128(&mut self) {
-                self.program.modify_mode(|w| {
-                    w.set_mode(aes::mode::Mode::Encrypt128);
-                    w.set_use_hardware_key(false);
-                });
+                ops::encrypt128(&mut self.program);
             }
             fn disable_pseudo_rounds(&mut self) {
-                self.program.modify_pseudo(|w| {
-                    w.set_pseudo_en(false);
-                });
+                ops::disable_pseudo_rounds(&mut self.program);
             }
             fn hold(&mut self) {
-                self.program.modify_free(|w| {
-                    w.set_free(false);
-                });
+                ops::hold(&mut self.program);
             }
             fn write_key(&mut self, words: &KeyWords) {
-                for (index, word) in KEY_WORDS.into_iter().zip(words) {
-                    self.program.modify_key(index, |w| {
-                        w.set_data(*word);
-                    });
-                }
+                ops::write_key(&mut self.program, words);
             }
             fn write_block(&mut self, words: &BlockWords) {
-                for (index, word) in WORDS.into_iter().zip(words) {
-                    self.program.modify_text_in(index, |w| {
-                        w.set_data(*word);
-                    });
-                }
+                ops::write_block(&mut self.program, words);
             }
             fn start(&mut self) {
-                self.program.trigger_trigger_trigger();
+                ops::start(&mut self.program);
             }
-            fn state(&self) -> u32 {
-                self.program.read_state().state().get()
+            fn state(&self) -> AesStateField {
+                ops::state(&self.program)
             }
             fn read_block(&self) -> BlockWords {
-                WORDS.map(|index| self.program.read_text_out(index).data())
+                ops::read_block(&self.program)
             }
         }
     };

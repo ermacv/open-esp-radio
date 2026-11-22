@@ -23,7 +23,9 @@
 //! SOURCE: TRM_S31_V01_AES §10.5.3 and ESP-IDF 4d80c1b2 aes_ll.h/aes_hal.c
 //! for the sequence; neither states a block latency.
 
-use oer_chips_esp32s31_hal::peripherals::aes::{BlockWords, IDLE, KeyWords, Registers, WORK};
+use oer_chips_esp32s31_hal::peripherals::aes::{
+    AesState, AesStateField, BlockWords, KeyWords, Registers,
+};
 use oer_portable_crypto::{
     Aes128Key,
     block::{Aes128Engine, Block, BlockEngine, BlockError},
@@ -56,6 +58,13 @@ pub struct AesBlocks<R: Registers, C: Clock> {
     poisoned: bool,
 }
 
+/// The direction of the last block, which the mode word holds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Direction {
+    Encrypt,
+    Decrypt,
+}
+
 impl<R: Registers, C: Clock> AesBlocks<R, C> {
     pub const fn new(registers: R, clock: C) -> Self {
         Self {
@@ -72,11 +81,11 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
             // SOURCE: aes_ll_reset_register and the AES register reset values.
             // No DMA ever reaches request storage. Reset restores the documented
             // output state; explicit writes erase all software key/input words.
-            self.registers.reset(true);
-            self.registers.reset(false);
+            self.registers.assert_reset();
+            self.registers.release_reset();
             self.registers.write_key(&KeyWords::default());
             self.registers.write_block(&BlockWords::default());
-            self.registers.clock(false);
+            self.registers.disable_clock();
             self.active = false;
         }
     }
@@ -86,18 +95,20 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
             return Err(BlockError::Unavailable);
         }
         self.active = true;
-        self.registers.clock(true);
-        self.registers.reset(true);
-        self.registers.reset(false);
+        self.registers.enable_clock();
+        self.registers.assert_reset();
+        self.registers.release_reset();
         self.registers.release_parent_resets();
         self.registers.disable_interrupt();
         self.registers.disable_dma();
         self.registers.disable_pseudo_rounds();
         self.registers.hold();
         let observation = self.registers.state();
-        if observation != IDLE {
+        if state(observation) != Some(AesState::Idle) {
             self.poisoned = true;
-            return Err(BlockError::InvalidState { observation });
+            return Err(BlockError::InvalidState {
+                observation: observation.get(),
+            });
         }
         let mut block = to_words(key.as_bytes());
         let mut words = KeyWords::default();
@@ -130,7 +141,7 @@ impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
         }
         Ok(Keyed {
             engine: self,
-            encrypting: None,
+            direction: None,
         })
     }
 }
@@ -139,7 +150,7 @@ impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
 /// Dropping it erases the key and gates the clock.
 pub struct Keyed<'a, R: Registers, C: Clock> {
     engine: &'a mut AesBlocks<R, C>,
-    encrypting: Option<bool>,
+    direction: Option<Direction>,
 }
 
 impl<R: Registers, C: Clock> Keyed<'_, R, C> {
@@ -156,20 +167,24 @@ impl<R: Registers, C: Clock> Keyed<'_, R, C> {
         words.zeroize();
         engine.registers.start();
         let registers = &engine.registers;
-        let mut observation = WORK;
+        let mut observation = AesStateField::constant::<{ AesState::Work.bits() }>();
         let settled = settle(Settle::new(BLOCK_SETTLE, &engine.clock), || {
             observation = registers.state();
-            (observation != WORK).then_some(())
+            (state(observation) != Some(AesState::Work)).then_some(())
         });
         let result = match settled {
-            Ok(()) if observation == IDLE => {
+            Ok(()) if state(observation) == Some(AesState::Idle) => {
                 let mut words = engine.registers.read_block();
                 from_words(&words, block);
                 words.zeroize();
                 return Ok(());
             }
-            Ok(()) => BlockError::InvalidState { observation },
-            Err(_unsettled) => BlockError::Timeout { observation },
+            Ok(()) => BlockError::InvalidState {
+                observation: observation.get(),
+            },
+            Err(_unsettled) => BlockError::Timeout {
+                observation: observation.get(),
+            },
         };
         engine.poisoned = true;
         block.zeroize();
@@ -179,17 +194,17 @@ impl<R: Registers, C: Clock> Keyed<'_, R, C> {
 
 impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
     fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        if self.encrypting != Some(true) {
+        if self.direction != Some(Direction::Encrypt) {
             self.engine.registers.encrypt128();
-            self.encrypting = Some(true);
+            self.direction = Some(Direction::Encrypt);
         }
         self.run(block)
     }
 
     fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        if self.encrypting != Some(false) {
+        if self.direction != Some(Direction::Decrypt) {
             self.engine.registers.decrypt128();
-            self.encrypting = Some(false);
+            self.direction = Some(Direction::Decrypt);
         }
         self.run(block)
     }
@@ -199,6 +214,11 @@ impl<R: Registers, C: Clock> Drop for Keyed<'_, R, C> {
     fn drop(&mut self) {
         self.engine.clear();
     }
+}
+
+/// The name of an observed `STATE` code, if it has one.
+const fn state(observation: AesStateField) -> Option<AesState> {
+    AesState::from_bits(observation.get())
 }
 
 fn to_words(bytes: &[u8; 16]) -> BlockWords {

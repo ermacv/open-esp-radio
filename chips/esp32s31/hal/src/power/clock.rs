@@ -77,6 +77,8 @@ pub(crate) fn module_dependencies(module: ModemClockModule) -> DependencySet<Dep
 }
 
 mod executor;
+#[cfg(test)]
+pub(crate) use executor::ModemClockPort;
 pub(crate) use executor::ModemExecution;
 pub(crate) use executor::ModemPlatformClocks;
 pub use executor::{

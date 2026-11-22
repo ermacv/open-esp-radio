@@ -6,7 +6,7 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_platform_board as board;
 use oer_chips_esp32s31_platform_runtime::Esp32s31;
 use oer_chips_esp32s31_hal::peripherals::aes::{
-    AesInterrupt, BlockWords, DmaBlockMode, IDLE, InterruptingAes, KeyWords, Registers,
+    AesInterrupt, AesState, BlockWords, DmaBlockMode, InterruptingAes, KeyWords, Registers,
 };
 use oer_chips_esp32s31_hal::peripherals::aes_dma::AesDma;
 use oer_chips_esp32s31_hal::peripherals::software_interrupt::FromCpu0Irq;
@@ -518,7 +518,7 @@ impl Keyed<'_> {
         let finished = match self.wait {
             Wait::Flag => {
                 self.aes.start();
-                (0..SPIN_LIMIT).any(|_| self.aes.state() == IDLE)
+                (0..SPIN_LIMIT).any(|_| idle(self.aes.state()))
             }
             Wait::Interrupt => {
                 let before = HANDLED.load(Ordering::Acquire);
@@ -907,16 +907,16 @@ fn dma_latency(
 /// The accelerator's setup, as the Wi-Fi engine's: clock on, out of reset,
 /// no DMA, no pseudo rounds, not preemptible; whether it reads idle.
 fn prepare(aes: &mut InterruptingAes) -> bool {
-    aes.clock(true);
+    aes.enable_clock();
     // The module reset, through the trait: no terminal reset.
-    Registers::reset(aes, true);
-    Registers::reset(aes, false);
+    Registers::assert_reset(aes);
+    Registers::release_reset(aes);
     aes.release_parent_resets();
     aes.disable_interrupt();
     aes.disable_dma();
     aes.disable_pseudo_rounds();
     aes.hold();
-    aes.state() == IDLE
+    idle(aes.state())
 }
 
 /// From the start of a block to `STATE` reading idle, polled back to back.
@@ -928,7 +928,7 @@ fn flag_latency(aes: &mut InterruptingAes) {
     for _ in 0..256 {
         let start = oer_portable_riscv::cycle32();
         aes.start();
-        let idle = (0..SPIN_LIMIT).any(|_| aes.state() == IDLE);
+        let idle = (0..SPIN_LIMIT).any(|_| idle(aes.state()));
         let end = oer_portable_riscv::cycle32();
         if idle {
             stats.add(end.wrapping_sub(start));
@@ -986,3 +986,8 @@ fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
 }
 
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
+
+/// Whether a `STATE` read names `IDLE`.
+fn idle(state: oer_chips_esp32s31_hal::peripherals::aes::AesStateField) -> bool {
+    matches!(AesState::from_bits(state.get()), Some(AesState::Idle))
+}
