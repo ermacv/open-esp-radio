@@ -176,6 +176,26 @@ fn boot_failure_records_retain_the_typed_density_in_bytes() {
 }
 
 #[test]
+fn an_unsupported_cpu_clock_records_its_root_and_divider() {
+    use oer_chips_family_boot::{BootFailure, ClockFailure};
+
+    assert_eq!(
+        boot_failure_record(BootFailure::Clock(ClockFailure::UnsupportedCpuClock {
+            root: 2,
+            fractional: false
+        })),
+        "OER_BOOT bootstrap=FAIL reason=cpu-clock-unsupported root=2 fractional=0\r\n"
+    );
+    assert_eq!(
+        boot_failure_record(BootFailure::Clock(ClockFailure::UnsupportedCpuClock {
+            root: 1,
+            fractional: true
+        })),
+        "OER_BOOT bootstrap=FAIL reason=cpu-clock-unsupported root=1 fractional=1\r\n"
+    );
+}
+
+#[test]
 fn boot_failure_records_preserve_the_named_wait() {
     use oer_chips_family_boot::{BootFailure, WaitFailure};
 

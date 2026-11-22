@@ -16,26 +16,54 @@ pub fn adopt_mapping<B: oer_chips_family_platform_layout::handoff::AdoptsBootstr
     board.adopt(proof)
 }
 
-/// Read-only observation of the clock already driving the CPU.
-pub struct CpuRate {
-    pub fractional: bool,
-    pub integer_hz: Option<u32>,
+/// The rate of the clock driving the CPU, in hertz: nonzero.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CpuHz(core::num::NonZeroU32);
+
+impl CpuHz {
+    /// A rate, or `None` for zero.
+    pub const fn new(hz: u32) -> Option<Self> {
+        match core::num::NonZeroU32::new(hz) {
+            Some(hz) => Some(Self(hz)),
+            None => None,
+        }
+    }
+
+    /// The rate in hertz.
+    pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+}
+
+/// Read-only observation of the clock already driving the CPU: an integer
+/// rate, or what makes it one no settle can be counted on.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CpuRate {
+    /// An integer divider of a root of known rate.
+    Integer(CpuHz),
+    /// A root of no known rate (`root`, its selector's code), or a
+    /// fractional divider.
+    Unsupported { root: u32, fractional: bool },
 }
 
 pub trait CpuClock {
-    fn sample(&self) -> CpuRate;
-    /// Publish the adopted rate for short settles; no clock register is written.
-    fn publish(self, rate_hz: Option<u32>);
+    /// Read the CPU clock once; no clock register is written.
+    fn sample(self) -> CpuRate;
 }
 
-/// Fractional or unsupported clocks continue to refuse short settles.
-pub fn adopt_cpu_clock<C: CpuClock>(clock: C) {
-    let rate = clock.sample();
-    clock.publish(if rate.fractional {
-        None
-    } else {
-        rate.integer_hz
-    });
+/// The adopted rate, the value the settle counter is made from, or the
+/// typed boot failure of a clock it cannot count on.
+///
+/// # Errors
+/// [`ClockFailure::UnsupportedCpuClock`] for a root of no known rate or a
+/// fractional divider.
+pub fn adopt_cpu_clock<C: CpuClock>(clock: C) -> Result<CpuHz, crate::BootFailure> {
+    match clock.sample() {
+        CpuRate::Integer(hz) => Ok(hz),
+        CpuRate::Unsupported { root, fractional } => Err(crate::BootFailure::Clock(
+            crate::ClockFailure::UnsupportedCpuClock { root, fractional },
+        )),
+    }
 }
 
 /// The clock of TIMG0 T0, independent of its watchdog clock and group reset.
@@ -132,6 +160,7 @@ pub trait Port: Sized {
         resources: Self::Resources,
         clocks: Self::Clocks,
         watchdogs: Watchdogs<Self::Main0, Self::Main1, Self::Rtc, Self::Super>,
+        cpu: CpuHz,
     ) -> Self::Output;
 }
 
@@ -153,6 +182,8 @@ pub enum InitError {
     ConsoleInstalled,
     CoreControlInstalled,
     DebugStatusPublished,
+    /// The CPU clock is one no settle can be counted on.
+    Boot(crate::BootFailure),
 }
 
 impl InitError {
@@ -162,6 +193,7 @@ impl InitError {
             Self::ConsoleInstalled => "console-installed",
             Self::CoreControlInstalled => "core-control-installed",
             Self::DebugStatusPublished => "debug-status-published",
+            Self::Boot(failure) => failure.reason(),
         }
     }
 }
@@ -179,13 +211,13 @@ pub fn initialize<P: Port>(owners: Owners<P>) -> Result<P::Output, InitError> {
         watchdogs,
         resources,
     } = owners;
-    adopt_cpu_clock(cpu_clock);
+    let cpu = adopt_cpu_clock(cpu_clock).map_err(InitError::Boot)?;
     P::install_console(console)?;
     let clocks = P::adopt_clocks(clocks);
     P::install_core_control(core_control)?;
     P::publish_debug_status(debug)?;
     let watchdogs = arm_watchdogs(watchdogs, P::WATCHDOGS);
-    Ok(P::finish(resources, clocks, watchdogs))
+    Ok(P::finish(resources, clocks, watchdogs, cpu))
 }
 
 #[cfg(test)]

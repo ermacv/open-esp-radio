@@ -135,7 +135,10 @@ fn a_hold_returns_once_its_whole_length_has_passed() {
     let counter = VirtualCounter::new(100, 1);
     hold(Settle::new(limit(20), &counter));
     let after = counter.now();
-    assert!(after - 100 >= 20, "returned at {after}, before the hold's length");
+    assert!(
+        after - 100 >= 20,
+        "returned at {after}, before the hold's length"
+    );
     assert!(
         after - 100 <= 24,
         "held past its length and the samples around it: {after}"

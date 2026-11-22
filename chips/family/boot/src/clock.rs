@@ -141,6 +141,10 @@ pub enum ClockFailure {
     /// LP-fast did not read back as the explicit startup policy. Codes are
     /// preserved even when the observed selector has no hardware meaning.
     LpFastReadback { expected: u32, observed: u32 },
+    /// The runtime's adoption found the CPU on a clock it cannot count a
+    /// settle on: a root of no known rate (`root`, the selector's code) or a
+    /// fractional divider.
+    UnsupportedCpuClock { root: u32, fractional: bool },
 }
 
 impl ClockFailure {
@@ -151,6 +155,7 @@ impl ClockFailure {
             Self::LivePllMismatch => "clock-live-pll",
             Self::Readback => "clock-readback",
             Self::LpFastReadback { .. } => "lp-fast-readback",
+            Self::UnsupportedCpuClock { .. } => "cpu-clock-unsupported",
         }
     }
 }

@@ -341,6 +341,15 @@ impl BootFailureRecord {
                 output(b" observed=");
                 decimal(observed as usize, &mut output);
             }
+            BootFailure::Clock(ClockFailure::UnsupportedCpuClock { root, fractional }) => {
+                output(b" root=");
+                decimal(root as usize, &mut output);
+                output(if fractional {
+                    b" fractional=1".as_slice()
+                } else {
+                    b" fractional=0".as_slice()
+                });
+            }
             BootFailure::Psram(PsramFailure::DensityMismatch { found }) => {
                 output(b" found=");
                 decimal(found as usize, &mut output);

@@ -115,6 +115,21 @@ impl Error {
             Self::Initialization(driver::InitError::DebugStatusPublished) => {
                 oer_portable_diagnostics::name!("debug-status-published"; 32)
             }
+            // The adoption's one boot failure; the other boot failures are
+            // the bootstrap's and never come from the adoption.
+            Self::Initialization(driver::InitError::Boot(failure)) => match failure {
+                oer_chips_family_boot::BootFailure::Clock(
+                    oer_chips_family_boot::ClockFailure::UnsupportedCpuClock { .. },
+                ) => oer_portable_diagnostics::name!("cpu-clock-unsupported"; 32),
+                oer_chips_family_boot::BootFailure::Wait(_)
+                | oer_chips_family_boot::BootFailure::Clock(_)
+                | oer_chips_family_boot::BootFailure::Cache(_)
+                | oer_chips_family_boot::BootFailure::Mmu(_)
+                | oer_chips_family_boot::BootFailure::Flash(_)
+                | oer_chips_family_boot::BootFailure::Psram(_) => {
+                    oer_portable_diagnostics::name!("boot-failure"; 32)
+                }
+            },
             Self::Context(error) => error.name(),
         }
     }

@@ -89,36 +89,63 @@ fn refused_installation_stops_at_its_original_step_before_any_watchdog_write() {
 }
 
 #[test]
-fn cpu_adoption_preserves_integer_rate_and_refuses_fractional_or_unknown_rates() {
-    use core::cell::Cell;
-    struct Clock<'a> {
-        sample: CpuRate,
-        published: &'a Cell<Option<u32>>,
-    }
-    impl CpuClock for Clock<'_> {
-        fn sample(&self) -> CpuRate {
-            CpuRate {
-                fractional: self.sample.fractional,
-                integer_hz: self.sample.integer_hz,
-            }
-        }
-        fn publish(self, rate_hz: Option<u32>) {
-            self.published.set(rate_hz);
+fn the_adoption_gives_the_integer_rate_and_fails_an_unsupported_cpu_clock() {
+    struct Clock(CpuRate);
+    impl CpuClock for Clock {
+        fn sample(self) -> CpuRate {
+            self.0
         }
     }
-    for (fractional, integer_hz, expected) in [
-        (false, Some(160_000_000), Some(160_000_000)),
-        (true, Some(160_000_000), None),
-        (false, None, None),
-    ] {
-        let published = Cell::new(Some(40_000_000));
-        adopt_cpu_clock(Clock {
-            sample: CpuRate {
-                fractional,
-                integer_hz,
-            },
-            published: &published,
-        });
-        assert_eq!(published.get(), expected);
+    let rate = |hz| CpuHz::new(hz).expect("a test rate is nonzero");
+    for hz in [40_000_000, 160_000_000, 320_000_000] {
+        assert_eq!(
+            adopt_cpu_clock(Clock(CpuRate::Integer(rate(hz)))),
+            Ok(rate(hz))
+        );
     }
+    for (root, fractional) in [(0, true), (1, true), (2, false), (3, false), (2, true)] {
+        let failure = adopt_cpu_clock(Clock(CpuRate::Unsupported { root, fractional }));
+        assert_eq!(
+            failure,
+            Err(crate::BootFailure::Clock(
+                crate::ClockFailure::UnsupportedCpuClock { root, fractional }
+            ))
+        );
+        assert_eq!(
+            failure.map(CpuHz::get).unwrap_err().reason(),
+            "cpu-clock-unsupported"
+        );
+    }
+    assert_eq!(CpuHz::new(0), None);
+}
+
+#[test]
+fn an_unsupported_cpu_clock_stops_the_adoption_before_the_console() {
+    let log = Log::new(None);
+    assert_eq!(
+        initialize(log.owners()).map(|ready| ready.cpu.get()).ok(),
+        Some(160_000_000),
+        "the adopted rate reaches the port's output"
+    );
+    let unsupported = CpuRate::Unsupported {
+        root: 2,
+        fractional: false,
+    };
+    let log = Log {
+        cpu: unsupported,
+        ..Log::new(None)
+    };
+    let failure = InitError::Boot(crate::BootFailure::Clock(
+        crate::ClockFailure::UnsupportedCpuClock {
+            root: 2,
+            fractional: false,
+        },
+    ));
+    assert!(matches!(initialize(log.owners()), Err(error) if error == failure));
+    assert_eq!(
+        log.operations(),
+        [Op::Cpu],
+        "nothing after the clock's sample"
+    );
+    assert_eq!(failure.reason(), "cpu-clock-unsupported");
 }
