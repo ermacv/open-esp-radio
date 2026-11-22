@@ -359,6 +359,43 @@ fn a_dropped_reply_is_refused_internal_and_the_console_takes_the_next_request() 
     assert_eq!(writer_dropped, 1, "the unanswered request is counted");
 }
 
+#[test]
+fn a_handler_cancelled_at_an_await_is_refused_when_the_worker_asks_again() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let worker = async move {
+        let mut inbox = inbox;
+        loop {
+            let (request, reply) = inbox.next().await;
+            // The first handler waits for ever and is cancelled by its
+            // deadline with the reply inside; the next ones answer.
+            let handler = async move {
+                if reply.identity().request_id == 1 {
+                    core::future::pending::<()>().await;
+                }
+                reply.answer(&ProbeArmed(mode(request)));
+            };
+            let deadline = async {
+                for _ in 0..3 {
+                    embassy_futures::yield_now().await;
+                }
+            };
+            let _ = embassy_futures::select::select(handler, deadline).await;
+        }
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+}
+
 /// A response its encoder refuses.
 #[derive(Debug, serde::Deserialize, postcard_schema::Schema)]
 struct Refusing;

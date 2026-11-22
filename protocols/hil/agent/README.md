@@ -50,8 +50,11 @@ identity, which borrows the inbox: the worker takes no next request
 before it answered, and an answer without a request or under another
 identity does not compile. One request is in work at a time: another
 meanwhile is answered `Rejected(Busy)` by the console. An answer that
-cannot be encoded, or a `Reply` dropped without one, is refused to the
-host as `Rejected(Internal)` and counted in `tx_dropped`. What follows an
+cannot be encoded is refused to the host as `Rejected(Internal)` and
+counted in `tx_dropped`. `Reply` has no `Drop`: one dropped without an
+answer (by the worker, or in a handler's future cancelled at an await)
+leaves its request owed in the inbox, and the worker's next `next` pays
+it first as unanswered, refused and counted the same way. What follows an
 answer's write (`mailbox::After`) travels with it: a set that declares
 `traps` (the fault service) may ask for `After::Trap`, and `console::run`
 ends with the trap once the answer is written whole; a set without it

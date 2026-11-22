@@ -8,7 +8,9 @@
 //! dropped the reply. The console hands a request only while none is in
 //! work and takes the answer before it hands the next, so the answer's
 //! place is free whenever a reply exists: answering neither waits nor
-//! fails.
+//! fails. The worker's end records what it owes; a reply dropped without
+//! an answer leaves the request owed, and the next request's wait pays it
+//! first as unanswered.
 
 use core::convert::Infallible;
 
@@ -99,6 +101,7 @@ impl<R: Requests> Mailbox<R> {
             Inbox {
                 requests: taken,
                 answers,
+                debt: Debt::Paid,
             },
         )
     }
@@ -110,10 +113,19 @@ pub struct Console<'a, R: Requests> {
     pub(crate) answers: WakingSpscReceiver<'a, Back<R>, 1>,
 }
 
+/// What the worker's end owes the console.
+#[derive(Clone, Copy)]
+enum Debt {
+    Paid,
+    /// The request was given and its reply not answered.
+    Owed(RequestIdentity),
+}
+
 /// The worker's end: each request with the permit of its answer.
 pub struct Inbox<'a, R: Requests> {
     requests: WakingSpscReceiver<'a, Handed<R>, 1>,
     answers: WakingSpscSender<'a, Back<R>, 1>,
+    debt: Debt,
 }
 
 impl<R: Requests> Inbox<'_, R> {
@@ -132,6 +144,13 @@ impl<R: Requests> Inbox<'_, R> {
     /// }
     /// ```
     ///
+    /// A reply dropped without an answer, by the worker or with a handler's
+    /// future cancelled at an await, leaves its request owed: this call
+    /// pays it first, as unanswered, which the console refuses to the host.
+    /// A worker that drops a reply and never asks again leaves the host to
+    /// its timeout; in every image a worker that stops asking has ended,
+    /// and `serve` ends with it.
+    ///
     /// A reply comes only from here: an answer without a request does not
     /// compile.
     ///
@@ -139,10 +158,19 @@ impl<R: Requests> Inbox<'_, R> {
     /// use core::convert::Infallible;
     /// use oer_protocols_hil_agent::mailbox::Reply;
     /// fn forged(identity: oer_protocols_hil_protocol::RequestIdentity) -> Reply<'static, Infallible> {
-    ///     Reply { identity, place: None }
+    ///     Reply { identity, place: todo!(), debt: todo!() }
     /// }
     /// ```
     pub async fn next(&mut self) -> (R, Reply<'_, R::Trap>) {
+        if let Debt::Owed(identity) = self.debt {
+            // The console waits for this answer before it hands another
+            // request, so the place is free.
+            self.answers.ready().await.send(Answered {
+                identity,
+                outcome: Outcome::Unanswered,
+            });
+            self.debt = Debt::Paid;
+        }
         let (identity, request) = loop {
             self.requests.ready().await;
             if let Some(entry) = self.requests.try_receive() {
@@ -152,26 +180,28 @@ impl<R: Requests> Inbox<'_, R> {
         // The console took the previous answer before it handed this
         // request, so the place is free and this wait ends at once.
         let place = self.answers.ready().await;
+        self.debt = Debt::Owed(identity);
         (
             request,
             Reply {
                 identity,
-                place: Some(place),
+                place,
+                debt: &mut self.debt,
             },
         )
     }
 }
 
 /// The permit of one request's answer: consumed by answering. Dropped
-/// without an answer, it ends the request as unanswered, and the console
-/// refuses it to the host.
-#[must_use = "answer the request; a dropped reply is refused to the host"]
+/// without an answer, it leaves the request owed, and the worker's next
+/// request pays it as unanswered ([`Inbox::next`]).
+#[must_use = "answer the request; a dropped reply is refused to the host at the next request"]
 pub struct Reply<'a, T> {
     identity: RequestIdentity,
-    /// The answer's place, held until the outcome is sent. Rust moves no
-    /// field out of a type with `Drop` without `unsafe`: the place is taken
-    /// once, by the answer or by the drop, and is never refilled.
-    place: Option<WakingSpscSendPermit<'a, Answered<T>, 1>>,
+    /// The answer's place, reserved.
+    place: WakingSpscSendPermit<'a, Answered<T>, 1>,
+    /// The worker's end's record of what it owes, paid by the answer.
+    debt: &'a mut Debt,
 }
 
 impl<T> Reply<'_, T> {
@@ -187,30 +217,21 @@ impl<T> Reply<'_, T> {
 
     /// Answers the request with `body`; once the console wrote it whole, it
     /// does `after`.
-    pub fn answer_then<M: Message>(mut self, body: &M, after: After<T>) {
+    pub fn answer_then<M: Message>(self, body: &M, after: After<T>) {
         let outcome =
             match Outbound::new(0, self.identity.session_id, self.identity.request_id, body) {
                 Ok(message) => Outcome::Encoded(message, after),
                 Err(_) => Outcome::Unencodable,
             };
-        self.end(outcome);
-    }
-
-    fn end(&mut self, outcome: Outcome<T>) {
-        if let Some(place) = self.place.take() {
-            // The encoded answer is a payload: copied into its place here and
-            // out of it by the console.
-            place.send(Answered {
-                identity: self.identity,
-                outcome,
-            });
-        }
-    }
-}
-
-impl<T> Drop for Reply<'_, T> {
-    fn drop(&mut self) {
-        self.end(Outcome::Unanswered);
+        let Self {
+            identity,
+            place,
+            debt,
+        } = self;
+        // The encoded answer is a payload: copied into its place here and out
+        // of it by the console.
+        place.send(Answered { identity, outcome });
+        *debt = Debt::Paid;
     }
 }
 

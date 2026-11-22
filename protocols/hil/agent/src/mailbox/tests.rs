@@ -49,7 +49,7 @@ fn the_worker_waits_for_a_request_and_its_reply_names_it() {
 }
 
 #[test]
-fn a_dropped_reply_ends_its_request_unanswered() {
+fn a_dropped_reply_leaves_its_request_owed_and_the_next_request_pays_it() {
     let mut mailbox = Mailbox::<Probes>::new();
     let (console, mut inbox) = mailbox.split();
     assert!(
@@ -62,7 +62,31 @@ fn a_dropped_reply_ends_its_request_unanswered() {
         panic!("the request is handed");
     };
     drop(reply);
-    let answered = console.answers.try_receive().expect("the outcome");
+    assert!(
+        console.answers.try_receive().is_none(),
+        "nothing is sent on the drop"
+    );
+    let mut next = pin!(inbox.next());
+    assert!(poll(next.as_mut()).is_pending(), "no next request yet");
+    let answered = console.answers.try_receive().expect("the debt is paid");
     assert_eq!(answered.identity, identity(5));
     assert!(matches!(answered.outcome, Outcome::Unanswered));
+    assert!(
+        console
+            .requests
+            .try_send((identity(6), Probes::Test(Probe(ProbeMode::Complete))))
+            .is_ok()
+    );
+    let Poll::Ready((_, reply)) = poll(next.as_mut()) else {
+        panic!("the next request is handed");
+    };
+    assert_eq!(reply.identity(), identity(6));
+    reply.answer(&ProbeArmed(ProbeMode::Complete));
+    assert!(matches!(
+        console
+            .answers
+            .try_receive()
+            .map(|answered| answered.outcome),
+        Some(Outcome::Encoded(_, After::Nothing))
+    ));
 }
