@@ -257,6 +257,23 @@ fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
     assert_eq!(ring.walker.rings, 0);
 }
 
+brand!(observed);
+#[test]
+fn the_descriptor_controls_are_each_word_the_walker_left_in_order_then_r() {
+    let bench = bench::<observed::Rx>();
+    bench.complete(2, 114, true);
+    let (ring, reserved) = bench.ring.descriptor_controls();
+    for (index, control) in ring.iter().enumerate() {
+        let expected = if index == 2 {
+            rx_landed_word(SIZE as u32, 114, true)
+        } else {
+            bench.arm_word()
+        };
+        assert_eq!(*control, expected, "descriptor {index}");
+    }
+    assert_eq!(reserved, bench.arm_word());
+}
+
 brand!(single);
 #[test]
 fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once() {

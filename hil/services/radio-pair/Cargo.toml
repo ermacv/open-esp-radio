@@ -1,0 +1,22 @@
+[package]
+name = "oer-hil-services-radio-pair"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL radio pair's services: the bring-up, the boot's snapshots and receive counters, the sender's rounds and the receiver's windows"
+
+[dependencies]
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-protocols-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
+heapless = { version = "0.9.3", features = ["serde"] }
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive", "heapless-v0_9"] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+postcard = { version = "1.1.3", default-features = false, features = ["heapless"] }
+
+[lints]
+workspace = true
