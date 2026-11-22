@@ -25,7 +25,7 @@
 pub mod base;
 pub mod capture;
 pub mod console;
-pub mod lifecycle;
+pub mod mailbox;
 pub mod postmortem;
 
 #[cfg(test)]

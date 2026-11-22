@@ -46,9 +46,19 @@ impl Message for Switched {
     const PATH: &'static str = "test/switched";
 }
 
-/// A test image property.
+/// A third test endpoint, mounted by two services at once.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, postcard_schema::Schema)]
-pub struct Marker;
-impl Message for Marker {
-    const PATH: &'static str = "test/marker";
+pub struct Trigger;
+impl Message for Trigger {
+    const PATH: &'static str = "test/trigger";
+    const WIRE_KIND: WireKind = WireKind::Command;
+}
+impl Endpoint for Trigger {
+    type Response = Triggered;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, postcard_schema::Schema)]
+pub struct Triggered;
+impl Message for Triggered {
+    const PATH: &'static str = "test/triggered";
 }

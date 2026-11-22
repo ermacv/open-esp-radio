@@ -1779,8 +1779,6 @@ dependencies = [
  "embedded-io-async",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-family-platform-runtime",
- "oer-portable-diagnostics",
- "oer-portable-memory",
  "oer-portable-riscv",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
@@ -2307,9 +2305,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "crc",
- "critical-section",
  "embassy-futures",
- "embassy-sync",
  "embedded-io-async",
  "heapless 0.9.3",
  "oer-portable-diagnostics",

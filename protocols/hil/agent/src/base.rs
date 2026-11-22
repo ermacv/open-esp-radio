@@ -29,6 +29,10 @@ pub trait Requests: Sized {
     /// module's never do.
     const SESSIONS: bool;
 
+    /// What the set may ask after an answer's write: `Infallible`, or
+    /// [`Trap`](crate::mailbox::Trap) for a set that declares `traps`.
+    type Trap: crate::mailbox::Traps;
+
     /// `frame` as one of the image's requests: `None` when its key is none
     /// of them.
     fn decode(frame: &Frame<'_>) -> Option<Result<Self, DecodeError>>;
@@ -77,6 +81,7 @@ pub enum NoRequests {}
 
 impl Requests for NoRequests {
     const SESSIONS: bool = false;
+    type Trap = core::convert::Infallible;
 
     fn decode(_: &Frame<'_>) -> Option<Result<Self, DecodeError>> {
         None
@@ -173,31 +178,11 @@ impl<'a> Intake<'a> {
         self.decoder.counters()
     }
 
-    /// Feeds `bytes` and hands each complete request to `handle`, in order.
-    pub fn receive_each<C: Requests>(
-        &mut self,
-        bytes: &[u8],
-        sent: Sent,
-        mut handle: impl FnMut(Request<C>),
-    ) {
-        // One byte at a time, at most one frame completes per feed, so an
-        // answer that reports the counters reports them as of its request.
-        for byte in bytes {
-            if let Some(request) = self.receive_byte(*byte, sent) {
-                handle(request);
-            }
-        }
-    }
-
-    /// Feeds `bytes` and returns the last complete request among them; a
-    /// console that reads one byte at a time sees every request.
-    pub fn receive<C: Requests>(&mut self, bytes: &[u8], sent: Sent) -> Option<Request<C>> {
-        let mut last = None;
-        self.receive_each(bytes, sent, |request| last = Some(request));
-        last
-    }
-
-    fn receive_byte<C: Requests>(&mut self, byte: u8, sent: Sent) -> Option<Request<C>> {
+    /// Feeds one byte: the request it completes, if any. One byte at a time,
+    /// at most one frame completes per feed, so an answer that reports the
+    /// counters reports them as of its request, and the console answers
+    /// each request before it feeds the next byte.
+    pub fn receive_byte<C: Requests>(&mut self, byte: u8, sent: Sent) -> Option<Request<C>> {
         let boot_id = self.boot_id;
         let hello = self.hello;
         let mut request = None;
@@ -282,19 +267,21 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 /// oer_protocols_hil_agent::requests! {
 ///     /// The requests this image serves.
 ///     pub enum Request (sessions = false) {
-///         Reset(oer_protocols_hil_protocol::lifecycle::RequestReset),
+///         Unwrap(oer_hil_services_aes::UnwrapKey),
 ///     }
 ///     publishes [oer_protocols_hil_protocol::base::Hello]
 /// }
 /// ```
 ///
 /// `sessions` says whether a request may belong to a session; a variant
-/// and a published message take `#[cfg(...)]` attributes only.
+/// and a published message take `#[cfg(...)]` attributes only. A set
+/// whose answers may end in a trap says `traps` after it: only such a set
+/// can build [`After::Trap`](crate::mailbox::After::Trap).
 #[macro_export]
 macro_rules! requests {
     (
         $(#[$meta:meta])*
-        $vis:vis enum $name:ident (sessions = $sessions:literal) {
+        $vis:vis enum $name:ident (sessions = $sessions:literal $(, $traps:ident)?) {
             $($(#[cfg($cfg:meta)])* $variant:ident($ty:ty)),* $(,)?
         }
         $(publishes [$($(#[cfg($published_cfg:meta)])* $published:ty),* $(,)?])?
@@ -306,6 +293,7 @@ macro_rules! requests {
 
         impl $crate::base::Requests for $name {
             const SESSIONS: bool = $sessions;
+            type Trap = $crate::__trap!($($traps)?);
 
             fn decode(
                 frame: &$crate::__protocol::Frame<'_>,
@@ -346,7 +334,7 @@ macro_rules! requests {
 /// Declares a service whose every endpoint has a handler: the
 /// [`requests!`](crate::requests) enum and keys, a handler trait with one
 /// required method per endpoint, and `serve`, which awaits the handler of a
-/// request and publishes its response as the request's answer. An image
+/// request and answers its response through the request's reply. An image
 /// implements the trait; a missing or extra method does not compile.
 ///
 /// ```ignore
@@ -388,24 +376,24 @@ macro_rules! requests {
 ///
 /// ```compile_fail
 /// oer_protocols_hil_agent::requests! {
-///     pub enum First (sessions = false) { Reset(oer_protocols_hil_protocol::lifecycle::RequestReset) }
+///     pub enum First (sessions = false) { Describe(oer_protocols_hil_protocol::capture::Describe) }
 /// }
 /// oer_protocols_hil_agent::image_keys! {
-///     KEYS = [First, oer_protocols_hil_agent::lifecycle::Request]
+///     KEYS = [First, oer_protocols_hil_agent::capture::Request]
 /// }
 /// ```
 #[macro_export]
 macro_rules! service {
     (
         $(#[$meta:meta])*
-        $vis:vis enum $name:ident (sessions = $sessions:literal, handler = $handler:ident) {
+        $vis:vis enum $name:ident (sessions = $sessions:literal, handler = $handler:ident $(, $traps:ident)?) {
             $($variant:ident($ty:ty) => $method:ident),* $(,)?
         }
         $(publishes [$($published:ty),* $(,)?])?
     ) => {
         $crate::requests! {
             $(#[$meta])*
-            $vis enum $name (sessions = $sessions) {
+            $vis enum $name (sessions = $sessions $(, $traps)?) {
                 $($variant($ty)),*
             }
             $(publishes [$($published),*])?
@@ -425,30 +413,33 @@ macro_rules! service {
         }
 
         impl $name {
-            /// Answer `identity`'s request through `handler` on `console`;
-            /// the response's place among the console's entries, or its
-            /// loss (counted).
-            $vis async fn serve<
-                H: $handler,
-                const NOTES: usize,
-                const MESSAGES: usize,
-                P: $crate::console::Immediate,
-            >(
+            /// Answer the request through `handler`: its response goes back
+            /// through `reply`.
+            $vis async fn serve<H: $handler, T>(
                 self,
                 handler: &mut H,
-                console: &$crate::console::Console<NOTES, MESSAGES, P>,
-                identity: $crate::__protocol::RequestIdentity,
-            ) -> Result<$crate::console::Entered, $crate::console::Dropped> {
+                reply: $crate::mailbox::Reply<'_, T>,
+            ) {
                 match self {
                     $(Self::$variant(request) => {
-                        let response = handler.$method(request).await;
-                        console
-                            .publish_reliably(identity.session_id, identity.request_id, &response)
-                            .await
+                        reply.answer(&handler.$method(request).await);
                     })*
                 }
             }
         }
+    };
+}
+
+/// The trap type of a [`requests!`](crate::requests) set: `Infallible`
+/// unless the set says `traps`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __trap {
+    () => {
+        ::core::convert::Infallible
+    };
+    (traps) => {
+        $crate::mailbox::Trap
     };
 }
 
@@ -459,8 +450,8 @@ macro_rules! service {
 ///
 /// ```ignore
 /// oer_protocols_hil_agent::image_keys! {
-///     /// What the reset-capable image serves.
-///     pub(crate) KEYS = [oer_protocols_hil_agent::lifecycle::Request]
+///     /// What the capture image serves.
+///     pub(crate) KEYS = [oer_protocols_hil_agent::capture::Request]
 /// }
 /// ```
 #[macro_export]
@@ -518,6 +509,7 @@ pub enum Either<A, B> {
 
 impl<A: Requests, B: Requests> Requests for Either<A, B> {
     const SESSIONS: bool = A::SESSIONS || B::SESSIONS;
+    type Trap = <A::Trap as crate::mailbox::Traps>::Or<B::Trap>;
 
     fn decode(frame: &Frame<'_>) -> Option<Result<Self, DecodeError>> {
         A::decode(frame)

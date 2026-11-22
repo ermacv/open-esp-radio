@@ -1,11 +1,11 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
 
 use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use embassy_futures::block_on;
-use embassy_futures::select::{Either, select};
+use embassy_futures::select::{Either3, select3};
 use oer_protocols_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetImageKeys, GetLinkHealth, Hello, ImageKeySet,
     PostMortemCheckpoints, RejectReason, ResetReason, sorted_keys,
@@ -13,7 +13,7 @@ use oer_protocols_hil_protocol::base::{
 use oer_protocols_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
-use oer_portable_diagnostics::{Note, Written};
+use crate::mailbox::{Inbox, Mailbox, Trap};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
@@ -21,36 +21,27 @@ crate::requests! {
     }
 }
 
+crate::requests! {
+    /// A set that may trap after an answer, as the fault service's.
+    #[expect(dead_code, reason = "the trap tests answer without reading the probe")]
+    enum TrappingRequest (sessions = false, traps) {
+        Test(Probe),
+    }
+}
+
 const BOOT: u64 = 77;
 
-/// The early writer of a test thread: it keeps the words of the notes it
-/// is given while it owns the peripheral.
+/// The early writer of a test thread: the bytes it dropped.
 struct Captured;
 
 impl Immediate for Captured {
-    fn note(note: &Note<'_>) -> Written {
-        if !EARLY_OWNS.get() {
-            return Written::Retired;
-        }
-        EARLY.with(|notes| notes.borrow_mut().push(note.words().to_vec()));
-        Written::Whole
-    }
-
     fn take_lost() -> u32 {
         EARLY_LOST.replace(0)
     }
 }
 
-type TestConsole = Console<4, 8, Captured>;
-
-fn console() -> &'static TestConsole {
-    Box::leak(Box::new(TestConsole::new()))
-}
-
 std::thread_local! {
-    static EARLY: RefCell<Vec<Vec<u32>>> = const { RefCell::new(Vec::new()) };
-    static EARLY_OWNS: core::cell::Cell<bool> = const { core::cell::Cell::new(true) };
-    static EARLY_LOST: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+    static EARLY_LOST: Cell<u32> = const { Cell::new(0) };
 }
 
 struct Chip;
@@ -143,20 +134,23 @@ impl Write for Endpoint {
     }
 }
 
-/// Runs the console until `done` holds for what the host received.
-fn run_until(
-    console: &'static TestConsole,
+/// The two ends of a mailbox placed for the test's whole run.
+fn mailbox<R: Requests + 'static>() -> (Console<'static, R>, Inbox<'static, R>) {
+    Box::leak(Box::new(Mailbox::<R>::new())).split()
+}
+
+/// Runs the console over `endpoint` beside `worker` until `done` holds for
+/// what the host received; the run's end, if it ended first.
+fn run_with<R: Requests, E: Read + Write>(
+    console: &mut Console<'static, R>,
+    endpoint: E,
     host: &Host,
-    mut served: impl FnMut(RequestIdentity, Probe),
+    worker: impl core::future::Future<Output = ()>,
     done: impl Fn(&Host) -> bool,
-) {
+) -> Option<Ended<E, R::Trap>> {
+    let mut writer = Writer::new();
     let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-    let run = console.run(
-        Endpoint(host.clone()),
-        intake,
-        &Chip,
-        |request, WatchdogRequest::Test(own)| served(request, own),
-    );
+    let run = run::<Captured, R, E>(&mut writer, console, BOOT, endpoint, intake, &Chip);
     let watch = async {
         for _ in 0..10_000 {
             if done(host) {
@@ -166,25 +160,63 @@ fn run_until(
         }
         panic!("the console did not finish: {:?}", host.frames());
     };
-    match block_on(select(run, watch)) {
-        Either::First(failure) => panic!("console failed: {:?}", failure.cause),
-        Either::Second(()) => {}
+    match block_on(select3(run, worker, watch)) {
+        Either3::First(ended) => Some(ended),
+        Either3::Second(()) | Either3::Third(()) => None,
     }
+}
+
+/// Runs the console beside `worker` until `done`; the run must not end.
+fn run_until<R: Requests>(
+    console: &mut Console<'static, R>,
+    host: &Host,
+    worker: impl core::future::Future<Output = ()>,
+    done: impl Fn(&Host) -> bool,
+) {
+    if run_with(console, Endpoint(host.clone()), host, worker, done).is_some() {
+        panic!("the console ended: {:?}", host.frames());
+    }
+}
+
+/// A worker that never takes a request.
+async fn idle() {
+    core::future::pending::<()>().await;
+}
+
+/// A worker that answers each probe with its mode.
+async fn prober<R: Requests>(mut inbox: Inbox<'static, R>, answer: impl Fn(R) -> ProbeMode) {
+    loop {
+        let (request, reply) = inbox.next().await;
+        reply.answer(&ProbeArmed(answer(request)));
+    }
+}
+
+fn mode(WatchdogRequest::Test(Probe(mode)): WatchdogRequest) -> ProbeMode {
+    mode
+}
+
+const REJECTED: Key = oer_protocols_hil_protocol::base::Rejected::KEY;
+
+/// The reason of every rejection the device wrote, by request.
+fn rejections(host: &Host) -> Vec<(u32, RejectReason)> {
+    let mut decoder = FrameDecoder::new();
+    let mut found = Vec::new();
+    decoder.feed(WireKind::Event, &host.from_device.borrow(), |frame| {
+        let frame = frame.unwrap();
+        if let Some(rejected) = frame.decode::<oer_protocols_hil_protocol::base::Rejected>() {
+            found.push((frame.request_id, rejected.unwrap().body.0));
+        }
+    });
+    found
 }
 
 #[test]
 fn hello_comes_first_and_base_requests_are_answered_in_order() {
-    let console = console();
+    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();
-    console.start(BOOT);
     host.send(0, 5, GetBootStatus);
     host.send(0, 6, GetLinkHealth);
-    run_until(
-        console,
-        &host,
-        |_, _| unreachable!(),
-        |host| host.frames().len() == 3,
-    );
+    run_until(&mut console, &host, idle(), |host| host.frames().len() == 3);
     let frames = host.frames();
     assert_eq!(frames[0], (0, 0, Hello::KEY));
     assert_eq!(frames[1], (5, 1, BootEvidence::KEY));
@@ -195,363 +227,325 @@ fn hello_comes_first_and_base_requests_are_answered_in_order() {
 }
 
 #[test]
-fn the_image_serves_its_own_requests_and_publishes_their_replies() {
-    let console = console();
+fn a_base_answer_is_written_in_the_step_that_decoded_it_while_the_worker_holds_a_request() {
+    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();
-    console.start(BOOT);
     host.send(0, 9, Probe(ProbeMode::Complete));
-    run_until(
-        console,
-        &host,
-        |request, Probe(mode)| {
-            assert_eq!(request.request_id, 9);
-            console
-                .publish(0, request.request_id, &ProbeArmed(mode))
-                .expect("room for the reply");
-        },
-        |host| host.frames().len() == 2,
+    host.send(0, 10, GetBootStatus);
+    let gate = Cell::new(false);
+    let worker = async {
+        let (request, reply) = inbox.next().await;
+        while !gate.get() {
+            embassy_futures::yield_now().await;
+        }
+        reply.answer(&ProbeArmed(mode(request)));
+        idle().await;
+    };
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 {
+            gate.set(true);
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(
+        host.frames(),
+        [
+            (0, 0, Hello::KEY),
+            (10, 1, BootEvidence::KEY),
+            (9, 2, ProbeArmed::KEY)
+        ]
     );
+}
+
+#[test]
+fn a_reply_answers_its_own_request() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 9, Probe(ProbeMode::Stall));
+    let worker = async move {
+        let mut inbox = inbox;
+        let (request, reply) = inbox.next().await;
+        assert_eq!(reply.identity().request_id, 9);
+        reply.answer(&ProbeArmed(mode(request)));
+        idle().await;
+    };
+    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
     assert_eq!(host.frames()[1], (9, 1, ProbeArmed::KEY));
 }
 
 #[test]
-fn a_rejection_names_the_request() {
-    let console = console();
+fn a_second_request_is_refused_busy_while_one_is_in_work_and_taken_after_its_answer() {
+    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();
-    console.start(BOOT);
-    host.send(3, 4, Probe(ProbeMode::Complete));
-    run_until(
-        console,
-        &host,
-        |_, _| unreachable!(),
-        |host| host.frames().len() == 2,
-    );
-    let (request, _, key) = host.frames()[1];
-    assert_eq!(
-        (request, key),
-        (4, oer_protocols_hil_protocol::base::Rejected::KEY)
-    );
-    let _ = RejectReason::InvalidState;
-}
-
-#[test]
-fn hello_leads_the_boot_although_the_image_published_first() {
-    let console = console();
-    let host = Host::default();
-    console.start(BOOT);
-    assert_eq!(
-        console.publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
-        Ok(())
-    );
-    run_until(
-        console,
-        &host,
-        |_, _| unreachable!(),
-        |host| host.frames().len() == 2,
-    );
-    assert_eq!(host.frames(), [(0, 0, Hello::KEY), (0, 1, ProbeArmed::KEY)]);
-}
-
-#[test]
-fn a_full_queue_drops_and_counts_instead_of_blocking() {
-    let console = console();
-    console.start(BOOT);
-    for request in 0..8 {
-        assert_eq!(console.publish(0, request, &GetBootStatus), Ok(()));
-    }
-    assert_eq!(console.publish(0, 8, &GetBootStatus), Err(Dropped));
-    assert_eq!(console.link_health().unwrap().tx_dropped, 1);
-}
-
-/// The requests of the messages in the queue, in its order.
-fn queued(console: &TestConsole) -> Vec<u32> {
-    core::iter::from_fn(|| console.messages.try_receive().ok())
-        .map(|message| message.request_id)
-        .collect()
-}
-
-/// A producer's `index`th message: the immediate producer's requests from
-/// 100, the waiting producer's from 200.
-const IMMEDIATE: u32 = 100;
-const WAITING: u32 = 200;
-
-#[test]
-fn the_writer_numbers_the_messages_in_the_queue_s_order() {
-    use core::task::{Context, Poll, Waker};
-    const EACH: u32 = 3;
-    // Every order of the two producers' messages: a bit set is the
-    // immediate producer's turn (a higher level), clear the waiting one's.
-    for order in 0_u32..(1 << (2 * EACH)) {
-        if order.count_ones() != EACH {
-            continue;
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    host.send(0, 2, Probe(ProbeMode::Complete));
+    let gate = Cell::new(false);
+    let worker = async {
+        let (request, reply) = inbox.next().await;
+        while !gate.get() {
+            embassy_futures::yield_now().await;
         }
-        let console = console();
-        let host = Host::default();
-        console.start(BOOT);
-        let (mut immediate, mut waiting) = (0, 0);
-        let mut context = Context::from_waker(Waker::noop());
-        let mut entered = Vec::new();
-        for turn in 0..2 * EACH {
-            if order & (1 << turn) != 0 {
-                console
-                    .publish(0, IMMEDIATE + immediate, &ProbeArmed(ProbeMode::Complete))
-                    .expect("room");
-                immediate += 1;
-            } else {
-                let mut publishing = core::pin::pin!(console.publish_reliably(
-                    0,
-                    WAITING + waiting,
-                    &ProbeArmed(ProbeMode::Complete)
-                ));
-                let Poll::Ready(Ok(place)) = publishing.as_mut().poll(&mut context) else {
-                    panic!("room for the message");
-                };
-                entered.push((place, Entered(turn)));
-                waiting += 1;
-            }
-        }
-        for (place, turn) in &entered {
-            assert_eq!(
-                place, turn,
-                "order {order:06b}: the waiting producer's place is its entry's"
-            );
-        }
-        run_until(
-            console,
-            &host,
-            |_, _| unreachable!(),
-            |host| host.frames().len() == 1 + 2 * EACH as usize,
-        );
+        reply.answer(&ProbeArmed(mode(request)));
+        let (request, reply) = inbox.next().await;
+        reply.answer(&ProbeArmed(mode(request)));
+        idle().await;
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
         let frames = host.frames();
-        let numbers: Vec<u32> = frames.iter().map(|(_, sequence, _)| *sequence).collect();
-        assert_eq!(
-            numbers,
-            (0..=2 * EACH).collect::<Vec<_>>(),
-            "Hello, then the queue's order"
+        if frames.len() == 2 {
+            gate.set(true);
+        }
+        if frames.len() == 3 && !sent.get() {
+            sent.set(true);
+            host.send(0, 3, Probe(ProbeMode::Complete));
+        }
+        frames.len() == 4
+    });
+    assert_eq!(
+        host.frames(),
+        [
+            (0, 0, Hello::KEY),
+            (2, 1, REJECTED),
+            (1, 2, ProbeArmed::KEY),
+            (3, 3, ProbeArmed::KEY)
+        ]
+    );
+    assert_eq!(rejections(&host), [(2, RejectReason::Busy)]);
+}
+
+#[test]
+fn a_request_while_the_worker_holds_a_reply_is_refused_busy_and_never_reaches_the_worker() {
+    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let (taken, gate) = (Cell::new(0), Cell::new(false));
+    let worker = async {
+        loop {
+            let (request, reply) = inbox.next().await;
+            taken.set(taken.get() + 1);
+            while !gate.get() {
+                embassy_futures::yield_now().await;
+            }
+            reply.answer(&ProbeArmed(mode(request)));
+        }
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        // The request place is empty: the worker took the first request
+        // and holds its reply.
+        if taken.get() == 1 && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        if host.frames().len() == 2 {
+            gate.set(true);
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(
+        host.frames(),
+        [
+            (0, 0, Hello::KEY),
+            (2, 1, REJECTED),
+            (1, 2, ProbeArmed::KEY)
+        ]
+    );
+    assert_eq!(rejections(&host), [(2, RejectReason::Busy)]);
+    assert_eq!(
+        taken.get(),
+        1,
+        "the refused request never reached the worker"
+    );
+}
+
+#[test]
+fn a_debt_is_paid_once_when_the_next_request_s_wait_is_cancelled_after_paying() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let cancelled = Cell::new(false);
+    let worker = async {
+        let mut inbox = inbox;
+        let (_request, reply) = inbox.next().await;
+        drop(reply);
+        // This call pays the debt, then waits for a request and is
+        // cancelled while it waits: no request comes before the cancel.
+        let deadline = async {
+            for _ in 0..3 {
+                embassy_futures::yield_now().await;
+            }
+        };
+        let waited = embassy_futures::select::select(inbox.next(), deadline).await;
+        assert!(matches!(
+            waited,
+            embassy_futures::select::Either::Second(())
+        ));
+        cancelled.set(true);
+        prober(inbox, mode).await;
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 && cancelled.get() && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+}
+
+#[test]
+fn a_rejection_names_the_request() {
+    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(3, 4, Probe(ProbeMode::Complete));
+    run_until(&mut console, &host, idle(), |host| host.frames().len() == 2);
+    assert_eq!(host.frames()[1], (4, 1, REJECTED));
+    assert_eq!(rejections(&host), [(4, RejectReason::InvalidState)]);
+}
+
+#[test]
+fn a_dropped_reply_is_refused_internal_and_the_console_takes_the_next_request() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let worker = async move {
+        let mut inbox = inbox;
+        let (_request, reply) = inbox.next().await;
+        drop(reply);
+        prober(inbox, mode).await;
+    };
+    let sent = Cell::new(false);
+    let mut writer_dropped = 0;
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+            host.send(0, 3, GetLinkHealth);
+        }
+        host.frames().len() == 4
+    });
+    let frames = host.frames();
+    assert_eq!(frames[1], (1, 1, REJECTED));
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    assert!(frames.contains(&(2, 2, ProbeArmed::KEY)) || frames.contains(&(2, 3, ProbeArmed::KEY)));
+    let mut decoder = FrameDecoder::new();
+    decoder.feed(WireKind::Event, &host.from_device.borrow(), |frame| {
+        let frame = frame.unwrap();
+        if let Some(link) = frame.decode::<oer_protocols_hil_protocol::base::LinkHealth>() {
+            writer_dropped = link.unwrap().body.tx_dropped;
+        }
+    });
+    assert_eq!(writer_dropped, 1, "the unanswered request is counted");
+}
+
+#[test]
+fn a_handler_cancelled_at_an_await_is_refused_when_the_worker_asks_again() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let worker = async move {
+        let mut inbox = inbox;
+        loop {
+            let (request, reply) = inbox.next().await;
+            // The first handler waits for ever and is cancelled by its
+            // deadline with the reply inside; the next ones answer.
+            let handler = async move {
+                if reply.identity().request_id == 1 {
+                    core::future::pending::<()>().await;
+                }
+                reply.answer(&ProbeArmed(mode(request)));
+            };
+            let deadline = async {
+                for _ in 0..3 {
+                    embassy_futures::yield_now().await;
+                }
+            };
+            let _ = embassy_futures::select::select(handler, deadline).await;
+        }
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+}
+
+/// A response its encoder refuses.
+#[derive(Debug, serde::Deserialize, postcard_schema::Schema)]
+struct Refusing;
+
+impl serde::Serialize for Refusing {
+    fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom("refused"))
+    }
+}
+
+impl Message for Refusing {
+    const PATH: &'static str = "test/refusing";
+}
+
+#[test]
+fn an_unencodable_answer_is_refused_internal_and_counted() {
+    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let worker = async {
+        let (_request, reply) = inbox.next().await;
+        reply.answer(&Refusing);
+        idle().await;
+    };
+    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+}
+
+#[test]
+fn a_trap_ends_the_run_only_after_its_answer_is_written() {
+    let (mut console, mut inbox) = mailbox::<TrappingRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let worker = async {
+        let (_request, reply) = inbox.next().await;
+        reply.answer_then(
+            &ProbeArmed(ProbeMode::Complete),
+            crate::mailbox::After::Trap(Trap),
         );
-        for first in [IMMEDIATE, WAITING] {
-            let own: Vec<u32> = frames
-                .iter()
-                .map(|(request, ..)| *request)
-                .filter(|request| (first..first + EACH).contains(request))
-                .collect();
-            assert_eq!(own, (first..first + EACH).collect::<Vec<_>>());
+        idle().await;
+    };
+    let ended = run_with(&mut console, Endpoint(host.clone()), &host, worker, |_| {
+        false
+    });
+    assert!(matches!(ended, Some(Ended::Trap(Trap))));
+    assert_eq!(host.frames(), [(0, 0, Hello::KEY), (1, 1, ProbeArmed::KEY)]);
+}
+
+#[test]
+fn a_trap_whose_answer_was_not_written_does_not_end_the_run() {
+    /// Delivers the host's bytes and refuses every write after Hello's.
+    struct Refuses {
+        host: Host,
+        writes: usize,
+    }
+    impl embedded_io_async::ErrorType for Refuses {
+        type Error = embedded_io_async::ErrorKind;
+    }
+    impl Read for Refuses {
+        async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
+            Ok(Endpoint(self.host.clone()).read(buffer).await.unwrap())
         }
     }
-}
-
-#[test]
-fn a_producer_that_waits_for_room_enters_after_the_room_and_holds_no_number() {
-    use core::task::{Context, Poll, Waker};
-    let console = console();
-    console.start(BOOT);
-    for request in 0..8 {
-        assert_eq!(
-            console.publish(0, IMMEDIATE + request, &GetBootStatus),
-            Ok(())
-        );
-    }
-    let mut context = Context::from_waker(Waker::noop());
-    let mut waiting =
-        core::pin::pin!(console.publish_reliably(0, WAITING, &ProbeArmed(ProbeMode::Complete)));
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    // Room comes, and a higher level takes it before the waiting producer
-    // runs: the waiting one waits again.
-    assert!(console.messages.try_receive().is_ok());
-    assert_eq!(console.publish(0, IMMEDIATE + 8, &GetBootStatus), Ok(()));
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    // While it waits, a message lost to the full queue spends no place.
-    assert_eq!(
-        console.publish(0, IMMEDIATE + 9, &GetBootStatus),
-        Err(Dropped)
-    );
-    assert_eq!(console.link_health().unwrap().tx_dropped, 1);
-    assert!(console.messages.try_receive().is_ok());
-    assert_eq!(
-        waiting.as_mut().poll(&mut context),
-        Poll::Ready(Ok(Entered(9)))
-    );
-    assert_eq!(
-        queued(console),
-        [102, 103, 104, 105, 106, 107, 108, WAITING],
-        "after the room, behind the higher level's"
-    );
-}
-
-fn rearm(step: u32) -> Note<'static> {
-    Note::rearm(step, 20, 20_000)
-}
-
-/// The notes a stream of console lines carries, in order: the sequence each
-/// was numbered with and its words.
-fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
-    bytes
-        .split(|&byte| byte == b'\n')
-        .filter_map(|line| line.strip_suffix(b"\r").or(Some(line)))
-        .filter_map(|line| {
-            let mut scratch = [0; oer_portable_diagnostics::MAX_PAYLOAD + 7];
-            match oer_portable_diagnostics::decode(line, &mut scratch) {
-                Ok(Some((sequence, oer_portable_diagnostics::Record::Note(note)))) => {
-                    Some((sequence, note.words().to_vec()))
-                }
-                _ => None,
-            }
-        })
-        .collect()
-}
-
-#[test]
-fn a_note_before_the_transport_owns_the_peripheral_goes_to_the_early_writer() {
-    let console = console();
-    EARLY.with(|notes| notes.borrow_mut().clear());
-    console.note_immediately(&rearm(1));
-    block_on(console.note_reliably(&rearm(2)));
-    EARLY.with(|notes| assert_eq!(notes.borrow().len(), 2));
-    assert!(console.notes.try_receive().is_err(), "nothing was queued");
-    assert_eq!(console.dropped_notes(), 0);
-}
-
-#[test]
-fn a_note_after_the_early_writer_gave_up_the_peripheral_is_queued() {
-    let console = console();
-    EARLY.with(|notes| notes.borrow_mut().clear());
-    EARLY_OWNS.set(false);
-    console.note_immediately(&rearm(1));
-    block_on(console.note_reliably(&rearm(2)));
-    EARLY_OWNS.set(true);
-    EARLY.with(|notes| assert!(notes.borrow().is_empty()));
-    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 1);
-    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 2);
-}
-
-#[test]
-fn an_immediate_note_is_dropped_and_counted_when_the_queue_is_full() {
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    for step in 0..4 {
-        console.note_immediately(&rearm(step));
-    }
-    assert_eq!(console.dropped_notes(), 0);
-    console.note_immediately(&rearm(9));
-    assert_eq!(console.dropped_notes(), 1);
-    assert_eq!(console.link_health().unwrap().notes_dropped, 1);
-}
-
-#[test]
-fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
-    let console = console();
-    EARLY_LOST.set(37);
-    let host = Host::default();
-    run_until(
-        console,
-        &host,
-        |_, _| {},
-        |host| {
-            decoded(&host.from_device.borrow())
-                .iter()
-                .any(|(_, words)| words == &[37])
-        },
-    );
-    assert_eq!(EARLY_LOST.get(), 0);
-}
-
-#[test]
-fn queued_notes_are_numbered_when_written_so_an_immediate_one_cannot_reorder_them() {
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    block_on(console.note_reliably(&rearm(1)));
-    block_on(console.note_reliably(&rearm(2)));
-    let first = console.notes.try_receive().expect("queued");
-    let second = console.notes.try_receive().expect("queued");
-    // Written in the order they were queued, each numbered at its write.
-    let mut wire = Vec::new();
-    let mut sink = Sink(&mut wire);
-    block_on(console.write_note(&mut sink, &first));
-    block_on(console.write_note(&mut sink, &second));
-    let notes = decoded(&wire);
-    assert_eq!(notes.len(), 2);
-    // The sequence is shared by the process, so only its order is checked.
-    assert!(notes[1].0 > notes[0].0);
-    assert_eq!(notes[0].1, [1, 20, 0, 20_000, 0]);
-    assert_eq!(notes[1].1, [2, 20, 0, 20_000, 0]);
-}
-
-#[test]
-fn a_reliable_note_waits_for_room_instead_of_being_lost() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    for step in 0..4 {
-        block_on(console.note_reliably(&rearm(step)));
-    }
-    let late = rearm(9);
-    let mut waiting = core::pin::pin!(console.note_reliably(&late));
-    let mut context = Context::from_waker(Waker::noop());
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    assert_eq!(console.dropped_notes(), 0);
-    let _ = console.notes.try_receive().expect("queued");
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Ready(()));
-}
-
-/// An endpoint that keeps what is written.
-struct Sink<'a>(&'a mut Vec<u8>);
-
-impl embedded_io_async::ErrorType for Sink<'_> {
-    type Error = core::convert::Infallible;
-}
-
-impl Write for Sink<'_> {
-    async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-        self.0.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    async fn flush(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-#[test]
-fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_endpoint() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
-
-    /// Where the split transport is: its first write not taken yet, a half
-    /// taken and the gate shut, or the gate opened.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Step {
-        Whole,
-        Split,
-        Open,
-    }
-
-    struct SplitTx<'a> {
-        host: Host,
-        gate: &'a Signal<NoopRawMutex, ()>,
-        step: Step,
-    }
-    impl embedded_io_async::ErrorType for SplitTx<'_> {
-        type Error = core::convert::Infallible;
-    }
-    impl Write for SplitTx<'_> {
+    impl Write for Refuses {
         async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-            if self.step == Step::Whole {
-                self.step = Step::Split;
-                let count = bytes.len() / 2;
-                self.host
-                    .from_device
-                    .borrow_mut()
-                    .extend_from_slice(&bytes[..count]);
-                return Ok(count);
-            }
-            if self.step == Step::Split {
-                self.gate.wait().await;
-                self.step = Step::Open;
+            self.writes += 1;
+            if self.writes > 2 {
+                return Err(embedded_io_async::ErrorKind::Other);
             }
             self.host.from_device.borrow_mut().extend_from_slice(bytes);
             Ok(bytes.len())
@@ -561,30 +555,32 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
         }
     }
 
-    let console = console();
-    console.start(BOOT);
-    let entered = block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
-        .expect("the reply is built");
-    let message = console.messages.try_receive().expect("queued reply");
+    let (mut console, mut inbox) = mailbox::<TrappingRequest>();
     let host = Host::default();
-    let gate = Signal::new();
-    let mut tx = SplitTx {
-        host: host.clone(),
-        gate: &gate,
-        step: Step::Whole,
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let answered = Cell::new(false);
+    let worker = async {
+        let (_request, reply) = inbox.next().await;
+        reply.answer_then(
+            &ProbeArmed(ProbeMode::Complete),
+            crate::mailbox::After::Trap(Trap),
+        );
+        answered.set(true);
+        idle().await;
     };
-    let mut writing = core::pin::pin!(console.write_queued(&mut tx, message, &Chip));
-    let mut written = core::pin::pin!(console.written(entered));
-    let mut context = Context::from_waker(Waker::noop());
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
-    assert_eq!(writing.as_mut().poll(&mut context), Poll::Pending);
-    assert!(!host.from_device.borrow().is_empty());
-    assert!(host.frames().is_empty());
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
-    gate.signal(());
-    assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
-    assert_eq!(host.frames(), [(9, 1, ProbeArmed::KEY)]);
+    let polls = Cell::new(0);
+    let endpoint = Refuses {
+        host: host.clone(),
+        writes: 0,
+    };
+    let ended = run_with(&mut console, endpoint, &host, worker, |_| {
+        if answered.get() {
+            polls.set(polls.get() + 1);
+        }
+        polls.get() > 100
+    });
+    assert!(ended.is_none(), "an unwritten answer gives no trap");
+    assert_eq!(host.frames(), [(0, 0, Hello::KEY)]);
 }
 
 #[test]
@@ -603,112 +599,45 @@ fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
     }
 
     for taken in [0, usize::MAX] {
-        let console = console();
-        console.start(BOOT);
-        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
-            .expect("the reply is built");
-        let message = console.messages.try_receive().expect("queued reply");
-        let lost = console.dropped_messages.load(Ordering::Relaxed);
-        let sent = console.sent_frames.load(Ordering::Relaxed);
-        block_on(console.write_queued(&mut Takes(taken), message, &Chip));
-        assert_eq!(console.dropped_messages.load(Ordering::Relaxed), lost + 1);
-        assert_eq!(console.sent_frames.load(Ordering::Relaxed), sent);
+        let mut writer = Writer::new();
+        let message = Outbound::new(0, 0, 9, &ProbeArmed(ProbeMode::Complete)).unwrap();
+        assert!(!block_on(writer.write(
+            &mut Takes(taken),
+            BOOT,
+            message,
+            &Chip
+        )));
+        assert_eq!((writer.dropped, writer.sent_frames), (1, 0));
     }
 }
 
-#[test]
-fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    use oer_protocols_hil_protocol::lifecycle::ResetAccepted;
-
-    let console = console();
-    console.start(BOOT);
-    let request = RequestIdentity {
-        boot_id: BOOT,
-        request_id: u32::MAX,
-        session_id: 0x89ab_cdef_0123_4567,
-    };
-    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
-    let mut cx = Context::from_waker(Waker::noop());
-    assert!(acknowledging.as_mut().poll(&mut cx).is_pending());
-    let message = console.messages.try_receive().unwrap();
-    let host = Host::default();
-    assert!(host.frames().is_empty());
-    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
-    let Poll::Ready(Ok(acknowledged)) = acknowledging.as_mut().poll(&mut cx) else {
-        panic!("a complete write releases the reset acknowledgement");
-    };
-    assert_eq!(host.frames(), [(u32::MAX, 1, ResetAccepted::KEY)]);
-    assert_eq!(
-        acknowledged.observations(),
-        [u32::MAX, 0, 0x0123_4567, 0x89ab_cdef]
-    );
-}
-
-#[test]
-fn reset_barrier_exhaustion_returns_no_reset_authority() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    let console = console();
-    console.start(BOOT);
-    let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16)
-        .map(|_| Box::pin(console.written(Entered(10))))
-        .collect();
-    for waiter in &mut waiting {
-        assert!(waiter.as_mut().poll(&mut cx).is_pending());
-    }
-    let request = RequestIdentity {
-        boot_id: BOOT,
-        session_id: 0,
-        request_id: 9,
-    };
-    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
-    let Poll::Ready(Err(fault)) = acknowledging.as_mut().poll(&mut cx) else {
-        panic!("no reset authority after the completion barrier fails");
-    };
-    assert_eq!(
-        fault,
-        crate::lifecycle::Unacknowledged::Barrier(progress::ReceiverLimit {
-            sequence: 0,
-            next: Some(0),
-            capacity: 16
+fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
+    bytes
+        .split(|&byte| byte == b'\n')
+        .filter_map(|line| line.strip_suffix(b"\r").or(Some(line)))
+        .filter_map(|line| {
+            let mut scratch = [0; oer_portable_diagnostics::MAX_PAYLOAD + 7];
+            match oer_portable_diagnostics::decode(line, &mut scratch) {
+                Ok(Some((sequence, oer_portable_diagnostics::Record::Note(note)))) => {
+                    Some((sequence, note.words().to_vec()))
+                }
+                _ => None,
+            }
         })
-    );
+        .collect()
 }
 
 #[test]
-fn failed_terminal_barrier_propagates_without_performing_the_terminal_action() {
-    use core::future::Future;
-    use core::task::{Context, Poll, Waker};
-    let console = console();
-    let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16)
-        .map(|_| Box::pin(console.written(Entered(10))))
-        .collect();
-    for future in &mut waiting {
-        assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-    }
-    let acted = core::cell::Cell::new(false);
-    let mut terminal = core::pin::pin!(async {
-        console.written(Entered(20)).await?;
-        acted.set(true);
-        Ok(())
+fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
+    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
+    EARLY_LOST.set(37);
+    let host = Host::default();
+    run_until(&mut console, &host, idle(), |host| {
+        decoded(&host.from_device.borrow())
+            .iter()
+            .any(|(_, words)| words == &[37])
     });
-    assert_eq!(
-        terminal.as_mut().poll(&mut cx),
-        Poll::Ready(Err(progress::ReceiverLimit {
-            sequence: 20,
-            next: Some(0),
-            capacity: 16,
-        }))
-    );
-    assert!(!acted.get());
+    assert_eq!(EARLY_LOST.get(), 0);
 }
 
 struct BrokenRead {
@@ -740,18 +669,23 @@ impl Drop for BrokenRead {
 #[test]
 fn invalid_read_length_returns_the_transport_without_releasing_it() {
     for length in [RX_CHUNK + 1, usize::MAX] {
-        let console = console();
-        let dropped = Rc::new(core::cell::Cell::new(false));
+        let (mut console, _inbox) = mailbox::<crate::base::NoRequests>();
+        let mut writer = Writer::new();
+        let dropped = Rc::new(Cell::new(false));
         let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-        let failure = block_on(console.run(
+        let ended = block_on(run::<Captured, crate::base::NoRequests, _>(
+            &mut writer,
+            &mut console,
+            BOOT,
             BrokenRead {
                 length,
                 dropped: dropped.clone(),
             },
             intake,
             &Chip,
-            |_, _: crate::base::NoRequests| {},
         ));
+        // An image without traps cannot end in one.
+        let Ended::Fault(failure) = ended;
         assert_eq!(
             failure.cause,
             ConsoleFault::ReadLength {
@@ -763,38 +697,6 @@ fn invalid_read_length_returns_the_transport_without_releasing_it() {
         drop(failure);
         assert!(dropped.get());
     }
-}
-
-#[test]
-fn counter_borrow_conflicts_return_typed_faults() {
-    let console = console();
-    console.received.lock(|received| {
-        let _exclusive = received.borrow_mut();
-        assert_eq!(
-            console.link_health(),
-            Err(ConsoleFault::CountersBorrowed { writing: false })
-        );
-    });
-    let dropped = Rc::new(core::cell::Cell::new(false));
-    let failure = console.received.lock(|received| {
-        let _reader = received.borrow();
-        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-        block_on(console.run(
-            BrokenRead {
-                length: 0,
-                dropped: dropped.clone(),
-            },
-            intake,
-            &Chip,
-            |_, _: crate::base::NoRequests| {},
-        ))
-    });
-    assert_eq!(
-        failure.cause,
-        ConsoleFault::CountersBorrowed { writing: true }
-    );
-    assert!(!dropped.get());
-    assert!(console.link_health().is_ok());
 }
 
 #[test]
@@ -852,10 +754,10 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
         let platform = Observed {
             retained: RefCell::new(retained),
         };
-        let console = console();
-        console.start(BOOT);
+        let mut writer = Writer::new();
         let message = Outbound::new(1, 0, 1, &platform.boot_evidence()).unwrap();
-        block_on(console.write_message(&mut Output { refused, calls: 0 }, &message, &platform));
+        let _written =
+            block_on(writer.write(&mut Output { refused, calls: 0 }, BOOT, message, &platform));
         if refused <= 2 {
             assert_eq!(*platform.retained.borrow(), retained);
         } else {
@@ -884,22 +786,21 @@ impl ProbeHandler for Prober {
 }
 
 #[test]
-fn a_service_answers_each_request_through_its_handler_with_the_request_identity() {
-    let console = console();
-    console.start(BOOT);
-    let mut prober = Prober { calls: 0 };
-    let identity = oer_protocols_hil_protocol::RequestIdentity {
-        boot_id: BOOT,
-        session_id: 0,
-        request_id: 21,
-    };
-    block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(&mut prober, console, identity))
-        .expect("the response is built");
-    assert_eq!(prober.calls, 1);
-    let message = console.messages.try_receive().expect("the queued response");
+fn a_service_answers_each_request_through_its_handler_and_its_reply() {
+    let (mut console, mut inbox) = mailbox::<ProbeService>();
     let host = Host::default();
-    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
-    assert_eq!(host.frames(), [(21, 1, ProbeArmed::KEY)]);
+    host.send(0, 21, Probe(ProbeMode::Stall));
+    let calls = Cell::new(0);
+    let worker = async {
+        let mut prober = Prober { calls: 0 };
+        let (request, reply) = inbox.next().await;
+        request.serve(&mut prober, reply).await;
+        calls.set(prober.calls);
+        idle().await;
+    };
+    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(host.frames()[1], (21, 1, ProbeArmed::KEY));
     assert_eq!(
         <ProbeService as crate::base::Service>::REQUESTS,
         [Probe::KEY]

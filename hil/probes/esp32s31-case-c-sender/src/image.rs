@@ -37,13 +37,11 @@ use oer_chips_esp32s31_radio_phy::{
     PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
-use oer_hil_agent::answer;
 use oer_hil_services_radio_pair::{self as service, Refusal, SenderRequest};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
 use oer_portable_time::{Clock, Duration, Timer};
-use oer_protocols_hil_protocol::RequestIdentity;
 
 /// The sender's receive ring: eight descriptors, each buffer of 256
 /// octets with the 64-octet header below its floor. The MAC's start takes
@@ -238,7 +236,10 @@ fn main(
     let Some(mailbox) = MAILBOX.try_take() else {
         fail(name!("mailbox"; 32));
     };
-    let (outbox, inbox) = mailbox.split();
+    let (mailbox, inbox) = mailbox.split();
+    let Some(writer) = WRITER.try_take() else {
+        fail(name!("writer"; 32));
+    };
     // The probe reads no previous boot's panic or exception record: its
     // diagnostic hook keeps its own (`diagnostic::report_previous`).
     let host = Host {
@@ -249,7 +250,8 @@ fn main(
             previous_panic: None,
             previous_exception: None,
         },
-        outbox,
+        mailbox,
+        writer,
     };
     if RadioTasks::session(&radio_executor, parts, inbox, u32::from(reset_cause.code())).is_err() {
         fail(name!("session-task"; 32));
@@ -311,6 +313,9 @@ const IMAGE: oer_hil_agent::Image = oer_hil_agent::Image {
 
 static MAILBOX: static_cell::ConstStaticCell<oer_hil_agent::Mailbox<SenderRequest>> =
     static_cell::ConstStaticCell::new(oer_hil_agent::Mailbox::new());
+/// The console's state: only the console's task touches it.
+static WRITER: static_cell::ConstStaticCell<oer_hil_agent::Writer> =
+    static_cell::ConstStaticCell::new(oer_hil_agent::Writer::new());
 
 /// What the host's link takes at boot: the console, this boot's identity,
 /// what the adoption read and the mailbox's console end.
@@ -318,7 +323,8 @@ pub(crate) struct Host {
     pub(crate) console: usb::Console,
     pub(crate) boot: u64,
     pub(crate) records: oer_hil_agent::Records,
-    pub(crate) outbox: oer_hil_agent::Outbox<'static, SenderRequest>,
+    pub(crate) mailbox: oer_hil_agent::Console<'static, SenderRequest>,
+    pub(crate) writer: &'static mut oer_hil_agent::Writer,
 }
 
 /// How the sender's serving ends: the console's transport broke.
@@ -335,14 +341,18 @@ async fn host_task(host: Host) {
         console,
         boot,
         records,
-        outbox,
+        mailbox,
+        writer,
     } = host;
     match oer_hil_agent::serve(
         console,
         boot,
         records,
         IMAGE,
-        outbox,
+        oer_hil_agent::Mount {
+            console: mailbox,
+            writer,
+        },
         Ended::Console,
         core::future::pending::<Result<core::convert::Infallible, Ended>>,
     )
@@ -408,8 +418,16 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
     collected.into_array().ok()
 }
 
+/// The reply to one request of the pair's services.
+type Reply<'a> = oer_hil_agent::Reply<'a, core::convert::Infallible>;
+
+/// Answers a request through its reply.
+fn answer<M: oer_protocols_hil_protocol::Message>(reply: Reply<'_>, body: &M) {
+    reply.answer(body);
+}
+
 /// Answer `request` with its endpoint's refusal.
-fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
+fn refuse(identity: Reply<'_>, request: SenderRequest, refusal: Refusal) {
     match request {
         SenderRequest::SnapshotCold(_) | SenderRequest::SnapshotUp(_) => {
             answer(identity, &service::SnapshotPage::Refused(refusal));
@@ -432,7 +450,7 @@ async fn down(
     cold: &pair::Readings,
 ) -> Result<core::convert::Infallible, Ended> {
     loop {
-        let (identity, request) = inbox.next().await;
+        let (request, identity) = inbox.next().await;
         match request {
             SenderRequest::SnapshotCold(request) => {
                 answer(identity, &pair::page(cold, request.page));
@@ -461,7 +479,7 @@ async fn worker(
     let cycles = parts.cycles;
     let ap = parts.ap;
     let bring = loop {
-        let (id, request) = inbox.next().await;
+        let (request, id) = inbox.next().await;
         match request {
             SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
             SenderRequest::BringUp(_) => break id,
@@ -565,7 +583,7 @@ async fn worker(
     let mut receiver = None;
     let mut steps = Steps::Open;
     loop {
-        let (id, request) = inbox.next().await;
+        let (request, id) = inbox.next().await;
         match request {
             SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
             SenderRequest::SnapshotUp(request) => answer(id, &pair::page(&up, request.page)),

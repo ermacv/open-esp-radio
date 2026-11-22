@@ -1,15 +1,16 @@
 # HIL agent
 
 `oer-protocols-hil-agent` holds the HIL target logic that does not
-depend on the chip: the request intake (`base`), console serialization and
-the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
+depend on the chip: the request intake (`base`), the console and its
+exchange with the image's worker (`console`, `mailbox`) and the
+reset-retained post-mortem codec. The
 [HIL agent on the application entry](../../../hil/agent/README.md)
 composes these modules with the library's executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |
 | --- | --- |
-| none | `base`, `capture`, `console`, `lifecycle`, `postmortem` |
+| none | `base`, `capture`, `console`, `mailbox`, `postmortem` |
 
 ## Image keys
 
@@ -33,35 +34,35 @@ returns its endpoint's response type, so every request is answered.
 An image component with no requests can implement `Service` for its
 properties alone.
 
-The optional `lifecycle::Request` service advertises `lifecycle/reset` and
-`lifecycle/reset-accepted`. Discovery, key pages, boot evidence and link
-health stay in `base`; Hello is also the reachability check. The image queues
-a reset request; `lifecycle::acknowledge_reset` publishes the acknowledgement
-and returns an affine `AcknowledgedReset` only after its complete frame was
-written. The image consumes its correlation observations (the request,
-the acknowledgement's place among the console's entries, the session) in
-its existing retained reset path. An acknowledgement that could not be
-built, or a completion-barrier error, returns to the image's fault policy
-(`lifecycle::Unacknowledged`) without performing the requested action.
+Discovery, key pages, boot evidence and link health stay in `base`; Hello
+is also the reachability check.
 
-The console's one writer numbers each message as it takes it out of the
-queue; a producer only enters its message. A producer that waits for its
-message's write holds its place among the entries (`console::Entered`)
-and `Console::written` waits until the writer has written that many
-entries; a producer of a higher level entering between a waiter's entry
-and its count lengthens that wait by a message. The agent owns no
-hardware reset operation.
+The console has one holder, its task, and takes no lock and no critical
+section. Its state is a `Writer` the image places once and lends to
+`console::run`: the encoder, the sequence it numbers messages with as it
+writes them and its counts. Nobody publishes into it. It writes Hello
+first and answers each base-module request in the step that decoded it.
 
-Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
-`ReceiverLimit` with the requested place, last published position and capacity.
-The image retains this impossible-state fault through its existing fatal record,
-keeps the operation's owners quarantined and resets. It never performs the
-requested action after a failed barrier.
+The image's requests go to its worker through the `mailbox::Mailbox`, two
+places of depth one (`portable/memory`), one each way. `Inbox::next`
+gives each request with its `Reply`, the permit of that request's
+identity, which borrows the inbox: the worker takes no next request
+before it answered, and an answer without a request or under another
+identity does not compile. One request is in work at a time: another
+meanwhile is answered `Rejected(Busy)` by the console. An answer that
+cannot be encoded is refused to the host as `Rejected(Internal)` and
+counted in `tx_dropped`. `Reply` has no `Drop`: one dropped without an
+answer (by the worker, or in a handler's future cancelled at an await)
+leaves its request owed in the inbox, and the worker's next `next` pays
+it first as unanswered, refused and counted the same way. What follows an
+answer's write (`mailbox::After`) travels with it: a set that declares
+`traps` (the fault service) may ask for `After::Trap`, and `console::run`
+ends with the trap once the answer is written whole; a set without it
+cannot build one. The agent owns no hardware reset operation.
 
-`Console::run` returns a `RunFault` owning the endpoint on an invalid read length
-or counter-borrow conflict. `link_health` reports counter-borrow conflicts as a
-`ConsoleFault`. Checkpoint and rate count overflows return typed
-faults before mutation; images retain their observations and reset.
+`console::run` ends with a `RunFault` owning the endpoint on an invalid read
+length. Checkpoint and rate count overflows return typed faults before
+mutation; images retain their observations and reset.
 
 The retained record is a value codec; placement and reset belong to the image.
 Const size, alignment and offset checks fix its layout. `AnyBitPattern` proves

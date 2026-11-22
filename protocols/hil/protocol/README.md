@@ -1,9 +1,9 @@
 # HIL protocol
 
-`oer-protocols-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission; `lifecycle` owns the optional generic reset exchange; `system` holds the stack watermark values other modules carry.
+`oer-protocols-hil-protocol` is the radio-independent message and frame skeleton: keys, `Message`/`Endpoint`, `messages!`, bounded framing, the envelope and optional asynchronous IO. `base` owns discovery, image-key pages, boot/post-mortem evidence, link health and request admission (a device works on one request of the image's at a time: another that arrives meanwhile is answered `Rejected(Busy)`, and the host sends its next request after the answer); `system` holds the stack watermark values other modules carry.
 
 - [Wire contract](wire.md): framing, version checks, discovery and boot identity.
-- [Platform diagnostics](diagnostics.md): requested reset and stack measurements.
+- [Platform diagnostics](diagnostics.md): stack measurements.
 
 Each message's key hashes its path and postcard schema. A semantic change with the same schema requires a new path. `messages!` emits typed endpoints/topics/properties and their compile-time `KEYS`. `async-io` enables `write_frame`. There are no radio-family features or dependencies.
 
