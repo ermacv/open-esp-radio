@@ -23,7 +23,7 @@ pub(crate) type Readings = heapless::Vec<Reading, READINGS>;
 /// Page `page` of `readings`, or the refusal of a page past the last.
 pub(crate) fn page(readings: &[Reading], page: u8) -> SnapshotPage {
     let length = readings.len();
-    let pages = length / PAGE_READINGS + usize::from(length % PAGE_READINGS != 0);
+    let pages = length / PAGE_READINGS + usize::from(!length.is_multiple_of(PAGE_READINGS));
     let start = usize::from(page).saturating_mul(PAGE_READINGS);
     let Some(rest) = readings.get(start..) else {
         return SnapshotPage::Refused(Refusal::NoSuchPage);

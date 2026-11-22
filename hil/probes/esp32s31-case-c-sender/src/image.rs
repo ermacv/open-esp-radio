@@ -344,7 +344,7 @@ async fn host_task(host: Host) {
         IMAGE,
         outbox,
         Ended::Console,
-        || core::future::pending::<Result<core::convert::Infallible, Ended>>(),
+        core::future::pending::<Result<core::convert::Infallible, Ended>>,
     )
     .await
     {
