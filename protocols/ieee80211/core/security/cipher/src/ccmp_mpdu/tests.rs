@@ -165,13 +165,19 @@ impl Aes128Engine for Refusing {
 
 impl oer_portable_crypto::block::BlockEngine for RefusingKeyed {
     fn encrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
-        self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
+        self.left = self
+            .left
+            .checked_sub(1)
+            .ok_or(BlockError::Timeout { observation: 1 })?;
         oer_portable_crypto::block::BlockCipher::encrypt_block(&mut self.blocks, block);
         Ok(())
     }
 
     fn decrypt(&mut self, block: &mut oer_portable_crypto::block::Block) -> Result<(), BlockError> {
-        self.left = self.left.checked_sub(1).ok_or(BlockError::Unavailable)?;
+        self.left = self
+            .left
+            .checked_sub(1)
+            .ok_or(BlockError::Timeout { observation: 1 })?;
         oer_portable_crypto::block::BlockCipher::decrypt_block(&mut self.blocks, block);
         Ok(())
     }
@@ -187,7 +193,9 @@ fn a_refused_block_is_an_engine_error_that_erases_the_body() {
         let mut frame = wire.clone();
         assert_eq!(
             mode(spp).open(&mut Refusing { refuse_from }, &key(), &mut frame),
-            Err(CcmpMpduError::Engine(BlockError::Unavailable)),
+            Err(CcmpMpduError::Engine(BlockError::Timeout {
+                observation: 1
+            })),
             "open {refuse_from}"
         );
         assert!(
@@ -197,7 +205,9 @@ fn a_refused_block_is_an_engine_error_that_erases_the_body() {
         let mut frame = wire.clone();
         assert_eq!(
             mode(spp).seal(&mut Refusing { refuse_from }, &key(), &mut frame),
-            Err(CcmpMpduError::Engine(BlockError::Unavailable)),
+            Err(CcmpMpduError::Engine(BlockError::Timeout {
+                observation: 1
+            })),
             "seal {refuse_from}"
         );
         assert!(

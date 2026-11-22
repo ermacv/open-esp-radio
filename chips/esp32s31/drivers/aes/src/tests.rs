@@ -12,21 +12,50 @@ use std::{cell::RefCell, rc::Rc};
 const IDLE: AesStateField = AesStateField::constant::<{ AesState::Idle.bits() }>();
 const WORK: AesStateField = AesStateField::constant::<{ AesState::Work.bits() }>();
 
+/// The fake's clock gate.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Gate {
+    #[default]
+    Off,
+    On,
+}
+
+/// The fake's mode word.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Mode {
+    #[default]
+    Decrypt,
+    Encrypt,
+}
+
+/// What `STATE` answers after a start.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Answer {
+    /// `WORK` for `busy_reads` reads, then `IDLE`.
+    #[default]
+    Normal,
+    /// `WORK` for ever.
+    Stuck,
+    /// This code.
+    Code(AesStateField),
+}
+
 #[derive(Default)]
 struct Port {
     key: KeyWords,
     input: BlockWords,
     output: BlockWords,
-    clocked: bool,
-    encrypting: bool,
+    clock: Gate,
+    mode: Mode,
     started: bool,
     starts: usize,
     reads: usize,
     /// `STATE` reads after a start that still answer `WORK`.
     busy_reads: usize,
     busy_left: usize,
-    stuck: bool,
-    invalid: Option<AesStateField>,
+    answer: Answer,
+    /// What `STATE` answers before any start; `IDLE` unless set.
+    before_start: Option<AesStateField>,
     /// Every atom called, in order.
     calls: std::vec::Vec<&'static str>,
 }
@@ -34,11 +63,11 @@ struct Fake(Rc<RefCell<Port>>);
 impl Registers for Fake {
     fn enable_clock(&mut self) {
         self.0.borrow_mut().calls.push("enable_clock");
-        self.0.borrow_mut().clocked = true;
+        self.0.borrow_mut().clock = Gate::On;
     }
     fn disable_clock(&mut self) {
         self.0.borrow_mut().calls.push("disable_clock");
-        self.0.borrow_mut().clocked = false;
+        self.0.borrow_mut().clock = Gate::Off;
     }
     fn assert_reset(&mut self) {
         self.0.borrow_mut().calls.push("assert_reset");
@@ -62,11 +91,11 @@ impl Registers for Fake {
     }
     fn decrypt128(&mut self) {
         self.0.borrow_mut().calls.push("decrypt128");
-        self.0.borrow_mut().encrypting = false;
+        self.0.borrow_mut().mode = Mode::Decrypt;
     }
     fn encrypt128(&mut self) {
         self.0.borrow_mut().calls.push("encrypt128");
-        self.0.borrow_mut().encrypting = true;
+        self.0.borrow_mut().mode = Mode::Encrypt;
     }
     fn disable_pseudo_rounds(&mut self) {
         self.0.borrow_mut().calls.push("disable_pseudo_rounds");
@@ -85,7 +114,7 @@ impl Registers for Fake {
     fn start(&mut self) {
         self.0.borrow_mut().calls.push("start");
         let mut p = self.0.borrow_mut();
-        assert!(p.clocked);
+        assert_eq!(p.clock, Gate::On);
         p.starts += 1;
         p.started = true;
         p.busy_left = p.busy_reads;
@@ -100,7 +129,7 @@ impl Registers for Fake {
         let input: std::vec::Vec<u8> = p.input.iter().flat_map(|word| word.to_le_bytes()).collect();
         let mut block = GenericArray::clone_from_slice(&input);
         let cipher = aes::Aes128::new(GenericArray::from_slice(&key));
-        if p.encrypting {
+        if p.mode == Mode::Encrypt {
             cipher.encrypt_block(&mut block);
         } else {
             cipher.decrypt_block(&mut block);
@@ -114,13 +143,12 @@ impl Registers for Fake {
         let mut p = self.0.borrow_mut();
         p.reads += 1;
         if !p.started {
-            return IDLE;
+            return p.before_start.unwrap_or(IDLE);
         }
-        if let Some(invalid) = p.invalid {
-            return invalid;
-        }
-        if p.stuck {
-            return WORK;
+        match p.answer {
+            Answer::Code(code) => return code,
+            Answer::Stuck => return WORK,
+            Answer::Normal => {}
         }
         if p.busy_left > 0 {
             p.busy_left -= 1;
@@ -154,7 +182,7 @@ fn request() -> KeyUnwrapRequest<32> {
 }
 fn assert_erased(port: &Rc<RefCell<Port>>) {
     let p = port.borrow();
-    assert!(!p.clocked);
+    assert_eq!(p.clock, Gate::Off);
     assert_eq!(p.key, [0; 8]);
     assert_eq!(p.input, [0; 4]);
     assert_eq!(p.output, [0; 4]);
@@ -210,32 +238,48 @@ fn encryption_and_decryption_select_their_mode_and_agree_with_the_cipher() {
     assert_erased(&port);
 }
 
+/// The stop's calls: the block reset, the key and block words erased, the
+/// clock gated.
+const STOP: [&str; 5] = [
+    "assert_reset",
+    "release_reset",
+    "write_key",
+    "write_block",
+    "disable_clock",
+];
+
+/// A block that times out or ends in another state returns its typed error
+/// and erases the block; it ends its run, whose later blocks answer the same
+/// error and touch nothing; the drop is the whole stop; and the next load
+/// starts the accelerator again, failing again while the port does and
+/// running a block once it answers idle.
 #[test]
-fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
-    for (stuck, invalid, error) in [
+fn a_failed_block_ends_its_run_and_the_next_load_starts_again() {
+    for (answer, error) in [
         (
-            true,
-            None,
+            Answer::Stuck,
             BlockError::Timeout {
                 observation: WORK.get(),
             },
         ),
         (
-            false,
-            Some(AesStateField::constant::<3>()),
+            Answer::Code(AesStateField::constant::<3>()),
             BlockError::InvalidState { observation: 3 },
         ),
     ] {
         let port = Rc::new(RefCell::new(Port {
-            stuck,
-            invalid,
+            answer,
             ..Port::default()
         }));
         let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
-        let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
-        assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
-        assert_eq!(port.borrow().starts, 1, "no block after the refused one");
-        if stuck {
+        let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+        let plain: Block = *b"0123456789abcdef";
+
+        let mut keyed = engine.load(&key).expect("an idle accelerator");
+        let mut block = plain;
+        assert_eq!(keyed.decrypt(&mut block), Err(error));
+        assert_eq!(block, [0; 16], "the failed block is erased");
+        if answer == Answer::Stuck {
             // One microsecond per clock read: the setup's read, then one
             // attempt per microsecond of the settle and the last one after
             // its end.
@@ -245,75 +289,85 @@ fn timeout_and_invalid_state_are_typed_and_poison_the_owned_engine() {
                 "the wait ends at its settle"
             );
         }
+        port.borrow_mut().calls.clear();
+        let mut later = plain;
+        assert_eq!(keyed.decrypt(&mut later), Err(error));
+        assert_eq!(keyed.encrypt(&mut later), Err(error));
+        assert_eq!(later, plain, "a later block is not touched");
+        assert!(port.borrow().calls.is_empty(), "nor is the hardware");
+        drop(keyed);
+        assert_eq!(port.borrow().calls, STOP);
         assert_erased(&port);
-        let starts = port.borrow().starts;
-        let reads = port.borrow().reads;
-        let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
+
+        // The port still fails: the next load starts, and the block fails
+        // again with its own error.
+        port.borrow_mut().calls.clear();
+        let mut keyed = engine.load(&key).expect("a start like the first");
         assert_eq!(
-            response.plaintext(),
-            Err(KeyUnwrapError::Engine(BlockError::Unavailable))
+            port.borrow().calls[..3],
+            ["enable_clock", "assert_reset", "release_reset"]
         );
-        assert_eq!(port.borrow().starts, starts);
-        assert_eq!(port.borrow().reads, reads);
+        let mut block = plain;
+        assert_eq!(keyed.decrypt(&mut block), Err(error));
+        drop(keyed);
+
+        // The port answers idle: the next load runs a block.
+        port.borrow_mut().answer = Answer::Normal;
+        let mut keyed = engine.load(&key).expect("a start like the first");
+        let mut block = plain;
+        keyed.encrypt(&mut block).expect("the block runs");
+        let mut expected = GenericArray::clone_from_slice(&plain);
+        aes::Aes128::new(GenericArray::from_slice(&RFC3394_4_1_KEK)).encrypt_block(&mut expected);
+        assert_eq!(block.as_slice(), expected.as_slice());
+        drop(keyed);
+        assert_erased(&port);
+
+        // Through the unwrap: every failed request gives its typed error.
+        port.borrow_mut().answer = answer;
+        for _ in 0..2 {
+            let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
+            assert_eq!(response.plaintext(), Err(KeyUnwrapError::Engine(error)));
+            assert_erased(&port);
+        }
     }
 }
 
+/// `STATE` not idle at a start refuses the key with its observation and
+/// leaves the block stopped; the next load starts again.
 #[test]
-fn a_not_idle_accelerator_refuses_the_key_and_is_erased() {
-    let port = Rc::new(RefCell::new(Port::default()));
-    let mut engine = AesBlocks::new(StuckSetup(Fake(Rc::clone(&port))), Ticking::default());
-    let response = oer_portable_crypto::block::unwrap_now(&mut engine, request());
+fn a_not_idle_accelerator_refuses_the_key_and_the_next_load_starts_again() {
+    let port = Rc::new(RefCell::new(Port {
+        before_start: Some(WORK),
+        ..Port::default()
+    }));
+    let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
+    let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
     assert_eq!(
-        response.plaintext(),
-        Err(KeyUnwrapError::Engine(BlockError::InvalidState {
+        engine.load(&key).err(),
+        Some(BlockError::InvalidState {
             observation: WORK.get()
-        }))
+        })
+    );
+    let calls = port.borrow().calls.clone();
+    assert_eq!(
+        calls[calls.len() - STOP.len()..],
+        STOP,
+        "the start is stopped"
+    );
+    assert!(
+        !calls[..calls.len() - STOP.len()].contains(&"write_key"),
+        "no key reaches the accelerator before the stop"
     );
     assert_eq!(port.borrow().starts, 0);
     assert_erased(&port);
-}
 
-/// A port whose `STATE` reads `WORK` before any start.
-struct StuckSetup(Fake);
-impl Registers for StuckSetup {
-    fn enable_clock(&mut self) {
-        self.0.enable_clock();
-    }
-    fn disable_clock(&mut self) {
-        self.0.disable_clock();
-    }
-    fn assert_reset(&mut self) {
-        self.0.assert_reset();
-    }
-    fn release_reset(&mut self) {
-        self.0.release_reset();
-    }
-    fn release_parent_resets(&mut self) {}
-    fn disable_interrupt(&mut self) {}
-    fn disable_dma(&mut self) {}
-    fn decrypt128(&mut self) {
-        self.0.decrypt128();
-    }
-    fn encrypt128(&mut self) {
-        self.0.encrypt128();
-    }
-    fn disable_pseudo_rounds(&mut self) {}
-    fn hold(&mut self) {}
-    fn write_key(&mut self, words: &KeyWords) {
-        self.0.write_key(words);
-    }
-    fn write_block(&mut self, words: &BlockWords) {
-        self.0.write_block(words);
-    }
-    fn start(&mut self) {
-        self.0.start();
-    }
-    fn state(&self) -> AesStateField {
-        WORK
-    }
-    fn read_block(&self) -> BlockWords {
-        self.0.read_block()
-    }
+    port.borrow_mut().before_start = None;
+    let mut keyed = engine.load(&key).expect("a start like the first");
+    let mut block = *b"0123456789abcdef";
+    keyed.encrypt(&mut block).expect("the block runs");
+    assert_eq!(port.borrow().starts, 1);
+    drop(keyed);
+    assert_erased(&port);
 }
 
 /// A key's load clocks and resets the accelerator before its configuration

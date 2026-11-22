@@ -1,7 +1,3 @@
-#![expect(
-    clippy::struct_excessive_bools,
-    reason = "the family's drivers and facts, in the stand campaign"
-)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -49,20 +45,29 @@ pub const BLOCK_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micr
 };
 
 /// The accelerator as one owner's synchronous AES-128 engine, its settles
-/// measured on `clock`. A failed engine retains its port and refuses later
-/// keys without touching the hardware again.
+/// measured on `clock`. Nothing of a failure outlives the keyed run that met
+/// it: the next `load` starts the block as the first did.
 pub struct AesBlocks<R: Registers, C: Clock> {
     registers: R,
     clock: C,
+    /// A key is in the accelerator: a keyed run is open, or one leaked
+    /// without its drop, whose stop the next `load` or the engine's drop
+    /// then performs.
     active: bool,
-    poisoned: bool,
 }
 
-/// The direction of the last block, which the mode word holds.
+/// One keyed run: the direction the mode word holds, or the failure that
+/// ended the run. The call that met the failure returned it; the copy only
+/// answers the run's later calls, and ends with the run.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Direction {
-    Encrypt,
-    Decrypt,
+enum KeyedRun {
+    /// No block yet: the mode word is not written.
+    Unset,
+    Encrypting,
+    Decrypting,
+    /// A block failed; later blocks of this run answer this, touching
+    /// nothing.
+    Ended(BlockError),
 }
 
 impl<R: Registers, C: Clock> AesBlocks<R, C> {
@@ -71,7 +76,6 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
             registers,
             clock,
             active: false,
-            poisoned: false,
         }
     }
 
@@ -91,9 +95,6 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
     }
 
     fn initialize(&mut self, key: &Aes128Key) -> Result<(), BlockError> {
-        if self.poisoned {
-            return Err(BlockError::Unavailable);
-        }
         self.active = true;
         self.registers.enable_clock();
         self.registers.assert_reset();
@@ -105,7 +106,6 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
         self.registers.hold();
         let observation = self.registers.state();
         if state(observation) != Some(AesState::Idle) {
-            self.poisoned = true;
             return Err(BlockError::InvalidState {
                 observation: observation.get(),
             });
@@ -141,27 +141,53 @@ impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
         }
         Ok(Keyed {
             engine: self,
-            direction: None,
+            run: KeyedRun::Unset,
         })
     }
 }
 
-/// The engine with a key loaded, in the direction of its last block.
-/// Dropping it erases the key and gates the clock.
+/// The engine with a key loaded, in the direction of its last block or
+/// ended by a failed one. Dropping it is the stop: the block reset, the key
+/// and block words erased, the clock gated.
 pub struct Keyed<'a, R: Registers, C: Clock> {
     engine: &'a mut AesBlocks<R, C>,
-    direction: Option<Direction>,
+    run: KeyedRun,
 }
 
 impl<R: Registers, C: Clock> Keyed<'_, R, C> {
-    /// Write `block`, start it and wait for it on `STATE` within
-    /// [`BLOCK_SETTLE`]; the output replaces `block`. A refusal poisons the
-    /// engine.
-    fn run(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        let engine = &mut *self.engine;
-        if engine.poisoned {
-            return Err(BlockError::Unavailable);
+    /// Select `direction` for the next block, or answer the run's failure.
+    fn enter(&mut self, direction: KeyedRun) -> Result<(), BlockError> {
+        match self.run {
+            KeyedRun::Ended(error) => Err(error),
+            current if current == direction => Ok(()),
+            _ => {
+                match direction {
+                    KeyedRun::Decrypting => self.engine.registers.decrypt128(),
+                    _ => self.engine.registers.encrypt128(),
+                }
+                self.run = direction;
+                Ok(())
+            }
         }
+    }
+
+    /// Run `block` in the selected direction; a failure ends the run and is
+    /// returned by this call.
+    fn block(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        let result = self.engine.run(block);
+        if let Err(error) = result {
+            self.run = KeyedRun::Ended(error);
+        }
+        result
+    }
+}
+
+impl<R: Registers, C: Clock> AesBlocks<R, C> {
+    /// Write `block`, start it and wait for it on `STATE` within
+    /// [`BLOCK_SETTLE`]; the output replaces `block`, or the block is erased
+    /// and the failure returned.
+    fn run(&mut self, block: &mut Block) -> Result<(), BlockError> {
+        let engine = self;
         let mut words = to_words(block);
         engine.registers.write_block(&words);
         words.zeroize();
@@ -186,7 +212,6 @@ impl<R: Registers, C: Clock> Keyed<'_, R, C> {
                 observation: observation.get(),
             },
         };
-        engine.poisoned = true;
         block.zeroize();
         Err(result)
     }
@@ -194,19 +219,13 @@ impl<R: Registers, C: Clock> Keyed<'_, R, C> {
 
 impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
     fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        if self.direction != Some(Direction::Encrypt) {
-            self.engine.registers.encrypt128();
-            self.direction = Some(Direction::Encrypt);
-        }
-        self.run(block)
+        self.enter(KeyedRun::Encrypting)?;
+        self.block(block)
     }
 
     fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        if self.direction != Some(Direction::Decrypt) {
-            self.engine.registers.decrypt128();
-            self.direction = Some(Direction::Decrypt);
-        }
-        self.run(block)
+        self.enter(KeyedRun::Decrypting)?;
+        self.block(block)
     }
 }
 

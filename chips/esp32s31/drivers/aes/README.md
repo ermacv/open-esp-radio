@@ -34,13 +34,17 @@ and selects encryption or decryption by the direction of each block.
 The request KEK is erased immediately after loading. When its keyed view
 drops (after the last block, a refusal or an integrity failure), the engine
 resets AES and erases all software key/input words before disabling its
-clock. No DMA can reach the request storage. A timeout or an unsupported
-status poisons the engine: it keeps its port, and later keys receive
-`BlockError::Unavailable` without hardware access. The portable request,
-blocks, continuation and response erase secrets on drop.
+clock. No DMA can reach the request storage. A block that times out or ends
+in an unsupported status returns its typed error and erases the block; it
+ends its keyed run, whose later blocks answer the same error without
+hardware access. Nothing of a failure outlives the keyed view: its drop is
+the same stop, and the next key starts the accelerator as the first did
+(clock, reset, the `STATE` check), as ESP-IDF resets it at every acquire.
+The portable request, blocks, continuation and response erase secrets on
+drop.
 
 Tests use a fake port whose block oracle is RustCrypto, including the shared
 RFC 3394 conformance, the flag wait and its settle on a clock that advances at
 every read, both directions, typed
-failures, poisoning and erasure. The HAL's UI case rejects taking AES twice
+failures, the ended run, the restart after a failure and erasure. The HAL's UI case rejects taking AES twice
 from one Root.
