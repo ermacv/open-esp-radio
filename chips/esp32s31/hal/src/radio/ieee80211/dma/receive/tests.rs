@@ -219,7 +219,7 @@ impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
 
 brand!(cold);
 #[test]
-fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
+fn the_cold_publication_arms_and_links_the_ring_and_publishes_its_head_as_base() {
     let bench = bench::<cold::Rx>();
     let ring = &bench.ring;
     for index in 0..RING {
