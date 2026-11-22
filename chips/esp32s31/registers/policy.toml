@@ -2273,6 +2273,16 @@ reason = "The radio pair's snapshots keep the word before and after the bring-up
 sources = ["S31_MODEM_SYSCON_STRUCT"]
 
 [[record-words]]
+register = "HP_SYS_CLKRST.REF_160M_CTRL0"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_ESP_PACS_SVD"]
+
+[[record-words]]
+register = "MODEM_LPCON.CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
 register = "MODEM_LPCON.LP_TIMER_CONF"
 reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
 sources = ["S31_MODEM_LPCON_STRUCT"]

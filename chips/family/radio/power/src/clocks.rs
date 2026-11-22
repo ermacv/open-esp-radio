@@ -42,6 +42,12 @@ impl<G: ClockGates, P> ClockCounts<G, P> {
         }
     }
 
+    /// The gates' words, lent for reading: a diagnostic record of what the
+    /// hardware holds. It writes no gate and changes no count.
+    pub fn gates(&self) -> &G {
+        &self.gates
+    }
+
     /// First reference opens the gate, then commits the count.
     ///
     /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hw_support/port/esp32s31/esp_clk_tree.c:510-541`

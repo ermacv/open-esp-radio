@@ -77,7 +77,7 @@ pub(crate) mod radio;
 pub mod sleep;
 #[cfg(test)]
 pub(crate) mod test_clocks;
-pub use chip_clocks::{ChipClocks, PsramMpll};
+pub use chip_clocks::{ChipClockWords, ChipClocks, PsramMpll};
 pub use clock::{
     PlatformClock, PlatformClockAbandonment, PlatformClockBackend, PlatformClockError,
     PlatformClockGuard, PlatformClockHolds, PlatformClockProvider, PlatformClockReleaseRefused,

@@ -455,7 +455,7 @@ async fn worker(
     mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
-    let cold = pair::cold(reset, &parts.radio);
+    let cold = pair::cold(reset, &parts.radio, &parts.clocks);
     let identity = parts.identity;
     let cycles = parts.cycles;
     let ap = parts.ap;
@@ -544,7 +544,7 @@ async fn worker(
         _mac_irq,
         _power_irq,
         station,
-        _held,
+        held,
         frames,
         mut ordinary,
     ) = match up.await {
@@ -558,7 +558,7 @@ async fn worker(
         }
     };
     answer(bring, &service::BroughtUp::Up { station, ap });
-    let up = match pair::up(&mut slot, reset, identity) {
+    let up = match pair::up(&mut slot, held.clocks(), reset, identity) {
         Ok(readings) => readings,
         Err(_) => cold.clone(),
     };

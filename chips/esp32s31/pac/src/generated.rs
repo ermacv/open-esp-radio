@@ -107874,6 +107874,13 @@ pub mod hp_sys_clkrst {
             pub const fn reg_ref_160m_clk_en(self) -> bool {
                 (self.0 & 0x00000100) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -134408,6 +134415,13 @@ pub mod modem_lpcon {
             #[inline]
             pub const fn clk_lp_timer_en(self) -> bool {
                 (self.0 & 0x00000008) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 

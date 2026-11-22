@@ -33,13 +33,20 @@ fn the_modem_words_are_read_only_behind_an_open_register_bus() {
         (true, false, false, false),
         (true, true, true, false),
     ] {
-        let ((words, proof), _) = with_registers_memory(FILL, |registers| {
+        let ((words, modem), _) = with_registers_memory(FILL, |registers| {
             gate(registers, clock, apb, reset);
-            let (words, proof) = registers.observe_power();
-            (words, proof.is_some())
+            let (words, bus) = registers.observe_power();
+            let modem = match bus {
+                ModemBus::Open { words, .. } => Some(words),
+                ModemBus::Closed => None,
+            };
+            (words, modem)
         });
-        assert_eq!(proof, open, "clock {clock}, apb {apb}, reset {reset}");
-        assert_eq!(words.modem.is_some(), open);
+        assert_eq!(
+            modem.is_some(),
+            open,
+            "clock {clock}, apb {apb}, reset {reset}"
+        );
         // The PMU's words answer whatever the gate: as the memory holds them.
         assert_eq!(
             [
@@ -50,7 +57,7 @@ fn the_modem_words_are_read_only_behind_an_open_register_bus() {
             ],
             [FILL; 4]
         );
-        if let Some(modem) = words.modem {
+        if let Some(modem) = modem {
             assert_eq!(modem.syscon_clk_conf, FILL);
             assert_eq!(modem.lpcon_tick_conf, FILL);
         }

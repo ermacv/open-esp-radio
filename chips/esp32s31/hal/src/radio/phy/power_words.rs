@@ -11,8 +11,7 @@ use oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn;
 use super::registers::{RadioPhyRegisters, RadioPlacement};
 
 /// The power and clock words of the radio's PMU and HP_SYS_CLKRST parts,
-/// which answer whatever the modem's state, and the modem blocks' words
-/// when their register bus is open.
+/// which answer whatever the modem's state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RadioPowerWords {
     pub pmu_hp_active_icg_modem: u32,
@@ -23,8 +22,16 @@ pub struct RadioPowerWords {
     pub hp_sys_clkrst_modem_ctrl0: u32,
     /// The modem's APB clock, source clocks and reset.
     pub hp_sys_clkrst_modem_conf: u32,
-    /// Absent while the modem register bus is closed: not read.
-    pub modem: Option<ModemWords>,
+}
+
+/// The modem register bus as the gate words read it: closed, its words
+/// not read; or open, with its words and the proof of it.
+pub enum ModemBus<'a> {
+    Closed,
+    Open {
+        words: ModemWords,
+        proof: ModemBusOpen<'a>,
+    },
 }
 
 /// The MODEM_SYSCON and MODEM_LPCON words the radio's parts hold.
@@ -52,9 +59,9 @@ pub struct ModemWords {
 pub struct ModemBusOpen<'a>(PhantomData<&'a ()>);
 
 impl<P: RadioPlacement> RadioPhyRegisters<P> {
-    /// The radio's power words, and the proof of an open modem register bus
-    /// when its gate words read open. Writes nothing.
-    pub fn observe_power(&self) -> (RadioPowerWords, Option<ModemBusOpen<'_>>) {
+    /// The radio's power words, and the modem register bus: its words and
+    /// its proof when its gate words read open. Writes nothing.
+    pub fn observe_power(&self) -> (RadioPowerWords, ModemBus<'_>) {
         let parts = &self.peripherals;
         let ctrl0 = parts.hp_sys_clkrst_radio.read_modem_ctrl0();
         let conf = parts.hp_sys_clkrst_radio.read_modem_conf();
@@ -102,9 +109,15 @@ impl<P: RadioPlacement> RadioPhyRegisters<P> {
             pmu_ana_peri_pwr_ctrl: parts.pmu_radio.read_ana_peri_pwr_ctrl().record_word(),
             hp_sys_clkrst_modem_ctrl0: ctrl0.record_word(),
             hp_sys_clkrst_modem_conf: conf.record_word(),
-            modem,
         };
-        (words, open.then_some(ModemBusOpen(PhantomData)))
+        let bus = match modem {
+            Some(words) => ModemBus::Open {
+                words,
+                proof: ModemBusOpen(PhantomData),
+            },
+            None => ModemBus::Closed,
+        };
+        (words, bus)
     }
 }
 

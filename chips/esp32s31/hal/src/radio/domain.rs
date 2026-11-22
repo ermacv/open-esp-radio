@@ -762,36 +762,16 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         &mut self.state_mut().attachment
     }
 
-    /// Borrow the shared registers for a protocol read-back that also reads
-    /// protocol registers.
-    /// Registers of the radio-PHY partition image [`Self::phy_register_image`]
-    /// reads.
-    pub const PHY_REGISTER_IMAGE_LEN: usize =
-        crate::radio::phy::RadioPhyRegisters::REGISTER_IMAGE_LEN;
-
-    /// Registers of the radio-PHY partition image.
-    pub const fn phy_register_image_len(&self) -> usize {
-        Self::PHY_REGISTER_IMAGE_LEN
-    }
-
-    /// Read register `index` of the radio-PHY partition image under this
-    /// domain, without effect, for hardware cross-checks of the calibrated
-    /// state; `None` past its end. A register whose clock domain is off
-    /// may not answer, so a caller reads only indices known to be readable
-    /// in the current radio state.
-    pub fn phy_register_image(&self, index: usize) -> Option<u32> {
-        self.registers().radio_phy().register_image(index)
-    }
-
     /// The radio's power, clock and reset words under this domain, and the
-    /// proof of an open modem register bus when its gate words read open
+    /// modem register bus: its words and its proof when its gate words read
+    /// open
     /// ([`crate::radio::phy::RadioPhyRegisters::observe_power`]). Writes
     /// nothing.
     pub fn observe_power(
         &self,
     ) -> (
         crate::radio::phy::power_words::RadioPowerWords,
-        Option<crate::radio::phy::power_words::ModemBusOpen<'_>>,
+        crate::radio::phy::power_words::ModemBus<'_>,
     ) {
         self.registers().radio_phy().observe_power()
     }

@@ -158,6 +158,8 @@ pub enum Item {
     HpSysClkrstModemCtrl0,
     /// `HP_SYS_CLKRST.MODEM_CONF` (`radio/modem/clock_device.rs`, `platform.rs`).
     HpSysClkrstModemConf,
+    /// `HP_SYS_CLKRST.REF_160M_CTRL0` (`power/chip_clocks.rs`).
+    HpSysClkrstRef160mCtrl0,
     /// `MODEM_SYSCON.CLK_CONF` (`radio/modem/ops.rs`, `syscon.rs`).
     ModemSysconClkConf,
     /// `MODEM_SYSCON.CLK_CONF1` (`radio/modem/ops.rs`, `syscon.rs`).
@@ -176,6 +178,8 @@ pub enum Item {
     ModemLpconWifiLpClkConf,
     /// `MODEM_LPCON.MODEM_32K_CLK_CONF` (`radio/modem/ops.rs`).
     ModemLpconModem32kClkConf,
+    /// `MODEM_LPCON.CLK_CONF` (`power/chip_clocks.rs`).
+    ModemLpconClkConf,
     /// `MODEM_LPCON.CLK_CONF_POWER_ST` (`radio/modem/ops.rs`, `shared_clock.rs`, `syscon.rs`).
     ModemLpconClkConfPowerSt,
     /// `MODEM_LPCON.TICK_CONF` (`radio/modem/low_power_phy.rs`).

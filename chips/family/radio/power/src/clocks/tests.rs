@@ -288,3 +288,15 @@ fn only_the_rtc_crystal_selector_chooses_wifi_xtal32k() {
         assert_eq!(port.reads.get(), 1);
     }
 }
+
+#[test]
+fn the_gates_lent_for_reading_change_no_gate_and_no_count() {
+    let mut counts = adopted();
+    counts.acquire(PlatformClock::Pll160m).expect("granted");
+    let written = counts.gates().0.clone();
+    assert_eq!(written, [Write::WifiPowerOpen, Write::Pll160m(true)]);
+    assert_eq!(counts.gates().0, written, "a read writes nothing");
+    assert_eq!(counts.counts.get(PlatformClock::Pll160m), 1);
+    counts.release(PlatformClock::Pll160m).expect("held");
+    assert_eq!(counts.gates().0.last(), Some(&Write::Pll160m(false)));
+}

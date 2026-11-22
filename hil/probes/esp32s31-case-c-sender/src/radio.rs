@@ -261,7 +261,14 @@ pub(crate) struct Held {
     >,
     _membership: WifiPhyMembership,
     _pilot: phy_pilot::Client,
-    _clocks: ChipClocks,
+    clocks: ChipClocks,
+}
+
+impl Held {
+    /// The platform's clocks, for their words' snapshot.
+    pub(crate) const fn clocks(&self) -> &ChipClocks {
+        &self.clocks
+    }
 }
 
 /// Wi-Fi brought up to its first reset (S0 to S3): the clocked client with
@@ -386,7 +393,7 @@ pub(crate) async fn bring_up(
             _power: power,
             _membership: membership,
             _pilot: pilot,
-            _clocks: clocks,
+            clocks,
         },
     })
 }
