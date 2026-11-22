@@ -27,7 +27,9 @@ use oer_protocols_hil_protocol::base::{ImageKeySet, RejectReason, Rejected};
 use oer_protocols_hil_protocol::{FrameEncoder, Message, Outbound, RequestIdentity};
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
-use crate::mailbox::{After, Answered, Console, Outcome};
+use oer_portable_memory::Answered;
+
+use crate::mailbox::{After, Console, Outcome};
 
 /// A broken transport: it answered a read longer than the buffer it was
 /// given.
@@ -63,11 +65,11 @@ pub trait Immediate {
     fn take_lost() -> u32;
 }
 
-/// Whether a request of the image is with the worker.
+/// Whether a request of the image is with the worker, and which.
 #[derive(Clone, Copy)]
 enum Work {
     Idle,
-    Handed,
+    Handed(RequestIdentity),
 }
 
 /// The console's state: the encoder, the sequence it numbers with and its
@@ -158,19 +160,19 @@ impl Writer {
         &mut self,
         tx: &mut impl Write,
         boot: u64,
-        answered: Answered<T>,
+        identity: RequestIdentity,
+        answered: Answered<Outcome<T>>,
         platform: &impl Platform,
     ) -> Option<T> {
-        let Answered { identity, outcome } = answered;
-        match outcome {
-            Outcome::Encoded(message, after) => {
+        match answered {
+            Answered::Given(Outcome::Encoded(message, after)) => {
                 let written = self.write(tx, boot, message, platform).await;
                 match after {
                     After::Trap(trap) if written => Some(trap),
                     After::Trap(_) | After::Nothing => None,
                 }
             }
-            Outcome::Unencodable | Outcome::Unanswered => {
+            Answered::Given(Outcome::Unencodable) | Answered::Unanswered => {
                 self.lose();
                 let refusal = Rejected(RejectReason::Internal);
                 let _written = self.reply(tx, boot, identity, &refusal, platform).await;
@@ -268,17 +270,24 @@ pub async fn run<P: Immediate, C: Requests, E: Read + Write>(
     let mut work = Work::Idle;
     let mut chunk = [0_u8; RX_CHUNK];
     loop {
-        let read = select(mailbox.answers.ready(), endpoint.read(&mut chunk)).await;
+        // The answer is awaited only while a request is in work.
+        let read = match work {
+            Work::Idle => Either::Second(endpoint.read(&mut chunk).await),
+            Work::Handed(identity) => {
+                match select(mailbox.0.answered(), endpoint.read(&mut chunk)).await {
+                    Either::First(answered) => Either::First((identity, answered)),
+                    Either::Second(read) => Either::Second(read),
+                }
+            }
+        };
         match read {
-            Either::First(()) => {
-                if let Some(answered) = mailbox.answers.try_receive() {
-                    work = Work::Idle;
-                    if let Some(trap) = writer
-                        .worker_answer(&mut endpoint, boot, answered, platform)
-                        .await
-                    {
-                        return Ended::Trap(trap);
-                    }
+            Either::First((identity, answered)) => {
+                work = Work::Idle;
+                if let Some(trap) = writer
+                    .worker_answer(&mut endpoint, boot, identity, answered, platform)
+                    .await
+                {
+                    return Ended::Trap(trap);
                 }
             }
             Either::Second(Err(_)) => {}
@@ -304,11 +313,11 @@ pub async fn run<P: Immediate, C: Requests, E: Read + Write>(
                         }
                         Request::Serve(identity, own) => {
                             let handed = match work {
-                                Work::Idle => mailbox.requests.try_send((identity, own)).is_ok(),
-                                Work::Handed => false,
+                                Work::Idle => mailbox.0.hand((identity, own)).is_ok(),
+                                Work::Handed(_) => false,
                             };
                             if handed {
-                                work = Work::Handed;
+                                work = Work::Handed(identity);
                             } else {
                                 let busy = Rejected(RejectReason::Busy);
                                 let _written = writer
