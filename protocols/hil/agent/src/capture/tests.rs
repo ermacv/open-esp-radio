@@ -255,13 +255,14 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     // The capture's requests are observations of the reader: the
     // collector is the observing value, and nothing commands.
     let mut nothing = ();
+    let intake = Intake::new(77, KEYS, 0, 0);
     let run = run::<Early, Request, _, (), _>(
         &mut writer,
         &mut collector,
         &mut nothing,
         77,
         Endpoint(host.clone()),
-        Intake::new(77, KEYS, 0, 0),
+        &intake,
         &Chip,
     );
     let watch = async {

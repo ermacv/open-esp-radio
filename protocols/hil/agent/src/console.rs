@@ -28,16 +28,22 @@ use embassy_futures::select::{Either, select};
 use embedded_io_async::{Read, Write};
 use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
 use oer_protocols_hil_protocol::base::{ImageKeySet, RejectReason, Rejected};
-use oer_protocols_hil_protocol::{FrameEncoder, RequestIdentity};
+use oer_protocols_hil_protocol::{FrameDecoder, FrameEncoder, RequestIdentity};
 
 use crate::base::{Answer, Intake, Platform, Request, Sent};
 use crate::serve::{After, Answer as _, Frame, Run, Serve, Served, Written};
 
-/// A broken transport: it answered a read longer than the buffer it was
-/// given.
+/// A broken transport: its read failed, or answered a read longer than the
+/// buffer it was given.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConsoleFault {
-    ReadLength { length: usize, capacity: usize },
+    /// The endpoint refused a read (for the USB console, its use outside
+    /// its signal's executor: a fault of the composition).
+    Read,
+    ReadLength {
+        length: usize,
+        capacity: usize,
+    },
 }
 
 /// The transport stays owned by the failure until the image records and resets.
@@ -101,9 +107,11 @@ impl Counts {
     }
 }
 
-/// The console's state: the encoder, the sequence it numbers with and its
-/// counts. Only [`run`] touches it; the image places it once and lends it.
+/// The console's state: the decoder of the host's frames, the encoder, the
+/// sequence it numbers with and its counts. Only [`run`] touches it; the
+/// image places it once and lends it.
 pub struct Writer {
+    decoder: FrameDecoder,
     frames: Frames,
     counts: Counts,
 }
@@ -126,6 +134,7 @@ enum Delivery {
 impl Writer {
     pub const fn new() -> Self {
         Self {
+            decoder: FrameDecoder::new(),
             frames: Frames {
                 encoder: FrameEncoder::new(),
                 sequence: 0,
@@ -215,13 +224,14 @@ async fn feed<P: Platform, R: Serve<O>, O, E: Write>(
     writer: &mut Writer,
     observer: &mut O,
     tx: &mut E,
-    intake: &mut Intake<'_>,
+    intake: &Intake<'_>,
     base: &Base<'_, P>,
     bytes: &[u8],
     work: Work,
 ) -> Fed<R::Command> {
     for (index, &byte) in bytes.iter().enumerate() {
-        let Some(request) = intake.receive_byte::<R>(byte, writer.counts.sent()) else {
+        let sent = writer.counts.sent();
+        let Some(request) = intake.receive_byte::<R>(&mut writer.decoder, byte, sent) else {
             continue;
         };
         match request {
@@ -267,7 +277,7 @@ pub async fn run<P: Immediate, R, O, C, E: Read + Write>(
     commander: &mut C,
     boot: u64,
     mut endpoint: E,
-    mut intake: Intake<'_>,
+    intake: &Intake<'_>,
     platform: &impl Platform,
 ) -> Ended<E, <R::Command as Run<C>>::Trap>
 where
@@ -316,7 +326,12 @@ where
                             endpoint,
                         });
                     }
-                    Err(_) => continue,
+                    Err(_) => {
+                        return Ended::Fault(RunFault {
+                            cause: ConsoleFault::Read,
+                            endpoint,
+                        });
+                    }
                 }
             }
             let Some(bytes) = chunk.get(start..end) else {
@@ -327,7 +342,7 @@ where
                 writer,
                 observer,
                 &mut endpoint,
-                &mut intake,
+                intake,
                 &base,
                 bytes,
                 Work::Idle,
@@ -350,7 +365,7 @@ where
                     writer,
                     observer,
                     &mut endpoint,
-                    &mut intake,
+                    intake,
                     &base,
                     bytes,
                     Work::Busy,
@@ -370,7 +385,12 @@ where
                         endpoint,
                     });
                 }
-                Either::Second(Err(_)) => {}
+                Either::Second(Err(_)) => {
+                    return Ended::Fault(RunFault {
+                        cause: ConsoleFault::Read,
+                        endpoint,
+                    });
+                }
             }
         };
         match ran {

@@ -88,7 +88,7 @@ where
         commander,
     } = mount;
     match console::run::<EarlyUsb, R, O, D, C>(
-        writer, observer, commander, boot, console, intake, &platform,
+        writer, observer, commander, boot, console, &intake, &platform,
     )
     .await
     {

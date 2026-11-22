@@ -138,12 +138,14 @@ pub fn link_health(received: DecodeCounters, sent: Sent) -> LinkHealth {
     }
 }
 
-/// The console's intake of one boot.
+/// The console's intake of one boot: what it answers the base module with.
+/// The frame decoder it feeds is the console's state, placed with the
+/// console's writer and lent to each feed.
+#[derive(Clone, Copy)]
 pub struct Intake<'a> {
     boot_id: u64,
     image_keys: ImageKeySet<'a>,
     hello: Hello,
-    decoder: FrameDecoder,
 }
 
 impl<'a> Intake<'a> {
@@ -160,7 +162,6 @@ impl<'a> Intake<'a> {
             boot_id,
             image_keys,
             hello: image_keys.hello(maximum_payload_bytes, image_crc32),
-            decoder: FrameDecoder::new(),
         }
     }
 
@@ -174,20 +175,21 @@ impl<'a> Intake<'a> {
         self.hello
     }
 
-    pub const fn counters(&self) -> DecodeCounters {
-        self.decoder.counters()
-    }
-
-    /// Feeds one byte: the request it completes, if any. One byte at a time,
+    /// Feeds one byte to `decoder`: the request it completes, if any. One byte at a time,
     /// at most one frame completes per feed, so an answer that reports the
     /// counters reports them as of its request, and the console answers
     /// each request before it feeds the next byte.
-    pub fn receive_byte<C: Requests>(&mut self, byte: u8, sent: Sent) -> Option<Request<C>> {
+    pub fn receive_byte<C: Requests>(
+        &self,
+        decoder: &mut FrameDecoder,
+        byte: u8,
+        sent: Sent,
+    ) -> Option<Request<C>> {
         let boot_id = self.boot_id;
         let hello = self.hello;
         let mut request = None;
         let mut payload_error = false;
-        self.decoder.feed(WireKind::Command, &[byte], |frame| {
+        decoder.feed(WireKind::Command, &[byte], |frame| {
             let Ok(frame) = frame else { return };
             let identity = frame.identity();
             let answer = |answer| Some(Request::Answer(identity, answer));
@@ -211,11 +213,11 @@ impl<'a> Intake<'a> {
             };
         });
         if payload_error {
-            self.decoder.count_payload_error();
+            decoder.count_payload_error();
         }
         // Link health counts the request that asks for it.
         if let Some(Request::Answer(_, Answer::Link(link))) = &mut request {
-            *link = link_health(self.decoder.counters(), sent);
+            *link = link_health(decoder.counters(), sent);
         }
         request
     }

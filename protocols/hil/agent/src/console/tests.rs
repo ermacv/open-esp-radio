@@ -108,6 +108,11 @@ impl Host {
         self.to_device.borrow_mut().push_back(bytes);
     }
 
+    /// Several frames delivered by one read.
+    fn send_together(&self, frames: &[Vec<u8>]) {
+        self.to_device.borrow_mut().push_back(frames.concat());
+    }
+
     /// Every frame the device wrote: its request id, sequence and key.
     fn frames(&self) -> Vec<(u32, u32, Key)> {
         let mut decoder = FrameDecoder::new();
@@ -131,9 +136,22 @@ impl embedded_io_async::ErrorType for Endpoint {
 impl Read for Endpoint {
     async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
         loop {
-            if let Some(bytes) = self.0.to_device.borrow_mut().pop_front() {
-                buffer[..bytes.len()].copy_from_slice(&bytes);
-                return Ok(bytes.len());
+            // A read is never longer than its buffer: the rest comes with
+            // the next read.
+            let read = {
+                let mut queue = self.0.to_device.borrow_mut();
+                queue.pop_front().map(|mut bytes| {
+                    let length = bytes.len().min(buffer.len());
+                    buffer[..length].copy_from_slice(&bytes[..length]);
+                    let rest = bytes.split_off(length);
+                    if !rest.is_empty() {
+                        queue.push_front(rest);
+                    }
+                    length
+                })
+            };
+            if let Some(length) = read {
+                return Ok(length);
             }
             embassy_futures::yield_now().await;
         }
@@ -235,7 +253,7 @@ where
         commander,
         BOOT,
         endpoint,
-        intake,
+        &intake,
         &Chip,
     );
     let watch = async {
@@ -377,6 +395,118 @@ fn while_a_command_does_not_come_back_an_observation_is_answered_a_second_comman
     assert_eq!(rejections(&host), [(3, RejectReason::Busy)]);
     assert_eq!(started.get(), 1, "the second command never ran");
     assert!(!gate.get(), "the first command is still in work");
+}
+
+/// One request's frame, for [`Host::send_together`].
+fn frame<M: Message>(request: u32, body: M) -> Vec<u8> {
+    FrameEncoder::new()
+        .encode(&Envelope::new(BOOT, 0, 0, request, body))
+        .unwrap()
+        .to_vec()
+}
+
+/// The host's decoding counts as the link's health reports them.
+fn link_health(host: &Host) -> Option<oer_protocols_hil_protocol::base::LinkHealth> {
+    let mut found = None;
+    let mut decoder = FrameDecoder::new();
+    decoder.feed(WireKind::Event, &host.from_device.borrow(), |frame| {
+        if let Some(link) = frame
+            .unwrap()
+            .decode::<oer_protocols_hil_protocol::base::LinkHealth>()
+        {
+            found = Some(link.unwrap().body);
+        }
+    });
+    found
+}
+
+#[test]
+fn reads_holding_a_command_an_observation_and_a_second_command_answer_each_once() {
+    // One delivery, read as the buffer allows: the first read holds the
+    // command, the observation and the start of the second command.
+    let host = Host::default();
+    host.send_together(&[
+        frame(1, Probe(ProbeMode::Stall)),
+        frame(2, Switch),
+        frame(3, Probe(ProbeMode::Complete)),
+    ]);
+    let (gate, started) = (Cell::new(false), Cell::new(0));
+    let mut observing = Observing::default();
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
+    };
+    let asked = Cell::new(false);
+    run_until::<Probes, _, _>(&mut observing, &mut commanding, &host, |host| {
+        let frames = host.frames().len();
+        if frames == 3 {
+            gate.set(true);
+        }
+        if frames == 4 && !asked.get() {
+            asked.set(true);
+            host.send(0, 4, GetLinkHealth);
+        }
+        frames == 5
+    });
+    assert_eq!(
+        host.frames()[..4],
+        [
+            (0, 0, Hello::KEY),
+            (2, 1, Switched::KEY),
+            (3, 2, REJECTED),
+            (1, 3, ProbeArmed::KEY)
+        ]
+    );
+    assert_eq!(rejections(&host), [(3, RejectReason::Busy)]);
+    assert_eq!((observing.switches.get(), started.get()), (1, 1));
+    let link = link_health(&host).expect("the link's health");
+    // Four frames received, each decoded once and none in error.
+    assert_eq!(
+        (link.rx_frames, link.rx_cobs_errors, link.rx_decode_errors),
+        (4, 0, 0)
+    );
+}
+
+#[test]
+fn a_refused_read_ends_the_run_with_a_fault_retaining_the_transport_and_reads_no_more() {
+    struct Refusing {
+        reads: Rc<Cell<u32>>,
+    }
+    impl embedded_io_async::ErrorType for Refusing {
+        type Error = embedded_io_async::ErrorKind;
+    }
+    impl Read for Refusing {
+        async fn read(&mut self, _: &mut [u8]) -> Result<usize, Self::Error> {
+            self.reads.set(self.reads.get() + 1);
+            Err(embedded_io_async::ErrorKind::Other)
+        }
+    }
+    impl Write for Refusing {
+        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+            Ok(bytes.len())
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+    let reads = Rc::new(Cell::new(0));
+    let mut writer = Writer::new();
+    let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
+    let ended = block_on(run::<Captured, crate::base::NoRequests, (), (), _>(
+        &mut writer,
+        &mut (),
+        &mut (),
+        BOOT,
+        Refusing {
+            reads: reads.clone(),
+        },
+        &intake,
+        &Chip,
+    ));
+    let Ended::Fault(failure) = ended;
+    assert_eq!(failure.cause, ConsoleFault::Read);
+    assert_eq!(reads.get(), 1, "one refusal, no second read");
+    drop(failure.endpoint);
 }
 
 #[test]
@@ -679,7 +809,7 @@ fn invalid_read_length_returns_the_transport_without_releasing_it() {
                 length,
                 dropped: dropped.clone(),
             },
-            intake,
+            &intake,
             &Chip,
         ));
         // An image without traps cannot end in one.
@@ -758,7 +888,7 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             retained: RefCell::new(retained),
         };
         let mut writer = Writer::new();
-        let mut intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
+        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
         let base = Base {
             boot: BOOT,
             image_keys: intake.image_keys(),
@@ -768,7 +898,7 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             &mut writer,
             &mut (),
             &mut Output { refused, calls: 0 },
-            &mut intake,
+            &intake,
             &base,
             &request,
             Work::Idle,
