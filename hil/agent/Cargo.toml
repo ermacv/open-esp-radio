@@ -14,7 +14,6 @@ oer-portable-memory = { path = "../../portable/memory" }
 
 # The console and the boot evidence run on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer-chips-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
 oer-portable-diagnostics = { path = "../../portable/diagnostics" }
 oer-chips-esp32s31-platform-runtime = { path = "../../chips/esp32s31/platform/runtime" }
 oer-chips-family-platform-runtime = { path = "../../chips/family/platform/runtime" }

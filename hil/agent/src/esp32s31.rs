@@ -3,8 +3,7 @@
 
 use core::{convert::Infallible, future::Future};
 
-use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
-use oer_chips_esp32s31_platform_runtime::exception::Observed;
+use oer_chips_esp32s31_platform_runtime::{exception::Observed, reset_causes::ResetCause};
 use oer_chips_family_platform_runtime::{panic::PanicRecord, trap::PreviousException};
 use oer_protocols_hil_agent::base::{Intake, Requests};
 use oer_protocols_hil_protocol::{

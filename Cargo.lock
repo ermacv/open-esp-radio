@@ -1777,7 +1777,6 @@ version = "0.1.0"
 dependencies = [
  "embassy-futures",
  "embedded-io-async",
- "oer-chips-esp32s31-hal",
  "oer-chips-esp32s31-platform-runtime",
  "oer-chips-family-platform-runtime",
  "oer-portable-diagnostics",

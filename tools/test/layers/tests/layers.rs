@@ -42,6 +42,8 @@ fn the_name_follows_the_path() {
         ),
         ("hil/scenarios/aes", "oer-hil-scenarios-aes"),
         ("hil/services/aes", "oer-hil-services-aes"),
+        ("hil/scenarios/radio-pair", "oer-hil-scenarios-radio-pair"),
+        ("hil/services/radio-pair", "oer-hil-services-radio-pair"),
         ("hil/services/load", "oer-hil-services-load"),
         ("hil/scenarios/wifi-load", "oer-hil-scenarios-wifi-load"),
         (
@@ -1022,10 +1024,12 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/agent", Role::HilSdkAgent),
     ("hil/images/aes", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
+    ("hil/services/radio-pair", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/sdk-station", Role::HilBinding),
     ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
+    ("hil/scenarios/radio-pair", Role::Tool),
     ("hil/scenarios/sdk-station", Role::Tool),
     ("hil/scenarios/wifi-access-point", Role::Tool),
 ];
@@ -1180,10 +1184,11 @@ fn role_allows(from: Role, to: Role, to_path: &str) -> bool {
         Role::Sdk => assembled || matches!(to, Role::Composition | Role::Facade | Role::Sdk),
         Role::HilProtocol => to == Role::Portable,
         Role::HilAgent => matches!(to, Role::HilProtocol | Role::Portable),
-        // It serves the HIL console over the SDK's console and evidence; the
-        // composition writes notes before the console opens, the platform
-        // places the console and names the image, and `oer-portable-riscv` raises the
-        // fault a test requests.
+        // The one agent of probes and images, below the entry: it serves the
+        // HIL console over the console and the records its image hands it;
+        // the composition writes notes before the console opens and names
+        // the records' types, the platform places the console and names the
+        // image, and `oer-portable-riscv` raises the fault a test requests.
         Role::HilSdkAgent => {
             matches!(
                 to,
@@ -4660,7 +4665,7 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 382, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 1031, RX_RING_ATOMS),
+    ("radio/ieee80211/dma/receive.rs", 1045, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
@@ -10191,6 +10196,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::arithmetic_side_effects",
         1,
         "R3 cleans the cores and the contracts (tasks/323)",
+    ),
+    (
+        "hil/services/radio-pair/src/lib.rs",
+        "clippy::large_enum_variant",
+        4,
+        "a message: the image builds its answer once and publishes it",
     ),
     (
         "portable/crypto/src/conformance.rs",
