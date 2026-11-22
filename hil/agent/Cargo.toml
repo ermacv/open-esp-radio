@@ -6,7 +6,7 @@ rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish = false
-description = "The HIL agent on the oer application entry: the console, the boot evidence and the request mailbox through which an SDK test image serves its services"
+description = "The HIL agent: the console, the boot evidence and the request mailbox through which a probe or a test image serves its services"
 
 [dependencies]
 oer-protocols-hil-protocol = { workspace = true }
@@ -14,7 +14,7 @@ oer-portable-memory = { path = "../../portable/memory" }
 
 # The console and the boot evidence run on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer = { path = "../../oer", features = ["console"] }
+oer-chips-esp32s31-hal = { path = "../../chips/esp32s31/hal" }
 oer-portable-diagnostics = { path = "../../portable/diagnostics" }
 oer-chips-esp32s31-platform-runtime = { path = "../../chips/esp32s31/platform/runtime" }
 oer-chips-family-platform-runtime = { path = "../../chips/family/platform/runtime" }

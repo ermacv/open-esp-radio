@@ -19,7 +19,7 @@ use oer::{
 use oer::observe;
 #[cfg(feature = "fault")]
 use oer_hil_agent::answer_then_trap;
-use oer_hil_agent::{Inbox, Mailbox, answer};
+use oer_hil_agent::{Inbox, Mailbox, Records, answer};
 use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchanged, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
@@ -93,6 +93,11 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     };
     let relay_part = measure::Part::claim("relay")?;
     let evidence = boot.evidence();
+    let records = Records {
+        reset_cause: evidence.reset_cause,
+        previous_panic: evidence.previous_panic,
+        previous_exception: evidence.previous_exception.map(|record| (record.trap, record.observed)),
+    };
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     let worker = Worker {
         station,
@@ -102,9 +107,15 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         requests: inbox,
     };
     Ok(boot.run(move || {
-        oer_hil_agent::serve(console, evidence, services::IMAGE, outbox, move || {
-            application(worker, relay, hart0, relay_part)
-        })
+        oer_hil_agent::serve(
+            console,
+            oer::boot_id(),
+            records,
+            services::IMAGE,
+            outbox,
+            Error::Console,
+            move || application(worker, relay, hart0, relay_part),
+        )
     }))
 }
 
@@ -353,7 +364,7 @@ impl Worker {
             // Traps once the answer is written; a write the console cannot
             // confirm ends the application, which records it.
             oer_hil_services_fault::Request::RaiseException(_) => {
-                match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
+                match answer_then_trap(identity, &oer_hil_services_fault::Raising, Error::Console).await? {}
             }
             oer_hil_services_fault::Request::RefusePublication(_) => {
                 oer::wifi::debug::refuse_next_publication();

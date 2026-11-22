@@ -1,8 +1,11 @@
-//! The HIL console over the library's USB console on the ESP32-S31.
+//! The HIL console over the platform runtime's USB console on the
+//! ESP32-S31: the one mount of probes and of images on the entry alike.
 
-use core::future::Future;
+use core::{convert::Infallible, future::Future};
 
-use oer::{AppResult, Error, Evidence, ExceptionEvidence, ResetCause, UsbConsole};
+use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
+use oer_chips_esp32s31_platform_runtime::{console::Console as UsbConsole, exception::Observed};
+use oer_chips_family_platform_runtime::{panic::PanicRecord, trap::PreviousException};
 use oer_protocols_hil_agent::base::{Intake, Requests};
 use oer_protocols_hil_protocol::{
     Message, RequestIdentity,
@@ -51,45 +54,61 @@ pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
     let _sequence = CONSOLE.publish(identity.session_id, identity.request_id, body);
 }
 
+/// What the image read before its boot: the base module's boot evidence.
+#[derive(Clone, Copy, Debug)]
+pub struct Records {
+    /// Why hart 0 left reset.
+    pub reset_cause: ResetCause,
+    /// The previous boot's panic, already printed and cleared.
+    pub previous_panic: Option<PanicRecord>,
+    /// The previous boot's CPU exception, with what the exception hook read
+    /// after the stop when a record of it follows this trap.
+    pub previous_exception: Option<(PreviousException, Option<Observed>)>,
+}
+
 /// Publish `body` as the answer to `identity`, wait until the console wrote
-/// it, then trap on an illegal instruction: the library's exception path
+/// it, then trap on an illegal instruction: the runtime's exception path
 /// records the exception and resets, and the next boot serves the record
 /// as its post-mortem. Never returns once the answer is written.
 ///
 /// # Errors
-/// [`Error::Console`] when the console could not confirm the write: its
+/// `console_fault` when the console could not confirm the write: its
 /// barrier's fan-out ([`oer_protocols_hil_agent::console::progress::ReceiverLimit`])
 /// is exhausted, which its contract makes a terminal fault. The image does
-/// not trap; the application ends with the error, which the library records
-/// before it resets.
-pub async fn answer_then_trap<M: Message>(identity: RequestIdentity, body: &M) -> AppResult {
+/// not trap; it ends with the error.
+pub async fn answer_then_trap<M: Message, E>(
+    identity: RequestIdentity,
+    body: &M,
+    console_fault: E,
+) -> Result<Infallible, E> {
     let sequence = CONSOLE
         .publish_reliably(identity.session_id, identity.request_id, body)
         .await;
     match CONSOLE.written(sequence).await {
         Ok(()) => oer_portable_riscv::illegal_instruction(),
-        Err(_limit) => Err(Error::Console),
+        Err(_limit) => Err(console_fault),
     }
 }
 
 /// Serve the host over `console` until the chip resets: the base module
-/// from this boot's identity and `evidence`, each request of the image's
-/// services handed to the worker through `outbox` (or refused as busy),
-/// and the worker `start` makes, which answers them, side by side. The
-/// worker's future is made only where it runs, so the application's
-/// future holds it once.
+/// from this boot's identity `boot` and `records`, each request of the
+/// image's services handed to the worker through `outbox` (or refused as
+/// busy), and the worker `start` makes, which answers them, side by side.
+/// The worker's future is made only where it runs, so the image's future
+/// holds it once.
 ///
 /// # Errors
-/// [`Error::Console`] when the console's transport broke its contract, or
-/// the error the worker ended with.
-pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
+/// `console_fault` when the console's transport broke its contract, or the
+/// error the worker ended with.
+pub async fn serve<R: Requests, E, W: Future<Output = Result<Infallible, E>>>(
     console: UsbConsole,
-    evidence: Evidence,
+    boot: u64,
+    records: Records,
     image: Image,
     outbox: Outbox<'_, R>,
+    console_fault: E,
     start: impl FnOnce() -> W,
-) -> AppResult {
-    let boot = oer::boot_id();
+) -> Result<Infallible, E> {
     CONSOLE.start(boot);
     let intake = Intake::new(
         boot,
@@ -97,20 +116,20 @@ pub async fn serve<R: Requests, W: Future<Output = AppResult>>(
         image.maximum_payload_bytes,
         oer_chips_family_platform_runtime::layout::payload_crc32(),
     );
-    let platform = Platform(evidence);
+    let platform = Platform(records);
     let serve = CONSOLE.run(console, intake, &platform, |identity, request: R| {
         if outbox.hand(identity, request).is_err() {
             answer(identity, &Rejected(RejectReason::Busy));
         }
     });
     match embassy_futures::select::select(serve, start()).await {
-        embassy_futures::select::Either::First(_fault) => Err(Error::Console),
+        embassy_futures::select::Either::First(_fault) => Err(console_fault),
         embassy_futures::select::Either::Second(ended) => ended,
     }
 }
 
-/// The boot evidence the base module serves, as the library read it.
-struct Platform(Evidence);
+/// The boot evidence the base module serves, as the image read it.
+struct Platform(Records);
 
 impl oer_protocols_hil_agent::base::Platform for Platform {
     fn boot_evidence(&self) -> BootEvidence {
@@ -118,7 +137,11 @@ impl oer_protocols_hil_agent::base::Platform for Platform {
         BootEvidence {
             reset_reason: reset_reason(cause),
             raw_reset_reason: cause.code(),
-            post_mortem: self.0.previous_exception.as_ref().map(post_mortem),
+            post_mortem: self
+                .0
+                .previous_exception
+                .as_ref()
+                .map(|(trap, observed)| post_mortem(trap, observed.as_ref())),
             platform_panic: self.0.previous_panic.as_ref().map(|record| PlatformPanic {
                 hart: record.hart,
                 in_interrupt: record.in_interrupt,
@@ -131,7 +154,7 @@ impl oer_protocols_hil_agent::base::Platform for Platform {
         }
     }
 
-    /// The library printed and cleared the previous boot's panic before the
+    /// The image printed and cleared the previous boot's panic before the
     /// boot.
     fn boot_evidence_written(&self) {}
 
@@ -147,8 +170,7 @@ impl oer_protocols_hil_agent::base::Platform for Platform {
 
 /// The previous boot's exception as the base module's post-mortem: the one
 /// boot that wrote it, no checkpoints.
-fn post_mortem(exception: &ExceptionEvidence) -> PostMortemSummary {
-    let trap = exception.trap;
+fn post_mortem(trap: &PreviousException, observed: Option<&Observed>) -> PostMortemSummary {
     PostMortemSummary {
         boot_count: 1,
         checkpoints: 0,
@@ -163,7 +185,7 @@ fn post_mortem(exception: &ExceptionEvidence) -> PostMortemSummary {
                 sp: trap.sp,
                 mscratch: trap.mscratch,
             },
-            observed: exception.observed.map(|observed| TrapObservation {
+            observed: observed.map(|observed| TrapObservation {
                 stopped: observed.stopped,
                 mtvec: observed.mtvec,
                 mtvt: observed.mtvt,
