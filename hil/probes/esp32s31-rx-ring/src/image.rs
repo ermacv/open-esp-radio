@@ -764,7 +764,7 @@ async fn worker(
     mut inbox: oer_hil_agent::Inbox<'static, ReceiverRequest>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
-    let cold = pair::cold(reset);
+    let cold = pair::cold(reset, &parts.radio);
     let identity = parts.identity;
     let cycles = parts.cycles;
     let ap = parts.ap;

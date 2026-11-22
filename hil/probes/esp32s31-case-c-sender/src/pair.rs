@@ -38,16 +38,79 @@ pub(crate) fn page(readings: &[Reading], page: u8) -> SnapshotPage {
     }
 }
 
-/// The snapshot before the bring-up: what the previous run left.
-pub(crate) fn cold(reset_cause: u32) -> Readings {
+/// The snapshot before the bring-up: the reset cause, and the radio's
+/// power, clock and reset words as the previous run left them.
+pub(crate) fn cold(reset_cause: u32, radio: &Radio) -> Readings {
     let mut readings = Readings::new();
     push(&mut readings, Item::ResetCause, 0, Value::Word(reset_cause));
+    power(&mut readings, radio);
     readings
 }
 
-/// The snapshot after the bring-up: the temperature code, the RF PLL's
-/// frequency block and the PHY's calibration results, read in one PHY
-/// transaction over the radio in `slot`.
+/// The radio's power, clock and reset words ([`Radio::observe_power`]): a
+/// modem block's word unreadable while its register bus is closed.
+fn power(readings: &mut Readings, radio: &Radio) {
+    let (words, _bus) = radio.observe_power();
+    for (item, word) in [
+        (Item::PmuHpActiveIcgModem, words.pmu_hp_active_icg_modem),
+        (Item::PmuHpActiveHpCkPower, words.pmu_hp_active_hp_ck_power),
+        (Item::PmuRfPwc, words.pmu_rf_pwc),
+        (Item::PmuAnaPeriPwrCtrl, words.pmu_ana_peri_pwr_ctrl),
+        (Item::HpSysClkrstModemCtrl0, words.hp_sys_clkrst_modem_ctrl0),
+        (Item::HpSysClkrstModemConf, words.hp_sys_clkrst_modem_conf),
+    ] {
+        push(readings, item, 0, Value::Word(word));
+    }
+    let modem = words.modem;
+    for (item, word) in [
+        (Item::ModemSysconClkConf, modem.map(|m| m.syscon_clk_conf)),
+        (Item::ModemSysconClkConf1, modem.map(|m| m.syscon_clk_conf1)),
+        (
+            Item::ModemSysconClkConfPowerSt,
+            modem.map(|m| m.syscon_clk_conf_power_st),
+        ),
+        (
+            Item::ModemSysconModemRstConf,
+            modem.map(|m| m.syscon_modem_rst_conf),
+        ),
+        (
+            Item::ModemSysconWifiBbCfg,
+            modem.map(|m| m.syscon_wifi_bb_cfg),
+        ),
+        (
+            Item::ModemLpconLpTimerConf,
+            modem.map(|m| m.lpcon_lp_timer_conf),
+        ),
+        (
+            Item::ModemLpconCoexLpClkConf,
+            modem.map(|m| m.lpcon_coex_lp_clk_conf),
+        ),
+        (
+            Item::ModemLpconWifiLpClkConf,
+            modem.map(|m| m.lpcon_wifi_lp_clk_conf),
+        ),
+        (
+            Item::ModemLpconModem32kClkConf,
+            modem.map(|m| m.lpcon_modem_32k_clk_conf),
+        ),
+        (
+            Item::ModemLpconClkConfPowerSt,
+            modem.map(|m| m.lpcon_clk_conf_power_st),
+        ),
+        (Item::ModemLpconTickConf, modem.map(|m| m.lpcon_tick_conf)),
+    ] {
+        push(
+            readings,
+            item,
+            0,
+            word.map_or(Value::Unreadable, Value::Word),
+        );
+    }
+}
+
+/// The snapshot after the bring-up: the cold snapshot's words again, the
+/// temperature code, the RF PLL's frequency block and the PHY's calibration
+/// results, read in one PHY transaction over the radio in `slot`.
 ///
 /// # Errors
 /// [`Refusal::NotUp`] when no radio is in `slot`.
@@ -56,7 +119,7 @@ pub(crate) fn up(
     reset_cause: u32,
     identity: PhyCalibrationIdentity,
 ) -> Result<Readings, Refusal> {
-    let mut readings = cold(reset_cause);
+    let mut readings = cold(reset_cause, slot.as_ref().ok_or(Refusal::NotUp)?);
     let radio = slot.take().ok_or(Refusal::NotUp)?;
     let calibration = radio
         .attachment()

@@ -783,6 +783,19 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         self.registers().radio_phy().register_image(index)
     }
 
+    /// The radio's power, clock and reset words under this domain, and the
+    /// proof of an open modem register bus when its gate words read open
+    /// ([`crate::radio::phy::RadioPhyRegisters::observe_power`]). Writes
+    /// nothing.
+    pub fn observe_power(
+        &self,
+    ) -> (
+        crate::radio::phy::power_words::RadioPowerWords,
+        Option<crate::radio::phy::power_words::ModemBusOpen<'_>>,
+    ) {
+        self.registers().radio_phy().observe_power()
+    }
+
     /// Reset the Wi-Fi MAC's block for its member, whose clocks `_clocks`
     /// proves on, for the first time since their clocking (`first`, one a
     /// clocking), and write back what the block's other owners keep in it;
