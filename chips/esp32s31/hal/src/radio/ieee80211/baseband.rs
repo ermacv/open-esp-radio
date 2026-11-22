@@ -20,14 +20,18 @@ pub fn set_baseband_init_control(registers: &mut RadioPhyRegisters) {
 }
 
 /// Apply complete ROM `phy_wifi_enable_set(1)`.
-pub fn enable_wifi(registers: &mut RadioPhyRegisters) {
+pub fn enable_wifi<P: crate::radio::phy::registers::RadioPlacement>(
+    registers: &mut RadioPhyRegisters<P>,
+) {
     registers.set_wifi_baseband_enabled(
         oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled,
     );
 }
 
 /// Apply complete ROM `phy_wifi_enable_set(0)`.
-pub fn disable_wifi(registers: &mut RadioPhyRegisters) {
+pub fn disable_wifi<P: crate::radio::phy::registers::RadioPlacement>(
+    registers: &mut RadioPhyRegisters<P>,
+) {
     registers.set_wifi_baseband_enabled(
         oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled,
     );
@@ -44,4 +48,31 @@ pub fn enable_agc_register_update(registers: &mut RadioPhyRegisters) {
 /// The three separate calls deliberately preserve its three fresh RMW edges.
 pub fn enable_mac_baseband(registers: &mut RadioPhyRegisters) {
     registers.enable_mac_baseband();
+}
+
+#[cfg(test)]
+mod tests {
+    use oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable;
+
+    #[test]
+    fn the_wifi_atoms_write_their_enable() {
+        for fill in [0, u32::MAX] {
+            crate::radio::phy::registers::host::with_registers(fill, |registers| {
+                super::enable_wifi(registers);
+                let enable = registers
+                    .peripherals
+                    .modem_syscon_radio
+                    .read_wifi_bb_cfg()
+                    .wifi_enable();
+                assert_eq!(enable, WifiEnable::Enabled);
+                super::disable_wifi(registers);
+                let enable = registers
+                    .peripherals
+                    .modem_syscon_radio
+                    .read_wifi_bb_cfg()
+                    .wifi_enable();
+                assert_eq!(enable, WifiEnable::Disabled);
+            });
+        }
+    }
 }

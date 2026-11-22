@@ -14,7 +14,6 @@
 
 use oer_chips_esp32s31_pac::{axi_dma, hp_sys_clkrst, ownership::AxiDmaPeripherals};
 use oer_portable_memory::DmaBytes;
-use oer_portable_mmio::Bits;
 
 use crate::layouts::{
     AxiDmaDescriptor, AxiDmaDescriptorBuffer, AxiDmaDescriptorControl, AxiDmaDescriptorNext,
@@ -57,40 +56,7 @@ impl AesDmaChannel {
     /// Clock and reset the controller, open its access ranges and connect
     /// both halves of channel 0 to the AES.
     pub(crate) fn prepare(&mut self) {
-        self.clock.modify_axi_pdma_ctrl0(|w| {
-            w.set_reg_axi_pdma_sys_clk_en(true);
-            w.set_reg_axi_pdma_rst_en(true);
-        });
-        self.clock.modify_axi_pdma_ctrl0(|w| {
-            w.set_reg_axi_pdma_rst_en(false);
-        });
-        self.channel.modify_misc_conf(|w| {
-            w.set_clk_en(true);
-        });
-        let window = crate::layouts::DMA_WINDOW;
-        self.channel.modify_intr_mem_start_addr(|w| {
-            w.set_access_intr_mem_start_addr(window.start);
-        });
-        self.channel.modify_intr_mem_end_addr(|w| {
-            w.set_access_intr_mem_end_addr(window.end.wrapping_sub(1));
-        });
-        self.channel.modify_extr_mem_start_addr(|w| {
-            w.set_access_extr_mem_start_addr(EXTERNAL_START);
-        });
-        self.channel.modify_extr_mem_end_addr(|w| {
-            w.set_access_extr_mem_end_addr(EXTERNAL_END);
-        });
-        let aes = Bits::truncate(axi_dma::in_peri_sel_ch0::PeriInSelCh0::Aes.bits());
-        self.channel.modify_in_peri_sel_ch0(|w| {
-            w.set_peri_in_sel_ch0(aes);
-        });
-        let aes = Bits::truncate(axi_dma::out_peri_sel_ch0::PeriOutSelCh0::Aes.bits());
-        self.channel.modify_out_peri_sel_ch0(|w| {
-            w.set_peri_out_sel_ch0(aes);
-        });
-        self.channel.modify_in_conf0_ch0(|w| {
-            w.set_mem_trans_en_ch0(false);
-        });
+        prepare(&mut self.clock, &mut self.channel);
     }
 
     /// Reset both halves, link them to `input` (OUT) and `output` (IN) and
@@ -121,6 +87,46 @@ impl AesDmaChannel {
         self.channel.trigger_out_link1_ch0_outlink_start_ch0();
         self.channel.trigger_in_link1_ch0_inlink_start_ch0();
     }
+}
+
+/// Clock and reset the controller, open its access ranges and connect both
+/// halves of channel 0 to the AES, for any placement.
+pub(crate) fn prepare<C: oer_portable_mmio::Placement, P: oer_portable_mmio::Placement>(
+    clock: &mut hp_sys_clkrst::AxiDmaClock<C>,
+    channel: &mut axi_dma::AxiDmaChannel0<P>,
+) {
+    clock.modify_axi_pdma_ctrl0(|w| {
+        w.set_reg_axi_pdma_sys_clk_en(true);
+        w.set_reg_axi_pdma_rst_en(true);
+    });
+    clock.modify_axi_pdma_ctrl0(|w| {
+        w.set_reg_axi_pdma_rst_en(false);
+    });
+    channel.modify_misc_conf(|w| {
+        w.set_clk_en(true);
+    });
+    let window = crate::layouts::DMA_WINDOW;
+    channel.modify_intr_mem_start_addr(|w| {
+        w.set_access_intr_mem_start_addr(window.start);
+    });
+    channel.modify_intr_mem_end_addr(|w| {
+        w.set_access_intr_mem_end_addr(window.end.wrapping_sub(1));
+    });
+    channel.modify_extr_mem_start_addr(|w| {
+        w.set_access_extr_mem_start_addr(EXTERNAL_START);
+    });
+    channel.modify_extr_mem_end_addr(|w| {
+        w.set_access_extr_mem_end_addr(EXTERNAL_END);
+    });
+    channel.modify_in_peri_sel_ch0(|w| {
+        w.set_peri_in_sel_ch0(axi_dma::in_peri_sel_ch0::PeriInSelCh0::Aes.into());
+    });
+    channel.modify_out_peri_sel_ch0(|w| {
+        w.set_peri_out_sel_ch0(axi_dma::out_peri_sel_ch0::PeriOutSelCh0::Aes.into());
+    });
+    channel.modify_in_conf0_ch0(|w| {
+        w.set_mem_trans_en_ch0(false);
+    });
 }
 
 /// Bytes of the small and middle buffer pairs: one block, and the eight
@@ -281,11 +287,6 @@ impl AesDma {
                 copy(out, &buffer.read());
             }
         }
-    }
-
-    /// The loaded length, once [`Self::load`] accepted an input.
-    pub fn loaded_bytes(&self) -> Option<u16> {
-        self.loaded.map(|(_, length)| length)
     }
 
     /// Hand the loaded input and the output buffer of its pair to the DMA:

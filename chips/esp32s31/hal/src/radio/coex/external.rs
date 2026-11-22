@@ -237,6 +237,19 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     }
 }
 
+/// The family external port's one translation of its flag into the two
+/// atoms (`ExternalPort::enabled`).
+pub(crate) fn apply_external_coex_enabled<P: oer_portable_mmio::Placement>(
+    control: &mut ExternalCoexControl<'_, P>,
+    enabled: bool,
+) {
+    if enabled {
+        control.enable_external_coex();
+    } else {
+        control.disable_external_coex();
+    }
+}
+
 impl crate::radio::modem::SharedRadioRegisters {
     pub fn configure_external_coex_mode(
         &mut self,
@@ -319,6 +332,28 @@ mod tests {
             drop(part);
             expected[0xa0 / 4] = expected_word;
             assert_eq!(memory, expected);
+        }
+    }
+
+    #[test]
+    fn the_family_flag_selects_the_matching_enable_atom() {
+        for (enabled, expected) in [
+            (
+                true,
+                oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Enabled,
+            ),
+            (
+                false,
+                oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Disabled,
+            ),
+        ] {
+            for fill in [0, u32::MAX] {
+                let mut memory = vec![fill; instances::coex::SIZE.div_ceil(4)];
+                let mut part = CoexExternal::host(&mut memory).expect("external part fits");
+                apply_external_coex_enabled(&mut ExternalCoexControl::new(&mut part), enabled);
+                assert_eq!(part.read_control().enable(), expected);
+                assert_eq!(part.read_enable_1().enable(), expected);
+            }
         }
     }
 }

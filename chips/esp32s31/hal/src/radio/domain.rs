@@ -914,13 +914,13 @@ impl<B: PlatformClockBackend, P>
     for ExternalBinding<'_, B, P>
 {
     type Error = crate::radio::coex::ExternalCoexError;
-    // The family port's one translation of its flag into the two atoms.
     fn enabled(&mut self, enabled: bool) {
-        if enabled {
-            self.registers.enable_external_coex();
-        } else {
-            self.registers.disable_external_coex();
-        }
+        crate::radio::coex::external::apply_external_coex_enabled(
+            &mut crate::radio::coex::external::ExternalCoexControl::new(
+                &mut self.registers.coexistence.coex_external,
+            ),
+            enabled,
+        );
     }
     fn clear_priorities(&mut self, config: crate::radio::coex::ExternalCoexConfig) {
         self.registers.clear_external_coex_priorities(config.role);
