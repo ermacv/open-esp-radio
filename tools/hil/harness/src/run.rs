@@ -10,7 +10,7 @@ use oer_tools_hil_link::{Boot, Link, LinkError};
 
 use crate::dut::{Device, Dut};
 use crate::finish::{Cleanup, Ending};
-use crate::{Case, Cx, Failure, Scenario, keys};
+use crate::{Case, Cx, DeviceCx, Failure, Role, Scenario, keys};
 
 /// How long the running boot may take to say Hello.
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
@@ -81,90 +81,144 @@ pub(crate) struct Measurement {
 pub(crate) struct Run {
     pub outcomes: Vec<Outcome>,
     pub measurements: Vec<Measurement>,
-    /// How the cases left the device, for finishing.
-    pub ending: Ending,
+    /// How the cases left each device, in the scenario's order of roles,
+    /// for finishing.
+    pub endings: Vec<Ending>,
 }
 
-/// Run `cases` on `dut` after checking that it runs the
-/// built image and that the image serves every service of `scenario`,
-/// printing each outcome to `out` as it is known. A case that sees a reboot
-/// fails and the next one runs on the new boot; a request without a
-/// response leaves the boot's remaining cases incomplete.
+/// Run `cases` on `duts`, one a role of `scenario` in its order, after
+/// checking that each runs its built image and that the image serves every
+/// service of its role, printing each outcome to `out` as it is known. A
+/// case that sees a reboot fails and the next one runs on the new boot; a
+/// request without a response leaves the remaining cases incomplete.
 pub(crate) fn cases(
-    dut: &mut Dut<'_>,
+    duts: &mut [Dut<'_>],
     scenario: &Scenario,
     cases: &[&Case],
     out: &mut impl Write,
 ) -> Run {
-    let image_crc32 = dut.image_crc32();
+    let roles = scenario.roles();
     let mut outcomes = Vec::new();
     let mut measurements = Vec::new();
     let mut record = |outcome: Outcome, out: &mut dyn Write| {
         print(&outcome, out);
         outcomes.push(outcome);
     };
-    let ready = match dut.link() {
-        Some(link) => ready(link, scenario, image_crc32),
-        None => Err("the device under test has no link".to_owned()),
-    };
-    let mut boot = match ready {
-        Ok(boot) => boot,
-        Err(reason) => {
+    let unready =
+        |record: &mut dyn FnMut(Outcome, &mut dyn Write), reason: String, out: &mut dyn Write| {
             record(Outcome::stand(reason), out);
-            return Run {
-                outcomes,
-                measurements,
-                ending: Ending { unconfirmed: false },
-            };
+        };
+    let endings = |duts: &[Dut<'_>]| vec![Ending { unconfirmed: false }; duts.len()];
+    if roles.is_empty() || roles.len() != duts.len() {
+        unready(
+            &mut record,
+            format!(
+                "the scenario has {} devices under test and the stand gave {}",
+                roles.len(),
+                duts.len()
+            ),
+            out,
+        );
+        let endings = endings(duts);
+        return Run {
+            outcomes,
+            measurements,
+            endings,
+        };
+    }
+    let mut boots = Vec::with_capacity(duts.len());
+    for (dut, role) in duts.iter().zip(roles) {
+        let ready = match dut.link() {
+            Some(link) => ready(link, role, dut.image_crc32()),
+            None => Err("the device under test has no link".to_owned()),
+        };
+        match ready {
+            Ok(boot) => boots.push(boot),
+            Err(reason) => {
+                unready(&mut record, device_reason(roles, role, reason), out);
+                let endings = endings(duts);
+                return Run {
+                    outcomes,
+                    measurements,
+                    endings,
+                };
+            }
         }
-    };
-    let mut unconfirmed = None;
-    for case in cases {
-        let mut lost = None;
-        let verdict = if let Some(request_id) = unconfirmed {
-            Verdict::Incomplete(format!(
-                "request {request_id} of boot {:016x} is unconfirmed",
-                boot.boot_id
+    }
+    let mut unconfirmed: Vec<Option<u32>> = vec![None; duts.len()];
+    'cases: for case in cases {
+        let mut lost: Vec<Option<u32>> = vec![None; duts.len()];
+        let pending = roles
+            .iter()
+            .zip(&unconfirmed)
+            .zip(&boots)
+            .find_map(|((role, unconfirmed), boot)| unconfirmed.map(|id| (role, id, boot)));
+        let verdict = if let Some((role, request_id, boot)) = pending {
+            Verdict::Incomplete(device_reason(
+                roles,
+                role,
+                format!(
+                    "request {request_id} of boot {:016x} is unconfirmed",
+                    boot.boot_id
+                ),
             ))
         } else {
-            let mut cx = Cx::new(dut, boot);
+            let mut devices = duts
+                .iter_mut()
+                .zip(roles)
+                .zip(boots.iter().cloned())
+                .map(|((dut, role), boot)| DeviceCx::new(role.name, dut, boot));
+            let (Some(first), others) = (devices.next(), devices.collect::<Vec<_>>()) else {
+                break 'cases;
+            };
+            let mut cx = Cx::new(first, others);
             let verdict = match (case.run)(&mut cx) {
                 Ok(()) => Verdict::Pass,
                 Err(Failure::Fail(reason)) => Verdict::Fail(reason),
                 Err(Failure::Incomplete(reason)) => Verdict::Incomplete(reason),
             };
-            // A reset during the case moved it to a later boot.
-            boot = cx.boot;
-            unconfirmed = cx.unconfirmed;
-            lost = cx.unconfirmed;
-            measurements.extend(
-                cx.measurements
-                    .into_iter()
-                    .map(|(name, value)| Measurement {
-                        case: case.name,
-                        name,
-                        value,
-                    }),
-            );
+            measurements.extend(cx.measurements.drain(..).map(|(name, value)| Measurement {
+                case: case.name,
+                name,
+                value,
+            }));
+            for (index, device) in cx.devices().enumerate() {
+                // A reset during the case moved it to a later boot.
+                if let Some(boot) = boots.get_mut(index) {
+                    *boot = device.boot;
+                }
+                if let Some(slot) = unconfirmed.get_mut(index) {
+                    *slot = device.unconfirmed;
+                }
+                if let Some(slot) = lost.get_mut(index) {
+                    *slot = device.unconfirmed;
+                }
+            }
             verdict
         };
-        let Some(link) = dut.link() else {
-            record(
-                Outcome {
-                    case: Some(case.name),
-                    verdict,
-                },
-                out,
-            );
-            record(
-                Outcome::stand("the device under test has no link".to_owned()),
-                out,
-            );
-            break;
-        };
-        print_notes(link);
-        if let Some(request_id) = lost {
-            print_link_probe(link, &boot, request_id, LINK_PROBE_TIMEOUT, out);
+        for (index, (dut, role)) in duts.iter().zip(roles).enumerate() {
+            let Some(link) = dut.link() else {
+                record(
+                    Outcome {
+                        case: Some(case.name),
+                        verdict: verdict.clone(),
+                    },
+                    out,
+                );
+                record(
+                    Outcome::stand(device_reason(
+                        roles,
+                        role,
+                        "the device under test has no link".to_owned(),
+                    )),
+                    out,
+                );
+                break 'cases;
+            };
+            print_notes(link, roles, role);
+            if let (Some(Some(request_id)), Some(boot)) = (lost.get(index), boots.get(index)) {
+                print_link_probe(link, boot, *request_id, LINK_PROBE_TIMEOUT, out);
+            }
         }
         record(
             Outcome {
@@ -177,55 +231,84 @@ pub(crate) fn cases(
             record(Outcome::stand(LinkError::Cancelled.to_string()), out);
             break;
         }
-        match link.boot(HELLO_TIMEOUT) {
-            Ok(next) if next.boot_id != boot.boot_id => {
-                if next.hello.image_crc32 != image_crc32 {
+        for (index, (dut, role)) in duts.iter().zip(roles).enumerate() {
+            let (Some(link), Some(boot)) = (dut.link(), boots.get_mut(index)) else {
+                break 'cases;
+            };
+            match link.boot(HELLO_TIMEOUT) {
+                Ok(next) if next.boot_id != boot.boot_id => {
+                    if next.hello.image_crc32 != dut.image_crc32() {
+                        record(
+                            Outcome::stand(device_reason(
+                                roles,
+                                role,
+                                format!(
+                                    "the board rebooted into image {:08x}, not the built {:08x}",
+                                    next.hello.image_crc32,
+                                    dut.image_crc32()
+                                ),
+                            )),
+                            out,
+                        );
+                        break 'cases;
+                    }
+                    print_previous_boot(link, &next, out);
+                    *boot = next;
+                    if let Some(slot) = unconfirmed.get_mut(index) {
+                        *slot = None;
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
                     record(
-                        Outcome::stand(format!(
-                            "the board rebooted into image {:08x}, not the built {image_crc32:08x}",
-                            next.hello.image_crc32
-                        )),
+                        Outcome::stand(device_reason(roles, role, error.to_string())),
                         out,
                     );
-                    break;
+                    break 'cases;
                 }
-                print_previous_boot(link, &next, out);
-                boot = next;
-                unconfirmed = None;
-            }
-            Ok(_) => {}
-            Err(error) => {
-                record(Outcome::stand(error.to_string()), out);
-                break;
             }
         }
     }
     Run {
         outcomes,
         measurements,
-        ending: Ending {
-            unconfirmed: unconfirmed.is_some(),
-        },
+        endings: unconfirmed
+            .iter()
+            .map(|unconfirmed| Ending {
+                unconfirmed: unconfirmed.is_some(),
+            })
+            .collect(),
     }
 }
 
-/// The results file of a run: the scenario, the board, every outcome and
-/// every measurement.
+/// `reason`, named by `role` when the scenario has several devices.
+fn device_reason(roles: &[Role], role: &Role, reason: String) -> String {
+    if roles.len() > 1 {
+        format!("{}: {reason}", role.name)
+    } else {
+        reason
+    }
+}
+
+/// The results file of a run: the scenario, each device's role, image,
+/// board and build, every outcome and every measurement.
 pub(crate) fn results(
     scenario: &Scenario,
-    board: &str,
+    boards: &[(String, oer_tools_image_bundle::BuildChoice)],
     outcomes: &[Outcome],
     measurements: &[Measurement],
-    built: &oer_tools_image_bundle::BuildChoice,
 ) -> serde_json::Value {
     let unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs());
     serde_json::json!({
         "scenario": scenario.name,
-        "image": scenario.image,
-        "build": built,
-        "board": board,
+        "devices": scenario.roles().iter().zip(boards).map(|(role, (board, built))| serde_json::json!({
+            "role": role.name,
+            "image": role.image,
+            "board": board,
+            "build": built,
+        })).collect::<Vec<_>>(),
         "unix": unix,
         "outcomes": outcomes.iter().map(|outcome| {
             let (verdict, reason) = match &outcome.verdict {
@@ -247,14 +330,16 @@ pub(crate) fn results(
     })
 }
 
-/// Print the device's diagnostic lines and how many were lost.
-fn print_notes(link: &Link) {
+/// Print the device's diagnostic lines and how many were lost, each named
+/// by its role when the scenario has several devices.
+fn print_notes(link: &Link, roles: &[Role], role: &Role) {
     let notes = link.take_notes();
+    let name = if roles.len() > 1 { role.name } else { "device" };
     for note in notes.lines {
-        eprintln!("device: {note}");
+        eprintln!("{name}: {note}");
     }
     if notes.lost > 0 {
-        eprintln!("device: {} diagnostic lines lost", notes.lost);
+        eprintln!("{name}: {} diagnostic lines lost", notes.lost);
     }
 }
 
@@ -312,8 +397,8 @@ pub(crate) fn print(outcome: &Outcome, out: &mut dyn Write) {
 }
 
 /// The running boot, once it runs the image of identity `image_crc32` and
-/// that image serves every service of `scenario`.
-fn ready(link: &Link, scenario: &Scenario, image_crc32: u32) -> Result<Boot, String> {
+/// that image serves every service of `role`.
+fn ready(link: &Link, role: &Role, image_crc32: u32) -> Result<Boot, String> {
     let boot = link
         .boot(HELLO_TIMEOUT)
         .map_err(|error| error.to_string())?;
@@ -324,7 +409,7 @@ fn ready(link: &Link, scenario: &Scenario, image_crc32: u32) -> Result<Boot, Str
         ));
     }
     let served = keys::served(link, &boot).map_err(|error| format!("image keys: {error}"))?;
-    let missing = keys::missing(scenario.services, &served);
+    let missing = keys::missing(role.services, &served);
     if missing.is_empty() {
         Ok(boot)
     } else {

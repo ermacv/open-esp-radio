@@ -38,13 +38,22 @@ The optional `lifecycle::Request` service advertises `lifecycle/reset` and
 health stay in `base`; Hello is also the reachability check. The image queues
 a reset request; `lifecycle::acknowledge_reset` publishes the acknowledgement
 and returns an affine `AcknowledgedReset` only after its complete frame was
-written. The image consumes its correlation observations in its existing
-retained reset path. A completion-barrier error returns to the image's
-fault policy without performing the requested action. The agent owns no
+written. The image consumes its correlation observations (the request,
+the acknowledgement's place among the console's entries, the session) in
+its existing retained reset path. An acknowledgement that could not be
+built, or a completion-barrier error, returns to the image's fault policy
+(`lifecycle::Unacknowledged`) without performing the requested action.
+
+The console's one writer numbers each message as it takes it out of the
+queue; a producer only enters its message. A producer that waits for its
+message's write holds its place among the entries (`console::Entered`)
+and `Console::written` waits until the writer has written that many
+entries; a producer of a higher level entering between a waiter's entry
+and its count lengthens that wait by a message. The agent owns no
 hardware reset operation.
 
 Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
-`ReceiverLimit` with the requested sequence, last published position and capacity.
+`ReceiverLimit` with the requested place, last published position and capacity.
 The image retains this impossible-state fault through its existing fatal record,
 keeps the operation's owners quarantined and resets. It never performs the
 requested action after a failed barrier.

@@ -2218,8 +2218,100 @@ sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
 
 [[record-words]]
 register = "PMU.HP_ACTIVE_HP_CK_POWER"
-reason = "The facts probe's PMU record keeps the word before and after its change."
+reason = "The facts probe's PMU record keeps the word before and after its change; the radio pair's snapshots keep it before and after the bring-up."
 sources = ["BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4"]
+
+[[record-words]]
+register = "PMU.HP_ACTIVE_ICG_MODEM"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_PMU_HEADERS"]
+
+[[record-words]]
+register = "PMU.RF_PWC"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_PMU_HEADERS"]
+
+[[record-words]]
+register = "PMU.ANA_PERI_PWR_CTRL"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_PMU_HEADERS"]
+
+[[record-words]]
+register = "HP_SYS_CLKRST.MODEM_CTRL0"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_ESP_PACS_SVD", "ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK"]
+
+[[record-words]]
+register = "HP_SYS_CLKRST.MODEM_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_ESP_PACS_SVD", "ESP_IDF_4D59230D_S31_MODEM_PLL_GATE"]
+
+
+[[record-words]]
+register = "MODEM_SYSCON.CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_SYSCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_SYSCON.CLK_CONF1"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_SYSCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_SYSCON.CLK_CONF_POWER_ST"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_SYSCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_SYSCON.MODEM_RST_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_SYSCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_SYSCON.WIFI_BB_CFG"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_SYSCON_STRUCT"]
+
+[[record-words]]
+register = "HP_SYS_CLKRST.REF_160M_CTRL0"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_ESP_PACS_SVD"]
+
+[[record-words]]
+register = "MODEM_LPCON.CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_LPCON.LP_TIMER_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_LPCON.COEX_LP_CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_LPCON.WIFI_LP_CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_LPCON.MODEM_32K_CLK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+
+[[record-words]]
+register = "MODEM_LPCON.CLK_CONF_POWER_ST"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT"]
+
+[[record-words]]
+register = "MODEM_LPCON.TICK_CONF"
+reason = "The radio pair's snapshots keep the word before and after the bring-up, to compare a deaf boot with a hearing one."
+sources = ["S31_MODEM_LPCON_STRUCT", "BLOB_LIBPHY_PHY_GET_XTAL_FREQ"]
 
 [[record-words]]
 register = "LP_TSENS.CTRL"

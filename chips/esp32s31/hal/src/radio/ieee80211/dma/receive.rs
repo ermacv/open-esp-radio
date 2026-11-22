@@ -521,6 +521,20 @@ where
         }
     }
 
+    /// Each descriptor's control word as the walker left it: the ring's in
+    /// its order, then R's. An observation for a probe's record of the
+    /// descriptors' owners, read through the layout's volatile accessor;
+    /// the ring decides nothing by it.
+    pub fn descriptor_controls(
+        &self,
+    ) -> ([WifiRxDmaDescriptorControl; N], WifiRxDmaDescriptorControl) {
+        let descriptors = self.table.descriptors;
+        (
+            descriptors.ring.each_ref().map(RxDescriptor::word0),
+            descriptors.reserved.word0(),
+        )
+    }
+
     /// Serve the completed units: `f` gets the view, in the ring's order up
     /// to `LAST` as read at the start; after it, the doorbell is rung if
     /// anything was re-armed, and once more when the walker settled with

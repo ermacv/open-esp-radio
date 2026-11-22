@@ -33,7 +33,7 @@ pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.
 pub(super) const TIMEOUT: u16 = 0x03ff;
 /// How long a frame's completion is awaited.
-const COMPLETION_MS: u32 = 20;
+pub(super) const COMPLETION_MS: u32 = 20;
 /// The transmit queue every frame goes on.
 const QUEUE: MacTxQueueIndex = MacTxQueueIndex::Zero;
 
@@ -52,7 +52,6 @@ oer_chips_esp32s31_hal::dma_static! {
 /// The phases the transmit half's failures name.
 pub(super) mod tx_phase {
     pub const POOL: u32 = 30;
-    pub const PEER: u32 = 31;
     pub const FRAME: u32 = 32;
     pub const START: u32 = 33;
     pub const COMPLETION: u32 = 34;
@@ -230,18 +229,45 @@ fn complete(
     })
 }
 
-/// The pool and the ordinary descriptor, then case C's rounds or cell E's.
-pub(super) async fn series(
-    access: &mut RadioAccess,
-    sources: &Sources,
-    station: [u8; 6],
-    peer: [u8; 6],
-    journal: &mut Journal,
-) -> Result<(), Failure> {
+/// The ordinary queue as the MAC holds it now, in the service's words.
+pub(super) fn queue_state(access: &mut RadioAccess) -> service::QueueState {
+    use oer_chips_esp32s31_hal::types::MacTxQueueOwnership;
+    let snapshot = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
+    service::QueueState {
+        ownership: match snapshot.ownership {
+            MacTxQueueOwnership::Idle => service::QueueOwnership::Idle,
+            MacTxQueueOwnership::Enabled => service::QueueOwnership::Enabled,
+            MacTxQueueOwnership::Valid => service::QueueOwnership::Valid,
+            MacTxQueueOwnership::Published => service::QueueOwnership::Published,
+        },
+        raised: [
+            (
+                snapshot.pending.completion(),
+                service::QueueEvent::Completion,
+            ),
+            (snapshot.pending.timeout(), service::QueueEvent::Timeout),
+            (snapshot.pending.collision(), service::QueueEvent::Collision),
+        ]
+        .into_iter()
+        .filter_map(|(raised, event)| raised.then_some(event))
+        .collect(),
+        active_state: snapshot.mac_active_state,
+        hang: service::HangCounters {
+            rx: snapshot.hang.rx,
+            tx: snapshot.hang.tx,
+            rx_tx_hang: snapshot.hang.rx_tx_hang,
+            rx_tx_panic: snapshot.hang.rx_tx_panic,
+        },
+    }
+}
+
+/// The pool and the ordinary descriptor, made once a boot: every round
+/// borrows them.
+pub(super) fn prepare(sources: &Sources) -> Result<(Frames, Descriptor), Failure> {
     let pool =
         Placed::pin(TX_POOL.take().ok_or((tx_phase::POOL, 1))?).map_err(|_| (tx_phase::POOL, 2))?;
     let pool: &'static Placed = POOL_PLACE.try_init(pool).ok_or((tx_phase::POOL, 5))?;
-    let mut ordinary: Descriptor =
+    let ordinary: Descriptor =
         oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::TxDmaStorage::pin::<
             oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma,
             Lease,
@@ -251,15 +277,5 @@ pub(super) async fn series(
         pool,
         power: sources.tx_power.pair(MacLegacyRate::Ofdm6M.code()).primary as u8,
     };
-    super::amsdu::series(
-        super::amsdu::AmsduParts {
-            frames: &frames,
-            ordinary: &mut ordinary,
-            station,
-            peer,
-            journal,
-        },
-        access,
-    )
-    .await
+    Ok((frames, ordinary))
 }

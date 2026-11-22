@@ -24,6 +24,7 @@ oer-tools-image-esp-idf = { path = "../esp-idf" }
 oer-tools-chip-profile = { path = "../../chip/profile" }
 oer-tools-lab-arbiter = { path = "../../lab/arbiter" }
 oer-tools-lab-client = { path = "../../lab/client" }
+oer-tools-hil-link = { path = "../../hil/link" }
 oer-tools-os-process = { path = "../../os/process" }
 oer-tools-lab-model = { path = "../../lab/model" }
 serde_json = "1.0"

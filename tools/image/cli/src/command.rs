@@ -216,9 +216,14 @@ pub fn run(
     choice: &image::Choice,
 ) -> Result<ExitCode> {
     let board = board(selector)?;
-    image::build(root, image, Enforced::Reported, None, choice)?;
+    let bundle = image::build(root, image, Enforced::Reported, None, choice)?;
     let mut client = lease(&board)?;
     write_image(root, image, &board, &mut client)?;
+    if oer_tools_image_build::console::of_image(root, image)?
+        == oer_tools_image_build::console::Console::Hil
+    {
+        return hil_run(image, &board, client, &bundle, timeout);
+    }
     let run = root
         .join("target/fw/runs")
         .join(format!("{}-{image}", timestamp(SystemTime::now())));
@@ -269,6 +274,63 @@ pub fn run(
         Some(Verdict::Fail) => ExitCode::from(1),
         None => {
             eprintln!("fw: no {RESULT_MARKER}line within {}s", timeout.as_secs());
+            ExitCode::from(2)
+        }
+    })
+}
+
+/// `run` of an image whose console speaks the HIL protocol: it prints no
+/// `OER-RESULT:`, its verdict is its scenario's (`cargo hil run`). The board
+/// is reset into the image and its link opened; the exit says only whether
+/// the built image booted and said Hello within `timeout` (0), or not (2).
+fn hil_run(
+    image: &str,
+    board: &stand::Board,
+    mut client: Client,
+    bundle: &oer_tools_image_bundle::ImageBundle,
+    timeout: Duration,
+) -> Result<ExitCode> {
+    let expected = bundle
+        .staged
+        .as_ref()
+        .map(|staged| staged.runtime_crc32)
+        .ok_or("the image is not staged: it has no identity to check")?;
+    let console = client.start(Operation::Console {
+        board: board.mac.clone(),
+        reset: true,
+    })?;
+    let line = oer_tools_lab_client::line::bridge(console)?;
+    let link = oer_tools_hil_link::Link::start(Box::new(line))?;
+    eprintln!(
+        "fw: {} reset into {image}, which speaks the HIL protocol: waiting {}s for its Hello; \
+         its verdict is its scenario's (`cargo hil run`)",
+        board.id,
+        timeout.as_secs()
+    );
+    let booted = link.boot(timeout);
+    let notes = link.take_notes();
+    for note in notes.lines {
+        println!("{note}");
+    }
+    drop(link);
+    client.release()?;
+    Ok(match booted {
+        Ok(boot) if boot.hello.image_crc32 == expected => {
+            println!(
+                "fw: boot {:016x} of {image} said Hello (image {expected:08x})",
+                boot.boot_id
+            );
+            ExitCode::SUCCESS
+        }
+        Ok(boot) => {
+            eprintln!(
+                "fw: the board runs image {:08x}, not the built {expected:08x}",
+                boot.hello.image_crc32
+            );
+            ExitCode::from(2)
+        }
+        Err(error) => {
+            eprintln!("fw: no Hello within {}s: {error}", timeout.as_secs());
             ExitCode::from(2)
         }
     })

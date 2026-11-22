@@ -302,7 +302,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   chip, `chips/<chip>/app` its application entry), `oer/` the application
   entry an image uses, `examples/` examples on it, `hil/` checks on hardware
   (`agent`, `services`, `images` on the entry, `probes` below it,
-  `scenarios` their host programs). Executables only in `examples/`, `hil/`,
+  `scenarios` their host programs). A probe differs from a scenario only in what it is allowed to use. A probe may use an API of any level, `unsafe` and any other means it needs; a scenario uses only the public API. The work between the DUT and the host is done through the HIL protocol and the agent. Executables only in `examples/`, `hil/`,
   `tools/` and a chip's `bootstrap`. Every package is `oer-` plus its whole
   path (`oer-chips-esp32s31-hal`, `oer-hil-probes-esp32s31-mcycle`); the
   entry is `oer`. A crate never sits inside another; a new crate needs a
@@ -320,7 +320,7 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   nothing and knows no scenario, service or stand equipment. A scenario's
   host program holds its cases and verdict; the image it runs serves
   services whose every endpoint has a handler (`oer_protocols_hil_agent::service!`);
-  several scenarios share one image. A HIL image is built on the product API
+  several scenarios share one image. A probe differs from a scenario only in what it is allowed to use. A probe may use an API of any level, `unsafe` and any other means it needs; a scenario uses only the public API. The work between the DUT and the host is done through the HIL protocol and the agent. A HIL image is built on the product API
   (`oer`) and takes its runs' control at runtime from the host. Stand
   equipment, its drivers and its ESP-IDF peer firmware belong to `tools/lab`.
 

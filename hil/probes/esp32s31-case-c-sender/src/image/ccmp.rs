@@ -11,52 +11,45 @@
 //! board's address for its key. The rounds draw their order as case C's do;
 //! the probe draws no backoff.
 use super::amsdu::AmsduParts;
+use super::amsdu::{RoundStop, at};
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start, tx_phase};
 use super::*;
-use crate::case_c::{CASES, CELL_ROUNDS, Case, TEMPORAL_KEY, byte, order, protected_byte};
-use oer_portable_embassy_time::EmbassyClock;
-use oer_portable_time::{Clock, Duration, Timer};
+use crate::case_c::{CASES, Case, TEMPORAL_KEY, byte, order, protected_byte};
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_security_cipher::{
     aes::SoftwareAes128, ccmp_mpdu::CcmpAssociation,
 };
 use oer_protocols_ieee80211_wire::security::Spp;
 
-/// Unprotected frames before the cell: the receiver learns this board's
-/// address from them.
+/// Unprotected frames before the cell, each its own round of one frame: a
+/// failure's round counts them first, the cell's rounds after them.
 const HELLO: u32 = 40;
-/// The wait after the peer is learned.
-const QUIET_MS: u32 = 1_500;
 /// The longest protected MPDU: case 4's.
 const LONGEST: usize = Case::AmsduLong.protected_length();
 
 /// One case's ends: acknowledged, ACK timeouts, other, seal refusals.
 type Ends = [u32; 4];
 
-pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
+pub(super) async fn series(
+    parts: AmsduParts<'_>,
+    access: &mut RadioAccess,
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, RoundStop> {
     let AmsduParts {
         frames,
         ordinary,
         station,
         peer,
-        journal,
+        rounds,
     } = parts;
-    mark(96);
-    // The injector's burst that taught this board its peer ends within half
-    // a second (`tasks/167`); the cell starts after it, on a quiet air (run
-    // e2 overlapped it by 0.33 s).
-    if let Some(at) = EmbassyClock
-        .now()
-        .checked_add(Duration::from_millis(QUIET_MS))
-    {
-        EmbassyClock.wait_until(at).await;
-    }
     for hello in 0..HELLO {
         let case = Case::Provenance700;
         let counter = case.counter(hello);
-        let lease = frames.lease_frame(ORDINARY_SLOT, case.length(), |offset| {
-            byte(case, station, peer, counter, offset)
-        })?;
+        let stop = at(hello, case);
+        let lease = frames
+            .lease_frame(ORDINARY_SLOT, case.length(), |offset| {
+                byte(case, station, peer, counter, offset)
+            })
+            .map_err(&stop)?;
         start(
             access,
             ordinary,
@@ -64,10 +57,10 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
             case.length(),
             frames.power,
             TIMEOUT,
-        )?;
-        await_completion(access, ordinary).await?;
+        )
+        .map_err(&stop)?;
+        await_completion(access, ordinary).await.map_err(&stop)?;
     }
-    mark(97);
     let association = CcmpAssociation::new(Spp::NotNegotiated);
     let key = Ccmp128Key::new(&TEMPORAL_KEY);
     let mut engine = SoftwareAes128;
@@ -76,14 +69,15 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
     let mut sealed = [0_u8; LONGEST];
     let mut ends: [Ends; CASES.len()] = [[0; 4]; CASES.len()];
     let mut pn = 0_u64;
-    for round in 0..CELL_ROUNDS {
+    for round in 0..rounds {
         for case in order(round).into_iter().filter(|case| case.qos()) {
             pn = pn.saturating_add(1);
             let counter = case.counter(round);
             let length = case.protected_length();
+            let stop = at(HELLO.saturating_add(round), case);
             let at = CASES.iter().position(|each| *each == case).unwrap_or(0);
             let Some(frame) = sealed.get_mut(..length) else {
-                return Err((tx_phase::FRAME, 0x10));
+                return Err(stop((tx_phase::FRAME, 0x10)));
             };
             for (offset, cell) in frame.iter_mut().enumerate() {
                 *cell = protected_byte(case, station, peer, counter, pn, offset);
@@ -95,11 +89,13 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
                 continue;
             }
             let frame: &[u8] = frame;
-            let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
-                frame.get(offset).copied().unwrap_or(0)
-            })?;
-            start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
-            let ended = await_completion(access, ordinary).await?;
+            let lease = frames
+                .lease_frame(ORDINARY_SLOT, length, |offset| {
+                    frame.get(offset).copied().unwrap_or(0)
+                })
+                .map_err(&stop)?;
+            start(access, ordinary, lease, length, frames.power, TIMEOUT).map_err(&stop)?;
+            let ended = await_completion(access, ordinary).await.map_err(&stop)?;
             if let Some(cell) = ends.get_mut(at).and_then(|row| {
                 row.get_mut(match ended.status {
                     0 => 0,
@@ -111,21 +107,32 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
             }
         }
     }
-    for (case, row) in CASES.iter().zip(ends) {
-        if case.qos() {
-            journal.record(
-                Kind::CcmpSent,
-                &[
-                    case.tag(),
-                    case.protected_length() as u32,
-                    row[0],
-                    row[1],
-                    row[2],
-                    row[3],
-                ],
-            );
-        }
+    // A seal the protocol layer refused is a failure of this probe, not
+    // an end of the air's.
+    if ends.iter().any(|row| row[3] != 0) {
+        return Err(RoundStop {
+            failure: (tx_phase::FRAME, 0x11),
+            round: HELLO.saturating_add(rounds),
+            tag: 0,
+        });
     }
-    mark(98);
-    Ok(())
+    let mut first = [0_u32; service::BEFORE];
+    Ok(CASES
+        .iter()
+        .zip(ends)
+        .filter(|(case, _)| case.qos())
+        .map(|(case, row)| service::CaseEnds {
+            tag: case.tag(),
+            acknowledged: {
+                first[0] = row[0];
+                first
+            },
+            timeouts: {
+                let mut timeouts = [0_u32; service::BEFORE];
+                timeouts[0] = row[1];
+                timeouts
+            },
+            other: row[2],
+        })
+        .collect())
 }

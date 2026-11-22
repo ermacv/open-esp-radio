@@ -68,3 +68,31 @@ fn an_uninstalled_owner_refuses_every_request() {
         );
     }
 }
+
+#[test]
+fn the_modem_low_power_word_is_read_only_with_the_radio_s_open_bus() {
+    use crate::radio::phy::registers::host::with_registers_memory;
+    use oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn;
+    let (mut lpcon, mut clkrst) = memory();
+    let words = ClockWords::host(&mut lpcon, &mut clkrst).expect("memory holds the words");
+    let closed = words.observe(&crate::radio::phy::power_words::ModemBus::Closed);
+    assert_eq!(closed.modem_lpcon_clk_conf, None);
+    assert_eq!(closed.hp_sys_clkrst_ref_160m_ctrl0, 0xa5a5_a400);
+    let (open, _) = with_registers_memory(0, |registers| {
+        let parts = &mut registers.peripherals;
+        parts.hp_sys_clkrst_radio.modify_modem_ctrl0(|w| {
+            w.set_reg_modem_clk_en(RegModemClkEn::Enabled);
+        });
+        parts.hp_sys_clkrst_radio.modify_modem_conf(|w| {
+            w.set_modem_apb_clk_en(true).set_modem_rst_en(false);
+        });
+        let (_, bus) = registers.observe_power();
+        assert!(
+            matches!(bus, crate::radio::phy::power_words::ModemBus::Open { .. }),
+            "the gate words read open"
+        );
+        words.observe(&bus)
+    });
+    assert_eq!(open.modem_lpcon_clk_conf, Some(0xa5a5_a5a0));
+    assert_eq!(open.hp_sys_clkrst_ref_160m_ctrl0, 0xa5a5_a400);
+}

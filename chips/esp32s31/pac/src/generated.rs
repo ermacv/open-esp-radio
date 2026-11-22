@@ -94953,6 +94953,13 @@ pub mod hp_sys_clkrst {
             pub const fn reg_modem_clk_en(self) -> RegModemClkEn {
                 RegModemClkEn::from_field(self.0)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -107867,6 +107874,13 @@ pub mod hp_sys_clkrst {
             pub const fn reg_ref_160m_clk_en(self) -> bool {
                 (self.0 & 0x00000100) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -110334,6 +110348,13 @@ pub mod hp_sys_clkrst {
             #[inline]
             pub const fn modem_xtal_clk_en(self) -> bool {
                 (self.0 & 0x00000020) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -133739,6 +133760,13 @@ pub mod modem_lpcon {
             pub const fn clk_lp_timer_div_num(self) -> oer_portable_mmio::Bits<12> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 4)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -133908,6 +133936,13 @@ pub mod modem_lpcon {
             #[inline]
             pub const fn bits_16_31_opaque(self) -> u16 {
                 ((self.0 >> 16) & 0xffff) as u16
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -134082,6 +134117,13 @@ pub mod modem_lpcon {
             #[inline]
             pub const fn clk_wifipwr_lp_div_num(self) -> oer_portable_mmio::Bits<12> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 4)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -134273,6 +134315,13 @@ pub mod modem_lpcon {
             pub const fn clk_modem_32k_sel(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -134366,6 +134415,13 @@ pub mod modem_lpcon {
             #[inline]
             pub const fn clk_lp_timer_en(self) -> bool {
                 (self.0 & 0x00000008) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -134694,6 +134750,13 @@ pub mod modem_lpcon {
             ) -> Option<super::dictionaries::IcgStateMap> {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -134939,6 +135002,13 @@ pub mod modem_lpcon {
             #[inline]
             pub const fn bits_6_31_opaque(self) -> oer_portable_mmio::Bits<26> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 6)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -146501,6 +146571,13 @@ pub mod modem_syscon {
             pub const fn clk_data_dump_en(self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -147301,6 +147378,13 @@ pub mod modem_syscon {
             ) -> Option<super::dictionaries::IcgStateMap> {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -147753,6 +147837,13 @@ pub mod modem_syscon {
             #[inline]
             pub const fn rst_data_dump(self) -> bool {
                 (self.0 & 0x80000000) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -148362,6 +148453,13 @@ pub mod modem_syscon {
             #[inline]
             pub const fn bits_22_31_opaque(self) -> oer_portable_mmio::Bits<10> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 22)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -149009,6 +149107,13 @@ pub mod modem_syscon {
             #[inline]
             pub const fn bits_29_31_opaque(self) -> oer_portable_mmio::Bits<3> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 29)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -150395,6 +150500,13 @@ pub mod pmu {
                 self,
             ) -> Option<HpActiveDigIcgModemCode> {
                 HpActiveDigIcgModemCode::from_bits((self.0 >> 30) & 0x3)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -161561,6 +161673,13 @@ pub mod pmu {
             pub const fn xpd_rf_circuit_variant(self) -> Option<XpdRfCircuit> {
                 XpdRfCircuit::from_bits((self.0 >> 16) & 0xffff)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -165123,6 +165242,13 @@ pub mod pmu {
             #[inline]
             pub const fn rstb_perif_i2c(self) -> bool {
                 (self.0 & 0x80000000) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 

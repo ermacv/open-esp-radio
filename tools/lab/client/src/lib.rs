@@ -23,4 +23,5 @@
 )]
 
 pub mod client;
+pub mod line;
 pub mod protocol;

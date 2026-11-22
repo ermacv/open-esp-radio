@@ -20,6 +20,9 @@ pub mod pbus;
 
 pub mod power_detector;
 
+/// The radio's power, clock and reset words for a diagnostic record.
+pub mod power_words;
+
 pub mod prelude;
 
 pub(crate) mod registration;

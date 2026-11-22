@@ -23,36 +23,24 @@ operations of the PHY crate and the HAL, in the radio system's order
 - RX enable and channel 13 at 20 MHz.
 
 It then starts the MAC on the receive ring's atoms, over a small ring of
-its own (8 descriptors and R, 256-octet buffers):
+its own (8 descriptors and R, 256-octet buffers), which it serves no frame
+of; its state is in the counters:
 - the first reset, the cold preparation with the walker's registers lent,
   the channel;
 - the core opened by the preparation's proof, the cold publication, the
   walker, the MAC's receive.
 
-It learns its peer from the first frame addressed to its station, served
-from that ring with every unit copied in place. Then it sends the rounds,
-12 000 of them. The rounds' length is the `End` record's.
+The probe speaks the HIL protocol (`console = "hil"`): its console serves
+the agent (`hil/agent`) and the sender's requests
+(`oer-hil-services-radio-pair`); the cases and the verdict are
+[`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s.
 
-| Record | Values |
+| Request | What the probe does |
 |---|---|
-| 1 up | |
-| 4 end | the rounds' microseconds |
-| 5 failed | phase, index |
-| 13 peer | the peer's address, its first two octets and its last four |
-| 15 sent (case C) | the case's tag; acknowledged by the frame before (none, then each case); ACK timeouts by the frame before; other ends |
-| 16 sent (cell E) | the case's tag, its protected length, acknowledged, ACK timeouts, other ends |
+| `snapshot-cold`, `bring-up`, `snapshot-up`, `receive-counters`, `stop` | as the receiver's ([`esp32s31-rx-ring`](../esp32s31-rx-ring/README.md)) |
+| `target` | the receiver's station address, which `round` sends to |
+| `round` | the given number of case C's rounds to the receiver, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds. A failed step answers where the rounds stopped: its phase and index, the round and the frame's case, the microseconds since the rounds began, the completion wait's bound (20 ms) and the ordinary queue as the MAC holds it (`ordinary_tx_queue_snapshot`: ownership, raised events, activity code, hang counters); afterwards `target` and `round` are refused (`StepFailed`), the frame possibly still the hardware's, and the snapshots, the counters and the stop answer |
 
-The console prints `MARK <n>` (70 the peer, 90 and 91 the rounds), then one
-line a record, `R <kind> <values…>`, then `OER-RESULT: pass case-c-sender`
-unless a failure was recorded.
-
-## Running
-
-Build with `cargo fw build esp32s31-case-c-sender --diagnostic` before the
-lease. The injector (`tools/lab/peers/esp32c5-wifi-injector`) teaches the
-sender its peer: frames to the sender's station from the receiver's address
-(`tasks/167`). The receiver is `esp32s31-rx-ring`; see its README for the
-three boards' lease.
-
-Every owner stays held until the leased host reset; the probe returns no
-reusable radio.
+With `--features ccmp`, `round` sends cell E's protected QoS cases instead;
+each case's ends are its first column, and a seal the protocol layer refused
+is answered as a failure.

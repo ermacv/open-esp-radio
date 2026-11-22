@@ -3,7 +3,7 @@
 // one worker that answers the AES requests in order on the engine.
 
 use oer::{AesEngine, AppResult, Boot, Console, Error, Peripherals, Started};
-use oer_hil_agent::{Inbox, Mailbox, answer};
+use oer_hil_agent::{Inbox, Mailbox, Records, answer};
 use oer_hil_services_aes::{Handler as _, Request};
 use static_cell::ConstStaticCell;
 
@@ -15,15 +15,22 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let engine = p.aes.engine(&mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let evidence = boot.evidence();
+    let records = Records {
+        reset_cause: evidence.reset_cause,
+        previous_panic: evidence.previous_panic,
+        previous_exception: evidence.previous_exception.map(|record| (record.trap, record.observed)),
+    };
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     Ok(boot.run(move || {
         oer_hil_agent::serve(
-        console,
-        evidence,
-        services::IMAGE,
-        outbox,
-        move || worker(engine, inbox),
-    )
+            console,
+            oer::boot_id(),
+            records,
+            services::IMAGE,
+            outbox,
+            Error::Console,
+            move || worker(engine, inbox),
+        )
     }))
 }
 

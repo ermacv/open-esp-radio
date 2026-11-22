@@ -46,6 +46,7 @@ mod around;
 pub mod build_log;
 pub mod cargo;
 pub mod compiler;
+pub mod console;
 mod critical_section;
 pub mod encode;
 pub mod esp_idf;

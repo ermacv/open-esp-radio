@@ -25,12 +25,6 @@ pub(crate) fn interrupt(part: &mut ConsoleInterrupt) {
     INTERRUPT.service(part);
 }
 
-/// Writes `bytes` as they are on the open console.
-pub(crate) async fn text(console: &mut Console, bytes: &[u8]) {
-    use embedded_io_async::Write as _;
-    let _ = console.write_all(bytes).await;
-}
-
 /// Why the console did not open.
 pub(crate) enum OpenError {
     /// The early writer kept the block.

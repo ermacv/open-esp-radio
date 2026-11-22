@@ -14,7 +14,7 @@ cover their APIs.
 | `chips/` | The hardware layers: `family/` what every chip of the family shares, `<chip>/` one chip's register model, PAC, HAL, PHY, drivers, compositions, bootstrap and application entry (`app`) |
 | `oer/` | The application entry an image uses (`oer`), its chip selected by the build |
 | `examples/` | Examples on the application entry |
-| `hil/` | Checks on hardware: images on the entry (`images/`), probes below it (`probes/`), test-only service vocabularies (`services/`), the HIL agent on the entry (`agent/`) and one host program per scenario (`scenarios/`) |
+| `hil/` | Checks on hardware: images on the entry (`images/`), probes below it (`probes/`), test-only service vocabularies (`services/`), the HIL agent that probes and images mount (`agent/`) and one host program per scenario (`scenarios/`). A probe differs from a scenario only in what it is allowed to use. A probe may use an API of any level, `unsafe` and any other means it needs; a scenario uses only the public API. The work between the DUT and the host is done through the HIL protocol and the agent. |
 | `docs/` | Cross-cutting documents; see the [index](README.md) |
 
 ## Workspace packages
@@ -78,8 +78,8 @@ hil/images/aes/
 hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
     esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
     esp32s31-register, esp32s31-rx-ring}/
-hil/scenarios/{aes, sdk-station, wifi-access-point}/
-hil/services/{aes, fault, sdk-station, wifi-access-point}/
+hil/scenarios/{aes, radio-pair, sdk-station, wifi-access-point}/
+hil/services/{aes, fault, radio-pair, sdk-station, wifi-access-point}/
 ```
 
 The workspace's `exclude` names the packages that stay as sources and are
@@ -191,8 +191,7 @@ network contract on the codec.
   `protocols/radio/coex`.
 - HAL production files that wait or poll are listed with exact counts:
   modules of `radio::bluetooth`, `system::boot`, `radio::ieee80211` and
-  `radio::phy`, and
-  `peripherals/entropy.rs`.
+  `radio::phy`.
 - A direct normal dependency on `embassy-sync` remains in
   `protocols/hil/agent`.
 

@@ -1,4 +1,5 @@
 //! Boot-time raw reset-cause reporting alongside retained diagnostics.
+pub use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
 use oer_chips_esp32s31_hal::{
     peripherals::reset_cause::{ResetCauseRegisters, ResetCauses},
     system::platform::Hart,

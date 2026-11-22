@@ -120,6 +120,10 @@ resets the board into its image, which stops what the command left running.
   opens the console and resets the chip into the image with an RTS pulse, then
   reads until `OER-RESULT: pass …` (exit 0), `OER-RESULT: fail …` (1) or the
   timeout (2): `--timeout`, or 30 s by default. The console goes to `target/fw/runs/<time>-<image>/log.txt`.
+  An image whose manifest declares `console = "hil"` in
+  `[package.metadata.open-radio]` prints no `OER-RESULT:`: `run` opens its
+  HIL link instead and exits 0 when the built image's boot says Hello within
+  the timeout, 2 otherwise; its verdict is its scenario's (`cargo hil run`).
 - `monitor` opens the console without a reset: RTS is released before DTR.
   `--start` resets it into its flashed image first.
 - `boards` lists each attached board, as the LAB service finds it, with the

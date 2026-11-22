@@ -7,20 +7,42 @@ use super::transmit::{Descriptor, Frames};
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
 #[cfg(not(feature = "ccmp"))]
-use crate::case_c::{CASES, ROUNDS, before_index, byte, order};
+use crate::case_c::{CASES, before_index, byte, order};
 
-/// What case C borrows from part two's series.
+/// What a round borrows.
 pub(super) struct AmsduParts<'a> {
     pub(super) frames: &'a Frames,
     pub(super) ordinary: &'a mut Descriptor,
     pub(super) station: [u8; 6],
     pub(super) peer: [u8; 6],
-    pub(super) journal: &'a mut Journal,
+    pub(super) rounds: u32,
 }
 
-/// The rounds, each frame awaited; per case: sent, acknowledged (status
-/// 0), ACK timeouts (status 5), other ends.
-pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
+/// A failed step of the rounds and the frame it was at.
+#[derive(Clone, Copy)]
+pub(super) struct RoundStop {
+    pub(super) failure: Failure,
+    /// The round, from zero.
+    pub(super) round: u32,
+    /// The frame's case.
+    pub(super) tag: u32,
+}
+
+/// The failure of a step at `round`'s frame of `case`.
+pub(super) fn at(round: u32, case: crate::case_c::Case) -> impl Fn(Failure) -> RoundStop {
+    move |failure| RoundStop {
+        failure,
+        round,
+        tag: case.tag(),
+    }
+}
+
+/// The rounds, each frame awaited; per case, by the frame before it:
+/// acknowledged (status 0), ACK timeouts (status 5), other ends.
+pub(super) async fn series(
+    parts: AmsduParts<'_>,
+    access: &mut RadioAccess,
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, RoundStop> {
     #[cfg(feature = "ccmp")]
     {
         super::ccmp::series(parts, access).await
@@ -33,27 +55,32 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
 
 /// Case C's rounds.
 #[cfg(not(feature = "ccmp"))]
-async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
+async fn rounds(
+    parts: AmsduParts<'_>,
+    access: &mut RadioAccess,
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, RoundStop> {
     let AmsduParts {
         frames,
         ordinary,
         station,
         peer,
-        journal,
+        rounds,
     } = parts;
-    mark(90);
     // Per case, by the frame before it (or none): acknowledged, ACK
     // timeouts, other ends.
     let mut ends = [[[0_u32; 3]; CASES.len() + 1]; CASES.len()];
-    for round in 0..ROUNDS {
+    for round in 0..rounds {
         for case in order(round) {
             let counter = case.counter(round);
             let length = case.length();
-            let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
-                byte(case, station, peer, counter, offset)
-            })?;
-            start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
-            let ended = await_completion(access, ordinary).await?;
+            let stop = at(round, case);
+            let lease = frames
+                .lease_frame(ORDINARY_SLOT, length, |offset| {
+                    byte(case, station, peer, counter, offset)
+                })
+                .map_err(&stop)?;
+            start(access, ordinary, lease, length, frames.power, TIMEOUT).map_err(&stop)?;
+            let ended = await_completion(access, ordinary).await.map_err(&stop)?;
             let at = CASES.iter().position(|each| *each == case);
             if let Some(cell) = at
                 .and_then(|at| ends.get_mut(at))
@@ -70,28 +97,14 @@ async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), F
             }
         }
     }
-    for (case, row) in CASES.iter().zip(&ends) {
-        // The tag; the acknowledged by the frame before; the ACK timeouts by
-        // the frame before; the other ends in all.
-        let mut values = [0_u32; 1 + 2 * (CASES.len() + 1) + 1];
-        // Laid out as the tag, the acknowledged, the timeouts, the other.
-        const TIMEOUTS: usize = 1 + CASES.len() + 1;
-        if let Some(tag) = values.first_mut() {
-            *tag = case.tag();
-        }
-        for (before, ends) in row.iter().enumerate() {
-            if let Some(cell) = values.get_mut(1 + before) {
-                *cell = ends[0];
-            }
-            if let Some(cell) = values.get_mut(TIMEOUTS + before) {
-                *cell = ends[1];
-            }
-            if let Some(cell) = values.last_mut() {
-                *cell = cell.saturating_add(ends[2]);
-            }
-        }
-        journal.record(Kind::AmsduSent, &values);
-    }
-    mark(91);
-    Ok(())
+    Ok(CASES
+        .iter()
+        .zip(&ends)
+        .map(|(case, row)| service::CaseEnds {
+            tag: case.tag(),
+            acknowledged: row.map(|ends| ends[0]),
+            timeouts: row.map(|ends| ends[1]),
+            other: row.iter().map(|ends| ends[2]).fold(0, u32::saturating_add),
+        })
+        .collect())
 }

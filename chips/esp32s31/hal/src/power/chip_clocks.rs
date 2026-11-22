@@ -30,6 +30,7 @@
 //! (the 160 MHz source before the modem PLL-source gate and after it on
 //! release) is the modem clock executor's.
 
+use crate::radio::phy::power_words::ModemBus;
 use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::HpSysClkrstPll160, instances, modem_lpcon::ModemLpconChipClocks,
     ownership::ChipClockPeripherals,
@@ -118,6 +119,30 @@ impl<'a, 'b> ClockWords<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host<'b>
     }
 }
 
+impl<P: Placement, Q: Placement> ClockWords<P, Q> {
+    /// The two words as the hardware has them, `MODEM_LPCON.CLK_CONF` only
+    /// behind the modem register bus `bus` proves open. Writes nothing.
+    fn observe(&self, bus: &ModemBus<'_>) -> ChipClockWords {
+        ChipClockWords {
+            hp_sys_clkrst_ref_160m_ctrl0: self.pll_f160m.read_ref_160m_ctrl0().record_word(),
+            modem_lpcon_clk_conf: match bus {
+                ModemBus::Open { proof: _, .. } => Some(self.lpcon.read_clk_conf().record_word()),
+                ModemBus::Closed => None,
+            },
+        }
+    }
+}
+
+/// The platform clock words for a diagnostic record.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ChipClockWords {
+    /// The 160 MHz PLL output's gate.
+    pub hp_sys_clkrst_ref_160m_ctrl0: u32,
+    /// The modem low-power clock gates; absent while the modem register bus
+    /// is closed: not read.
+    pub modem_lpcon_clk_conf: Option<u32>,
+}
+
 impl<P: Placement, Q: Placement> ClockGates for ClockWords<P, Q> {
     type References = PlatformClockHolds;
     fn set_clock(&mut self, clock: PlatformClock, on: bool) {
@@ -172,6 +197,20 @@ impl ChipClocks {
         // succeeds, without a runtime refusal or a panic in this API.
         let _ = CHIP_CLOCKS.install(ClockCounts::adopt(ClockWords::new(parts), psram));
         Self { _private: () }
+    }
+
+    /// The platform clock words as the hardware has them, the modem
+    /// low-power word only behind the radio's open modem register bus ([`crate::radio::domain::RadioDomain::observe_power`]). Writes
+    /// nothing and changes no count.
+    ///
+    /// # Errors
+    /// [`PlatformClockError`] while the words are lent to another context
+    /// (an operation this call interrupted, or another hart): its end
+    /// returns them.
+    pub fn observe(&self, bus: &ModemBus<'_>) -> Result<ChipClockWords, PlatformClockError> {
+        CHIP_CLOCKS
+            .lend(|counts| counts.gates().observe(bus))
+            .map_err(|_| PlatformClockError)
     }
 
     fn with(
