@@ -429,6 +429,11 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: [u8; 6]) -> See
     if from != sender {
         return Seen::Foreign;
     }
+    // The sender's `single` frame before case C's: its body bytes may read
+    // as a counter of some case.
+    if let Seen::Pattern { written } = pattern(frame, written, kind) {
+        return Seen::Pattern { written };
+    }
     let probe = if kind == 0x88 {
         Case::Amsdu2
     } else {
@@ -441,7 +446,7 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: [u8; 6]) -> See
     let Some((case, counter)) =
         counter.and_then(|counter| Some((Case::from_counter(counter)?, counter)))
     else {
-        return pattern(frame, written, kind);
+        return Seen::Foreign;
     };
     let length = case.length();
     // The bytes after the header are the MPDU without its FCS, rounded up to
@@ -1058,7 +1063,7 @@ async fn worker(
                 let (reset, parts, place) =
                     stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
                 let stopped = micros_since(began);
-                let handles = parts.ring.len() + 1 + spares.len();
+                let handles = parts.ring.len() + spares.len();
                 // T5: the next start from the cold preparation.
                 let began = EmbassyClock.now();
                 let mut clocked = WifiClocked::from_running(access, clocks_on);
