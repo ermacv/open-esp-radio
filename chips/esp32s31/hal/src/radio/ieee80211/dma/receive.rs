@@ -409,11 +409,10 @@ where
             lent
         });
         let (reserved, buffer) = arena.lend(reserved);
-        descriptors
-            .reserved
-            .publish_owned(Self::ARMED, buffer, Some(table.head));
+        // PROBE (tasks/361): R armed but linked to nothing; BASE is d0.
+        descriptors.reserved.publish_owned(Self::ARMED, buffer, None);
         walker.fence();
-        walker.write_base(table.reserved);
+        walker.write_base(table.head);
         walker.fence();
         let ring = Occupied::fill(
             place,

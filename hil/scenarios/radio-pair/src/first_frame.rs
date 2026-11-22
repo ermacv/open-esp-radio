@@ -10,6 +10,7 @@ use oer_hil_services_radio_pair::{
     Seat, SentOne, Single, Stop, Target, Targeted, Window, Windowed,
 };
 use oer_tools_hil_harness::{Cx, Failure};
+use std::time::Duration;
 
 use crate::{BRING_UP, RECEIVER, SENDER, STEP, keep, within};
 
@@ -216,6 +217,22 @@ fn boot(cx: &mut Cx<'_>, length: u16, sender: [u8; 6]) -> Result<Boot, Failure> 
         },
         within(WINDOW_MS),
     )?;
+    // PROBE (tasks/361, point 3): a turn (the stop, the reset after a stop,
+    // the cold start), then where the walker begins with one more frame.
+    let turned = cx.device(RECEIVER)?.call(
+        oer_hil_services_radio_pair::Turn { millis: 200 },
+        within(200).saturating_add(Duration::from_millis(200)),
+    )?;
+    let after_turn = cx.device(RECEIVER)?.call(ReceiveCounters, STEP)?;
+    let ended_again = cx.device(SENDER)?.call(Single { length: 300 }, STEP)?;
+    let after_again = cx.device(RECEIVER)?.call(ReceiveCounters, STEP)?;
+    let probe_turn = serde_json::json!({
+        "before": ring(&before)?,
+        "turned": turned,
+        "after_turn": ring(&after_turn)?,
+        "ended_again": ended_again,
+        "after_again": ring(&after_again)?,
+    });
     stop_receiver(cx)?;
     let status = match ended {
         SentOne::Ended { status } => status,
@@ -243,6 +260,7 @@ fn boot(cx: &mut Cx<'_>, length: u16, sender: [u8; 6]) -> Result<Boot, Failure> 
         "observed": seen,
         "predicted": expected,
         "as_predicted": seen == expected,
+        "probe_turn": probe_turn,
     })))
 }
 
