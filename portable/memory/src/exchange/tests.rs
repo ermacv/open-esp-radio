@@ -87,3 +87,24 @@ fn an_exchange_with_priority_wakers_answers_as_the_default_one() {
         Poll::Ready(Answered::Given(8))
     );
 }
+
+#[test]
+fn the_answer_s_arrival_is_awaited_apart_from_its_take() {
+    let mut exchange = Exchange::<u8, u16>::new();
+    let (mut asking, mut answering) = exchange.split();
+    assert!(asking.take().is_none(), "nothing before an answer");
+    assert_eq!(asking.hand(3), Ok(()));
+    assert!(poll(pin!(asking.arrived())).is_pending());
+    let Poll::Ready((request, reply)) = poll(pin!(answering.next())) else {
+        panic!("the request is handed");
+    };
+    reply.answer(u16::from(request) * 10);
+    assert_eq!(poll(pin!(asking.arrived())), Poll::Ready(()));
+    assert_eq!(
+        poll(pin!(asking.arrived())),
+        Poll::Ready(()),
+        "arrival takes nothing"
+    );
+    assert_eq!(asking.take(), Some(Answered::Given(30)));
+    assert!(asking.take().is_none(), "taken once");
+}

@@ -270,24 +270,28 @@ pub async fn run<P: Immediate, C: Requests, E: Read + Write>(
     let mut work = Work::Idle;
     let mut chunk = [0_u8; RX_CHUNK];
     loop {
-        // The answer is awaited only while a request is in work.
+        // The answer's arrival is awaited only while a request is in work;
+        // the answer is taken in the arm that writes it, so no future's
+        // output carries it.
         let read = match work {
             Work::Idle => Either::Second(endpoint.read(&mut chunk).await),
             Work::Handed(identity) => {
-                match select(mailbox.0.answered(), endpoint.read(&mut chunk)).await {
-                    Either::First(answered) => Either::First((identity, answered)),
+                match select(mailbox.0.arrived(), endpoint.read(&mut chunk)).await {
+                    Either::First(()) => Either::First(identity),
                     Either::Second(read) => Either::Second(read),
                 }
             }
         };
         match read {
-            Either::First((identity, answered)) => {
-                work = Work::Idle;
-                if let Some(trap) = writer
-                    .worker_answer(&mut endpoint, boot, identity, answered, platform)
-                    .await
-                {
-                    return Ended::Trap(trap);
+            Either::First(identity) => {
+                if let Some(answered) = mailbox.0.take() {
+                    work = Work::Idle;
+                    if let Some(trap) = writer
+                        .worker_answer(&mut endpoint, boot, identity, answered, platform)
+                        .await
+                    {
+                        return Ended::Trap(trap);
+                    }
                 }
             }
             Either::Second(Err(_)) => {}

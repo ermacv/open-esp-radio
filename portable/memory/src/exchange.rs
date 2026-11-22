@@ -116,11 +116,24 @@ impl<Q, A, N: QueueNotify, M: QueueNotify> Asking<'_, Q, A, N, M> {
         self.requests.try_send(request).map_err(|refused| refused.0)
     }
 
-    /// The answer of the request in work, once it comes back.
+    /// Waits until the answer of the request in work lies in its place,
+    /// without taking it: a loop that selects on it takes the answer where
+    /// it uses it ([`Self::take`]), so no future's output carries it.
+    pub async fn arrived(&mut self) {
+        self.answers.ready().await;
+    }
+
+    /// The answer in its place, taken; `None` before it arrived.
+    pub fn take(&self) -> Option<Answered<A>> {
+        self.answers.try_receive()
+    }
+
+    /// The answer of the request in work, once it comes back: for an asker
+    /// that only awaits it.
     pub async fn answered(&mut self) -> Answered<A> {
         loop {
-            self.answers.ready().await;
-            if let Some(answered) = self.answers.try_receive() {
+            self.arrived().await;
+            if let Some(answered) = self.take() {
                 return answered;
             }
         }
