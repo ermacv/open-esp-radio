@@ -4084,7 +4084,6 @@ const HAL_SEQUENCES: &[(&str, usize)] = &[
         "chips/esp32s31/hal/src/radio/ieee80211/init/cold/handshake.rs",
         8,
     ),
-    ("chips/esp32s31/hal/src/peripherals/entropy.rs", 2),
 ];
 
 /// The change that moves the driver code out of each HAL module, by path
@@ -4101,10 +4100,6 @@ const HAL_SEQUENCE_REMOVAL: &[(&str, &str)] = &[
     (
         "radio/ieee80211",
         "Wi-Fi hardware engine out of the HAL (#844, #848)",
-    ),
-    (
-        "peripherals/entropy.rs",
-        "the entropy read gap in a driver (#848)",
     ),
     ("phy", "PHY analog bus and delays in the PHY driver (#848)"),
 ];
@@ -4665,14 +4660,14 @@ const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
 const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 382, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
-    ("radio/ieee80211/dma/receive.rs", 1028, RX_RING_ATOMS),
+    ("radio/ieee80211/dma/receive.rs", 1031, RX_RING_ATOMS),
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
     ("radio/phy/i2c.rs", 713, PHY_DRIVER),
     ("radio/phy/i2c/commands.rs", 574, PHY_DRIVER),
-    ("radio/phy/restore.rs", 375, PHY_DRIVER),
-    ("radio/phy/temperature.rs", 177, PHY_DRIVER),
+    ("radio/phy/restore.rs", 371, PHY_DRIVER),
+    ("radio/phy/temperature.rs", 172, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
     ("radio/domain/transaction.rs", 532, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
@@ -5076,10 +5071,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("PbusAccess::is_busy", SAMPLED_BIT),
     ("PbusContext::wifi_baseband_enabled", SAMPLED_BIT),
     ("PhyI2cParallelAccess::is_busy", SAMPLED_BIT),
-    (
-        "PhyShortDelay::settle_micros",
-        "decision: whether a short settle was taken; no package yet (the PHY driver, with the PHY's poison)",
-    ),
     ("PllRegisters::calibration_done", SAMPLED_BIT),
     (
         "PowerBaselinePort::bus_matches",
@@ -6325,7 +6316,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         12,
         BY_P3,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 3, BY_PHY),
     ("chips/esp32s31/radio/phy/src/concurrent.rs", 22, BY_PHY),
     ("chips/esp32s31/radio/phy/src/diagnostic_path.rs", 1, BY_PHY),
     (
@@ -6549,6 +6539,9 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         3,
         BY_NONE,
     ),
+    // The unsupported CPU root's `SOC_CLK_SEL` code, the word the boot
+    // record carries (tasks/349).
+    ("chips/esp32s31/hal/src/system/boot/clock.rs", 1, BY_NONE),
     (
         "chips/esp32s31/hal/src/radio/coex/ports.rs",
         1,
@@ -9907,12 +9900,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         "R2 cleans the chip layers: family drivers and boot (tasks/312)",
-    ),
-    (
-        "chips/family/radio/phy/src/lib.rs",
-        "clippy::disallowed_methods",
-        1,
-        "a named settle of at most MAX_MICROS (20 µs), the one busy-wait the execution rules admit",
     ),
     (
         "chips/family/radio/phy/src/lib.rs",

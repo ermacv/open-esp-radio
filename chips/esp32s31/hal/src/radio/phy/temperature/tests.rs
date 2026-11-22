@@ -250,7 +250,7 @@ fn idle_resources_reject_calibration_before_capturing_fields() {
         TxDcPwdetPrepareError, TxIqToneControlPrepareError,
     };
     let clock = VirtualClock::new();
-    let mut port = Port::new(&clock);
+    let port = Port::new(&clock);
     let mut route = PhyRouteState::for_host_test();
     {
         let before = port.edges.clone();

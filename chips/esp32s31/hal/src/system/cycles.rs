@@ -5,8 +5,23 @@
 use oer_chips_family_boot::adoption::CpuHz;
 use oer_portable_time::settle::{SettleCounter, SettleLimit};
 
+/// The hertz of one cycle a microsecond.
+const MICRO_HZ: u32 = 1_000_000;
+
+/// The cycles of one microsecond at `hz`, rounded up so that a settle is
+/// never shorter than its limit. The quotient is at most 4 294, so the
+/// rounding cannot overflow.
+const fn per_micro(hz: u32) -> u32 {
+    let whole = hz / MICRO_HZ;
+    if hz % MICRO_HZ == 0 {
+        whole
+    } else {
+        whole.saturating_add(1)
+    }
+}
+
 /// The cycles of a microsecond at most: any rate a `u32` holds, rounded up.
-const MOST_CYCLES_PER_MICRO: u32 = u32::MAX.div_ceil(1_000_000);
+const MOST_CYCLES_PER_MICRO: u32 = per_micro(u32::MAX);
 
 // A settle's longest limit counted at the fastest rate fits a `u32`: the
 // product in `cycles` cannot overflow.
@@ -32,7 +47,7 @@ impl CycleCounter {
     /// The counter at the adopted rate `cpu`.
     pub const fn new(cpu: CpuHz) -> Self {
         Self {
-            per_micro: cpu.get().div_ceil(1_000_000),
+            per_micro: per_micro(cpu.get()),
         }
     }
 }
