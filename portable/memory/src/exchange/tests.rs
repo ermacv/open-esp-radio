@@ -108,3 +108,25 @@ fn the_answer_s_arrival_is_awaited_apart_from_its_take() {
     assert_eq!(asking.take(), Some(Answered::Given(30)));
     assert!(asking.take().is_none(), "taken once");
 }
+
+#[test]
+fn an_answered_request_owes_nothing_and_the_next_one_is_answered_too() {
+    let mut exchange = Exchange::<u8, u16>::new();
+    let (mut asking, mut answering) = exchange.split();
+    for request in [1, 2] {
+        assert_eq!(asking.hand(request), Ok(()));
+        let Poll::Ready((taken, reply)) = poll(pin!(answering.next())) else {
+            panic!("the request is handed");
+        };
+        assert_eq!(taken, request);
+        reply.answer(u16::from(request) * 100);
+        assert_eq!(
+            poll(pin!(asking.answered())),
+            Poll::Ready(Answered::Given(u16::from(request) * 100)),
+            "a given answer, never an unanswered one"
+        );
+    }
+    // Nothing more comes: no debt was left to pay.
+    assert!(poll(pin!(answering.next())).is_pending());
+    assert!(asking.take().is_none());
+}
