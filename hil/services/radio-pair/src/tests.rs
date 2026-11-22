@@ -140,6 +140,9 @@ fn every_request_fits_the_images_payload_bound() {
         encoded_length(&SnapshotUp { page: u8::MAX }),
         encoded_length(&Round { rounds: u32::MAX }),
         encoded_length(&Expect { sender: [0xff; 6] }),
+        encoded_length(&Target {
+            receiver: [0xff; 6],
+        }),
         encoded_length(&Window {
             millis: u32::MAX,
             record: Record::Chains,
@@ -159,7 +162,7 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // Five endpoints (two snapshots, the bring-up, the counters, the stop)
     // and their four answers: the two snapshots share their page.
     assert_eq!(shared.len(), 9);
-    // Each side's own: three endpoints and three answers, four and four.
-    assert_eq!(sender.len(), 9 + 6);
+    // Each side's own: two endpoints and two answers, four and four.
+    assert_eq!(sender.len(), 9 + 4);
     assert_eq!(receiver.len(), 9 + 8);
 }

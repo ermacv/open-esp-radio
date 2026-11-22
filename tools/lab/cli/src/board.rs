@@ -321,19 +321,41 @@ fn soak(
     })
 }
 
-/// The `@OK` (true) or `@ERR` (false) answer to `command` on `lines`, or
-/// `None` after `duration` ([`oer_tools_lab_client::peer::answer`]).
+/// Print `lines` until the `@OK` (true) or `@ERR` (false) answer to
+/// `command` in the peers' one grammar ([`oer_tools_lab_model::peer_line::parse`]), or
+/// `None` after `duration`. An answer naming another command, such as noise
+/// a peer read while it booted, is only printed.
 fn answer(
     lines: &mpsc::Receiver<Vec<u8>>,
     command: &str,
     duration: Duration,
     print: &mut dyn FnMut(&str),
 ) -> Option<bool> {
-    match oer_tools_lab_client::peer::answer(lines, command, duration, print) {
-        oer_tools_lab_client::peer::Answer::Accepted => Some(true),
-        oer_tools_lab_client::peer::Answer::Refused(_) => Some(false),
-        oer_tools_lab_client::peer::Answer::Unanswered => None,
+    let deadline = Instant::now() + duration;
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        match lines.recv_timeout(remaining) {
+            Ok(line) if line.is_empty() => {}
+            Ok(line) => {
+                let text = String::from_utf8_lossy(&line);
+                print(&text);
+                match oer_tools_lab_model::peer_line::parse(text.trim()) {
+                    Some(oer_tools_lab_model::peer_line::Line::Ok { command: about })
+                        if about.eq_ignore_ascii_case(command) =>
+                    {
+                        return Some(true);
+                    }
+                    Some(oer_tools_lab_model::peer_line::Line::Err { command: about, .. })
+                        if about.eq_ignore_ascii_case(command) =>
+                    {
+                        return Some(false);
+                    }
+                    _ => {}
+                }
+            }
+            Err(_) => return None,
+        }
     }
+    None
 }
 
 /// Send each of `commands` through `write` once the previous one was
@@ -538,6 +560,33 @@ mod tests {
         }
         std::mem::forget(sender);
         received
+    }
+
+    #[test]
+    fn a_peer_answer_ends_at_its_ok_or_err_line() {
+        let mut printed = Vec::new();
+        let ok = answer(
+            &lines(&["@READY", "@ERR n unknown", "@OK SYNC", "later"]),
+            "SYNC",
+            Duration::from_secs(1),
+            &mut |text| printed.push(text.to_owned()),
+        );
+        assert_eq!(ok, Some(true));
+        assert_eq!(printed, ["@READY", "@ERR n unknown", "@OK SYNC"]);
+        let err = answer(
+            &lines(&["@ERR BURST busy"]),
+            "BURST",
+            Duration::from_secs(1),
+            &mut |_| {},
+        );
+        assert_eq!(err, Some(false));
+        let silent = answer(
+            &lines(&["boot"]),
+            "SYNC",
+            Duration::from_millis(200),
+            &mut |_| {},
+        );
+        assert_eq!(silent, None);
     }
 
     #[test]

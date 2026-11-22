@@ -45,13 +45,11 @@ pub(crate) struct Choice {
     pub(crate) default_features: bool,
 }
 
-/// What the command line names of the stand: each role's board, and the
-/// injector's.
+/// What the command line names of the stand: each role's board.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Selection {
     /// `role=board`, or a bare board for a scenario of one device.
     pub(crate) boards: Vec<String>,
-    pub(crate) injector: Option<String>,
 }
 
 /// One device under test of the session. Declared in drop order: the link
@@ -95,16 +93,10 @@ impl SessionDevice {
 
 pub(crate) struct Session {
     devices: Vec<SessionDevice>,
-    equipment: std::rc::Rc<Equipment>,
+    /// The lease's client, which every board of the session shares.
+    client: std::rc::Rc<Mutex<Client>>,
     /// The checkout the scenario runs in.
     root: PathBuf,
-}
-
-/// What every board of the session shares: the lease's client and the
-/// injector's line, while the lease holds one.
-struct Equipment {
-    client: Mutex<Client>,
-    injector: Option<oer_tools_lab_client::peer::PeerLine>,
 }
 
 /// The choice a scenario's image was built with: a HIL image is a
@@ -127,7 +119,7 @@ pub(crate) fn package_choice(
 
 impl Session {
     /// Resolve each role's board (the one device under test of the image's
-    /// chip for a scenario of one), the injector's and the stand owner, then
+    /// chip for a scenario of one) and the stand owner, then
     /// build each role's image, lease the boards, write each image unless its
     /// board runs it, and open each link with a reset. A selection or an
     /// owner that cannot be resolved fails before the build.
@@ -138,7 +130,7 @@ impl Session {
     ) -> Result<Self> {
         let root = oer_tools_os_process::Checkout::discover("HIL scenario")?.root;
         let stand = Stand::load(&oer_tools_lab_model::path()?)?;
-        let (boards, injector, owner) = resolve(&stand, scenario, selection, || {
+        let (boards, owner) = resolve(&stand, scenario, selection, || {
             Ok(oer_tools_lab_arbiter::owner::from_environment()?.to_string())
         })?;
         let mut bundles = Vec::with_capacity(boards.len());
@@ -169,35 +161,19 @@ impl Session {
                 work: format!("hil {}", scenario.name),
                 scenarios: vec![scenario.name.to_owned()],
                 run: None,
-                claims: claims(
-                    &macs,
-                    injector.as_ref().map(|board| board.mac.as_str()),
-                    scenario,
-                ),
+                claims: claims(&macs, scenario),
                 maintenance: None,
                 divisible: false,
             },
             &mut |message| eprintln!("hil: {message}"),
         )?;
-        let injector = match &injector {
-            Some(board) => Some(oer_tools_lab_client::peer::PeerLine::open(client.start(
-                Operation::Console {
-                    board: board.mac.clone(),
-                    reset: false,
-                },
-            )?)),
-            None => None,
-        };
-        let equipment = std::rc::Rc::new(Equipment {
-            client: Mutex::new(client),
-            injector,
-        });
+        let client = std::rc::Rc::new(Mutex::new(client));
         let mut devices = Vec::with_capacity(boards.len());
         for ((board, role), (bundle, built, image_crc32)) in
             boards.iter().zip(scenario.roles()).zip(bundles)
         {
             let stand_board = StandBoard {
-                equipment: std::rc::Rc::clone(&equipment),
+                client: std::rc::Rc::clone(&client),
                 board: board.mac.clone(),
                 owner: owner.clone(),
             };
@@ -213,7 +189,7 @@ impl Session {
         }
         Ok(Self {
             devices,
-            equipment,
+            client,
             root,
         })
     }
@@ -243,18 +219,14 @@ impl Session {
         cleanup
     }
 
-    /// Close the links and the injector's line, and finish the lease: the
+    /// Close the links and finish the lease: the
     /// LAB service stops its operations and confirms the boards' end state,
     /// or says why not.
     pub(crate) fn release(&mut self) -> std::result::Result<(), String> {
         for device in &mut self.devices {
             drop(device.link.take());
         }
-        if let Some(injector) = &self.equipment.injector {
-            let _ = injector.cancel();
-        }
-        self.equipment
-            .client
+        self.client
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .release()
@@ -263,7 +235,7 @@ impl Session {
 
 /// A leased board, reached through the service.
 pub(crate) struct StandBoard {
-    equipment: std::rc::Rc<Equipment>,
+    client: std::rc::Rc<Mutex<Client>>,
     /// The board's MAC.
     board: String,
     owner: String,
@@ -271,10 +243,7 @@ pub(crate) struct StandBoard {
 
 impl StandBoard {
     fn client(&self) -> std::sync::MutexGuard<'_, Client> {
-        self.equipment
-            .client
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        self.client.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Run `operation` to its result, its output discarded.
@@ -338,28 +307,14 @@ impl finish::Board for StandBoard {
     ) -> std::result::Result<serde_json::Value, String> {
         self.run(Operation::Router { request })
     }
-
-    fn injector(
-        &self,
-        command: &str,
-        timeout: Duration,
-    ) -> std::result::Result<oer_tools_lab_client::peer::Answer, String> {
-        let Some(injector) = &self.equipment.injector else {
-            return Err("the scenario's lease holds no injector".to_owned());
-        };
-        injector.send(command, timeout, &mut |line| eprintln!("injector: {line}"))
-    }
 }
 
 /// What a run of `scenario` on the boards with `macs` leases: the boards,
-/// the injector's board when its cases command it, the router exclusively
+/// the router exclusively
 /// when its cases use it (they change its network), and the air as the
 /// scenario uses it, at least shared with the router.
-fn claims(macs: &[String], injector: Option<&str>, scenario: &Scenario) -> Vec<Claim> {
+fn claims(macs: &[String], scenario: &Scenario) -> Vec<Claim> {
     let mut claims = macs.iter().map(|mac| Claim::board(mac)).collect::<Vec<_>>();
-    if let Some(mac) = injector {
-        claims.push(Claim::board(mac));
-    }
     if scenario.router {
         claims.push(Claim::exclusive(ROUTER));
     }
@@ -390,15 +345,10 @@ fn build(root: &Path, image: &str, choice: &Choice) -> Result<ImageBundle> {
 }
 
 /// Each role's board on `stand` as `selection` names it (the one device
-/// under test of the image's chip for a scenario of one, named or not), the
-/// injector's board when the scenario commands one, and the owner `owner`
-/// resolves, in that order: everything a run needs from the stand before it
-/// builds anything.
-type Resolved = (
-    Vec<oer_tools_lab_model::Board>,
-    Option<oer_tools_lab_model::Board>,
-    String,
-);
+/// under test of the image's chip for a scenario of one, named or not) and
+/// the owner `owner` resolves, in that order: everything a run needs from
+/// the stand before it builds anything.
+type Resolved = (Vec<oer_tools_lab_model::Board>, String);
 
 fn resolve(
     stand: &Stand,
@@ -445,21 +395,7 @@ fn resolve(
             boards
         }
     };
-    let injector = match (scenario.injector, &selection.injector) {
-        (true, Some(selector)) => Some(named(selector)?),
-        (true, None) => {
-            return Err(
-                "the scenario commands the injector: name its board with --injector".into(),
-            );
-        }
-        (false, Some(selector)) => {
-            return Err(
-                format!("the scenario commands no injector, not --injector {selector}").into(),
-            );
-        }
-        (false, None) => None,
-    };
-    Ok((boards, injector, owner()?))
+    Ok((boards, owner()?))
 }
 
 /// The one board of the image's chip that may be a device under test.
@@ -512,12 +448,11 @@ mod tests {
         crate::Role::new("receiver", "esp32s31-rx-ring", &[]),
         crate::Role::new("sender", "esp32s31-case-c-sender", &[]),
     ];
-    const PAIR: Scenario = Scenario::with_roles("pair", PAIR_ROLES).using_injector();
+    const PAIR: Scenario = Scenario::with_roles("pair", PAIR_ROLES);
 
-    fn selecting(boards: &[&str], injector: Option<&str>) -> Selection {
+    fn selecting(boards: &[&str]) -> Selection {
         Selection {
             boards: boards.iter().map(|board| (*board).to_owned()).collect(),
-            injector: injector.map(str::to_owned),
         }
     }
 
@@ -529,7 +464,7 @@ mod tests {
     fn an_ambiguous_board_selection_fails_before_the_owner_or_the_build() {
         let stand = stand_with(2);
         let mut asked = false;
-        let error = resolve(&stand, &ONE, &selecting(&[], None), || {
+        let error = resolve(&stand, &ONE, &selecting(&[]), || {
             asked = true;
             Ok("owner".to_owned())
         })
@@ -539,7 +474,7 @@ mod tests {
             "{error}"
         );
         assert!(!asked, "the owner is asked only for a resolved board");
-        let error = resolve(&stand, &ONE, &selecting(&["dut-9"], None), || {
+        let error = resolve(&stand, &ONE, &selecting(&["dut-9"]), || {
             Ok("owner".to_owned())
         })
         .unwrap_err();
@@ -549,19 +484,16 @@ mod tests {
     #[test]
     fn a_named_or_single_board_resolves_with_its_owner() {
         let stand = stand_with(2);
-        let (boards, injector, owner) = resolve(&stand, &ONE, &selecting(&["dut-1"], None), || {
+        let (boards, owner) = resolve(&stand, &ONE, &selecting(&["dut-1"]), || {
             Ok("owner".to_owned())
         })
         .unwrap();
         assert_eq!((ids(&boards), owner.as_str()), (vec!["dut-1"], "owner"));
-        assert!(injector.is_none());
         let single = stand_with(1);
-        let (boards, ..) = resolve(&single, &ONE, &selecting(&[], None), || {
-            Ok("owner".to_owned())
-        })
-        .unwrap();
+        let (boards, ..) =
+            resolve(&single, &ONE, &selecting(&[]), || Ok("owner".to_owned())).unwrap();
         assert_eq!(ids(&boards), ["dut-0"]);
-        let error = resolve(&single, &ONE, &selecting(&[], None), || {
+        let error = resolve(&single, &ONE, &selecting(&[]), || {
             Err("no stand owner is registered".into())
         })
         .unwrap_err();
@@ -569,44 +501,27 @@ mod tests {
     }
 
     #[test]
-    fn each_role_names_its_board_and_an_injector_is_named_only_when_commanded() {
+    fn each_role_names_its_board() {
         let stand = stand_with(3);
         let owner = || Ok("owner".to_owned());
-        let (boards, injector, _) = resolve(
+        let (boards, _) = resolve(
             &stand,
             &PAIR,
-            &selecting(&["sender=dut-1", "receiver=dut-0"], Some("dut-2")),
+            &selecting(&["sender=dut-1", "receiver=dut-0"]),
             owner,
         )
         .unwrap();
         assert_eq!(ids(&boards), ["dut-0", "dut-1"], "the scenario's order");
-        assert_eq!(injector.map(|board| board.id), Some("dut-2".to_owned()));
         for (selection, expected) in [
+            (selecting(&["receiver=dut-0"]), "--board sender=<board>"),
             (
-                selecting(&["receiver=dut-0"], Some("dut-2")),
-                "--board sender=<board>",
-            ),
-            (
-                selecting(
-                    &["receiver=dut-0", "sender=dut-1", "other=dut-2"],
-                    Some("dut-2"),
-                ),
+                selecting(&["receiver=dut-0", "sender=dut-1", "other=dut-2"]),
                 "no role for --board other=dut-2",
-            ),
-            (
-                selecting(&["receiver=dut-0", "sender=dut-1"], None),
-                "name its board with --injector",
             ),
         ] {
             let error = resolve(&stand, &PAIR, &selection, owner).unwrap_err();
             assert!(error.to_string().contains(expected), "{error}");
         }
-        let error =
-            resolve(&stand, &ONE, &selecting(&["dut-0"], Some("dut-2")), owner).unwrap_err();
-        assert!(
-            error.to_string().contains("commands no injector"),
-            "{error}"
-        );
     }
 
     #[test]
@@ -614,13 +529,13 @@ mod tests {
         let mac = "02:00:00:00:00:01";
         let macs = [mac.to_owned()];
         let quiet = Scenario::new("aes", "hil-aes", &[]);
-        assert_eq!(claims(&macs, None, &quiet), [Claim::board(mac)]);
+        assert_eq!(claims(&macs, &quiet), [Claim::board(mac)]);
         assert_eq!(
-            claims(&macs, None, &quiet.using_air()),
+            claims(&macs, &quiet.using_air()),
             [Claim::board(mac), Claim::shared(AIR)]
         );
         assert_eq!(
-            claims(&macs, None, &quiet.using_router()),
+            claims(&macs, &quiet.using_router()),
             [
                 Claim::board(mac),
                 Claim::exclusive(ROUTER),
@@ -628,7 +543,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            claims(&macs, None, &quiet.using_router().using_air_exclusively()),
+            claims(&macs, &quiet.using_router().using_air_exclusively()),
             [
                 Claim::board(mac),
                 Claim::exclusive(ROUTER),
@@ -638,18 +553,17 @@ mod tests {
     }
 
     #[test]
-    fn a_pair_leases_both_boards_the_injector_and_the_air() {
+    fn a_pair_leases_both_boards_and_the_air() {
         let macs = [
             "02:00:00:00:00:01".to_owned(),
             "02:00:00:00:00:02".to_owned(),
         ];
         let pair = PAIR.using_air_exclusively();
         assert_eq!(
-            claims(&macs, Some("02:00:00:00:00:03"), &pair),
+            claims(&macs, &pair),
             [
                 Claim::board("02:00:00:00:00:01"),
                 Claim::board("02:00:00:00:00:02"),
-                Claim::board("02:00:00:00:00:03"),
                 Claim::exclusive(AIR)
             ]
         );
@@ -659,13 +573,13 @@ mod tests {
     fn two_router_runs_on_different_boards_conflict_on_the_router() {
         use oer_tools_lab_arbiter::claims::{conflict, normalize};
         let station = Scenario::new("wifi-station", "image", &[]).using_router();
-        let one = normalize(&claims(&["02:00:00:00:00:01".to_owned()], None, &station));
-        let other = normalize(&claims(&["02:00:00:00:00:02".to_owned()], None, &station));
+        let one = normalize(&claims(&["02:00:00:00:00:01".to_owned()], &station));
+        let other = normalize(&claims(&["02:00:00:00:00:02".to_owned()], &station));
         assert!(conflict(&one, &other), "both change the router's network");
         let quiet = Scenario::new("aes", "hil-aes", &[]);
         assert!(!conflict(
             &one,
-            &normalize(&claims(&["02:00:00:00:00:02".to_owned()], None, &quiet))
+            &normalize(&claims(&["02:00:00:00:00:02".to_owned()], &quiet))
         ));
     }
 }

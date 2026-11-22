@@ -560,7 +560,7 @@ fn a_case_reaches_each_device_by_its_role_and_an_unknown_role_is_incomplete() {
         check(boots == (20, 30), "the first device is the receiver")
     }
     fn unknown(cx: &mut Cx<'_>) -> Result<(), Failure> {
-        cx.device("injector").map(drop)
+        cx.device("observer").map(drop)
     }
     let (receiver, receiver_link) = Device::new(20);
     let (sender, sender_link) = Device::new(30);

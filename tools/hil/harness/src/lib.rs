@@ -109,9 +109,6 @@ pub struct Scenario {
     /// Whether its cases use the lab router ([`Cx::router`]): its lease
     /// then holds the router and the air, shared.
     pub(crate) router: bool,
-    /// Whether its cases use the stand's injector ([`Cx::injector`]): its
-    /// lease then holds the injector's board.
-    pub(crate) injector: bool,
 }
 
 impl Scenario {
@@ -128,7 +125,6 @@ impl Scenario {
             devices: Devices::One(Role::new("dut", image, services)),
             air: None,
             router: false,
-            injector: false,
         }
     }
 
@@ -140,7 +136,6 @@ impl Scenario {
             devices: Devices::Roles(roles),
             air: None,
             router: false,
-            injector: false,
         }
     }
 
@@ -173,15 +168,6 @@ impl Scenario {
     pub const fn using_router(self) -> Self {
         Self {
             router: true,
-            ..self
-        }
-    }
-
-    /// This scenario, whose cases command the stand's injector: the board
-    /// running the stand's injector firmware (`tools/lab/peers`).
-    pub const fn using_injector(self) -> Self {
-        Self {
-            injector: true,
             ..self
         }
     }
@@ -346,23 +332,6 @@ impl<'a> Cx<'a> {
             .dut
             .router(request)
             .map_err(|error| Failure::Incomplete(format!("the lab router: {error}")))
-    }
-
-    /// Write `command` to the stand's injector under the run's lease (a
-    /// scenario [`Scenario::using_injector`]) and wait up to `timeout` for
-    /// its answer: a refusal fails the case, no answer leaves it
-    /// incomplete.
-    pub fn injector(&self, command: &str, timeout: Duration) -> Result<(), Failure> {
-        match self.first.dut.injector(command, timeout) {
-            Ok(oer_tools_lab_client::peer::Answer::Accepted) => Ok(()),
-            Ok(oer_tools_lab_client::peer::Answer::Refused(line)) => Err(Failure::Fail(format!(
-                "the injector refused `{command}`: {line}"
-            ))),
-            Ok(oer_tools_lab_client::peer::Answer::Unanswered) => Err(Failure::Incomplete(
-                format!("the injector did not answer `{command}` within {timeout:?}"),
-            )),
-            Err(error) => Err(Failure::Incomplete(format!("the injector: {error}"))),
-        }
     }
 }
 
@@ -560,9 +529,6 @@ struct Arguments {
     /// several devices names each role's: `--board <role>=<board>`, repeated.
     #[arg(long = "board")]
     boards: Vec<String>,
-    /// The board of the stand's injector, for a scenario that commands it.
-    #[arg(long)]
-    injector: Option<String>,
     /// Run only this case. May be repeated.
     #[arg(long = "case")]
     cases: Vec<String>,
@@ -608,7 +574,6 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
     };
     let selection = stand::Selection {
         boards: arguments.boards.clone(),
-        injector: arguments.injector.clone(),
     };
     let (outcomes, cleanup) = match stand::Session::open(scenario, &selection, &choice) {
         Ok(mut session) => {

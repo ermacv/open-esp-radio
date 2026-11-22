@@ -1,7 +1,8 @@
 //! The HIL radio pair: two ESP32-S31 boards, the receiver
-//! (`esp32s31-rx-ring`) and the sender (`esp32s31-case-c-sender`), and the
-//! stand's injector, which teaches the sender its peer. Every step is a
-//! request the device answers; the cases and the verdict are this program's.
+//! (`esp32s31-rx-ring`) and the sender (`esp32s31-case-c-sender`). The host
+//! tells each its peer's station address, which the other's bring-up
+//! answered. Every step is a request the device answers; the cases and the
+//! verdict are this program's.
 //!
 //! Each boot's snapshots (before and after the bring-up) and the receive
 //! counters at each window's end are kept as measurements, so that
@@ -21,13 +22,13 @@
 use std::{
     process::ExitCode,
     sync::{Mutex, PoisonError},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use oer_hil_services_radio_pair::{
-    self as service, BringUp, BroughtUp, Counters, Expect, Expecting, Listen, Listening, Peer,
-    PeerHeard, ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold,
-    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Turn, Turned, Window, Windowed,
+    self as service, BringUp, BroughtUp, Counters, Expect, Expecting, ReceiveCounters,
+    ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold, SnapshotPage, SnapshotUp,
+    Stall, Stood, Stop, Stopped, Target, Targeted, Turn, Turned, Window, Windowed,
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Role, Scenario, check};
@@ -40,9 +41,7 @@ const ROLES: &[Role] = &[
     Role::new(SENDER, "esp32s31-case-c-sender", &[SenderRequest::KEYS]),
 ];
 
-const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES)
-    .using_air_exclusively()
-    .using_injector();
+const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES).using_air_exclusively();
 
 const CASES: [Case; 5] = [
     Case {
@@ -72,13 +71,10 @@ const STEP: Duration = Duration::from_secs(5);
 /// The bring-up: the PHY's registration and calibration, the MAC's cold
 /// start, the channel.
 const BRING_UP: Duration = Duration::from_secs(30);
-/// An injector command, its burst included.
-const INJECTOR: Duration = Duration::from_secs(30);
-/// How long the sender may take to hear the injector's burst.
-const HEAR: Duration = Duration::from_secs(3);
-/// Case C's rounds (`case_c::ROUNDS`), and how long they may take.
-const ROUNDS: u32 = 12_000;
-const ROUNDS_TIMEOUT: Duration = Duration::from_secs(600);
+/// Case C's rounds, and how long they may take: about 45 s, past R4's end
+/// (about 30 s); R1 to R4 take their counts inside their own windows.
+const ROUNDS: u32 = 6_000;
+const ROUNDS_TIMEOUT: Duration = Duration::from_secs(300);
 /// The receiver's windows (`tasks/277`, `281`).
 const WINDOW_MS: u32 = 2_000;
 const STALL_MS: u32 = 100;
@@ -211,52 +207,14 @@ fn addresses() -> Result<Addresses, Failure> {
         .ok_or_else(|| Failure::Incomplete("no bring-up gave the addresses".to_owned()))
 }
 
-/// `address` as the injector reads one.
-fn colon(address: [u8; 6]) -> String {
-    address
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join(":")
-}
-
-/// The sender learns its peer from the injector's burst, sent after it
-/// acknowledged that it listens; the receiver is told its sender.
+/// Each board told its peer: the sender its receiver, the receiver its
+/// sender, by the addresses their bring-ups answered.
 fn peer(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let Addresses { receiver, sender } = addresses()?;
-    cx.injector("SYNC", INJECTOR)?;
-    cx.injector("MODE 13 20 6m", INJECTOR)?;
-    match cx.device(SENDER)?.call(Listen, STEP)? {
-        Listening::Listening => {}
-        other => return Err(Failure::Fail(format!("sender: listen: {other:?}"))),
+    match cx.device(SENDER)?.call(Target { receiver }, STEP)? {
+        Targeted::Targeted => {}
+        other => return Err(Failure::Fail(format!("sender: target: {other:?}"))),
     }
-    cx.injector(
-        &format!(
-            "TX 300 10000 512 {} {} {} 0",
-            colon(sender),
-            colon(receiver),
-            colon(receiver)
-        ),
-        INJECTOR,
-    )?;
-    let began = Instant::now();
-    let heard = loop {
-        match cx.device(SENDER)?.call(Peer, STEP)? {
-            PeerHeard::Heard(peer) => break peer,
-            PeerHeard::NotHeard if began.elapsed() < HEAR => {
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            other => return Err(Failure::Fail(format!("sender: peer: {other:?}"))),
-        }
-    };
-    check(
-        heard == receiver,
-        format!(
-            "the sender learned {} as its peer, not the receiver's {}",
-            colon(heard),
-            colon(receiver)
-        ),
-    )?;
     match cx.device(RECEIVER)?.call(Expect { sender }, STEP)? {
         Expecting::Expecting => Ok(()),
         other => Err(Failure::Fail(format!("receiver: expect: {other:?}"))),

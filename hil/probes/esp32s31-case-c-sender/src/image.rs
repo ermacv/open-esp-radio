@@ -1,9 +1,9 @@
 //! The sender's boot and its radio session: Wi-Fi brought up over the radio
 //! domain the probe holds (`radio`), the MAC started on the receive ring's
 //! atoms over a small ring of its own, then each step the host's program
-//! (`hil/scenarios/radio-pair`) asks for over the HIL protocol: the peer
-//! learned from the first frame addressed to the station after the host's
-//! `listen`, then case C's rounds (`amsdu`) or cell E's (`ccmp`).
+//! (`hil/scenarios/radio-pair`) asks for over the HIL protocol: the
+//! receiver's address the host names (`target`), then case C's rounds
+//! (`amsdu`) or cell E's (`ccmp`).
 use crate::pair;
 use crate::radio::{
     Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up,
@@ -23,7 +23,7 @@ use oer_chips_esp32s31_hal::{
     power::ChipClocks,
     radio::ieee80211::{
         dma::{
-            receive::{RxDescriptors, RxRing, RxRingParts, RxTable, Unit},
+            receive::{RxDescriptors, RxRing, RxRingParts, RxTable},
             space::ChipDma,
         },
         registers::WifiRxDmaRegisters,
@@ -46,8 +46,8 @@ use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_hil_protocol::RequestIdentity;
 
 /// The sender's receive ring: eight descriptors and R, each buffer of 256
-/// octets with the 64-octet header below its floor. It serves the learning
-/// of the peer only, every unit copied in place.
+/// octets with the 64-octet header below its floor. The MAC's start takes
+/// it; the sender serves no frame of it, and the counters report its state.
 const RING: usize = 8;
 const SIZE: usize = 256;
 const BUFFERS: usize = RING + 1;
@@ -419,8 +419,7 @@ fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
             answer(identity, &service::Counters::Refused(refusal));
         }
         SenderRequest::Stop(_) => answer(identity, &service::Stopped::Refused(refusal)),
-        SenderRequest::Listen(_) => answer(identity, &service::Listening::Refused(refusal)),
-        SenderRequest::Peer(_) => answer(identity, &service::PeerHeard::Refused(refusal)),
+        SenderRequest::Target(_) => answer(identity, &service::Targeted::Refused(refusal)),
         SenderRequest::Round(_) => answer(identity, &service::Sent::Refused(refusal)),
     }
 }
@@ -440,16 +439,6 @@ async fn down(
             other => refuse(identity, other, Refusal::Down),
         }
     }
-}
-
-/// Where the sender is in learning its peer.
-#[derive(Clone, Copy)]
-enum Learning {
-    /// The host did not ask it to listen.
-    Deaf,
-    /// Listening: the peer is the sender of the first frame to the station.
-    Listening,
-    Heard([u8; 6]),
 }
 
 /// The sender's worker: each step the host asks for, in its order.
@@ -565,7 +554,8 @@ async fn worker(
         Ok(readings) => readings,
         Err(_) => cold.clone(),
     };
-    let mut learning = Learning::Deaf;
+    // The receiver the host named, absent until its `target`.
+    let mut receiver = None;
     loop {
         let (id, request) = inbox.next().await;
         match request {
@@ -578,44 +568,13 @@ async fn worker(
                 id,
                 &pair::counters(&access, ring.standing(), ring.descriptor_controls()),
             ),
-            SenderRequest::Listen(_) => {
-                // Frames that came before the acknowledgement are not the
-                // peer's teaching: the ring is drained first.
-                match drain(&mut ring, cycles) {
-                    Ok(()) => {
-                        learning = Learning::Listening;
-                        answer(id, &service::Listening::Listening);
-                    }
-                    Err(index) => answer(
-                        id,
-                        &service::Listening::Failed(service::Failure {
-                            phase: transmit::tx_phase::PEER,
-                            index,
-                        }),
-                    ),
-                }
+            SenderRequest::Target(request) => {
+                receiver = Some(request.receiver);
+                answer(id, &service::Targeted::Targeted);
             }
-            SenderRequest::Peer(_) => match learning {
-                Learning::Deaf => answer(id, &service::PeerHeard::Refused(Refusal::NoPeer)),
-                Learning::Heard(peer) => answer(id, &service::PeerHeard::Heard(peer)),
-                Learning::Listening => match heard(&mut ring, station, cycles) {
-                    Ok(Some(peer)) => {
-                        learning = Learning::Heard(peer);
-                        answer(id, &service::PeerHeard::Heard(peer));
-                    }
-                    Ok(None) => answer(id, &service::PeerHeard::NotHeard),
-                    Err(index) => answer(
-                        id,
-                        &service::PeerHeard::Failed(service::Failure {
-                            phase: transmit::tx_phase::PEER,
-                            index,
-                        }),
-                    ),
-                },
-            },
             SenderRequest::Round(request) => {
-                let Learning::Heard(peer) = learning else {
-                    answer(id, &service::Sent::Refused(Refusal::NoPeer));
+                let Some(peer) = receiver else {
+                    answer(id, &service::Sent::Refused(Refusal::NoReceiver));
                     continue;
                 };
                 let began = EmbassyClock.now();
@@ -673,74 +632,4 @@ async fn worker(
             }
         }
     }
-}
-
-/// Serve the ring once and drop what it held.
-///
-/// # Errors
-/// The ring's anomaly, as a failure's index.
-fn drain(
-    ring: &mut Ring,
-    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
-) -> Result<(), u32> {
-    let served = ring.serve(&cycles, |view| {
-        while let Some(unit) = view.next_unit() {
-            let mut head = [0_u8; 16];
-            let _copied = match unit {
-                Unit::Single(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-                Unit::Chain(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-            };
-        }
-    });
-    served.map_err(|(anomaly, ())| anomaly_code(anomaly))
-}
-
-/// Serve the ring once: the sender of the first frame to `station`, if one
-/// came, every unit copied in place.
-///
-/// # Errors
-/// The ring's anomaly, as a failure's index.
-fn heard(
-    ring: &mut Ring,
-    station: [u8; 6],
-    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
-) -> Result<Option<[u8; 6]>, u32> {
-    let served = ring.serve(&cycles, |view| {
-        let mut found = None;
-        while let Some(unit) = view.next_unit() {
-            let mut head = [0_u8; 16];
-            let copied = match unit {
-                Unit::Single(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-                Unit::Chain(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-            };
-            if found.is_none()
-                && copied == head.len()
-                && let Some((to, from)) = addresses(&head)
-                && to == station
-            {
-                found = Some(from);
-            }
-        }
-        found
-    });
-    served.map_err(|(anomaly, _)| anomaly_code(anomaly))
-}
-
-/// A ring anomaly's code in a failure's index.
-fn anomaly_code(
-    anomaly: oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::RingAnomaly,
-) -> u32 {
-    use oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::RingAnomaly;
-    match anomaly {
-        RingAnomaly::Length { word } => 0x1000_0000 | (word.length() as u32),
-        RingAnomaly::DoorbellPending => 0x2000_0000,
-    }
-}
-
-/// A frame's Address 1 and Address 2, from its first 16 octets.
-pub(crate) fn addresses(frame: &[u8; 16]) -> Option<([u8; 6], [u8; 6])> {
-    Some((
-        frame.get(4..10)?.try_into().ok()?,
-        frame.get(10..16)?.try_into().ok()?,
-    ))
 }

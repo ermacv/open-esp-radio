@@ -13,8 +13,9 @@
 //!    counter every [`PERIOD`] octets, so that every buffer of a chain names
 //!    its frame.
 
-/// The rounds the sender sends, one frame of each case a round.
-pub const ROUNDS: u32 = 12_000;
+/// The rounds the radio pair's scenario asks for (`hil/scenarios/radio-pair`),
+/// one frame of each case a round: the order's tests run over them.
+pub const ROUNDS: u32 = 6_000;
 /// The QoS Data header: Frame Control, Duration, three addresses, Sequence
 /// Control, QoS Control (IEEE 802.11-2020 9.3.2.1).
 pub const QOS_HEADER: usize = 26;

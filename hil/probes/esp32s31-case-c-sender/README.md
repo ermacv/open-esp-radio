@@ -23,7 +23,8 @@ operations of the PHY crate and the HAL, in the radio system's order
 - RX enable and channel 13 at 20 MHz.
 
 It then starts the MAC on the receive ring's atoms, over a small ring of
-its own (8 descriptors and R, 256-octet buffers):
+its own (8 descriptors and R, 256-octet buffers), which it serves no frame
+of; its state is in the counters:
 - the first reset, the cold preparation with the walker's registers lent,
   the channel;
 - the core opened by the preparation's proof, the cold publication, the
@@ -37,9 +38,8 @@ the agent (`hil/agent`) and the sender's requests
 | Request | What the probe does |
 |---|---|
 | `snapshot-cold`, `bring-up`, `snapshot-up`, `receive-counters`, `stop` | as the receiver's ([`esp32s31-rx-ring`](../esp32s31-rx-ring/README.md)) |
-| `listen` | drains its ring, then learns as its peer the sender of the first frame to its station that comes after this answer |
-| `peer` | serves its ring once and answers the peer it heard, or that it heard none yet, without waiting |
-| `round` | the given number of case C's rounds to the peer, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds |
+| `target` | the receiver's station address, which `round` sends to |
+| `round` | the given number of case C's rounds to the receiver, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds |
 
 With `--features ccmp`, `round` sends cell E's protected QoS cases instead;
 each case's ends are its first column, and a seal the protocol layer refused

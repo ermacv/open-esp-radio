@@ -21,13 +21,6 @@ pub(crate) trait Board {
     fn connect(&self) -> Result<Link, String>;
     /// Run `request` on the lab router under the run's lease.
     fn router(&self, request: RouterOperation) -> Result<serde_json::Value, String>;
-    /// Write `command` to the stand's injector under the run's lease and
-    /// wait up to `timeout` for its answer.
-    fn injector(
-        &self,
-        command: &str,
-        timeout: Duration,
-    ) -> Result<oer_tools_lab_client::peer::Answer, String>;
 }
 
 /// How long finishing waits for the device.

@@ -79,8 +79,6 @@ pub(crate) struct FakeBoard {
     pub routed: std::cell::RefCell<Vec<oer_tools_lab_client::protocol::RouterOperation>>,
     pub router:
         fn(&oer_tools_lab_client::protocol::RouterOperation) -> Result<serde_json::Value, String>,
-    /// How the stand's injector answers a command.
-    pub injector: fn(&str) -> Result<oer_tools_lab_client::peer::Answer, String>,
 }
 
 impl FakeBoard {
@@ -94,7 +92,6 @@ impl FakeBoard {
             hellos_lost: Cell::new(0),
             routed: std::cell::RefCell::new(Vec::new()),
             router: |_| Err("no router".to_owned()),
-            injector: |_| Err("no injector".to_owned()),
         }
     }
 }
@@ -116,14 +113,6 @@ impl Rung for FakeRung<'_> {
 }
 
 impl Board for FakeBoard {
-    fn injector(
-        &self,
-        command: &str,
-        _: std::time::Duration,
-    ) -> Result<oer_tools_lab_client::peer::Answer, String> {
-        (self.injector)(command)
-    }
-
     fn router(
         &self,
         request: oer_tools_lab_client::protocol::RouterOperation,

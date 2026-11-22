@@ -14,8 +14,8 @@
 //!
 //! Both images serve [`Radio`]'s endpoints: the bring-up, the stop, the
 //! boot's two snapshots and the receive path's counters. The sender
-//! (`esp32s31-case-c-sender`) adds [`Sender`]'s (listen, peer, round); the
-//! receiver (`esp32s31-rx-ring`) adds [`Receiver`]'s (expect, window,
+//! (`esp32s31-case-c-sender`) adds its own (target, round); the
+//! receiver (`esp32s31-rx-ring`) adds its own (expect, window,
 //! stall, turn). No endpoint waits for the host: each answers what its
 //! hardware did, a wait inside a handler bounded by its hardware's source
 //! or by the duration the request names.
@@ -47,10 +47,8 @@ oer_protocols_hil_protocol::messages! {
     topic Counters = "radio-pair/counters";
     endpoint Stop = "radio-pair/stop" => Stopped;
     topic Stopped = "radio-pair/stopped";
-    endpoint Listen = "radio-pair/listen" => Listening;
-    topic Listening = "radio-pair/listening";
-    endpoint Peer = "radio-pair/peer" => PeerHeard;
-    topic PeerHeard = "radio-pair/peer-heard";
+    endpoint Target = "radio-pair/target" => Targeted;
+    topic Targeted = "radio-pair/targeted";
     endpoint Round = "radio-pair/round" => Sent;
     topic Sent = "radio-pair/sent";
     endpoint Expect = "radio-pair/expect" => Expecting;
@@ -75,8 +73,8 @@ pub enum Refusal {
     Down,
     /// The receiver was not told its sender ([`Expect`]).
     NoSender,
-    /// The sender did not listen ([`Listen`]) or learned no peer yet.
-    NoPeer,
+    /// The sender was not told its receiver ([`Target`]).
+    NoReceiver,
     /// A snapshot page past the last.
     NoSuchPage,
 }
@@ -371,33 +369,21 @@ pub enum Stopped {
     Refused(Refusal),
 }
 
-/// Learn the peer from the first frame to the station after this
-/// acknowledgement.
+/// Send to `receiver`: the receiver's station address the host names, as
+/// [`Expect`] names the receiver its sender.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct Listen;
+pub struct Target {
+    pub receiver: [u8; 6],
+}
 
-/// The answer to [`Listen`].
+/// The answer to [`Target`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub enum Listening {
-    Listening,
-    Failed(Failure),
+pub enum Targeted {
+    Targeted,
     Refused(Refusal),
 }
 
-/// Serve the ring once and say whether the peer is heard, without waiting.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub struct Peer;
-
-/// The answer to [`Peer`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
-pub enum PeerHeard {
-    Heard([u8; 6]),
-    NotHeard,
-    Failed(Failure),
-    Refused(Refusal),
-}
-
-/// Send `rounds` of case C to the peer: one frame of each case a round,
+/// Send `rounds` of case C to the receiver: one frame of each case a round,
 /// each awaited, in the round's drawn order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Round {
@@ -429,8 +415,8 @@ pub struct CaseEnds {
     pub other: u32,
 }
 
-/// Count the frames from `sender`: the sender the host names, never
-/// learned from the first frame.
+/// Count the frames from `sender`: the sender's station address the host
+/// names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Expect {
     pub sender: [u8; 6],
@@ -555,8 +541,7 @@ oer_protocols_hil_agent::requests! {
         BringUp(BringUp),
         ReceiveCounters(ReceiveCounters),
         Stop(Stop),
-        Listen(Listen),
-        Peer(Peer),
+        Target(Target),
         Round(Round),
     }
 }

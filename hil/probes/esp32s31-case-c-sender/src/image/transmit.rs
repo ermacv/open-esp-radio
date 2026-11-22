@@ -52,7 +52,6 @@ oer_chips_esp32s31_hal::dma_static! {
 /// The phases the transmit half's failures name.
 pub(super) mod tx_phase {
     pub const POOL: u32 = 30;
-    pub const PEER: u32 = 31;
     pub const FRAME: u32 = 32;
     pub const START: u32 = 33;
     pub const COMPLETION: u32 = 34;

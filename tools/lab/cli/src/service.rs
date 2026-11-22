@@ -135,5 +135,20 @@ pub(crate) fn run(client: &mut Client, operation: Operation) -> Result<serde_jso
 /// The lines of a console stream, each without its line ending; the channel
 /// ends with the stream.
 pub(crate) fn lines(console: Running) -> mpsc::Receiver<Vec<u8>> {
-    oer_tools_lab_client::peer::lines(console)
+    let (send, lines) = mpsc::channel();
+    std::thread::spawn(move || {
+        use std::io::BufRead as _;
+        for line in std::io::BufReader::new(console).split(b'\n') {
+            let Ok(mut line) = line else {
+                break;
+            };
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    lines
 }

@@ -12,8 +12,8 @@ The ring:
 - the other 15 buffers are the spares a single is lent for;
 - case C's 700- and 1 500-octet frames are chains of 3 and 7 descriptors.
 
-A frame is the sender's when it is to the station, from the sender learned
-first, with Frame Control one of the cases'. It is then checked:
+A frame is the sender's when it is to the station, from the sender the host
+named (`expect`), with Frame Control one of the cases'. It is then checked:
 - every byte the sender sets agrees (Duration, Sequence Control and Retry
   are the MAC's);
 - its length agrees with its case's: the bytes after the header are the
