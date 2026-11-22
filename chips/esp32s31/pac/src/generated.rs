@@ -133475,6 +133475,53 @@ pub mod modem_etm {
 ///
 /// The modem low-power controller: the modem's low-power clocks, their sources and dividers, and its low-power resets.
 pub mod modem_lpcon {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
+        ///
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        /// The declared values of the `ICG_STATE_MAP` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum IcgStateMap {
+            /// ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.
+            NogatingSleep = 0x1,
+            /// ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.
+            NogatingModem = 0x2,
+            /// ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.
+            NogatingActive = 0x4,
+        }
+
+        impl IcgStateMap {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x1 => Some(Self::NogatingSleep),
+                    0x2 => Some(Self::NogatingModem),
+                    0x4 => Some(Self::NogatingActive),
+                    _ => None,
+                }
+            }
+        }
+
+        impl From<IcgStateMap> for oer_portable_mmio::Bits<4> {
+            #[inline]
+            fn from(value: IcgStateMap) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
+    }
+
     /// The `TEST_CONF` register.
     pub mod test_conf {
         /// The bits of the register's declared fields.
@@ -134520,10 +134567,24 @@ pub mod modem_lpcon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
+            /// The `CLK_WIFIPWR_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_wifipwr_st_map_variant(
+                self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            }
+
             /// Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization.
             #[inline]
             pub const fn clk_coex_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// The `CLK_COEX_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_coex_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
             /// Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization.
@@ -134532,10 +134593,26 @@ pub mod modem_lpcon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
+            /// The `CLK_I2C_MST_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_i2c_mst_st_map_variant(
+                self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            }
+
             /// Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization.
             #[inline]
             pub const fn clk_lp_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `CLK_LP_APB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_lp_apb_st_map_variant(
+                self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
         }
 
@@ -134555,10 +134632,26 @@ pub mod modem_lpcon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
+            /// The `CLK_WIFIPWR_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_wifipwr_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            }
+
             /// Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization.
             #[inline]
             pub const fn clk_coex_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// The `CLK_COEX_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_coex_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
             /// Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization.
@@ -134567,10 +134660,26 @@ pub mod modem_lpcon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
+            /// The `CLK_I2C_MST_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_i2c_mst_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            }
+
             /// Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization.
             #[inline]
             pub const fn clk_lp_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `CLK_LP_APB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_lp_apb_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -145693,6 +145802,50 @@ pub mod modem_syscon {
                 }
             }
         }
+
+        /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
+        ///
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        /// The declared values of the `ICG_STATE_MAP` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum IcgStateMap {
+            /// ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.
+            NogatingSleep = 0x1,
+            /// ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.
+            NogatingModem = 0x2,
+            /// ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.
+            NogatingActive = 0x4,
+        }
+
+        impl IcgStateMap {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x1 => Some(Self::NogatingSleep),
+                    0x2 => Some(Self::NogatingModem),
+                    0x4 => Some(Self::NogatingActive),
+                    _ => None,
+                }
+            }
+        }
+
+        impl From<IcgStateMap> for oer_portable_mmio::Bits<4> {
+            #[inline]
+            fn from(value: IcgStateMap) -> Self {
+                oer_portable_mmio::Bits::truncate(value.bits())
+            }
+        }
     }
 
     /// The `TEST_CONF` register.
@@ -146999,10 +147152,22 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
             }
 
+            /// The `CLK_ZB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_zb_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
+            }
+
             /// Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_fe_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// The `CLK_FE_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_fe_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
             }
 
             /// Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization.
@@ -147011,10 +147176,22 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
+            /// The `CLK_BT_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_bt_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            }
+
             /// Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_wifi_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// The `CLK_WIFI_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_wifi_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
             /// Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization.
@@ -147023,10 +147200,26 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
+            /// The `CLK_MODEM_PERI_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_modem_peri_st_map_variant(
+                self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            }
+
             /// Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_modem_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `CLK_MODEM_APB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_modem_apb_st_map_variant(
+                self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
         }
 
@@ -147046,10 +147239,22 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
             }
 
+            /// The `CLK_ZB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_zb_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
+            }
+
             /// Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_fe_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
+            }
+
+            /// The `CLK_FE_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_fe_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
             }
 
             /// Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization.
@@ -147058,10 +147263,24 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
+            /// The `CLK_BT_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_bt_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            }
+
             /// Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_wifi_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
+            }
+
+            /// The `CLK_WIFI_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_wifi_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
             /// Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization.
@@ -147070,10 +147289,26 @@ pub mod modem_syscon {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
             }
 
+            /// The `CLK_MODEM_PERI_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_modem_peri_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            }
+
             /// Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization.
             #[inline]
             pub const fn clk_modem_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
+            }
+
+            /// The `CLK_MODEM_APB_ST_MAP` field as its declared value, if it is one.
+            #[inline]
+            pub const fn clk_modem_apb_st_map_variant(
+                &self,
+            ) -> Option<super::dictionaries::IcgStateMap> {
+                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
             }
 
             /// Set `BITS_0_7_OPAQUE`.

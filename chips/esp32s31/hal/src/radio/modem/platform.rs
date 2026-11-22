@@ -345,6 +345,44 @@ mod tests {
     }
 
     #[test]
+    fn a_captured_baseline_restores_the_fields_it_was_captured_from() {
+        for fill in [0, 0x5555_5555, 0xaaaa_aaaa, u32::MAX] {
+            crate::radio::phy::registers::host::with_registers(fill, |registers| {
+                let captured = registers.capture_wifi_power_baseline();
+                registers.enable_modem_register_bus_clock();
+                registers.configure_modem_source_clocks();
+                registers.enable_phy_calibration_clocks();
+                registers.select_phy_i2c_160mhz_source();
+                if fill == 0 {
+                    assert_ne!(
+                        registers.capture_wifi_power_baseline(),
+                        captured,
+                        "the power-up changes the captured fields"
+                    );
+                }
+                assert_eq!(
+                    oer_chips_family_radio_power::baseline::restore(registers, captured),
+                    Ok(())
+                );
+                assert_eq!(registers.capture_wifi_power_baseline(), captured);
+                assert_eq!(
+                    registers
+                        .peripherals
+                        .hp_sys_clkrst_radio
+                        .read_modem_ctrl0()
+                        .reg_modem_clk_en(),
+                    if fill & 1 == 0 {
+                        oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled
+                    } else {
+                        oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
+                    },
+                    "the bus clock returns to its fill"
+                );
+            });
+        }
+    }
+
+    #[test]
     fn source_readback_accepts_the_pinned_open_state_only() {
         let words = HpSysClkrstRadioWords::WORDS.iter().copied().max().unwrap() / 4 + 1;
         let mut memory = std::vec![u32::MAX; words];

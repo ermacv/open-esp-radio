@@ -39,15 +39,6 @@ pub struct BluetoothLowPowerClockObservation {
     pub bluetooth_divider_configured: bool,
 }
 
-/// Semantic Wi-Fi low-power-clock observation without register authority.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WifiLowPowerClockObservation {
-    /// The single selected source, or `None` unless exactly one of the two
-    /// sources production selects is set.
-    pub source: Option<WifiLowPowerClockSource>,
-    pub divider: u16,
-}
-
 impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// The RTC slow-clock source, as `clk_ll_rtc_slow_get_src` reads it.
     #[doc(hidden)]
@@ -95,26 +86,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             registers,
             const { ModemLowPowerClockDivider::new(0).expect("zero is a valid low-power divider") },
         );
-    }
-
-    #[doc(hidden)]
-    pub fn wifi_low_power_clock_observation(&self) -> WifiLowPowerClockObservation {
-        let wifi_lp_clk_conf = self.peripherals.modem_lpcon_power.read_wifi_lp_clk_conf();
-        let (slow, fast, crystal, crystal_32khz, divider) = (
-            wifi_lp_clk_conf.clk_wifipwr_lp_sel_osc_slow(),
-            wifi_lp_clk_conf.clk_wifipwr_lp_sel_osc_fast(),
-            wifi_lp_clk_conf.clk_wifipwr_lp_sel_xtal(),
-            wifi_lp_clk_conf.clk_wifipwr_lp_sel_xtal32k(),
-            super::field_halfword(wifi_lp_clk_conf.clk_wifipwr_lp_div_num()),
-        );
-        WifiLowPowerClockObservation {
-            source: match (slow, fast, crystal, crystal_32khz) {
-                (true, false, false, false) => Some(WifiLowPowerClockSource::SlowOscillator),
-                (false, false, false, true) => Some(WifiLowPowerClockSource::Crystal32Khz),
-                _ => None,
-            },
-            divider,
-        }
     }
 
     #[doc(hidden)]
@@ -180,7 +151,9 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         &self,
     ) -> Option<CoexistenceLowPowerClockObservation> {
         // Two reads of the word, as the vendor samples the source and then
-        // the divider.
+        // the divider. SOURCE: complete pinned
+        // libcoexist.a[coexist_hw.o]::coex_hw_timer_freq_set and tick_get read
+        // COEX_LP_CLK_CONF back: the vendor's own read.
         let registers = &self.peripherals.coex_lp_clock;
         let selected = registers.read_coex_lp_clk_conf();
         let source = match (
