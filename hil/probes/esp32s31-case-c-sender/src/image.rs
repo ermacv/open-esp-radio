@@ -1,11 +1,13 @@
 //! The sender's boot and its radio session: Wi-Fi brought up over the radio
 //! domain the probe holds (`radio`), the MAC started on the receive ring's
-//! atoms over a small ring of its own, the peer learned from the first frame
-//! addressed to the station, then case C's rounds (`amsdu`) or cell E's
-//! (`ccmp`).
+//! atoms over a small ring of its own, then each step the host's program
+//! (`hil/scenarios/radio-pair`) asks for over the HIL protocol: the peer
+//! learned from the first frame addressed to the station after the host's
+//! `listen`, then case C's rounds (`amsdu`) or cell E's (`ccmp`).
+use crate::pair;
 use crate::radio::{
-    Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up, held,
-    phase, prepare,
+    Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up,
+    held as held_radio, phase, prepare, stop,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -35,10 +37,13 @@ use oer_chips_esp32s31_radio_phy::{
     PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
+use oer_hil_agent::answer;
+use oer_hil_services_radio_pair::{self as service, Refusal, SenderRequest};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
 use oer_portable_time::{Clock, Duration, Timer};
+use oer_protocols_hil_protocol::RequestIdentity;
 
 /// The sender's receive ring: eight descriptors and R, each buffer of 256
 /// octets with the 64-octet header below its floor. It serves the learning
@@ -79,13 +84,13 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts) = session_task;
+        session(parts: SessionParts, inbox: oer_hil_agent::Inbox<'static, SenderRequest>, reset: u32) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> {
-        report(console: usb::Console, pads: oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads) = report;
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog;
+        host(host: Host) = host_task;
     }
 }
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
@@ -106,6 +111,7 @@ fn main(
     };
     let (
         (
+            reset_cause,
             runtime_efuse,
             runtime_radio,
             runtime_timg0_alarm,
@@ -131,10 +137,11 @@ fn main(
         board::BootstrapPsram,
         oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
-            let _reset_causes =
+            let reset_causes =
                 oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
             crate::diagnostic::report_previous();
             (
+                reset_causes.of(oer_chips_esp32s31_hal::system::platform::BOOT_HART),
                 hardware.efuse,
                 hardware.radio,
                 hardware.timg0_alarm,
@@ -203,9 +210,9 @@ fn main(
         .unwrap_or_else(|failure| failure.reset());
     let mut rng =
         oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, runtime_cycles);
-    let seed = match rng.random() {
-        Ok(word) => word,
-        Err(_) => fail(name!("entropy"; 32)),
+    let (seed, boot) = match (rng.random(), rng.random(), rng.random()) {
+        (Ok(seed), Ok(high), Ok(low)) => (seed, (u64::from(high) << 32) | u64::from(low)),
+        _ => fail(name!("entropy"; 32)),
     };
     let parts = SessionParts {
         radio,
@@ -221,13 +228,32 @@ fn main(
         ap,
         cycles: runtime_cycles,
     };
-    if RadioTasks::session(&radio_executor, parts).is_err() {
-        fail(name!("session-task"; 32));
-    }
     let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
         Ok(value) => value,
         Err(error) => fail(error.reason()),
     };
+    // The pads stay held by `main`, which never returns, so that nothing
+    // switches them off.
+    let _pads = pads;
+    let Some(mailbox) = MAILBOX.try_take() else {
+        fail(name!("mailbox"; 32));
+    };
+    let (outbox, inbox) = mailbox.split();
+    // The probe reads no previous boot's panic or exception record: its
+    // diagnostic hook keeps its own (`diagnostic::report_previous`).
+    let host = Host {
+        console,
+        boot,
+        records: oer_hil_agent::Records {
+            reset_cause,
+            previous_panic: None,
+            previous_exception: None,
+        },
+        outbox,
+    };
+    if RadioTasks::session(&radio_executor, parts, inbox, u32::from(reset_cause.code())).is_err() {
+        fail(name!("session-task"; 32));
+    }
     let (mut router, hart) = match adopted.enable_interrupts() {
         Ok(value) => value,
         Err(error) => fail(error.name()),
@@ -241,8 +267,8 @@ fn main(
             (),
             (),
             move |spawner| {
-                if AppTasks::report(spawner, console, pads).is_err()
-                    || AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()
+                if AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()
+                    || AppTasks::host(spawner, host).is_err()
                 {
                     fail(name!("task"; 32));
                 }
@@ -270,112 +296,62 @@ async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
         .await {}
 }
 
-// ---------------------------------------------------------------- journal
+// ---------------------------------------------------------------- host
 
-/// What one record says.
-#[derive(Clone, Copy)]
-#[repr(u32)]
-enum Kind {
-    /// The bring-up's end: the MAC started on the receive ring.
-    Up = 1,
-    /// A failure: its phase and its index.
-    Failed = 5,
-    /// The rounds' end: their microseconds.
-    End = 4,
-    /// The peer's address, learned from its frames.
-    Peer = 13,
-    /// Case C's sender: one case's frames and how they ended.
-    #[cfg(not(feature = "ccmp"))]
-    AmsduSent = 15,
-    /// Cell E's sender: one case's protected frames and how they ended.
-    #[cfg(feature = "ccmp")]
-    CcmpSent = 16,
+oer_protocols_hil_agent::image_keys! {
+    /// The sender: the base module and the sender's requests.
+    KEYS = [SenderRequest]
 }
 
-const WIDTH: usize = 22;
-const ROWS: usize = 16;
+/// What the sender announces in its Hello.
+const IMAGE: oer_hil_agent::Image = oer_hil_agent::Image {
+    keys: KEYS,
+    maximum_payload_bytes: service::MAXIMUM_PAYLOAD_BYTES,
+};
 
-/// The session's records, filled on hart 0's radio executor and printed by
-/// the console's task once the session has ended.
-#[derive(bytemuck::Zeroable)]
-struct Journal {
-    rows: [[u32; WIDTH]; ROWS],
-    used: usize,
+static MAILBOX: static_cell::ConstStaticCell<oer_hil_agent::Mailbox<SenderRequest>> =
+    static_cell::ConstStaticCell::new(oer_hil_agent::Mailbox::new());
+
+/// What the host's link takes at boot: the console, this boot's identity,
+/// what the adoption read and the mailbox's console end.
+pub(crate) struct Host {
+    pub(crate) console: usb::Console,
+    pub(crate) boot: u64,
+    pub(crate) records: oer_hil_agent::Records,
+    pub(crate) outbox: oer_hil_agent::Outbox<'static, SenderRequest>,
 }
 
-impl Journal {
-    fn record(&mut self, kind: Kind, values: &[u32]) {
-        if let Some(row) = self.rows.get_mut(self.used) {
-            *row = [0; WIDTH];
-            if let Some(first) = row.first_mut() {
-                *first = kind as u32;
-            }
-            for (cell, value) in row.iter_mut().skip(1).zip(values) {
-                *cell = *value;
-            }
-            self.used = self.used.saturating_add(1);
-        }
+/// How the sender's serving ends: the console's transport broke.
+enum Ended {
+    Console,
+}
+
+/// The application level's task: the HIL console, which hands each request
+/// to the radio level's worker through the mailbox and writes the worker's
+/// answers. Its own worker never ends: the sender's work is the radio
+/// level's.
+async fn host_task(host: Host) {
+    let Host {
+        console,
+        boot,
+        records,
+        outbox,
+    } = host;
+    match oer_hil_agent::serve(
+        console,
+        boot,
+        records,
+        IMAGE,
+        outbox,
+        Ended::Console,
+        || core::future::pending::<Result<core::convert::Infallible, Ended>>(),
+    )
+    .await
+    {
+        Err(Ended::Console) => fail(name!("console"; 32)),
+        Ok(never) => match never {},
     }
 }
-
-static JOURNAL: oer_portable_memory::zeroed::ZeroedStatic<Journal> =
-    oer_portable_memory::zeroed::ZeroedStatic::new();
-static DONE: oer_portable_memory::ClaimCell<&'static mut Journal> =
-    oer_portable_memory::ClaimCell::new();
-/// The phase the session is in, printed as it changes so that the host
-/// can place the receiver's lines beside the sender's (`MARK <n>`).
-static MARK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-
-fn mark(phase: u32) {
-    MARK.store(phase, core::sync::atomic::Ordering::Relaxed);
-}
-
-async fn report(
-    mut console: usb::Console,
-    _pads: oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
-) {
-    use core::fmt::Write as _;
-    usb::text(&mut console, b"CASECSENDER boot v=1\n").await;
-    let mut shown = 0_u32;
-    let journal = loop {
-        let now = MARK.load(core::sync::atomic::Ordering::Relaxed);
-        if now != shown {
-            shown = now;
-            let mut line = heapless::String::<32>::new();
-            let _ = writeln!(line, "MARK {now}");
-            usb::text(&mut console, line.as_bytes()).await;
-        }
-        if let Ok(journal) = DONE.take() {
-            break journal;
-        }
-        match EmbassyClock.now().checked_add(Duration::from_millis(10)) {
-            Some(at) => EmbassyClock.wait_until(at).await,
-            None => return,
-        }
-    };
-    let mut line = heapless::String::<256>::new();
-    for row in journal.rows.iter().take(journal.used) {
-        line.clear();
-        let _ = line.push_str("R");
-        for value in row {
-            let _ = write!(line, " {value}");
-        }
-        let _ = line.push('\n');
-        usb::text(&mut console, line.as_bytes()).await;
-    }
-    let failed = journal
-        .rows
-        .iter()
-        .take(journal.used)
-        .any(|row| row.first() == Some(&(Kind::Failed as u32)));
-    if failed {
-        usb::text(&mut console, b"OER-RESULT: fail case-c-sender\n").await;
-    } else {
-        usb::text(&mut console, b"OER-RESULT: pass case-c-sender\n").await;
-    }
-}
-
-// ---------------------------------------------------------------- session
 
 mod amsdu;
 #[cfg(feature = "ccmp")]
@@ -385,25 +361,32 @@ mod transmit;
 type SessionRun = impl core::future::Future<Output = ()>;
 static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<SessionRun>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
+
+/// The radio level's one task: the worker that drives the radio, each step
+/// as the host asks for it.
 #[define_opaque(SessionRun)]
-fn session_future(parts: SessionParts) -> SessionRun {
+fn session_future(
+    parts: SessionParts,
+    inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
+    reset: u32,
+) -> SessionRun {
     async move {
-        let Some(journal) = JOURNAL.try_take() else {
-            return;
-        };
-        journal.used = 0;
-        if let Err((phase, index)) = apart!(session(parts, journal)) {
-            journal.record(Kind::Failed, &[phase, index]);
+        match worker(parts, inbox, reset).await {
+            Ok(never) => match never {},
+            Err(Ended::Console) => fail(name!("console"; 32)),
         }
-        let _ = DONE.install(journal);
     }
 }
 
-async fn session_task(parts: SessionParts) {
+async fn session_task(
+    parts: SessionParts,
+    inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
+    reset: u32,
+) {
     let Some(place) = SESSION.try_take() else {
-        return;
+        fail(name!("session-place"; 32));
     };
-    place.future(|| session_future(parts)).await;
+    place.future(|| session_future(parts, inbox, reset)).await;
 }
 
 /// Wait `micros` on the executor's clock.
@@ -425,134 +408,322 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
     collected.into_array().ok()
 }
 
-/// Bring Wi-Fi up, start the MAC on the receive ring, learn the peer, then
-/// the rounds. Every owner stays held until the leased host reset.
-async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failure> {
+/// Answer `request` with its endpoint's refusal.
+fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
+    match request {
+        SenderRequest::SnapshotCold(_) | SenderRequest::SnapshotUp(_) => {
+            answer(identity, &service::SnapshotPage::Refused(refusal));
+        }
+        SenderRequest::BringUp(_) => answer(identity, &service::BroughtUp::Refused(refusal)),
+        SenderRequest::ReceiveCounters(_) => {
+            answer(identity, &service::Counters::Refused(refusal));
+        }
+        SenderRequest::Stop(_) => answer(identity, &service::Stopped::Refused(refusal)),
+        SenderRequest::Listen(_) => answer(identity, &service::Listening::Refused(refusal)),
+        SenderRequest::Peer(_) => answer(identity, &service::PeerHeard::Refused(refusal)),
+        SenderRequest::Round(_) => answer(identity, &service::Sent::Refused(refusal)),
+    }
+}
+
+/// After a failure or the stop: the cold snapshot still answers, every
+/// other step is refused, until the next boot.
+async fn down(
+    mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
+    cold: &pair::Readings,
+) -> Result<core::convert::Infallible, Ended> {
+    loop {
+        let (identity, request) = inbox.next().await;
+        match request {
+            SenderRequest::SnapshotCold(request) => {
+                answer(identity, &pair::page(cold, request.page));
+            }
+            other => refuse(identity, other, Refusal::Down),
+        }
+    }
+}
+
+/// Where the sender is in learning its peer.
+#[derive(Clone, Copy)]
+enum Learning {
+    /// The host did not ask it to listen.
+    Deaf,
+    /// Listening: the peer is the sender of the first frame to the station.
+    Listening,
+    Heard([u8; 6]),
+}
+
+/// The sender's worker: each step the host asks for, in its order.
+async fn worker(
+    parts: SessionParts,
+    mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
+    reset: u32,
+) -> Result<core::convert::Infallible, Ended> {
+    let cold = pair::cold(reset);
+    let identity = parts.identity;
     let cycles = parts.cycles;
+    let ap = parts.ap;
+    let bring = loop {
+        let (id, request) = inbox.next().await;
+        match request {
+            SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
+            SenderRequest::BringUp(_) => break id,
+            other => refuse(id, other, Refusal::NotUp),
+        }
+    };
     let cooperative = Cooperative::new(EmbassyClock);
     let timer = CooperativeTimer::new(&cooperative, cycles);
     let mut platform = ();
-    let brought = apart!(bring_up(parts, &timer, &mut platform))?;
-    // The ring's parts: the table, the walker's registers, the arena and
-    // its buffers (the ring's and R's).
-    let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
-    let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
-    let (arena, mut fresh) = Arena::<SenderRx, BYTES>::claim().ok_or((phase::RING, 2))?;
-    let ring: [Handle<SenderRx>; RING] = first_of(&mut fresh).ok_or((phase::RING, 3))?;
-    let reserved = fresh.next().ok_or((phase::RING, 4))?;
-    let place = RING_PLACE
-        .try_init(MaybeUninit::uninit())
-        .ok_or((phase::RING, 5))?;
-    let Brought {
-        mut slot,
-        mut clocked,
-        first,
-        mut walker,
-        mut sources,
-        mac,
-        channel,
-        mut mac_irq,
-        mut power_irq,
-        station,
-        held: _held,
-    } = brought;
-    // S4 to S10: the first reset, the cold preparation and the channel, the
-    // core, the publication, the walker, the MAC's receive.
-    let reset =
-        held(&mut slot)?.reset_wifi_mac_block(clocked.clocks_on(), first, crate::radio::CBW);
-    let prepared = apart!(prepare(
-        &mut slot,
-        &mut clocked,
-        &mut walker,
-        &mut sources,
-        reset,
-        mac,
-        channel,
-        &timer,
-        &mut platform,
-    ))?;
-    let (mut access, _clocks_on) = clocked.into_running();
-    let parts = RxRingParts {
-        table,
-        walker,
-        arena,
-        ring,
-        reserved,
+    let up = async {
+        let brought = apart!(bring_up(parts, &timer, &mut platform))?;
+        // The ring's parts: the table, the walker's registers, the arena
+        // and its buffers (the ring's and R's).
+        let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
+        let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
+        let (arena, mut fresh) = Arena::<SenderRx, BYTES>::claim().ok_or((phase::RING, 2))?;
+        let ring: [Handle<SenderRx>; RING] = first_of(&mut fresh).ok_or((phase::RING, 3))?;
+        let reserved = fresh.next().ok_or((phase::RING, 4))?;
+        let place = RING_PLACE
+            .try_init(MaybeUninit::uninit())
+            .ok_or((phase::RING, 5))?;
+        let Brought {
+            mut slot,
+            mut clocked,
+            first,
+            mut walker,
+            mut sources,
+            mac,
+            channel,
+            mut mac_irq,
+            mut power_irq,
+            station,
+            held,
+        } = brought;
+        // S4 to S10: the first reset, the cold preparation and the channel,
+        // the core, the publication, the walker, the MAC's receive.
+        let reset = held_radio(&mut slot)?.reset_wifi_mac_block(
+            clocked.clocks_on(),
+            first,
+            crate::radio::CBW,
+        );
+        let prepared = apart!(prepare(
+            &mut slot,
+            &mut clocked,
+            &mut walker,
+            &mut sources,
+            reset,
+            mac,
+            channel,
+            &timer,
+            &mut platform,
+        ))?;
+        let (mut access, clocks_on) = clocked.into_running();
+        let parts = RxRingParts {
+            table,
+            walker,
+            arena,
+            ring,
+            reserved,
+        };
+        let (ring, enabled) = begin(
+            &mut access,
+            &mut mac_irq,
+            &mut power_irq,
+            prepared,
+            place,
+            parts,
+        );
+        let (frames, ordinary) = transmit::prepare(&sources)?;
+        Ok((
+            slot, access, clocks_on, ring, enabled, mac_irq, power_irq, station, held, frames,
+            ordinary,
+        ))
     };
-    let (mut ring, _enabled) = begin(
-        &mut access,
-        &mut mac_irq,
-        &mut power_irq,
-        prepared,
-        place,
-        parts,
-    );
-    journal.record(Kind::Up, &[]);
-    mark(70);
-    let peer = learn_peer(&mut ring, station, cycles).await?;
-    journal.record(
-        Kind::Peer,
-        &[
-            u32::from_be_bytes([0, 0, peer[0], peer[1]]),
-            u32::from_be_bytes([peer[2], peer[3], peer[4], peer[5]]),
-        ],
-    );
-    let began = EmbassyClock.now();
-    let result = apart!(transmit::series(
-        &mut access,
-        &sources,
+    let (
+        mut slot,
+        mut access,
+        clocks_on,
+        mut ring,
+        enabled,
+        _mac_irq,
+        _power_irq,
         station,
-        peer,
-        journal
-    ));
-    let micros = EmbassyClock
-        .now()
-        .saturating_duration_since(began)
-        .as_micros();
-    journal.record(Kind::End, &[u32::try_from(micros).unwrap_or(u32::MAX)]);
-    let _held = (slot, ring, mac_irq, power_irq, _held);
-    result
-}
-
-/// The peer: the sender of the first frame addressed to the station, served
-/// from the ring within two seconds, every unit copied in place.
-async fn learn_peer(
-    ring: &mut Ring,
-    station: [u8; 6],
-    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
-) -> Result<[u8; 6], Failure> {
-    let end = EmbassyClock
-        .now()
-        .checked_add(Duration::from_secs(2))
-        .ok_or((transmit::tx_phase::PEER, 0))?;
-    while EmbassyClock.now() < end {
-        let served = ring.serve(&cycles, |view| {
-            let mut found = None;
-            while let Some(unit) = view.next_unit() {
-                let mut head = [0_u8; 16];
-                let copied = match unit {
-                    Unit::Single(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-                    Unit::Chain(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
-                };
-                if found.is_none()
-                    && copied == head.len()
-                    && let Some((to, from)) = addresses(&head)
-                    && to == station
-                {
-                    found = Some(from);
+        _held,
+        frames,
+        mut ordinary,
+    ) = match up.await {
+        Ok(up) => up,
+        Err((phase, index)) => {
+            answer(
+                bring,
+                &service::BroughtUp::Failed(service::Failure { phase, index }),
+            );
+            return down(inbox, &cold).await;
+        }
+    };
+    answer(bring, &service::BroughtUp::Up { station, ap });
+    let up = match pair::up(&mut slot, reset, identity) {
+        Ok(readings) => readings,
+        Err(_) => cold.clone(),
+    };
+    let mut learning = Learning::Deaf;
+    loop {
+        let (id, request) = inbox.next().await;
+        match request {
+            SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
+            SenderRequest::SnapshotUp(request) => answer(id, &pair::page(&up, request.page)),
+            SenderRequest::BringUp(_) => {
+                answer(id, &service::BroughtUp::Refused(Refusal::AlreadyUp));
+            }
+            SenderRequest::ReceiveCounters(_) => answer(
+                id,
+                &pair::counters(&access, ring.standing(), ring.descriptor_controls()),
+            ),
+            SenderRequest::Listen(_) => {
+                // Frames that came before the acknowledgement are not the
+                // peer's teaching: the ring is drained first.
+                match drain(&mut ring, cycles) {
+                    Ok(()) => {
+                        learning = Learning::Listening;
+                        answer(id, &service::Listening::Listening);
+                    }
+                    Err(index) => answer(
+                        id,
+                        &service::Listening::Failed(service::Failure {
+                            phase: transmit::tx_phase::PEER,
+                            index,
+                        }),
+                    ),
                 }
             }
-            found
-        });
-        match served {
-            Ok(Some(peer)) => return Ok(peer),
-            Ok(None) => wait_micros(100).await,
-            Err((anomaly, _)) => {
-                return Err((transmit::tx_phase::PEER, anomaly_code(anomaly)));
+            SenderRequest::Peer(_) => match learning {
+                Learning::Deaf => answer(id, &service::PeerHeard::Refused(Refusal::NoPeer)),
+                Learning::Heard(peer) => answer(id, &service::PeerHeard::Heard(peer)),
+                Learning::Listening => match heard(&mut ring, station, cycles) {
+                    Ok(Some(peer)) => {
+                        learning = Learning::Heard(peer);
+                        answer(id, &service::PeerHeard::Heard(peer));
+                    }
+                    Ok(None) => answer(id, &service::PeerHeard::NotHeard),
+                    Err(index) => answer(
+                        id,
+                        &service::PeerHeard::Failed(service::Failure {
+                            phase: transmit::tx_phase::PEER,
+                            index,
+                        }),
+                    ),
+                },
+            },
+            SenderRequest::Round(request) => {
+                let Learning::Heard(peer) = learning else {
+                    answer(id, &service::Sent::Refused(Refusal::NoPeer));
+                    continue;
+                };
+                let began = EmbassyClock.now();
+                let sent = amsdu::series(
+                    amsdu::AmsduParts {
+                        frames: &frames,
+                        ordinary: &mut ordinary,
+                        station,
+                        peer,
+                        rounds: request.rounds,
+                    },
+                    &mut access,
+                )
+                .await;
+                let micros = u32::try_from(
+                    EmbassyClock
+                        .now()
+                        .saturating_duration_since(began)
+                        .as_micros(),
+                )
+                .unwrap_or(u32::MAX);
+                match sent {
+                    Ok(cases) => answer(id, &service::Sent::Sent { cases, micros }),
+                    Err((phase, index)) => {
+                        answer(
+                            id,
+                            &service::Sent::Failed(service::Failure { phase, index }),
+                        );
+                        return down(inbox, &cold).await;
+                    }
+                }
+            }
+            SenderRequest::Stop(_) => {
+                match held_radio(&mut slot) {
+                    Ok(radio) => {
+                        let began = EmbassyClock.now();
+                        let _stopped = stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
+                        let micros = u32::try_from(
+                            EmbassyClock
+                                .now()
+                                .saturating_duration_since(began)
+                                .as_micros(),
+                        )
+                        .unwrap_or(u32::MAX);
+                        answer(id, &service::Stopped::Stopped { micros });
+                    }
+                    Err((phase, index)) => {
+                        answer(
+                            id,
+                            &service::Stopped::Failed(service::Failure { phase, index }),
+                        );
+                    }
+                }
+                return down(inbox, &cold).await;
             }
         }
     }
-    Err((transmit::tx_phase::PEER, 1))
+}
+
+/// Serve the ring once and drop what it held.
+///
+/// # Errors
+/// The ring's anomaly, as a failure's index.
+fn drain(
+    ring: &mut Ring,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+) -> Result<(), u32> {
+    let served = ring.serve(&cycles, |view| {
+        while let Some(unit) = view.next_unit() {
+            let mut head = [0_u8; 16];
+            let _copied = match unit {
+                Unit::Single(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
+                Unit::Chain(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
+            };
+        }
+    });
+    served.map_err(|(anomaly, ())| anomaly_code(anomaly))
+}
+
+/// Serve the ring once: the sender of the first frame to `station`, if one
+/// came, every unit copied in place.
+///
+/// # Errors
+/// The ring's anomaly, as a failure's index.
+fn heard(
+    ring: &mut Ring,
+    station: [u8; 6],
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+) -> Result<Option<[u8; 6]>, u32> {
+    let served = ring.serve(&cycles, |view| {
+        let mut found = None;
+        while let Some(unit) = view.next_unit() {
+            let mut head = [0_u8; 16];
+            let copied = match unit {
+                Unit::Single(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
+                Unit::Chain(unit) => unit.copy_in_place(|frame| frame.copy_to(&mut head)),
+            };
+            if found.is_none()
+                && copied == head.len()
+                && let Some((to, from)) = addresses(&head)
+                && to == station
+            {
+                found = Some(from);
+            }
+        }
+        found
+    });
+    served.map_err(|(anomaly, _)| anomaly_code(anomaly))
 }
 
 /// A ring anomaly's code in a failure's index.

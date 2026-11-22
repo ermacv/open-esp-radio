@@ -4,7 +4,7 @@
 use core::{convert::Infallible, future::Future};
 
 use oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCause;
-use oer_chips_esp32s31_platform_runtime::{console::Console as UsbConsole, exception::Observed};
+use oer_chips_esp32s31_platform_runtime::exception::Observed;
 use oer_chips_family_platform_runtime::{panic::PanicRecord, trap::PreviousException};
 use oer_protocols_hil_agent::base::{Intake, Requests};
 use oer_protocols_hil_protocol::{
@@ -90,7 +90,8 @@ pub async fn answer_then_trap<M: Message, E>(
     }
 }
 
-/// Serve the host over `console` until the chip resets: the base module
+/// Serve the host over `console` (the image's USB console: the platform
+/// runtime's, or a probe's own endpoint) until the chip resets: the base module
 /// from this boot's identity `boot` and `records`, each request of the
 /// image's services handed to the worker through `outbox` (or refused as
 /// busy), and the worker `start` makes, which answers them, side by side.
@@ -100,8 +101,13 @@ pub async fn answer_then_trap<M: Message, E>(
 /// # Errors
 /// `console_fault` when the console's transport broke its contract, or the
 /// error the worker ended with.
-pub async fn serve<R: Requests, E, W: Future<Output = Result<Infallible, E>>>(
-    console: UsbConsole,
+pub async fn serve<
+    C: embedded_io_async::Read + embedded_io_async::Write,
+    R: Requests,
+    E,
+    W: Future<Output = Result<Infallible, E>>,
+>(
+    console: C,
     boot: u64,
     records: Records,
     image: Image,

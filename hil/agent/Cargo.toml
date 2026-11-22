@@ -22,6 +22,7 @@ oer-protocols-hil-agent = { path = "../../protocols/hil/agent", default-features
 oer-protocols-hil-protocol = { workspace = true, features = ["async-io"] }
 oer-portable-riscv = { path = "../../portable/riscv" }
 embassy-futures = "0.1.2"
+embedded-io-async = "0.7.0"
 
 [lints]
 workspace = true

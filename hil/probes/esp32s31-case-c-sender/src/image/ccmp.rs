@@ -13,7 +13,7 @@
 use super::amsdu::AmsduParts;
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start, tx_phase};
 use super::*;
-use crate::case_c::{CASES, CELL_ROUNDS, Case, TEMPORAL_KEY, byte, order, protected_byte};
+use crate::case_c::{CASES, Case, TEMPORAL_KEY, byte, order, protected_byte};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
@@ -33,15 +33,17 @@ const LONGEST: usize = Case::AmsduLong.protected_length();
 /// One case's ends: acknowledged, ACK timeouts, other, seal refusals.
 type Ends = [u32; 4];
 
-pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
+pub(super) async fn series(
+    parts: AmsduParts<'_>,
+    access: &mut RadioAccess,
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, Failure> {
     let AmsduParts {
         frames,
         ordinary,
         station,
         peer,
-        journal,
+        rounds,
     } = parts;
-    mark(96);
     // The injector's burst that taught this board its peer ends within half
     // a second (`tasks/167`); the cell starts after it, on a quiet air (run
     // e2 overlapped it by 0.33 s).
@@ -67,7 +69,6 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         )?;
         await_completion(access, ordinary).await?;
     }
-    mark(97);
     let association = CcmpAssociation::new(Spp::NotNegotiated);
     let key = Ccmp128Key::new(&TEMPORAL_KEY);
     let mut engine = SoftwareAes128;
@@ -76,7 +77,7 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
     let mut sealed = [0_u8; LONGEST];
     let mut ends: [Ends; CASES.len()] = [[0; 4]; CASES.len()];
     let mut pn = 0_u64;
-    for round in 0..CELL_ROUNDS {
+    for round in 0..rounds {
         for case in order(round).into_iter().filter(|case| case.qos()) {
             pn = pn.saturating_add(1);
             let counter = case.counter(round);
@@ -111,21 +112,28 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
             }
         }
     }
-    for (case, row) in CASES.iter().zip(ends) {
-        if case.qos() {
-            journal.record(
-                Kind::CcmpSent,
-                &[
-                    case.tag(),
-                    case.protected_length() as u32,
-                    row[0],
-                    row[1],
-                    row[2],
-                    row[3],
-                ],
-            );
-        }
+    // A seal the protocol layer refused is a failure of this probe, not
+    // an end of the air's.
+    if ends.iter().any(|row| row[3] != 0) {
+        return Err((tx_phase::FRAME, 0x11));
     }
-    mark(98);
-    Ok(())
+    let mut first = [0_u32; service::BEFORE];
+    Ok(CASES
+        .iter()
+        .zip(ends)
+        .filter(|(case, _)| case.qos())
+        .map(|(case, row)| service::CaseEnds {
+            tag: case.tag(),
+            acknowledged: {
+                first[0] = row[0];
+                first
+            },
+            timeouts: {
+                let mut timeouts = [0_u32; service::BEFORE];
+                timeouts[0] = row[1];
+                timeouts
+            },
+            other: row[2],
+        })
+        .collect())
 }

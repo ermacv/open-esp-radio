@@ -10,6 +10,10 @@ description = "Case C's sender: A-MSDU and provenance frames (or cell E's protec
 build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
+oer-hil-agent = { path = "../../agent" }
+oer-hil-services-radio-pair = { path = "../../services/radio-pair" }
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+oer-protocols-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }

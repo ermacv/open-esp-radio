@@ -230,18 +230,13 @@ fn complete(
     })
 }
 
-/// The pool and the ordinary descriptor, then case C's rounds or cell E's.
-pub(super) async fn series(
-    access: &mut RadioAccess,
-    sources: &Sources,
-    station: [u8; 6],
-    peer: [u8; 6],
-    journal: &mut Journal,
-) -> Result<(), Failure> {
+/// The pool and the ordinary descriptor, made once a boot: every round
+/// borrows them.
+pub(super) fn prepare(sources: &Sources) -> Result<(Frames, Descriptor), Failure> {
     let pool =
         Placed::pin(TX_POOL.take().ok_or((tx_phase::POOL, 1))?).map_err(|_| (tx_phase::POOL, 2))?;
     let pool: &'static Placed = POOL_PLACE.try_init(pool).ok_or((tx_phase::POOL, 5))?;
-    let mut ordinary: Descriptor =
+    let ordinary: Descriptor =
         oer_chips_esp32s31_hal::radio::ieee80211::dma::tx_storage::TxDmaStorage::pin::<
             oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma,
             Lease,
@@ -251,15 +246,5 @@ pub(super) async fn series(
         pool,
         power: sources.tx_power.pair(MacLegacyRate::Ofdm6M.code()).primary as u8,
     };
-    super::amsdu::series(
-        super::amsdu::AmsduParts {
-            frames: &frames,
-            ordinary: &mut ordinary,
-            station,
-            peer,
-            journal,
-        },
-        access,
-    )
-    .await
+    Ok((frames, ordinary))
 }

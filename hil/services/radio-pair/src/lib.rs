@@ -380,6 +380,7 @@ pub struct Listen;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum Listening {
     Listening,
+    Failed(Failure),
     Refused(Refusal),
 }
 
