@@ -558,7 +558,8 @@ probe has one at each of P1 to P4).
   Every such settle is `oer_portable_time::settle`, counted in cycles of a
   `SettleCounter`. On the chip that counter is the HAL's `CycleCounter`: the
   runtime handover adopts the CPU rate from the clock registers as a value
-  (an unsupported CPU clock is a typed boot failure), and the counter made
+  (a clock of no known rate or a fractional divider is the adoption's
+  typed failure, `UnsupportedCpuClock`, which stops the boot), and the counter made
   from it samples `mcycle` and rounds each limit up to whole cycles. Each
   driver takes a copy where it takes its clock (the AES engine, entropy, the
   MAC stop, the TX abort, the receive ring's doorbell, the PHY beside its

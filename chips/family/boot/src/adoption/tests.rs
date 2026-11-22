@@ -103,18 +103,18 @@ fn the_adoption_gives_the_integer_rate_and_fails_an_unsupported_cpu_clock() {
             Ok(rate(hz))
         );
     }
-    for (root, fractional) in [(0, true), (1, true), (2, false), (3, false), (2, true)] {
-        let failure = adopt_cpu_clock(Clock(CpuRate::Unsupported { root, fractional }));
+    for (unsupported, reason) in [
+        (UnsupportedCpuClock::UnknownRate, "cpu-clock-rate-unknown"),
+        (
+            UnsupportedCpuClock::FractionalDivider,
+            "cpu-clock-fractional",
+        ),
+    ] {
         assert_eq!(
-            failure,
-            Err(crate::BootFailure::Clock(
-                crate::ClockFailure::UnsupportedCpuClock { root, fractional }
-            ))
+            adopt_cpu_clock(Clock(CpuRate::Unsupported(unsupported))),
+            Err(unsupported)
         );
-        assert_eq!(
-            failure.map(CpuHz::get).unwrap_err().reason(),
-            "cpu-clock-unsupported"
-        );
+        assert_eq!(unsupported.reason(), reason);
     }
     assert_eq!(CpuHz::new(0), None);
 }
@@ -127,25 +127,17 @@ fn an_unsupported_cpu_clock_stops_the_adoption_before_the_console() {
         Some(160_000_000),
         "the adopted rate reaches the port's output"
     );
-    let unsupported = CpuRate::Unsupported {
-        root: 2,
-        fractional: false,
-    };
+    let unsupported = CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate);
     let log = Log {
         cpu: unsupported,
         ..Log::new(None)
     };
-    let failure = InitError::Boot(crate::BootFailure::Clock(
-        crate::ClockFailure::UnsupportedCpuClock {
-            root: 2,
-            fractional: false,
-        },
-    ));
+    let failure = InitError::CpuClock(UnsupportedCpuClock::UnknownRate);
     assert!(matches!(initialize(log.owners()), Err(error) if error == failure));
     assert_eq!(
         log.operations(),
         [Op::Cpu],
         "nothing after the clock's sample"
     );
-    assert_eq!(failure.reason(), "cpu-clock-unsupported");
+    assert_eq!(failure.reason(), "cpu-clock-rate-unknown");
 }

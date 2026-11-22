@@ -41,9 +41,29 @@ impl CpuHz {
 pub enum CpuRate {
     /// An integer divider of a root of known rate.
     Integer(CpuHz),
-    /// A root of no known rate (`root`, its selector's code), or a
-    /// fractional divider.
-    Unsupported { root: u32, fractional: bool },
+    /// A clock no settle can be counted on.
+    Unsupported(UnsupportedCpuClock),
+}
+
+/// Why the CPU's clock is one no settle can be counted on: the adoption's
+/// one failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnsupportedCpuClock {
+    /// The root, or the root and its dividers, give no known rate; the
+    /// divider is then not read.
+    UnknownRate,
+    /// A root of known rate under a fractional divider.
+    FractionalDivider,
+}
+
+impl UnsupportedCpuClock {
+    /// The `reason=` word of the failure line.
+    pub const fn reason(self) -> &'static str {
+        match self {
+            Self::UnknownRate => "cpu-clock-rate-unknown",
+            Self::FractionalDivider => "cpu-clock-fractional",
+        }
+    }
 }
 
 pub trait CpuClock {
@@ -51,18 +71,16 @@ pub trait CpuClock {
     fn sample(self) -> CpuRate;
 }
 
-/// The adopted rate, the value the settle counter is made from, or the
-/// typed boot failure of a clock it cannot count on.
+/// The adopted rate, the value the settle counter is made from, or why the
+/// clock is one no settle can be counted on.
 ///
 /// # Errors
-/// [`ClockFailure::UnsupportedCpuClock`] for a root of no known rate or a
-/// fractional divider.
-pub fn adopt_cpu_clock<C: CpuClock>(clock: C) -> Result<CpuHz, crate::BootFailure> {
+/// [`UnsupportedCpuClock`] for a clock of no known rate or a fractional
+/// divider.
+pub fn adopt_cpu_clock<C: CpuClock>(clock: C) -> Result<CpuHz, UnsupportedCpuClock> {
     match clock.sample() {
         CpuRate::Integer(hz) => Ok(hz),
-        CpuRate::Unsupported { root, fractional } => Err(crate::BootFailure::Clock(
-            crate::ClockFailure::UnsupportedCpuClock { root, fractional },
-        )),
+        CpuRate::Unsupported(unsupported) => Err(unsupported),
     }
 }
 
@@ -183,7 +201,7 @@ pub enum InitError {
     CoreControlInstalled,
     DebugStatusPublished,
     /// The CPU clock is one no settle can be counted on.
-    Boot(crate::BootFailure),
+    CpuClock(UnsupportedCpuClock),
 }
 
 impl InitError {
@@ -193,7 +211,7 @@ impl InitError {
             Self::ConsoleInstalled => "console-installed",
             Self::CoreControlInstalled => "core-control-installed",
             Self::DebugStatusPublished => "debug-status-published",
-            Self::Boot(failure) => failure.reason(),
+            Self::CpuClock(unsupported) => unsupported.reason(),
         }
     }
 }
@@ -211,7 +229,7 @@ pub fn initialize<P: Port>(owners: Owners<P>) -> Result<P::Output, InitError> {
         watchdogs,
         resources,
     } = owners;
-    let cpu = adopt_cpu_clock(cpu_clock).map_err(InitError::Boot)?;
+    let cpu = adopt_cpu_clock(cpu_clock).map_err(InitError::CpuClock)?;
     P::install_console(console)?;
     let clocks = P::adopt_clocks(clocks);
     P::install_core_control(core_control)?;

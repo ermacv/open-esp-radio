@@ -100,3 +100,46 @@ fn a_running_generator_is_healthy_only_without_a_health_error() {
         "a stopped generator is not healthy"
     );
 }
+
+#[test]
+fn a_read_sooner_than_the_gap_waits_it_out_and_a_later_one_does_not_wait() {
+    /// A hundred cycles a microsecond, one cycle each sample: the gap is
+    /// 200 samples, far more than a read takes.
+    struct Fast(VirtualCounter);
+    impl oer_portable_time::settle::SettleCounter for Fast {
+        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+            limit.micros() * 100
+        }
+        fn sample(&self) -> u32 {
+            self.0.sample()
+        }
+    }
+    let gap = u32::try_from(READ_GAP.as_micros() * 100).expect("a test gap fits");
+    let mut trng = memory(instances::trng::SIZE, HEALTHY);
+    let mut clock_words = memory(instances::lp_periclkrst::SIZE, 0);
+    let counter = Fast(VirtualCounter::new(1_000, 1));
+    let mut entropy = Entropy::new(
+        EntropyRegisters::host(&mut trng, &mut clock_words).expect("host memory holds the blocks"),
+        &counter,
+    );
+    entropy.random().expect("the first read does not wait");
+    let first = entropy.last.expect("a read records its sample");
+    // Less than the gap passes before the next read.
+    counter.0.advance(gap / 4);
+    entropy.random().expect("the second read waits out the gap");
+    let second = entropy.last.expect("a read records its sample");
+    assert!(
+        second.wrapping_sub(first) >= gap,
+        "the second read came {} cycles after the first",
+        second.wrapping_sub(first)
+    );
+    // More than the gap passes: the next read does not wait.
+    counter.0.advance(gap * 5);
+    let before = counter.0.now();
+    entropy.random().expect("a later read does not wait");
+    assert!(
+        counter.0.now().wrapping_sub(before) <= 4,
+        "a read after the gap took {} samples",
+        counter.0.now().wrapping_sub(before)
+    );
+}

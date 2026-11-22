@@ -6539,9 +6539,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         3,
         BY_NONE,
     ),
-    // The unsupported CPU root's `SOC_CLK_SEL` code, the word the boot
-    // record carries (tasks/349).
-    ("chips/esp32s31/hal/src/system/boot/clock.rs", 1, BY_NONE),
     (
         "chips/esp32s31/hal/src/radio/coex/ports.rs",
         1,

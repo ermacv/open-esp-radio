@@ -166,10 +166,9 @@ impl oer_chips_family_boot::adoption::CpuClock for RuntimeCpuClock {
         #[cfg(not(target_arch = "riscv32"))]
         {
             let _ = self.0;
-            oer_chips_family_boot::adoption::CpuRate::Unsupported {
-                root: 0,
-                fractional: false,
-            }
+            oer_chips_family_boot::adoption::CpuRate::Unsupported(
+                oer_chips_family_boot::adoption::UnsupportedCpuClock::UnknownRate,
+            )
         }
     }
 }
@@ -183,17 +182,15 @@ fn cpu_rate(
     fractional: bool,
     pll: CpllDividers,
 ) -> oer_chips_family_boot::adoption::CpuRate {
-    use oer_chips_family_boot::adoption::{CpuHz, CpuRate};
-    let unsupported = CpuRate::Unsupported {
-        root: root.code().bits(),
+    use oer_chips_family_boot::adoption::{CpuHz, CpuRate, UnsupportedCpuClock};
+    // The rate first: with a root of no known rate the divider says nothing.
+    match (
+        CpuFrequency::from_dividers(root, divider, pll).and_then(|rate| CpuHz::new(rate.0)),
         fractional,
-    };
-    if fractional {
-        return unsupported;
-    }
-    match CpuFrequency::from_dividers(root, divider, pll).and_then(|rate| CpuHz::new(rate.0)) {
-        Some(hz) => CpuRate::Integer(hz),
-        None => unsupported,
+    ) {
+        (None, _) => CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate),
+        (Some(_), true) => CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider),
+        (Some(hz), false) => CpuRate::Integer(hz),
     }
 }
 
@@ -560,7 +557,7 @@ mod frequency_tests {
 
     #[test]
     fn the_adoption_gives_each_profile_s_rate_and_fails_every_other_clock() {
-        use oer_chips_family_boot::adoption::{CpuHz, CpuRate};
+        use oer_chips_family_boot::adoption::{CpuHz, CpuRate, UnsupportedCpuClock};
         for profile in [
             super::super::CpuProfile::Mhz160,
             super::super::CpuProfile::Mhz320,
@@ -573,10 +570,7 @@ mod frequency_tests {
             );
             assert_eq!(
                 cpu_rate(profile.root, profile.dividers.cpu, true, pll),
-                CpuRate::Unsupported {
-                    root: CpuRoot::Cpll.code().bits(),
-                    fractional: true
-                }
+                CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider)
             );
         }
         let pll = super::super::CPLL_320;
@@ -590,19 +584,13 @@ mod frequency_tests {
         );
         assert_eq!(
             cpu_rate(CpuRoot::Xtal, 0, true, pll),
-            CpuRate::Unsupported {
-                root: CpuRoot::Xtal.code().bits(),
-                fractional: true
-            }
+            CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider)
         );
         for root in [CpuRoot::RcFast, CpuRoot::PllF240m] {
             for fractional in [false, true] {
                 assert_eq!(
                     cpu_rate(root, 0, fractional, pll),
-                    CpuRate::Unsupported {
-                        root: root.code().bits(),
-                        fractional
-                    }
+                    CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate)
                 );
             }
         }
@@ -610,10 +598,7 @@ mod frequency_tests {
         pll.reference = Bits::constant::<0>();
         assert_eq!(
             cpu_rate(CpuRoot::Cpll, 0, false, pll),
-            CpuRate::Unsupported {
-                root: CpuRoot::Cpll.code().bits(),
-                fractional: false
-            }
+            CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate)
         );
     }
 

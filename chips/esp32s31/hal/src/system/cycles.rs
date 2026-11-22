@@ -13,7 +13,7 @@ const MICRO_HZ: u32 = 1_000_000;
 /// rounding cannot overflow.
 const fn per_micro(hz: u32) -> u32 {
     let whole = hz / MICRO_HZ;
-    if hz % MICRO_HZ == 0 {
+    if hz.is_multiple_of(MICRO_HZ) {
         whole
     } else {
         whole.saturating_add(1)
