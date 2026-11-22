@@ -406,3 +406,31 @@ fn the_load_and_the_clear_call_the_atoms_in_the_vendor_order() {
         ]
     );
 }
+
+/// A run writes the mode word once a direction: blocks in one direction
+/// write it once, and each change of direction writes it once more.
+#[test]
+fn the_mode_word_is_written_once_a_direction() {
+    let port = Rc::new(RefCell::new(Port::default()));
+    let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
+    let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+    let mut keyed = engine.load(&key).expect("an idle accelerator");
+    port.borrow_mut().calls.clear();
+    let mut block = *b"0123456789abcdef";
+    for _ in 0..3 {
+        keyed.encrypt(&mut block).expect("the block runs");
+    }
+    for _ in 0..2 {
+        keyed.decrypt(&mut block).expect("the block runs");
+    }
+    keyed.encrypt(&mut block).expect("the block runs");
+    let modes: std::vec::Vec<&str> = port
+        .borrow()
+        .calls
+        .iter()
+        .copied()
+        .filter(|call| *call == "encrypt128" || *call == "decrypt128")
+        .collect();
+    assert_eq!(modes, ["encrypt128", "decrypt128", "encrypt128"]);
+    assert_eq!(port.borrow().starts, 6);
+}

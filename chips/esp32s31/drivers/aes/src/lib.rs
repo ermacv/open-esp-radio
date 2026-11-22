@@ -63,11 +63,18 @@ pub struct AesBlocks<R: Registers, C: Clock> {
 enum KeyedRun {
     /// No block yet: the mode word is not written.
     Unset,
-    Encrypting,
-    Decrypting,
+    /// The mode word holds this direction.
+    Directed(Direction),
     /// A block failed; later blocks of this run answer this, touching
     /// nothing.
     Ended(BlockError),
+}
+
+/// A block's direction, which the mode word selects.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Direction {
+    Encrypt,
+    Decrypt,
 }
 
 impl<R: Registers, C: Clock> AesBlocks<R, C> {
@@ -155,17 +162,18 @@ pub struct Keyed<'a, R: Registers, C: Clock> {
 }
 
 impl<R: Registers, C: Clock> Keyed<'_, R, C> {
-    /// Select `direction` for the next block, or answer the run's failure.
-    fn enter(&mut self, direction: KeyedRun) -> Result<(), BlockError> {
+    /// Select `direction` for the next block, writing the mode word only
+    /// when it changes, or answer the run's failure.
+    fn enter(&mut self, direction: Direction) -> Result<(), BlockError> {
         match self.run {
             KeyedRun::Ended(error) => Err(error),
-            current if current == direction => Ok(()),
-            _ => {
+            KeyedRun::Directed(current) if current == direction => Ok(()),
+            KeyedRun::Unset | KeyedRun::Directed(_) => {
                 match direction {
-                    KeyedRun::Decrypting => self.engine.registers.decrypt128(),
-                    _ => self.engine.registers.encrypt128(),
+                    Direction::Encrypt => self.engine.registers.encrypt128(),
+                    Direction::Decrypt => self.engine.registers.decrypt128(),
                 }
-                self.run = direction;
+                self.run = KeyedRun::Directed(direction);
                 Ok(())
             }
         }
@@ -219,12 +227,12 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
 
 impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
     fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        self.enter(KeyedRun::Encrypting)?;
+        self.enter(Direction::Encrypt)?;
         self.block(block)
     }
 
     fn decrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
-        self.enter(KeyedRun::Decrypting)?;
+        self.enter(Direction::Decrypt)?;
         self.block(block)
     }
 }
