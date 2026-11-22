@@ -2,8 +2,8 @@
 //! reads.
 
 use oer_portable_mmio::{Fixed, Placement};
-use oer_portable_time::settle::{Settle, SettleLimit, settle};
-use oer_portable_time::{Clock, Duration, Instant};
+use oer_portable_time::Duration;
+use oer_portable_time::settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle};
 
 use oer_chips_esp32s31_pac::{
     instances, lp_peri_clkrst::LpPericlkrstRngInit, ownership::EntropyPeripherals, trng::Trng,
@@ -58,8 +58,8 @@ impl EntropyStatus {
     }
 }
 
-/// The shortest time between two reads of the generator's output, as `C`
-/// measures it.
+/// The shortest time between two reads of the generator's output, as the
+/// settle counter counts it.
 ///
 /// SOURCE: ESP-IDF 4d80c1b2 `components/esp_hw_support/hw_random.c:43,89`: consecutive
 /// reads are at least 16 APB clock cycles apart (`apb_cycle_wait_num`).
@@ -80,29 +80,30 @@ pub enum EntropyError {
     /// A startup or continuous health test failed: the generator's raw
     /// health-error flag is set.
     HealthTest,
-    /// The clock did not show [`READ_GAP`] since the previous read by the
-    /// settle's last attempt.
-    ReadGap,
 }
 
 /// Owns the true random number generator's output for the image's lifetime.
 ///
 /// This owner only reads the generator, spacing reads by [`READ_GAP`] with
 /// a named settle, and checks the health-error flag after every read;
-/// [`Entropy::status`] tells whether it runs. The time of the last read
-/// lives here, not in a global.
-pub struct Entropy<C: Clock, P: Placement = TrngPlacement, Q: Placement = RngClockPlacement> {
+/// [`Entropy::status`] tells whether it runs. The counter's sample at the
+/// last read lives here, not in a global.
+pub struct Entropy<K: SettleCounter, P: Placement = TrngPlacement, Q: Placement = RngClockPlacement>
+{
     registers: EntropyRegisters<P, Q>,
-    clock: C,
-    last: Option<Instant>,
+    counter: K,
+    /// The counter's 32-bit sample at the last read. A gap longer than the
+    /// counter's wrap can only read "too soon", so a read never comes
+    /// before its gap and waits at most one more [`READ_GAP`].
+    last: Option<u32>,
 }
 
-impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
-    /// Own the generator, timing reads with `clock`.
-    pub const fn new(registers: EntropyRegisters<P, Q>, clock: C) -> Self {
+impl<K: SettleCounter, P: Placement, Q: Placement> Entropy<K, P, Q> {
+    /// Own the generator, spacing reads on `counter`.
+    pub const fn new(registers: EntropyRegisters<P, Q>, counter: K) -> Self {
         Self {
             registers,
-            clock,
+            counter,
             last: None,
         }
     }
@@ -115,18 +116,23 @@ impl<C: Clock, P: Placement, Q: Placement> Entropy<C, P, Q> {
     /// read fails too.
     pub fn random(&mut self) -> Result<u32, EntropyError> {
         if let Some(last) = self.last {
-            let clock = &self.clock;
-            settle(Settle::new(READ_GAP_SETTLE, clock), || {
-                (clock.now().saturating_duration_since(last) >= READ_GAP).then_some(())
-            })
-            .map_err(|_| EntropyError::ReadGap)?;
+            let counter = &self.counter;
+            let gap = counter.cycles(READ_GAP_SETTLE);
+            // Both ends keep the gap: the settle starts after the last read,
+            // and it ends unsettled only once its own limit, the gap, has
+            // passed since its start.
+            match settle(Settle::new(READ_GAP_SETTLE, counter), || {
+                (counter.sample().wrapping_sub(last) >= gap).then_some(())
+            }) {
+                Ok(()) | Err(Unsettled) => {}
+            }
         }
         let word = self
             .registers
             .trng
             .read_crc_sync_data()
             .sw_crc_random_data_sync();
-        self.last = Some(self.clock.now());
+        self.last = Some(self.counter.sample());
         if self.registers.trng.read_int_raw().error_int_raw() {
             return Err(EntropyError::HealthTest);
         }

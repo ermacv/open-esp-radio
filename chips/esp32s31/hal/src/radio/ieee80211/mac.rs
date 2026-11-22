@@ -260,13 +260,16 @@ pub(crate) fn start_receive(port: &mut impl MacRuntimePort) {
 
 /// Register transaction of [`WifiMacHal::request_stop`]: the request, the
 /// fence, then the hold.
-pub(crate) fn request_stop<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn request_stop<K: oer_portable_time::settle::SettleCounter + ?Sized>(
     port: &mut impl MacRuntimePort,
-    clock: &C,
+    counter: &K,
 ) -> StopRequested {
     port.request_stop();
     port.fence();
-    oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(MAC_STOP_HOLD, clock));
+    oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
+        MAC_STOP_HOLD,
+        counter,
+    ));
     StopRequested { _private: () }
 }
 
@@ -313,15 +316,15 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// The MAC's stop request after the walker's edge, held for
-    /// [`MAC_STOP_HOLD`] on `clock`. Nothing is read: no activity field
+    /// [`MAC_STOP_HOLD`] on `counter`. Nothing is read: no activity field
     /// decides the stop.
-    pub fn request_stop<C: oer_portable_time::Clock + ?Sized>(
+    pub fn request_stop<K: oer_portable_time::settle::SettleCounter + ?Sized>(
         &mut self,
         edge: crate::radio::ieee80211::dma::receive::WalkerEdge,
-        clock: &C,
+        counter: &K,
     ) -> StopRequested {
         let crate::radio::ieee80211::dma::receive::WalkerEdge { .. } = edge;
-        request_stop(self.pac_mut(), clock)
+        request_stop(self.pac_mut(), counter)
     }
 
     /// Read back the common gates held by cold MAC preparation.
@@ -648,14 +651,14 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// [`WifiRadioRegisters::abort_mac_tx`](crate::radio::ieee80211::registers::WifiRadioRegisters::abort_mac_tx).
-    pub fn abort_tx_queue<C: oer_portable_time::Clock + ?Sized, R>(
+    pub fn abort_tx_queue<K: oer_portable_time::settle::SettleCounter + ?Sized, R>(
         &mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,
-        clock: &C,
+        counter: &K,
         aborted: impl for<'aborted> FnOnce(MacTxQueueAborted<'aborted>) -> R,
     ) -> MacTxAbortOutcome<R> {
-        self.pac_mut().abort_mac_tx(queue, cause, clock, aborted)
+        self.pac_mut().abort_mac_tx(queue, cause, counter, aborted)
     }
 
     pub fn with_tx_queue_detached<R>(

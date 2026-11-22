@@ -54,6 +54,16 @@ pub trait SettleCounter {
     fn sample(&self) -> u32;
 }
 
+/// A lent counter counts as its owner's.
+impl<K: SettleCounter + ?Sized> SettleCounter for &K {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        (**self).cycles(limit)
+    }
+    fn sample(&self) -> u32 {
+        (**self).sample()
+    }
+}
+
 /// One settle: its limit and the counter that counts it.
 pub struct Settle<'counter, K: SettleCounter + ?Sized> {
     limit: SettleLimit,

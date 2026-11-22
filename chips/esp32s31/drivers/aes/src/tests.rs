@@ -162,15 +162,18 @@ impl Registers for Fake {
     }
 }
 
-/// A clock that advances one microsecond at every read, so a settle on a
-/// stuck port ends.
+/// A counter of one cycle a microsecond that advances one at every sample,
+/// so a settle on a stuck port ends.
 #[derive(Default)]
-struct Ticking(core::cell::Cell<u64>);
-impl Clock for Ticking {
-    fn now(&self) -> oer_portable_time::Instant {
+struct Ticking(core::cell::Cell<u32>);
+impl SettleCounter for Ticking {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        limit.micros()
+    }
+    fn sample(&self) -> u32 {
         let now = self.0.get() + 1;
         self.0.set(now);
-        oer_portable_time::Instant::from_micros(now)
+        now
     }
 }
 
@@ -280,7 +283,7 @@ fn a_failed_block_ends_its_run_and_the_next_load_starts_again() {
         assert_eq!(keyed.decrypt(&mut block), Err(error));
         assert_eq!(block, [0; 16], "the failed block is erased");
         if answer == Answer::Stuck {
-            // One microsecond per clock read: the setup's read, then one
+            // One microsecond per counter sample: the setup's read, then one
             // attempt per microsecond of the settle and the last one after
             // its end.
             assert_eq!(

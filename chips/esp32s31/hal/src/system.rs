@@ -3,6 +3,7 @@
 
 pub mod boot;
 pub mod cores;
+pub mod cycles;
 pub mod memory;
 pub mod owner;
 pub mod platform;

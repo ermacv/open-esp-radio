@@ -27,8 +27,8 @@ use oer_portable_crypto::{
     block::{Aes128Engine, Block, BlockEngine, BlockError},
 };
 use oer_portable_time::{
-    Clock, Duration,
-    settle::{Settle, SettleLimit, settle},
+    Duration,
+    settle::{Settle, SettleCounter, SettleLimit, settle},
 };
 use zeroize::Zeroize;
 
@@ -45,11 +45,11 @@ pub const BLOCK_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micr
 };
 
 /// The accelerator as one owner's synchronous AES-128 engine, its settles
-/// measured on `clock`. Nothing of a failure outlives the keyed run that met
+/// counted on `counter`. Nothing of a failure outlives the keyed run that met
 /// it: the next `load` starts the block as the first did.
-pub struct AesBlocks<R: Registers, C: Clock> {
+pub struct AesBlocks<R: Registers, K: SettleCounter> {
     registers: R,
-    clock: C,
+    counter: K,
     /// A key is in the accelerator: a keyed run is open, or one leaked
     /// without its drop, whose stop the next `load` or the engine's drop
     /// then performs.
@@ -77,11 +77,11 @@ enum Direction {
     Decrypt,
 }
 
-impl<R: Registers, C: Clock> AesBlocks<R, C> {
-    pub const fn new(registers: R, clock: C) -> Self {
+impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
+    pub const fn new(registers: R, counter: K) -> Self {
         Self {
             registers,
-            clock,
+            counter,
             active: false,
         }
     }
@@ -129,19 +129,19 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
     }
 }
 
-impl<R: Registers, C: Clock> Drop for AesBlocks<R, C> {
+impl<R: Registers, K: SettleCounter> Drop for AesBlocks<R, K> {
     fn drop(&mut self) {
         self.clear();
     }
 }
 
-impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
+impl<R: Registers, K: SettleCounter> Aes128Engine for AesBlocks<R, K> {
     type Keyed<'a>
-        = Keyed<'a, R, C>
+        = Keyed<'a, R, K>
     where
         Self: 'a;
 
-    fn load(&mut self, key: &Aes128Key) -> Result<Keyed<'_, R, C>, BlockError> {
+    fn load(&mut self, key: &Aes128Key) -> Result<Keyed<'_, R, K>, BlockError> {
         if let Err(error) = self.initialize(key) {
             self.clear();
             return Err(error);
@@ -156,12 +156,12 @@ impl<R: Registers, C: Clock> Aes128Engine for AesBlocks<R, C> {
 /// The engine with a key loaded, in the direction of its last block or
 /// ended by a failed one. Dropping it is the stop: the block reset, the key
 /// and block words erased, the clock gated.
-pub struct Keyed<'a, R: Registers, C: Clock> {
-    engine: &'a mut AesBlocks<R, C>,
+pub struct Keyed<'a, R: Registers, K: SettleCounter> {
+    engine: &'a mut AesBlocks<R, K>,
     run: KeyedRun,
 }
 
-impl<R: Registers, C: Clock> Keyed<'_, R, C> {
+impl<R: Registers, K: SettleCounter> Keyed<'_, R, K> {
     /// Select `direction` for the next block, writing the mode word only
     /// when it changes, or answer the run's failure.
     fn enter(&mut self, direction: Direction) -> Result<(), BlockError> {
@@ -190,7 +190,7 @@ impl<R: Registers, C: Clock> Keyed<'_, R, C> {
     }
 }
 
-impl<R: Registers, C: Clock> AesBlocks<R, C> {
+impl<R: Registers, K: SettleCounter> AesBlocks<R, K> {
     /// Write `block`, start it and wait for it on `STATE` within
     /// [`BLOCK_SETTLE`]; the output replaces `block`, or the block is erased
     /// and the failure returned.
@@ -202,7 +202,7 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
         engine.registers.start();
         let registers = &engine.registers;
         let mut observation = AesStateField::constant::<{ AesState::Work.bits() }>();
-        let settled = settle(Settle::new(BLOCK_SETTLE, &engine.clock), || {
+        let settled = settle(Settle::new(BLOCK_SETTLE, &engine.counter), || {
             observation = registers.state();
             (state(observation) != Some(AesState::Work)).then_some(())
         });
@@ -225,7 +225,7 @@ impl<R: Registers, C: Clock> AesBlocks<R, C> {
     }
 }
 
-impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
+impl<R: Registers, K: SettleCounter> BlockEngine for Keyed<'_, R, K> {
     fn encrypt(&mut self, block: &mut Block) -> Result<(), BlockError> {
         self.enter(Direction::Encrypt)?;
         self.block(block)
@@ -237,7 +237,7 @@ impl<R: Registers, C: Clock> BlockEngine for Keyed<'_, R, C> {
     }
 }
 
-impl<R: Registers, C: Clock> Drop for Keyed<'_, R, C> {
+impl<R: Registers, K: SettleCounter> Drop for Keyed<'_, R, K> {
     fn drop(&mut self) {
         self.engine.clear();
     }
