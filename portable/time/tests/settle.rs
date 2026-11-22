@@ -165,3 +165,25 @@ fn the_counter_s_cycles_decide_the_length() {
     });
     assert_eq!((result, attempts), (Err(Unsettled), 6));
 }
+
+#[test]
+fn a_lent_counter_counts_as_its_owner() {
+    fn run<K: SettleCounter>(
+        counter: &K,
+        now: impl Fn() -> u32,
+    ) -> (Result<(), Unsettled>, u32, u32) {
+        let mut attempts = 0;
+        let result = settle(Settle::new(limit(5), counter), || {
+            attempts += 1;
+            None
+        });
+        (result, attempts, now())
+    }
+    let owned = VirtualCounter::new(10, 1);
+    let owned = run(&owned, || owned.now());
+    let counter = VirtualCounter::new(10, 1);
+    // `K` is `&VirtualCounter`: the settle counts on the lent counter.
+    let lent = run(&&counter, || counter.now());
+    assert_eq!(lent, owned);
+    assert_eq!(owned.0, Err(Unsettled));
+}
