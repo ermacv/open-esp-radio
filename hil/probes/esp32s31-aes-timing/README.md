@@ -45,8 +45,9 @@ start, AES start), `wait` and `finish` (`DMA_EXIT` and the copy out).
 `unwrap`, `ccm-seal` and `cmac` run the same code over every block
 (`src/ops.rs`, checked on the host against RustCrypto's `ccm` and `cmac`);
 `unwrap` uses `oer-portable-crypto`'s RFC 3394 unwrap (`block::unwrap_now`). The
-`driver` mode runs only `unwrap`, the one operation the station hands the
-accelerator. Every hardware result is compared with the software one.
+`driver` mode runs `block` (one block as the driver runs it: its write,
+start and settled `STATE` wait, under one loaded key) and `unwrap`, the one
+operation the station hands the accelerator. Every hardware result is compared with the software one.
 
 The console prints one line per case,
 `OER-PROBE aes-timing <mode> <operation> bytes=<n> runs=<n> min=<cycles>

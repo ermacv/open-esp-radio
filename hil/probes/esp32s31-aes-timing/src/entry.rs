@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use oer_portable_crypto::block::{Aes128Blocks, Block, BlockCipher};
+use oer_portable_crypto::block::{Aes128Blocks, Aes128Engine, Block, BlockCipher, BlockEngine};
 use oer_portable_crypto::{Aes128Key, KeyData, KeyUnwrapRequest};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_chips_esp32s31_platform_board as board;
@@ -290,7 +290,9 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
 /// place as the Wi-Fi station does in its step.
 async fn driver_mode(aes: InterruptingAes) -> bool {
     let mut engine = oer_chips_esp32s31_drivers_aes::AesBlocks::new(aes, EmbassyClock);
-    let mut agree = true;
+    let (stats, mut agree) = driver_block_case(&mut engine);
+    report("driver", "block", 16, &stats);
+    pause().await;
     for plain in UNWRAP_PLAIN {
         let (plaintext, wrapped) = wrapped(plain);
         let mut stats = Stats::default();
@@ -315,6 +317,29 @@ async fn driver_mode(aes: InterruptingAes) -> bool {
         b"OER-PROBE aes-timing driver disagrees with software\r\n"
     });
     agree
+}
+
+/// One encryption of a block as the driver runs it (its write, start and
+/// settled `STATE` wait), 256 times under one loaded key; whether the last
+/// block agrees with software.
+fn driver_block_case(engine: &mut impl Aes128Engine) -> (Stats, bool) {
+    let key = Aes128Key::copy_from(&KEY);
+    let mut stats = Stats::default();
+    let mut block: Block = [0x3c; 16];
+    let mut expected: Block = [0x3c; 16];
+    let mut software = SoftwareAes128.load_key(&key);
+    let Ok(mut keyed) = engine.load(&key) else {
+        return (stats, false);
+    };
+    let mut agree = true;
+    for _ in 0..256 {
+        let start = oer_portable_riscv::cycle32();
+        let ran = keyed.encrypt(&mut block);
+        stats.add(oer_portable_riscv::cycle32().wrapping_sub(start));
+        agree &= ran.is_ok();
+        software.encrypt_block(&mut expected);
+    }
+    (stats, agree && block == expected)
 }
 
 /// How many runs a case of `bytes` takes: fewer for the long inputs.
