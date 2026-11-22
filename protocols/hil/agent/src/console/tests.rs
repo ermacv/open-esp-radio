@@ -315,6 +315,88 @@ fn a_second_request_is_refused_busy_while_one_is_in_work_and_taken_after_its_ans
 }
 
 #[test]
+fn a_request_while_the_worker_holds_a_reply_is_refused_busy_and_never_reaches_the_worker() {
+    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let (taken, gate) = (Cell::new(0), Cell::new(false));
+    let worker = async {
+        loop {
+            let (request, reply) = inbox.next().await;
+            taken.set(taken.get() + 1);
+            while !gate.get() {
+                embassy_futures::yield_now().await;
+            }
+            reply.answer(&ProbeArmed(mode(request)));
+        }
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        // The request place is empty: the worker took the first request
+        // and holds its reply.
+        if taken.get() == 1 && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        if host.frames().len() == 2 {
+            gate.set(true);
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(
+        host.frames(),
+        [
+            (0, 0, Hello::KEY),
+            (2, 1, REJECTED),
+            (1, 2, ProbeArmed::KEY)
+        ]
+    );
+    assert_eq!(rejections(&host), [(2, RejectReason::Busy)]);
+    assert_eq!(
+        taken.get(),
+        1,
+        "the refused request never reached the worker"
+    );
+}
+
+#[test]
+fn a_debt_is_paid_once_when_the_next_request_s_wait_is_cancelled_after_paying() {
+    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+    let host = Host::default();
+    host.send(0, 1, Probe(ProbeMode::Complete));
+    let cancelled = Cell::new(false);
+    let worker = async {
+        let mut inbox = inbox;
+        let (_request, reply) = inbox.next().await;
+        drop(reply);
+        // This call pays the debt, then waits for a request and is
+        // cancelled while it waits: no request comes before the cancel.
+        let deadline = async {
+            for _ in 0..3 {
+                embassy_futures::yield_now().await;
+            }
+        };
+        let waited = embassy_futures::select::select(inbox.next(), deadline).await;
+        assert!(matches!(
+            waited,
+            embassy_futures::select::Either::Second(())
+        ));
+        cancelled.set(true);
+        prober(inbox, mode).await;
+    };
+    let sent = Cell::new(false);
+    run_until(&mut console, &host, worker, |host| {
+        if host.frames().len() == 2 && cancelled.get() && !sent.get() {
+            sent.set(true);
+            host.send(0, 2, Probe(ProbeMode::Complete));
+        }
+        host.frames().len() == 3
+    });
+    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+}
+
+#[test]
 fn a_rejection_names_the_request() {
     let (mut console, _inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();

@@ -181,10 +181,12 @@ impl<R: Requests> Inbox<'_, R> {
                 break entry;
             }
         };
+        // Owed from the moment the request is taken: a call dropped while it
+        // waits for the place leaves the debt for the next call to pay.
+        self.debt = Debt::Owed(identity);
         // The console took the previous answer before it handed this
         // request, so the place is free and this wait ends at once.
         let place = self.answers.ready().await;
-        self.debt = Debt::Owed(identity);
         (
             request,
             Reply {
