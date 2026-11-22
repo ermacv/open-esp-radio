@@ -10570,6 +10570,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R3 cleans the cores and the contracts (tasks/312)",
     ),
     (
+        "protocols/hil/agent/src/console.rs",
+        "clippy::result_large_err",
+        1,
+        "a full queue returns the message to the producer that holds it, to wait again",
+    ),
+    (
         "protocols/hil/agent/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,

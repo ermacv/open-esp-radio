@@ -77,13 +77,6 @@ pub trait Immediate {
     fn take_lost() -> u32;
 }
 
-/// Where a message went: queued with its sequence, or back to its producer
-/// unnumbered, the queue full.
-enum Entry {
-    Queued(u32),
-    Full(Outbound),
-}
-
 /// One console. `NOTES` bounds the queued notes and `MESSAGES` the queued
 /// messages; `P` is the chip's early writer.
 pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
@@ -177,8 +170,8 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             return None;
         };
         match self.enter(message) {
-            Entry::Queued(sequence) => Some(sequence),
-            Entry::Full(_message) => {
+            Ok(sequence) => Some(sequence),
+            Err(_full) => {
                 self.lose_numbered();
                 None
             }
@@ -203,15 +196,19 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             // A producer of a higher level may take the room between the
             // wait and the entry: the message then waits again, unnumbered.
             match self.enter(message) {
-                Entry::Queued(sequence) => return sequence,
-                Entry::Full(back) => message = back,
+                Ok(sequence) => return sequence,
+                Err(back) => message = back,
             }
         }
     }
 
-    /// Number `message` and queue it, in one critical section; a full queue
-    /// returns it unnumbered.
-    fn enter(&self, mut message: Outbound) -> Entry {
+    /// Number `message` and queue it, in one critical section: its
+    /// sequence, or the message back unnumbered when the queue is full.
+    #[expect(
+        clippy::result_large_err,
+        reason = "a full queue returns the message to the producer that holds it, to wait again"
+    )]
+    fn enter(&self, mut message: Outbound) -> Result<u32, Outbound> {
         self.entry.lock(|()| {
             let sequence = self.sequence.load(Ordering::Relaxed);
             message.message_sequence = sequence;
@@ -219,9 +216,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
                 Ok(()) => {
                     self.sequence
                         .store(sequence.wrapping_add(1), Ordering::Relaxed);
-                    Entry::Queued(sequence)
+                    Ok(sequence)
                 }
-                Err(embassy_sync::channel::TrySendError::Full(message)) => Entry::Full(message),
+                Err(embassy_sync::channel::TrySendError::Full(message)) => Err(message),
             }
         })
     }
