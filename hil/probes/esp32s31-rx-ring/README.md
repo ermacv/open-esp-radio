@@ -42,6 +42,5 @@ it refuses every step but the cold snapshot until the next boot.
 
 The radio work is the radio level's one task (the interrupt executor of
 level 2); the console and the agent run on the application level and hand
-each request over through the agent's mailbox. An answer the radio level
-publishes while the console publishes its own is dropped and counted by the
-console, and the host then sees its request time out, an incomplete case.
+each request over through the agent's mailbox. The radio level puts each
+answer into the console's queue itself, which numbers it as it enters.
