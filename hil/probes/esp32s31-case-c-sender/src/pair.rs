@@ -456,22 +456,28 @@ pub(crate) fn counters(
 }
 
 /// The ring's state: where its walker stands and each descriptor's control
-/// word, R's last.
+/// word, in the ring's order.
 pub(crate) fn ring_state<const N: usize>(
     standing: Standing,
-    controls: (
-        [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
-        oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
-    ),
+    controls: [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
 ) -> service::RingState {
-    let (ring, reserved) = controls;
     service::RingState {
         standing: standing_of(standing),
-        controls: ring
-            .iter()
-            .chain(core::iter::once(&reserved))
-            .map(|control| control.bits())
-            .collect(),
+        controls: controls.iter().map(|control| control.bits()).collect(),
+        seats: controls.iter().map(|control| seat(*control)).collect(),
+    }
+}
+
+/// A descriptor's control word as its fields read.
+fn seat(control: oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl) -> service::Seat {
+    if control.rx_done() {
+        service::Seat::Done {
+            length: control.length(),
+        }
+    } else if control.owner() && control.length() == control.size() {
+        service::Seat::Armed
+    } else {
+        service::Seat::Other
     }
 }
 

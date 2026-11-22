@@ -229,6 +229,38 @@ fn complete(
     })
 }
 
+/// One non-QoS Data frame of `length` octets (without its FCS) from
+/// `station` to `peer`, awaited: its completion's status.
+///
+/// IEEE 802.11-2020 9.3.2.1: Frame Control (type Data, subtype Data),
+/// Duration, Address 1 the receiver, Address 2 the transmitter, Address 3
+/// the receiver as BSSID, Sequence Control, then the body.
+pub(super) async fn single(
+    frames: &Frames,
+    ordinary: &mut Descriptor,
+    access: &mut RadioAccess,
+    station: [u8; 6],
+    peer: [u8; 6],
+    length: usize,
+) -> Result<Ended, Failure> {
+    let mut header = [0_u8; 24];
+    header[0] = 0x08;
+    for (cell, byte) in header[4..10].iter_mut().zip(peer) {
+        *cell = byte;
+    }
+    for (cell, byte) in header[10..16].iter_mut().zip(station) {
+        *cell = byte;
+    }
+    for (cell, byte) in header[16..22].iter_mut().zip(peer) {
+        *cell = byte;
+    }
+    let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
+        header.get(offset).copied().unwrap_or(offset as u8)
+    })?;
+    start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
+    await_completion(access, ordinary).await
+}
+
 /// The ordinary queue as the MAC holds it now, in the service's words.
 pub(super) fn queue_state(access: &mut RadioAccess) -> service::QueueState {
     use oer_chips_esp32s31_hal::types::MacTxQueueOwnership;

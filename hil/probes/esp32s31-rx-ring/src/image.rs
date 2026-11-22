@@ -59,7 +59,7 @@ use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_protocols_hil_protocol::RequestIdentity;
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
-/// The ring: sixteen descriptors and R; the arena's other fifteen buffers
+/// The ring: sixteen descriptors; the arena's other sixteen buffers
 /// are the spares a lent unit is exchanged for. Each buffer is 256 octets
 /// with the 64-octet header below its floor: case C's 700- and 1 500-octet
 /// frames are chains of three and of seven descriptors.
@@ -67,7 +67,7 @@ const RING: usize = 16;
 const SIZE: usize = 256;
 const FLOOR: usize = 64;
 const BUFFERS: usize = 32;
-const SPARES: usize = BUFFERS - RING - 1;
+const SPARES: usize = BUFFERS - RING;
 const BYTES: usize = BUFFERS * SIZE;
 /// The longest frame copied in place, its FCS and padding included.
 const COPY: usize = 1_600;
@@ -329,6 +329,8 @@ struct Counts {
     foreign: u32,
     length_anomalies: u32,
     doorbell_anomalies: u32,
+    patterns: u32,
+    pattern_written: u32,
 }
 
 impl Counts {
@@ -343,6 +345,8 @@ impl Counts {
             foreign: self.foreign,
             length_anomalies: self.length_anomalies,
             doorbell_anomalies: self.doorbell_anomalies,
+            patterns: self.patterns,
+            pattern_written: self.pattern_written,
         }
     }
 }
@@ -396,6 +400,9 @@ enum Seen {
         bytes: bool,
         length: bool,
     },
+    /// The sender's `single` frame: every body byte its offset's; its bytes
+    /// after the header as written.
+    Pattern { written: usize },
 }
 
 const RETRY: u8 = 0x08;
@@ -421,6 +428,11 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: [u8; 6]) -> See
     }
     if from != sender {
         return Seen::Foreign;
+    }
+    // The sender's `single` frame before case C's: its body bytes may read
+    // as a counter of some case.
+    if let Seen::Pattern { written } = pattern(frame, written, kind) {
+        return Seen::Pattern { written };
     }
     let probe = if kind == 0x88 {
         Case::Amsdu2
@@ -458,6 +470,20 @@ fn check(frame: &[u8], written: usize, station: [u8; 6], sender: [u8; 6]) -> See
         case,
         bytes: bytes_agree,
         length: length_agrees,
+    }
+}
+
+/// The sender's `single` frame, or a foreign one: a non-QoS Data frame whose
+/// body bytes are each their offset's, checked up to the written bytes'
+/// last word, which may be padding.
+fn pattern(frame: &[u8], written: usize, kind: u8) -> Seen {
+    const BODY: usize = 24;
+    let checked = written.saturating_sub(3);
+    let body = (BODY..checked).all(|offset| frame.get(offset) == Some(&(offset as u8)));
+    if kind == 0x08 && checked > BODY && body {
+        Seen::Pattern { written }
+    } else {
+        Seen::Foreign
     }
 }
 
@@ -505,6 +531,10 @@ async fn window(
         let served = ring.serve(&cycles, |view| {
             let tally = |seen: Seen, counts: &mut Counts| match seen {
                 Seen::Foreign => counts.foreign = counts.foreign.saturating_add(1),
+                Seen::Pattern { written } => {
+                    counts.patterns = counts.patterns.saturating_add(1);
+                    counts.pattern_written = u32::try_from(written).unwrap_or(u32::MAX);
+                }
                 Seen::Sender { bytes, length, .. } => {
                     counts.sender = counts.sender.saturating_add(1);
                     counts.mismatched = counts.mismatched.saturating_add(u32::from(!bytes));
@@ -787,7 +817,6 @@ async fn worker(
         let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
         let (arena, mut fresh) = Arena::<RingRx, BYTES>::claim().ok_or((phase::RING, 2))?;
         let ring: [Handle<RingRx>; RING] = first_of(&mut fresh).ok_or((phase::RING, 3))?;
-        let reserved = fresh.next().ok_or((phase::RING, 4))?;
         let mut spares = heapless::Vec::<Handle<RingRx>, SPARES>::new();
         for spare in fresh {
             spares.push(spare).map_err(|_| (phase::RING, 5))?;
@@ -833,7 +862,6 @@ async fn worker(
             walker,
             arena,
             ring,
-            reserved,
         };
         let (ring, enabled) = begin(
             &mut access,
@@ -1035,7 +1063,7 @@ async fn worker(
                 let (reset, parts, place) =
                     stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
                 let stopped = micros_since(began);
-                let handles = parts.ring.len() + 1 + spares.len();
+                let handles = parts.ring.len() + spares.len();
                 // T5: the next start from the cold preparation.
                 let began = EmbassyClock.now();
                 let mut clocked = WifiClocked::from_running(access, clocks_on);

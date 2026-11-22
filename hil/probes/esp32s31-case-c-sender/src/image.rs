@@ -45,17 +45,17 @@ use oer_portable_memory::arena::{Arena, Handle};
 use oer_portable_time::{Clock, Duration, Timer};
 use oer_protocols_hil_protocol::RequestIdentity;
 
-/// The sender's receive ring: eight descriptors and R, each buffer of 256
+/// The sender's receive ring: eight descriptors, each buffer of 256
 /// octets with the 64-octet header below its floor. The MAC's start takes
 /// it; the sender serves no frame of it, and the counters report its state.
 const RING: usize = 8;
 const SIZE: usize = 256;
-const BUFFERS: usize = RING + 1;
+const BUFFERS: usize = RING;
 const BYTES: usize = BUFFERS * SIZE;
 
 oer_portable_memory::arena! {
     /// The sender's receive buffers.
-    pub(crate) SenderRx: window DmaWindow, count 9, size 256, floor 64,
+    pub(crate) SenderRx: window DmaWindow, count 8, size 256, floor 64,
         placed by oer_chips_esp32s31_hal::dma_static
         as oer_chips_esp32s31_hal::system::memory::dma_static::DmaStatic
         in ".dma.bss.case_c_sender_rx";
@@ -421,6 +421,7 @@ fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
         SenderRequest::Stop(_) => answer(identity, &service::Stopped::Refused(refusal)),
         SenderRequest::Target(_) => answer(identity, &service::Targeted::Refused(refusal)),
         SenderRequest::Round(_) => answer(identity, &service::Sent::Refused(refusal)),
+        SenderRequest::Single(_) => answer(identity, &service::SentOne::Refused(refusal)),
     }
 }
 
@@ -473,12 +474,11 @@ async fn worker(
     let up = async {
         let brought = apart!(bring_up(parts, &timer, &mut platform))?;
         // The ring's parts: the table, the walker's registers, the arena
-        // and its buffers (the ring's and R's).
+        // and its buffers.
         let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
         let table = RxTable::place::<ChipDma>(table).map_err(|_| (phase::RING, 1))?;
         let (arena, mut fresh) = Arena::<SenderRx, BYTES>::claim().ok_or((phase::RING, 2))?;
         let ring: [Handle<SenderRx>; RING] = first_of(&mut fresh).ok_or((phase::RING, 3))?;
-        let reserved = fresh.next().ok_or((phase::RING, 4))?;
         let place = RING_PLACE
             .try_init(MaybeUninit::uninit())
             .ok_or((phase::RING, 5))?;
@@ -519,7 +519,6 @@ async fn worker(
             walker,
             arena,
             ring,
-            reserved,
         };
         let (ring, enabled) = begin(
             &mut access,
@@ -588,6 +587,45 @@ async fn worker(
             }
             SenderRequest::Round(_) if matches!(steps, Steps::Failed) => {
                 answer(id, &service::Sent::Refused(Refusal::StepFailed));
+            }
+            SenderRequest::Single(_) if matches!(steps, Steps::Failed) => {
+                answer(id, &service::SentOne::Refused(Refusal::StepFailed));
+            }
+            SenderRequest::Single(request) => {
+                let Some(peer) = receiver else {
+                    answer(id, &service::SentOne::Refused(Refusal::NoReceiver));
+                    continue;
+                };
+                if !service::SINGLE_LENGTHS.contains(&request.length) {
+                    answer(id, &service::SentOne::Refused(Refusal::LengthOutOfRange));
+                    continue;
+                }
+                match transmit::single(
+                    &frames,
+                    &mut ordinary,
+                    &mut access,
+                    station,
+                    peer,
+                    usize::from(request.length),
+                )
+                .await
+                {
+                    Ok(ended) => answer(
+                        id,
+                        &service::SentOne::Ended {
+                            status: ended.status,
+                        },
+                    ),
+                    Err((phase, index)) => {
+                        answer(
+                            id,
+                            &service::SentOne::Failed(service::Failure { phase, index }),
+                        );
+                        // As after a failed round: the frame may still be
+                        // the hardware's.
+                        steps = Steps::Failed;
+                    }
+                }
             }
             SenderRequest::Target(request) => {
                 receiver = Some(request.receiver);

@@ -169,9 +169,9 @@ impl RxDescriptor {
 
     /// Rewrites only the ownership word, keeping the buffer and the link.
     ///
-    /// The live RX-ring owner uses it to rearm the reserved descriptor after
-    /// a frame landed in it; that descriptor's link is the walker's and is
-    /// changed separately, only after the walker left it.
+    /// The receive ring's `copy_in_place` of a single and of a chain uses it
+    /// to re-arm a unit's own descriptors with the buffers they hold, once
+    /// the frame is copied out; the ring then links them behind the tail.
     #[inline]
     pub(crate) fn publish_word0(&self, word0: WifiRxDmaDescriptorControl) {
         self.0.control().write(word0);

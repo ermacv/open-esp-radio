@@ -20,9 +20,28 @@ cargo hil run radio-pair --board receiver=s31-a --board sender=s31-b
 | `peer` | the sender told the receiver's address (`target`), the receiver the sender's (`expect`) | both acknowledge |
 | `case-c` | the sender's 6 000 rounds of case C posted (about 45 s, past R4's end); meanwhile the receiver's R1 and R2 (a 2 s window, chains recorded), R3 (a 100 ms stall, the walker's standing, a 1 s window) and R4 (50 turns of a 200 ms window, the stop, the cold start, a 200 ms window); the counters after R2 and R4; then the sender's ends | each R's thresholds (`tasks/277`, `281`) and the rounds without a failure; a failing case names every R that failed, and the receiver's step that ran when the sender's rounds failed; both boards' snapshots and counters are then kept again |
 | `stop` | each board's stop: the walker's edge, the stop request and its hold, the reset after a stop, the release | both stopped |
+| `first-frame` | for each length of 100, 252, 253 and 700 octets, three fresh boots of the receiver, each with one `single` frame as its first frame (below) | every complete boot: the frame's one terminal descriptor where its length puts it from d0, no length anomaly, and one unit of the sender's pattern of its length (rounded up to a word) |
+
+`first-frame` is the regression case of a first frame that began outside
+the ring and ended in it (`tasks/358`); it runs last, since it boots both
+boards afresh. Each boot:
+1. the receiver reset, brought up and told its sender;
+2. its counters, every descriptor armed (else the boot is repeated);
+3. the sender's `single` frame of that length;
+4. the counters again: every descriptor that is not armed lies among the
+   descriptors one frame of that length takes from d0 (192 octets in d0,
+   256 in each after it), and the sender named the frame's end (else
+   repeated);
+5. a 1 s window;
+6. the stop.
+
+A length may take eight boots. Each complete boot is kept in
+`receiver/first-frame` with what the fixed ring leaves beside it; a
+complete boot that is not that fails the case, and a length short of its
+boots leaves it incomplete.
 
 The thresholds: R1 at least 1 000 sender units, none mismatched, no length
-disagreement, no anomaly, the 15 spares held; R2 at least 200 chains of each
+disagreement, no anomaly, the 16 spares held; R2 at least 200 chains of each
 of the 700- and 1 500-octet cases, none mismatched; R3 the cursor steady in
 one of the two recorded states and at least 100 sender units after; R4 every
 turn the 32 handles back, at least 50 sender units after and some before, no

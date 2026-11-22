@@ -23,7 +23,7 @@ operations of the PHY crate and the HAL, in the radio system's order
 - RX enable and channel 13 at 20 MHz.
 
 It then starts the MAC on the receive ring's atoms, over a small ring of
-its own (8 descriptors and R, 256-octet buffers), which it serves no frame
+its own (8 descriptors, 256-octet buffers), which it serves no frame
 of; its state is in the counters:
 - the first reset, the cold preparation with the walker's registers lent,
   the channel;
@@ -38,7 +38,8 @@ the agent (`hil/agent`) and the sender's requests
 | Request | What the probe does |
 |---|---|
 | `snapshot-cold`, `bring-up`, `snapshot-up`, `receive-counters`, `stop` | as the receiver's ([`esp32s31-rx-ring`](../esp32s31-rx-ring/README.md)) |
-| `target` | the receiver's station address, which `round` sends to |
+| `target` | the receiver's station address, which `round` and `single` send to |
+| `single` | one non-QoS Data frame of the given length (24 to 1 500 octets without its FCS) to the receiver, awaited; its completion's status, or the failed step (afterwards as after a failed round) |
 | `round` | the given number of case C's rounds to the receiver, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds. A failed step answers where the rounds stopped: its phase and index, the round and the frame's case, the microseconds since the rounds began, the completion wait's bound (20 ms) and the ordinary queue as the MAC holds it (`ordinary_tx_queue_snapshot`: ownership, raised events, activity code, hang counters); afterwards `target` and `round` are refused (`StepFailed`), the frame possibly still the hardware's, and the snapshots, the counters and the stop answer |
 
 With `--features ccmp`, `round` sends cell E's protected QoS cases instead;
