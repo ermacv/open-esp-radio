@@ -27,18 +27,22 @@ The cases, their thresholds and the verdict are
 
 | Request | What the probe does |
 |---|---|
-| `snapshot-cold` | the reset cause, as the adoption read it, before the bring-up |
+| `snapshot-cold` | before the bring-up: the reset cause, as the adoption read it, and the radio domain's power, clock and reset words (`RadioDomain::observe_power`: PMU, HP_SYS_CLKRST, and MODEM_SYSCON and MODEM_LPCON when the modem register bus reads open, unreadable otherwise) |
 | `bring-up` | the PHY's registration, coexistence, power, the clocks, the PHY client, the tracking due, the MAC's cold start on the ring, the channel; then it reads its snapshot after the bring-up |
-| `snapshot-up` | the temperature code, the RF PLL's frequency block and the PHY's calibration results |
-| `receive-counters` | the MAC's receive counters, the walker's standing and every descriptor's control word |
+| `snapshot-up` | the cold snapshot's words read again after the bring-up, the temperature code, the RF PLL's frequency block and the PHY's calibration results |
+| `receive-counters` | the MAC's receive counters, the walker's standing and every descriptor's control word; no ring's state after a failed turn's stop |
 | `expect` | the sender's address: a unit is the sender's when it is to the station from that address, never learned from a first frame |
 | `window` | serves the ring for the given time: every single lent for a spare (copied in place when none is held), every chain copied in place, each checked; with chains recorded, each chain's descriptors and continuation words by position |
 | `stall` | leaves the ring unserved for the given time, then reads where the walker stands |
 | `turn` | a window, the stop (the walker's edge, the stop request and its hold, the reset after a stop, the release), the cold start, a window |
 | `stop` | the stop; afterwards every step but the cold snapshot is refused until the next boot |
 
-A step that fails answers its phase and index, and the probe goes down:
-it refuses every step but the cold snapshot until the next boot.
+A step that fails answers its phase and index; the probe then refuses
+every step but the snapshots, the counters and the stop (`StepFailed`)
+until the next boot. The stop takes the hardware down as after a pass; a
+turn that failed after its own stop has left the radio stopped, and the
+stop is then refused as `Down`. A bring-up that fails leaves only the cold
+snapshot.
 
 The radio work is the radio level's one task (the interrupt executor of
 level 2); the console and the agent run on the application level and hand

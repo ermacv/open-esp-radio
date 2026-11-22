@@ -18,12 +18,31 @@ pub(super) struct AmsduParts<'a> {
     pub(super) rounds: u32,
 }
 
+/// A failed step of the rounds and the frame it was at.
+#[derive(Clone, Copy)]
+pub(super) struct RoundStop {
+    pub(super) failure: Failure,
+    /// The round, from zero.
+    pub(super) round: u32,
+    /// The frame's case.
+    pub(super) tag: u32,
+}
+
+/// The failure of a step at `round`'s frame of `case`.
+pub(super) fn at(round: u32, case: crate::case_c::Case) -> impl Fn(Failure) -> RoundStop {
+    move |failure| RoundStop {
+        failure,
+        round,
+        tag: case.tag(),
+    }
+}
+
 /// The rounds, each frame awaited; per case, by the frame before it:
 /// acknowledged (status 0), ACK timeouts (status 5), other ends.
 pub(super) async fn series(
     parts: AmsduParts<'_>,
     access: &mut RadioAccess,
-) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, Failure> {
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, RoundStop> {
     #[cfg(feature = "ccmp")]
     {
         super::ccmp::series(parts, access).await
@@ -39,7 +58,7 @@ pub(super) async fn series(
 async fn rounds(
     parts: AmsduParts<'_>,
     access: &mut RadioAccess,
-) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, Failure> {
+) -> Result<heapless::Vec<service::CaseEnds, { service::CASES }>, RoundStop> {
     let AmsduParts {
         frames,
         ordinary,
@@ -54,11 +73,14 @@ async fn rounds(
         for case in order(round) {
             let counter = case.counter(round);
             let length = case.length();
-            let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
-                byte(case, station, peer, counter, offset)
-            })?;
-            start(access, ordinary, lease, length, frames.power, TIMEOUT)?;
-            let ended = await_completion(access, ordinary).await?;
+            let stop = at(round, case);
+            let lease = frames
+                .lease_frame(ORDINARY_SLOT, length, |offset| {
+                    byte(case, station, peer, counter, offset)
+                })
+                .map_err(&stop)?;
+            start(access, ordinary, lease, length, frames.power, TIMEOUT).map_err(&stop)?;
+            let ended = await_completion(access, ordinary).await.map_err(&stop)?;
             let at = CASES.iter().position(|each| *each == case);
             if let Some(cell) = at
                 .and_then(|at| ends.get_mut(at))

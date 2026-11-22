@@ -61,7 +61,7 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
             rx_tx_hang: u32::MAX,
             rx_tx_panic: u32::MAX,
         },
-        ring: RingState {
+        ring: Some(RingState {
             standing: Standing {
                 last: Some(u8::MAX),
                 next: NextAt::Ring(u8::MAX),
@@ -70,7 +70,7 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
                 cursor: Cursor::Moved,
             },
             controls: core::iter::repeat_n(u32::MAX, RING_DESCRIPTORS).collect(),
-        },
+        }),
     };
     let ends = CaseEnds {
         tag: u32::MAX,
@@ -119,10 +119,39 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         stop_micros: u32::MAX,
         start_micros: u32::MAX,
     };
+    let hang = HangCounters {
+        rx: u8::MAX,
+        tx: u8::MAX,
+        rx_tx_hang: u32::MAX,
+        rx_tx_panic: u32::MAX,
+    };
+    let failed = Sent::Failed(RoundFailure {
+        failure: Failure {
+            phase: u32::MAX,
+            index: u32::MAX,
+        },
+        round: u32::MAX,
+        tag: u32::MAX,
+        micros: u32::MAX,
+        bound_millis: u32::MAX,
+        queue: QueueState {
+            ownership: QueueOwnership::Published,
+            raised: [
+                QueueEvent::Completion,
+                QueueEvent::Timeout,
+                QueueEvent::Collision,
+            ]
+            .into_iter()
+            .collect(),
+            active_state: u8::MAX,
+            hang,
+        },
+    });
     for (name, length) in [
         ("snapshot page", encoded_length(&page)),
         ("counters", encoded_length(&counters)),
         ("sent", encoded_length(&sent)),
+        ("failed rounds", encoded_length(&failed)),
         ("windowed", encoded_length(&windowed)),
         ("turned", encoded_length(&turned)),
     ] {

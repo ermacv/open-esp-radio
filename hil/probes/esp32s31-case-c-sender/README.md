@@ -39,7 +39,7 @@ the agent (`hil/agent`) and the sender's requests
 |---|---|
 | `snapshot-cold`, `bring-up`, `snapshot-up`, `receive-counters`, `stop` | as the receiver's ([`esp32s31-rx-ring`](../esp32s31-rx-ring/README.md)) |
 | `target` | the receiver's station address, which `round` sends to |
-| `round` | the given number of case C's rounds to the receiver, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds |
+| `round` | the given number of case C's rounds to the receiver, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds. A failed step answers where the rounds stopped: its phase and index, the round and the frame's case, the microseconds since the rounds began, the completion wait's bound (20 ms) and the ordinary queue as the MAC holds it (`ordinary_tx_queue_snapshot`: ownership, raised events, activity code, hang counters); afterwards `target` and `round` are refused (`StepFailed`), the frame possibly still the hardware's, and the snapshots, the counters and the stop answer |
 
 With `--features ccmp`, `round` sends cell E's protected QoS cases instead;
 each case's ends are its first column, and a seal the protocol layer refused

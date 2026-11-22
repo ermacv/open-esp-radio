@@ -71,6 +71,9 @@ pub enum Refusal {
     AlreadyUp,
     /// The radio was stopped: nothing runs until the next boot.
     Down,
+    /// A step failed: until the next boot only the counters, the snapshots
+    /// and the stop answer.
+    StepFailed,
     /// The receiver was not told its sender ([`Expect`]).
     NoSender,
     /// The sender was not told its receiver ([`Target`]).
@@ -245,7 +248,8 @@ pub enum BroughtUp {
 pub struct ReceiveCounters;
 
 /// The answer to [`ReceiveCounters`]: the MAC's counters as the hardware
-/// holds them (cumulative, wrapping) and the ring's state.
+/// holds them (cumulative, wrapping) and the ring's state, absent once a
+/// failed turn's stop took the ring down.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 #[allow(
     clippy::large_enum_variant,
@@ -256,7 +260,7 @@ pub enum Counters {
         mac: MacCounters,
         decode: DecodeCounters,
         hang: HangCounters,
-        ring: RingState,
+        ring: Option<RingState>,
     },
     Refused(Refusal),
 }
@@ -397,8 +401,52 @@ pub enum Sent {
         cases: heapless::Vec<CaseEnds, CASES>,
         micros: u32,
     },
-    Failed(Failure),
+    Failed(RoundFailure),
     Refused(Refusal),
+}
+
+/// Where the rounds stopped: the failed step, the frame it was at, the time
+/// since the rounds began, the completion wait's bound, and the transmit
+/// queue as the MAC held it when the step failed.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct RoundFailure {
+    pub failure: Failure,
+    /// The round, from zero.
+    pub round: u32,
+    /// The frame's case (`case_c::Case::tag`).
+    pub tag: u32,
+    pub micros: u32,
+    pub bound_millis: u32,
+    pub queue: QueueState,
+}
+
+/// The ordinary transmit queue as the MAC holds it
+/// (`MacOrdinaryTxQueueSnapshot`): a sequence of reads, not one capture.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct QueueState {
+    pub ownership: QueueOwnership,
+    /// The queue's raised result events.
+    pub raised: heapless::Vec<QueueEvent, 3>,
+    /// The MAC's shared activity code.
+    pub active_state: u8,
+    pub hang: HangCounters,
+}
+
+/// A transmit queue's result event.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum QueueEvent {
+    Completion,
+    Timeout,
+    Collision,
+}
+
+/// The queue's `ENABLE` and `VALID` bits: who holds it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum QueueOwnership {
+    Idle,
+    Enabled,
+    Valid,
+    Published,
 }
 
 /// One case's ends by the frame before it: acknowledged (status 0), ACK

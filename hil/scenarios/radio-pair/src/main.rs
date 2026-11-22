@@ -22,7 +22,7 @@
 use std::{
     process::ExitCode,
     sync::{Mutex, PoisonError},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use oer_hil_services_radio_pair::{
@@ -237,8 +237,10 @@ const fn anomalies(counts: &service::Counts) -> u32 {
 /// R's verdict is recorded, and the case fails naming every R that did.
 fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let rounds = cx.device(SENDER)?.post(Round { rounds: ROUNDS })?;
+    let mut timeline = Timeline::new();
     let mut failed = Vec::new();
     // R1 and R2: one window, singles lent and chains copied.
+    let began = timeline.now();
     let windowed = cx.device(RECEIVER)?.call(
         Window {
             millis: WINDOW_MS,
@@ -246,6 +248,7 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         },
         within(WINDOW_MS),
     )?;
+    timeline.step("r1-r2-window", began);
     keep(cx, RECEIVER, "r1-r2-window", &windowed);
     counters(cx, RECEIVER, "counters-r1-r2")?;
     match &windowed {
@@ -277,10 +280,13 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         other => failed.push(format!("R1 and R2: {other:?}")),
     }
     // R3: the stall, the walker's standing, then the exit by serve.
+    let began = timeline.now();
     let stood = cx
         .device(RECEIVER)?
         .call(Stall { millis: STALL_MS }, within(STALL_MS))?;
+    timeline.step("r3-stall", began);
     keep(cx, RECEIVER, "r3-standing", &stood);
+    let began = timeline.now();
     let exit = cx.device(RECEIVER)?.call(
         Window {
             millis: EXIT_MS,
@@ -288,6 +294,7 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
         },
         within(EXIT_MS),
     )?;
+    timeline.step("r3-window", began);
     keep(cx, RECEIVER, "r3-window", &exit);
     match (&stood, &exit) {
         (Stood::Standing(standing), Windowed::Counted { counts, .. }) => {
@@ -314,10 +321,12 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
     // R4: the turns.
     let mut turns = Vec::new();
     for turn in 0..TURNS {
+        let began = timeline.now();
         let turned = cx.device(RECEIVER)?.call(
             Turn { millis: TURN_MS },
             within(TURN_MS).saturating_add(Duration::from_millis(u64::from(TURN_MS))),
         )?;
+        timeline.step(&format!("r4-turn-{turn}"), began);
         let pass = match &turned {
             Turned::Turned {
                 before,
@@ -349,14 +358,70 @@ fn case_c(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let sent = cx.device(SENDER)?.wait(rounds, ROUNDS_TIMEOUT)?;
     keep(cx, SENDER, "rounds", &sent);
     counters(cx, SENDER, "counters-rounds")?;
+    keep(cx, RECEIVER, "steps", &timeline.steps);
     match &sent {
         Sent::Sent { .. } => {}
+        Sent::Failed(stopped) => {
+            // The sender's clock counts from its step's start, the host's from
+            // the post: the two differ by the request's way to the board.
+            let at = u64::from(stopped.micros / 1_000);
+            let during = timeline.during(at);
+            keep(
+                cx,
+                SENDER,
+                "rounds-failure",
+                &serde_json::json!({ "millis": at, "receiver_step": during }),
+            );
+            failed.push(format!(
+                "case C: {stopped:?}, the receiver at {}",
+                during.unwrap_or("no step")
+            ));
+        }
         other => failed.push(format!("case C: {other:?}")),
     }
     if failed.is_empty() {
-        Ok(())
-    } else {
-        Err(Failure::Fail(failed.join("; ")))
+        return Ok(());
+    }
+    // A failure is what the pair studies: both boards still answer their
+    // snapshot and counters; the stop case stops them.
+    for role in [RECEIVER, SENDER] {
+        let readings = snapshot(cx, role, Snapshot::Up)?;
+        keep(cx, role, "snapshot-after-failure", &readings);
+        counters(cx, role, "counters-after-failure")?;
+    }
+    Err(Failure::Fail(failed.join("; ")))
+}
+
+/// The receiver's steps, each from its request to its answer, in
+/// milliseconds since the sender's rounds were posted.
+struct Timeline {
+    posted: Instant,
+    steps: Vec<(String, u64, u64)>,
+}
+
+impl Timeline {
+    fn new() -> Self {
+        Self {
+            posted: Instant::now(),
+            steps: Vec::new(),
+        }
+    }
+
+    fn now(&self) -> u64 {
+        u64::try_from(self.posted.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+
+    fn step(&mut self, name: &str, began: u64) {
+        let ended = self.now();
+        self.steps.push((name.to_owned(), began, ended));
+    }
+
+    /// The step that ran at `millis`, or none.
+    fn during(&self, millis: u64) -> Option<&str> {
+        self.steps
+            .iter()
+            .find(|(_, began, ended)| (*began..=*ended).contains(&millis))
+            .map(|(name, ..)| name.as_str())
     }
 }
 
@@ -372,4 +437,23 @@ fn stop(cx: &mut Cx<'_>) -> Result<(), Failure> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_failure_s_moment_names_the_receiver_s_step_that_ran_then() {
+        let mut timeline = Timeline::new();
+        timeline.steps = vec![
+            ("r1-r2-window".to_owned(), 5, 2_010),
+            ("r3-stall".to_owned(), 2_015, 2_120),
+            ("r4-turn-0".to_owned(), 2_130, 2_600),
+        ];
+        assert_eq!(timeline.during(2_100), Some("r3-stall"));
+        assert_eq!(timeline.during(2_010), Some("r1-r2-window"));
+        assert_eq!(timeline.during(2_125), None, "between two steps");
+        assert_eq!(timeline.during(9_000), None, "after the last");
+    }
 }

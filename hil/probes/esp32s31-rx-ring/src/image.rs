@@ -741,7 +741,7 @@ fn refuse(identity: RequestIdentity, request: ReceiverRequest, refusal: Refusal)
     }
 }
 
-/// After a failure or the stop: the cold snapshot still answers, every
+/// After the bring-up's failure or the stop: the cold snapshot still answers, every
 /// other step is refused, until the next boot.
 async fn down(
     mut inbox: oer_hil_agent::Inbox<'static, ReceiverRequest>,
@@ -852,8 +852,8 @@ async fn worker(
         mut slot,
         access,
         clocks_on,
-        mut ring,
-        mut enabled,
+        ring,
+        enabled,
         arena,
         mut spares,
         mut sources,
@@ -888,6 +888,11 @@ async fn worker(
         channel,
     };
     let mut sender = None;
+    let mut receiving = Receiving::Up {
+        ring,
+        enabled,
+        steps: Steps::Open,
+    };
     loop {
         let (id, request) = inbox.next().await;
         match request {
@@ -896,186 +901,27 @@ async fn worker(
             ReceiverRequest::BringUp(_) => {
                 answer(id, &service::BroughtUp::Refused(Refusal::AlreadyUp));
             }
-            ReceiverRequest::ReceiveCounters(_) => match turns.access.as_ref() {
-                Some((access, _)) => answer(
+            ReceiverRequest::ReceiveCounters(_) => match (&mut receiving, turns.access.as_ref()) {
+                (Receiving::Up { ring, .. }, Some((access, _))) => answer(
                     id,
-                    &pair::counters(access, ring.standing(), ring.descriptor_controls()),
+                    &pair::counters(
+                        access,
+                        Some(pair::ring_state(
+                            ring.standing(),
+                            ring.descriptor_controls(),
+                        )),
+                    ),
                 ),
-                None => answer(id, &service::Counters::Refused(Refusal::Down)),
+                (Receiving::Stopped, Some((access, _))) => {
+                    answer(id, &pair::counters(access, None));
+                }
+                (_, None) => answer(id, &service::Counters::Refused(Refusal::Down)),
             },
-            ReceiverRequest::Expect(expect) => {
-                sender = Some(expect.sender);
-                answer(id, &service::Expecting::Expecting);
-            }
-            ReceiverRequest::Window(request) => {
-                let Some(sender) = sender else {
-                    answer(id, &service::Windowed::Refused(Refusal::NoSender));
-                    continue;
-                };
-                let mut record = ChainRecord {
-                    cases: [ChainCase::default(); CASES.len()],
-                    words: Words {
-                        seen: [heapless::Vec::new(), heapless::Vec::new()],
-                        overflow: 0,
-                    },
-                };
-                let mut service = Service {
-                    ring: &mut ring,
-                    arena,
-                    spares: &mut spares,
-                    station,
-                    sender,
-                };
-                let chains = match request.record {
-                    service::Record::Chains => Some(&mut record),
-                    service::Record::Counts => None,
-                };
-                match window(&mut service, cycles, request.millis, chains).await {
-                    Ok(counts) => answer(
-                        id,
-                        &service::Windowed::Counted {
-                            counts: counts.to_service(),
-                            spares: u8::try_from(spares.len()).unwrap_or(u8::MAX),
-                            chains: CASES
-                                .iter()
-                                .zip(&record.cases)
-                                .map(|(case, per)| service::ChainCase {
-                                    tag: case.tag(),
-                                    chains: per.chains,
-                                    least: per.least,
-                                    most: per.most,
-                                    expected: expected_descriptors(*case) as u32,
-                                    mismatched: per.mismatched,
-                                })
-                                .collect(),
-                            words: record
-                                .words
-                                .seen
-                                .iter()
-                                .enumerate()
-                                .flat_map(|(position, list)| {
-                                    list.iter().map(move |(word, seen)| service::WordSeen {
-                                        position: position as u8,
-                                        word: *word,
-                                        seen: *seen,
-                                    })
-                                })
-                                .take(service::WORDS)
-                                .collect(),
-                            words_overflow: record.words.overflow,
-                        },
-                    ),
-                    Err((phase, index)) => answer(
-                        id,
-                        &service::Windowed::Failed(service::Failure { phase, index }),
-                    ),
-                }
-            }
-            ReceiverRequest::Stall(request) => {
-                wait_micros(u64::from(request.millis) * 1_000).await;
-                answer(
-                    id,
-                    &service::Stood::Standing(pair::standing_of(ring.standing())),
-                );
-            }
-            ReceiverRequest::Turn(request) => {
-                let Some(sender) = sender else {
-                    answer(id, &service::Turned::Refused(Refusal::NoSender));
-                    continue;
-                };
-                // A failed step leaves no ring to serve: the answer names it
-                // and the receiver goes down.
-                macro_rules! step {
-                    ($answer:path, $result:expr) => {
-                        match $result {
-                            Ok(value) => value,
-                            Err((phase, index)) => {
-                                answer(id, &$answer(service::Failure { phase, index }));
-                                return down(inbox, &cold).await;
-                            }
-                        }
-                    };
-                }
-                let before = {
-                    let mut service = Service {
-                        ring: &mut ring,
-                        arena,
-                        spares: &mut spares,
-                        station,
-                        sender,
-                    };
-                    step!(
-                        service::Turned::Failed,
-                        window(&mut service, cycles, request.millis, None).await
-                    )
-                };
-                // T1 to T4.
-                let (mut access, clocks_on) = step!(
-                    service::Turned::Failed,
-                    turns.access.take().ok_or((phase::RING, 0x40))
-                );
-                let radio = step!(service::Turned::Failed, held_radio(turns.slot));
-                let began = EmbassyClock.now();
-                let (reset, parts, place) =
-                    stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
-                let stopped = micros_since(began);
-                let handles = parts.ring.len() + 1 + spares.len();
-                // T5: the next start from the cold preparation.
-                let began = EmbassyClock.now();
-                let mut clocked = WifiClocked::from_running(access, clocks_on);
-                let mut walker = parts.walker;
-                let prepared = step!(
-                    service::Turned::Failed,
-                    apart!(prepare(
-                        turns.slot,
-                        &mut clocked,
-                        &mut walker,
-                        turns.sources,
-                        reset,
-                        turns.mac,
-                        turns.channel,
-                        &timer,
-                        &mut platform,
-                    ))
-                );
-                let (mut access, clocks_on) = clocked.into_running();
-                let parts = Parts { walker, ..parts };
-                (ring, enabled) = begin(
-                    &mut access,
-                    turns.mac_irq,
-                    turns.power_irq,
-                    prepared,
-                    place,
-                    parts,
-                );
-                let started = micros_since(began);
-                turns.access = Some((access, clocks_on));
-                let after = {
-                    let mut service = Service {
-                        ring: &mut ring,
-                        arena,
-                        spares: &mut spares,
-                        station,
-                        sender,
-                    };
-                    step!(
-                        service::Turned::Failed,
-                        window(&mut service, cycles, request.millis, None).await
-                    )
-                };
-                answer(
-                    id,
-                    &service::Turned::Turned {
-                        before: before.to_service(),
-                        after: after.to_service(),
-                        handles: u8::try_from(handles).unwrap_or(u8::MAX),
-                        stop_micros: stopped,
-                        start_micros: started,
-                    },
-                );
-            }
             ReceiverRequest::Stop(_) => {
-                let Some((mut access, clocks_on)) = turns.access.take() else {
+                let (Receiving::Up { ring, enabled, .. }, Some((mut access, clocks_on))) = (
+                    core::mem::replace(&mut receiving, Receiving::Stopped),
+                    turns.access.take(),
+                ) else {
                     answer(id, &service::Stopped::Refused(Refusal::Down));
                     return down(inbox, &cold).await;
                 };
@@ -1099,6 +945,298 @@ async fn worker(
                 }
                 return down(inbox, &cold).await;
             }
+            ReceiverRequest::Turn(request) => {
+                let Some(sender) = sender else {
+                    answer(id, &service::Turned::Refused(Refusal::NoSender));
+                    continue;
+                };
+                let (mut ring, enabled) =
+                    match core::mem::replace(&mut receiving, Receiving::Stopped) {
+                        Receiving::Up {
+                            ring,
+                            enabled,
+                            steps: Steps::Open,
+                        } => (ring, enabled),
+                        held => {
+                            let refusal = match held {
+                                Receiving::Up { .. } => Refusal::StepFailed,
+                                Receiving::Stopped => Refusal::Down,
+                            };
+                            receiving = held;
+                            answer(id, &service::Turned::Refused(refusal));
+                            continue;
+                        }
+                    };
+                // A step that fails with the ring up keeps it, failed; one
+                // that fails after the stop leaves the radio stopped.
+                macro_rules! failed {
+                    ($state:expr, $phase:expr, $index:expr) => {{
+                        receiving = $state;
+                        answer(
+                            id,
+                            &service::Turned::Failed(service::Failure {
+                                phase: $phase,
+                                index: $index,
+                            }),
+                        );
+                        continue;
+                    }};
+                }
+                let before = {
+                    let mut service = Service {
+                        ring: &mut ring,
+                        arena,
+                        spares: &mut spares,
+                        station,
+                        sender,
+                    };
+                    window(&mut service, cycles, request.millis, None).await
+                };
+                let before = match before {
+                    Ok(before) => before,
+                    Err((phase, index)) => failed!(
+                        Receiving::Up {
+                            ring,
+                            enabled,
+                            steps: Steps::Failed,
+                        },
+                        phase,
+                        index
+                    ),
+                };
+                // T1 to T4.
+                let Some((mut access, clocks_on)) = turns.access.take() else {
+                    failed!(
+                        Receiving::Up {
+                            ring,
+                            enabled,
+                            steps: Steps::Failed,
+                        },
+                        phase::RING,
+                        0x40
+                    )
+                };
+                let radio = match held_radio(turns.slot) {
+                    Ok(radio) => radio,
+                    Err((phase, index)) => {
+                        turns.access = Some((access, clocks_on));
+                        failed!(
+                            Receiving::Up {
+                                ring,
+                                enabled,
+                                steps: Steps::Failed,
+                            },
+                            phase,
+                            index
+                        )
+                    }
+                };
+                let began = EmbassyClock.now();
+                let (reset, parts, place) =
+                    stop(radio, &mut access, &clocks_on, ring, enabled, cycles);
+                let stopped = micros_since(began);
+                let handles = parts.ring.len() + 1 + spares.len();
+                // T5: the next start from the cold preparation.
+                let began = EmbassyClock.now();
+                let mut clocked = WifiClocked::from_running(access, clocks_on);
+                let mut walker = parts.walker;
+                let prepared = apart!(prepare(
+                    turns.slot,
+                    &mut clocked,
+                    &mut walker,
+                    turns.sources,
+                    reset,
+                    turns.mac,
+                    turns.channel,
+                    &timer,
+                    &mut platform,
+                ));
+                let prepared = match prepared {
+                    Ok(prepared) => prepared,
+                    Err((phase, index)) => {
+                        turns.access = Some(clocked.into_running());
+                        failed!(Receiving::Stopped, phase, index)
+                    }
+                };
+                let (mut access, clocks_on) = clocked.into_running();
+                let parts = Parts { walker, ..parts };
+                let (mut ring, enabled) = begin(
+                    &mut access,
+                    turns.mac_irq,
+                    turns.power_irq,
+                    prepared,
+                    place,
+                    parts,
+                );
+                let started = micros_since(began);
+                turns.access = Some((access, clocks_on));
+                let after = {
+                    let mut service = Service {
+                        ring: &mut ring,
+                        arena,
+                        spares: &mut spares,
+                        station,
+                        sender,
+                    };
+                    window(&mut service, cycles, request.millis, None).await
+                };
+                let after = match after {
+                    Ok(after) => after,
+                    Err((phase, index)) => failed!(
+                        Receiving::Up {
+                            ring,
+                            enabled,
+                            steps: Steps::Failed,
+                        },
+                        phase,
+                        index
+                    ),
+                };
+                receiving = Receiving::Up {
+                    ring,
+                    enabled,
+                    steps: Steps::Open,
+                };
+                answer(
+                    id,
+                    &service::Turned::Turned {
+                        before: before.to_service(),
+                        after: after.to_service(),
+                        handles: u8::try_from(handles).unwrap_or(u8::MAX),
+                        stop_micros: stopped,
+                        start_micros: started,
+                    },
+                );
+            }
+            other => {
+                // The other steps run only while the ring is up and no step
+                // failed.
+                let ring = match &mut receiving {
+                    Receiving::Up {
+                        ring,
+                        steps: Steps::Open,
+                        ..
+                    } => ring,
+                    Receiving::Up { .. } => {
+                        refuse(id, other, Refusal::StepFailed);
+                        continue;
+                    }
+                    Receiving::Stopped => {
+                        refuse(id, other, Refusal::Down);
+                        continue;
+                    }
+                };
+                match other {
+                    ReceiverRequest::Expect(expect) => {
+                        sender = Some(expect.sender);
+                        answer(id, &service::Expecting::Expecting);
+                    }
+                    ReceiverRequest::Window(request) => {
+                        let Some(sender) = sender else {
+                            answer(id, &service::Windowed::Refused(Refusal::NoSender));
+                            continue;
+                        };
+                        let mut record = ChainRecord {
+                            cases: [ChainCase::default(); CASES.len()],
+                            words: Words {
+                                seen: [heapless::Vec::new(), heapless::Vec::new()],
+                                overflow: 0,
+                            },
+                        };
+                        let mut service = Service {
+                            ring,
+                            arena,
+                            spares: &mut spares,
+                            station,
+                            sender,
+                        };
+                        let chains = match request.record {
+                            service::Record::Chains => Some(&mut record),
+                            service::Record::Counts => None,
+                        };
+                        match window(&mut service, cycles, request.millis, chains).await {
+                            Ok(counts) => answer(
+                                id,
+                                &service::Windowed::Counted {
+                                    counts: counts.to_service(),
+                                    spares: u8::try_from(spares.len()).unwrap_or(u8::MAX),
+                                    chains: CASES
+                                        .iter()
+                                        .zip(&record.cases)
+                                        .map(|(case, per)| service::ChainCase {
+                                            tag: case.tag(),
+                                            chains: per.chains,
+                                            least: per.least,
+                                            most: per.most,
+                                            expected: expected_descriptors(*case) as u32,
+                                            mismatched: per.mismatched,
+                                        })
+                                        .collect(),
+                                    words: record
+                                        .words
+                                        .seen
+                                        .iter()
+                                        .enumerate()
+                                        .flat_map(|(position, list)| {
+                                            list.iter().map(move |(word, seen)| service::WordSeen {
+                                                position: position as u8,
+                                                word: *word,
+                                                seen: *seen,
+                                            })
+                                        })
+                                        .take(service::WORDS)
+                                        .collect(),
+                                    words_overflow: record.words.overflow,
+                                },
+                            ),
+                            Err((phase, index)) => {
+                                answer(
+                                    id,
+                                    &service::Windowed::Failed(service::Failure { phase, index }),
+                                );
+                                if let Receiving::Up { steps, .. } = &mut receiving {
+                                    *steps = Steps::Failed;
+                                }
+                            }
+                        }
+                    }
+                    ReceiverRequest::Stall(request) => {
+                        wait_micros(u64::from(request.millis) * 1_000).await;
+                        answer(
+                            id,
+                            &service::Stood::Standing(pair::standing_of(ring.standing())),
+                        );
+                    }
+                    // Answered above.
+                    ReceiverRequest::SnapshotCold(_)
+                    | ReceiverRequest::SnapshotUp(_)
+                    | ReceiverRequest::BringUp(_)
+                    | ReceiverRequest::ReceiveCounters(_)
+                    | ReceiverRequest::Stop(_)
+                    | ReceiverRequest::Turn(_) => {}
+                }
+            }
         }
     }
+}
+
+/// The receiver's ring, while the bring-up's radio runs.
+enum Receiving {
+    /// The ring is up.
+    Up {
+        ring: oer_portable_memory::Occupied<'static, Ring>,
+        enabled: oer_chips_esp32s31_hal::radio::ieee80211::dma::receive::WalkerEnabled,
+        steps: Steps,
+    },
+    /// A failed turn's stop took the ring down: the radio is stopped.
+    Stopped,
+}
+
+/// Whether a step failed while the ring was up.
+#[derive(Clone, Copy)]
+enum Steps {
+    Open,
+    /// A step failed: only the counters, the snapshots and the stop answer
+    /// until the next boot.
+    Failed,
 }

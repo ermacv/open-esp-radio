@@ -33,7 +33,7 @@ pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.
 pub(super) const TIMEOUT: u16 = 0x03ff;
 /// How long a frame's completion is awaited.
-const COMPLETION_MS: u32 = 20;
+pub(super) const COMPLETION_MS: u32 = 20;
 /// The transmit queue every frame goes on.
 const QUEUE: MacTxQueueIndex = MacTxQueueIndex::Zero;
 
@@ -227,6 +227,38 @@ fn complete(
     Ok(Ended {
         status: u32::from(observation.status()),
     })
+}
+
+/// The ordinary queue as the MAC holds it now, in the service's words.
+pub(super) fn queue_state(access: &mut RadioAccess) -> service::QueueState {
+    use oer_chips_esp32s31_hal::types::MacTxQueueOwnership;
+    let snapshot = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
+    service::QueueState {
+        ownership: match snapshot.ownership {
+            MacTxQueueOwnership::Idle => service::QueueOwnership::Idle,
+            MacTxQueueOwnership::Enabled => service::QueueOwnership::Enabled,
+            MacTxQueueOwnership::Valid => service::QueueOwnership::Valid,
+            MacTxQueueOwnership::Published => service::QueueOwnership::Published,
+        },
+        raised: [
+            (
+                snapshot.pending.completion(),
+                service::QueueEvent::Completion,
+            ),
+            (snapshot.pending.timeout(), service::QueueEvent::Timeout),
+            (snapshot.pending.collision(), service::QueueEvent::Collision),
+        ]
+        .into_iter()
+        .filter_map(|(raised, event)| raised.then_some(event))
+        .collect(),
+        active_state: snapshot.mac_active_state,
+        hang: service::HangCounters {
+            rx: snapshot.hang.rx,
+            tx: snapshot.hang.tx,
+            rx_tx_hang: snapshot.hang.rx_tx_hang,
+            rx_tx_panic: snapshot.hang.rx_tx_panic,
+        },
+    }
 }
 
 /// The pool and the ordinary descriptor, made once a boot: every round

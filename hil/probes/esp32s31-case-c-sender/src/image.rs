@@ -424,8 +424,8 @@ fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
     }
 }
 
-/// After a failure or the stop: the cold snapshot still answers, every
-/// other step is refused, until the next boot.
+/// After the bring-up's failure or the stop: the cold snapshot still
+/// answers, every other step is refused, until the next boot.
 async fn down(
     mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     cold: &pair::Readings,
@@ -439,6 +439,14 @@ async fn down(
             other => refuse(identity, other, Refusal::Down),
         }
     }
+}
+
+/// Whether a step of the rounds failed.
+#[derive(Clone, Copy)]
+enum Steps {
+    Open,
+    /// A round failed: rounds and targets are refused until the next boot.
+    Failed,
 }
 
 /// The sender's worker: each step the host asks for, in its order.
@@ -556,6 +564,7 @@ async fn worker(
     };
     // The receiver the host named, absent until its `target`.
     let mut receiver = None;
+    let mut steps = Steps::Open;
     loop {
         let (id, request) = inbox.next().await;
         match request {
@@ -566,8 +575,20 @@ async fn worker(
             }
             SenderRequest::ReceiveCounters(_) => answer(
                 id,
-                &pair::counters(&access, ring.standing(), ring.descriptor_controls()),
+                &pair::counters(
+                    &access,
+                    Some(pair::ring_state(
+                        ring.standing(),
+                        ring.descriptor_controls(),
+                    )),
+                ),
             ),
+            SenderRequest::Target(_) if matches!(steps, Steps::Failed) => {
+                answer(id, &service::Targeted::Refused(Refusal::StepFailed));
+            }
+            SenderRequest::Round(_) if matches!(steps, Steps::Failed) => {
+                answer(id, &service::Sent::Refused(Refusal::StepFailed));
+            }
             SenderRequest::Target(request) => {
                 receiver = Some(request.receiver);
                 answer(id, &service::Targeted::Targeted);
@@ -598,12 +619,23 @@ async fn worker(
                 .unwrap_or(u32::MAX);
                 match sent {
                     Ok(cases) => answer(id, &service::Sent::Sent { cases, micros }),
-                    Err((phase, index)) => {
+                    Err(stop) => {
+                        let (phase, index) = stop.failure;
                         answer(
                             id,
-                            &service::Sent::Failed(service::Failure { phase, index }),
+                            &service::Sent::Failed(service::RoundFailure {
+                                failure: service::Failure { phase, index },
+                                round: stop.round,
+                                tag: stop.tag,
+                                micros,
+                                bound_millis: transmit::COMPLETION_MS,
+                                queue: transmit::queue_state(&mut access),
+                            }),
                         );
-                        return down(inbox, &cold).await;
+                        // The frame may still be the hardware's: no round
+                        // runs again; the counters, the snapshots and the
+                        // stop still answer.
+                        steps = Steps::Failed;
                     }
                 }
             }

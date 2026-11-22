@@ -387,19 +387,14 @@ fn calibration_readings(readings: &mut Readings, snapshot: &PhyCalibrationSnapsh
 
 /// The receive path's counters now: the MAC's, as the hardware holds them,
 /// and the ring's walker and descriptors.
-pub(crate) fn counters<const N: usize>(
+pub(crate) fn counters(
     access: &RadioAccess,
-    standing: Standing,
-    controls: (
-        [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
-        oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
-    ),
+    ring: Option<service::RingState>,
 ) -> service::Counters {
     let statistics = access.receive_statistics_snapshot();
     let primary = statistics.primary;
     let decode = statistics.decode_errors;
     let hang = statistics.hang;
-    let (ring, reserved) = controls;
     service::Counters::Counted {
         mac: service::MacCounters {
             mpdu: primary.mpdu_count,
@@ -435,14 +430,27 @@ pub(crate) fn counters<const N: usize>(
             rx_tx_hang: hang.rx_tx_hang,
             rx_tx_panic: hang.rx_tx_panic,
         },
-        ring: service::RingState {
-            standing: standing_of(standing),
-            controls: ring
-                .iter()
-                .chain(core::iter::once(&reserved))
-                .map(|control| control.bits())
-                .collect(),
-        },
+        ring,
+    }
+}
+
+/// The ring's state: where its walker stands and each descriptor's control
+/// word, R's last.
+pub(crate) fn ring_state<const N: usize>(
+    standing: Standing,
+    controls: (
+        [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
+        oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
+    ),
+) -> service::RingState {
+    let (ring, reserved) = controls;
+    service::RingState {
+        standing: standing_of(standing),
+        controls: ring
+            .iter()
+            .chain(core::iter::once(&reserved))
+            .map(|control| control.bits())
+            .collect(),
     }
 }
 
