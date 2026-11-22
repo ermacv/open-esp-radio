@@ -465,6 +465,15 @@ probe has one at each of P1 to P4).
   The image checks read both tables: a task's code is strict as a hardware
   handler's, and its level is one level of its hart's interrupt stack
   bound.
+- A level's task between the handlers and the application (a `LevelTask`
+  entry, or an interrupt-mode executor's task) talks to its owner alone.
+  The owner is a task of the application's level: it holds what the world
+  asks of the level (in the pair's probes, the HIL inbox), commands the
+  level's task through its private hand-over (`portable/memory`'s
+  `Exchange`, one command in work and its one result) and answers. The
+  level's task wakes its owner below it; the owner starts a command by the
+  level's wake on the same hart. The hand-over's ends are split once at the
+  image's composition and named nowhere else.
 - Each hart has its own local interrupt controller (the S31 CLIC is
   context-relative) and one router. The root pairs each hart's CLIC parts,
   which the PAC claims once per hart, with that hart's route bank in one
@@ -1314,6 +1323,10 @@ its model and conformance case.
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
+- A port's owner is a task of the application's level; the tasks of its
+  levels are its own, commanded through its private hand-over and named
+  nowhere outside it. The pair's probes are the composition that applies
+  it today: their radio's owner on P1 and the radio's task on P2.
 - The Wi-Fi port is two traits of one owner, the task that holds it (the
   contract; its S31 backend, `chips/esp32s31/radio/ieee80211/backend`, is a
   source outside the build, awaiting deletion at its successor): the
