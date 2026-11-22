@@ -26,8 +26,11 @@ impl ModemClockPort for Port {
     fn prepare_power_state(&mut self) {
         self.0.borrow_mut().push(Operation::PreparePowerState);
     }
-    fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
-        self.0.borrow_mut().push(Operation::Device(device, enable));
+    fn enable_device(&mut self, device: ModemClockDevice) {
+        self.0.borrow_mut().push(Operation::Device(device, true));
+    }
+    fn disable_device(&mut self, device: ModemClockDevice) {
+        self.0.borrow_mut().push(Operation::Device(device, false));
     }
 }
 

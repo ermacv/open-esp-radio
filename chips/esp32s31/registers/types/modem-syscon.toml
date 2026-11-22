@@ -547,42 +547,42 @@ description = "Observed source use; the individual hardware meaning is unknown. 
 name = "CLK_ZB_ST_MAP"
 bits = "11:8"
 class = "plain"
-description = "Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization."
+description = "The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_FE_ST_MAP"
 bits = "15:12"
 class = "plain"
-description = "Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization."
+description = "The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_BT_ST_MAP"
 bits = "19:16"
 class = "plain"
-description = "Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization."
+description = "The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_WIFI_ST_MAP"
 bits = "23:20"
 class = "plain"
-description = "Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization."
+description = "The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_MODEM_PERI_ST_MAP"
 bits = "27:24"
 class = "plain"
-description = "Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization."
+description = "The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_MODEM_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
-description = "Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization."
+description = "The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers]]
@@ -832,16 +832,22 @@ class = "plain"
 name = "CLK_FE_80M_EN"
 bits = "13"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "CLK_FE_160M_EN"
 bits = "14"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "CLK_FE_APB_EN"
 bits = "15"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "CLK_BT_APB_EN"
@@ -868,16 +874,22 @@ write-values-only = true
 name = "CLK_FE_PWDET_ADC_EN"
 bits = "19"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "CLK_FE_ADC_EN"
 bits = "20"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "CLK_FE_DAC_EN"
 bits = "21"
 class = "plain"
+values = { dictionary = "CLOCK_GATE" }
+write-values-only = true
 
 [[registers.fields]]
 name = "BITS_22_31_OPAQUE"

@@ -96,12 +96,12 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_btbb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
-            .set_clk_fe_80m_en(true)
-            .set_clk_fe_160m_en(true)
-            .set_clk_fe_apb_en(true)
-            .set_clk_fe_pwdet_adc_en(true)
-            .set_clk_fe_adc_en(true)
-            .set_clk_fe_dac_en(true);
+            .set_clk_fe_80m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_fe_160m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_fe_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_fe_pwdet_adc_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_fe_adc_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
+            .set_clk_fe_dac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.sar.radio.modem_syscon_clock_reset.modify_clk_conf(|w| {
         w.set_clk_i2c_mst_sel_160m(pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m);

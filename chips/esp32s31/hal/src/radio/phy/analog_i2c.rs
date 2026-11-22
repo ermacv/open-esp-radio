@@ -11,13 +11,22 @@ pub fn power_port<T: SharedPhyAccess + ?Sized>(owner: &mut T) -> PowerPort<'_, T
     PowerPort(owner)
 }
 
+// The family port's one translation of its flags into the atoms.
 impl<T: SharedPhyAccess + ?Sized> AnalogI2cPowerAccess for PowerPort<'_, T> {
     fn set_rf_circuit_power(&mut self, enabled: bool) {
-        SharedPhyAccess::set_rf_circuit_power(self.0, enabled);
+        if enabled {
+            SharedPhyAccess::power_on_rf_circuits(self.0);
+        } else {
+            SharedPhyAccess::power_off_rf_circuits(self.0);
+        }
     }
 
+    /// The tie is a write trigger: its release writes nothing (the vendor's
+    /// clearing RMW has no counterpart in that access class).
     fn set_bb_i2c_power_tie(&mut self, enabled: bool) {
-        SharedPhyAccess::set_bb_i2c_power_tie(self.0, enabled);
+        if enabled {
+            SharedPhyAccess::tie_baseband_i2c_power(self.0);
+        }
     }
 
     fn analog_i2c_is_powered(&self) -> bool {
@@ -25,7 +34,11 @@ impl<T: SharedPhyAccess + ?Sized> AnalogI2cPowerAccess for PowerPort<'_, T> {
     }
 
     fn set_analog_i2c_power(&mut self, enabled: bool) {
-        SharedPhyAccess::set_analog_i2c_power(self.0, enabled);
+        if enabled {
+            SharedPhyAccess::power_on_analog_i2c(self.0);
+        } else {
+            SharedPhyAccess::power_off_analog_i2c(self.0);
+        }
     }
 
     fn analog_i2c_reset_is_released(&self) -> bool {
@@ -33,7 +46,11 @@ impl<T: SharedPhyAccess + ?Sized> AnalogI2cPowerAccess for PowerPort<'_, T> {
     }
 
     fn set_analog_i2c_reset_released(&mut self, released: bool) {
-        SharedPhyAccess::set_analog_i2c_reset_released(self.0, released);
+        if released {
+            SharedPhyAccess::release_analog_i2c_reset(self.0);
+        } else {
+            SharedPhyAccess::assert_analog_i2c_reset(self.0);
+        }
     }
 }
 
@@ -43,7 +60,7 @@ impl<T: SharedPhyAccess + ?Sized> AnalogI2cPowerAccess for PowerPort<'_, T> {
 /// clock operations; this leaf performs only the instruction-evidenced PMU
 /// update.
 pub fn power_off_rf_circuits(registers: &mut impl SharedPhyAccess) {
-    SharedPhyAccess::set_rf_circuit_power(registers, false);
+    SharedPhyAccess::power_off_rf_circuits(registers);
 }
 
 /// Complete the ROM frontend/baseband clock leaf after internal radio gates.

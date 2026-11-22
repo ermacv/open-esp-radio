@@ -254,13 +254,13 @@ pub fn configure_channel_cbw(registers: &mut impl SharedPhyAccess, cbw: u32) {
 /// Apply complete rev0 ROM `phy_wifi_enable_set`.
 #[cfg(target_arch = "riscv32")]
 pub fn enable_wifi(registers: &mut impl PhyInitializationAccess) {
-    crate::radio::ieee80211::baseband::set_wifi_enabled(phy_pac_mut(registers), true);
+    crate::radio::ieee80211::baseband::enable_wifi(phy_pac_mut(registers));
 }
 
 /// Clear the Wi-Fi baseband enable.
 #[cfg(target_arch = "riscv32")]
 pub fn disable_wifi(registers: &mut impl PhyInitializationAccess) {
-    crate::radio::ieee80211::baseband::set_wifi_enabled(phy_pac_mut(registers), false);
+    crate::radio::ieee80211::baseband::disable_wifi(phy_pac_mut(registers));
 }
 
 /// Apply complete rev0 ROM `phy_mac_enable_bb`.

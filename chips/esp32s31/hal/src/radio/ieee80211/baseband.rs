@@ -19,18 +19,18 @@ pub fn set_baseband_init_control(registers: &mut RadioPhyRegisters) {
     registers.set_bb_agc_update_mode(WifiBasebandAgcUpdate::Initialization);
 }
 
-/// Select the digital BSS bandwidth branch used by `phy_bb_bss_cbw40_dig`.
-pub fn set_bss_cbw_40_digital(registers: &mut RadioPhyRegisters, enabled: bool) {
-    registers.set_bss_cbw_40_digital(enabled);
+/// Apply complete ROM `phy_wifi_enable_set(1)`.
+pub fn enable_wifi(registers: &mut RadioPhyRegisters) {
+    registers.set_wifi_baseband_enabled(
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled,
+    );
 }
 
-/// Apply complete ROM `phy_wifi_enable_set`.
-pub fn set_wifi_enabled(registers: &mut RadioPhyRegisters, enabled: bool) {
-    registers.set_wifi_baseband_enabled(if enabled {
-        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Enabled
-    } else {
-        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled
-    });
+/// Apply complete ROM `phy_wifi_enable_set(0)`.
+pub fn disable_wifi(registers: &mut RadioPhyRegisters) {
+    registers.set_wifi_baseband_enabled(
+        oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::WifiEnable::Disabled,
+    );
 }
 
 /// Apply the final system-register update from ROM `phy_bb_agc_reg_update`.

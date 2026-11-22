@@ -79,7 +79,7 @@ pub(super) fn prepare(s: &mut Session<'_>) {
             .set_clk_wifimac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
             .set_clk_btmac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled)
-            .set_clk_fe_apb_en(true);
+            .set_clk_fe_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
     });
     s.opaque.core_enable.modify_core_enable_control(|w| {
         w.set_bits_4_7_opaque(pac::wifi_mac::core_enable_control::Bits4_7Opaque::Disabled);
@@ -671,11 +671,11 @@ fn syscon_clocks(r: pac::modem_syscon::clk_conf1::R) -> u32 {
             << pac::modem_syscon::clk_conf1::CLK_FE_20M_EN_MASK.trailing_zeros())
         | (u32::from(r.clk_fe_40m_en())
             << pac::modem_syscon::clk_conf1::CLK_FE_40M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_80m_en())
+        | (r.clk_fe_80m_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_80M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_160m_en())
+        | (r.clk_fe_160m_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_160M_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_apb_en())
+        | (r.clk_fe_apb_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_APB_EN_MASK.trailing_zeros())
         | (r.clk_bt_apb_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_BT_APB_EN_MASK.trailing_zeros())
@@ -683,11 +683,11 @@ fn syscon_clocks(r: pac::modem_syscon::clk_conf1::R) -> u32 {
             << pac::modem_syscon::clk_conf1::CLK_BTBB_EN_MASK.trailing_zeros())
         | (r.clk_btmac_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_BTMAC_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_pwdet_adc_en())
+        | (r.clk_fe_pwdet_adc_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_PWDET_ADC_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_adc_en())
+        | (r.clk_fe_adc_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_ADC_EN_MASK.trailing_zeros())
-        | (u32::from(r.clk_fe_dac_en())
+        | (r.clk_fe_dac_en().bits()
             << pac::modem_syscon::clk_conf1::CLK_FE_DAC_EN_MASK.trailing_zeros())
         | (r.bits_22_31_opaque().get()
             << pac::modem_syscon::clk_conf1::BITS_22_31_OPAQUE_MASK.trailing_zeros())

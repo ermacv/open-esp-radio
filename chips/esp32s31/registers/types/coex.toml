@@ -238,6 +238,7 @@ bits = "0"
 class = "plain"
 description = "hal_set_extern_coex_validity: set when the external grant is valid high."
 value-range = { min = 0x0, max = 0x1, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
+values = [{ name = "VALID_LOW", value = 0x0, description = "hal_set_extern_coex_validity(false): the external grant is valid low.", sources = ["BLOB_LIBCOEX_EXTERNAL"] }, { name = "VALID_HIGH", value = 0x1, description = "hal_set_extern_coex_validity(true): the external grant is valid high.", sources = ["BLOB_LIBCOEX_EXTERNAL"] }]
 
 [[registers.fields]]
 name = "GRANT_DELAY_LOW"
@@ -259,6 +260,7 @@ bits = "9"
 class = "plain"
 description = "Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields."
 value-range = { min = 0x0, max = 0x1, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
+values = { dictionary = "EXTERNAL_COEX_ENABLE" }
 
 [[registers.fields]]
 name = "SYNC"
@@ -283,6 +285,7 @@ name = "ENABLE"
 bits = "14"
 class = "plain"
 value-range = { min = 0x0, max = 0x1, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
+values = { dictionary = "EXTERNAL_COEX_ENABLE" }
 
 [[registers]]
 name = "WORD_00B4_OPAQUE"
@@ -327,3 +330,10 @@ name = "MASK"
 bits = "3:0"
 class = "plain"
 value-range = { min = 0x0, max = 0xf, sources = ["BLOB_LIBCOEX_EXTERNAL"] }
+
+[[dictionaries]]
+name = "EXTERNAL_COEX_ENABLE"
+description = "An external coexistence enable: hal_enable_extern_coex sets it and hal_disable_extern_coex clears it."
+width = 1
+values = [{ name = "DISABLED", value = 0x0, description = "hal_disable_extern_coex: external coexistence is disabled.", sources = ["BLOB_LIBCOEX_EXTERNAL"] }, { name = "ENABLED", value = 0x1, description = "hal_enable_extern_coex: external coexistence is enabled.", sources = ["BLOB_LIBCOEX_EXTERNAL"] }]
+sources = ["BLOB_LIBCOEX_EXTERNAL"]

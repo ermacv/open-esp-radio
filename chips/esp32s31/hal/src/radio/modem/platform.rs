@@ -57,19 +57,19 @@ impl PlatformPllSourceBaseline {
 /// Bluetooth power edge: each field one decoded register field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WifiPowerBaseline {
-    modem_register_bus_clock_enabled: bool,
+    modem_register_bus_clock: oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn,
     pll_source: PlatformPllSourceBaseline,
     modem_syscon: ModemSysconPowerBaseline,
 }
 
 impl WifiPowerBaseline {
     const fn new(
-        modem_register_bus_clock_enabled: bool,
+        modem_register_bus_clock: oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn,
         pll_source: PlatformPllSourceBaseline,
         modem_syscon: ModemSysconPowerBaseline,
     ) -> Self {
         Self {
-            modem_register_bus_clock_enabled,
+            modem_register_bus_clock,
             pll_source,
             modem_syscon,
         }
@@ -78,16 +78,20 @@ impl WifiPowerBaseline {
     /// Construct one distinguishable baseline for a host test.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub fn for_host_test(modem_register_bus_clock_enabled: bool) -> Self {
+    pub fn for_host_test(
+        modem_register_bus_clock: oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn,
+    ) -> Self {
         Self::new(
-            modem_register_bus_clock_enabled,
+            modem_register_bus_clock,
             PlatformPllSourceBaseline::default(),
             ModemSysconPowerBaseline::DISABLED,
         )
     }
 
-    const fn modem_register_bus_clock_enabled(self) -> bool {
-        self.modem_register_bus_clock_enabled
+    const fn modem_register_bus_clock(
+        self,
+    ) -> oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn {
+        self.modem_register_bus_clock
     }
 
     const fn pll_source(self) -> PlatformPllSourceBaseline {
@@ -104,13 +108,10 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     #[doc(hidden)]
     pub fn capture_wifi_power_baseline(&self) -> WifiPowerBaseline {
         WifiPowerBaseline::new(
-            matches!(
-                self.peripherals
-                    .hp_sys_clkrst_radio
-                    .read_modem_ctrl0()
-                    .reg_modem_clk_en(),
-                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
-            ),
+            self.peripherals
+                .hp_sys_clkrst_radio
+                .read_modem_ctrl0()
+                .reg_modem_clk_en(),
             self.platform_pll_source_baseline(),
             self.modem_syscon_power_baseline(),
         )
@@ -200,17 +201,18 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_rf_circuit_power(&mut self, enabled: bool) {
-        if enabled {
-            super::ops::power_on_rf_circuits(&mut self.peripherals.pmu_radio);
-        } else {
-            super::ops::power_off_rf_circuits(&mut self.peripherals.pmu_radio);
-        }
+    pub fn power_on_rf_circuits(&mut self) {
+        super::ops::power_on_rf_circuits(&mut self.peripherals.pmu_radio);
     }
 
     #[doc(hidden)]
-    pub fn set_bb_i2c_power_tie(&mut self, enabled: bool) {
-        super::ops::set_baseband_i2c_power_tie(&mut self.peripherals.pmu_radio, enabled);
+    pub fn power_off_rf_circuits(&mut self) {
+        super::ops::power_off_rf_circuits(&mut self.peripherals.pmu_radio);
+    }
+
+    #[doc(hidden)]
+    pub fn tie_baseband_i2c_power(&mut self) {
+        super::ops::tie_baseband_i2c_power(&mut self.peripherals.pmu_radio);
     }
 
     #[doc(hidden)]
@@ -222,12 +224,13 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_analog_i2c_power(&mut self, enabled: bool) {
-        if enabled {
-            super::ops::power_on_analog_i2c(&mut self.peripherals.pmu_radio);
-        } else {
-            super::ops::power_off_analog_i2c(&mut self.peripherals.pmu_radio);
-        }
+    pub fn power_on_analog_i2c(&mut self) {
+        super::ops::power_on_analog_i2c(&mut self.peripherals.pmu_radio);
+    }
+
+    #[doc(hidden)]
+    pub fn power_off_analog_i2c(&mut self) {
+        super::ops::power_off_analog_i2c(&mut self.peripherals.pmu_radio);
     }
 
     #[doc(hidden)]
@@ -239,12 +242,13 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     }
 
     #[doc(hidden)]
-    pub fn set_analog_i2c_reset_released(&mut self, released: bool) {
-        if released {
-            super::ops::release_analog_i2c_reset(&mut self.peripherals.pmu_radio);
-        } else {
-            super::ops::assert_analog_i2c_reset(&mut self.peripherals.pmu_radio);
-        }
+    pub fn release_analog_i2c_reset(&mut self) {
+        super::ops::release_analog_i2c_reset(&mut self.peripherals.pmu_radio);
+    }
+
+    #[doc(hidden)]
+    pub fn assert_analog_i2c_reset(&mut self) {
+        super::ops::assert_analog_i2c_reset(&mut self.peripherals.pmu_radio);
     }
 
     #[doc(hidden)]
@@ -272,21 +276,15 @@ impl<P: crate::radio::phy::registers::RadioPlacement>
     fn restore_bus(&mut self, baseline: WifiPowerBaseline) {
         super::ops::restore_modem_register_bus_clock(
             &mut self.peripherals.hp_sys_clkrst_radio,
-            if baseline.modem_register_bus_clock_enabled() {
-                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
-            } else {
-                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled
-            },
+            baseline.modem_register_bus_clock(),
         );
     }
     fn bus_matches(&self, baseline: WifiPowerBaseline) -> bool {
-        matches!(
-            self.peripherals
-                .hp_sys_clkrst_radio
-                .read_modem_ctrl0()
-                .reg_modem_clk_en(),
-            oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled
-        ) == baseline.modem_register_bus_clock_enabled()
+        self.peripherals
+            .hp_sys_clkrst_radio
+            .read_modem_ctrl0()
+            .reg_modem_clk_en()
+            == baseline.modem_register_bus_clock()
     }
 }
 

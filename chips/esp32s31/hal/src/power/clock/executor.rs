@@ -359,7 +359,8 @@ pub(crate) trait ModemClockPort {
     /// Publish the active modem state and its clock maps before any module
     /// gate is opened, including the PHY's pre-client registration clocks.
     fn prepare_power_state(&mut self);
-    fn configure_device(&mut self, device: ModemClockDevice, enable: bool);
+    fn enable_device(&mut self, device: ModemClockDevice);
+    fn disable_device(&mut self, device: ModemClockDevice);
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement> ModemClockPort for RadioPhyRegisters<P> {
@@ -369,8 +370,12 @@ impl<P: crate::radio::phy::registers::RadioPlacement> ModemClockPort for RadioPh
         self.publish_modem_power_state();
     }
 
-    fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
-        self.configure_modem_clock_device(device, enable);
+    fn enable_device(&mut self, device: ModemClockDevice) {
+        self.enable_modem_clock_device(device);
+    }
+
+    fn disable_device(&mut self, device: ModemClockDevice) {
+        self.disable_modem_clock_device(device);
     }
 }
 
@@ -418,8 +423,13 @@ impl<H: ModemClockPort, B: PlatformClockBackend, P>
             D::Coexistence => return Action::Platform(PlatformClock::ModemCoexistence),
         })
     }
+    // The family port's one translation of its flag into the two actions.
     fn configure_device(&mut self, device: ModemClockDevice, enable: bool) {
-        self.port.configure_device(device, enable);
+        if enable {
+            self.port.enable_device(device);
+        } else {
+            self.port.disable_device(device);
+        }
     }
     fn release_clock(&mut self, clock: PlatformClock) -> Result<(), PlatformClockError> {
         self.held.release(clock)

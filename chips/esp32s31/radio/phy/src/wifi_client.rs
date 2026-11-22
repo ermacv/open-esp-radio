@@ -85,7 +85,11 @@ pub fn set_wifi_rx<B: PlatformClockBackend>(
     enabled: bool,
 ) -> Result<(), ConcurrentPhyError> {
     radio.attachment().check_permission(membership.key)?;
-    radio.set_wifi_rx_enabled(enabled);
+    if enabled {
+        radio.enable_wifi_rx();
+    } else {
+        radio.disable_wifi_rx();
+    }
     Ok(())
 }
 

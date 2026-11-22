@@ -27,7 +27,10 @@ fn a_running_epoch_reunites_with_its_clocked_client() {
     let clocked = super::WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let (runtime, clocks) = clocked.into_running();
     let clocked = super::WifiClocked::from_running(runtime, clocks);
-    assert!(!clocked.initialized());
+    assert_eq!(
+        clocked.initialized(),
+        super::WifiInitialization::Uninitialized
+    );
 }
 
 /// The runtime channel capability borrows the shared PHY from the radio

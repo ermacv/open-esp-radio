@@ -220,14 +220,14 @@ impl Sar {
             w.set_clk_wifibb_80x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_wifibb_160x1_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_wifi_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
-            w.set_clk_fe_80m_en(true);
-            w.set_clk_fe_160m_en(true);
-            w.set_clk_fe_apb_en(true);
+            w.set_clk_fe_80m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_fe_160m_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_fe_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_bt_apb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
             w.set_clk_btbb_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
-            w.set_clk_fe_pwdet_adc_en(true);
-            w.set_clk_fe_adc_en(true);
-            w.set_clk_fe_dac_en(true);
+            w.set_clk_fe_pwdet_adc_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_fe_adc_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
+            w.set_clk_fe_dac_en(pac::modem_syscon::dictionaries::ClockGate::Enabled);
         });
 
         p.modem_syscon_clock_reset.modify_clk_conf(|w| {

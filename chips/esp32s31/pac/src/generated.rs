@@ -58669,6 +58669,43 @@ pub mod clic {
 /// Words 0x9c-0xd8: External coexistence control beside the coexistence timer bank. The complete hal_external_coexist.o leaves of the pinned libcoexist address these words at 0x2010f49c, 0x2010f4a0, 0x2010f4a4, 0x2010f4d0 and 0x2010f4d8 through fresh-read RMW operations; the GPIO matrix routing of the request, priority, grant and TX-line signals belongs to the platform, not to this block.
 /// Words 0xb4-0xb8: Sparse source-qualified word views in the existing owned MMIO aperture; individual meanings and side effects remain unknown.
 pub mod coex {
+    /// Value lists fields of one meaning share, each with its sources.
+    pub mod dictionaries {
+        /// An external coexistence enable: hal_enable_extern_coex sets it and hal_disable_extern_coex clears it.
+        ///
+        /// SOURCE: BLOB_LIBCOEX_EXTERNAL.
+        /// The declared values of the `EXTERNAL_COEX_ENABLE` dictionary.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ExternalCoexEnable {
+            /// hal_disable_extern_coex: external coexistence is disabled.
+            Disabled = 0x0,
+            /// hal_enable_extern_coex: external coexistence is enabled.
+            Enabled = 0x1,
+        }
+
+        impl ExternalCoexEnable {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::Disabled,
+                    _ => Self::Enabled,
+                }
+            }
+        }
+    }
+
     /// The `CONFIGURATION%s` register.
     ///
     /// Primary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set replaces both high nibbles and the low 24-bit tick image through separate fresh-read RMW operations. coex_hw_timer_force clears the low 24 bits; coex_hw_timer_unforce replaces them with 1000.
@@ -59398,6 +59435,43 @@ pub mod coex {
         /// Positioned bits of `VALIDATE_HIGH`.
         pub const VALIDATE_HIGH_MASK: u32 = 0x1;
 
+        /// The declared values of the `VALIDATE_HIGH` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum ValidateHigh {
+            /// hal_set_extern_coex_validity(false): the external grant is valid low.
+            ValidLow = 0x0,
+            /// hal_set_extern_coex_validity(true): the external grant is valid high.
+            ValidHigh = 0x1,
+        }
+
+        impl ValidateHigh {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The value of the field in the low bits of `bits`; the field has
+            /// exactly the declared values.
+            #[inline]
+            pub const fn from_field(bits: u32) -> Self {
+                match bits & 0x1 {
+                    0x0 => Self::ValidLow,
+                    _ => Self::ValidHigh,
+                }
+            }
+        }
+
         /// Width of `GRANT_DELAY_LOW` in bits.
         pub const GRANT_DELAY_LOW_WIDTH: u32 = 4;
         /// Greatest unsigned image of `GRANT_DELAY_LOW`.
@@ -59440,8 +59514,8 @@ pub mod coex {
         impl R {
             /// hal_set_extern_coex_validity: set when the external grant is valid high.
             #[inline]
-            pub const fn validate_high(self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn validate_high(self) -> ValidateHigh {
+                ValidateHigh::from_field(self.0)
             }
 
             /// Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params.
@@ -59458,8 +59532,8 @@ pub mod coex {
 
             /// Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields.
             #[inline]
-            pub const fn enable(self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn enable(self) -> super::dictionaries::ExternalCoexEnable {
+                super::dictionaries::ExternalCoexEnable::from_field(self.0 >> 9)
             }
 
             /// hal_set_extern_coex_sync replaces bits 19:10 with the low ten bits of its argument; hal_set_extern_pti_mode writes zero and then 0x14 in the leader mode.
@@ -59481,8 +59555,8 @@ pub mod coex {
         impl W {
             /// hal_set_extern_coex_validity: set when the external grant is valid high.
             #[inline]
-            pub const fn validate_high(&self) -> bool {
-                (self.0 & 0x00000001) != 0
+            pub const fn validate_high(&self) -> ValidateHigh {
+                ValidateHigh::from_field(self.0)
             }
 
             /// Low nibble of the hal_set_extern_coex_delay byte. ic_set_extern_coex_params supplies only the upper nibble, so this complete field is written zero. SOURCE: BLOB_LIBCOEX_EXTERNAL, hal_external_coexist.o::hal_set_extern_coex_delay and ic_set_extern_coex_params.
@@ -59499,8 +59573,8 @@ pub mod coex {
 
             /// Set by hal_enable_extern_coex and cleared by hal_disable_extern_coex, after the other enable fields.
             #[inline]
-            pub const fn enable(&self) -> bool {
-                (self.0 & 0x00000200) != 0
+            pub const fn enable(&self) -> super::dictionaries::ExternalCoexEnable {
+                super::dictionaries::ExternalCoexEnable::from_field(self.0 >> 9)
             }
 
             /// hal_set_extern_coex_sync replaces bits 19:10 with the low ten bits of its argument; hal_set_extern_pti_mode writes zero and then 0x14 in the leader mode.
@@ -59517,8 +59591,8 @@ pub mod coex {
 
             /// Set `VALIDATE_HIGH`.
             #[inline]
-            pub fn set_validate_high(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffe) | u32::from(value);
+            pub fn set_validate_high(&mut self, value: ValidateHigh) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffe) | value.bits();
                 self
             }
 
@@ -59538,8 +59612,11 @@ pub mod coex {
 
             /// Set `ENABLE`.
             #[inline]
-            pub fn set_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfffffdff) | (u32::from(value) << 9);
+            pub fn set_enable(
+                &mut self,
+                value: super::dictionaries::ExternalCoexEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
 
@@ -59588,8 +59665,8 @@ pub mod coex {
         impl R {
             /// The `ENABLE` field.
             #[inline]
-            pub const fn enable(self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn enable(self) -> super::dictionaries::ExternalCoexEnable {
+                super::dictionaries::ExternalCoexEnable::from_field(self.0 >> 14)
             }
         }
 
@@ -59599,14 +59676,17 @@ pub mod coex {
         impl W {
             /// The `ENABLE` field.
             #[inline]
-            pub const fn enable(&self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn enable(&self) -> super::dictionaries::ExternalCoexEnable {
+                super::dictionaries::ExternalCoexEnable::from_field(self.0 >> 14)
             }
 
             /// Set `ENABLE`.
             #[inline]
-            pub fn set_enable(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffbfff) | (u32::from(value) << 14);
+            pub fn set_enable(
+                &mut self,
+                value: super::dictionaries::ExternalCoexEnable,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffbfff) | (value.bits() << 14);
                 self
             }
         }
@@ -134561,7 +134641,7 @@ pub mod modem_lpcon {
                 (self.0 & 0xffff) as u16
             }
 
-            /// Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization.
+            /// The Wi-Fi-power clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_wifipwr_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
@@ -134575,7 +134655,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
             }
 
-            /// Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization.
+            /// The coexistence clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_coex_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
@@ -134587,7 +134667,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
-            /// Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization.
+            /// The PHY-I2C-master clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_i2c_mst_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -134601,7 +134681,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
             }
 
-            /// Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization.
+            /// The low-power APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_lp_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
@@ -134626,7 +134706,7 @@ pub mod modem_lpcon {
                 (self.0 & 0xffff) as u16
             }
 
-            /// Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization.
+            /// The Wi-Fi-power clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_wifipwr_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
@@ -134640,7 +134720,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
             }
 
-            /// Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization.
+            /// The coexistence clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_coex_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
@@ -134654,7 +134734,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
-            /// Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization.
+            /// The PHY-I2C-master clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_i2c_mst_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -134668,7 +134748,7 @@ pub mod modem_lpcon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
             }
 
-            /// Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization.
+            /// The low-power APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_lp_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
@@ -147146,7 +147226,7 @@ pub mod modem_syscon {
                 (self.0 & 0xff) as u8
             }
 
-            /// Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization.
+            /// The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_zb_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
@@ -147158,7 +147238,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
             }
 
-            /// Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization.
+            /// The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_fe_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
@@ -147170,7 +147250,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
             }
 
-            /// Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization.
+            /// The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_bt_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
@@ -147182,7 +147262,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
             }
 
-            /// Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization.
+            /// The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_wifi_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
@@ -147194,7 +147274,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
-            /// Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization.
+            /// The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_modem_peri_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -147208,7 +147288,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
             }
 
-            /// Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization.
+            /// The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_modem_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
@@ -147233,7 +147313,7 @@ pub mod modem_syscon {
                 (self.0 & 0xff) as u8
             }
 
-            /// Bit 2: Bit two of the IEEE 802.15.4 domain state map, set by the reviewed modem clock initialization.
+            /// The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_zb_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
@@ -147245,7 +147325,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
             }
 
-            /// Bit 1: Bit one of the radio-front-end domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the radio-front-end domain state map, set by the reviewed modem clock initialization.
+            /// The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_fe_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
@@ -147257,7 +147337,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
             }
 
-            /// Bit 2: Bit two of the Bluetooth domain state map, set by the reviewed modem clock initialization.
+            /// The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_bt_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
@@ -147269,7 +147349,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
             }
 
-            /// Bit 1: Bit one of the Wi-Fi domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the Wi-Fi domain state map, set by the reviewed modem clock initialization.
+            /// The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_wifi_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 20)
@@ -147283,7 +147363,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
             }
 
-            /// Bit 2: Bit two of the modem-peripheral domain state map, set by the reviewed modem clock initialization.
+            /// The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_modem_peri_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -147297,7 +147377,7 @@ pub mod modem_syscon {
                 super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
             }
 
-            /// Bit 1: Bit one of the modem-APB domain state map, set by the reviewed modem clock initialization. Bit 2: Bit two of the modem-APB domain state map, set by the reviewed modem clock initialization.
+            /// The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
             pub const fn clk_modem_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 28)
@@ -148226,20 +148306,20 @@ pub mod modem_syscon {
 
             /// The `CLK_FE_80M_EN` field.
             #[inline]
-            pub const fn clk_fe_80m_en(self) -> bool {
-                (self.0 & 0x00002000) != 0
+            pub const fn clk_fe_80m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 13)
             }
 
             /// The `CLK_FE_160M_EN` field.
             #[inline]
-            pub const fn clk_fe_160m_en(self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn clk_fe_160m_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 14)
             }
 
             /// The `CLK_FE_APB_EN` field.
             #[inline]
-            pub const fn clk_fe_apb_en(self) -> bool {
-                (self.0 & 0x00008000) != 0
+            pub const fn clk_fe_apb_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 15)
             }
 
             /// The `CLK_BT_APB_EN` field.
@@ -148262,20 +148342,20 @@ pub mod modem_syscon {
 
             /// The `CLK_FE_PWDET_ADC_EN` field.
             #[inline]
-            pub const fn clk_fe_pwdet_adc_en(self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn clk_fe_pwdet_adc_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 19)
             }
 
             /// The `CLK_FE_ADC_EN` field.
             #[inline]
-            pub const fn clk_fe_adc_en(self) -> bool {
-                (self.0 & 0x00100000) != 0
+            pub const fn clk_fe_adc_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 20)
             }
 
             /// The `CLK_FE_DAC_EN` field.
             #[inline]
-            pub const fn clk_fe_dac_en(self) -> bool {
-                (self.0 & 0x00200000) != 0
+            pub const fn clk_fe_dac_en(self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 21)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -148369,20 +148449,20 @@ pub mod modem_syscon {
 
             /// The `CLK_FE_80M_EN` field.
             #[inline]
-            pub const fn clk_fe_80m_en(&self) -> bool {
-                (self.0 & 0x00002000) != 0
+            pub const fn clk_fe_80m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 13)
             }
 
             /// The `CLK_FE_160M_EN` field.
             #[inline]
-            pub const fn clk_fe_160m_en(&self) -> bool {
-                (self.0 & 0x00004000) != 0
+            pub const fn clk_fe_160m_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 14)
             }
 
             /// The `CLK_FE_APB_EN` field.
             #[inline]
-            pub const fn clk_fe_apb_en(&self) -> bool {
-                (self.0 & 0x00008000) != 0
+            pub const fn clk_fe_apb_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 15)
             }
 
             /// The `CLK_BT_APB_EN` field.
@@ -148405,20 +148485,20 @@ pub mod modem_syscon {
 
             /// The `CLK_FE_PWDET_ADC_EN` field.
             #[inline]
-            pub const fn clk_fe_pwdet_adc_en(&self) -> bool {
-                (self.0 & 0x00080000) != 0
+            pub const fn clk_fe_pwdet_adc_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 19)
             }
 
             /// The `CLK_FE_ADC_EN` field.
             #[inline]
-            pub const fn clk_fe_adc_en(&self) -> bool {
-                (self.0 & 0x00100000) != 0
+            pub const fn clk_fe_adc_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 20)
             }
 
             /// The `CLK_FE_DAC_EN` field.
             #[inline]
-            pub const fn clk_fe_dac_en(&self) -> bool {
-                (self.0 & 0x00200000) != 0
+            pub const fn clk_fe_dac_en(&self) -> super::dictionaries::ClockGate {
+                super::dictionaries::ClockGate::from_field(self.0 >> 21)
             }
 
             /// Observed source use; the individual hardware meaning is unknown. The ESP-IDF header marks these bits reserved; the cited sources use them.
@@ -148553,22 +148633,31 @@ pub mod modem_syscon {
 
             /// Set `CLK_FE_80M_EN`.
             #[inline]
-            pub fn set_clk_fe_80m_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffdfff) | (u32::from(value) << 13);
+            pub fn set_clk_fe_80m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffdfff) | (value.bits() << 13);
                 self
             }
 
             /// Set `CLK_FE_160M_EN`.
             #[inline]
-            pub fn set_clk_fe_160m_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffffbfff) | (u32::from(value) << 14);
+            pub fn set_clk_fe_160m_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffffbfff) | (value.bits() << 14);
                 self
             }
 
             /// Set `CLK_FE_APB_EN`.
             #[inline]
-            pub fn set_clk_fe_apb_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffff7fff) | (u32::from(value) << 15);
+            pub fn set_clk_fe_apb_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffff7fff) | (value.bits() << 15);
                 self
             }
 
@@ -148598,22 +148687,31 @@ pub mod modem_syscon {
 
             /// Set `CLK_FE_PWDET_ADC_EN`.
             #[inline]
-            pub fn set_clk_fe_pwdet_adc_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xfff7ffff) | (u32::from(value) << 19);
+            pub fn set_clk_fe_pwdet_adc_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfff7ffff) | (value.bits() << 19);
                 self
             }
 
             /// Set `CLK_FE_ADC_EN`.
             #[inline]
-            pub fn set_clk_fe_adc_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffefffff) | (u32::from(value) << 20);
+            pub fn set_clk_fe_adc_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffefffff) | (value.bits() << 20);
                 self
             }
 
             /// Set `CLK_FE_DAC_EN`.
             #[inline]
-            pub fn set_clk_fe_dac_en(&mut self, value: bool) -> &mut Self {
-                self.0 = (self.0 & 0xffdfffff) | (u32::from(value) << 21);
+            pub fn set_clk_fe_dac_en(
+                &mut self,
+                value: super::dictionaries::ClockGate,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffdfffff) | (value.bits() << 21);
                 self
             }
 
@@ -149500,66 +149598,6 @@ pub mod modem_syscon {
                 3 => Some(self.0.read::<0x14>()),
                 _ => None,
             }
-        }
-
-        /// Open (`true`) or close the `bus` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_APB_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L549.
-        #[inline]
-        pub fn set_fe_bus_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_apb_en(on);
-            });
-        }
-
-        /// Open (`true`) or close the `80m` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_80M_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L525.
-        #[inline]
-        pub fn set_fe_80m_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_80m_en(on);
-            });
-        }
-
-        /// Open (`true`) or close the `160m` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_160M_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L537.
-        #[inline]
-        pub fn set_fe_160m_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_160m_en(on);
-            });
-        }
-
-        /// Open (`true`) or close the `dac` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_DAC_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L575.
-        #[inline]
-        pub fn set_fe_dac_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_dac_en(on);
-            });
-        }
-
-        /// Open (`true`) or close the `pwdet-adc` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_PWDET_ADC_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L588.
-        #[inline]
-        pub fn set_fe_pwdet_adc_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_pwdet_adc_en(on);
-            });
-        }
-
-        /// Open (`true`) or close the `adc` clock of `FE` (`MODEM_SYSCON.CLK_CONF1.CLK_FE_ADC_EN`); every other bit keeps the value read.
-        ///
-        /// SOURCE: ESP_IDF_4D59230D_S31_MODEM_SYSCON_LL_H_L562.
-        #[inline]
-        pub fn set_fe_adc_clock(&mut self, on: bool) {
-            self.modify_clk_conf1(|w| {
-                w.set_clk_fe_adc_en(on);
-            });
         }
 
         /// Open (`true`) or close the `pwdet-sar` clock of `FE` (`MODEM_SYSCON.CLK_CONF.PWDET_SAR_CLOCK_ENA`); every other bit keeps the value read.

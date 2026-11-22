@@ -13,7 +13,7 @@ use oer_chips_esp32s31_hal::{
     power::ChipClocks,
     radio::domain::RadioDomain,
     radio::ieee80211::{
-        client::{MacFirstReset, WifiClocked, WifiClocksOn, WifiCold},
+        client::{MacFirstReset, WifiClocked, WifiClocksOn, WifiCold, WifiInitialization},
         dma::receive::{RxRing, RxRingParts, WalkerEnabled},
         init::{
             MAC_COLD_HANDSHAKE_DEADLINE, MacBlockReset, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
@@ -305,7 +305,7 @@ pub(crate) async fn bring_up(
         .enable_clocks(radio, &clocks)
         .map_err(|_| (phase::CLOCKS, 0))?;
     clocked
-        .set_initialized(radio, true)
+        .set_initialized(radio, WifiInitialization::Initialized)
         .map_err(|_| (phase::INITIALIZED, 0))?;
     let (membership, acquired) = {
         let ready = phy_ready(radio).map_err(|_| (phase::JOIN, 0))?;

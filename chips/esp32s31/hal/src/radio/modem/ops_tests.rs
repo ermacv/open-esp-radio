@@ -856,21 +856,11 @@ golden!(
 );
 
 golden!(
-    set_baseband_i2c_power_tie_off,
+    tie_baseband_i2c_power,
     PmuRadio,
     pmu,
     |b| {
-        ops::set_baseband_i2c_power_tie(&mut b, false);
-    },
-    [(0, &[]), (u32::MAX, &[])]
-);
-
-golden!(
-    set_baseband_i2c_power_tie_on,
-    PmuRadio,
-    pmu,
-    |b| {
-        ops::set_baseband_i2c_power_tie(&mut b, true);
+        ops::tie_baseband_i2c_power(&mut b);
     },
     [
         (0, &[(0x00f0, 0x10000000)]),
@@ -1314,8 +1304,10 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b)
-            .configure_external_coex_grant(ExternalCoexGrantDelay::new(0).expect("delay"), false);
+        ExternalCoexControl::new(&mut b).configure_external_coex_grant(
+            ExternalCoexGrantDelay::new(0).expect("delay"),
+            ExternalCoexGrantValidity::ValidLow,
+        );
     },
     [(0, &[]), (u32::MAX, &[(0x00a0, 0xfffffe00)])]
 );
@@ -1325,8 +1317,10 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b)
-            .configure_external_coex_grant(ExternalCoexGrantDelay::new(0).expect("delay"), true);
+        ExternalCoexControl::new(&mut b).configure_external_coex_grant(
+            ExternalCoexGrantDelay::new(0).expect("delay"),
+            ExternalCoexGrantValidity::ValidHigh,
+        );
     },
     [
         (0, &[(0x00a0, 0x00000001)]),
@@ -1339,8 +1333,10 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b)
-            .configure_external_coex_grant(ExternalCoexGrantDelay::new(0xa).expect("delay"), false);
+        ExternalCoexControl::new(&mut b).configure_external_coex_grant(
+            ExternalCoexGrantDelay::new(0xa).expect("delay"),
+            ExternalCoexGrantValidity::ValidLow,
+        );
     },
     [
         (0, &[(0x00a0, 0x00000140)]),
@@ -1353,8 +1349,10 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b)
-            .configure_external_coex_grant(ExternalCoexGrantDelay::new(0xa).expect("delay"), true);
+        ExternalCoexControl::new(&mut b).configure_external_coex_grant(
+            ExternalCoexGrantDelay::new(0xa).expect("delay"),
+            ExternalCoexGrantValidity::ValidHigh,
+        );
     },
     [
         (0, &[(0x00a0, 0x00000141)]),
@@ -1558,7 +1556,7 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b).set_external_coex_enabled(false);
+        ExternalCoexControl::new(&mut b).disable_external_coex();
     },
     [
         (0, &[]),
@@ -1579,7 +1577,7 @@ golden!(
     CoexExternal,
     coex,
     |b| {
-        ExternalCoexControl::new(&mut b).set_external_coex_enabled(true);
+        ExternalCoexControl::new(&mut b).enable_external_coex();
     },
     [
         (
@@ -2003,71 +2001,41 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_set_bss_cbw_40_digital_off,
+    owner_power_off_rf_circuits,
     |r| {
-        r.set_bss_cbw_40_digital(false);
-    },
-    [
-        (0, &[]),
-        (u32::MAX, &[("modem_syscon_radio", 0x0018, 0xfffffff3)])
-    ]
-);
-
-owner_golden!(
-    owner_set_rf_circuit_power_off,
-    |r| {
-        r.set_rf_circuit_power(false);
+        r.power_off_rf_circuits();
     },
     [(0, &[]), (u32::MAX, &[("pmu_radio", 0x0184, 0x0000ffff)])]
 );
 
 owner_golden!(
-    owner_set_bb_i2c_power_tie_off,
+    owner_power_off_analog_i2c,
     |r| {
-        r.set_bb_i2c_power_tie(false);
-    },
-    [(0, &[]), (u32::MAX, &[])]
-);
-
-owner_golden!(
-    owner_set_analog_i2c_power_off,
-    |r| {
-        r.set_analog_i2c_power(false);
+        r.power_off_analog_i2c();
     },
     [(0, &[]), (u32::MAX, &[("pmu_radio", 0x0208, 0xbfffffff)])]
 );
 
 owner_golden!(
-    owner_set_analog_i2c_reset_released_off,
+    owner_assert_analog_i2c_reset,
     |r| {
-        r.set_analog_i2c_reset_released(false);
+        r.assert_analog_i2c_reset();
     },
     [(0, &[]), (u32::MAX, &[("pmu_radio", 0x0208, 0x7fffffff)])]
 );
 
 owner_golden!(
-    owner_set_bss_cbw_40_digital_on,
+    owner_power_on_rf_circuits,
     |r| {
-        r.set_bss_cbw_40_digital(true);
-    },
-    [
-        (0, &[("modem_syscon_radio", 0x0018, 0x00000004)]),
-        (u32::MAX, &[("modem_syscon_radio", 0x0018, 0xfffffff7)])
-    ]
-);
-
-owner_golden!(
-    owner_set_rf_circuit_power_on,
-    |r| {
-        r.set_rf_circuit_power(true);
+        r.power_on_rf_circuits();
     },
     [(0, &[("pmu_radio", 0x0184, 0xffff0000)]), (u32::MAX, &[])]
 );
 
 owner_golden!(
-    owner_set_bb_i2c_power_tie_on,
+    owner_tie_baseband_i2c_power,
     |r| {
-        r.set_bb_i2c_power_tie(true);
+        r.tie_baseband_i2c_power();
     },
     [
         (0, &[("pmu_radio", 0x00f0, 0x10000000)]),
@@ -2076,17 +2044,17 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_set_analog_i2c_power_on,
+    owner_power_on_analog_i2c,
     |r| {
-        r.set_analog_i2c_power(true);
+        r.power_on_analog_i2c();
     },
     [(0, &[("pmu_radio", 0x0208, 0x40000000)]), (u32::MAX, &[])]
 );
 
 owner_golden!(
-    owner_set_analog_i2c_reset_released_on,
+    owner_release_analog_i2c_reset,
     |r| {
-        r.set_analog_i2c_reset_released(true);
+        r.release_analog_i2c_reset();
     },
     [(0, &[("pmu_radio", 0x0208, 0x80000000)]), (u32::MAX, &[])]
 );
@@ -2512,17 +2480,17 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_modem_adc_common_fe_off,
+    owner_disable_modem_clock_device_modem_adc_common_fe,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::ModemAdcCommonFe, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::ModemAdcCommonFe);
     },
     [(0, &[]), (u32::MAX, &[])]
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_modem_adc_common_fe_on,
+    owner_enable_modem_clock_device_modem_adc_common_fe,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::ModemAdcCommonFe, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::ModemAdcCommonFe);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x0000a000)]),
@@ -2531,17 +2499,17 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_modem_private_fe_off,
+    owner_disable_modem_clock_device_modem_private_fe,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::ModemPrivateFe, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::ModemPrivateFe);
     },
     [(0, &[]), (u32::MAX, &[])]
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_modem_private_fe_on,
+    owner_enable_modem_clock_device_modem_private_fe,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::ModemPrivateFe, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::ModemPrivateFe);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00384000)]),
@@ -2550,9 +2518,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_pll_source_gate_off,
+    owner_disable_modem_clock_device_pll_source_gate,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::PllSourceGate, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::PllSourceGate);
     },
     [
         (0, &[("hp_sys_clkrst_radio", 0x01e0, 0x00000025)]),
@@ -2561,9 +2529,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_pll_source_gate_on,
+    owner_enable_modem_clock_device_pll_source_gate,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::PllSourceGate, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::PllSourceGate);
     },
     [
         (0, &[("hp_sys_clkrst_radio", 0x01e0, 0x0000001d)]),
@@ -2572,9 +2540,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_apb_off,
+    owner_disable_modem_clock_device_wifi_apb,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiApb, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::WifiApb);
     },
     [
         (0, &[]),
@@ -2586,9 +2554,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_apb_on,
+    owner_enable_modem_clock_device_wifi_apb,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiApb, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::WifiApb);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00000400)]),
@@ -2597,9 +2565,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband44m_off,
+    owner_disable_modem_clock_device_wifi_baseband44m,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband44m, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::WifiBaseband44m);
     },
     [
         (0, &[]),
@@ -2611,9 +2579,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband44m_on,
+    owner_enable_modem_clock_device_wifi_baseband44m,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband44m, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::WifiBaseband44m);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00000004)]),
@@ -2622,9 +2590,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_mac_off,
+    owner_disable_modem_clock_device_wifi_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiMac, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::WifiMac);
     },
     [
         (0, &[]),
@@ -2636,9 +2604,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_mac_on,
+    owner_enable_modem_clock_device_wifi_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiMac, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::WifiMac);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00000200)]),
@@ -2647,9 +2615,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband_off,
+    owner_disable_modem_clock_device_wifi_baseband,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::WifiBaseband);
     },
     [
         (0, &[]),
@@ -2661,9 +2629,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband_on,
+    owner_enable_modem_clock_device_wifi_baseband,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::WifiBaseband);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x0000017b)]),
@@ -2675,9 +2643,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband_80x1_off,
+    owner_disable_modem_clock_device_wifi_baseband_80x1,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband80x1, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::WifiBaseband80x1);
     },
     [
         (0, &[]),
@@ -2689,9 +2657,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_wifi_baseband_80x1_on,
+    owner_enable_modem_clock_device_wifi_baseband_80x1,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::WifiBaseband80x1, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::WifiBaseband80x1);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00000080)]),
@@ -2700,9 +2668,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_etm_off,
+    owner_disable_modem_clock_device_etm,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::Etm, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::Etm);
     },
     [
         (0, &[]),
@@ -2714,9 +2682,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_etm_on,
+    owner_enable_modem_clock_device_etm,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::Etm, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::Etm);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0004, 0x00400000)]),
@@ -2725,9 +2693,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_mac_off,
+    owner_disable_modem_clock_device_bluetooth_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothMac, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::BluetoothMac);
     },
     [
         (0, &[]),
@@ -2739,9 +2707,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_mac_on,
+    owner_enable_modem_clock_device_bluetooth_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothMac, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::BluetoothMac);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00040000)]),
@@ -2750,9 +2718,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_peripheral_off,
+    owner_disable_modem_clock_device_bluetooth_peripheral,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothPeripheral, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::BluetoothPeripheral);
     },
     [
         (0, &[]),
@@ -2764,9 +2732,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_peripheral_on,
+    owner_enable_modem_clock_device_bluetooth_peripheral,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothPeripheral, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::BluetoothPeripheral);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0004, 0x6e000000)]),
@@ -2775,9 +2743,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_apb_off,
+    owner_disable_modem_clock_device_bluetooth_apb,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothApb, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::BluetoothApb);
     },
     [
         (0, &[]),
@@ -2792,9 +2760,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_apb_on,
+    owner_enable_modem_clock_device_bluetooth_apb,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::BluetoothApb, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::BluetoothApb);
     },
     [
         (
@@ -2809,12 +2777,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_ieee802154_common_baseband_off,
+    owner_disable_modem_clock_device_bluetooth_ieee802154_common_baseband,
     |r| {
-        r.configure_modem_clock_device(
-            super::ModemClockDevice::BluetoothIeee802154CommonBaseband,
-            false,
-        );
+        r.disable_modem_clock_device(super::ModemClockDevice::BluetoothIeee802154CommonBaseband);
     },
     [
         (0, &[]),
@@ -2826,12 +2791,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_bluetooth_ieee802154_common_baseband_on,
+    owner_enable_modem_clock_device_bluetooth_ieee802154_common_baseband,
     |r| {
-        r.configure_modem_clock_device(
-            super::ModemClockDevice::BluetoothIeee802154CommonBaseband,
-            true,
-        );
+        r.enable_modem_clock_device(super::ModemClockDevice::BluetoothIeee802154CommonBaseband);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0014, 0x00020000)]),
@@ -2840,9 +2802,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_ieee802154_mac_off,
+    owner_disable_modem_clock_device_ieee802154_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::Ieee802154Mac, false);
+        r.disable_modem_clock_device(super::ModemClockDevice::Ieee802154Mac);
     },
     [
         (0, &[]),
@@ -2854,9 +2816,9 @@ owner_golden!(
 );
 
 owner_golden!(
-    owner_configure_modem_clock_device_ieee802154_mac_on,
+    owner_enable_modem_clock_device_ieee802154_mac,
     |r| {
-        r.configure_modem_clock_device(super::ModemClockDevice::Ieee802154Mac, true);
+        r.enable_modem_clock_device(super::ModemClockDevice::Ieee802154Mac);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0004, 0x01800000)]),
