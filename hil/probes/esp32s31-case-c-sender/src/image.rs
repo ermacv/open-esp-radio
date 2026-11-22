@@ -528,7 +528,10 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
 /// data.
 type Reply<'a> = crate::radio::Done<'a, Answer>;
 
-/// Gives a command's result through its permit.
+/// Gives a command's result through its permit. A function of its own, so
+/// that the waker call of the hand-over keeps its inline scope and the image's
+/// stack analysis resolves it to the executor's vtable (`Fact::WakerVtables`).
+#[inline(never)]
 fn answer(done: Reply<'_>, body: impl Into<Answer>) {
     done.answer(body.into());
 }
