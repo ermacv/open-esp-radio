@@ -1,15 +1,16 @@
 # HIL agent
 
 `oer-protocols-hil-agent` holds the HIL target logic that does not
-depend on the chip: the request intake (`base`), console serialization and
-the lifecycle acknowledgement barrier and the reset-retained post-mortem codec. The
+depend on the chip: the request intake (`base`), the console and its
+exchange with the image's worker (`console`, `mailbox`) and the
+reset-retained post-mortem codec. The
 [HIL agent on the application entry](../../../hil/agent/README.md)
 composes these modules with the library's executor and console. Host tests exercise the same compiled code the
 firmware links.
 
 | Feature | Modules |
 | --- | --- |
-| none | `base`, `capture`, `console`, `lifecycle`, `postmortem` |
+| none | `base`, `capture`, `console`, `mailbox`, `postmortem` |
 
 ## Image keys
 
@@ -33,32 +34,30 @@ returns its endpoint's response type, so every request is answered.
 An image component with no requests can implement `Service` for its
 properties alone.
 
-The optional `lifecycle::Request` service advertises `lifecycle/reset` and
-`lifecycle/reset-accepted`. Discovery, key pages, boot evidence and link
-health stay in `base`; Hello is also the reachability check. The image queues
-a reset request; `lifecycle::acknowledge_reset` publishes the acknowledgement
-and returns an affine `AcknowledgedReset` only after its complete frame was
-written. The image consumes its correlation observations (the request,
-the acknowledgement's place in its lane, the session) in its existing
-retained reset path. An acknowledgement that could not be built returns
-`Dropped` to the image's fault policy without performing the requested
-action. The agent owns no hardware reset operation.
+Discovery, key pages, boot evidence and link health stay in `base`; Hello
+is also the reachability check.
 
-The console takes no lock and no critical section. Its state is its one
-writer's (`console::run`, over a `Writer` the image places once): the
-encoder, the sequence it numbers messages with as it writes them, its
-counts and the base module's answers it gives itself. A producing context
-(a level of the console's hart) holds its own `Producer` on its own lane, a
-lock-free FIFO (`console::Lanes`, split once): a producer is not `Clone`
-and publishes through `&mut`. The writer writes Hello first, then at every
-pass its own answers and each lane in its declared order. A producer that
-waits for its message's write holds its place in its lane
-(`console::Entered`) and waits for the writer's count of that lane
-(`Producer::written`); one producer a lane makes the place exact, and the
-waiter borrows the producer, so a lane has one waiter and the wait cannot
-refuse.
+The console has one holder, its task, and takes no lock and no critical
+section. Its state is a `Writer` the image places once and lends to
+`console::run`: the encoder, the sequence it numbers messages with as it
+writes them and its counts. Nobody publishes into it. It writes Hello
+first and answers each base-module request in the step that decoded it.
 
-`console::run` returns a `RunFault` owning the endpoint on an invalid read
+The image's requests go to its worker through the `mailbox::Mailbox`, two
+places of depth one (`portable/memory`), one each way. `Inbox::next`
+gives each request with its `Reply`, the permit of that request's
+identity, which borrows the inbox: the worker takes no next request
+before it answered, and an answer without a request or under another
+identity does not compile. One request is in work at a time: another
+meanwhile is answered `Rejected(Busy)` by the console. An answer that
+cannot be encoded, or a `Reply` dropped without one, is refused to the
+host as `Rejected(Internal)` and counted in `tx_dropped`. What follows an
+answer's write (`mailbox::After`) travels with it: a set that declares
+`traps` (the fault service) may ask for `After::Trap`, and `console::run`
+ends with the trap once the answer is written whole; a set without it
+cannot build one. The agent owns no hardware reset operation.
+
+`console::run` ends with a `RunFault` owning the endpoint on an invalid read
 length. Checkpoint and rate count overflows return typed faults before
 mutation; images retain their observations and reset.
 

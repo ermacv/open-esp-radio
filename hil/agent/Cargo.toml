@@ -10,7 +10,6 @@ description = "The HIL agent: the console, the boot evidence and the request mai
 
 [dependencies]
 oer-protocols-hil-protocol = { workspace = true }
-oer-portable-memory = { path = "../../portable/memory" }
 oer-protocols-hil-agent = { path = "../../protocols/hil/agent", default-features = false }
 
 # The console and the boot evidence run on the chip target only.

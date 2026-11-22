@@ -164,9 +164,10 @@ fn service_keys_only_appear_when_mounted_and_maximum_pages_fit_frames() {
 fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     use crate::{
         base::{Intake, Platform},
-        console::{Ends, Immediate, Lanes, Writer, run},
+        console::{Immediate, Writer, run},
+        mailbox::Mailbox,
     };
-    use embassy_futures::{block_on, select::select};
+    use embassy_futures::{block_on, select::select3};
     use oer_protocols_hil_protocol::{
         Envelope, FrameDecoder, FrameEncoder, Message, WireKind,
         base::{BootEvidence, PostMortemCheckpoints, ResetReason},
@@ -240,34 +241,36 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     collector.begin(ID, u64::MAX).unwrap();
     collector.event(Step);
     collector.freeze().unwrap();
-    let mut lanes = Lanes::<1, 8>::new();
-    let [
-        Ends {
-            mut producer,
-            drain,
-        },
-    ] = lanes.split();
-    let mut drains = [drain];
+    let mut mailbox = Mailbox::<Request>::new();
+    let (mut console, mut inbox) = mailbox.split();
     let mut writer = Writer::new();
     crate::image_keys! { KEYS = [Request] }
     let host = Host::default();
-    host.send(1, Describe);
-    host.send(2, ReadRecords(request(0, 1)));
-    host.send(3, ReadCounters(request(0, 1)));
-    host.send(4, ReadRecords(request(1, 1)));
-    let run = run::<Early, Request, _, 1, 8>(
+    // One request in work at a time: the host sends the next after each
+    // answer.
+    let send = |index: usize| match index {
+        0 => host.send(1, Describe),
+        1 => host.send(2, ReadRecords(request(0, 1))),
+        2 => host.send(3, ReadCounters(request(0, 1))),
+        _ => host.send(4, ReadRecords(request(1, 1))),
+    };
+    send(0);
+    let run = run::<Early, Request, _>(
         &mut writer,
-        &mut drains,
+        &mut console,
         77,
         Endpoint(host.clone()),
         Intake::new(77, KEYS, 0, 0),
         &Chip,
-        |identity, request: Request| {
-            block_on(request.serve(&collector).publish(&mut producer, identity));
-            Ok(())
-        },
     );
+    let worker = async {
+        loop {
+            let (request, reply) = inbox.next().await;
+            request.serve(&collector).reply(reply);
+        }
+    };
     let watch = async {
+        let mut sent = 1;
         for _ in 0..1000 {
             let mut decoder = FrameDecoder::new();
             let mut received = Vec::new();
@@ -280,6 +283,10 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
                     assert_eq!(refused.unwrap().body, Refused(Error::InvalidRange));
                 }
             });
+            if received.len() == sent && sent < 4 {
+                send(sent);
+                sent += 1;
+            }
             if received.len() == 4 {
                 assert_eq!(
                     received,
@@ -297,7 +304,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
         panic!("fake console did not answer capture requests");
     };
     assert!(matches!(
-        block_on(select(run, watch)),
-        embassy_futures::select::Either::Second(())
+        block_on(select3(run, worker, watch)),
+        embassy_futures::select::Either3::Third(())
     ));
 }

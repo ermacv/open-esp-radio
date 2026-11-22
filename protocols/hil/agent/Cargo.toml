@@ -15,8 +15,6 @@ crc = "3.3.0"
 heapless = "0.9.3"
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-memory = { path = "../../../portable/memory" }
-oer-portable-sync = { path = "../../../portable/sync" }
-oer-portable-waker = { path = "../../../portable/waker" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
 oer-protocols-hil-protocol = { path = "../protocol", default-features = false, features = ["async-io"] }
 embedded-io-async = "0.7.0"

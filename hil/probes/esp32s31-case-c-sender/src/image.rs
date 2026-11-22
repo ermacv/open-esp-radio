@@ -37,13 +37,11 @@ use oer_chips_esp32s31_radio_phy::{
     PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
-use oer_hil_agent::answer;
 use oer_hil_services_radio_pair::{self as service, Refusal, SenderRequest};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
 use oer_portable_time::{Clock, Duration, Timer};
-use oer_protocols_hil_protocol::RequestIdentity;
 
 /// The sender's receive ring: eight descriptors, each buffer of 256
 /// octets with the 64-octet header below its floor. The MAC's start takes
@@ -84,7 +82,7 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts, inbox: oer_hil_agent::Inbox<'static, SenderRequest>, reset: u32, out: oer_hil_agent::Producer) = session_task;
+        session(parts: SessionParts, inbox: oer_hil_agent::Inbox<'static, SenderRequest>, reset: u32) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
@@ -238,13 +236,7 @@ fn main(
     let Some(mailbox) = MAILBOX.try_take() else {
         fail(name!("mailbox"; 32));
     };
-    let (outbox, inbox) = mailbox.split();
-    let Some(lanes) = LANES.try_take() else {
-        fail(name!("lanes"; 32));
-    };
-    // The one lane: the radio level's, the console's own answers being its
-    // writer's.
-    let [oer_hil_agent::Ends { producer, drain }] = lanes.split();
+    let (mailbox, inbox) = mailbox.split();
     let Some(writer) = WRITER.try_take() else {
         fail(name!("writer"; 32));
     };
@@ -258,19 +250,10 @@ fn main(
             previous_panic: None,
             previous_exception: None,
         },
-        outbox,
+        mailbox,
         writer,
-        drain,
     };
-    if RadioTasks::session(
-        &radio_executor,
-        parts,
-        inbox,
-        u32::from(reset_cause.code()),
-        producer,
-    )
-    .is_err()
-    {
+    if RadioTasks::session(&radio_executor, parts, inbox, u32::from(reset_cause.code())).is_err() {
         fail(name!("session-task"; 32));
     }
     let (mut router, hart) = match adopted.enable_interrupts() {
@@ -330,9 +313,7 @@ const IMAGE: oer_hil_agent::Image = oer_hil_agent::Image {
 
 static MAILBOX: static_cell::ConstStaticCell<oer_hil_agent::Mailbox<SenderRequest>> =
     static_cell::ConstStaticCell::new(oer_hil_agent::Mailbox::new());
-/// The console's lane of the radio level and its writer.
-static LANES: static_cell::ConstStaticCell<oer_hil_agent::Lanes<1>> =
-    static_cell::ConstStaticCell::new(oer_hil_agent::Lanes::new());
+/// The console's state: only the console's task touches it.
 static WRITER: static_cell::ConstStaticCell<oer_hil_agent::Writer> =
     static_cell::ConstStaticCell::new(oer_hil_agent::Writer::new());
 
@@ -342,9 +323,8 @@ pub(crate) struct Host {
     pub(crate) console: usb::Console,
     pub(crate) boot: u64,
     pub(crate) records: oer_hil_agent::Records,
-    pub(crate) outbox: oer_hil_agent::Outbox<'static, SenderRequest>,
+    pub(crate) mailbox: oer_hil_agent::Console<'static, SenderRequest>,
     pub(crate) writer: &'static mut oer_hil_agent::Writer,
-    pub(crate) drain: oer_hil_agent::LaneDrain,
 }
 
 /// How the sender's serving ends: the console's transport broke.
@@ -361,9 +341,8 @@ async fn host_task(host: Host) {
         console,
         boot,
         records,
-        outbox,
+        mailbox,
         writer,
-        drain,
     } = host;
     match oer_hil_agent::serve(
         console,
@@ -371,9 +350,8 @@ async fn host_task(host: Host) {
         records,
         IMAGE,
         oer_hil_agent::Mount {
-            outbox,
+            console: mailbox,
             writer,
-            drains: [drain],
         },
         Ended::Console,
         core::future::pending::<Result<core::convert::Infallible, Ended>>,
@@ -401,10 +379,9 @@ fn session_future(
     parts: SessionParts,
     inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     reset: u32,
-    mut out: oer_hil_agent::Producer,
 ) -> SessionRun {
     async move {
-        match worker(parts, inbox, reset, &mut out).await {
+        match worker(parts, inbox, reset).await {
             Ok(never) => match never {},
             Err(Ended::Console) => fail(name!("console"; 32)),
         }
@@ -415,14 +392,11 @@ async fn session_task(
     parts: SessionParts,
     inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     reset: u32,
-    out: oer_hil_agent::Producer,
 ) {
     let Some(place) = SESSION.try_take() else {
         fail(name!("session-place"; 32));
     };
-    place
-        .future(|| session_future(parts, inbox, reset, out))
-        .await;
+    place.future(|| session_future(parts, inbox, reset)).await;
 }
 
 /// Wait `micros` on the executor's clock.
@@ -444,25 +418,28 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
     collected.into_array().ok()
 }
 
+/// The reply to one request of the pair's services.
+type Reply<'a> = oer_hil_agent::Reply<'a, core::convert::Infallible>;
+
+/// Answers a request through its reply.
+fn answer<M: oer_protocols_hil_protocol::Message>(reply: Reply<'_>, body: &M) {
+    reply.answer(body);
+}
+
 /// Answer `request` with its endpoint's refusal.
-fn refuse(
-    out: &mut oer_hil_agent::Producer,
-    identity: RequestIdentity,
-    request: SenderRequest,
-    refusal: Refusal,
-) {
+fn refuse(identity: Reply<'_>, request: SenderRequest, refusal: Refusal) {
     match request {
         SenderRequest::SnapshotCold(_) | SenderRequest::SnapshotUp(_) => {
-            answer(out, identity, &service::SnapshotPage::Refused(refusal));
+            answer(identity, &service::SnapshotPage::Refused(refusal));
         }
-        SenderRequest::BringUp(_) => answer(out, identity, &service::BroughtUp::Refused(refusal)),
+        SenderRequest::BringUp(_) => answer(identity, &service::BroughtUp::Refused(refusal)),
         SenderRequest::ReceiveCounters(_) => {
-            answer(out, identity, &service::Counters::Refused(refusal));
+            answer(identity, &service::Counters::Refused(refusal));
         }
-        SenderRequest::Stop(_) => answer(out, identity, &service::Stopped::Refused(refusal)),
-        SenderRequest::Target(_) => answer(out, identity, &service::Targeted::Refused(refusal)),
-        SenderRequest::Round(_) => answer(out, identity, &service::Sent::Refused(refusal)),
-        SenderRequest::Single(_) => answer(out, identity, &service::SentOne::Refused(refusal)),
+        SenderRequest::Stop(_) => answer(identity, &service::Stopped::Refused(refusal)),
+        SenderRequest::Target(_) => answer(identity, &service::Targeted::Refused(refusal)),
+        SenderRequest::Round(_) => answer(identity, &service::Sent::Refused(refusal)),
+        SenderRequest::Single(_) => answer(identity, &service::SentOne::Refused(refusal)),
     }
 }
 
@@ -471,15 +448,14 @@ fn refuse(
 async fn down(
     mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     cold: &pair::Readings,
-    out: &mut oer_hil_agent::Producer,
 ) -> Result<core::convert::Infallible, Ended> {
     loop {
-        let (identity, request) = inbox.next().await;
+        let (request, identity) = inbox.next().await;
         match request {
             SenderRequest::SnapshotCold(request) => {
-                answer(out, identity, &pair::page(cold, request.page));
+                answer(identity, &pair::page(cold, request.page));
             }
-            other => refuse(out, identity, other, Refusal::Down),
+            other => refuse(identity, other, Refusal::Down),
         }
     }
 }
@@ -497,20 +473,17 @@ async fn worker(
     parts: SessionParts,
     mut inbox: oer_hil_agent::Inbox<'static, SenderRequest>,
     reset: u32,
-    out: &mut oer_hil_agent::Producer,
 ) -> Result<core::convert::Infallible, Ended> {
     let cold = pair::cold(reset, &parts.radio, &parts.clocks);
     let identity = parts.identity;
     let cycles = parts.cycles;
     let ap = parts.ap;
     let bring = loop {
-        let (id, request) = inbox.next().await;
+        let (request, id) = inbox.next().await;
         match request {
-            SenderRequest::SnapshotCold(request) => {
-                answer(out, id, &pair::page(&cold, request.page))
-            }
+            SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
             SenderRequest::BringUp(_) => break id,
-            other => refuse(out, id, other, Refusal::NotUp),
+            other => refuse(id, other, Refusal::NotUp),
         }
     };
     let cooperative = Cooperative::new(EmbassyClock);
@@ -595,14 +568,13 @@ async fn worker(
         Ok(up) => up,
         Err((phase, index)) => {
             answer(
-                out,
                 bring,
                 &service::BroughtUp::Failed(service::Failure { phase, index }),
             );
-            return down(inbox, &cold, out).await;
+            return down(inbox, &cold).await;
         }
     };
-    answer(out, bring, &service::BroughtUp::Up { station, ap });
+    answer(bring, &service::BroughtUp::Up { station, ap });
     let up = match pair::up(&mut slot, held.clocks(), reset, identity) {
         Ok(readings) => readings,
         Err(_) => cold.clone(),
@@ -611,17 +583,14 @@ async fn worker(
     let mut receiver = None;
     let mut steps = Steps::Open;
     loop {
-        let (id, request) = inbox.next().await;
+        let (request, id) = inbox.next().await;
         match request {
-            SenderRequest::SnapshotCold(request) => {
-                answer(out, id, &pair::page(&cold, request.page))
-            }
-            SenderRequest::SnapshotUp(request) => answer(out, id, &pair::page(&up, request.page)),
+            SenderRequest::SnapshotCold(request) => answer(id, &pair::page(&cold, request.page)),
+            SenderRequest::SnapshotUp(request) => answer(id, &pair::page(&up, request.page)),
             SenderRequest::BringUp(_) => {
-                answer(out, id, &service::BroughtUp::Refused(Refusal::AlreadyUp));
+                answer(id, &service::BroughtUp::Refused(Refusal::AlreadyUp));
             }
             SenderRequest::ReceiveCounters(_) => answer(
-                out,
                 id,
                 &pair::counters(
                     &access,
@@ -632,25 +601,21 @@ async fn worker(
                 ),
             ),
             SenderRequest::Target(_) if matches!(steps, Steps::Failed) => {
-                answer(out, id, &service::Targeted::Refused(Refusal::StepFailed));
+                answer(id, &service::Targeted::Refused(Refusal::StepFailed));
             }
             SenderRequest::Round(_) if matches!(steps, Steps::Failed) => {
-                answer(out, id, &service::Sent::Refused(Refusal::StepFailed));
+                answer(id, &service::Sent::Refused(Refusal::StepFailed));
             }
             SenderRequest::Single(_) if matches!(steps, Steps::Failed) => {
-                answer(out, id, &service::SentOne::Refused(Refusal::StepFailed));
+                answer(id, &service::SentOne::Refused(Refusal::StepFailed));
             }
             SenderRequest::Single(request) => {
                 let Some(peer) = receiver else {
-                    answer(out, id, &service::SentOne::Refused(Refusal::NoReceiver));
+                    answer(id, &service::SentOne::Refused(Refusal::NoReceiver));
                     continue;
                 };
                 if !service::SINGLE_LENGTHS.contains(&request.length) {
-                    answer(
-                        out,
-                        id,
-                        &service::SentOne::Refused(Refusal::LengthOutOfRange),
-                    );
+                    answer(id, &service::SentOne::Refused(Refusal::LengthOutOfRange));
                     continue;
                 }
                 match transmit::single(
@@ -664,7 +629,6 @@ async fn worker(
                 .await
                 {
                     Ok(ended) => answer(
-                        out,
                         id,
                         &service::SentOne::Ended {
                             status: ended.status,
@@ -672,7 +636,6 @@ async fn worker(
                     ),
                     Err((phase, index)) => {
                         answer(
-                            out,
                             id,
                             &service::SentOne::Failed(service::Failure { phase, index }),
                         );
@@ -684,11 +647,11 @@ async fn worker(
             }
             SenderRequest::Target(request) => {
                 receiver = Some(request.receiver);
-                answer(out, id, &service::Targeted::Targeted);
+                answer(id, &service::Targeted::Targeted);
             }
             SenderRequest::Round(request) => {
                 let Some(peer) = receiver else {
-                    answer(out, id, &service::Sent::Refused(Refusal::NoReceiver));
+                    answer(id, &service::Sent::Refused(Refusal::NoReceiver));
                     continue;
                 };
                 let began = EmbassyClock.now();
@@ -711,11 +674,10 @@ async fn worker(
                 )
                 .unwrap_or(u32::MAX);
                 match sent {
-                    Ok(cases) => answer(out, id, &service::Sent::Sent { cases, micros }),
+                    Ok(cases) => answer(id, &service::Sent::Sent { cases, micros }),
                     Err(stop) => {
                         let (phase, index) = stop.failure;
                         answer(
-                            out,
                             id,
                             &service::Sent::Failed(service::RoundFailure {
                                 failure: service::Failure { phase, index },
@@ -745,17 +707,16 @@ async fn worker(
                                 .as_micros(),
                         )
                         .unwrap_or(u32::MAX);
-                        answer(out, id, &service::Stopped::Stopped { micros });
+                        answer(id, &service::Stopped::Stopped { micros });
                     }
                     Err((phase, index)) => {
                         answer(
-                            out,
                             id,
                             &service::Stopped::Failed(service::Failure { phase, index }),
                         );
                     }
                 }
-                return down(inbox, &cold, out).await;
+                return down(inbox, &cold).await;
             }
         }
     }

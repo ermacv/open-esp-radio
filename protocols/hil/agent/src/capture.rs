@@ -1,7 +1,7 @@
 //! An image owns capture storage, its clock, lifecycle and context. The agent
 //! serves only bounded encoded records and aggregate counters.
-use crate::console::Producer;
-use oer_protocols_hil_protocol::{RequestIdentity, capture::*};
+use crate::mailbox::Reply;
+use oer_protocols_hil_protocol::capture::*;
 
 #[cfg(oer_trace)]
 pub mod atomic;
@@ -42,26 +42,15 @@ impl Request {
 }
 
 impl Answer {
-    /// Pages use console backpressure; observation points never wait for IO.
-    pub async fn publish<const DEPTH: usize>(
-        &self,
-        producer: &mut Producer<'_, DEPTH>,
-        request: RequestIdentity,
-    ) {
-        macro_rules! send {
-            ($value:expr) => {
-                producer
-                    .publish_reliably(request.session_id, request.request_id, $value)
-                    .await
-            };
+    /// Answers the request through its `reply`; observation points never
+    /// wait for IO.
+    pub fn reply<T>(&self, reply: Reply<'_, T>) {
+        match self {
+            Self::Description(value) => reply.answer(value),
+            Self::Records(value) => reply.answer(value),
+            Self::Counters(value) => reply.answer(value),
+            Self::Refused(value) => reply.answer(value),
         }
-        // A message that cannot be built is counted in the link's health.
-        let _counted = match self {
-            Self::Description(value) => send!(value),
-            Self::Records(value) => send!(value),
-            Self::Counters(value) => send!(value),
-            Self::Refused(value) => send!(value),
-        };
     }
 }
 

@@ -1,12 +1,5 @@
 # HIL diagnostics
 
-## Requested reset
-
-`lifecycle::RequestReset` is served by an image that mounts the agent's
-lifecycle service: the image acknowledges with `ResetAccepted`, waits until
-the acknowledgement's frame was written and resets through its retained
-path; the next boot reports the reason.
-
 ## Stack measurements
 
 `system::StackUsage` carries task watermarks and optional dedicated IRQ watermarks for

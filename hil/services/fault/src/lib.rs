@@ -66,8 +66,8 @@ pub struct Restarts {
 }
 
 oer_protocols_hil_agent::service! {
-    /// The fault service's requests.
-    pub enum Request (sessions = false, handler = Handler) {
+    /// The fault service's requests: their answers may end in a trap.
+    pub enum Request (sessions = false, handler = Handler, traps) {
         RaiseException(RaiseException) => raise_exception,
         RefusePublication(RefusePublication) => refuse_publication,
         GetRestarts(GetRestarts) => get_restarts,

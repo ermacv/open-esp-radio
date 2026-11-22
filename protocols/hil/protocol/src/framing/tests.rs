@@ -15,11 +15,26 @@ fn receive<M: crate::Message>(
     });
     last
 }
-use crate::lifecycle::RequestReset;
 use crate::{Envelope, WireKind};
 
-fn command(sequence: u32) -> Envelope<RequestReset> {
-    Envelope::new(0x1234_5678_9abc_def0, sequence, 42, sequence, RequestReset)
+crate::messages! {
+    endpoint Command = "test/command" => Answered;
+    topic Answered = "test/answered";
+}
+
+/// A command without a body, for the framing alone.
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
+)]
+struct Command;
+
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, postcard_schema::Schema,
+)]
+struct Answered;
+
+fn command(sequence: u32) -> Envelope<Command> {
+    Envelope::new(0x1234_5678_9abc_def0, sequence, 42, sequence, Command)
 }
 
 #[test]
@@ -57,11 +72,11 @@ fn wire_header_is_fixed_and_precedes_the_postcard_body() {
         u32::from_le_bytes(raw[14..18].try_into().unwrap()),
         expected.message_sequence
     );
-    assert_eq!(raw[KEY_RANGE], <RequestReset as crate::Message>::KEY.0);
+    assert_eq!(raw[KEY_RANGE], <Command as crate::Message>::KEY.0);
     let payload_length = usize::from(u16::from_le_bytes(raw[LENGTH_RANGE].try_into().unwrap()));
     assert_eq!(decoded, WIRE_HEADER_BYTES + payload_length + CHECKSUM_BYTES);
     assert_eq!(
-        postcard::from_bytes::<RequestReset>(
+        postcard::from_bytes::<Command>(
             &raw[WIRE_HEADER_BYTES..WIRE_HEADER_BYTES + payload_length]
         )
         .unwrap(),
@@ -83,7 +98,7 @@ fn a_frame_of_another_type_is_not_decoded_as_this_one() {
             frame.key,
             <crate::base::GetBootStatus as crate::Message>::KEY
         );
-        seen = Some(frame.decode::<RequestReset>().is_none());
+        seen = Some(frame.decode::<Command>().is_none());
     });
     assert_eq!(seen, Some(true));
     assert_eq!(decoder.counters().frames, 1);
@@ -95,7 +110,7 @@ fn rejects_an_event_on_the_command_endpoint() {
     let mut encoder = FrameEncoder::new();
     let frame = encoder.encode(&expected).unwrap();
     let mut decoder = FrameDecoder::new();
-    let observed = receive::<RequestReset>(&mut decoder, frame);
+    let observed = receive::<Command>(&mut decoder, frame);
     assert_eq!(observed, Some(Err(DecodeError::MessageKind)));
     assert_eq!(decoder.counters().message_kind_errors, 1);
     assert_eq!(decoder.counters().deserialize_errors, 0);
@@ -118,7 +133,7 @@ fn leading_delimiter_recovers_from_text_output() {
         &input[..NOISE.len() + frame.len()],
         |result| {
             if let Ok(frame) = result {
-                observed = frame.decode::<RequestReset>().map(Result::unwrap);
+                observed = frame.decode::<Command>().map(Result::unwrap);
             }
         },
     );
@@ -211,7 +226,7 @@ fn a_message_serialized_by_its_producer_frames_like_an_encoded_one() {
         &expected.body,
     )
     .unwrap();
-    assert!(outbound.is::<RequestReset>());
+    assert!(outbound.is::<Command>());
     let queued = encoder
         .encode_outbound(expected.boot_id, &outbound)
         .unwrap()
@@ -223,7 +238,7 @@ fn a_message_serialized_by_its_producer_frames_like_an_encoded_one() {
 fn invalid_internal_lengths_return_typed_errors() {
     let header = Header {
         kind: WireKind::Command,
-        key: <RequestReset as crate::Message>::KEY,
+        key: <Command as crate::Message>::KEY,
         boot_id: 1,
         message_sequence: 2,
         session_id: 3,
@@ -309,7 +324,7 @@ fn an_overflowing_frame_then_a_good_one_decodes_exactly_the_good_one() {
         results += 1;
         observed = result
             .ok()
-            .and_then(|frame| frame.decode::<RequestReset>().map(Result::unwrap));
+            .and_then(|frame| frame.decode::<Command>().map(Result::unwrap));
     });
     assert_eq!(results, 1, "only the good frame ends a frame");
     assert_eq!(observed, Some(expected));
