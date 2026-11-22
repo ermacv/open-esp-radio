@@ -50,6 +50,10 @@ pub enum After<T> {
 }
 
 /// The outcome of one request, as the worker's reply left it.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "the answer's place holds one encoded message by value; the other outcomes carry nothing"
+)]
 pub(crate) enum Outcome<T> {
     /// The encoded answer, numbered and framed by the console.
     Encoded(Outbound, After<T>),
