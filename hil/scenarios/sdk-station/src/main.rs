@@ -106,7 +106,7 @@ const MCAUSE_CODE: u32 = 0x0fff;
 /// more board reset, whose predecessor printed with the console open, serves
 /// none.
 fn exception(cx: &mut Cx<'_>) -> Result<(), Failure> {
-    let before = cx.boot().boot_id;
+    let before = cx.boot()?.boot_id;
     let Raising = cx.call(RaiseException, STATUS_TIMEOUT)?;
     let after = cx.follow_restart()?.boot_id;
     let evidence = cx.call(GetBootStatus, STATUS_TIMEOUT)?;

@@ -138,7 +138,7 @@ fn cases_pass_fail_and_a_reboot_fails_its_case_but_not_the_next() {
         Case {
             name: "after-reboot",
             run: |cx| {
-                check(cx.boot().boot_id == 11, "the case runs on the new boot")?;
+                check(cx.boot()?.boot_id == 11, "the case runs on the new boot")?;
                 ask(9)(cx)
             },
         },
@@ -542,7 +542,7 @@ fn a_scenario_s_image_is_a_package_build_and_a_catalog_build_is_refused() {
 }
 
 #[test]
-fn a_case_reaches_each_device_by_its_role_and_an_unknown_role_is_incomplete() {
+fn a_case_reaches_each_device_by_its_role_and_an_unknown_or_unnamed_one_is_incomplete() {
     const ROLES: &[crate::Role] = &[
         crate::Role::new("receiver", "test-image", &[SERVICE]),
         crate::Role::new("sender", "test-image", &[SERVICE]),
@@ -556,11 +556,22 @@ fn a_case_reaches_each_device_by_its_role_and_an_unknown_role_is_incomplete() {
             .device("sender")?
             .call(Ask(6), Duration::from_millis(300))?;
         check((receiver, sender) == (5, 7), "each device answers its own")?;
-        let boots = (cx.boot().boot_id, cx.device("sender")?.boot().boot_id);
-        check(boots == (20, 30), "the first device is the receiver")
+        let boots = (
+            cx.device("receiver")?.boot().boot_id,
+            cx.device("sender")?.boot().boot_id,
+        );
+        check(boots == (20, 30), "each role its own boot")
     }
     fn unknown(cx: &mut Cx<'_>) -> Result<(), Failure> {
         cx.device("observer").map(drop)
+    }
+    fn unnamed(cx: &mut Cx<'_>) -> Result<(), Failure> {
+        match cx.call(Ask(1), Duration::from_millis(300)) {
+            Err(Failure::Incomplete(reason)) if reason.contains("Cx::device") => {
+                cx.boot().map(drop)
+            }
+            other => Err(Failure::Fail(format!("an unnamed call answered {other:?}"))),
+        }
     }
     let (receiver, receiver_link) = Device::new(20);
     let (sender, sender_link) = Device::new(30);
@@ -580,12 +591,21 @@ fn a_case_reaches_each_device_by_its_role_and_an_unknown_role_is_incomplete() {
             name: "unknown",
             run: unknown,
         },
+        Case {
+            name: "unnamed",
+            run: unnamed,
+        },
     ];
     let selected = cases.iter().collect::<Vec<_>>();
     let ran = run::cases(&mut duts, &PAIR, &selected, &mut Vec::new());
     assert_eq!(
         verdicts(&ran.outcomes),
-        [(Some("both"), 0), (Some("unknown"), 2)]
+        [
+            (Some("both"), 0),
+            (Some("unknown"), 2),
+            (Some("unnamed"), 2)
+        ],
+        "a call or a boot without a role is incomplete in a pair"
     );
     assert_eq!(ran.endings.len(), 2);
 }

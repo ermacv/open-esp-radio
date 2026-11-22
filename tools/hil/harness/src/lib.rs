@@ -203,13 +203,23 @@ pub fn check(condition: bool, what: impl Into<String>) -> Result<(), Failure> {
 }
 
 /// A case's access to the devices under test and the stand's equipment.
-/// Its own requests, resets and events go to the scenario's first device,
-/// the one of a scenario of one; [`Cx::device`] reaches each by its role.
+/// Its own requests, resets and events go to a scenario's one device; in a
+/// scenario of several roles they leave the case incomplete, and
+/// [`Cx::device`] reaches each device by its role.
 pub struct Cx<'a> {
     first: DeviceCx<'a>,
     others: Vec<DeviceCx<'a>>,
     /// What the case measured, in the order it measured it.
     measurements: Vec<(String, serde_json::Value)>,
+}
+
+/// A forwarded operation in a scenario of several devices: the case names
+/// the device it reaches.
+fn several(others: usize) -> Failure {
+    Failure::Incomplete(format!(
+        "the scenario has {} devices: the case names the one it reaches with Cx::device",
+        others.saturating_add(1)
+    ))
 }
 
 /// One device under test during a case: its link, running boot and resets.
@@ -247,72 +257,83 @@ impl<'a> Cx<'a> {
         core::iter::once(self.first).chain(self.others)
     }
 
-    /// What the first device's image was built with.
-    pub fn built(&self) -> &BuildChoice {
-        self.first.built()
+    /// The scenario's one device, for the forwarded operations below; a
+    /// scenario of several roles leaves the case incomplete there: its case
+    /// names each device it reaches ([`Cx::device`]).
+    fn only(&self) -> Result<&DeviceCx<'a>, Failure> {
+        if self.others.is_empty() {
+            Ok(&self.first)
+        } else {
+            Err(several(self.others.len()))
+        }
     }
 
-    /// The first device's running boot.
-    pub fn boot(&self) -> &Boot {
-        self.first.boot()
+    /// [`Cx::only`], mutably.
+    fn only_mut(&mut self) -> Result<&mut DeviceCx<'a>, Failure> {
+        if self.others.is_empty() {
+            Ok(&mut self.first)
+        } else {
+            Err(several(self.others.len()))
+        }
     }
 
-    /// [`DeviceCx::request`] on the first device.
-    pub fn request<E: Endpoint>(
-        &mut self,
-        request: E,
-        timeout: Duration,
-    ) -> Result<E::Response, CallError> {
-        self.first.request(request, timeout)
+    /// What the device's image was built with.
+    pub fn built(&self) -> Result<&BuildChoice, Failure> {
+        Ok(self.only()?.built())
     }
 
-    /// [`DeviceCx::call`] on the first device.
+    /// The device's running boot.
+    pub fn boot(&self) -> Result<&Boot, Failure> {
+        Ok(self.only()?.boot())
+    }
+
+    /// [`DeviceCx::call`] on the device.
     pub fn call<E: Endpoint>(
         &mut self,
         request: E,
         timeout: Duration,
     ) -> Result<E::Response, Failure> {
-        self.first.call(request, timeout)
+        self.only_mut()?.call(request, timeout)
     }
 
-    /// [`DeviceCx::events`] on the first device.
+    /// [`DeviceCx::events`] on the device.
     pub fn events(&self) -> Result<Cursor, Failure> {
-        self.first.events()
+        self.only()?.events()
     }
 
-    /// [`DeviceCx::take_message`] on the first device.
+    /// [`DeviceCx::take_message`] on the device.
     pub fn take_message(
         &self,
         cursor: &mut Cursor,
         matches: impl Fn(&Received) -> bool,
         timeout: Duration,
     ) -> Result<Option<Received>, Failure> {
-        self.first.take_message(cursor, matches, timeout)
+        self.only()?.take_message(cursor, matches, timeout)
     }
 
-    /// [`DeviceCx::event`] on the first device.
+    /// [`DeviceCx::event`] on the device.
     pub fn event<M: Message>(&self, cursor: &mut Cursor, timeout: Duration) -> Result<M, Failure> {
-        self.first.event(cursor, timeout)
+        self.only()?.event(cursor, timeout)
     }
 
-    /// [`DeviceCx::completeness`] on the first device.
+    /// [`DeviceCx::completeness`] on the device.
     pub fn completeness(&self, cursor: &Cursor) -> Result<Completeness, Failure> {
-        self.first.completeness(cursor)
+        self.only()?.completeness(cursor)
     }
 
-    /// [`DeviceCx::health`] on the first device.
+    /// [`DeviceCx::health`] on the device.
     pub fn health(&self) -> Result<Health, Failure> {
-        self.first.health()
+        self.only()?.health()
     }
 
-    /// [`DeviceCx::reset`] on the first device.
+    /// [`DeviceCx::reset`] on the device.
     pub fn reset(&mut self) -> Result<&Boot, Failure> {
-        self.first.reset()
+        self.only_mut()?.reset()
     }
 
-    /// [`DeviceCx::follow_restart`] on the first device.
+    /// [`DeviceCx::follow_restart`] on the device.
     pub fn follow_restart(&mut self) -> Result<&Boot, Failure> {
-        self.first.follow_restart()
+        self.only_mut()?.follow_restart()
     }
 
     /// Record a measurement `name` of the case: printed at once, and kept in

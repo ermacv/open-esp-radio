@@ -34,7 +34,8 @@ path and stay as sources ([repository layout](../docs/repository-layout.md));
 A scenario of several devices names each by its role
 (`Scenario::with_roles`, `Role`); its program runs with `--board
 <role>=<board>` for each, and a case reaches each through `Cx::device`.
-`Cx`'s own requests go to the first role. A case that works with one
+`Cx`'s own requests, events and resets serve a scenario of one device; in
+a scenario of several they leave the case incomplete. A case that works with one
 device while another runs a long request posts it (`DeviceCx::post`) and
 takes its answer later (`DeviceCx::wait`); until then that device takes no
 other request.
