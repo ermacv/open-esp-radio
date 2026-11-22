@@ -417,3 +417,35 @@ fn the_reserved_boot_identity_fails_the_link() {
     device.send(0, HELLO);
     assert!(matches!(link.boot(SHORT), Err(LinkError::Protocol(_))));
 }
+
+#[test]
+fn a_posted_request_s_response_waits_while_another_link_or_cursor_works() {
+    let (mut device, link) = Device::new(9);
+    device.send(0, HELLO);
+    let boot = link.boot(SHORT).unwrap();
+    let (answer, answered) = std::sync::mpsc::channel::<()>();
+    let server = thread::spawn(move || {
+        let request = device.request().unwrap();
+        let Ping(value) = postcard::from_bytes(&request.payload).unwrap();
+        // An event while the posted request runs, then its answer once told.
+        device.send(0, Progress(value));
+        answered.recv().unwrap();
+        device.send(request.request_id, Pong(value + 1));
+        device
+    });
+    let mut cursor = link.cursor(&boot);
+    let posted = link.post(&boot, Ping(9)).unwrap();
+    let progress = link
+        .take(&mut cursor, crate::Received::is::<Progress>, SHORT)
+        .unwrap()
+        .and_then(|message| message.decode::<Progress>())
+        .unwrap();
+    assert_eq!(
+        progress,
+        Ok(Progress(9)),
+        "the link serves its cursor meanwhile"
+    );
+    answer.send(()).unwrap();
+    assert_eq!(link.wait(&boot, posted, SHORT), Ok(Pong(10)));
+    drop(server.join().unwrap());
+}

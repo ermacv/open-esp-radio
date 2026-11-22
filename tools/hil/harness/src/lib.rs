@@ -46,7 +46,7 @@
 use std::{process::ExitCode, time::Duration};
 
 use oer_protocols_hil_protocol::{Endpoint, Key, Message};
-use oer_tools_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Received};
+use oer_tools_hil_link::{Boot, CallError, Completeness, Cursor, Health, Link, Posted, Received};
 
 mod dut;
 #[cfg(test)]
@@ -426,6 +426,35 @@ impl<'a> DeviceCx<'a> {
         timeout: Duration,
     ) -> Result<E::Response, Failure> {
         self.request(request, timeout).map_err(failure)
+    }
+
+    /// Send `request` without waiting, for a case that works with another
+    /// device meanwhile; [`DeviceCx::wait`] takes its response. Until then
+    /// the device takes no other request: it is busy with this one, and a
+    /// case that never waits leaves it unconfirmed.
+    pub fn post<E: Endpoint>(&mut self, request: E) -> Result<Posted<E>, Failure> {
+        if let Some(request_id) = self.unconfirmed {
+            return Err(failure(CallError::Unconfirmed { request_id }));
+        }
+        let posted = self.link()?.post(&self.boot, request).map_err(failure)?;
+        self.unconfirmed = Some(posted.request_id());
+        Ok(posted)
+    }
+
+    /// Wait up to `timeout` for the response to `posted`, with
+    /// [`DeviceCx::call`]'s failures; without one, the device stays
+    /// unconfirmed.
+    pub fn wait<E: Endpoint>(
+        &mut self,
+        posted: Posted<E>,
+        timeout: Duration,
+    ) -> Result<E::Response, Failure> {
+        let link = self.link()?;
+        let result = link.wait(&self.boot, posted, timeout);
+        if !matches!(result, Err(CallError::Unconfirmed { .. })) {
+            self.unconfirmed = None;
+        }
+        result.map_err(failure)
     }
 
     /// A cursor over the running boot's messages from now on: made before

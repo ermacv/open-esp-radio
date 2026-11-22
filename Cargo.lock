@@ -2061,6 +2061,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-radio-pair"
+version = "0.1.0"
+dependencies = [
+ "oer-hil-services-radio-pair",
+ "oer-protocols-hil-agent",
+ "oer-tools-hil-harness",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-hil-scenarios-sdk-station"
 version = "0.1.0"
 dependencies = [

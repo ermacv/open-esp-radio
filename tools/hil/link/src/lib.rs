@@ -208,6 +208,20 @@ impl Shared {
     }
 }
 
+/// A request [`Link::post`] sent, whose response [`Link::wait`] takes.
+#[must_use = "a posted request's response is taken by Link::wait"]
+pub struct Posted<E: Endpoint> {
+    request_id: u32,
+    response: core::marker::PhantomData<fn() -> E>,
+}
+
+impl<E: Endpoint> Posted<E> {
+    /// The request's identity on its link.
+    pub const fn request_id(&self) -> u32 {
+        self.request_id
+    }
+}
+
 /// The link to one board: a worker thread owns its serial line.
 pub struct Link {
     shared: Arc<Shared>,
@@ -284,7 +298,7 @@ impl Link {
                 state = self.shared.lock();
                 continue;
             }
-            state = self.wait(state, deadline.min(if asked { deadline } else { ask_at }))?;
+            state = self.wait_for(state, deadline.min(if asked { deadline } else { ask_at }))?;
         }
     }
 
@@ -297,6 +311,18 @@ impl Link {
         request: E,
         timeout: Duration,
     ) -> Result<E::Response, CallError> {
+        let posted = self.post(boot, request)?;
+        self.wait(boot, posted, timeout)
+    }
+
+    /// Send `request` to `boot` without waiting: its response's slot is
+    /// reserved before it leaves, and [`Link::wait`] takes the response.
+    /// Meanwhile the link serves other requests, to this device or the
+    /// cursors of its messages.
+    ///
+    /// # Errors
+    /// The request was not sent: [`CallError::NotSent`].
+    pub fn post<E: Endpoint>(&self, boot: &Boot, request: E) -> Result<Posted<E>, CallError> {
         let request_id = self.next_request.fetch_add(1, Ordering::Relaxed);
         if !self
             .shared
@@ -305,19 +331,40 @@ impl Link {
         {
             return Err(CallError::NotSent(NotSent::PendingFull));
         }
-        let result = self.exchange::<E>(boot, request_id, request, timeout);
+        if let Err(error) = self.send(boot.boot_id, request_id, request) {
+            self.shared.lock().forget(request_id);
+            return Err(error);
+        }
+        Ok(Posted {
+            request_id,
+            response: core::marker::PhantomData,
+        })
+    }
+
+    /// Wait up to `timeout` for the response to `posted`, a request this
+    /// link sent to `boot`. Without one, the request is unconfirmed: its
+    /// slot stays reserved for a late answer to be told from another's.
+    ///
+    /// # Errors
+    /// As [`Link::call`].
+    pub fn wait<E: Endpoint>(
+        &self,
+        boot: &Boot,
+        posted: Posted<E>,
+        timeout: Duration,
+    ) -> Result<E::Response, CallError> {
+        let request_id = posted.request_id;
+        let result = self.answer::<E>(boot, request_id, timeout);
         self.shared.lock().forget(request_id);
         result
     }
 
-    fn exchange<E: Endpoint>(
+    fn answer<E: Endpoint>(
         &self,
         boot: &Boot,
         request_id: u32,
-        request: E,
         timeout: Duration,
     ) -> Result<E::Response, CallError> {
-        self.send(boot.boot_id, request_id, request)?;
         let deadline = Instant::now() + timeout;
         let mut state = self.shared.lock();
         loop {
@@ -342,7 +389,7 @@ impl Link {
             if Instant::now() >= deadline {
                 return Err(CallError::Unconfirmed { request_id });
             }
-            state = self.wait(state, deadline)?;
+            state = self.wait_for(state, deadline)?;
         }
     }
 
@@ -384,7 +431,7 @@ impl Link {
             if Instant::now() >= deadline {
                 return Ok(None);
             }
-            state = self.wait(state, deadline)?;
+            state = self.wait_for(state, deadline)?;
         }
     }
 
@@ -435,7 +482,7 @@ impl Link {
     }
 
     /// Wait for a change until `deadline`, looking at cancellation.
-    fn wait<'a>(
+    fn wait_for<'a>(
         &self,
         state: std::sync::MutexGuard<'a, State>,
         deadline: Instant,
