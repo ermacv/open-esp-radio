@@ -345,7 +345,7 @@ pub(crate) fn start_radio(wifi: WifiPeripheral, boot: &mut Boot) -> Result<Radio
         .unwrap_or_else(|failure| failure.reset());
     let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
     let mut rng =
-        oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, EmbassyClock);
+        oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, boot.cycles);
     if !rng.is_healthy() {
         return Err(Error::Entropy);
     }

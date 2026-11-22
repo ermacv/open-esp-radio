@@ -5,7 +5,11 @@ use super::*;
 #[cfg(target_arch = "riscv32")]
 impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R {
     #[inline]
-    fn control<D: PhyShortDelay>(&mut self, command: ControlCommand) -> Result<(), RxError> {
+    fn control<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        &mut self,
+        counter: &K,
+        command: ControlCommand,
+    ) -> Result<(), RxError> {
         use oer_chips_esp32s31_hal::radio::phy::{agc, baseband, pbus, rx_dco};
         match command {
             ControlCommand::PrepareRoot | ControlCommand::PrepareCalibration => {
@@ -30,9 +34,9 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
                 if oer_chips_family_radio_phy::pbus::configure_work_mode(
                     &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),
                 ) {
-                    settle::<D>(1)?;
+                    D::settle(counter, crate::executor::wait::SETTLE_ONE_MICRO);
                     agc::configure_pbus_work_mode_pulse(self);
-                    settle::<D>(2)?;
+                    D::settle(counter, crate::executor::wait::SETTLE_TWO_MICROS);
                     agc::clear_pbus_work_mode_pulse(self);
                 }
             }
@@ -42,7 +46,11 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         Ok(())
     }
     #[inline]
-    fn pbus<C: Clock>(&mut self, clock: &C, command: PhyPbusForceTest) -> Result<bool, RxError> {
+    fn pbus<C: Clock + oer_portable_time::settle::SettleCounter>(
+        &mut self,
+        clock: &C,
+        command: PhyPbusForceTest,
+    ) -> Result<bool, RxError> {
         Ok(crate::target_executor::force_pbus_direct(
             clock, self, command,
         ))
@@ -59,38 +67,43 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
         Ok(())
     }
     #[inline]
-    fn estimator<D: PhyShortDelay>(
+    fn estimator<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
         &mut self,
+        counter: &K,
         command: PhyDcIqAction,
     ) -> Result<PhyDcIqCompletion, RxError> {
         use crate::calibration::estimator::PhyDcIqExternalBinding as B;
         match B::lower(command).map_err(|_| RxError::WrongCompletion)? {
-            B::Mmio(binding) => binding.capture_target::<D>(self).map_err(port_error),
-            B::Readiness(binding) => binding.capture_target::<D>(self).map_err(port_error),
+            B::Mmio(binding) => binding
+                .capture_target::<D, _>(counter, self)
+                .map_err(port_error),
+            B::Readiness(binding) => binding
+                .capture_target::<D, _>(counter, self)
+                .map_err(port_error),
             B::Timer(binding) => {
-                settle::<D>(binding.micros())?;
+                settle::<D, _>(counter, binding.micros())?;
                 Ok(binding.into_completion())
             }
         }
     }
     #[inline]
-    fn frequency<D: PhyShortDelay, C: Clock>(
+    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_time::settle::SettleCounter>(
         &mut self,
-        _clock: &C,
+        clock: &C,
         command: RfpllFrequencyAction,
     ) -> Result<RfpllFrequencyCompletion, RxError> {
         use crate::analog::rfpll::RfpllFrequencyExternalBinding as B;
         match B::lower(command).map_err(|_| RxError::WrongCompletion)? {
             B::Mmio(binding) => Ok(binding.execute_target(self)),
             B::Timer(binding) => {
-                settle::<D>(binding.micros())?;
+                settle::<D, _>(clock, binding.micros())?;
                 Ok(binding.into_completion())
             }
             B::I2c(_) => Err(RxError::WrongCompletion),
         }
     }
     #[inline]
-    fn direct_i2c<C: Clock>(
+    fn direct_i2c<C: Clock + oer_portable_time::settle::SettleCounter>(
         &mut self,
         clock: &C,
         transaction: &mut PhyColdI2cTransaction,
@@ -139,12 +152,14 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
 }
 
 #[cfg(target_arch = "riscv32")]
-fn settle<D: PhyShortDelay>(micros: u32) -> Result<(), RxError> {
-    if micros != 0 && micros <= D::MAX_MICROS && D::settle_micros(micros) {
-        Ok(())
-    } else {
-        Err(RxError::Capability)
-    }
+fn settle<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    counter: &K,
+    micros: u32,
+) -> Result<(), RxError> {
+    let limit =
+        crate::executor::wait::short_limit::<D>(u64::from(micros)).ok_or(RxError::Capability)?;
+    D::settle(counter, limit);
+    Ok(())
 }
 
 #[cfg(target_arch = "riscv32")]

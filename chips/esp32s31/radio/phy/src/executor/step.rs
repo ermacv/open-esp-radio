@@ -253,7 +253,10 @@ impl<'a> Job<'a> {
     /// and keeps complete memory entries inside a checkpoint;
     /// temperature conversion, state publication and observers are outside it.
     #[inline(never)]
-    fn advance_one<D: super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance_one<
+        D: super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         io: Io<'_>,
         clock: &C,
@@ -272,7 +275,10 @@ impl<'a> Job<'a> {
             Err(error) => Step::Failure(error),
         }
     }
-    fn advance<D: super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance<
+        D: super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         mut io: Io<'_>,
         clock: &C,
@@ -513,11 +519,11 @@ impl<'a> Job<'a> {
                             return Ok(Step::Runnable);
                         }
                         PhyPbusClearAction::ConfigureDebugMode => {
-                            io.pbus_control(false)?;
+                            io.pbus_control(clock, false)?;
                             PhyPbusClearCompletion::DebugModeConfigured
                         }
                         PhyPbusClearAction::ConfigureWorkMode => {
-                            let settled = io.pbus_control(true)?;
+                            let settled = io.pbus_control(clock, true)?;
                             transition
                                 .advance(PhyPbusClearCompletion::WorkModeConfigured {
                                     settle_required: settled,
@@ -632,7 +638,7 @@ trait Engine: Future<Output = Result<(), Failure>> {
 impl<
     'a,
     R: Registers,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -687,7 +693,7 @@ impl<
 impl<
     'a,
     R: Registers,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: super::wait::PhyShortDelay,
@@ -927,7 +933,13 @@ fn poll_timer<F: Future<Output = ()>>(wait: Pin<&mut F>, context: &mut Context<'
     wait.poll(context)
 }
 
-fn driver<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
+fn driver<
+    'a,
+    'j,
+    D: super::wait::PhyShortDelay + 'a,
+    R: Registers,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+>(
     input: Input<'a, 'j>,
     registers: &'a mut R,
     timer: &'a T,
@@ -962,7 +974,13 @@ fn driver<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
         gate: Gate::Idle,
     }
 }
-pub(crate) fn drive<'a, 'j, D: super::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
+pub(crate) fn drive<
+    'a,
+    'j,
+    D: super::wait::PhyShortDelay + 'a,
+    R: Registers,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+>(
     job: &'a mut Job<'j>,
     registers: &'a mut R,
     timer: &'a T,
@@ -997,7 +1015,7 @@ pub(crate) fn drive_calibration<
     'j,
     D: super::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
 >(
     job: &'a mut Job<'j>,
     registers: &'a mut R,

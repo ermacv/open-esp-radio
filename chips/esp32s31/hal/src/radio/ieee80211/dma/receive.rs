@@ -40,8 +40,8 @@ use core::mem::{MaybeUninit, replace};
 use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, Brand, Handle, Lent, Quiet, Released, Span};
 use oer_portable_time::{
-    Clock, Duration,
-    settle::{Settle, SettleLimit, Unsettled, settle},
+    Duration,
+    settle::{Settle, SettleCounter, SettleLimit, Unsettled, settle},
 };
 
 use crate::layouts::{DmaRef, DmaWindow, WifiRxDmaDescriptor, WifiRxDmaDescriptorControl};
@@ -525,16 +525,16 @@ where
     /// to `LAST` as read at the start; after it, the doorbell is rung if
     /// anything was re-armed, and once more when the walker settled with
     /// NEXT zero and LAST short of the tail, each wait bounded by
-    /// [`RELOAD_SETTLE`] on `clock`.
+    /// [`RELOAD_SETTLE`] on `counter`.
     ///
     /// # Errors
     ///
     /// A [`RingAnomaly`] with `f`'s result: the doorbell not accepted, or the
     /// length at which the view stopped. What was re-armed is linked and, but
     /// for the first anomaly, rung.
-    pub fn serve<C: Clock + ?Sized, R>(
+    pub fn serve<K: SettleCounter + ?Sized, R>(
         &mut self,
-        clock: &C,
+        counter: &K,
         f: impl FnOnce(&mut Completed<'_, B, BYTES, N, W>) -> R,
     ) -> Result<R, (RingAnomaly, R)> {
         let (last, next) = self.walker.cursor();
@@ -551,7 +551,7 @@ where
         let rung = if rearmed == 0 {
             Ok(())
         } else {
-            self.ring_doorbell(Settle::new(RELOAD_SETTLE, clock))
+            self.ring_doorbell(Settle::new(RELOAD_SETTLE, counter))
         };
         match (rung, anomaly) {
             (Err(Unsettled), _) => Err((RingAnomaly::DoorbellPending, result)),
@@ -577,7 +577,10 @@ where
 
     /// Ring the doorbell, wait for its acceptance, and ring once more when
     /// the walker settled with NEXT zero and LAST short of the tail.
-    fn ring_doorbell<C: Clock + ?Sized>(&mut self, within: Settle<'_, C>) -> Result<(), Unsettled> {
+    fn ring_doorbell<K: SettleCounter + ?Sized>(
+        &mut self,
+        within: Settle<'_, K>,
+    ) -> Result<(), Unsettled> {
         let tail = self.tail.index.get();
         let base = self.table.base;
         let walker = &mut self.walker;

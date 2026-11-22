@@ -41,6 +41,22 @@ impl<const N: usize> Timer for VirtualClock<N> {
         self.clock.wait_until(at)
     }
 }
+/// The settle counter beside the timer: one cycle a microsecond of the
+/// clock's time, wrapping, so a test moves both by advancing the clock.
+impl<const N: usize> oer_portable_time::settle::SettleCounter for VirtualClock<N> {
+    fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+        limit.micros()
+    }
+    fn sample(&self) -> u32 {
+        sample_at(self.clock.now())
+    }
+}
+
+/// A settle counter's sample at `now`: its microsecond, wrapping.
+pub(crate) fn sample_at(now: Instant) -> u32 {
+    let [a, b, c, d, ..] = now.as_micros().to_le_bytes();
+    u32::from_le_bytes([a, b, c, d])
+}
 impl<const N: usize> oer_portable_cooperate::CooperativeTimer for VirtualClock<N> {
     fn should_yield(&self) -> bool {
         self.peers.get() || self.peer_at.get().is_some_and(|at| self.clock.now() >= at)

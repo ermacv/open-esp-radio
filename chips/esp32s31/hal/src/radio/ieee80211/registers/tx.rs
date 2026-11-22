@@ -2072,11 +2072,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// SOURCE: complete `libpp[lmac.o]::lmacStopTransmit`
     /// (`PROMOTED_LMAC_TX`): CCA forced, the 16 us delay, VALID sampled and
     /// cleared, CCA released, the queue disabled only if it was valid.
-    pub fn abort_mac_tx<'registers, C: oer_portable_time::Clock + ?Sized, R>(
+    pub fn abort_mac_tx<'registers, K: oer_portable_time::settle::SettleCounter + ?Sized, R>(
         &'registers mut self,
         queue: MacTxQueueIndex,
         cause: MacTxAbortCause,
-        clock: &C,
+        counter: &K,
         aborted: impl FnOnce(MacTxQueueAborted<'registers>) -> R,
     ) -> MacTxAbortOutcome<R> {
         let common = &mut self.mac.wifi_mac_tx_common;
@@ -2086,16 +2086,11 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
         }
         let _ = queue::set_cca_force(common, Bits::constant::<3>());
         oer_portable_riscv::fence();
-        // The vendor's fixed delay: the attempt yields once the limit has
-        // passed, and a settle that ends unsettled has passed it too.
-        let start = clock.now();
-        let limit = MAC_TX_ABORT_SETTLE.limit();
-        match oer_portable_time::settle::settle(
-            oer_portable_time::settle::Settle::new(MAC_TX_ABORT_SETTLE, clock),
-            || (clock.now().saturating_duration_since(start) >= limit).then_some(()),
-        ) {
-            Ok(()) | Err(oer_portable_time::settle::Unsettled) => {}
-        }
+        // The vendor's fixed delay.
+        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(
+            MAC_TX_ABORT_SETTLE,
+            counter,
+        ));
         let was_valid = queue::queue_valid(queue_control, queue);
         queue::invalidate_queue(queue_control, queue);
         let _ = queue::set_cca_force(common, Bits::constant::<0>());

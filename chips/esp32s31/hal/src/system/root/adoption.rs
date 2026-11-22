@@ -79,6 +79,9 @@ pub struct Hardware {
     pub wifi_interrupts: WifiInterruptBanks,
     pub clocks: ChipClocks,
     pub radio: RadioHardware,
+    /// The settle counter at the adopted CPU rate: a copy for each driver
+    /// that settles.
+    pub cycles: crate::system::cycles::CycleCounter,
 }
 
 impl Port for RuntimePort {
@@ -118,6 +121,7 @@ impl Port for RuntimePort {
         resources: RuntimeResources,
         clocks: ChipClocks,
         watchdogs: adoption::Watchdogs<Self::Main0, Self::Main1, Self::Rtc, Self::Super>,
+        cpu: adoption::CpuHz,
     ) -> PlatformParts {
         let RuntimeResources {
             aes,
@@ -157,6 +161,7 @@ impl Port for RuntimePort {
                 wifi_interrupts,
                 clocks,
                 radio,
+                cycles: crate::system::cycles::CycleCounter::new(cpu),
             },
         }
     }

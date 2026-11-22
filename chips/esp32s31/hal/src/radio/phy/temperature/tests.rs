@@ -57,13 +57,12 @@ impl TemperaturePort for Port<'_> {
     }
 }
 
-fn settle(clock: &VirtualClock<4>) -> bool {
+fn settle(clock: &VirtualClock<4>) {
     clock
         .advance(Duration::from_micros(u64::from(
-            SAR_I2C_RESET_SETTLE_MICROS,
+            SAR_I2C_RESET_SETTLE.micros(),
         )))
         .expect("test reset settle fits virtual time");
-    true
 }
 
 fn expected_acquire(start: Instant) -> Vec<(Instant, Edge)> {
@@ -158,37 +157,6 @@ fn repeated_close_and_wake_cycles_do_not_retain_an_unreleased_power_reference() 
 }
 
 #[test]
-fn failed_reset_settle_never_enables_power_and_prevents_reuse_or_root_release() {
-    let clock = VirtualClock::new();
-    let mut port = Port::new(&clock);
-    let mut route = crate::radio::phy::restore::PhyRouteState::for_host_test();
-    let start = clock.now();
-    assert_eq!(
-        route
-            .resources_mut()
-            .acquire_with(&mut port, || false, Acquisition::Warm),
-        Err(TemperaturePowerError::ResetSettleFailed)
-    );
-    assert_eq!(port.edges, [(start, Edge::SarResetReleased(false))]);
-    assert_eq!(
-        route
-            .resources_mut()
-            .acquire_with(&mut port, || settle(&clock), Acquisition::Warm),
-        Err(TemperaturePowerError::Poisoned)
-    );
-    assert_eq!(
-        route.resources_mut().release_with(&mut port),
-        Err(TemperaturePowerError::Poisoned)
-    );
-    assert_eq!(
-        crate::system::root::check_phy_restore_complete(&route),
-        Err(crate::system::root::RadioPhyReleaseError::TemperatureResourcesHeld)
-    );
-    assert_eq!(port.edges, [(start, Edge::SarResetReleased(false))]);
-    assert_eq!(clock.now(), start);
-}
-
-#[test]
 fn duplicate_acquire_and_unowned_release_do_not_write_hardware() {
     let clock = VirtualClock::new();
     let mut port = Port::new(&clock);
@@ -204,7 +172,7 @@ fn duplicate_acquire_and_unowned_release_do_not_write_hardware() {
     port.edges.clear();
     let now = clock.now();
     assert_eq!(
-        resources.acquire_with(&mut port, || false, Acquisition::Cold),
+        resources.acquire_with(&mut port, || (), Acquisition::Cold),
         Err(TemperaturePowerError::AlreadyAcquired)
     );
     assert!(port.edges.is_empty());
@@ -253,7 +221,7 @@ fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
     assert_eq!(
         route
             .resources_mut()
-            .acquire_with(&mut port, || false, Acquisition::Warm),
+            .acquire_with(&mut port, || (), Acquisition::Warm),
         Err(TemperaturePowerError::AlreadyAcquired)
     );
     assert_eq!(
@@ -276,23 +244,15 @@ fn a_pending_calibration_cannot_lose_its_resource_or_saved_restore_fields() {
 }
 
 #[test]
-fn idle_and_poisoned_resources_reject_calibration_before_capturing_fields() {
+fn idle_resources_reject_calibration_before_capturing_fields() {
     use crate::radio::phy::restore::{
         BluetoothTxPowerControlPrepareError, PhyRouteState, RxDcoControlPrepareError,
         TxDcPwdetPrepareError, TxIqToneControlPrepareError,
     };
     let clock = VirtualClock::new();
-    let mut port = Port::new(&clock);
+    let port = Port::new(&clock);
     let mut route = PhyRouteState::for_host_test();
-    for poisoned in [false, true] {
-        if poisoned {
-            assert_eq!(
-                route
-                    .resources_mut()
-                    .acquire_with(&mut port, || false, Acquisition::Warm),
-                Err(TemperaturePowerError::ResetSettleFailed)
-            );
-        }
+    {
         let before = port.edges.clone();
         assert_eq!(
             route.prepare_txdc_with(

@@ -1,23 +1,26 @@
 //! The runtime start's and stop's writes over a small port, in their order,
-//! with the time each was made on a stepping clock.
+//! with the cycle each was made at on a stepping counter.
 
 extern crate std;
 
 use core::cell::Cell;
 use std::vec::Vec;
 
-use oer_portable_time::{Clock, Instant};
+use oer_portable_time::settle::{SettleCounter, SettleLimit};
 
 use super::{MacRuntimePort, StopRequested, open_core, request_stop, start_receive};
 
-/// A clock that moves one microsecond at every read.
-struct Stepping(Cell<u64>);
+/// A counter of one cycle a microsecond that moves one at every sample.
+struct Stepping(Cell<u32>);
 
-impl Clock for Stepping {
-    fn now(&self) -> Instant {
+impl SettleCounter for Stepping {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        limit.micros()
+    }
+    fn sample(&self) -> u32 {
         let now = self.0.get();
         self.0.set(now + 1);
-        Instant::from_micros(now)
+        now
     }
 }
 
@@ -30,10 +33,10 @@ enum Write {
     RegdmaLink,
 }
 
-/// Every write with the clock's microsecond at it.
+/// Every write with the counter's cycle at it.
 struct Port<'c> {
     clock: &'c Stepping,
-    writes: Vec<(Write, u64)>,
+    writes: Vec<(Write, u32)>,
 }
 
 impl Port<'_> {

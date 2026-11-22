@@ -457,7 +457,9 @@ impl<'t, D, T> TargetCompleter<'t, D, T> {
     }
 }
 
-impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
+impl<D: PhyShortDelay, T: Timer + oer_portable_time::settle::SettleCounter>
+    TargetCompleter<'_, D, T>
+{
     fn complete_rfpll<'a>(
         &'a self,
         binding: RfpllFrequencyExternalBinding,
@@ -1629,9 +1631,12 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     observer.rf_boundary(boundary);
                 }
                 binding
-                    .execute_target(registers, || D::settle_micros(
-                        oer_chips_esp32s31_hal::radio::phy::temperature::SAR_I2C_RESET_SETTLE_MICROS,
-                    ))
+                    .execute_target(registers, || {
+                        D::settle(
+                            self.timer,
+                            oer_chips_esp32s31_hal::radio::phy::temperature::SAR_I2C_RESET_SETTLE,
+                        );
+                    })
                     .map_err(|error| match error {
                         crate::calibration::cold::PhyColdLoweringError::HardwareRestoreInvariant => {
                             PhyTargetPortError::HardwareInvariant
@@ -1712,9 +1717,10 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
             let completion = match binding {
                 PhyForceTxRxExternalBinding::Mmio(binding) => binding.execute_target(registers),
                 PhyForceTxRxExternalBinding::Timer(binding) => {
-                    if !D::settle_micros(binding.micros()) {
-                        return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
-                    }
+                    let limit =
+                        crate::executor::wait::short_limit::<D>(u64::from(binding.micros()))
+                            .ok_or(PhyTargetPortError::HardwareCapabilityUnavailable)?;
+                    D::settle(self.timer, limit);
                     binding.into_completion()
                 }
             };
@@ -1767,7 +1773,13 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                         _ => None,
                     }
                 });
-            rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
+            rfpll::envelope::<D, _>(
+                self.timer,
+                child.transition_mut(),
+                registers,
+                grant,
+                observer,
+            )?;
             if let Some(correction) = child.transition_mut().correction_mut() {
                 {
                     use crate::executor::step::{Job, drive, rfpll::Cursor};
@@ -1788,7 +1800,13 @@ impl<D: PhyShortDelay, T: Timer> TargetCompleter<'_, D, T> {
                     .transition_mut()
                     .finish_correction()
                     .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-                rfpll::envelope::<D>(child.transition_mut(), registers, grant, observer)?;
+                rfpll::envelope::<D, _>(
+                    self.timer,
+                    child.transition_mut(),
+                    registers,
+                    grant,
+                    observer,
+                )?;
             }
             let crate::tracking::rfpll::thermal::Action::Complete(outcome) = child.action() else {
                 return Err(PhyTargetPortError::UnexpectedBinding);
@@ -1862,8 +1880,13 @@ impl<'a, 's, P, S, D, T, O> TargetPhyParamTrackingPort<'a, 's, P, S, D, T, O> {
     }
 }
 
-impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetObserver>
-    PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, '_, P, S, D, T, O>
+impl<
+    P,
+    S: crate::sar_pilot::Service,
+    D: PhyShortDelay,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+    O: PhyTargetObserver,
+> PhyCalibrationTrackingPort for TargetPhyCalibrationTrackingPort<'_, '_, P, S, D, T, O>
 {
     type Error = PhyTargetPortError;
 
@@ -2015,9 +2038,7 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
                 .map_err(|_| PhyTargetPortError::UnexpectedBinding)?
                 .execute_target(self.physical.hardware()),
             PhyCalibrationTrackingAction::AwaitSoftwareFrequencySettle => {
-                if !D::settle_micros(2) {
-                    return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
-                }
+                D::settle(self.timer, crate::executor::wait::SETTLE_TWO_MICROS);
                 oer_chips_esp32s31_hal::radio::phy::frequency::observe_software_frequency_boundary(
                     self.physical.hardware(),
                 );
@@ -2053,8 +2074,13 @@ impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetOb
     }
 }
 
-impl<P, S: crate::sar_pilot::Service, D: PhyShortDelay, T: Timer, O: PhyTargetObserver>
-    PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, '_, P, S, D, T, O>
+impl<
+    P,
+    S: crate::sar_pilot::Service,
+    D: PhyShortDelay,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+    O: PhyTargetObserver,
+> PhyParamTrackingPort for TargetPhyParamTrackingPort<'_, '_, P, S, D, T, O>
 {
     type Error = PhyParamTrackingPortError;
 
@@ -2177,7 +2203,7 @@ impl<
     P,
     R: PhyInitializationAccess + crate::executor::step::Registers,
     D: PhyShortDelay,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
     O: PhyTargetObserver,
 > PhyRegisterPort for TargetPhyRegisterPort<'_, P, R, D, T, O>
 {
@@ -2270,7 +2296,7 @@ impl<
 /// The raw state is not a registration proof, so this entry stays inside the
 /// crate; callers select channels through the concurrent domain.
 pub(crate) async fn select_phy_channel_with_hal<D: PhyShortDelay, P, O: PhyTargetObserver>(
-    timer: &impl Timer,
+    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,
@@ -2288,7 +2314,7 @@ pub(crate) async fn switch_phy_channel_with_hal_and_mac_restart<
     P,
     O: PhyTargetObserver,
 >(
-    timer: &impl Timer,
+    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
     state: &mut PhyState,
     channel_or_frequency: u16,
     cbw: u8,

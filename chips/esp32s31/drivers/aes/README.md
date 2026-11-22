@@ -14,8 +14,8 @@ SDK RPC image, which serves its unwraps to the host; or
 boot-smoke's hart-1 task, which unwraps RFC 3394 §4.1 for the boot hart.
 
 A block waits on `STATE` in the named settle `BLOCK_SETTLE`
-(`oer_portable_time::settle`, 10 µs on the engine's clock: the executors' clock in
-`runtime`). TRM v0.1 §10.5.3 and the pinned ESP-IDF 4d80c1b2 AES HAL state
+(`oer_portable_time::settle`, 10 µs on the engine's settle counter: the HAL's
+`CycleCounter` at the adopted CPU rate in `runtime`). TRM v0.1 §10.5.3 and the pinned ESP-IDF 4d80c1b2 AES HAL state
 no block latency; the bound comes from the `esp32s31-aes-timing` probe,
 which measured 270–279 cycles (0.87 µs) from the start to `STATE` reading
 idle over 256 blocks at 320 MHz. A block still working at the end of the
@@ -44,7 +44,7 @@ The portable request, blocks, continuation and response erase secrets on
 drop.
 
 Tests use a fake port whose block oracle is RustCrypto, including the shared
-RFC 3394 conformance, the flag wait and its settle on a clock that advances at
-every read, both directions, typed
+RFC 3394 conformance, the flag wait and its settle on a counter that advances at
+every sample, both directions, typed
 failures, the ended run, the restart after a failure and erasure. The HAL's UI case rejects taking AES twice
 from one Root.

@@ -23,20 +23,29 @@ use oer_portable_cooperate::CooperativeTimer as Timer;
 use oer_portable_time::{Clock, Duration, Instant};
 
 pub(crate) trait Hardware {
-    fn control<D: PhyShortDelay>(&mut self, command: ControlCommand) -> Result<(), RxError>;
-    fn pbus<C: Clock>(&mut self, clock: &C, command: PhyPbusForceTest) -> Result<bool, RxError>;
+    fn control<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        &mut self,
+        counter: &K,
+        command: ControlCommand,
+    ) -> Result<(), RxError>;
+    fn pbus<C: Clock + oer_portable_time::settle::SettleCounter>(
+        &mut self,
+        clock: &C,
+        command: PhyPbusForceTest,
+    ) -> Result<bool, RxError>;
     fn read_pbus(&mut self, selector: u8, path: u8) -> Result<u32, RxError>;
     fn entry(&mut self, command: PhyGainMemoryEntry) -> Result<(), RxError>;
-    fn estimator<D: PhyShortDelay>(
+    fn estimator<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
         &mut self,
+        counter: &K,
         command: PhyDcIqAction,
     ) -> Result<PhyDcIqCompletion, RxError>;
-    fn frequency<D: PhyShortDelay, C: Clock>(
+    fn frequency<D: PhyShortDelay, C: Clock + oer_portable_time::settle::SettleCounter>(
         &mut self,
         clock: &C,
         command: RfpllFrequencyAction,
     ) -> Result<RfpllFrequencyCompletion, RxError>;
-    fn direct_i2c<C: Clock>(
+    fn direct_i2c<C: Clock + oer_portable_time::settle::SettleCounter>(
         &mut self,
         clock: &C,
         transaction: &mut PhyColdI2cTransaction,
@@ -58,7 +67,7 @@ enum Atom {
 /// before this function returns. No await or early ? separates publication
 /// from recording the program's cleanup obligation.
 #[inline(never)]
-fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
+fn atom<D: PhyShortDelay, R: Hardware, C: Clock + oer_portable_time::settle::SettleCounter>(
     program: &mut RxProgram,
     registers: &mut R,
     clock: &C,
@@ -96,7 +105,7 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
         RxStep::Control(mut step) => {
             let command = step.command();
             step.prepare_publication();
-            let result = registers.control::<D>(command);
+            let result = registers.control::<D, _>(clock, command);
             complete!(step, result)
         }
         RxStep::GainEntry(step) => {
@@ -109,10 +118,12 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
             if micros == 10 {
                 execution.settle_10us += 1;
             }
-            let result = if micros != 0 && micros <= D::MAX_MICROS && D::settle_micros(micros) {
-                Ok(())
-            } else {
-                Err(RxError::Capability)
+            let result = match crate::executor::wait::short_limit::<D>(u64::from(micros)) {
+                Some(limit) => {
+                    D::settle(clock, limit);
+                    Ok(())
+                }
+                None => Err(RxError::Capability),
             };
             complete!(step, result)
         }
@@ -139,7 +150,7 @@ fn atom<D: PhyShortDelay, R: Hardware, C: Clock>(
             }
             #[cfg(feature = "radio-health")]
             let health_started = clock.now();
-            let result = registers.estimator::<D>(command);
+            let result = registers.estimator::<D, _>(clock, command);
             #[cfg(feature = "radio-health")]
             let observation = result.ok().and_then(|completion| {
                 crate::tracking::observation::health::DcIq::observed(
@@ -243,7 +254,7 @@ fn operation(phase: RxPhase) -> Operation {
 impl<
     'a,
     R: Hardware,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
     F: Future<Output = ()>,
     M: Fn(&'a T, Instant) -> F,
     D: PhyShortDelay,
@@ -394,7 +405,7 @@ pub(crate) fn drive<
     'a,
     D: PhyShortDelay + 'a,
     R: Hardware,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
     O: FnMut(Operation, Event) + 'a,
 >(
     program: &'a mut RxProgram,

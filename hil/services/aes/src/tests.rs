@@ -137,7 +137,6 @@ fn every_engine_failure_has_its_own_answer() {
             BlockError::InvalidState { observation: 4 },
             UnwrapError::EngineInvalidState { observation: 4 },
         ),
-        (BlockError::TimeOverflow, UnwrapError::EngineTimeOverflow),
     ] {
         assert_eq!(UnwrapError::from(KeyUnwrapError::Engine(error)), expected);
     }

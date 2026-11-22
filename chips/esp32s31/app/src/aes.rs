@@ -23,7 +23,9 @@ impl AesPeripheral {
             .silent::<AesInterrupt>()
             .map_err(|_| Error::InterruptRouted)?;
         Ok(oer_chips_esp32s31_platform_runtime::crypto::aes_engine(
-            self.0, silent,
+            self.0,
+            silent,
+            boot.cycles,
         ))
     }
 }

@@ -34,6 +34,8 @@ pub struct Log {
     pub clock: VirtualClock,
     pub events: RefCell<Vec<(Instant, Op)>>,
     pub refusal: Option<InitError>,
+    /// What the CPU clock's sample answers.
+    pub cpu: adoption::CpuRate,
 }
 impl Log {
     pub fn new(refusal: Option<InitError>) -> Self {
@@ -41,6 +43,9 @@ impl Log {
             clock: VirtualClock::new(),
             events: RefCell::new(Vec::new()),
             refusal,
+            cpu: adoption::CpuRate::Integer(
+                adoption::CpuHz::new(160_000_000).expect("a test rate is nonzero"),
+            ),
         }
     }
     pub fn push(&self, op: Op) {
@@ -76,6 +81,7 @@ pub struct Part<'a> {
 pub struct Fake<'a>(PhantomData<&'a ()>);
 pub struct Hardware<'a> {
     pub clock: Part<'a>,
+    pub cpu: adoption::CpuHz,
     pub resources: Part<'a>,
     pub watchdogs: adoption::Watchdogs<Part<'a>, Part<'a>, Part<'a>, Part<'a>>,
 }
@@ -131,11 +137,13 @@ impl<'a> Port for Fake<'a> {
         resources: Part<'a>,
         clock: Part<'a>,
         watchdogs: adoption::Watchdogs<Part<'a>, Part<'a>, Part<'a>, Part<'a>>,
+        cpu: adoption::CpuHz,
     ) -> Hardware<'a> {
         resources.log.push(Op::Finish);
         Hardware {
             resources,
             clock,
+            cpu,
             watchdogs,
         }
     }
@@ -206,14 +214,8 @@ impl SuperWatchdogRegisters for Part<'_> {
 }
 
 impl adoption::CpuClock for Part<'_> {
-    fn sample(&self) -> adoption::CpuRate {
+    fn sample(self) -> adoption::CpuRate {
         self.log.push(Op::Cpu);
-        adoption::CpuRate {
-            fractional: false,
-            integer_hz: Some(160_000_000),
-        }
-    }
-    fn publish(self, rate_hz: Option<u32>) {
-        assert_eq!(rate_hz, Some(160_000_000));
+        self.log.cpu
     }
 }

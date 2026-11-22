@@ -92,7 +92,6 @@ pub enum BluetoothTxPowerControlRestoreError {
 pub(super) enum Restore {
     #[default]
     TemperatureIdle,
-    TemperaturePoisoned,
     /// Acquired TSENS/SAR-I2C with no pending calibration restore. The other
     /// payload variants retain that acquisition while a calibration borrows it.
     Empty,
@@ -146,10 +145,7 @@ impl PhyRouteState {
     }
 
     const fn temperature_unavailable(&self) -> bool {
-        matches!(
-            self.restore,
-            Restore::TemperatureIdle | Restore::TemperaturePoisoned
-        )
+        matches!(self.restore, Restore::TemperatureIdle)
     }
 
     /// A powered route fixture; no MMIO is performed by this test owner.

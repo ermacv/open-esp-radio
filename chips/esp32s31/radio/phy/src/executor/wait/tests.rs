@@ -134,8 +134,8 @@ mod delays {
     };
     use std::vec::Vec;
 
+    use crate::executor::test_clock::VirtualClock;
     use oer_portable_time::{Clock, Duration, Instant};
-    use oer_portable_time_virtual::VirtualClock;
 
     use super::super::{Event, Kind, PhyShortDelay, delay, delay_observed};
 
@@ -148,31 +148,16 @@ mod delays {
     impl PhyShortDelay for Short {
         const MAX_MICROS: u32 = 20;
 
-        fn settle_micros(micros: u32) -> bool {
-            SETTLED.with(|settled| settled.set(settled.get() + micros));
-            true
+        fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+            _: &K,
+            limit: oer_portable_time::settle::SettleLimit,
+        ) {
+            SETTLED.with(|settled| settled.set(settled.get() + limit.micros()));
         }
     }
 
     fn poll<F: core::future::Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
         future.poll(&mut Context::from_waker(Waker::noop()))
-    }
-
-    #[test]
-    fn a_refused_settle_is_reported_instead_of_a_panic() {
-        struct Unclocked;
-        impl PhyShortDelay for Unclocked {
-            const MAX_MICROS: u32 = 20;
-            fn settle_micros(_: u32) -> bool {
-                false
-            }
-        }
-        let clock: VirtualClock = VirtualClock::new();
-        let wait = core::pin::pin!(super::super::delay::<Unclocked, _>(&clock, Kind::Settle, 5));
-        assert_eq!(
-            poll(wait),
-            Poll::Ready(Err(super::super::PhyWaitRefused::Settle))
-        );
     }
 
     #[test]
@@ -221,33 +206,26 @@ mod delays {
 
     #[test]
     fn a_refused_wait_is_reported_as_refused() {
-        struct Unclocked;
-        impl PhyShortDelay for Unclocked {
-            const MAX_MICROS: u32 = 20;
-            fn settle_micros(_: u32) -> bool {
-                false
-            }
-        }
-        let clock: VirtualClock = VirtualClock::new();
+        let clock: VirtualClock = VirtualClock::starting_at(Instant::from_micros(u64::MAX - 1));
         let mut events = Vec::new();
         {
-            let wait = pin!(delay_observed::<Unclocked, _>(
+            let wait = pin!(delay_observed::<Short, _>(
                 &clock,
-                Kind::Settle,
-                5,
+                Kind::Completion,
+                2,
                 true,
                 |event| events.push(event),
             ));
             assert_eq!(
                 poll(wait),
-                Poll::Ready(Err(super::super::PhyWaitRefused::Settle))
+                Poll::Ready(Err(super::super::PhyWaitRefused::Deadline))
             );
         }
         assert_eq!(
             events,
             [
                 Event::Started {
-                    requested_micros: 5
+                    requested_micros: 2
                 },
                 Event::Refused
             ]

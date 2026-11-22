@@ -137,6 +137,8 @@ pub struct Boot {
     pub(crate) entropy: Option<EntropyRegisters>,
     /// The boot's identity, once drawn.
     pub(crate) boot_id: Option<u64>,
+    /// The settle counter at the adopted CPU rate, for each driver.
+    pub(crate) cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
     evidence: Evidence,
     /// The time driver's authority and the comparator for hart 1's
     /// executor, once the time driver is installed.
@@ -569,6 +571,7 @@ pub fn start<S: Started, H: GroupStarted>(
                     #[cfg(feature = "group")]
                     causes,
                     cache_counters: hardware.cache_counters,
+                    cycles: hardware.cycles,
                 }
             },
         ) {
@@ -586,6 +589,7 @@ pub fn start<S: Started, H: GroupStarted>(
         app_alarm: Some(interrupts.alarm),
         entropy: Some(hardware.entropy),
         boot_id: None,
+        cycles: hardware.cycles,
         evidence: Evidence {
             reset_cause: hardware.reset_cause,
             previous_panic: previous,
@@ -629,13 +633,13 @@ pub fn start<S: Started, H: GroupStarted>(
         #[cfg(not(feature = "group"))]
         let _ = ready;
     }
-    // The timer is installed now, and the read gap has a clock.
+    // The timer is installed now.
     let id = match (setup.boot_id, setup.entropy.take()) {
         (Some(id), _) => id,
         (None, Some(registers)) => {
             let mut rng = oer_chips_esp32s31_platform_runtime::platform::Entropy::new(
                 registers,
-                EmbassyClock,
+                setup.cycles,
             );
             if !rng.is_healthy() {
                 fail(Error::Entropy.name());
@@ -744,6 +748,7 @@ struct Owned {
     #[cfg(feature = "group")]
     causes: oer_chips_esp32s31_hal::peripherals::reset_cause::ResetCauses,
     cache_counters: oer_chips_esp32s31_hal::peripherals::cache_counters::CacheCounters,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
 }
 
 /// Where hart 1 takes its parts: the mailbox `entry!` declares with the

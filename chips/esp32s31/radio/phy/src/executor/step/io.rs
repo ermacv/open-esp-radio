@@ -7,13 +7,19 @@ use crate::{
 use oer_portable_time::Instant;
 
 pub(crate) trait Registers {
-    fn advance<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
         now: Instant,
     ) -> Step;
-    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance_power<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         _child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         _gain: &mut super::power::Cursor,
@@ -24,7 +30,10 @@ pub(crate) trait Registers {
         Step::Failure(Failure::Binding)
     }
     #[cfg(target_arch = "riscv32")]
-    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
+    fn rfpll_atom<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -39,7 +48,10 @@ pub(super) enum Io<'a> {
 }
 #[cfg(target_arch = "riscv32")]
 impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardware {
-    fn advance<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -47,7 +59,10 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
     ) -> Step {
         job.advance_one::<D, _>(Io::Shared(self), clock, now)
     }
-    fn advance_power<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance_power<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
@@ -58,7 +73,10 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
         super::power::advance::<D, _>(&mut Io::Shared(self), child, gain, action, clock, measured)
             .unwrap_or_else(Step::Failure)
     }
-    fn rfpll_atom<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock + ?Sized>(
+    fn rfpll_atom<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -73,7 +91,10 @@ impl Registers for oer_chips_esp32s31_hal::radio::domain::transaction::PhyHardwa
 impl Io<'_> {
     /// Keep channel's large command/completion values out of the shared dispatcher.
     #[inline(never)]
-    pub(super) fn channel<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    pub(super) fn channel<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         clock: &C,
         binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
@@ -94,7 +115,10 @@ impl Io<'_> {
 
     /// The original channel command/completion body keeps its own poll frame.
     #[inline(never)]
-    fn channel_direct<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn channel_direct<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         clock: &C,
         binding: &mut Option<crate::channel::PhyChipChannelExternalBinding>,
@@ -102,7 +126,10 @@ impl Io<'_> {
     ) -> Result<bool, Failure> {
         let binding = binding.take().ok_or(Failure::Binding)?;
         #[cfg(target_arch = "riscv32")]
-        fn apply<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+        fn apply<
+            D: super::super::wait::PhyShortDelay,
+            C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+        >(
             clock: &C,
             registers: &mut (impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess + Registers),
             binding: crate::channel::PhyChipChannelExternalBinding,
@@ -131,7 +158,10 @@ impl Io<'_> {
         *completion = Some(result);
         Ok(waiting)
     }
-    pub(super) fn frequency<D: super::super::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    pub(super) fn frequency<
+        D: super::super::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         clock: &C,
         binding: crate::analog::rfpll::RfpllFrequencyExternalBinding,
@@ -221,7 +251,7 @@ impl Io<'_> {
     #[inline(always)]
     fn rfpll_frequency<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock + ?Sized,
+        C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -244,11 +274,11 @@ impl Io<'_> {
                 binding.into_completion().map_err(|_| Failure::Binding)
             }
             Binding::Timer(binding) => {
-                if !D::settle_micros(binding.micros()) {
-                    return Err(Failure::Target(
+                let limit = crate::executor::wait::short_limit::<D>(u64::from(binding.micros()))
+                    .ok_or(Failure::Target(
                         crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-                    ));
-                }
+                    ))?;
+                D::settle(clock, limit);
                 Ok(binding.into_completion())
             }
             Binding::Mmio(binding) => {
@@ -269,7 +299,7 @@ impl Io<'_> {
     #[inline(never)]
     pub(super) fn advance_rfpll<
         D: super::super::wait::PhyShortDelay,
-        C: oer_portable_time::Clock,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
     >(
         &mut self,
         clock: &C,
@@ -299,9 +329,9 @@ impl Io<'_> {
                 return Err(Failure::Binding);
             }
             if remaining != 0 {
-                if !D::settle_micros(remaining as u32) {
-                    return Err(Failure::Binding);
-                }
+                let limit =
+                    crate::executor::wait::short_limit::<D>(remaining).ok_or(Failure::Binding)?;
+                D::settle(clock, limit);
                 #[cfg(test)]
                 if let Self::Test(io) = self {
                     io.rfpll::<D>(Action::Search(search::Action::DelayMicros(
@@ -591,10 +621,15 @@ impl Io<'_> {
             Self::Test(io) => io.temperature_code(),
         }
     }
-    pub(super) fn pbus_control(&mut self, work_mode: bool) -> Result<bool, Failure> {
+    pub(super) fn pbus_control<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        &mut self,
+        counter: &K,
+        work_mode: bool,
+    ) -> Result<bool, Failure> {
         #[cfg(target_arch = "riscv32")]
-        fn apply(
+        fn apply<K: oer_portable_time::settle::SettleCounter + ?Sized>(
             registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
+            counter: &K,
             work_mode: bool,
         ) -> Result<bool, Failure> {
             use crate::RomShortDelay;
@@ -609,22 +644,21 @@ impl Io<'_> {
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(registers),
             );
             if settled {
-                if !RomShortDelay::settle_micros(1) {
-                    return Err(Failure::Binding);
-                }
+                RomShortDelay::settle(counter, crate::executor::wait::SETTLE_ONE_MICRO);
                 agc::configure_pbus_work_mode_pulse(registers);
-                if !RomShortDelay::settle_micros(2) {
-                    return Err(Failure::Binding);
-                }
+                RomShortDelay::settle(counter, crate::executor::wait::SETTLE_TWO_MICROS);
                 agc::clear_pbus_work_mode_pulse(registers);
             }
             Ok(settled)
         }
         match self {
             #[cfg(target_arch = "riscv32")]
-            Self::Shared(registers) => apply(*registers, work_mode),
+            Self::Shared(registers) => apply(*registers, counter, work_mode),
             #[cfg(test)]
-            Self::Test(io) => io.clear_pbus_control(work_mode),
+            Self::Test(io) => {
+                let _ = counter;
+                io.clear_pbus_control(work_mode)
+            }
         }
     }
 }

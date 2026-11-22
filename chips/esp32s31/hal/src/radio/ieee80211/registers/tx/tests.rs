@@ -289,23 +289,27 @@ fn a_completed_queue_detaches_with_its_descriptor_head() {
     assert_eq!(before.changes(&memory).len(), 1);
 }
 
-/// A clock that moves one microsecond at every read, so a settle ends.
+/// A counter of one cycle a microsecond that moves one at every sample,
+/// so a settle ends.
 #[derive(Default)]
 struct TickingClock {
-    reads: core::cell::Cell<u64>,
+    reads: core::cell::Cell<u32>,
 }
 
 impl TickingClock {
     fn elapsed(&self) -> oer_portable_time::Duration {
-        oer_portable_time::Duration::from_micros(self.reads.get().saturating_sub(1))
+        oer_portable_time::Duration::from_micros(u64::from(self.reads.get().saturating_sub(1)))
     }
 }
 
-impl oer_portable_time::Clock for TickingClock {
-    fn now(&self) -> oer_portable_time::Instant {
+impl oer_portable_time::settle::SettleCounter for TickingClock {
+    fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+        limit.micros()
+    }
+    fn sample(&self) -> u32 {
         let reads = self.reads.get();
         self.reads.set(reads + 1);
-        oer_portable_time::Instant::from_micros(reads)
+        reads
     }
 }
 

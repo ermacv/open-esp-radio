@@ -1,8 +1,8 @@
 //! Direct hardware observation: a named settle bounded in time, and the
 //! the time bounds of measured direct observations.
 
-use oer_portable_time::settle::{self, Settle, SettleLimit, Unsettled};
-use oer_portable_time::{Clock, Duration};
+use oer_portable_time::Duration;
+use oer_portable_time::settle::{self, Settle, SettleCounter, SettleLimit, Unsettled};
 
 /// The longest a direct observation of a measured site may wait: the worst
 /// measured direct wait was 87 reads, 2976 cycles (18.6 µs at 160 MHz)
@@ -15,25 +15,25 @@ const OBSERVATION_SETTLE_LIMIT: SettleLimit =
     };
 
 /// Observe until `attempt` yields a value or [`OBSERVATION_SETTLE_LIMIT`] has
-/// passed on `clock`; the first observation always runs, and so does one
+/// passed on `counter`; the first observation always runs, and so does one
 /// after the limit was seen.
 #[inline]
-pub(crate) fn settled<T, C: Clock + ?Sized>(
-    clock: &C,
+pub(crate) fn settled<T, K: SettleCounter + ?Sized>(
+    counter: &K,
     attempt: impl FnMut() -> Option<T>,
 ) -> Result<T, Unsettled> {
-    settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, clock), attempt)
+    settle::settle(Settle::new(OBSERVATION_SETTLE_LIMIT, counter), attempt)
 }
 
 /// Complete one measured direct edge within the named 20 µs settle on the
-/// caller's clock. W2 on s31-a measured a worst direct edge of 2,976 cycles
+/// caller's counter. W2 on s31-a measured a worst direct edge of 2,976 cycles
 /// at 160 MHz (18.6 µs); status sampling has no minimum delay.
 #[inline]
-pub(crate) fn bounded<E, C: Clock + ?Sized>(
-    clock: &C,
+pub(crate) fn bounded<E, K: SettleCounter + ?Sized>(
+    counter: &K,
     mut observe: impl FnMut() -> Result<bool, E>,
 ) -> Result<bool, E> {
-    match settled(clock, || match observe() {
+    match settled(counter, || match observe() {
         Ok(true) => Some(Ok(true)),
         Ok(false) => None,
         Err(error) => Some(Err(error)),
@@ -47,16 +47,16 @@ pub(crate) fn bounded<E, C: Clock + ?Sized>(
 mod tests {
     use super::*;
 
-    use oer_portable_time_virtual::VirtualClock;
+    use oer_portable_time_virtual::VirtualCounter;
 
-    /// Advance the clock by `step` microseconds at every read.
-    fn read_step(clock: &VirtualClock, step: u64) {
-        clock.advance(Duration::from_micros(step)).unwrap();
+    /// Advance the counter by `step` cycles (microseconds) at every read.
+    fn read_step(clock: &VirtualCounter, step: u32) {
+        clock.advance(step);
     }
 
     #[test]
     fn a_settled_observation_stops_at_the_first_ready_read() {
-        let clock = VirtualClock::default();
+        let clock = VirtualCounter::new(0, 0);
         let mut reads = 0;
         let result = settled(&clock, || {
             reads += 1;
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn a_settled_observation_gives_up_when_the_limit_has_passed() {
-        let clock = VirtualClock::default();
+        let clock = VirtualCounter::new(0, 0);
         let mut reads = 0;
         let result: Result<(), _> = settled(&clock, || {
             reads += 1;
@@ -83,7 +83,7 @@ mod tests {
 
     #[test]
     fn direct_completion_uses_elapsed_time_and_keeps_the_first_ready_or_error() {
-        let clock = VirtualClock::default();
+        let clock = VirtualCounter::new(0, 0);
         let mut reads = 0;
         assert_eq!(
             bounded::<(), _>(&clock, || {

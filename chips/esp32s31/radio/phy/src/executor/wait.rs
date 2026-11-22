@@ -9,6 +9,7 @@
 
 use core::{future::Future, pin::pin, task::Poll};
 
+use oer_portable_time::settle::{SettleCounter, SettleLimit};
 use oer_portable_time::{Duration, Timer};
 
 pub mod tx;
@@ -183,18 +184,83 @@ pub trait PhyShortDelay {
     /// Largest minimum settle that the backend can complete synchronously.
     const MAX_MICROS: u32;
 
-    /// Complete a short minimum settle without constructing a future.
-    /// False means that the requested interval is outside the implementation's
-    /// proven blocking range.
-    fn settle_micros(micros: u32) -> bool;
+    /// Complete a short minimum settle of `limit` on `counter`, without
+    /// constructing a future.
+    fn settle<K: SettleCounter + ?Sized>(counter: &K, limit: SettleLimit);
 }
 
-/// The length of a wait of `kind` and `micros`, if it is a short settle `S`
+/// The PHY's timer beside its settle counter: what an executor gives the
+/// PHY's operations, so that a short settle counts cycles at the adopted CPU
+/// rate and every other wait ends on the timer.
+#[derive(Clone, Copy, Debug)]
+pub struct PhyTimer<'t, T: ?Sized, K> {
+    timer: &'t T,
+    counter: K,
+}
+
+impl<'t, T: ?Sized, K> PhyTimer<'t, T, K> {
+    pub const fn new(timer: &'t T, counter: K) -> Self {
+        Self { timer, counter }
+    }
+}
+
+impl<T: oer_portable_time::Clock + ?Sized, K> oer_portable_time::Clock for PhyTimer<'_, T, K> {
+    fn now(&self) -> oer_portable_time::Instant {
+        self.timer.now()
+    }
+}
+
+impl<T: Timer + ?Sized, K> Timer for PhyTimer<'_, T, K> {
+    fn wait_until(&self, deadline: oer_portable_time::Instant) -> impl Future<Output = ()> {
+        self.timer.wait_until(deadline)
+    }
+}
+
+impl<T: oer_portable_cooperate::CooperativeTimer + ?Sized, K>
+    oer_portable_cooperate::CooperativeTimer for PhyTimer<'_, T, K>
+{
+    fn should_yield(&self) -> bool {
+        self.timer.should_yield()
+    }
+}
+
+impl<T: ?Sized, K: SettleCounter> SettleCounter for PhyTimer<'_, T, K> {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        self.counter.cycles(limit)
+    }
+    fn sample(&self) -> u32 {
+        self.counter.sample()
+    }
+}
+
+/// The vendor's one-microsecond settle.
+pub(crate) const SETTLE_ONE_MICRO: SettleLimit = match SettleLimit::new(Duration::from_micros(1)) {
+    Some(limit) => limit,
+    None => panic!("one microsecond lies within the longest a settle may wait"),
+};
+
+/// The vendor's two-microsecond settle.
+pub(crate) const SETTLE_TWO_MICROS: SettleLimit = match SettleLimit::new(Duration::from_micros(2)) {
+    Some(limit) => limit,
+    None => panic!("two microseconds lie within the longest a settle may wait"),
+};
+
+/// The settle of a table's `micros`, if `S` completes it synchronously: not
+/// zero and at most [`PhyShortDelay::MAX_MICROS`].
+pub(crate) const fn short_limit<S: PhyShortDelay>(micros: u64) -> Option<SettleLimit> {
+    if micros == 0 || micros > S::MAX_MICROS as u64 {
+        None
+    } else {
+        SettleLimit::new(Duration::from_micros(micros))
+    }
+}
+
+/// The settle of a wait of `kind` and `micros`, if it is a short settle `S`
 /// completes synchronously. Readiness retries keep their timer cadence at any
 /// size.
-const fn synchronous_settle<S: PhyShortDelay>(kind: Kind, micros: u64) -> Option<u32> {
-    if matches!(kind, Kind::Settle) && micros != 0 && micros <= S::MAX_MICROS as u64 {
-        Some(micros as u32)
+const fn synchronous_settle<S: PhyShortDelay>(kind: Kind, micros: u64) -> Option<SettleLimit> {
+    if matches!(kind, Kind::Settle) {
+        short_limit::<S>(micros)
     } else {
         None
     }
@@ -203,22 +269,20 @@ const fn synchronous_settle<S: PhyShortDelay>(kind: Kind, micros: u64) -> Option
 /// Why a wait could not run its full length.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyWaitRefused {
-    /// The backend refused a settle within its stated bound.
-    Settle,
     /// The deadline is past the timer's range.
     Deadline,
 }
 
 /// Wait at least `micros` for `kind`.
 ///
-/// A short settle completes at its first poll through `S`; every other wait
-/// ends on `timer` at the deadline taken when this is called, so the time
-/// before the first poll counts.
+/// A short settle completes at its first poll through `S`, counted on
+/// `timer`'s counter; every other wait ends on `timer` at the deadline taken
+/// when this is called, so the time before the first poll counts.
 ///
 /// # Errors
 ///
 /// The wait did not run its length; the caller must not act as if it had.
-pub fn delay<S: PhyShortDelay, T: Timer + ?Sized>(
+pub fn delay<S: PhyShortDelay, T: Timer + SettleCounter + ?Sized>(
     timer: &T,
     kind: Kind,
     micros: u64,
@@ -229,11 +293,7 @@ pub fn delay<S: PhyShortDelay, T: Timer + ?Sized>(
         .then(|| timer.now().checked_add(Duration::from_micros(micros)));
     async move {
         match (settle, deadline) {
-            (Some(micros), _) => {
-                if !S::settle_micros(micros) {
-                    return Err(PhyWaitRefused::Settle);
-                }
-            }
+            (Some(limit), _) => S::settle(timer, limit),
             (None, Some(Some(deadline))) => timer.wait_until(deadline).await,
             (None, _) => return Err(PhyWaitRefused::Deadline),
         }
@@ -245,7 +305,7 @@ pub fn delay<S: PhyShortDelay, T: Timer + ?Sized>(
 /// the first poll and, on completion, the time elapsed since this was called
 /// and the lateness past `micros`, measured on `timer`. The completion is
 /// observed after the wait ends, so observer work cannot shorten it.
-pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + ?Sized>(
+pub fn delay_observed<'t, S: PhyShortDelay, T: Timer + SettleCounter + ?Sized>(
     timer: &'t T,
     kind: Kind,
     micros: u64,

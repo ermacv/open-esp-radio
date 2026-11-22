@@ -30,6 +30,7 @@ oer_chips_family_platform_executor::tasks! {
 }
 struct Boot {
     hardware: RadioHardware,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
     clocks: ChipClocks,
     identity: PhyCalibrationIdentity,
 }
@@ -57,6 +58,7 @@ fn main(
             runtime_radio,
             runtime_clocks,
             runtime_watchdogs,
+            runtime_cycles,
         ),
         _psram,
         mut adopted,
@@ -81,6 +83,7 @@ fn main(
                 hardware.radio,
                 hardware.clocks,
                 hardware.watchdogs,
+                hardware.cycles,
             )
         },
     ) {
@@ -125,6 +128,7 @@ fn main(
     };
     let boot = Boot {
         hardware: runtime_radio,
+        cycles: runtime_cycles,
         clocks: runtime_clocks,
         identity,
     };
@@ -187,6 +191,7 @@ async fn sheets(boot: Boot) {
                 boot.clocks,
                 boot.identity,
                 &timer,
+                boot.cycles,
                 oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
                 |fault| oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault),
             )

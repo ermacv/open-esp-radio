@@ -115,6 +115,12 @@ impl Error {
             Self::Initialization(driver::InitError::DebugStatusPublished) => {
                 oer_portable_diagnostics::name!("debug-status-published"; 32)
             }
+            Self::Initialization(driver::InitError::CpuClock(
+                driver::UnsupportedCpuClock::UnknownRate,
+            )) => oer_portable_diagnostics::name!("cpu-clock-rate-unknown"; 32),
+            Self::Initialization(driver::InitError::CpuClock(
+                driver::UnsupportedCpuClock::FractionalDivider,
+            )) => oer_portable_diagnostics::name!("cpu-clock-fractional"; 32),
             Self::Context(error) => error.name(),
         }
     }

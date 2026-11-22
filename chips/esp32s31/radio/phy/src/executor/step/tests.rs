@@ -9,8 +9,10 @@ mod wifi_i2c;
 pub(crate) struct TestDelay;
 impl crate::executor::wait::PhyShortDelay for TestDelay {
     const MAX_MICROS: u32 = 20;
-    fn settle_micros(micros: u32) -> bool {
-        (1..=20).contains(&micros)
+    fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        _: &K,
+        _: oer_portable_time::settle::SettleLimit,
+    ) {
     }
 }
 
@@ -111,8 +113,8 @@ impl Io {
             },
             |io, micros| {
                 io.dc_iq_events.push("settle");
-                D::settle_micros(micros)
-                    .then_some(())
+                crate::executor::wait::short_limit::<D>(u64::from(micros))
+                    .map(|_| ())
                     .ok_or(Failure::Binding)
             },
         )
@@ -151,9 +153,8 @@ impl Io {
                 }
             }
             Binding::Timer(binding) => {
-                if !D::settle_micros(binding.micros()) {
-                    return Err(Failure::Binding);
-                }
+                crate::executor::wait::short_limit::<D>(u64::from(binding.micros()))
+                    .ok_or(Failure::Binding)?;
                 binding.into_completion()
             }
             _ => return Err(Failure::Binding),
@@ -223,9 +224,8 @@ impl Io {
                     search::Completion::CapWritten(cap)
                 }
                 search::Action::DelayMicros(micros) => {
-                    if !D::settle_micros(micros) {
-                        return Err(Failure::Binding);
-                    }
+                    crate::executor::wait::short_limit::<D>(u64::from(micros))
+                        .ok_or(Failure::Binding)?;
                     if let Some(clock) = &self.rfpll_clock {
                         clock
                             .advance(Duration::from_micros(u64::from(micros)))
@@ -364,7 +364,10 @@ impl Io {
     }
 }
 impl Registers for Io {
-    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance<
+        D: crate::executor::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -372,7 +375,10 @@ impl Registers for Io {
     ) -> Step {
         job.advance_one::<D, _>(super::io::Io::Test(self), clock, now)
     }
-    fn advance_power<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance_power<
+        D: crate::executor::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         child: &mut crate::tracking::parameters::PhyParamTrackingTxPowerTransition<'_>,
         gain: &mut super::power::Cursor,
@@ -699,6 +705,14 @@ fn pbus_clear_preserves_all_commands_and_the_conditional_settle_tail() {
 #[test]
 fn an_immediately_ready_async_timer_is_not_polled_after_completion() {
     struct AsyncTimer(VirtualClock<1>);
+    impl oer_portable_time::settle::SettleCounter for AsyncTimer {
+        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+            limit.micros()
+        }
+        fn sample(&self) -> u32 {
+            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+        }
+    }
     impl Clock for AsyncTimer {
         fn now(&self) -> Instant {
             self.0.now()
@@ -814,6 +828,14 @@ fn runnable_yields_without_constructing_or_polling_a_timer() {
         constructed: Cell<u32>,
         polled: Cell<u32>,
     }
+    impl oer_portable_time::settle::SettleCounter for Probe<'_> {
+        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+            limit.micros()
+        }
+        fn sample(&self) -> u32 {
+            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+        }
+    }
     impl Clock for Probe<'_> {
         fn now(&self) -> Instant {
             self.clock.now()
@@ -874,7 +896,10 @@ struct CommandCost<'a> {
     clock: &'a VirtualClock<1>,
 }
 impl Registers for CommandCost<'_> {
-    fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+    fn advance<
+        D: crate::executor::wait::PhyShortDelay,
+        C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+    >(
         &mut self,
         job: &mut Job<'_>,
         clock: &C,
@@ -1322,6 +1347,14 @@ fn rfpll_rmw_keeps_the_captured_byte_and_model_owner_across_the_checkpoint() {
 #[test]
 fn rfpll_busy_command_times_out_without_consuming_a_partial_helper() {
     struct Progress<'a>(&'a VirtualClock<1>);
+    impl oer_portable_time::settle::SettleCounter for Progress<'_> {
+        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+            limit.micros()
+        }
+        fn sample(&self) -> u32 {
+            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+        }
+    }
     impl Clock for Progress<'_> {
         fn now(&self) -> Instant {
             let now = self.0.now();
@@ -1476,6 +1509,14 @@ fn rfpll_driver_wakes_once_per_checkpoint_without_a_timer_or_gap_timeout() {
     struct NoWait<'a> {
         clock: &'a VirtualClock<1>,
         constructed: Cell<usize>,
+    }
+    impl oer_portable_time::settle::SettleCounter for NoWait<'_> {
+        fn cycles(&self, limit: oer_portable_time::settle::SettleLimit) -> u32 {
+            limit.micros()
+        }
+        fn sample(&self) -> u32 {
+            crate::executor::test_clock::sample_at(oer_portable_time::Clock::now(self))
+        }
     }
     impl Clock for NoWait<'_> {
         fn now(&self) -> Instant {

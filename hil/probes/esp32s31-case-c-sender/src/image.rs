@@ -4,7 +4,8 @@
 //! addressed to the station, then case C's rounds (`amsdu`) or cell E's
 //! (`ccmp`).
 use crate::radio::{
-    Brought, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up, held, phase, prepare,
+    Brought, Cooperative, CooperativeTimer, Failure, SessionParts, apart, begin, bring_up, held,
+    phase, prepare,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -114,6 +115,7 @@ fn main(
             runtime_software_interrupts,
             runtime_entropy,
             runtime_watchdogs,
+            runtime_cycles,
         ),
         _psram,
         mut adopted,
@@ -142,6 +144,7 @@ fn main(
                 hardware.software_interrupts,
                 hardware.entropy,
                 hardware.watchdogs,
+                hardware.cycles,
             )
         },
     ) {
@@ -199,7 +202,7 @@ fn main(
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     let mut rng =
-        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, EmbassyClock);
+        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, runtime_cycles);
     let seed = match rng.random() {
         Ok(word) => word,
         Err(_) => fail(name!("entropy"; 32)),
@@ -216,6 +219,7 @@ fn main(
         seed,
         station,
         ap,
+        cycles: runtime_cycles,
     };
     if RadioTasks::session(&radio_executor, parts).is_err() {
         fail(name!("session-task"; 32));
@@ -424,7 +428,9 @@ fn first_of<T, const N: usize>(items: impl Iterator<Item = T>) -> Option<[T; N]>
 /// Bring Wi-Fi up, start the MAC on the receive ring, learn the peer, then
 /// the rounds. Every owner stays held until the leased host reset.
 async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failure> {
-    let timer = CooperativeTimer::new(EmbassyClock);
+    let cycles = parts.cycles;
+    let cooperative = Cooperative::new(EmbassyClock);
+    let timer = CooperativeTimer::new(&cooperative, cycles);
     let mut platform = ();
     let brought = apart!(bring_up(parts, &timer, &mut platform))?;
     // The ring's parts: the table, the walker's registers, the arena and
@@ -483,7 +489,7 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
     );
     journal.record(Kind::Up, &[]);
     mark(70);
-    let peer = learn_peer(&mut ring, station).await?;
+    let peer = learn_peer(&mut ring, station, cycles).await?;
     journal.record(
         Kind::Peer,
         &[
@@ -510,13 +516,17 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
 
 /// The peer: the sender of the first frame addressed to the station, served
 /// from the ring within two seconds, every unit copied in place.
-async fn learn_peer(ring: &mut Ring, station: [u8; 6]) -> Result<[u8; 6], Failure> {
+async fn learn_peer(
+    ring: &mut Ring,
+    station: [u8; 6],
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+) -> Result<[u8; 6], Failure> {
     let end = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(2))
         .ok_or((transmit::tx_phase::PEER, 0))?;
     while EmbassyClock.now() < end {
-        let served = ring.serve(&EmbassyClock, |view| {
+        let served = ring.serve(&cycles, |view| {
             let mut found = None;
             while let Some(unit) = view.next_unit() {
                 let mut head = [0_u8; 16];

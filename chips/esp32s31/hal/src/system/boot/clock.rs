@@ -20,11 +20,6 @@ use oer_chips_esp32s31_pac::{
     pmu::PmuBootClock,
 };
 
-/// CPU rate captured by the clock owner before its runtime handover.
-/// Zero means no supported, stable integer clock has been adopted.
-#[cfg(target_arch = "riscv32")]
-static RUNTIME_CPU_HZ: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-
 /// The chip's supported crystal, used by the clock owner's divider calculation.
 /// SOURCE: ESP-IDF 4d80c1b2 `soc/esp32s31/include/soc/clk_tree_defs.h:125-127`.
 #[cfg(any(target_arch = "riscv32", test))]
@@ -49,10 +44,6 @@ impl CpuFrequency {
         };
         let hz = root_hz / (u32::from(cpu) + 1);
         (hz != 0).then_some(Self(hz))
-    }
-
-    fn cycles(self, micros: u32) -> Option<u32> {
-        u32::try_from((u64::from(self.0) * u64::from(micros)).div_ceil(1_000_000)).ok()
     }
 }
 
@@ -155,48 +146,55 @@ impl RuntimeCpuClock {
 }
 
 impl oer_chips_family_boot::adoption::CpuClock for RuntimeCpuClock {
-    fn sample(&self) -> oer_chips_family_boot::adoption::CpuRate {
+    fn sample(self) -> oer_chips_family_boot::adoption::CpuRate {
         #[cfg(target_arch = "riscv32")]
         {
             let cpu = self.0.hp_sys_clkrst.read_cpu_freq_ctrl0();
-            let root =
-                CpuRoot::from_code(self.0.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel());
+            let code = self.0.hp_sys_clkrst.read_soc_clk_sel().reg_soc_clk_sel();
             let pll = self.0.lp_aon_clkrst.read_cpll_div();
-            oer_chips_family_boot::adoption::CpuRate {
-                fractional: cpu.reg_cpu_clk_div_numerator().get() != 0,
-                integer_hz: CpuFrequency::from_dividers(
-                    root,
-                    cpu.reg_cpu_clk_div_num(),
-                    CpllDividers {
-                        feedback: pll.cpll_fb_div(),
-                        reference: pll.cpll_ref_div(),
-                    },
-                )
-                .map(|rate| rate.0),
-            }
+            cpu_rate(
+                CpuRoot::from_code(code),
+                cpu.reg_cpu_clk_div_num(),
+                cpu.reg_cpu_clk_div_numerator().get() != 0,
+                CpllDividers {
+                    feedback: pll.cpll_fb_div(),
+                    reference: pll.cpll_ref_div(),
+                },
+            )
         }
+        // The host has no CPU clock to read: its adoption counts nothing.
         #[cfg(not(target_arch = "riscv32"))]
-        oer_chips_family_boot::adoption::CpuRate {
-            fractional: false,
-            integer_hz: None,
+        {
+            let _ = self.0;
+            oer_chips_family_boot::adoption::CpuRate::Unsupported(
+                oer_chips_family_boot::adoption::UnsupportedCpuClock::UnknownRate,
+            )
         }
     }
-    fn publish(self, rate_hz: Option<u32>) {
-        #[cfg(target_arch = "riscv32")]
-        RUNTIME_CPU_HZ.store(rate_hz.unwrap_or(0), core::sync::atomic::Ordering::Release);
-        #[cfg(not(target_arch = "riscv32"))]
-        let _ = (self.0, rate_hz);
+}
+
+/// The adopted CPU rate from the root, the integer divider, whether a
+/// fractional divider is set, and the CPU PLL's dividers.
+#[cfg(any(target_arch = "riscv32", test))]
+fn cpu_rate(
+    root: CpuRoot,
+    divider: u8,
+    fractional: bool,
+    pll: CpllDividers,
+) -> oer_chips_family_boot::adoption::CpuRate {
+    use oer_chips_family_boot::adoption::{CpuHz, CpuRate, UnsupportedCpuClock};
+    // The rate first: with a root of no known rate the divider says nothing.
+    match (
+        CpuFrequency::from_dividers(root, divider, pll).and_then(|rate| CpuHz::new(rate.0)),
+        fractional,
+    ) {
+        (None, _) => CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate),
+        (Some(_), true) => CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider),
+        (Some(hz), false) => CpuRate::Integer(hz),
     }
 }
 
 impl ClockRegisters {
-    /// The settle length in machine cycles at the adopted CPU rate.
-    #[cfg(target_arch = "riscv32")]
-    pub(crate) fn short_settle_cycles(micros: u32) -> Option<u32> {
-        let hz = RUNTIME_CPU_HZ.load(core::sync::atomic::Ordering::Acquire);
-        (hz != 0).then_some(CpuFrequency(hz))?.cycles(micros)
-    }
-
     /// Own the bootstrap's clock parts.
     pub(crate) fn new(
         hp_sys_clkrst: HpSysClkrstBootClock,
@@ -558,22 +556,50 @@ mod frequency_tests {
     use super::*;
 
     #[test]
-    fn short_settles_follow_the_adopted_profile_and_round_up() {
+    fn the_adoption_gives_each_profile_s_rate_and_fails_every_other_clock() {
+        use oer_chips_family_boot::adoption::{CpuHz, CpuRate, UnsupportedCpuClock};
         for profile in [
             super::super::CpuProfile::Mhz160,
             super::super::CpuProfile::Mhz320,
         ] {
             let profile = profile.clock();
-            let rate = CpuFrequency::from_dividers(
-                profile.root,
-                profile.dividers.cpu,
-                profile.pll.expect("CPLL profile"),
-            )
-            .expect("supported CPU profile");
-            assert_eq!(rate.0, profile.rates.cpu_hz);
-            assert_eq!(rate.cycles(20), Some(profile.rates.cpu_hz / 50_000));
+            let pll = profile.pll.expect("CPLL profile");
+            assert_eq!(
+                cpu_rate(profile.root, profile.dividers.cpu, false, pll),
+                CpuRate::Integer(CpuHz::new(profile.rates.cpu_hz).expect("a profile's rate"))
+            );
+            assert_eq!(
+                cpu_rate(profile.root, profile.dividers.cpu, true, pll),
+                CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider)
+            );
         }
-        assert_eq!(CpuFrequency(1_500_001).cycles(1), Some(2));
+        let pll = super::super::CPLL_320;
+        assert_eq!(
+            cpu_rate(CpuRoot::Xtal, 0, false, pll),
+            CpuRate::Integer(CpuHz::new(40_000_000).expect("the crystal's rate"))
+        );
+        assert_eq!(
+            cpu_rate(CpuRoot::Xtal, 1, false, pll),
+            CpuRate::Integer(CpuHz::new(20_000_000).expect("half the crystal"))
+        );
+        assert_eq!(
+            cpu_rate(CpuRoot::Xtal, 0, true, pll),
+            CpuRate::Unsupported(UnsupportedCpuClock::FractionalDivider)
+        );
+        for root in [CpuRoot::RcFast, CpuRoot::PllF240m] {
+            for fractional in [false, true] {
+                assert_eq!(
+                    cpu_rate(root, 0, fractional, pll),
+                    CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate)
+                );
+            }
+        }
+        let mut pll = pll;
+        pll.reference = Bits::constant::<0>();
+        assert_eq!(
+            cpu_rate(CpuRoot::Cpll, 0, false, pll),
+            CpuRate::Unsupported(UnsupportedCpuClock::UnknownRate)
+        );
     }
 
     #[test]

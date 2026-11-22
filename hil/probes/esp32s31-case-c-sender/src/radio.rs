@@ -49,8 +49,15 @@ pub(crate) const CHANNEL: u8 = 13;
 pub(crate) const CBW: u8 = 0;
 
 pub(crate) type Radio = RadioDomain<ChipClocks, ConcurrentPhy>;
-pub(crate) type CooperativeTimer =
+pub(crate) type Cooperative =
     oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>;
+/// The executor's cooperative timer beside the settle counter at the adopted
+/// CPU rate: what the PHY's operations take.
+pub(crate) type CooperativeTimer<'t> = oer_chips_esp32s31_radio_phy::executor::wait::PhyTimer<
+    't,
+    Cooperative,
+    oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+>;
 /// A failure: its phase and its index.
 pub(crate) type Failure = (u32, u32);
 
@@ -87,6 +94,8 @@ pub(crate) struct SessionParts {
     pub(crate) seed: u32,
     pub(crate) station: [u8; 6],
     pub(crate) ap: [u8; 6],
+    /// The settle counter at the adopted CPU rate.
+    pub(crate) cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
 }
 
 /// The platform values the MAC cold start reads.
@@ -162,7 +171,7 @@ pub(crate) fn held(slot: &mut Option<Radio>) -> Result<&mut Radio, Failure> {
 /// The PHY's registration over the radio in `slot`.
 async fn register(
     slot: &mut Option<Radio>,
-    timer: &CooperativeTimer,
+    timer: &CooperativeTimer<'_>,
     platform: &mut (),
     clocks: &ChipClocks,
     identity: PhyCalibrationIdentity,
@@ -188,7 +197,7 @@ async fn register(
 /// The PHY's tracking over the radio in `slot`.
 async fn maintain(
     slot: &mut Option<Radio>,
-    timer: &CooperativeTimer,
+    timer: &CooperativeTimer<'_>,
     platform: &mut (),
     pilot: &mut phy_pilot::Client,
 ) -> Result<(), Failure> {
@@ -214,7 +223,7 @@ async fn maintain(
 async fn tune(
     slot: &mut Option<Radio>,
     clocked: &mut WifiClocked,
-    timer: &CooperativeTimer,
+    timer: &CooperativeTimer<'_>,
     platform: &mut (),
     channel: Ghz2_4Channel,
 ) -> Result<(), Failure> {
@@ -277,7 +286,7 @@ pub(crate) struct Brought {
 /// client, the tracking due, RX enable and the channel.
 pub(crate) async fn bring_up(
     parts: SessionParts,
-    timer: &CooperativeTimer,
+    timer: &CooperativeTimer<'_>,
     platform: &mut (),
 ) -> Result<Brought, Failure> {
     let SessionParts {
@@ -292,6 +301,7 @@ pub(crate) async fn bring_up(
         seed,
         station,
         ap,
+        cycles: _,
     } = parts;
     let mut slot = Some(radio);
     apart!(register(&mut slot, timer, platform, &clocks, identity))?;
@@ -396,7 +406,7 @@ pub(crate) async fn prepare(
     reset: MacBlockReset,
     mac: MacColdStartConfig,
     channel: Ghz2_4Channel,
-    timer: &CooperativeTimer,
+    timer: &CooperativeTimer<'_>,
     platform: &mut (),
 ) -> Result<MacPrepared, Failure> {
     let (_outcome, prepared) = {
@@ -481,6 +491,7 @@ pub(crate) fn stop<'p, B, const BYTES: usize, const N: usize>(
     clocks_on: &WifiClocksOn,
     mut ring: Occupied<'p, RxRing<B, BYTES, N, WifiRxDmaRegisters>>,
     enabled: WalkerEnabled,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
 ) -> (
     MacBlockReset,
     RxRingParts<B, BYTES, N, WifiRxDmaRegisters>,
@@ -490,7 +501,7 @@ where
     B: Brand<Window = DmaWindow>,
 {
     let edge = ring.stop_walker(enabled);
-    let requested = access.wifi_mac_hal().request_stop(edge, &EmbassyClock);
+    let requested = access.wifi_mac_hal().request_stop(edge, &cycles);
     let (reset, stopped) = radio.reset_stopped_wifi_mac_block(clocks_on, requested, CBW);
     let (parts, place) = RxRing::release(ring, stopped);
     (reset, parts, place)

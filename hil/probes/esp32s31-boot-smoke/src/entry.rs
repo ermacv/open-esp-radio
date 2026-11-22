@@ -186,6 +186,8 @@ struct Hart1Parts {
     token: Hart1Token,
     alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,
     aes: AesParts,
+    /// The settle counter at the adopted CPU rate, for the AES engine.
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
     exchange: Server,
     unwrap: AesServer,
     liveness: LivenessResponder,
@@ -209,6 +211,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
             reset_causes,
             hart1,
             aes,
+            cycles,
         ),
         _psram,
         mut adopted,
@@ -242,6 +245,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
                 reset_causes,
                 hardware.hart1,
                 hardware.aes,
+                hardware.cycles,
             )
         },
     ) {
@@ -307,6 +311,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
             token: interrupts.hart1,
             alarm: hart1_alarm,
             aes,
+            cycles,
             exchange: server,
             unwrap: aes_server,
             liveness: responder,
@@ -358,6 +363,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
         token,
         alarm,
         aes,
+        cycles,
         exchange,
         unwrap,
         liveness,
@@ -375,7 +381,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
     let Ok(silent) = router.silent::<AesInterrupt>() else {
         fail(oer_portable_diagnostics::name!("hart1-aes-silent"; 32));
     };
-    let engine = oer_chips_esp32s31_platform_runtime::crypto::aes_engine(aes, silent);
+    let engine = oer_chips_esp32s31_platform_runtime::crypto::aes_engine(aes, silent, cycles);
     let spawner = executor
         .start::<Hart1Tasks, _, _, 1, _, _>(hart, router, token, irq, ())
         .unwrap_or_else(|failure| failure.reset());

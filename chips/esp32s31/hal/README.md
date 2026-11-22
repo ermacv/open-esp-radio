@@ -251,12 +251,12 @@ clock owner and prevents installing it again with that root.
 
 ## TSENS and peripheral SAR-I2C
 
-The route-owned temperature resource tracks idle, acquired/restore-pending and
-poisoned states. First acquire asserts SAR-I2C reset, completes its named 1 µs
-settle, powers the bus, releases reset, then clocks/resets/enables TSENS.
-Last release after RF close disables TSENS, its clock and peripheral power.
-Pending calibration restoration prevents release; incomplete reset settling
-poisons the owner and prevents neutral-root return. The sequence assigns no
+The route-owned temperature resource tracks idle and acquired/restore-pending
+states. First acquire asserts SAR-I2C reset, completes its named 1 µs settle
+(`SAR_I2C_RESET_SETTLE`, a settle that cannot refuse), powers the bus, releases
+reset, then clocks/resets/enables TSENS. Last release after RF close disables
+TSENS, its clock and peripheral power. Pending calibration restoration prevents
+release. The sequence assigns no
 literal zero to analog69.04. SOURCE: `phy/temperature.rs`, pinned ESP-IDF
 `phy_override.c::phy_set_tsens_power`, `sar_tsens_ctrl.c`,
 `sar_periph_ctrl_common.c` and S31 `regi2c_ctrl_ll.h`.

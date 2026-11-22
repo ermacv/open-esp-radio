@@ -11,12 +11,11 @@ use std::collections::VecDeque;
 use std::vec;
 use std::vec::Vec;
 
-use core::cell::Cell;
 use oer_portable_memory::Occupied;
 use oer_portable_memory::arena::{Arena, ArenaPlace, Brand, Handle, PlacedStatic};
 use oer_portable_memory::zeroed::ZeroedStatic;
-use oer_portable_time::{Clock, Instant};
-use oer_portable_time_virtual::VirtualClock;
+use oer_portable_time::settle::SettleCounter;
+use oer_portable_time_virtual::VirtualCounter;
 
 use super::{
     Reload, RingAnomaly, RxDescriptors, RxRing, RxRingParts, RxTable, Unit, Walker, WalkerEnabled,
@@ -220,17 +219,6 @@ impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
     }
 }
 
-/// A clock that moves 5 µs at every read: a settle on it ends.
-struct Ticking(Cell<u64>);
-
-impl Clock for Ticking {
-    fn now(&self) -> Instant {
-        let now = self.0.get() + 5;
-        self.0.set(now);
-        Instant::from_micros(now)
-    }
-}
-
 brand!(cold);
 #[test]
 fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
@@ -282,7 +270,7 @@ fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once()
     bench.complete(0, 114, true);
     bench.cursor(Some(0), Some(1));
     let spare = bench.spares.pop().unwrap();
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let lent = bench
         .ring
         .serve(&clock, |view| match view.next_unit() {
@@ -336,7 +324,7 @@ fn an_exhausted_ring_is_rung_after_one_exchange_and_again_when_next_stayed_zero(
     bench.cursor(Some(RING - 1), None);
     bench.cursor(Some(RING - 1), None);
     let spare = bench.spares.pop().unwrap();
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let served = bench.ring.serve(&clock, |view| match view.next_unit() {
         Some(Unit::Single(unit)) => Some(unit.lend(spare)),
         _ => None,
@@ -354,7 +342,7 @@ fn the_view_ends_at_last_and_after_a_dropped_unit() {
     // LAST at 0: descriptor 1 is complete but beyond it.
     bench.cursor(Some(0), Some(1));
     let spare = bench.spares.pop().unwrap();
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let beyond = bench
         .ring
         .serve(&clock, |view| {
@@ -412,7 +400,7 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
     bench.cursor(Some(2), Some(3));
     let expected: Vec<u8> = [first, second, third].concat();
     let table: &'static RxDescriptors<RING> = bench.ring.table.descriptors;
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let copied = bench
         .ring
         .serve(&clock, |view| match view.next_unit() {
@@ -468,7 +456,7 @@ fn a_chain_is_copied_from_its_continuations_first_bytes_and_re_armed_after() {
 /// copies nothing: what it was handed.
 fn lend_first<B: Brand<Window = DmaWindow> + 'static>(
     bench: &mut Bench<B>,
-    clock: &impl Clock,
+    clock: &impl SettleCounter,
 ) -> Result<Option<Handle<B>>, (RingAnomaly, Option<Handle<B>>)> {
     let spare = bench.spares.pop().unwrap();
     bench.ring.serve(clock, |view| match view.next_unit() {
@@ -488,7 +476,7 @@ fn a_length_past_the_buffer_or_below_the_floor_stops_the_view_as_an_anomaly() {
         bench.complete(0, length, true);
         bench.cursor(Some(0), Some(1));
         let word = bench.ring.table.descriptors.ring[0].word0();
-        let clock: VirtualClock = VirtualClock::new();
+        let clock = VirtualCounter::new(0, 0);
         let served = lend_first(&mut bench, &clock);
         assert!(
             matches!(served, Err((RingAnomaly::Length { word: seen }, None)) if seen == word),
@@ -511,7 +499,7 @@ fn a_chain_s_continuation_length_field_is_not_read() {
     bench.complete(0, 100, false);
     bench.complete(1, 40, true);
     bench.cursor(Some(1), Some(2));
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let served = bench.ring.serve(&clock, |view| match view.next_unit() {
         Some(Unit::Chain(chain)) => Some(chain.copy_in_place(|frame| frame.len())),
         _ => None,
@@ -531,7 +519,8 @@ fn a_doorbell_the_walker_does_not_accept_is_an_anomaly_with_the_unit_lent() {
     bench.complete(0, 80, true);
     bench.cursor(Some(0), Some(1));
     bench.ring.walker.stuck = true;
-    let clock = Ticking(Cell::new(0));
+    // A counter that moves 5 cycles at every sample: a settle on it ends.
+    let clock = VirtualCounter::new(0, 5);
     let served = lend_first(&mut bench, &clock);
     assert!(
         matches!(served, Err((RingAnomaly::DoorbellPending, Some(_)))),
@@ -556,7 +545,7 @@ fn a_stopped_ring_s_release_gives_every_buffer_back_and_publishes_again() {
     bench.complete(0, 80, true);
     bench.cursor(Some(0), Some(1));
     let spare = bench.spares.pop().unwrap();
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let lent = bench
         .ring
         .serve(&clock, |view| match view.next_unit() {
@@ -651,7 +640,7 @@ fn a_chain_shows_its_continuations_words_as_the_walker_left_them() {
     bench.cursor(Some(2), Some(3));
     let first = bench.ring.table.descriptors.ring[0].word0();
     let middle = bench.ring.table.descriptors.ring[1].word0();
-    let clock: VirtualClock = VirtualClock::new();
+    let clock = VirtualCounter::new(0, 0);
     let seen = bench
         .ring
         .serve(&clock, |view| match view.next_unit() {

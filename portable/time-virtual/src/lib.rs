@@ -27,6 +27,11 @@
 //! it is polled. There is no global time driver: code that needs time takes
 //! a clock.
 //!
+//! [`VirtualCounter`] is a settle's counter
+//! ([`oer_portable_time::settle::SettleCounter`]) for host tests: it counts
+//! one cycle a microsecond, and every sample advances it by its step, so a
+//! settle over it ends after a known number of samples.
+//!
 //! [`SkipClock`] serves code under test that runs on one task and waits only
 //! for its own deadlines: a wait's first poll moves time to its deadline
 //! and completes it, so a blocking test runs a timed sequence without an
@@ -38,7 +43,51 @@ use core::{
     task::{Poll, Waker},
 };
 
-use oer_portable_time::{CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer};
+use oer_portable_time::{
+    CLOCK_EPOCH_OFFSET, Clock, Duration, Instant, TimeOverflow, Timer,
+    settle::{SettleCounter, SettleLimit},
+};
+
+/// A settle's counter on the host: one cycle a microsecond, each sample
+/// advancing it by `step` cycles; [`Self::advance`] moves it as an
+/// interrupt or the hardware's own time would.
+#[derive(Debug, Default)]
+pub struct VirtualCounter {
+    now: Cell<u32>,
+    step: u32,
+}
+
+impl VirtualCounter {
+    /// A counter at `start` whose every sample advances it by `step`.
+    pub const fn new(start: u32, step: u32) -> Self {
+        Self {
+            now: Cell::new(start),
+            step,
+        }
+    }
+
+    /// Move the counter on by `cycles`, wrapping.
+    pub fn advance(&self, cycles: u32) {
+        self.now.set(self.now.get().wrapping_add(cycles));
+    }
+
+    /// The counter's value, without a sample's step.
+    pub fn now(&self) -> u32 {
+        self.now.get()
+    }
+}
+
+impl SettleCounter for VirtualCounter {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        limit.micros()
+    }
+
+    fn sample(&self) -> u32 {
+        let now = self.now.get();
+        self.now.set(now.wrapping_add(self.step));
+        now
+    }
+}
 
 /// Where [`VirtualClock::new`] and [`SkipClock::new`] start:
 /// [`CLOCK_EPOCH_OFFSET`] past [`Instant::EPOCH`], as the image's clock

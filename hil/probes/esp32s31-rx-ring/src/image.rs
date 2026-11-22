@@ -13,8 +13,8 @@
 //! Every window counts the sender's units and the ring's anomalies by kind.
 use crate::case_c::{CASES, Case, byte, word_padded};
 use crate::radio::{
-    Brought, CooperativeTimer, Failure, Radio, SessionParts, apart, begin, bring_up, held, phase,
-    prepare, stop,
+    Brought, Cooperative, CooperativeTimer, Failure, Radio, SessionParts, apart, begin, bring_up,
+    held, phase, prepare, stop,
 };
 use crate::usb;
 use core::mem::MaybeUninit;
@@ -150,6 +150,7 @@ fn main(
             runtime_software_interrupts,
             runtime_entropy,
             runtime_watchdogs,
+            runtime_cycles,
         ),
         _psram,
         mut adopted,
@@ -178,6 +179,7 @@ fn main(
                 hardware.software_interrupts,
                 hardware.entropy,
                 hardware.watchdogs,
+                hardware.cycles,
             )
         },
     ) {
@@ -235,7 +237,7 @@ fn main(
         .start(hart, router, interrupts.radio, software.irq2, ())
         .unwrap_or_else(|failure| failure.reset());
     let mut rng =
-        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, EmbassyClock);
+        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, runtime_cycles);
     let seed = match rng.random() {
         Ok(word) => word,
         Err(_) => fail(name!("entropy"; 32)),
@@ -252,6 +254,7 @@ fn main(
         seed,
         station,
         ap,
+        cycles: runtime_cycles,
     };
     if RadioTasks::session(&radio_executor, parts).is_err() {
         fail(name!("session-task"; 32));
@@ -593,6 +596,7 @@ struct Service<'a> {
 /// place when none is held), every chain copied in place, each checked.
 async fn window(
     service: &mut Service<'_>,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
     millis: u32,
     mut chains: Option<&mut ChainRecord>,
 ) -> Result<Counts, Failure> {
@@ -611,7 +615,7 @@ async fn window(
         } = service;
         let arena = *arena;
         let station = *station;
-        let served = ring.serve(&EmbassyClock, |view| {
+        let served = ring.serve(&cycles, |view| {
             let tally = |seen: Seen, counts: &mut Counts| match seen {
                 Seen::Foreign => counts.foreign = counts.foreign.saturating_add(1),
                 Seen::Sender { bytes, length, .. } => {
@@ -773,7 +777,9 @@ struct Turns<'a> {
 /// Bring Wi-Fi up, start the ring, then the four cases. Every owner stays
 /// held until the leased host reset.
 async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failure> {
-    let timer = CooperativeTimer::new(EmbassyClock);
+    let cycles = parts.cycles;
+    let cooperative = Cooperative::new(EmbassyClock);
+    let timer = CooperativeTimer::new(&cooperative, cycles);
     let mut platform = ();
     let brought = apart!(bring_up(parts, &timer, &mut platform))?;
     let table = RX_TABLE.take().ok_or((phase::RING, 0))?;
@@ -853,7 +859,7 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
             station,
             sender: &mut sender,
         };
-        let counts = window(&mut service, WAIT_STEP_MS, None).await?;
+        let counts = window(&mut service, cycles, WAIT_STEP_MS, None).await?;
         before.sender = counts.sender;
         before.foreign = before.foreign.saturating_add(counts.foreign);
         waited = waited.saturating_add(WAIT_STEP_MS);
@@ -877,7 +883,7 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
             station,
             sender: &mut sender,
         };
-        window(&mut service, WINDOW_MS, Some(&mut record)).await?
+        window(&mut service, cycles, WINDOW_MS, Some(&mut record)).await?
     };
     counts.record(journal, 1, spares.len());
     for (case, per) in CASES.iter().zip(&record.cases) {
@@ -947,7 +953,7 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
             station,
             sender: &mut sender,
         };
-        window(&mut service, EXIT_MS, None).await?
+        window(&mut service, cycles, EXIT_MS, None).await?
     };
     counts.record(journal, 3, spares.len());
     let r3 = standing.unchanged
@@ -979,12 +985,19 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
                 station,
                 sender: &mut sender,
             };
-            window(&mut service, TURN_MS, None).await?
+            window(&mut service, cycles, TURN_MS, None).await?
         };
         // T1 to T4.
         let (mut access, clocks_on) = turns.access.take().ok_or((phase::RING, 0x40))?;
         let began = EmbassyClock.now();
-        let (reset, parts, place) = stop(held(turns.slot)?, &mut access, &clocks_on, ring, enabled);
+        let (reset, parts, place) = stop(
+            held(turns.slot)?,
+            &mut access,
+            &clocks_on,
+            ring,
+            enabled,
+            cycles,
+        );
         let stopped = micros_since(began);
         let handles = parts.ring.len() + 1 + spares.len();
         // T5: the next start from the cold preparation.
@@ -1022,7 +1035,7 @@ async fn session(parts: SessionParts, journal: &mut Journal) -> Result<(), Failu
                 station,
                 sender: &mut sender,
             };
-            window(&mut service, TURN_MS, None).await?
+            window(&mut service, cycles, TURN_MS, None).await?
         };
         journal.record(
             Kind::Turn,
