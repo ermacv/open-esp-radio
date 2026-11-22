@@ -64,6 +64,7 @@ mod claim_cell;
 mod context_cell;
 mod dma_address;
 mod dma_bytes;
+mod exchange;
 mod execution_context;
 mod frame_len;
 mod handler_cell;
@@ -102,6 +103,7 @@ pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};
 pub use dma_bytes::DmaBytes;
+pub use exchange::{Answered, Answering, Asking, Exchange, Reply};
 #[cfg(any(test, feature = "host-context"))]
 pub use execution_context::HostContext;
 pub use execution_context::{Entered, ExecutionContext, Never};

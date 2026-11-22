@@ -1,6 +1,8 @@
 use core::pin::pin;
 use core::task::{Context, Poll, Waker};
 
+use oer_portable_memory::Answered;
+
 use super::*;
 use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 
@@ -23,70 +25,26 @@ fn poll<F: core::future::Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Outp
 }
 
 #[test]
-fn the_worker_waits_for_a_request_and_its_reply_names_it() {
+fn a_reply_names_its_request_and_encodes_the_answer_under_its_identity() {
     let mut mailbox = Mailbox::<Probes>::new();
-    let (console, mut inbox) = mailbox.split();
-    let mut next = pin!(inbox.next());
-    assert!(poll(next.as_mut()).is_pending());
+    let (mut console, mut inbox) = mailbox.split();
     assert!(
         console
-            .requests
-            .try_send((identity(4), Probes::Test(Probe(ProbeMode::Stall))))
+            .0
+            .hand((identity(4), Probes::Test(Probe(ProbeMode::Stall))))
             .is_ok()
     );
-    let Poll::Ready((Probes::Test(Probe(mode)), reply)) = poll(next.as_mut()) else {
+    let Poll::Ready((Probes::Test(Probe(mode)), reply)) = poll(pin!(inbox.next())) else {
         panic!("the request is handed");
     };
     assert_eq!((mode, reply.identity()), (ProbeMode::Stall, identity(4)));
     reply.answer(&ProbeArmed(mode));
-    let answered = console.answers.try_receive().expect("the answer");
-    assert_eq!(answered.identity, identity(4));
+    let Poll::Ready(answered) = poll(pin!(console.0.answered())) else {
+        panic!("the answer comes back");
+    };
     assert!(matches!(
-        answered.outcome,
-        Outcome::Encoded(ref message, After::Nothing)
+        answered,
+        Answered::Given(Outcome::Encoded(ref message, After::Nothing))
             if message.request_id == 4 && message.session_id == 1 && message.key == ProbeArmed::KEY
-    ));
-}
-
-#[test]
-fn a_dropped_reply_leaves_its_request_owed_and_the_next_request_pays_it() {
-    let mut mailbox = Mailbox::<Probes>::new();
-    let (console, mut inbox) = mailbox.split();
-    assert!(
-        console
-            .requests
-            .try_send((identity(5), Probes::Test(Probe(ProbeMode::Complete))))
-            .is_ok()
-    );
-    let Poll::Ready((_, reply)) = poll(pin!(inbox.next())) else {
-        panic!("the request is handed");
-    };
-    drop(reply);
-    assert!(
-        console.answers.try_receive().is_none(),
-        "nothing is sent on the drop"
-    );
-    let mut next = pin!(inbox.next());
-    assert!(poll(next.as_mut()).is_pending(), "no next request yet");
-    let answered = console.answers.try_receive().expect("the debt is paid");
-    assert_eq!(answered.identity, identity(5));
-    assert!(matches!(answered.outcome, Outcome::Unanswered));
-    assert!(
-        console
-            .requests
-            .try_send((identity(6), Probes::Test(Probe(ProbeMode::Complete))))
-            .is_ok()
-    );
-    let Poll::Ready((_, reply)) = poll(next.as_mut()) else {
-        panic!("the next request is handed");
-    };
-    assert_eq!(reply.identity(), identity(6));
-    reply.answer(&ProbeArmed(ProbeMode::Complete));
-    assert!(matches!(
-        console
-            .answers
-            .try_receive()
-            .map(|answered| answered.outcome),
-        Some(Outcome::Encoded(_, After::Nothing))
     ));
 }

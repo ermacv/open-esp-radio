@@ -33,7 +33,12 @@ of; its state is in the counters:
 The probe speaks the HIL protocol (`console = "hil"`): its console serves
 the agent (`hil/agent`) and the sender's requests
 (`oer-hil-services-radio-pair`); the cases and the verdict are
-[`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s.
+[`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s. As
+the receiver's, its radio work is the radio level's task, private to the
+radio's owner on the application level, which takes each request from the
+agent's mailbox, commands it through the radio's hand-over (`src/radio.rs`)
+and answers with its result. Nothing of the HIL agent is named on level 2
+but the service's request and answer types as data.
 
 | Request | What the probe does |
 |---|---|

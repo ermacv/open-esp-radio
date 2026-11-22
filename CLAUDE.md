@@ -86,6 +86,16 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   is a sum" cannot both hold, the sum holds: the copy is recorded for the
   audit of copies and frames and is removed where the image's reports
   show its cost.
+- **One owner.** A state has one owner, which holds it by `&mut`. A
+  module does not enter another's state: what it needs it asks of the
+  owner and is answered. Counters and data are taken by the one that
+  asks, never pushed into a place several contexts enter. Between
+  contexts that preempt each other the one shared thing is an owner's
+  private hand-over to its own level's task, a primitive of `portable/`
+  in its home; a level's task talks to its owner alone, and the owner is
+  a task of the application's level. A static that several contexts
+  enter behind a lock, a critical section or a claim that can be refused
+  at run time is debt to remove, never a precedent to repeat.
 - **DMA memory.** Memory the hardware reads or writes has three facts, and
   one layer answers each: its place (a fixed address in the chip's DMA
   window, a fact of the link: `portable/memory`), its layout (what the

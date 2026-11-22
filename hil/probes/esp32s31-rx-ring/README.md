@@ -45,6 +45,11 @@ stop is then refused as `Down`. A bring-up that fails leaves only the cold
 snapshot.
 
 The radio work is the radio level's one task (the interrupt executor of
-level 2); the console and the agent run on the application level and hand
-each request over through the agent's mailbox. The radio level puts each
-answer into the console's queue itself, which numbers it as it enters.
+level 2), private to the radio's owner, a task of the application level.
+The console and the agent run on the application level and hand each
+request to the owner through the agent's mailbox; the owner commands the
+radio level's task through the radio's hand-over (`src/radio.rs` of the
+sender, shared by path) and answers with its result. Nothing of the HIL
+agent is named on level 2 but the service's request and answer types as
+data: the radio level's task refuses what it cannot do in its state by its
+result, and the owner relays that answer.

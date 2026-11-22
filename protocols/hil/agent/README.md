@@ -43,8 +43,11 @@ section. Its state is a `Writer` the image places once and lends to
 writes them and its counts. Nobody publishes into it. It writes Hello
 first and answers each base-module request in the step that decoded it.
 
-The image's requests go to its worker through the `mailbox::Mailbox`, two
-places of depth one (`portable/memory`), one each way. `Inbox::next`
+The image's requests go to its worker through the `mailbox::Mailbox`,
+`portable/memory`'s `Exchange` (two places of depth one, one each way)
+with the request's identity and the image's request as its request and
+HIL's outcome as its answer; the console keeps the identity of the request
+in work. `Inbox::next`
 gives each request with its `Reply`, the permit of that request's
 identity, which borrows the inbox: the worker takes no next request
 before it answered, and an answer without a request or under another

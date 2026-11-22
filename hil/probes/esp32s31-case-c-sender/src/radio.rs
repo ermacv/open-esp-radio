@@ -513,3 +513,45 @@ where
     let (parts, place) = RxRing::release(ring, stopped);
     (reset, parts, place)
 }
+
+/// The radio's private hand-over between its owner, a task of the
+/// application's level, and the radio level's task: `portable/memory`'s
+/// exchange, one command in work at a time and its one result. The radio's
+/// end is woken from the level below it, so it names `PriorityWaker`s; the
+/// owner's end ordinary wakers. The composition splits it once: the owner
+/// holds [`Commands`], the radio level's task [`Work`], and nothing else
+/// names them.
+pub(crate) type Handover<Q, A> = oer_portable_memory::Exchange<
+    Q,
+    A,
+    oer_portable_sync::PriorityWaker,
+    oer_portable_memory::AtomicWaker,
+>;
+/// The owner's end of the hand-over.
+pub(crate) type Commands<Q, A> = oer_portable_memory::Asking<
+    'static,
+    Q,
+    A,
+    oer_portable_sync::PriorityWaker,
+    oer_portable_memory::AtomicWaker,
+>;
+/// The radio level's end of the hand-over.
+pub(crate) type Work<Q, A> = oer_portable_memory::Answering<
+    'static,
+    Q,
+    A,
+    oer_portable_sync::PriorityWaker,
+    oer_portable_memory::AtomicWaker,
+>;
+/// The permit of one command's result.
+pub(crate) type Done<'a, A> = oer_portable_memory::Reply<'a, A, oer_portable_memory::AtomicWaker>;
+
+/// The hand-over, for a static of the composition.
+pub(crate) const fn handover<Q, A>() -> Handover<Q, A> {
+    oer_portable_memory::Exchange::with_notifies(
+        oer_portable_sync::PriorityWaker::new(),
+        oer_portable_sync::PriorityWaker::new(),
+        oer_portable_memory::AtomicWaker::new(),
+        oer_portable_memory::AtomicWaker::new(),
+    )
+}

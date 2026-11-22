@@ -69,6 +69,8 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("chips/esp32s31/radio/ieee80211/backend/src/rx/upper.rs", 6),
         ("chips/family/app/src/channel.rs", 3),
         ("hil/images/wifi-station/src/udp.rs", 5),
+        ("hil/probes/esp32s31-case-c-sender/src/radio.rs", 6),
+        ("portable/memory/src/exchange.rs", 13),
         ("portable/memory/src/lib.rs", 1),
         ("portable/memory/src/slot_queue.rs", 9),
         ("portable/memory/src/waking_spsc.rs", 13),
