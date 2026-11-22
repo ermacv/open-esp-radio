@@ -12,7 +12,11 @@ use oer_portable_cooperate::CooperativeTimer as Timer;
 
 type Result =
     core::result::Result<(PhyParamTrackingCompletion, PhyTemperatureOutcome), PhyTargetPortError>;
-pub(super) async fn temperature<D: crate::PhyShortDelay, R: Registers, T: Timer>(
+pub(super) async fn temperature<
+    D: crate::PhyShortDelay,
+    R: Registers,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+>(
     timer: &T,
     mut child: PhyParamTrackingTemperatureTransition<'_>,
     registers: &mut R,

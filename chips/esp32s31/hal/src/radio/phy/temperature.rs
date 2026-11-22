@@ -16,17 +16,17 @@ use oer_chips_esp32s31_pac::{
 pub mod ops;
 
 /// Named minimum settle between asserting SAR-I2C reset and enabling power.
-pub const SAR_I2C_RESET_SETTLE_MICROS: u32 = 1;
+pub const SAR_I2C_RESET_SETTLE: oer_portable_time::settle::SettleLimit =
+    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
+        Some(limit) => limit,
+        None => panic!("the SAR-I2C reset settle lies within the longest a settle may wait"),
+    };
 
 /// Why the physical temperature/SAR-I2C owner could not change epoch.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TemperaturePowerError {
     AlreadyAcquired,
     NotAcquired,
-    /// Reset started but its minimum settle did not complete. Reset is held;
-    /// the route cannot be reused or returned to the neutral root.
-    ResetSettleFailed,
-    Poisoned,
     /// A calibration must restore its fields before the resource is released.
     RestorePending,
 }
@@ -95,22 +95,18 @@ impl Restore {
     fn acquire_with(
         &mut self,
         port: &mut impl TemperaturePort,
-        settle_reset: impl FnOnce() -> bool,
+        settle_reset: impl FnOnce(),
         acquisition: Acquisition,
     ) -> Result<(), TemperaturePowerError> {
         match self {
-            Self::TemperaturePoisoned => return Err(TemperaturePowerError::Poisoned),
             Self::TemperatureIdle => {}
             _ => return Err(TemperaturePowerError::AlreadyAcquired),
         }
-        *self = Self::TemperaturePoisoned;
         if acquisition == Acquisition::Cold {
             port.cold_readout_prefix();
         }
         port.hold_sar_reset();
-        if !settle_reset() {
-            return Err(TemperaturePowerError::ResetSettleFailed);
-        }
+        settle_reset();
         port.power_on_sar();
         port.release_sar_reset();
         port.sensor_clock(LpTsensClkEn::Enabled);
@@ -127,7 +123,6 @@ impl Restore {
     ) -> Result<(), TemperaturePowerError> {
         match self {
             Self::TemperatureIdle => return Err(TemperaturePowerError::NotAcquired),
-            Self::TemperaturePoisoned => return Err(TemperaturePowerError::Poisoned),
             Self::Empty => {}
             _ => return Err(TemperaturePowerError::RestorePending),
         }
@@ -143,7 +138,7 @@ impl Restore {
 /// RF-init action. `settle_reset` completes the named 1 µs hardware settle.
 pub fn initialize(
     registers: &mut impl SharedPhyAccess,
-    settle_reset: impl FnOnce() -> bool,
+    settle_reset: impl FnOnce(),
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
     state
@@ -154,7 +149,7 @@ pub fn initialize(
 /// First acquire after RF close: reset SAR-I2C, then clock/reset/enable TSENS.
 pub fn acquire(
     registers: &mut impl SharedPhyAccess,
-    settle_reset: impl FnOnce() -> bool,
+    settle_reset: impl FnOnce(),
 ) -> Result<(), TemperaturePowerError> {
     let (phy, state) = phy_parts_mut(registers);
     state

@@ -744,8 +744,12 @@ impl PhyDcIqMmioBinding {
     }
 
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
+    pub(crate) fn capture_target<
+        D: crate::executor::wait::PhyShortDelay,
+        K: oer_portable_time::settle::SettleCounter + ?Sized,
+    >(
         self,
+        counter: &K,
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
         let PhyDcIqMmioAction::Configure(request) = self.action else {
@@ -757,9 +761,11 @@ impl PhyDcIqMmioBinding {
             configure_target,
             set_enable_target,
             |_, micros| {
-                D::settle_micros(micros).then_some(()).ok_or(
+                let limit = crate::executor::wait::short_limit::<D>(u64::from(micros)).ok_or(
                     crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-                )
+                )?;
+                D::settle(counter, limit);
+                Ok(())
             },
             sample_readiness_target,
             read_accumulators_target,
@@ -814,8 +820,12 @@ pub struct PhyDcIqReadinessBinding {
 
 impl PhyDcIqReadinessBinding {
     #[cfg(target_arch = "riscv32")]
-    pub(crate) fn capture_target<D: crate::executor::wait::PhyShortDelay>(
+    pub(crate) fn capture_target<
+        D: crate::executor::wait::PhyShortDelay,
+        K: oer_portable_time::settle::SettleCounter + ?Sized,
+    >(
         self,
+        counter: &K,
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> Result<PhyDcIqCompletion, crate::target_executor::PhyTargetPortError> {
         self.capture_with(
@@ -825,9 +835,11 @@ impl PhyDcIqReadinessBinding {
             read_accumulators_target,
             set_enable_target,
             |_, micros| {
-                D::settle_micros(micros).then_some(()).ok_or(
+                let limit = crate::executor::wait::short_limit::<D>(u64::from(micros)).ok_or(
                     crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-                )
+                )?;
+                D::settle(counter, limit);
+                Ok(())
             },
         )
     }

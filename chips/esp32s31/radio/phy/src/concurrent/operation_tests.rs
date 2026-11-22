@@ -39,7 +39,10 @@ impl PhyTargetObserver for () {}
 struct Delay;
 impl PhyShortDelay for Delay {
     const MAX_MICROS: u32 = 0;
-    fn settle_micros(_: u32) -> bool {
+    fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        _: &K,
+        _: oer_portable_time::settle::SettleLimit,
+    ) {
         panic!("no hardware settle in an ownership test")
     }
 }

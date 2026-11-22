@@ -118,7 +118,8 @@ pub(crate) fn complete_memory(
 
 /// Synchronous entry/restoration around the sole correction await. It never
 /// executes a correction action or constructs an always-ready child future.
-pub(super) fn envelope<D: PhyShortDelay>(
+pub(super) fn envelope<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter + ?Sized>(
+    counter: &K,
     child: &mut rfpll::thermal::Transition,
     registers: &mut impl SharedPhyAccess,
     grant: &mut impl super::PhyGrantProtectPort,
@@ -139,9 +140,7 @@ pub(super) fn envelope<D: PhyShortDelay>(
                 Completion::SoftwareControlSelected
             }
             Action::Settle => {
-                if !D::settle_micros(2) {
-                    return Err(PhyTargetPortError::HardwareCapabilityUnavailable);
-                }
+                D::settle(counter, crate::executor::wait::SETTLE_TWO_MICROS);
                 Completion::Settled
             }
             Action::ObserveBoundary => {
@@ -172,7 +171,8 @@ pub async fn track<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer
     request: rfpll::thermal::Request,
 ) -> Result<rfpll::thermal::Outcome, PhyTargetPortError> {
     let mut child = rfpll::thermal::Transition::new(request);
-    envelope::<D>(
+    envelope::<D, _>(
+        clock,
         &mut child,
         registers,
         &mut super::WeakPhyGrantProtect,
@@ -190,7 +190,8 @@ pub async fn track<D: PhyShortDelay, C: oer_portable_cooperate::CooperativeTimer
         child
             .finish_correction()
             .map_err(|_| PhyTargetPortError::UnexpectedBinding)?;
-        envelope::<D>(
+        envelope::<D, _>(
+            clock,
             &mut child,
             registers,
             &mut super::WeakPhyGrantProtect,

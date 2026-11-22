@@ -63,7 +63,9 @@ use oer_chips_esp32s31_hal::system::owner::SharedPhyAccess;
 /// bounds completion; no executor edge exists inside this transaction.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn force_pbus_direct<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn force_pbus_direct<
+    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     transaction: crate::analog::pbus::PhyPbusForceTest,
@@ -87,7 +89,9 @@ pub(crate) fn force_pbus_direct<C: oer_portable_time::Clock + ?Sized>(
 /// transition or an async completion for each busy observation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn read_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn read_i2c_direct<
+    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     address: oer_chips_esp32s31_hal::radio::phy::i2c::Address,
@@ -110,7 +114,9 @@ pub(crate) fn read_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
 /// direct busy polling as the vendor leaf.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn write_i2c_direct<
+    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     address: oer_chips_esp32s31_hal::radio::phy::i2c::Address,
@@ -140,7 +146,9 @@ pub(crate) fn write_i2c_direct<C: oer_portable_time::Clock + ?Sized>(
 /// vendor-shaped operation.
 #[cfg(target_arch = "riscv32")]
 #[inline]
-pub(crate) fn write_i2c_field_direct<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn write_i2c_field_direct<
+    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     field: oer_chips_esp32s31_hal::radio::phy::i2c::Field,
@@ -158,7 +166,9 @@ pub(crate) fn write_i2c_field_direct<C: oer_portable_time::Clock + ?Sized>(
 /// Execute the four masked analog-I²C writes of complete ROM
 /// `phy_reset_ckgen` within named 20 µs completion settles.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn reset_clock_generator_direct<C: oer_portable_time::Clock + ?Sized>(
+pub(crate) fn reset_clock_generator_direct<
+    C: oer_portable_time::Clock + ?Sized + oer_portable_time::settle::SettleCounter,
+>(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<(), PhyTargetPortError> {
@@ -210,33 +220,36 @@ impl DirectOperationBudget {
     }
 }
 
-/// Production PHY delay provider using the CPU rate adopted by its clock owner.
+/// Production PHY delay provider: a named settle on the adopted rate's
+/// counter.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RomShortDelay;
 
 impl RomShortDelay {
-    pub const MAX_MICROS: u32 = oer_chips_family_radio_phy::settle::MAX_MICROS;
+    pub const MAX_MICROS: u32 = oer_portable_time::settle::SettleLimit::MAX.as_micros() as u32;
 
-    pub fn settle_micros(micros: u32) -> bool {
-        oer_chips_family_radio_phy::settle::settle_micros(
-            &mut oer_chips_esp32s31_hal::radio::phy::settle_clock::SettleClock,
-            micros,
-        )
+    pub fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        counter: &K,
+        limit: oer_portable_time::settle::SettleLimit,
+    ) {
+        oer_portable_time::settle::hold(oer_portable_time::settle::Settle::new(limit, counter));
     }
 }
 
 impl PhyShortDelay for crate::RomShortDelay {
     const MAX_MICROS: u32 = crate::RomShortDelay::MAX_MICROS;
 
-    fn settle_micros(micros: u32) -> bool {
-        crate::RomShortDelay::settle_micros(micros)
+    fn settle<K: oer_portable_time::settle::SettleCounter + ?Sized>(
+        counter: &K,
+        limit: oer_portable_time::settle::SettleLimit,
+    ) {
+        crate::RomShortDelay::settle(counter, limit);
     }
 }
 
 impl From<crate::executor::wait::PhyWaitRefused> for PhyTargetPortError {
     fn from(refused: crate::executor::wait::PhyWaitRefused) -> Self {
         match refused {
-            crate::executor::wait::PhyWaitRefused::Settle => Self::HardwareCapabilityUnavailable,
             crate::executor::wait::PhyWaitRefused::Deadline => Self::DeadlineOverflow,
         }
     }
@@ -278,7 +291,7 @@ impl oer_portable_diagnostics::DiagnosticPath for PhyTargetPortError {
 /// error. Applications must not reinterpret a write action or select another
 /// polling bound at this boundary.
 pub async fn complete_final_i2c<D: PhyShortDelay>(
-    timer: &impl Timer,
+    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
     mut binding: PhyRegisterFinalI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyRegisterCompletion, PhyTargetPortError> {
@@ -435,7 +448,7 @@ define_i2c_executor!(
     PhyTxPowerCompletion
 );
 pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
-    timer: &impl Timer,
+    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
     mut binding: PhyBluetoothI2cBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<PhyBluetoothTxPowerCompletion, PhyTargetPortError> {
@@ -466,7 +479,7 @@ pub async fn complete_bluetooth_i2c<D: PhyShortDelay>(
 }
 
 pub async fn complete_i2c_configuration<D: PhyShortDelay>(
-    timer: &impl Timer,
+    timer: &(impl Timer + oer_portable_time::settle::SettleCounter),
     mut binding: PhyColdI2cConfigurationBinding,
     registers: &mut impl SharedPhyAccess,
 ) -> Result<crate::analog::i2c::PhyRfInitPrefixCompletion, PhyTargetPortError> {

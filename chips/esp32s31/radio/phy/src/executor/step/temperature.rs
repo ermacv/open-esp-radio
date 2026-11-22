@@ -25,7 +25,12 @@ impl<F: Future<Output = Result<PhyTemperatureOutcome, Failure>>> Future for Samp
         self.project().inner.poll(cx)
     }
 }
-pub(crate) fn sample<'a, D: crate::executor::wait::PhyShortDelay + 'a, R: Registers, T: Timer>(
+pub(crate) fn sample<
+    'a,
+    D: crate::executor::wait::PhyShortDelay + 'a,
+    R: Registers,
+    T: Timer + oer_portable_time::settle::SettleCounter,
+>(
     transition: &'a mut PhyTemperatureTransition,
     registers: &'a mut R,
     timer: &'a T,

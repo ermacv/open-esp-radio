@@ -138,7 +138,7 @@ impl PhyDomainRegisterFailure {
 /// A fresh registration epoch begins on `registers` before the first edge;
 /// the returned epoch is the one the completed state must describe.
 pub(super) async fn execute_registration<P, R, D, O>(
-    timer: &impl oer_portable_cooperate::CooperativeTimer,
+    timer: &(impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter),
     transition: &mut PhyRegisterTransition,
     platform: &mut P,
     registers: &mut R,
@@ -186,7 +186,9 @@ impl PhyDomain {
         reason = "the sealed physical routes use the private shared engine"
     )]
     pub fn register<'a, P, R, D, O>(
-        timer: &'a impl oer_portable_cooperate::CooperativeTimer,
+        timer: &'a (
+                impl oer_portable_cooperate::CooperativeTimer + oer_portable_time::settle::SettleCounter
+            ),
         platform: &'a mut P,
         registers: &'a mut R,
         config: PhyRegisterConfig,

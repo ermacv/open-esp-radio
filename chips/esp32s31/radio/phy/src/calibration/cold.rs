@@ -871,7 +871,7 @@ impl PhyColdMmioBinding {
     pub fn execute_target<R: oer_chips_esp32s31_hal::system::owner::SharedPhyAccess>(
         self,
         registers: &mut R,
-        settle_temperature_reset: impl FnOnce() -> bool,
+        settle_temperature_reset: impl FnOnce(),
     ) -> Result<PhyRfInitPrefixCompletion, PhyColdLoweringError> {
         match self.outer_action {
             PhyRfInitPrefixAction::ConfigureFeBbClock => {

@@ -39,7 +39,7 @@ pub(crate) fn run_param_tx_power<
     'a,
     D: crate::executor::wait::PhyShortDelay + 'a,
     R: Registers,
-    T: Timer,
+    T: Timer + oer_portable_time::settle::SettleCounter,
 >(
     timer: &'a T,
     child: PhyParamTrackingTxPowerTransition<'a>,
@@ -125,7 +125,10 @@ fn prepare(action: Action, state: &PhyState, gain: &mut Cursor) -> Result<Work, 
 /// One complete gain record, BBPLL edge or full force/settle pair per poll.
 /// Dispatch and acknowledgement are shared, independent of the clock type.
 #[inline(never)]
-pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_time::Clock>(
+pub(super) fn advance<
+    D: crate::executor::wait::PhyShortDelay,
+    C: oer_portable_time::Clock + oer_portable_time::settle::SettleCounter,
+>(
     io: &mut Io<'_>,
     child: &mut PhyParamTrackingTxPowerTransition<'_>,
     gain: &mut Cursor,
@@ -138,7 +141,7 @@ pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_t
     match prepare(action, state, gain)? {
         Work::Complete => return Ok(Step::Complete),
         Work::Control(binding) => {
-            execute::<D>(io, transition, binding)?;
+            execute::<D, _>(io, clock, transition, binding)?;
             let next = transition.action();
             if matches!(
                 next,
@@ -146,7 +149,7 @@ pub(super) fn advance<D: crate::executor::wait::PhyShortDelay, C: oer_portable_t
             ) {
                 let binding = crate::tracking::power::ControlBinding::lower(next)
                     .map_err(|_| Failure::Binding)?;
-                execute::<D>(io, transition, binding)?;
+                execute::<D, _>(io, clock, transition, binding)?;
             }
         }
         Work::Lower(bank) => {
@@ -219,20 +222,25 @@ fn gain_record(
 }
 
 #[inline(never)]
-fn execute<D: crate::executor::wait::PhyShortDelay>(
+fn execute<
+    D: crate::executor::wait::PhyShortDelay,
+    K: oer_portable_time::settle::SettleCounter + ?Sized,
+>(
     io: &mut Io<'_>,
+    counter: &K,
     transition: &mut PhyTxPowerTrackingTransition,
     binding: crate::tracking::power::ControlBinding,
 ) -> Result<(), Failure> {
-    if let Some(micros) = binding.delay_micros()
-        && !D::settle_micros(micros)
-    {
-        #[cfg(target_arch = "riscv32")]
-        return Err(Failure::Target(
-            crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
-        ));
-        #[cfg(not(target_arch = "riscv32"))]
-        return Err(Failure::Binding);
+    if let Some(micros) = binding.delay_micros() {
+        let Some(limit) = crate::executor::wait::short_limit::<D>(u64::from(micros)) else {
+            #[cfg(target_arch = "riscv32")]
+            return Err(Failure::Target(
+                crate::target_executor::PhyTargetPortError::HardwareCapabilityUnavailable,
+            ));
+            #[cfg(not(target_arch = "riscv32"))]
+            return Err(Failure::Binding);
+        };
+        D::settle(counter, limit);
     }
     let completion = io.power(binding)?;
     transition.advance(completion).map_err(|_| Failure::Binding)
