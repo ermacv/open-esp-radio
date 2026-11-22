@@ -6,7 +6,6 @@ use oer_chips_family_platform_interrupt_table::{
     Controller, Entry, InterruptSource, Router, Table,
 };
 use oer_chips_family_platform_port::AlarmPart;
-use oer_portable_embassy_time::EmbassyClock;
 
 /// Associated interrupt parts are supplied by the same platform that owns
 /// their construction and service, rather than named by an image's HAL edge.
@@ -69,10 +68,13 @@ impl DeviceIdentity {
 }
 
 /// The unique entropy owner, which draws the image's seeds at boot.
-pub struct Entropy(hw::entropy::Entropy<EmbassyClock>);
+pub struct Entropy(hw::entropy::Entropy<oer_chips_esp32s31_hal::system::cycles::CycleCounter>);
 impl Entropy {
-    pub fn new(registers: hw::entropy::EntropyRegisters, clock: EmbassyClock) -> Self {
-        Self(hw::entropy::Entropy::new(registers, clock))
+    pub fn new(
+        registers: hw::entropy::EntropyRegisters,
+        counter: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    ) -> Self {
+        Self(hw::entropy::Entropy::new(registers, counter))
     }
     pub fn is_healthy(&self) -> bool {
         self.0.status().is_healthy()
@@ -126,7 +128,7 @@ where
 #[cfg(oer_trace)]
 pub fn trace_now() -> u64 {
     use oer_portable_time::Clock;
-    EmbassyClock.now().as_micros()
+    oer_portable_embassy_time::EmbassyClock.now().as_micros()
 }
 /// The image chooses this terminal path for an unanswered owned request.
 pub fn reset_request<T>(error: oer_portable_memory::RequestError) -> T {

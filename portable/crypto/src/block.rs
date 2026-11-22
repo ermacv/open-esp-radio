@@ -15,8 +15,6 @@ pub enum BlockError {
     Timeout { observation: u32 },
     /// A status outside the selected operation's domain was observed.
     InvalidState { observation: u32 },
-    /// The monotonic clock cannot represent the operation's bound.
-    TimeOverflow,
 }
 
 /// A keyed block cipher: one block in place per call, finished on return.

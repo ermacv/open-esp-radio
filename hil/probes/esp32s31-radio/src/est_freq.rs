@@ -2,6 +2,7 @@
 #![cfg(target_arch = "riscv32")]
 #![deny(unsafe_code)]
 use core::sync::atomic::{AtomicU32, Ordering};
+use oer_chips_esp32s31_hal::system::cycles::CycleCounter;
 use oer_chips_esp32s31_hal::{
     radio::phy::{clock, frequency as freq, iq_estimator as iq, pbus, rx_dco},
     system::owner::SharedPhyAccess,
@@ -64,8 +65,9 @@ oer_tools_probe_macros::probe! {
         let result = crate::session::with(|session| {
             if !session.calibrated { return Err(13); }
             if session.measurement_clocks(crate::session::ClockModule::Enable).is_err() { return Err(2); }
+            let cycles = session.cycles;
             let result = session.phy(|phy| {
-                if selection == 151 { estimator(phy) } else { frequency(phy) }
+                if selection == 151 { estimator(phy, cycles) } else { frequency(phy, cycles) }
             });
             if session.measurement_clocks(crate::session::ClockModule::Disable).is_err() { return Err(3); }
             result
@@ -77,14 +79,29 @@ oer_tools_probe_macros::probe! {
     }
 }
 
-fn settle() -> Result<(), u32> {
-    if RomShortDelay::settle_micros(1) {
-        Ok(())
-    } else {
-        Err(5)
-    }
+/// The vendor's 1 µs settle.
+const ONE_MICRO: oer_portable_time::settle::SettleLimit =
+    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1)) {
+        Some(limit) => limit,
+        None => panic!("one microsecond lies within the longest a settle may wait"),
+    };
+/// The vendor's 2 µs settle.
+const TWO_MICROS: oer_portable_time::settle::SettleLimit =
+    match oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(2)) {
+        Some(limit) => limit,
+        None => panic!("two microseconds lie within the longest a settle may wait"),
+    };
+
+fn settle(cycles: CycleCounter) {
+    RomShortDelay::settle(&cycles, ONE_MICRO);
 }
-fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> Result<(), u32> {
+fn force(
+    phy: &mut impl SharedPhyAccess,
+    cycles: CycleCounter,
+    selector: u8,
+    path: u8,
+    value: u16,
+) -> Result<(), u32> {
     pbus::start_force_test(phy, selector, path, value);
     for _ in 0..20 {
         if oer_chips_family_radio_phy::pbus::try_finish_force_test(
@@ -94,7 +111,7 @@ fn force(phy: &mut impl SharedPhyAccess, selector: u8, path: u8, value: u16) -> 
         {
             return Ok(());
         }
-        settle()?;
+        settle(cycles);
     }
     oer_chips_family_radio_phy::pbus::try_finish_force_test(
         &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
@@ -115,6 +132,7 @@ fn pairs(phy: &mut impl SharedPhyAccess, tag: u32) {
 }
 fn estimator(
     phy: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyContext,
+    cycles: CycleCounter,
 ) -> Result<(), u32> {
     let saved = iq::capture_configuration(phy);
     let original = saved.fields();
@@ -157,7 +175,7 @@ fn estimator(
             (1, 1, 0x38),
             (1, 1, 0x189),
         ] {
-            force(phy, selector, path, value)?;
+            force(phy, cycles, selector, path, value)?;
         }
         rx_dco::prepare_control_restore(phy).map_err(|_| 8_u32)
     })();
@@ -170,7 +188,7 @@ fn estimator(
                     phy,
                     oer_chips_esp32s31_hal::types::PhyEstimatorStart::Enabled,
                 );
-                settle()?;
+                settle(cycles);
                 iq::set_measurement_enabled(
                     phy,
                     oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Enabled,
@@ -186,7 +204,7 @@ fn estimator(
                     phy,
                     oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled,
                 );
-                settle()?;
+                settle(cycles);
                 iq::set_start_enabled(
                     phy,
                     oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled,
@@ -210,7 +228,7 @@ fn estimator(
         phy,
         oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled,
     );
-    let delay_result = settle();
+    settle(cycles);
     iq::set_start_enabled(
         phy,
         oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled,
@@ -237,7 +255,7 @@ fn estimator(
         if !bus_usable || cleanup.is_err() {
             break;
         }
-        cleanup = force(phy, selector, path, 0);
+        cleanup = force(phy, cycles, selector, path, 0);
     }
     if bus_usable
         && cleanup.is_ok()
@@ -245,9 +263,9 @@ fn estimator(
             &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(phy),
         )
     {
-        cleanup = cleanup.and(settle());
+        settle(cycles);
         oer_chips_esp32s31_hal::radio::phy::agc::configure_pbus_work_mode_pulse(phy);
-        cleanup = cleanup.and(settle());
+        settle(cycles);
         oer_chips_esp32s31_hal::radio::phy::agc::clear_pbus_work_mode_pulse(phy);
     }
     if calibration_clock {
@@ -255,14 +273,11 @@ fn estimator(
     } else {
         phy.disable_phy_calibration_clock();
     }
-    result
-        .and(delay_result)
-        .and(cleanup)
-        .and(if restored == original {
-            Ok(())
-        } else {
-            Err(14)
-        })
+    result.and(cleanup).and(if restored == original {
+        Ok(())
+    } else {
+        Err(14)
+    })
 }
 fn observation(phy: &mut impl SharedPhyAccess, tag: u32) -> Result<(), u32> {
     let Some(value) = freq::observe(phy) else {
@@ -282,7 +297,7 @@ fn observation(phy: &mut impl SharedPhyAccess, tag: u32) -> Result<(), u32> {
     );
     Ok(())
 }
-fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
+fn frequency(phy: &mut impl SharedPhyAccess, cycles: CycleCounter) -> Result<(), u32> {
     const LOW: freq::FrequencyMemoryAddress = match freq::FrequencyMemoryAddress::new(0) {
         Some(address) => address,
         None => panic!("the diagnostic address fits eleven bits"),
@@ -308,9 +323,7 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
             phy,
             oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software,
         );
-        if !RomShortDelay::settle_micros(2) {
-            return Err(5);
-        }
+        RomShortDelay::settle(&cycles, TWO_MICROS);
         observation(phy, 0x1522)?;
         // SOURCE: PhyFrequencyI2cTransition's final descriptor initializes
         // address 0 with the BBTOP03 command in a complete cold registration.

@@ -33,6 +33,8 @@ pub(crate) struct Session {
     _clocks_on: WifiClocksOn,
     /// The platform clock owner.
     _clocks: ChipClocks,
+    /// The settle counter at the adopted CPU rate.
+    pub(crate) cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
 }
 
 static SESSION: ClaimCell<Session> = ClaimCell::new();
@@ -79,6 +81,7 @@ pub(crate) fn init(
     let runtime = platform.hardware;
     let transaction_identity = identity();
     let clocks = runtime.clocks;
+    let cycles = runtime.cycles;
     let (radio, partitions) = runtime
         .radio
         .split::<ChipClocks, _>(ConcurrentPhy::new(), transaction_identity)
@@ -87,7 +90,7 @@ pub(crate) fn init(
             let _owners = failure;
             match report(fault) {}
         });
-    let session = match powered(radio, partitions.wifi, clocks) {
+    let session = match powered(radio, partitions.wifi, clocks, cycles) {
         Ok(session) => session,
         Err(reason) => return reason,
     };
@@ -98,6 +101,7 @@ fn powered(
     mut radio: RadioDomain<ChipClocks, ConcurrentPhy>,
     wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
     clocks: ChipClocks,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
 ) -> Result<Session, u32> {
     let (cold, walker) = WifiCold::from_partition(wifi);
     let Ok((powered, power)) = cold.power_up(&mut radio, &clocks) else {
@@ -117,6 +121,7 @@ fn powered(
         _power: power,
         _clocks_on: clocks_on,
         _clocks: clocks,
+        cycles,
     })
 }
 
@@ -131,6 +136,7 @@ pub(crate) async fn calibrated(
     clocks: ChipClocks,
     identity: oer_chips_esp32s31_radio_phy::PhyCalibrationIdentity,
     timer: &impl oer_portable_cooperate::CooperativeTimer,
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
     transaction_identity: oer_chips_esp32s31_hal::radio::domain::transaction::PhyIdentity,
     report: impl FnOnce(
         oer_chips_esp32s31_hal::radio::domain::transaction::Fault,
@@ -150,10 +156,11 @@ pub(crate) async fn calibrated(
         return REGISTRATION_PLACE;
     };
     let mut port = ();
+    let timer = oer_chips_esp32s31_radio_phy::executor::wait::PhyTimer::new(timer, cycles);
     let (radio, registration) = place
         .future(|| {
             register_concurrent_phy::<_, (), RomShortDelay, _>(
-                timer,
+                &timer,
                 radio,
                 &mut port,
                 &clocks,
@@ -165,7 +172,7 @@ pub(crate) async fn calibrated(
     if registration.is_err() {
         return REGISTRATION;
     }
-    match powered(radio, partitions.wifi, clocks) {
+    match powered(radio, partitions.wifi, clocks, cycles) {
         Ok(mut session) => {
             session.calibrated = true;
             install(session)

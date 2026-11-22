@@ -58,8 +58,6 @@ pub enum UnwrapError {
     EngineTimeout { observation: u32 },
     /// The engine observed a status outside the operation's domain.
     EngineInvalidState { observation: u32 },
-    /// The engine's clock cannot represent its bound.
-    EngineTimeOverflow,
 }
 
 impl From<KeyUnwrapError> for UnwrapError {
@@ -73,7 +71,6 @@ impl From<KeyUnwrapError> for UnwrapError {
             KeyUnwrapError::Engine(BlockError::InvalidState { observation }) => {
                 Self::EngineInvalidState { observation }
             }
-            KeyUnwrapError::Engine(BlockError::TimeOverflow) => Self::EngineTimeOverflow,
         }
     }
 }

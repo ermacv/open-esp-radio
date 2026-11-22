@@ -39,7 +39,7 @@ oer_chips_family_platform_executor::tasks! {
     /// The boot hart's tasks.
     Tasks: Executor<Esp32s31, 0> {
         rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        measure(aes: InterruptingAes) = measure;
+        measure(aes: InterruptingAes, cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter) = measure;
     }
 }
 
@@ -77,7 +77,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     let Some(root) = Root::take() else {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
-    let ((timer, software, watchdogs, aes), _psram, mut adopted) =
+    let ((timer, software, watchdogs, aes, cycles), _psram, mut adopted) =
         match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
             handoff,
             root.into_runtime(),
@@ -90,6 +90,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
                     hardware.software_interrupts,
                     hardware.watchdogs,
                     hardware.aes,
+                    hardware.cycles,
                 )
             },
         ) {
@@ -126,7 +127,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     match executor
         .run(&hart, &mut router, interrupts.wake, software.irq0, (), (), move |spawner| {
             if Tasks::rtc_watchdog(spawner, watchdog).is_err()
-                || Tasks::measure(spawner, aes).is_err()
+                || Tasks::measure(spawner, aes, cycles).is_err()
             {
                 fail(oer_portable_diagnostics::name!("task-start"; 32));
             }
@@ -137,7 +138,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
 
 /// Every case, in order, then the verdict: every hardware result equals the
 /// software one.
-async fn measure(mut aes: InterruptingAes) {
+async fn measure(mut aes: InterruptingAes, cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter) {
     let mut agree = true;
     calibrate().await;
     software_cases().await;
@@ -179,7 +180,7 @@ async fn measure(mut aes: InterruptingAes) {
             agree = false;
         }
     }
-    agree &= driver_mode(aes).await;
+    agree &= driver_mode(aes, cycles).await;
     text(if agree {
         b"OER-RESULT: pass aes-timing\r\n"
     } else {
@@ -288,8 +289,8 @@ async fn hardware_cases(aes: &mut InterruptingAes, wait: Wait, mode: &str) -> bo
 /// The AES driver's engine (`oer-chips-esp32s31-drivers-aes`: each block waited for on
 /// `STATE` within its named settle on the executors' clock), unwrapping in
 /// place as the Wi-Fi station does in its step.
-async fn driver_mode(aes: InterruptingAes) -> bool {
-    let mut engine = oer_chips_esp32s31_drivers_aes::AesBlocks::new(aes, EmbassyClock);
+async fn driver_mode(aes: InterruptingAes, cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter) -> bool {
+    let mut engine = oer_chips_esp32s31_drivers_aes::AesBlocks::new(aes, cycles);
     let (stats, mut agree) = driver_block_case(&mut engine);
     report("driver", "block", 16, &stats);
     pause().await;

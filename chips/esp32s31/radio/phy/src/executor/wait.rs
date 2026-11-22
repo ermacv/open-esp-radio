@@ -189,6 +189,50 @@ pub trait PhyShortDelay {
     fn settle<K: SettleCounter + ?Sized>(counter: &K, limit: SettleLimit);
 }
 
+/// The PHY's timer beside its settle counter: what an executor gives the
+/// PHY's operations, so that a short settle counts cycles at the adopted CPU
+/// rate and every other wait ends on the timer.
+#[derive(Clone, Copy, Debug)]
+pub struct PhyTimer<'t, T: ?Sized, K> {
+    timer: &'t T,
+    counter: K,
+}
+
+impl<'t, T: ?Sized, K> PhyTimer<'t, T, K> {
+    pub const fn new(timer: &'t T, counter: K) -> Self {
+        Self { timer, counter }
+    }
+}
+
+impl<T: oer_portable_time::Clock + ?Sized, K> oer_portable_time::Clock for PhyTimer<'_, T, K> {
+    fn now(&self) -> oer_portable_time::Instant {
+        self.timer.now()
+    }
+}
+
+impl<T: Timer + ?Sized, K> Timer for PhyTimer<'_, T, K> {
+    fn wait_until(&self, deadline: oer_portable_time::Instant) -> impl Future<Output = ()> {
+        self.timer.wait_until(deadline)
+    }
+}
+
+impl<T: oer_portable_cooperate::CooperativeTimer + ?Sized, K>
+    oer_portable_cooperate::CooperativeTimer for PhyTimer<'_, T, K>
+{
+    fn should_yield(&self) -> bool {
+        self.timer.should_yield()
+    }
+}
+
+impl<T: ?Sized, K: SettleCounter> SettleCounter for PhyTimer<'_, T, K> {
+    fn cycles(&self, limit: SettleLimit) -> u32 {
+        self.counter.cycles(limit)
+    }
+    fn sample(&self) -> u32 {
+        self.counter.sample()
+    }
+}
+
 /// The vendor's one-microsecond settle.
 pub(crate) const SETTLE_ONE_MICRO: SettleLimit = match SettleLimit::new(Duration::from_micros(1)) {
     Some(limit) => limit,
