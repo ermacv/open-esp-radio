@@ -71,7 +71,8 @@ pub struct Records {
 /// as its post-mortem. Never returns once the answer is written.
 ///
 /// # Errors
-/// `console_fault` when the console could not confirm the write: its
+/// `console_fault` when the answer could not be built (nothing was queued)
+/// or the console could not confirm the write: its
 /// barrier's fan-out ([`oer_protocols_hil_agent::console::progress::ReceiverLimit`])
 /// is exhausted, which its contract makes a terminal fault. The image does
 /// not trap; it ends with the error.
@@ -80,10 +81,13 @@ pub async fn answer_then_trap<M: Message, E>(
     body: &M,
     console_fault: E,
 ) -> Result<Infallible, E> {
-    let sequence = CONSOLE
+    let Ok(entered) = CONSOLE
         .publish_reliably(identity.session_id, identity.request_id, body)
-        .await;
-    match CONSOLE.written(sequence).await {
+        .await
+    else {
+        return Err(console_fault);
+    };
+    match CONSOLE.written(entered).await {
         Ok(()) => oer_portable_riscv::illegal_instruction(),
         Err(_limit) => Err(console_fault),
     }

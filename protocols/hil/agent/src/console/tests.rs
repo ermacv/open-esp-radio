@@ -205,7 +205,9 @@ fn the_image_serves_its_own_requests_and_publishes_their_replies() {
         &host,
         |request, Probe(mode)| {
             assert_eq!(request.request_id, 9);
-            console.publish(0, request.request_id, &ProbeArmed(mode));
+            console
+                .publish(0, request.request_id, &ProbeArmed(mode))
+                .expect("room for the reply");
         },
         |host| host.frames().len() == 2,
     );
@@ -239,7 +241,7 @@ fn hello_leads_the_boot_although_the_image_published_first() {
     console.start(BOOT);
     assert_eq!(
         console.publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
-        Some(1)
+        Ok(Entered(0))
     );
     run_until(
         console,
@@ -257,17 +259,17 @@ fn a_full_queue_drops_and_counts_instead_of_blocking() {
     for request in 0..8 {
         assert_eq!(
             console.publish(0, request, &GetBootStatus),
-            Some(request + 1)
+            Ok(Entered(request))
         );
     }
-    assert_eq!(console.publish(0, 8, &GetBootStatus), None);
+    assert_eq!(console.publish(0, 8, &GetBootStatus), Err(Dropped));
     assert_eq!(console.link_health().unwrap().tx_dropped, 1);
 }
 
-/// The messages in the queue, in its order: each one's request and sequence.
-fn queued(console: &TestConsole) -> Vec<(u32, u32)> {
+/// The requests of the messages in the queue, in its order.
+fn queued(console: &TestConsole) -> Vec<u32> {
     core::iter::from_fn(|| console.messages.try_receive().ok())
-        .map(|message| (message.request_id, message.message_sequence))
+        .map(|message| message.request_id)
         .collect()
 }
 
@@ -277,27 +279,27 @@ const IMMEDIATE: u32 = 100;
 const WAITING: u32 = 200;
 
 #[test]
-fn two_producers_interleaved_at_every_point_leave_the_queue_in_their_numbers_order() {
+fn the_writer_numbers_the_messages_in_the_queue_s_order() {
     use core::task::{Context, Poll, Waker};
-    const EACH: u32 = 4;
-    // Every order of the two producers' four messages each: a bit set is
-    // the immediate producer's turn (a higher level), clear the waiting
-    // producer's, whose future is polled once before and once after each
-    // of the other's turns.
+    const EACH: u32 = 3;
+    // Every order of the two producers' messages: a bit set is the
+    // immediate producer's turn (a higher level), clear the waiting one's.
     for order in 0_u32..(1 << (2 * EACH)) {
         if order.count_ones() != EACH {
             continue;
         }
         let console = console();
+        let host = Host::default();
         console.start(BOOT);
         let (mut immediate, mut waiting) = (0, 0);
         let mut context = Context::from_waker(Waker::noop());
+        let mut entered = Vec::new();
         for turn in 0..2 * EACH {
             if order & (1 << turn) != 0 {
-                assert!(
+                entered.push(
                     console
-                        .publish(0, IMMEDIATE + immediate, &GetBootStatus)
-                        .is_some()
+                        .publish(0, IMMEDIATE + immediate, &ProbeArmed(ProbeMode::Complete))
+                        .expect("room"),
                 );
                 immediate += 1;
             } else {
@@ -306,24 +308,35 @@ fn two_producers_interleaved_at_every_point_leave_the_queue_in_their_numbers_ord
                     WAITING + waiting,
                     &ProbeArmed(ProbeMode::Complete)
                 ));
-                assert!(matches!(
-                    publishing.as_mut().poll(&mut context),
-                    Poll::Ready(_)
-                ));
+                let Poll::Ready(Ok(place)) = publishing.as_mut().poll(&mut context) else {
+                    panic!("room for the message");
+                };
+                entered.push(place);
                 waiting += 1;
             }
         }
-        let queued = queued(console);
-        let sequences: Vec<u32> = queued.iter().map(|(_, sequence)| *sequence).collect();
         assert_eq!(
-            sequences,
-            (1..=2 * EACH).collect::<Vec<_>>(),
-            "order {order:08b}: the queue's order is the numbers'"
+            entered,
+            (0..2 * EACH).map(Entered).collect::<Vec<_>>(),
+            "order {order:06b}: each place its entry's"
+        );
+        run_until(
+            console,
+            &host,
+            |_, _| unreachable!(),
+            |host| host.frames().len() == 1 + 2 * EACH as usize,
+        );
+        let frames = host.frames();
+        let numbers: Vec<u32> = frames.iter().map(|(_, sequence, _)| *sequence).collect();
+        assert_eq!(
+            numbers,
+            (0..=2 * EACH).collect::<Vec<_>>(),
+            "Hello, then the queue's order"
         );
         for first in [IMMEDIATE, WAITING] {
-            let own: Vec<u32> = queued
+            let own: Vec<u32> = frames
                 .iter()
-                .map(|(request, _)| *request)
+                .map(|(request, ..)| *request)
                 .filter(|request| (first..first + EACH).contains(request))
                 .collect();
             assert_eq!(own, (first..first + EACH).collect::<Vec<_>>());
@@ -332,14 +345,14 @@ fn two_producers_interleaved_at_every_point_leave_the_queue_in_their_numbers_ord
 }
 
 #[test]
-fn a_producer_that_waits_for_room_takes_its_number_after_the_wait() {
+fn a_producer_that_waits_for_room_enters_after_the_room_and_holds_no_number() {
     use core::task::{Context, Poll, Waker};
     let console = console();
     console.start(BOOT);
     for request in 0..8 {
         assert_eq!(
             console.publish(0, IMMEDIATE + request, &GetBootStatus),
-            Some(request + 1)
+            Ok(Entered(request))
         );
     }
     let mut context = Context::from_waker(Waker::noop());
@@ -347,37 +360,29 @@ fn a_producer_that_waits_for_room_takes_its_number_after_the_wait() {
         core::pin::pin!(console.publish_reliably(0, WAITING, &ProbeArmed(ProbeMode::Complete)));
     assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
     // Room comes, and a higher level takes it before the waiting producer
-    // runs: the waiting one waits again, holding no number.
+    // runs: the waiting one waits again.
+    assert!(console.messages.try_receive().is_ok());
     assert_eq!(
-        console
-            .messages
-            .try_receive()
-            .ok()
-            .map(|m| m.message_sequence),
-        Some(1)
+        console.publish(0, IMMEDIATE + 8, &GetBootStatus),
+        Ok(Entered(8))
     );
-    assert_eq!(console.publish(0, IMMEDIATE + 8, &GetBootStatus), Some(9));
     assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    // While it waits, a message lost to the full queue takes its number.
-    assert_eq!(console.publish(0, IMMEDIATE + 9, &GetBootStatus), None);
+    // While it waits, a message lost to the full queue spends no place.
+    assert_eq!(
+        console.publish(0, IMMEDIATE + 9, &GetBootStatus),
+        Err(Dropped)
+    );
     assert_eq!(console.link_health().unwrap().tx_dropped, 1);
+    assert!(console.messages.try_receive().is_ok());
     assert_eq!(
-        console
-            .messages
-            .try_receive()
-            .ok()
-            .map(|m| m.message_sequence),
-        Some(2)
+        waiting.as_mut().poll(&mut context),
+        Poll::Ready(Ok(Entered(9)))
     );
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Ready(11));
-    let queued = queued(console);
     assert_eq!(
-        queued.last(),
-        Some(&(WAITING, 11)),
-        "after the wait, after the loss"
+        queued(console),
+        [102, 103, 104, 105, 106, 107, 108, WAITING],
+        "after the room, behind the higher level's"
     );
-    let sequences: Vec<u32> = queued.iter().map(|(_, sequence)| *sequence).collect();
-    assert!(sequences.is_sorted(), "{sequences:?}");
 }
 
 fn rearm(step: u32) -> Note<'static> {
@@ -565,7 +570,8 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
 
     let console = console();
     console.start(BOOT);
-    let sequence = block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
+    let entered = block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
+        .expect("the reply is built");
     let message = console.messages.try_receive().expect("queued reply");
     let host = Host::default();
     let gate = Signal::new();
@@ -574,8 +580,8 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
         gate: &gate,
         step: Step::Whole,
     };
-    let mut writing = core::pin::pin!(console.write_message(&mut tx, &message, &Chip));
-    let mut written = core::pin::pin!(console.written(sequence));
+    let mut writing = core::pin::pin!(console.write_queued(&mut tx, message, &Chip));
+    let mut written = core::pin::pin!(console.written(entered));
     let mut context = Context::from_waker(Waker::noop());
     assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
     assert_eq!(writing.as_mut().poll(&mut context), Poll::Pending);
@@ -585,7 +591,7 @@ fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_e
     gate.signal(());
     assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
     assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
-    assert_eq!(host.frames(), [(9, sequence, ProbeArmed::KEY)]);
+    assert_eq!(host.frames(), [(9, 1, ProbeArmed::KEY)]);
 }
 
 #[test]
@@ -606,11 +612,12 @@ fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
     for taken in [0, usize::MAX] {
         let console = console();
         console.start(BOOT);
-        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)));
+        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
+            .expect("the reply is built");
         let message = console.messages.try_receive().expect("queued reply");
         let lost = console.dropped_messages.load(Ordering::Relaxed);
         let sent = console.sent_frames.load(Ordering::Relaxed);
-        block_on(console.write_message(&mut Takes(taken), &message, &Chip));
+        block_on(console.write_queued(&mut Takes(taken), message, &Chip));
         assert_eq!(console.dropped_messages.load(Ordering::Relaxed), lost + 1);
         assert_eq!(console.sent_frames.load(Ordering::Relaxed), sent);
     }
@@ -637,14 +644,14 @@ fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
     let message = console.messages.try_receive().unwrap();
     let host = Host::default();
     assert!(host.frames().is_empty());
-    block_on(console.write_message(&mut Endpoint(host.clone()), &message, &Chip));
+    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
     let Poll::Ready(Ok(acknowledged)) = acknowledging.as_mut().poll(&mut cx) else {
         panic!("a complete write releases the reset acknowledgement");
     };
     assert_eq!(host.frames(), [(u32::MAX, 1, ResetAccepted::KEY)]);
     assert_eq!(
         acknowledged.observations(),
-        [u32::MAX, 1, 0x0123_4567, 0x89ab_cdef]
+        [u32::MAX, 0, 0x0123_4567, 0x89ab_cdef]
     );
 }
 
@@ -657,7 +664,9 @@ fn reset_barrier_exhaustion_returns_no_reset_authority() {
     let console = console();
     console.start(BOOT);
     let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16).map(|_| Box::pin(console.written(10))).collect();
+    let mut waiting: Vec<_> = (0..16)
+        .map(|_| Box::pin(console.written(Entered(10))))
+        .collect();
     for waiter in &mut waiting {
         assert!(waiter.as_mut().poll(&mut cx).is_pending());
     }
@@ -672,11 +681,11 @@ fn reset_barrier_exhaustion_returns_no_reset_authority() {
     };
     assert_eq!(
         fault,
-        progress::ReceiverLimit {
-            sequence: 1,
+        crate::lifecycle::Unacknowledged::Barrier(progress::ReceiverLimit {
+            sequence: 0,
             next: Some(0),
             capacity: 16
-        }
+        })
     );
 }
 
@@ -686,13 +695,15 @@ fn failed_terminal_barrier_propagates_without_performing_the_terminal_action() {
     use core::task::{Context, Poll, Waker};
     let console = console();
     let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16).map(|_| Box::pin(console.written(10))).collect();
+    let mut waiting: Vec<_> = (0..16)
+        .map(|_| Box::pin(console.written(Entered(10))))
+        .collect();
     for future in &mut waiting {
         assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
     }
     let acted = core::cell::Cell::new(false);
     let mut terminal = core::pin::pin!(async {
-        console.written(20).await?;
+        console.written(Entered(20)).await?;
         acted.set(true);
         Ok(())
     });
@@ -889,16 +900,13 @@ fn a_service_answers_each_request_through_its_handler_with_the_request_identity(
         session_id: 0,
         request_id: 21,
     };
-    let sequence = block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(
-        &mut prober,
-        console,
-        identity,
-    ));
+    block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(&mut prober, console, identity))
+        .expect("the response is built");
     assert_eq!(prober.calls, 1);
     let message = console.messages.try_receive().expect("the queued response");
     let host = Host::default();
-    block_on(console.write_message(&mut Endpoint(host.clone()), &message, &Chip));
-    assert_eq!(host.frames(), [(21, sequence, ProbeArmed::KEY)]);
+    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
+    assert_eq!(host.frames(), [(21, 1, ProbeArmed::KEY)]);
     assert_eq!(
         <ProbeService as crate::base::Service>::REQUESTS,
         [Probe::KEY]

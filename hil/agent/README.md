@@ -43,7 +43,7 @@ failure value.
 | --- | --- |
 | `serve` | Runs the HIL console over the platform runtime's USB console and the image's worker side by side until the chip resets. It takes the worker as a function that makes its future, so the image's future holds that future once, inside the select. The console answers the base module: Hello with the image's keys, its largest payload and the stage-two payload CRC-32, the boot evidence and link health. A transport fault ends it with the image's `console_fault` value. |
 | `Mailbox` | Room for one request between the console and the worker. The console hands a request over without waiting; a second one while the worker has not taken the first is answered `Rejected(Busy)`. |
-| `answer` | Publishes a response to its request without waiting, from any level: the console numbers it as it enters its queue; a full queue drops it and counts the loss. |
+| `answer` | Publishes a response to its request without waiting, from any level: it enters the console's queue, whose writer numbers it; a full queue drops it and counts the loss. |
 | `answer_then_trap` | Publishes the answer of a fault request, waits until the console wrote it and traps on an illegal instruction (`oer_portable_riscv::illegal_instruction`). A write the console cannot confirm (its barrier's exhausted fan-out, a terminal fault by its contract) returns the image's `console_fault` value without a trap; the worker ends with it. |
 
 The boot identity and the records are the image's. An image on the

@@ -426,7 +426,8 @@ macro_rules! service {
 
         impl $name {
             /// Answer `identity`'s request through `handler` on `console`;
-            /// the sequence of the published response.
+            /// the response's place among the console's entries, or its
+            /// loss (counted).
             $vis async fn serve<
                 H: $handler,
                 const NOTES: usize,
@@ -437,7 +438,7 @@ macro_rules! service {
                 handler: &mut H,
                 console: &$crate::console::Console<NOTES, MESSAGES, P>,
                 identity: $crate::__protocol::RequestIdentity,
-            ) -> u32 {
+            ) -> Result<$crate::console::Entered, $crate::console::Dropped> {
                 match self {
                     $(Self::$variant(request) => {
                         let response = handler.$method(request).await;

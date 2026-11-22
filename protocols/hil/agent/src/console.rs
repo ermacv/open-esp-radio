@@ -11,9 +11,11 @@
 //! the queue ([`Console::publish`] drops it when the queue is full,
 //! [`Console::publish_reliably`] waits for room first), and the one
 //! [`Console::run`] task frames and writes messages and notes in queue order.
-//! A message takes its sequence where it enters the queue, in one critical
-//! section with its entry, so the queue's order is the sequences' order
-//! whatever level each producer runs at, and no producer waits for another.
+//! The writer numbers each message as it takes it out of the queue, so the
+//! numbers follow the queue's order by construction, whatever level each
+//! producer runs at; a producer only enters its message and takes no
+//! number. A producer that must know its message written waits for its
+//! place among the entries ([`Entered`], [`Console::written`]).
 //!
 //! What is in the message queue at once is bounded by the host, not by a
 //! type: the host drives one request at a time per session and keeps at
@@ -77,6 +79,23 @@ pub trait Immediate {
     fn take_lost() -> u32;
 }
 
+/// A message's place among the queue's entries since the boot's start, for
+/// a wait until it is written ([`Console::written`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Entered(u32);
+
+impl Entered {
+    /// The place, for a record that keeps it.
+    pub const fn place(self) -> u32 {
+        self.0
+    }
+}
+
+/// A message lost before the queue: it could not be built, or the queue
+/// was full. Counted in the link's health.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Dropped;
+
 /// One console. `NOTES` bounds the queued notes and `MESSAGES` the queued
 /// messages; `P` is the chip's early writer.
 pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
@@ -84,13 +103,13 @@ pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
     running: AtomicBool,
     boot_low: AtomicU32,
     boot_high: AtomicU32,
-    /// The next message's sequence. Taken only inside `entry`, with the
-    /// message's entry into the queue.
+    /// The next message's sequence: the writer's alone, taken as it takes
+    /// the message out of the queue.
     sequence: AtomicU32,
-    // A sequence and the queue's entry are one step: a producer of a higher
-    // level that preempts another between the two would queue N+1 ahead of
-    // N, which makes an otherwise lossless stream fail closed.
-    entry: Mutex<CriticalSectionRawMutex, ()>,
+    /// The messages entered into the queue since the boot's start.
+    entries: AtomicU32,
+    /// The entries the writer took out of the queue.
+    taken: AtomicU32,
     // The one encoder of the message writer, kept here rather than in the
     // writer's future, which is moved into its task.
     encoder: AsyncMutex<CriticalSectionRawMutex, FrameEncoder>,
@@ -117,7 +136,8 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             boot_low: AtomicU32::new(0),
             boot_high: AtomicU32::new(0),
             sequence: AtomicU32::new(0),
-            entry: Mutex::new(()),
+            entries: AtomicU32::new(0),
+            taken: AtomicU32::new(0),
             encoder: AsyncMutex::new(FrameEncoder::new()),
             messages: Channel::new(),
             notes: Channel::new(),
@@ -153,6 +173,8 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.boot_high
             .store((boot_id >> 32) as u32, Ordering::Relaxed);
         self.sequence.store(HELLO_SEQUENCE + 1, Ordering::Relaxed);
+        self.entries.store(0, Ordering::Relaxed);
+        self.taken.store(0, Ordering::Relaxed);
         self.written.publish_next(0);
     }
 
@@ -162,84 +184,66 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     }
 
     /// Queues `body` without making the caller wait, from any level; a full
-    /// queue drops it and counts the loss. Returns the message's sequence
-    /// when it was queued.
-    pub fn publish<M: Message>(&self, session_id: u64, request_id: u32, body: &M) -> Option<u32> {
-        let Ok(message) = Outbound::new(0, session_id, request_id, body) else {
-            self.lose_numbered();
-            return None;
-        };
-        match self.enter(message) {
-            Ok(sequence) => Some(sequence),
-            Err(_full) => {
-                self.lose_numbered();
-                None
-            }
+    /// queue drops it and counts the loss.
+    ///
+    /// # Errors
+    /// [`Dropped`] when the message could not be built or the queue was
+    /// full: counted in the link's health, no number spent on it.
+    pub fn publish<M: Message>(
+        &self,
+        session_id: u64,
+        request_id: u32,
+        body: &M,
+    ) -> Result<Entered, Dropped> {
+        let queued = Outbound::new(0, session_id, request_id, body)
+            .ok()
+            .and_then(|message| self.messages.try_send(message).ok());
+        match queued {
+            Some(()) => Ok(self.entered()),
+            None => Err(self.drop_message()),
         }
     }
 
-    /// Queues `body`, waiting for room first: for control-plane boundaries a
-    /// full telemetry queue must not erase. The sequence is taken after the
-    /// wait, with the entry. High-rate observations use
+    /// Queues `body`, waiting for room: for control-plane boundaries a full
+    /// telemetry queue must not erase. High-rate observations use
     /// [`Console::publish`], which never applies backpressure.
+    ///
+    /// # Errors
+    /// [`Dropped`] when the message could not be built: counted, nothing
+    /// queued.
     pub async fn publish_reliably<M: Message>(
         &self,
         session_id: u64,
         request_id: u32,
         body: &M,
-    ) -> u32 {
-        let Ok(mut message) = Outbound::new(0, session_id, request_id, body) else {
-            return self.lose_numbered();
+    ) -> Result<Entered, Dropped> {
+        let Ok(message) = Outbound::new(0, session_id, request_id, body) else {
+            return Err(self.drop_message());
         };
-        loop {
-            core::future::poll_fn(|cx| self.messages.poll_ready_to_send(cx)).await;
-            // A producer of a higher level may take the room between the
-            // wait and the entry: the message then waits again, unnumbered.
-            match self.enter(message) {
-                Ok(sequence) => return sequence,
-                Err(back) => message = back,
-            }
-        }
+        self.messages.send(message).await;
+        Ok(self.entered())
     }
 
-    /// Number `message` and queue it, in one critical section: its
-    /// sequence, or the message back unnumbered when the queue is full.
-    #[expect(
-        clippy::result_large_err,
-        reason = "a full queue returns the message to the producer that holds it, to wait again"
-    )]
-    fn enter(&self, mut message: Outbound) -> Result<u32, Outbound> {
-        self.entry.lock(|()| {
-            let sequence = self.sequence.load(Ordering::Relaxed);
-            message.message_sequence = sequence;
-            match self.messages.try_send(message) {
-                Ok(()) => {
-                    self.sequence
-                        .store(sequence.wrapping_add(1), Ordering::Relaxed);
-                    Ok(sequence)
-                }
-                Err(embassy_sync::channel::TrySendError::Full(message)) => Err(message),
-            }
-        })
+    /// The place of a message the caller just queued: the count of entries
+    /// so far. A producer of a higher level that enters between the
+    /// caller's entry and this count makes the place one later than the
+    /// caller's message, never earlier, so a wait for it lasts at most a
+    /// message longer; a caller that a lower level's producer can preempt
+    /// does not exist, since the lowest level preempts nobody.
+    fn entered(&self) -> Entered {
+        Entered(self.entries.fetch_add(1, Ordering::Relaxed))
     }
 
-    /// A message lost before the queue: it takes its sequence, so the host
-    /// sees the gap, and the loss is counted. Returns the sequence.
-    fn lose_numbered(&self) -> u32 {
-        let sequence = self.entry.lock(|()| {
-            let sequence = self.sequence.load(Ordering::Relaxed);
-            self.sequence
-                .store(sequence.wrapping_add(1), Ordering::Relaxed);
-            sequence
-        });
+    /// A message lost before the queue, counted.
+    fn drop_message(&self) -> Dropped {
         self.dropped_messages.fetch_add(1, Ordering::Relaxed);
-        sequence
+        Dropped
     }
 
-    /// Waits until the message with `sequence` has been written to the
-    /// endpoint.
-    pub async fn written(&self, sequence: u32) -> Result<(), progress::ReceiverLimit> {
-        self.written.wait_for(sequence).await
+    /// Waits until the message at `entered` (or one after it) has been
+    /// written to the endpoint.
+    pub async fn written(&self, entered: Entered) -> Result<(), progress::ReceiverLimit> {
+        self.written.wait_for(entered.0).await
     }
 
     /// Writes `note` through the early writer while it owns the USB
@@ -309,7 +313,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         platform: &impl Platform,
     ) {
         let (session, id) = (request.session_id, request.request_id);
-        match answer {
+        // A lost answer is counted in the link's health; the host's request
+        // then times out.
+        let _counted = match answer {
             Answer::Hello(hello) => self.publish(session, id, &hello),
             Answer::ImageKeys(first) => self.publish(session, id, &image_keys.page(first)),
             Answer::Boot => self.publish(session, id, &platform.boot_evidence()),
@@ -335,7 +341,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         self.running.store(true, Ordering::Release);
         let image_keys = intake.image_keys();
         match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
-            Ok(hello) => self.write_message(&mut endpoint, &hello, platform).await,
+            Ok(hello) => {
+                let _written = self.write_message(&mut endpoint, &hello, platform).await;
+            }
             Err(_) => self.lose_message(),
         }
         // What the early writer dropped before it gave up the peripheral: a
@@ -354,7 +362,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             .await
             {
                 Either3::First(message) => {
-                    self.write_message(&mut endpoint, &message, platform).await
+                    self.write_queued(&mut endpoint, message, platform).await;
                 }
                 Either3::Second(Ok(length)) => {
                     let Some(bytes) = chunk.get(..length) else {
@@ -390,7 +398,7 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
             }
             for _ in 1..DRAIN_BATCH {
                 if let Ok(message) = self.messages.try_receive() {
-                    self.write_message(&mut endpoint, &message, platform).await;
+                    self.write_queued(&mut endpoint, message, platform).await;
                 } else if let Ok(note) = self.notes.try_receive() {
                     self.write_note(&mut endpoint, &note).await;
                 } else {
@@ -401,26 +409,42 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         }
     }
 
+    /// Numbers a message taken out of the queue, writes it, and on its
+    /// write tells the waiters how many entries are written.
+    async fn write_queued(
+        &self,
+        tx: &mut impl Write,
+        mut message: Outbound,
+        platform: &impl Platform,
+    ) {
+        message.message_sequence = self.sequence.fetch_add(1, Ordering::Relaxed);
+        let taken = self.taken.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        if self.write_message(tx, &message, platform).await {
+            self.written.publish_next(taken);
+        }
+    }
+
+    /// Writes one message whole; whether it was.
     async fn write_message(
         &self,
         tx: &mut impl Write,
         message: &Outbound,
         platform: &impl Platform,
-    ) {
+    ) -> bool {
         let mut encoder = self.encoder.lock().await;
         let Ok(frame) = encoder.encode_outbound(self.boot_id(), message) else {
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
-            return;
+            return false;
         };
         if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
             self.sent_frames.fetch_add(1, Ordering::Relaxed);
             if message.key == oer_protocols_hil_protocol::base::BootEvidence::KEY {
                 platform.boot_evidence_written();
             }
-            self.written
-                .publish_next(message.message_sequence.wrapping_add(1));
+            true
         } else {
             self.dropped_messages.fetch_add(1, Ordering::Relaxed);
+            false
         }
     }
 

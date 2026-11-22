@@ -55,7 +55,8 @@ impl Answer {
                     .await
             };
         }
-        match self {
+        // A message that cannot be built is counted in the link's health.
+        let _counted = match self {
             Self::Description(value) => send!(value),
             Self::Records(value) => send!(value),
             Self::Counters(value) => send!(value),
