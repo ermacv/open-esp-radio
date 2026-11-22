@@ -184,7 +184,10 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     }
 
     /// Queues `body` without making the caller wait, from any level; a full
-    /// queue drops it and counts the loss.
+    /// queue drops it and counts the loss. It gives no place to wait on: a
+    /// producer of a level above another's may enter behind that one's
+    /// message and count first, so its count would name the message before
+    /// its own ([`Console::entered`]).
     ///
     /// # Errors
     /// [`Dropped`] when the message could not be built or the queue was
@@ -194,12 +197,15 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         session_id: u64,
         request_id: u32,
         body: &M,
-    ) -> Result<Entered, Dropped> {
+    ) -> Result<(), Dropped> {
         let queued = Outbound::new(0, session_id, request_id, body)
             .ok()
             .and_then(|message| self.messages.try_send(message).ok());
         match queued {
-            Some(()) => Ok(self.entered()),
+            Some(()) => {
+                let _place = self.entered();
+                Ok(())
+            }
             None => Err(self.drop_message()),
         }
     }
@@ -207,6 +213,12 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
     /// Queues `body`, waiting for room: for control-plane boundaries a full
     /// telemetry queue must not erase. High-rate observations use
     /// [`Console::publish`], which never applies backpressure.
+    ///
+    /// The place it answers is right for a producer on the console's own
+    /// level, the lowest that produces: no producer preempts it from below,
+    /// so the place is its message's or, when a higher level entered
+    /// between its entry and its count, the one after. A wait for room
+    /// already binds its caller to that level.
     ///
     /// # Errors
     /// [`Dropped`] when the message could not be built: counted, nothing
@@ -224,12 +236,14 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         Ok(self.entered())
     }
 
-    /// The place of a message the caller just queued: the count of entries
-    /// so far. A producer of a higher level that enters between the
-    /// caller's entry and this count makes the place one later than the
-    /// caller's message, never earlier, so a wait for it lasts at most a
-    /// message longer; a caller that a lower level's producer can preempt
-    /// does not exist, since the lowest level preempts nobody.
+    /// The count of entries so far, taken by a producer just after its own
+    /// entry. Between a producer's entry and its count a producer of a
+    /// higher level may enter and count: the lower producer's count then
+    /// names the message after its own (a wait lasts a message longer), and
+    /// the higher producer's names the lower one's message, one before its
+    /// own (a wait would end before its message is written). Only a
+    /// producer that nothing preempts from below, the console's own level,
+    /// may therefore wait on its count ([`Console::publish_reliably`]).
     fn entered(&self) -> Entered {
         Entered(self.entries.fetch_add(1, Ordering::Relaxed))
     }
@@ -240,8 +254,9 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         Dropped
     }
 
-    /// Waits until the message at `entered` (or one after it) has been
-    /// written to the endpoint.
+    /// Waits until the writer has written the entries up to `entered`, a
+    /// place [`Console::publish_reliably`] gave on the console's own level:
+    /// its message, or the one after it, written.
     pub async fn written(&self, entered: Entered) -> Result<(), progress::ReceiverLimit> {
         self.written.wait_for(entered.0).await
     }

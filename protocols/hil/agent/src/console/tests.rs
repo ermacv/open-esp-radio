@@ -241,7 +241,7 @@ fn hello_leads_the_boot_although_the_image_published_first() {
     console.start(BOOT);
     assert_eq!(
         console.publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
-        Ok(Entered(0))
+        Ok(())
     );
     run_until(
         console,
@@ -257,10 +257,7 @@ fn a_full_queue_drops_and_counts_instead_of_blocking() {
     let console = console();
     console.start(BOOT);
     for request in 0..8 {
-        assert_eq!(
-            console.publish(0, request, &GetBootStatus),
-            Ok(Entered(request))
-        );
+        assert_eq!(console.publish(0, request, &GetBootStatus), Ok(()));
     }
     assert_eq!(console.publish(0, 8, &GetBootStatus), Err(Dropped));
     assert_eq!(console.link_health().unwrap().tx_dropped, 1);
@@ -296,11 +293,9 @@ fn the_writer_numbers_the_messages_in_the_queue_s_order() {
         let mut entered = Vec::new();
         for turn in 0..2 * EACH {
             if order & (1 << turn) != 0 {
-                entered.push(
-                    console
-                        .publish(0, IMMEDIATE + immediate, &ProbeArmed(ProbeMode::Complete))
-                        .expect("room"),
-                );
+                console
+                    .publish(0, IMMEDIATE + immediate, &ProbeArmed(ProbeMode::Complete))
+                    .expect("room");
                 immediate += 1;
             } else {
                 let mut publishing = core::pin::pin!(console.publish_reliably(
@@ -311,15 +306,16 @@ fn the_writer_numbers_the_messages_in_the_queue_s_order() {
                 let Poll::Ready(Ok(place)) = publishing.as_mut().poll(&mut context) else {
                     panic!("room for the message");
                 };
-                entered.push(place);
+                entered.push((place, Entered(turn)));
                 waiting += 1;
             }
         }
-        assert_eq!(
-            entered,
-            (0..2 * EACH).map(Entered).collect::<Vec<_>>(),
-            "order {order:06b}: each place its entry's"
-        );
+        for (place, turn) in &entered {
+            assert_eq!(
+                place, turn,
+                "order {order:06b}: the waiting producer's place is its entry's"
+            );
+        }
         run_until(
             console,
             &host,
@@ -352,7 +348,7 @@ fn a_producer_that_waits_for_room_enters_after_the_room_and_holds_no_number() {
     for request in 0..8 {
         assert_eq!(
             console.publish(0, IMMEDIATE + request, &GetBootStatus),
-            Ok(Entered(request))
+            Ok(())
         );
     }
     let mut context = Context::from_waker(Waker::noop());
@@ -362,10 +358,7 @@ fn a_producer_that_waits_for_room_enters_after_the_room_and_holds_no_number() {
     // Room comes, and a higher level takes it before the waiting producer
     // runs: the waiting one waits again.
     assert!(console.messages.try_receive().is_ok());
-    assert_eq!(
-        console.publish(0, IMMEDIATE + 8, &GetBootStatus),
-        Ok(Entered(8))
-    );
+    assert_eq!(console.publish(0, IMMEDIATE + 8, &GetBootStatus), Ok(()));
     assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
     // While it waits, a message lost to the full queue spends no place.
     assert_eq!(
