@@ -61,26 +61,17 @@ pub use oer_tools_image_bundle::BuildChoice;
 pub use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 pub use run::{Outcome, Verdict};
 
-/// What a scenario needs from the stand and the device.
+/// One device under test of a scenario: its role, the image it runs
+/// (`oer_tools_image_build::images`) and the services that image must serve
+/// (each its `Service::KEYS`).
 #[derive(Clone, Copy, Debug)]
-pub struct Scenario {
+pub struct Role {
     pub(crate) name: &'static str,
     pub(crate) image: &'static str,
     pub(crate) services: &'static [&'static [Key]],
-    /// How its cases use the air: none (an image's radio works only on its
-    /// command, so a scenario that never commands one leases the board
-    /// alone), shared when they turn a radio on, exclusive when they
-    /// measure it.
-    pub(crate) air: Option<oer_tools_lab_arbiter::claims::Mode>,
-    /// Whether its cases use the lab router ([`Cx::router`]): its lease
-    /// then holds the router and the air, shared.
-    pub(crate) router: bool,
 }
 
-impl Scenario {
-    /// A scenario named `name` whose device runs `image`
-    /// (`oer_tools_image_build::images`), which must serve every service of
-    /// `services` (each its `Service::KEYS`).
+impl Role {
     pub const fn new(
         name: &'static str,
         image: &'static str,
@@ -90,8 +81,74 @@ impl Scenario {
             name,
             image,
             services,
+        }
+    }
+
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+}
+
+/// A scenario's devices under test: one, or several by role.
+#[derive(Clone, Copy, Debug)]
+enum Devices {
+    One(Role),
+    Roles(&'static [Role]),
+}
+
+/// What a scenario needs from the stand and the devices.
+#[derive(Clone, Copy, Debug)]
+pub struct Scenario {
+    pub(crate) name: &'static str,
+    devices: Devices,
+    /// How its cases use the air: none (an image's radio works only on its
+    /// command, so a scenario that never commands one leases the board
+    /// alone), shared when they turn a radio on, exclusive when they
+    /// measure it.
+    pub(crate) air: Option<oer_tools_lab_arbiter::claims::Mode>,
+    /// Whether its cases use the lab router ([`Cx::router`]): its lease
+    /// then holds the router and the air, shared.
+    pub(crate) router: bool,
+    /// Whether its cases use the stand's injector ([`Cx::injector`]): its
+    /// lease then holds the injector's board.
+    pub(crate) injector: bool,
+}
+
+impl Scenario {
+    /// A scenario named `name` whose one device under test (the role
+    /// `dut`) runs `image` (`oer_tools_image_build::images`), which must
+    /// serve every service of `services` (each its `Service::KEYS`).
+    pub const fn new(
+        name: &'static str,
+        image: &'static str,
+        services: &'static [&'static [Key]],
+    ) -> Self {
+        Self {
+            name,
+            devices: Devices::One(Role::new("dut", image, services)),
             air: None,
             router: false,
+            injector: false,
+        }
+    }
+
+    /// A scenario named `name` over several devices under test, each named
+    /// by its role.
+    pub const fn with_roles(name: &'static str, roles: &'static [Role]) -> Self {
+        Self {
+            name,
+            devices: Devices::Roles(roles),
+            air: None,
+            router: false,
+            injector: false,
+        }
+    }
+
+    /// Its devices under test, the first the one [`Cx`]'s own requests go to.
+    pub(crate) fn roles(&self) -> &[Role] {
+        match &self.devices {
+            Devices::One(role) => core::slice::from_ref(role),
+            Devices::Roles(roles) => roles,
         }
     }
 
@@ -116,6 +173,15 @@ impl Scenario {
     pub const fn using_router(self) -> Self {
         Self {
             router: true,
+            ..self
+        }
+    }
+
+    /// This scenario, whose cases command the stand's injector: the board
+    /// running the stand's injector firmware (`tools/lab/peers`).
+    pub const fn using_injector(self) -> Self {
+        Self {
+            injector: true,
             ..self
         }
     }
@@ -150,25 +216,163 @@ pub fn check(condition: bool, what: impl Into<String>) -> Result<(), Failure> {
     }
 }
 
-/// A case's access to the device under test: its link, running boot and
-/// resets.
+/// A case's access to the devices under test and the stand's equipment.
+/// Its own requests, resets and events go to the scenario's first device,
+/// the one of a scenario of one; [`Cx::device`] reaches each by its role.
 pub struct Cx<'a> {
+    first: DeviceCx<'a>,
+    others: Vec<DeviceCx<'a>>,
+    /// What the case measured, in the order it measured it.
+    measurements: Vec<(String, serde_json::Value)>,
+}
+
+/// One device under test during a case: its link, running boot and resets.
+pub struct DeviceCx<'a> {
+    role: &'static str,
     dut: &'a mut (dyn dut::Device + 'a),
     boot: Boot,
     /// A request whose outcome is unknown: the device may still run it, so
     /// the boot takes no further request.
     unconfirmed: Option<u32>,
-    /// What the case measured, in the order it measured it.
-    measurements: Vec<(String, serde_json::Value)>,
 }
 
 impl<'a> Cx<'a> {
-    fn new(dut: &'a mut (dyn dut::Device + 'a), boot: Boot) -> Self {
+    fn new(first: DeviceCx<'a>, others: Vec<DeviceCx<'a>>) -> Self {
         Self {
+            first,
+            others,
+            measurements: Vec::new(),
+        }
+    }
+
+    /// The device under test of `role`; an unknown role leaves the case
+    /// incomplete: the scenario names no such device.
+    pub fn device(&mut self, role: &str) -> Result<&mut DeviceCx<'a>, Failure> {
+        if self.first.role == role {
+            return Ok(&mut self.first);
+        }
+        self.others
+            .iter_mut()
+            .find(|device| device.role == role)
+            .ok_or_else(|| Failure::Incomplete(format!("the scenario has no device `{role}`")))
+    }
+
+    fn devices(self) -> impl Iterator<Item = DeviceCx<'a>> {
+        core::iter::once(self.first).chain(self.others)
+    }
+
+    /// What the first device's image was built with.
+    pub fn built(&self) -> &BuildChoice {
+        self.first.built()
+    }
+
+    /// The first device's running boot.
+    pub fn boot(&self) -> &Boot {
+        self.first.boot()
+    }
+
+    /// [`DeviceCx::request`] on the first device.
+    pub fn request<E: Endpoint>(
+        &mut self,
+        request: E,
+        timeout: Duration,
+    ) -> Result<E::Response, CallError> {
+        self.first.request(request, timeout)
+    }
+
+    /// [`DeviceCx::call`] on the first device.
+    pub fn call<E: Endpoint>(
+        &mut self,
+        request: E,
+        timeout: Duration,
+    ) -> Result<E::Response, Failure> {
+        self.first.call(request, timeout)
+    }
+
+    /// [`DeviceCx::events`] on the first device.
+    pub fn events(&self) -> Result<Cursor, Failure> {
+        self.first.events()
+    }
+
+    /// [`DeviceCx::take_message`] on the first device.
+    pub fn take_message(
+        &self,
+        cursor: &mut Cursor,
+        matches: impl Fn(&Received) -> bool,
+        timeout: Duration,
+    ) -> Result<Option<Received>, Failure> {
+        self.first.take_message(cursor, matches, timeout)
+    }
+
+    /// [`DeviceCx::event`] on the first device.
+    pub fn event<M: Message>(&self, cursor: &mut Cursor, timeout: Duration) -> Result<M, Failure> {
+        self.first.event(cursor, timeout)
+    }
+
+    /// [`DeviceCx::completeness`] on the first device.
+    pub fn completeness(&self, cursor: &Cursor) -> Result<Completeness, Failure> {
+        self.first.completeness(cursor)
+    }
+
+    /// [`DeviceCx::health`] on the first device.
+    pub fn health(&self) -> Result<Health, Failure> {
+        self.first.health()
+    }
+
+    /// [`DeviceCx::reset`] on the first device.
+    pub fn reset(&mut self) -> Result<&Boot, Failure> {
+        self.first.reset()
+    }
+
+    /// [`DeviceCx::follow_restart`] on the first device.
+    pub fn follow_restart(&mut self) -> Result<&Boot, Failure> {
+        self.first.follow_restart()
+    }
+
+    /// Record a measurement `name` of the case: printed at once, and kept in
+    /// the run's results file (`target/hil/results/`) with the case's name.
+    /// A measurement reports; it never decides the case.
+    pub fn measure(&mut self, name: impl Into<String>, value: serde_json::Value) {
+        let name = name.into();
+        println!("  measure {name}: {value}");
+        self.measurements.push((name, value));
+    }
+
+    /// Run `request` on the lab router under the run's lease (a scenario
+    /// [`Scenario::using_router`]): its result as the operation returns it.
+    /// A router that does not answer leaves the case incomplete.
+    pub fn router(&self, request: RouterOperation) -> Result<serde_json::Value, Failure> {
+        self.first
+            .dut
+            .router(request)
+            .map_err(|error| Failure::Incomplete(format!("the lab router: {error}")))
+    }
+
+    /// Write `command` to the stand's injector under the run's lease (a
+    /// scenario [`Scenario::using_injector`]) and wait up to `timeout` for
+    /// its answer: a refusal fails the case, no answer leaves it
+    /// incomplete.
+    pub fn injector(&self, command: &str, timeout: Duration) -> Result<(), Failure> {
+        match self.first.dut.injector(command, timeout) {
+            Ok(oer_tools_lab_client::peer::Answer::Accepted) => Ok(()),
+            Ok(oer_tools_lab_client::peer::Answer::Refused(line)) => Err(Failure::Fail(format!(
+                "the injector refused `{command}`: {line}"
+            ))),
+            Ok(oer_tools_lab_client::peer::Answer::Unanswered) => Err(Failure::Incomplete(
+                format!("the injector did not answer `{command}` within {timeout:?}"),
+            )),
+            Err(error) => Err(Failure::Incomplete(format!("the injector: {error}"))),
+        }
+    }
+}
+
+impl<'a> DeviceCx<'a> {
+    fn new(role: &'static str, dut: &'a mut (dyn dut::Device + 'a), boot: Boot) -> Self {
+        Self {
+            role,
             dut,
             boot,
             unconfirmed: None,
-            measurements: Vec::new(),
         }
     }
 
@@ -180,9 +384,9 @@ impl<'a> Cx<'a> {
     }
 
     fn link(&self) -> Result<&Link, Failure> {
-        self.dut
-            .link()
-            .ok_or_else(|| Failure::Incomplete("the device under test has no link".to_owned()))
+        self.dut.link().ok_or_else(|| {
+            Failure::Incomplete(format!("the device under test `{}` has no link", self.role))
+        })
     }
 
     /// The running boot.
@@ -202,7 +406,7 @@ impl<'a> Cx<'a> {
         }
         let Some(link) = self.dut.link() else {
             return Err(CallError::Link(oer_tools_hil_link::LinkError::Transport(
-                "the device under test has no link".to_owned(),
+                format!("the device under test `{}` has no link", self.role),
             )));
         };
         let result = link.call(&self.boot, request, timeout);
@@ -212,9 +416,9 @@ impl<'a> Cx<'a> {
         result
     }
 
-    /// [`Cx::request`] with its errors as the case's failure: a refusal, a
-    /// payload of another type or another boot refute the case; a request
-    /// that was not sent or got no response, a broken link or a
+    /// [`DeviceCx::request`] with its errors as the case's failure: a
+    /// refusal, a payload of another type or another boot refute the case;
+    /// a request that was not sent or got no response, a broken link or a
     /// cancellation leave it incomplete.
     pub fn call<E: Endpoint>(
         &mut self,
@@ -279,26 +483,8 @@ impl<'a> Cx<'a> {
         Ok(self.link()?.health())
     }
 
-    /// Record a measurement `name` of the case: printed at once, and kept in
-    /// the run's results file (`target/hil/results/`) with the case's name.
-    /// A measurement reports; it never decides the case.
-    pub fn measure(&mut self, name: impl Into<String>, value: serde_json::Value) {
-        let name = name.into();
-        println!("  measure {name}: {value}");
-        self.measurements.push((name, value));
-    }
-
-    /// Run `request` on the lab router under the run's lease (a scenario
-    /// [`Scenario::using_router`]): its result as the operation returns it.
-    /// A router that does not answer leaves the case incomplete.
-    pub fn router(&self, request: RouterOperation) -> Result<serde_json::Value, Failure> {
-        self.dut
-            .router(request)
-            .map_err(|error| Failure::Incomplete(format!("the lab router: {error}")))
-    }
-
-    /// Reset the device under test through its board and continue on the
-    /// new boot of the same image; its earlier boot's requests end.
+    /// Reset the device through its board and continue on the new boot of
+    /// the same image; its earlier boot's requests end.
     pub fn reset(&mut self) -> Result<&Boot, Failure> {
         let boot = self.dut.reset().map_err(Failure::Incomplete)?;
         self.boot = boot;
@@ -341,9 +527,13 @@ fn failure(error: CallError) -> Failure {
 #[derive(clap::Parser)]
 struct Arguments {
     /// The device under test, by its stand-file id or MAC; without it, the
-    /// one board of the image's chip with the `dut` role.
+    /// one board of the image's chip with the `dut` role. A scenario of
+    /// several devices names each role's: `--board <role>=<board>`, repeated.
+    #[arg(long = "board")]
+    boards: Vec<String>,
+    /// The board of the stand's injector, for a scenario that commands it.
     #[arg(long)]
-    board: Option<String>,
+    injector: Option<String>,
     /// Run only this case. May be repeated.
     #[arg(long = "case")]
     cases: Vec<String>,
@@ -387,38 +577,60 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         features: arguments.features.clone(),
         default_features: !arguments.no_default_features,
     };
-    let (outcomes, cleanup) =
-        match stand::Session::open(scenario, arguments.board.as_deref(), &choice) {
-            Ok(mut session) => {
-                let link = session.take_link();
-                let (run, link) = {
-                    let board = session.board();
-                    let mut dut =
-                        dut::Dut::new(link, board, session.image_crc32(), session.built().clone());
-                    let run = run::cases(&mut dut, scenario, &selected, &mut out);
-                    (run, dut.into_link())
-                };
-                if !run.measurements.is_empty() {
-                    measured = Some((
-                        session.root().to_owned(),
-                        session.board_id().to_owned(),
-                        run.measurements,
-                        session.built().clone(),
-                    ));
-                }
-                let cleanup = session.finish(link, run.ending);
-                let cleanup = cleanup.released(session.release());
-                (run.outcomes, Some(cleanup))
+    let selection = stand::Selection {
+        boards: arguments.boards.clone(),
+        injector: arguments.injector.clone(),
+    };
+    let (outcomes, cleanup) = match stand::Session::open(scenario, &selection, &choice) {
+        Ok(mut session) => {
+            let links = session
+                .devices()
+                .iter_mut()
+                .map(stand::SessionDevice::take_link)
+                .collect::<Vec<_>>();
+            let (run, links) = {
+                let devices: &[stand::SessionDevice] = session.devices();
+                let mut duts = devices
+                    .iter()
+                    .zip(links)
+                    .map(|(device, link)| {
+                        dut::Dut::new(
+                            link,
+                            device.board(),
+                            device.image_crc32(),
+                            device.built().clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let run = run::cases(&mut duts, scenario, &selected, &mut out);
+                (
+                    run,
+                    duts.into_iter()
+                        .map(dut::Dut::into_link)
+                        .collect::<Vec<_>>(),
+                )
+            };
+            if !run.measurements.is_empty() {
+                let boards = session
+                    .devices()
+                    .iter()
+                    .map(|device| (device.board_id().to_owned(), device.built().clone()))
+                    .collect::<Vec<_>>();
+                measured = Some((session.root().to_owned(), boards, run.measurements));
             }
-            Err(error) => {
-                let outcome = Outcome::stand(error.to_string());
-                run::print(&outcome, &mut out);
-                (vec![outcome], None)
-            }
-        };
+            let cleanup = session.finish(links, &run.endings);
+            let cleanup = cleanup.released(session.release());
+            (run.outcomes, Some(cleanup))
+        }
+        Err(error) => {
+            let outcome = Outcome::stand(error.to_string());
+            run::print(&outcome, &mut out);
+            (vec![outcome], None)
+        }
+    };
     let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
-    if let Some((root, board, measurements, built)) = measured {
-        let mut results = run::results(scenario, &board, &outcomes, &measurements, &built);
+    if let Some((root, boards, measurements)) = measured {
+        let mut results = run::results(scenario, &boards, &outcomes, &measurements);
         if let Some(object) = results.as_object_mut() {
             object.insert(
                 "cleanup".to_owned(),

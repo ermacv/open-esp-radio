@@ -81,6 +81,13 @@ pub(crate) trait Device {
         &self,
         request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String>;
+    /// Write `command` to the stand's injector under the run's lease and
+    /// wait up to `timeout` for its answer.
+    fn injector(
+        &self,
+        command: &str,
+        timeout: Duration,
+    ) -> Result<oer_tools_lab_client::peer::Answer, String>;
     /// What the image the device runs was built with.
     fn built(&self) -> &oer_tools_image_bundle::BuildChoice;
 }
@@ -116,6 +123,14 @@ impl Device for Dut<'_> {
         request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String> {
         self.board.router(request)
+    }
+
+    fn injector(
+        &self,
+        command: &str,
+        timeout: Duration,
+    ) -> Result<oer_tools_lab_client::peer::Answer, String> {
+        self.board.injector(command, timeout)
     }
 }
 

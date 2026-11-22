@@ -43,7 +43,7 @@ const SCENARIO: Scenario = Scenario::new("test", "test-image", &[SERVICE]);
 /// Run `cases` on the device behind `link`.
 fn run_cases(link: oer_tools_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
     let board = crate::fakes::FakeBoard::new(Vec::new());
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
+    let mut dut = [crate::dut::Dut::new(Some(link), &board, IMAGE, defaults())];
     run::cases(&mut dut, &SCENARIO, cases, &mut Vec::new()).outcomes
 }
 
@@ -168,7 +168,7 @@ fn a_reboot_prints_how_the_previous_boot_ended() {
     }];
     let selected = cases.iter().collect::<Vec<_>>();
     let board = crate::fakes::FakeBoard::new(Vec::new());
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
+    let mut dut = [crate::dut::Dut::new(Some(link), &board, IMAGE, defaults())];
     let mut out = Vec::new();
     run::cases(&mut dut, &SCENARIO, &selected, &mut out);
     let out = String::from_utf8(out).unwrap();
@@ -456,7 +456,7 @@ fn a_case_runs_router_operations_and_an_unanswered_router_leaves_it_incomplete()
         RouterOperation::VerifyRuntime => Ok(serde_json::Value::Null),
         _ => Err("ssh refused".to_owned()),
     };
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
+    let mut dut = [crate::dut::Dut::new(Some(link), &board, IMAGE, defaults())];
     let case = Case {
         name: "router",
         run: probe,
@@ -489,7 +489,12 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
         default_features: false,
         instrumentation: Vec::new(),
     };
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, built.clone());
+    let mut dut = [crate::dut::Dut::new(
+        Some(link),
+        &board,
+        IMAGE,
+        built.clone(),
+    )];
     let case = Case {
         name: "load",
         run: measured,
@@ -503,11 +508,21 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
             value: serde_json::json!({ "mbps": 42.5 }),
         }]
     );
-    let results = run::results(&SCENARIO, "s31-a", &ran.outcomes, &ran.measurements, &built);
-    assert_eq!(results["board"], "s31-a");
+    let results = run::results(
+        &SCENARIO,
+        &[("s31-a".to_owned(), built)],
+        &ran.outcomes,
+        &ran.measurements,
+    );
+    assert_eq!(results["devices"][0]["role"], "dut");
+    assert_eq!(results["devices"][0]["image"], "test-image");
+    assert_eq!(results["devices"][0]["board"], "s31-a");
     // What the image was built with: the measuring build, no instrumentation.
-    assert_eq!(results["build"]["default_features"], false);
-    assert_eq!(results["build"]["instrumentation"], serde_json::json!([]));
+    assert_eq!(results["devices"][0]["build"]["default_features"], false);
+    assert_eq!(
+        results["devices"][0]["build"]["instrumentation"],
+        serde_json::json!([])
+    );
     assert_eq!(results["outcomes"][0]["verdict"], "fail");
     assert_eq!(results["measurements"][0]["case"], "load");
     assert_eq!(results["measurements"][0]["value"]["mbps"], 42.5);
@@ -524,4 +539,72 @@ fn a_scenario_s_image_is_a_package_build_and_a_catalog_build_is_refused() {
         error.to_string().contains("ESP-IDF catalog build"),
         "{error}"
     );
+}
+
+#[test]
+fn a_case_reaches_each_device_by_its_role_and_an_unknown_role_is_incomplete() {
+    const ROLES: &[crate::Role] = &[
+        crate::Role::new("receiver", "test-image", &[SERVICE]),
+        crate::Role::new("sender", "test-image", &[SERVICE]),
+    ];
+    const PAIR: Scenario = Scenario::with_roles("pair", ROLES);
+    fn both(cx: &mut Cx<'_>) -> Result<(), Failure> {
+        let Told(receiver) = cx
+            .device("receiver")?
+            .call(Ask(4), Duration::from_millis(300))?;
+        let Told(sender) = cx
+            .device("sender")?
+            .call(Ask(6), Duration::from_millis(300))?;
+        check((receiver, sender) == (5, 7), "each device answers its own")?;
+        let boots = (cx.boot().boot_id, cx.device("sender")?.boot().boot_id);
+        check(boots == (20, 30), "the first device is the receiver")
+    }
+    fn unknown(cx: &mut Cx<'_>) -> Result<(), Failure> {
+        cx.device("injector").map(drop)
+    }
+    let (receiver, receiver_link) = Device::new(20);
+    let (sender, sender_link) = Device::new(30);
+    thread::spawn(move || serve(receiver));
+    thread::spawn(move || serve(sender));
+    let board = crate::fakes::FakeBoard::new(Vec::new());
+    let mut duts = [
+        crate::dut::Dut::new(Some(receiver_link), &board, IMAGE, defaults()),
+        crate::dut::Dut::new(Some(sender_link), &board, IMAGE, defaults()),
+    ];
+    let cases = [
+        Case {
+            name: "both",
+            run: both,
+        },
+        Case {
+            name: "unknown",
+            run: unknown,
+        },
+    ];
+    let selected = cases.iter().collect::<Vec<_>>();
+    let ran = run::cases(&mut duts, &PAIR, &selected, &mut Vec::new());
+    assert_eq!(
+        verdicts(&ran.outcomes),
+        [(Some("both"), 0), (Some("unknown"), 2)]
+    );
+    assert_eq!(ran.endings.len(), 2);
+}
+
+#[test]
+fn a_stand_that_gives_another_count_of_devices_runs_no_case() {
+    const ROLES: &[crate::Role] = &[
+        crate::Role::new("receiver", "test-image", &[SERVICE]),
+        crate::Role::new("sender", "test-image", &[SERVICE]),
+    ];
+    const PAIR: Scenario = Scenario::with_roles("pair", ROLES);
+    let (device, link) = Device::new(40);
+    thread::spawn(move || serve(device));
+    let board = crate::fakes::FakeBoard::new(Vec::new());
+    let mut duts = [crate::dut::Dut::new(Some(link), &board, IMAGE, defaults())];
+    let case = Case {
+        name: "never",
+        run: |cx| ask(4)(cx),
+    };
+    let ran = run::cases(&mut duts, &PAIR, &[&case], &mut Vec::new());
+    assert_eq!(verdicts(&ran.outcomes), [(None, 2)]);
 }
