@@ -7,9 +7,9 @@ the ring's start and stop are the path table's, in `src/radio.rs` of the
 sender (`esp32s31-case-c-sender`), which this probe includes.
 
 The ring:
-- 16 descriptors and R, in an arena of 32 buffers of 256 octets with the
+- 16 descriptors, in an arena of 32 buffers of 256 octets with the
   64-octet header below the floor;
-- the other 15 buffers are the spares a single is lent for;
+- the other 16 buffers are the spares a single is lent for;
 - case C's 700- and 1 500-octet frames are chains of 3 and 7 descriptors.
 
 A frame is the sender's when it is to the station, from the sender the host

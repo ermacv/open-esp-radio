@@ -93,6 +93,8 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         foreign: u32::MAX,
         length_anomalies: u32::MAX,
         doorbell_anomalies: u32::MAX,
+        patterns: u32::MAX,
+        pattern_written: u32::MAX,
     };
     let chain = ChainCase {
         tag: u32::MAX,

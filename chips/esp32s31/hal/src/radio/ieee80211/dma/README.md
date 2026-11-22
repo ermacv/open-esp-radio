@@ -51,9 +51,11 @@ host space, the ring's model walker, the MAC's reading of a published chain,
 ## The receive ring over the arena
 
 `receive::RxRing` is the receive ring over 5.1's arena (`oer_portable_memory::arena`):
-`N` descriptors and R after them, every one always holding a buffer lent
-to the walker, and the walker's registers. `publish_cold` arms and links
-the ring, R and BASE = R, in its place; `enable_walker` starts the walker.
+`N` descriptors, every one always holding a buffer lent to the walker, and
+the walker's registers. `publish_cold` arms and links the ring and writes
+BASE = d0, its head, in its place (`HW_RX_BASE_HEAD_20261122`): no
+descriptor is outside the rotation, so the first frame is the ring's first
+unit; `enable_walker` starts the walker.
 `serve(clock, f)` lends `f` the completed units up to the `LAST` it read,
 in the ring's order: a single unit is exchanged for a spare (`lend`), a
 chain or a single is copied out through its `Frame` reader and re-armed in

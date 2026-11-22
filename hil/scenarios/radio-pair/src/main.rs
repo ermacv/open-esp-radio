@@ -43,7 +43,7 @@ const ROLES: &[Role] = &[
 
 const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES).using_air_exclusively();
 
-const CASES: [Case; 5] = [
+const CASES: [Case; 6] = [
     Case {
         name: "cold-snapshots",
         run: cold_snapshots,
@@ -63,6 +63,11 @@ const CASES: [Case; 5] = [
     Case {
         name: "stop",
         run: stop,
+    },
+    // Last: it boots both boards afresh.
+    Case {
+        name: "first-frame",
+        run: first_frame::first_frame,
     },
 ];
 
@@ -87,7 +92,7 @@ const R2_CHAINS: u32 = 200;
 const R3_UNITS: u32 = 100;
 const R4_UNITS: u32 = 50;
 /// The receiver's spares and buffers (`esp32s31-rx-ring`).
-const SPARES: u8 = 15;
+const SPARES: u8 = 16;
 const BUFFERS: u8 = 32;
 /// Case C's long cases: 700 and 1 500 octets (`case_c::Case::tag`).
 const LONG_TAGS: [u32; 2] = [5, 6];
@@ -103,25 +108,8 @@ static ADDRESSES: Mutex<Option<Addresses>> = Mutex::new(None);
 
 mod first_frame;
 
-/// The default cases and `first-frame`, which runs only when its name is
-/// given (`--case first-frame`): it boots the receiver some thirty times.
-const ALL_CASES: [Case; 6] = [
-    CASES[0],
-    CASES[1],
-    CASES[2],
-    CASES[3],
-    CASES[4],
-    Case {
-        name: "first-frame",
-        run: first_frame::first_frame,
-    },
-];
-
 fn main() -> ExitCode {
-    let named = std::env::args()
-        .any(|argument| argument == "first-frame" || argument == "--case=first-frame");
-    let cases: &[Case] = if named { &ALL_CASES } else { &CASES };
-    oer_tools_hil_harness::main(&SCENARIO, cases)
+    oer_tools_hil_harness::main(&SCENARIO, &CASES)
 }
 
 /// Which snapshot of a boot.

@@ -23,7 +23,7 @@ operations of the PHY crate and the HAL, in the radio system's order
 - RX enable and channel 13 at 20 MHz.
 
 It then starts the MAC on the receive ring's atoms, over a small ring of
-its own (8 descriptors and R, 256-octet buffers), which it serves no frame
+its own (8 descriptors, 256-octet buffers), which it serves no frame
 of; its state is in the counters:
 - the first reset, the cold preparation with the walker's registers lent,
   the channel;

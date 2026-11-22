@@ -1,9 +1,10 @@
-//! `first-frame` (`tasks/358`, `tasks/360`): one frame of `L` octets from
+//! `first-frame` (`tasks/358`, `tasks/361`): one frame of `L` octets from
 //! the sender before the receiver's ring has served anything, on a fresh
-//! boot of the receiver, and what the ring's descriptors and one window make
-//! of it. The case records each boot against the prediction of `tasks/360`;
-//! its verdict is that every length has its boots, not that the prediction
-//! holds.
+//! boot of the receiver. The ring's first descriptor is the walker's BASE
+//! (`HW_RX_BASE_HEAD_20261122`): the frame is the ring's first unit, a single
+//! in d0 or a chain from d0, and the first service gives it whole. The case
+//! is the regression case of `tasks/358`'s defect, where a first frame of
+//! 193 to 252 octets left a unit below the floor.
 
 use oer_hil_services_radio_pair::{
     self as service, BringUp, BroughtUp, Counters, Expect, Expecting, ReceiveCounters, Record,
@@ -14,41 +15,19 @@ use oer_tools_hil_harness::{Cx, Failure};
 use crate::{BRING_UP, RECEIVER, SENDER, STEP, keep, within};
 
 /// The lengths: the edges of R's buffer, of the word rounding and of d0's.
-pub(crate) const LENGTHS: [u16; 9] = [100, 192, 193, 230, 252, 253, 256, 300, 700];
+/// d0 alone, a chain whose terminal is below the floor, at the floor, and of
+/// three descriptors.
+pub(crate) const LENGTHS: [u16; 4] = [100, 252, 253, 700];
 /// Complete boots a length, and the boots a length may take in all.
 const BOOTS: usize = 3;
 const ATTEMPTS: usize = BOOTS + 5;
 /// The window after the frame.
 const WINDOW_MS: u32 = 1_000;
-/// R's buffer: 256 octets, the 64-octet header below its floor.
-const R_FRAME: u16 = 192;
+/// A unit's first buffer: 256 octets, the 64-octet header below its floor,
+/// so 192 octets of frame; every later buffer of a chain 256.
+const FIRST: u16 = 192;
 const BUFFER: u16 = 256;
 const FLOOR: u16 = 64;
-/// The ring's descriptors; R's seat is the last.
-const RING: usize = 16;
-
-/// A descriptor's place: R, or the ring's `n`th.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
-pub(crate) enum Place {
-    R,
-    Ring(usize),
-}
-
-/// `seats` (the ring's in order, then R's) by place.
-fn placed(seats: &[Seat]) -> Vec<(Place, Seat)> {
-    seats
-        .iter()
-        .enumerate()
-        .map(|(index, seat)| {
-            let place = if index == RING {
-                Place::R
-            } else {
-                Place::Ring(index)
-            };
-            (place, *seat)
-        })
-        .collect()
-}
 
 /// `value` over `unit`, rounded up; `unit` is never zero here.
 const fn units(value: u16, unit: u16) -> u16 {
@@ -64,14 +43,9 @@ const fn word_rounded(value: u16) -> u16 {
     units(value, 4).saturating_mul(4)
 }
 
-/// The places one frame of `length` octets may reach from R on: R, then as
-/// many ring descriptors as its bytes past R's buffer fill.
-fn reach(length: u16) -> Vec<Place> {
-    let past = length.saturating_sub(R_FRAME);
-    let ring = usize::from(units(past, BUFFER));
-    core::iter::once(Place::R)
-        .chain((0..ring).map(Place::Ring))
-        .collect()
+/// The descriptors one frame of `length` octets takes from d0 on.
+fn reach(length: u16) -> usize {
+    usize::from(units(length.saturating_sub(FIRST), BUFFER)).saturating_add(1)
 }
 
 /// Nothing heard: every descriptor armed.
@@ -80,70 +54,85 @@ fn quiet(seats: &[Seat]) -> bool {
 }
 
 /// One frame of `length` and no more: something done, and every descriptor
-/// that is not armed among the places that frame may reach.
+/// that is not armed among those that frame takes from d0.
 fn one_frame(seats: &[Seat], length: u16) -> bool {
     let reach = reach(length);
-    let changed: Vec<Place> = placed(seats)
-        .into_iter()
-        .filter(|(_, seat)| *seat != Seat::Armed)
-        .map(|(place, _)| place)
-        .collect();
-    !changed.is_empty() && changed.iter().all(|place| reach.contains(place))
+    let mut changed = seats
+        .iter()
+        .enumerate()
+        .filter(|(_, seat)| **seat != Seat::Armed)
+        .peekable();
+    changed.peek().is_some() && changed.all(|(index, _)| index < reach)
 }
 
-/// The prediction of `tasks/360` for a frame of `length`: the descriptors
-/// it leaves (every other one armed), whether the window meets the length
-/// anomaly, and the units it gives.
+/// What a frame of `length` leaves from d0 on: its terminal descriptor and
+/// its `LENGTH` (every other descriptor armed, a chain's first ones read as
+/// continuations), and the bytes its unit holds after the header.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
-pub(crate) struct Predicted {
-    pub(crate) done: Vec<(Place, u16)>,
-    pub(crate) anomaly: bool,
-    pub(crate) singles: u32,
-    pub(crate) chains: u32,
+pub(crate) struct Expected {
+    pub(crate) terminal: (usize, u16),
+    pub(crate) written: u32,
 }
 
-pub(crate) fn predicted(length: u16) -> Predicted {
-    if length <= R_FRAME {
-        return Predicted {
-            done: vec![(Place::R, FLOOR.saturating_add(word_rounded(length)))],
-            anomaly: false,
-            singles: 0,
-            chains: 0,
-        };
-    }
-    let past = length.saturating_sub(R_FRAME);
-    let ring = units(past, BUFFER);
-    let last = past.saturating_sub(BUFFER.saturating_mul(ring.saturating_sub(1)));
-    let terminal = word_rounded(last);
-    let anomaly = ring == 1 && terminal < FLOOR;
-    Predicted {
-        done: vec![(Place::Ring(usize::from(ring.saturating_sub(1))), terminal)],
-        anomaly,
-        singles: u32::from(ring == 1 && !anomaly),
-        chains: u32::from(ring > 1),
+pub(crate) fn expected(length: u16) -> Expected {
+    let terminal = if length <= FIRST {
+        (0, FLOOR.saturating_add(word_rounded(length)))
+    } else {
+        let past = length.saturating_sub(FIRST);
+        let more = units(past, BUFFER);
+        let last = past.saturating_sub(BUFFER.saturating_mul(more.saturating_sub(1)));
+        (usize::from(more), word_rounded(last))
+    };
+    Expected {
+        terminal,
+        written: u32::from(word_rounded(length)),
     }
 }
 
-/// What a boot showed, in the prediction's terms.
-fn observed(seats: &[Seat], counts: &service::Counts) -> Predicted {
-    Predicted {
-        done: placed(seats)
-            .into_iter()
-            .filter_map(|(place, seat)| match seat {
-                Seat::Done { length } => Some((place, length)),
-                Seat::Armed | Seat::Other => None,
-            })
-            .collect(),
-        anomaly: counts.length_anomalies > 0,
-        singles: counts.singles,
-        chains: counts.chains,
+/// The descriptors a boot left done, by index and `LENGTH`.
+fn done(seats: &[Seat]) -> Vec<(usize, u16)> {
+    seats
+        .iter()
+        .enumerate()
+        .filter_map(|(index, seat)| match seat {
+            Seat::Done { length } => Some((index, *length)),
+            Seat::Armed | Seat::Other => None,
+        })
+        .collect()
+}
+
+/// Whether a boot is the fixed ring's: the frame's one terminal descriptor
+/// where its length puts it, no anomaly, and the window's one unit of the
+/// sender's pattern of its length.
+fn fixed(seats: &[Seat], counts: &service::Counts, length: u16) -> Result<(), String> {
+    let expected = expected(length);
+    let done = done(seats);
+    if done != [expected.terminal] {
+        return Err(format!(
+            "{length}: done {done:?}, not {:?}",
+            expected.terminal
+        ));
     }
+    if counts.length_anomalies != 0 {
+        return Err(format!(
+            "{length}: {} length anomalies",
+            counts.length_anomalies
+        ));
+    }
+    if (counts.patterns, counts.pattern_written) != (1, expected.written) {
+        return Err(format!(
+            "{length}: {} of the sender's units, the last of {} bytes, not one of {}",
+            counts.patterns, counts.pattern_written, expected.written
+        ));
+    }
+    Ok(())
 }
 
 /// How one boot ended.
 enum Boot {
-    /// Exactly one frame of the length, the sender's end known.
-    Complete(serde_json::Value),
+    /// Exactly one frame of the length, the sender's end known: its record
+    /// and whether it is the fixed ring's.
+    Complete(serde_json::Value, Result<(), String>),
     /// Something else reached the ring, or the sender's end is unknown.
     Incomplete(String),
 }
@@ -231,19 +220,20 @@ fn boot(cx: &mut Cx<'_>, length: u16, sender: [u8; 6]) -> Result<Boot, Failure> 
     let Windowed::Counted { counts, .. } = &windowed else {
         return Err(Failure::Fail(format!("receiver: window: {windowed:?}")));
     };
-    let seen = observed(&after_ring.seats, counts);
-    let expected = predicted(length);
-    Ok(Boot::Complete(serde_json::json!({
-        "length": length,
-        "status": status,
-        "standing": after_ring.standing,
-        "controls": after_ring.controls,
-        "seats": after_ring.seats,
-        "window": counts,
-        "observed": seen,
-        "predicted": expected,
-        "as_predicted": seen == expected,
-    })))
+    let verdict = fixed(&after_ring.seats, counts, length);
+    Ok(Boot::Complete(
+        serde_json::json!({
+            "length": length,
+            "status": status,
+            "standing": after_ring.standing,
+            "controls": after_ring.controls,
+            "seats": after_ring.seats,
+            "window": counts,
+            "expected": expected(length),
+            "fixed": verdict.as_ref().err(),
+        }),
+        verdict,
+    ))
 }
 
 fn stop_receiver(cx: &mut Cx<'_>) -> Result<(), Failure> {
@@ -252,11 +242,13 @@ fn stop_receiver(cx: &mut Cx<'_>) -> Result<(), Failure> {
 }
 
 /// The case: every length, `BOOTS` complete boots each, a boot a foreign
-/// frame or an unknown end took repeated up to `ATTEMPTS`.
+/// frame or an unknown end took repeated up to `ATTEMPTS`; it fails when a
+/// complete boot is not the fixed ring's.
 pub(crate) fn first_frame(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let sender = fresh_sender(cx, None)?;
     let mut receiver = None;
     let mut short = Vec::new();
+    let mut refuted = Vec::new();
     let mut table = Vec::new();
     for length in LENGTHS {
         let mut complete = 0;
@@ -272,9 +264,12 @@ pub(crate) fn first_frame(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 receiver = Some(station);
             }
             match boot(cx, length, sender)? {
-                Boot::Complete(record) => {
+                Boot::Complete(record, verdict) => {
                     complete = complete.saturating_add(1);
                     table.push(record);
+                    if let Err(reason) = verdict {
+                        refuted.push(reason);
+                    }
                 }
                 Boot::Incomplete(reason) => {
                     // A sender whose step failed refuses its next frame: a
@@ -297,6 +292,9 @@ pub(crate) fn first_frame(cx: &mut Cx<'_>) -> Result<(), Failure> {
         }
     }
     keep(cx, RECEIVER, "first-frame", &table);
+    if !refuted.is_empty() {
+        return Err(Failure::Fail(refuted.join("; ")));
+    }
     if short.is_empty() {
         Ok(())
     } else {
@@ -309,44 +307,58 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_prediction_is_the_table_of_tasks_360() {
-        let done = |length: u16| predicted(length).done;
-        assert_eq!(done(100), [(Place::R, 164)]);
-        assert_eq!(done(192), [(Place::R, 256)]);
-        for (length, terminal) in [(193, 4), (230, 40), (252, 60)] {
-            let p = predicted(length);
-            assert_eq!(p.done, [(Place::Ring(0), terminal)], "{length}");
-            assert!(p.anomaly && p.singles == 0, "{length}");
-        }
-        for (length, terminal) in [(253, 64), (256, 64), (300, 108)] {
-            let p = predicted(length);
-            assert_eq!(p.done, [(Place::Ring(0), terminal)], "{length}");
-            assert!(!p.anomaly && p.singles == 1, "{length}");
-        }
-        let p = predicted(700);
-        assert_eq!(p.done, [(Place::Ring(1), 252)]);
-        assert_eq!((p.anomaly, p.singles, p.chains), (false, 0, 1));
+    fn a_frame_from_d0_ends_where_its_length_puts_it() {
+        assert_eq!(expected(100).terminal, (0, 164));
+        assert_eq!(expected(192).terminal, (0, 256));
+        assert_eq!(expected(193).terminal, (1, 4));
+        assert_eq!(expected(252).terminal, (1, 60));
+        assert_eq!(expected(253).terminal, (1, 64));
+        assert_eq!(expected(448).terminal, (1, 256));
+        assert_eq!(expected(449).terminal, (2, 4));
+        assert_eq!(expected(700).terminal, (2, 252));
+        assert_eq!(expected(253).written, 256);
+        assert_eq!(expected(700).written, 700);
     }
 
     #[test]
-    fn one_frame_is_what_its_length_can_reach_and_nothing_beyond() {
-        let mut seats = vec![Seat::Armed; RING + 1];
+    fn one_frame_is_what_its_length_takes_from_d0_and_nothing_beyond() {
+        let mut seats = vec![Seat::Armed; 16];
         assert!(quiet(&seats));
         assert!(!one_frame(&seats, 300), "nothing done is no frame");
-        seats[0] = Seat::Done { length: 108 };
+        seats[1] = Seat::Done { length: 108 };
         assert!(!quiet(&seats));
         assert!(one_frame(&seats, 300));
-        assert!(
-            !one_frame(&seats, 100),
-            "a frame in R reaches no ring descriptor"
-        );
-        seats[2] = Seat::Done { length: 60 };
+        assert!(!one_frame(&seats, 100), "a frame in d0 alone reaches no d1");
+        seats[3] = Seat::Done { length: 60 };
         assert!(!one_frame(&seats, 300), "a second frame");
-        let mut in_r = vec![Seat::Armed; RING + 1];
-        in_r[RING] = Seat::Done { length: 164 };
-        assert!(one_frame(&in_r, 100));
-        let mut chain = vec![Seat::Armed; RING + 1];
-        chain[1] = Seat::Done { length: 252 };
-        assert!(one_frame(&chain, 700));
+    }
+
+    #[test]
+    fn a_boot_is_the_fixed_ring_s_only_with_the_one_unit_of_its_length() {
+        let mut seats = vec![Seat::Armed; 16];
+        seats[1] = Seat::Done { length: 60 };
+        let counts = service::Counts {
+            chains: 1,
+            patterns: 1,
+            pattern_written: 252,
+            ..service::Counts::default()
+        };
+        assert_eq!(fixed(&seats, &counts, 252), Ok(()));
+        let standing = service::Counts {
+            length_anomalies: 4_740,
+            ..counts
+        };
+        assert!(fixed(&seats, &standing, 252).is_err(), "tasks/358's defect");
+        let foreign = service::Counts {
+            patterns: 0,
+            ..counts
+        };
+        assert!(
+            fixed(&seats, &foreign, 252).is_err(),
+            "not the sender's frame"
+        );
+        let mut in_d0 = vec![Seat::Armed; 16];
+        in_d0[0] = Seat::Done { length: 60 };
+        assert!(fixed(&in_d0, &counts, 252).is_err(), "the old ring's d0");
     }
 }

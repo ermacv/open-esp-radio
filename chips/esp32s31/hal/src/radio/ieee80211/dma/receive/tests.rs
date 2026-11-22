@@ -135,7 +135,7 @@ macro_rules! brand {
 type Ring<B> = RxRing<B, BYTES, RING, ModelWalker>;
 
 /// The ring over its own brand, built cold, with the spares the arena has
-/// beyond the ring and R, the walker's start and the first byte of the
+/// beyond the ring, the walker's start and the first byte of the
 /// arena's place.
 struct Bench<B: Brand<Window = DmaWindow> + 'static> {
     ring: Occupied<'static, Ring<B>>,
@@ -152,8 +152,7 @@ fn core_open() -> MacCoreOpen {
 fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>() -> Bench<B> {
     let (arena, fresh) = Arena::<B, BYTES>::claim().unwrap();
     let mut fresh: Vec<_> = fresh.collect();
-    let spares = fresh.split_off(RING + 1);
-    let reserved = fresh.pop().unwrap();
+    let spares = fresh.split_off(RING);
     let ring: [Handle<B>; RING] = fresh.try_into().ok().unwrap();
     let table: &'static mut RxDescriptors<RING> = Box::leak(Box::new(bytemuck::Zeroable::zeroed()));
     let table = RxTable::place::<HostDma>(Placed::host(table)).ok().unwrap();
@@ -163,7 +162,6 @@ fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>
         walker: ModelWalker::default(),
         arena,
         ring,
-        reserved,
     };
     let (ring, start) = RxRing::publish_cold(place, parts, core_open());
     Bench {
@@ -175,7 +173,7 @@ fn bench<B: Brand<Window = DmaWindow, Static = HostPlace<ArenaPlace<B, BYTES>>>>
 }
 
 impl<B: Brand<Window = DmaWindow> + 'static> Bench<B> {
-    /// Descriptor `index`'s DMA address (R's at `RING`).
+    /// Descriptor `index`'s DMA address.
     fn descriptor_address(&self, index: usize) -> u32 {
         self.ring.table.base + 12 * index as u32
     }
@@ -242,15 +240,10 @@ fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
         };
         assert_eq!(descriptor.next_address(), next, "descriptor {index}'s link");
     }
-    assert_eq!(ring.table.descriptors.reserved.word0(), bench.arm_word());
-    assert_eq!(
-        ring.table.descriptors.reserved.next_address(),
-        bench.descriptor_address(0)
-    );
     assert_eq!(
         ring.walker.base,
-        Some(bench.descriptor_address(RING)),
-        "BASE = R"
+        Some(bench.descriptor_address(0)),
+        "BASE = the ring's head: no descriptor outside the rotation"
     );
     assert!(ring.walker.window);
     assert!(!ring.walker.enabled, "the walker is started apart");
@@ -259,37 +252,12 @@ fn the_cold_publication_arms_and_links_the_ring_and_publishes_r_once() {
 
 brand!(observed);
 #[test]
-fn the_descriptor_controls_are_each_word_the_walker_left_in_order_then_r() {
+fn the_descriptor_controls_are_each_word_the_walker_left_in_its_order() {
     let bench = bench::<observed::Rx>();
-    bench.complete(2, 114, true);
-    let (ring, reserved) = bench.ring.descriptor_controls();
-    for (index, control) in ring.iter().enumerate() {
-        let expected = if index == 2 {
-            rx_landed_word(SIZE as u32, 114, true)
-        } else {
-            bench.arm_word()
-        };
-        assert_eq!(*control, expected, "descriptor {index}");
-    }
-    assert_eq!(reserved, bench.arm_word());
-}
-
-brand!(observed_reserved);
-#[test]
-fn the_reserved_word_is_r_s_own_and_answered_last() {
-    let bench = bench::<observed_reserved::Rx>();
-    // R done with a length no ring descriptor has, d0 and d3 with two others.
-    let r_word = rx_landed_word(SIZE as u32, 100, true);
-    bench.ring.table.descriptors.reserved.write_word0(r_word);
     bench.complete(0, 60, true);
     bench.complete(3, 84, false);
-    let (ring, reserved) = bench.ring.descriptor_controls();
-    assert_eq!(reserved, r_word, "R's own word, answered last");
-    assert!(
-        ring.iter().all(|control| *control != r_word),
-        "no ring descriptor answers R's word"
-    );
-    for (index, control) in ring.iter().enumerate() {
+    let controls = bench.ring.descriptor_controls();
+    for (index, control) in controls.iter().enumerate() {
         let expected = match index {
             0 => rx_landed_word(SIZE as u32, 60, true),
             3 => rx_landed_word(SIZE as u32, 84, false),
@@ -611,9 +579,8 @@ fn a_stopped_ring_s_release_gives_every_buffer_back_and_publishes_again() {
         [SIZE - 64; RING],
         "every handle the whole buffer above the floor"
     );
-    assert_eq!(parts.reserved.span().len(), SIZE - 64);
     assert_eq!(
-        spares.len() + 1 + RING + 1,
+        spares.len() + 1 + RING,
         COUNT,
         "the lent unit is out, every other buffer back"
     );

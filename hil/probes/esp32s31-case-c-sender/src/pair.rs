@@ -456,20 +456,15 @@ pub(crate) fn counters(
 }
 
 /// The ring's state: where its walker stands and each descriptor's control
-/// word, R's last.
+/// word, in the ring's order.
 pub(crate) fn ring_state<const N: usize>(
     standing: Standing,
-    controls: (
-        [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
-        oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl,
-    ),
+    controls: [oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl; N],
 ) -> service::RingState {
-    let (ring, reserved) = controls;
-    let all = || ring.iter().chain(core::iter::once(&reserved));
     service::RingState {
         standing: standing_of(standing),
-        controls: all().map(|control| control.bits()).collect(),
-        seats: all().map(|control| seat(*control)).collect(),
+        controls: controls.iter().map(|control| control.bits()).collect(),
+        seats: controls.iter().map(|control| seat(*control)).collect(),
     }
 }
 

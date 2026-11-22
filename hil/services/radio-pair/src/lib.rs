@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 
 /// The most readings a snapshot page holds.
 pub const PAGE_READINGS: usize = 40;
-/// The most descriptors a ring's state reports: the receiver's 16 and R.
-pub const RING_DESCRIPTORS: usize = 17;
+/// The most descriptors a ring's state reports: the receiver's 16.
+pub const RING_DESCRIPTORS: usize = 16;
 /// Case C's cases (`case_c::CASES`).
 pub const CASES: usize = 6;
 /// A case's ends by the frame before it: each case or none.
@@ -321,7 +321,7 @@ pub struct HangCounters {
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct RingState {
     pub standing: Standing,
-    /// The ring's descriptors in its order, then R's.
+    /// The ring's descriptors in its order.
     pub controls: heapless::Vec<u32, RING_DESCRIPTORS>,
     /// The same descriptors read through the layout's fields.
     pub seats: heapless::Vec<Seat, RING_DESCRIPTORS>,
@@ -559,6 +559,12 @@ pub struct Counts {
     pub foreign: u32,
     pub length_anomalies: u32,
     pub doorbell_anomalies: u32,
+    /// The sender's `single` frames: from the sender to the station, each
+    /// body byte its offset's (`Single`).
+    pub patterns: u32,
+    /// The last such unit's bytes after its header, its frame rounded up to
+    /// a word.
+    pub pattern_written: u32,
 }
 
 /// One case's chains in a window.

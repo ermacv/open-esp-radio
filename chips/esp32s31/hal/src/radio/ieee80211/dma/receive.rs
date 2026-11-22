@@ -1,16 +1,22 @@
 //! The Wi-Fi receive ring over 5.1's arena: the walker's descriptors, the
 //! buffers lent to it and the atoms that exchange them.
 //!
-//! The ring is `N` descriptors and, right after them, the reserved
-//! descriptor R. Every descriptor always holds a buffer lent to the walker:
-//! a unit is never taken without its replacement in the same step. The cold
-//! publication arms them all (BUFFER, NEXT, CONTROL with OWNER last), links
-//! them in ring order with the last one's link zero (the accepted tail),
-//! gives R its own buffer and the ring's head as its link, and publishes R
-//! as `RX_DESCRIPTOR_BASE`, once (`ROM_REV0_WDEV_APPEND_RX_BLOCKS`). R is
-//! outside the rotation: its buffer stays lent until the ring's release, and
-//! a frame that lands in it before the walker reaches the head is not one of
-//! the ring's units.
+//! The ring is `N` descriptors. Every descriptor always holds a buffer lent
+//! to the walker: a unit is never taken without its replacement in the same
+//! step. The cold publication arms them all (BUFFER, NEXT, CONTROL with
+//! OWNER last), links them in ring order with the last one's link zero (the
+//! accepted tail), and publishes the ring's head, d0, as
+//! `RX_DESCRIPTOR_BASE`, once a publication: the walker begins there, so the
+//! first frame it writes is the ring's first unit, a chain from d0 included
+//! (`HW_RX_BASE_HEAD_20261122`). The vendor's list is published the same way
+//! (`PP[wdev.o]::wDev_Rxbuf_Init`, `PP[hal_mac.o]::mac_rxbuf_init`).
+//!
+//! No descriptor is kept outside the rotation. One was, while a unit's
+//! buffer could be lent on with its descriptor detached (`OWNER` cleared,
+//! where the walker stops): BASE then had to name a descriptor that is never
+//! detached. Here no descriptor is detached, and the walker reads BASE only
+//! at its start after a publication; after a service and after it ran out
+//! it continues at `LAST.next` (`HW_RX_BASE_HEAD_20261122`).
 //!
 //! [`RxRing::serve`] gives its caller (the keeper) a view of the units the
 //! walker completed, in the ring's order up to `LAST` inclusive, read once
@@ -68,13 +74,11 @@ pub const RELOAD_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_mic
     None => panic!("the doorbell's settle is a valid settle"),
 };
 
-/// The descriptors of a receive ring: the ring and, right after it, the
-/// reserved descriptor R. Placed by the image (`dma_static!`).
+/// The descriptors of a receive ring. Placed by the image (`dma_static!`).
 #[repr(C)]
 #[derive(bytemuck::Zeroable)]
 pub struct RxDescriptors<const N: usize> {
     ring: [RxDescriptor; N],
-    reserved: RxDescriptor,
 }
 
 /// What the ring reads of and writes to the walker's registers.
@@ -166,7 +170,7 @@ pub enum NextAt {
     Zero,
     /// A descriptor of the ring.
     Ring(usize),
-    /// Another address (R's among them).
+    /// Another address.
     Elsewhere,
 }
 
@@ -209,15 +213,13 @@ pub enum RingAnomaly {
 pub struct Unplaced;
 
 /// A ring's descriptor table, placed once: the descriptors and the DMA
-/// address of each, R's included. Every publication of the ring reuses it.
+/// address of each. Every publication of the ring reuses it.
 pub struct RxTable<const N: usize> {
     descriptors: &'static RxDescriptors<N>,
     /// Each ring descriptor's own address.
     links: [DmaRef<WifiRxDmaDescriptor>; N],
-    /// The ring's first descriptor's address, R's link.
+    /// The ring's first descriptor's address, the walker's BASE.
     head: DmaRef<WifiRxDmaDescriptor>,
-    /// R's address, the walker's BASE.
-    reserved: DmaRef<WifiRxDmaDescriptor>,
     /// The ring's first address, which the walker's cursor reads against.
     base: u32,
 }
@@ -233,26 +235,18 @@ impl<const N: usize> RxTable<N> {
         table: Placed<RxDescriptors<N>>,
     ) -> Result<Self, (Unplaced, Placed<RxDescriptors<N>>)> {
         let projected = PlacementProjection::try_with::<S, _, _>(table, |table, projection| {
-            let addresses = projection.table(
-                table
-                    .ring
-                    .iter()
-                    .chain(core::iter::once(&table.reserved))
-                    .map(RxDescriptor::layout),
-            )?;
+            let addresses = projection.table(table.ring.iter().map(RxDescriptor::layout))?;
             let mut links = [addresses.first(); N];
             for (link, descriptor) in links.iter_mut().zip(&table.ring) {
                 *link = projection.link(descriptor.layout())?;
             }
-            let reserved = projection.link(table.reserved.layout())?;
-            Ok((links, addresses.first(), reserved, addresses.base()))
+            Ok((links, addresses.first(), addresses.base()))
         });
         match projected {
-            Ok((descriptors, (links, head, reserved, base))) => Ok(Self {
+            Ok((descriptors, (links, head, base))) => Ok(Self {
                 descriptors,
                 links,
                 head,
-                reserved,
                 base,
             }),
             Err((_, table)) => Err((Unplaced, table)),
@@ -268,7 +262,6 @@ pub struct RxRingParts<B: Brand, const BYTES: usize, const N: usize, W> {
     pub walker: W,
     pub arena: Arena<B, BYTES>,
     pub ring: [Handle<B>; N],
-    pub reserved: Handle<B>,
 }
 
 /// The one start a publication gives: [`RxRing::enable_walker`] takes it.
@@ -338,7 +331,6 @@ where
     table: RxTable<N>,
     arena: Arena<B, BYTES>,
     slots: [Lent<B>; N],
-    reserved: Lent<B>,
     walker: W,
     /// The oldest descriptor not yet consumed, in the ring's order.
     start: RingIndex<N>,
@@ -372,8 +364,8 @@ where
 
     /// The cold publication, built in its place: the walker's buffer
     /// configuration; every descriptor armed with one of the parts' buffers
-    /// and linked to the next, the last one's link zero; R armed with its
-    /// buffer and linked to the head; the window selected and BASE = R. It
+    /// and linked to the next, the last one's link zero; the window selected
+    /// and BASE = the ring's head (`HW_RX_BASE_HEAD_20261122`). It
     /// takes the MAC core opened with its runtime stop held
     /// (`WifiMacHal::open_core`), before the one BASE. The walker is not
     /// started: the start it gives does ([`Self::enable_walker`]).
@@ -389,14 +381,10 @@ where
             mut walker,
             arena,
             ring,
-            reserved,
         } = parts;
         let descriptors = table.descriptors;
         // The accepted tail is the ring's last descriptor (`N >= 2`).
-        let last = descriptors
-            .ring
-            .iter()
-            .fold(&descriptors.reserved, |_, descriptor| descriptor);
+        let last = &descriptors.ring[Self::LAST.get()];
         walker.initialize_prefix();
         walker.configure_window();
         let mut descriptor = descriptors.ring.iter();
@@ -408,12 +396,10 @@ where
             }
             lent
         });
-        let (reserved, buffer) = arena.lend(reserved);
-        descriptors
-            .reserved
-            .publish_owned(Self::ARMED, buffer, Some(table.head));
         walker.fence();
-        walker.write_base(table.reserved);
+        // SOURCE: HW_RX_BASE_HEAD_20261122: the walker begins at BASE after
+        // its start and reads it at no other time.
+        walker.write_base(table.head);
         walker.fence();
         let ring = Occupied::fill(
             place,
@@ -421,7 +407,6 @@ where
                 table,
                 arena,
                 slots,
-                reserved,
                 walker,
                 start: Self::HEAD,
                 tail: Tail {
@@ -465,7 +450,6 @@ where
             table,
             arena,
             slots,
-            reserved,
             walker,
             ..
         } = ring;
@@ -493,7 +477,6 @@ where
             walker,
             arena,
             ring: slots.map(release),
-            reserved: release(reserved),
         };
         (parts, place)
     }
@@ -521,18 +504,16 @@ where
         }
     }
 
-    /// Each descriptor's control word as the walker left it: the ring's in
-    /// its order, then R's. An observation for a probe's record of the
-    /// descriptors' owners, read through the layout's volatile accessor;
-    /// the ring decides nothing by it.
-    pub fn descriptor_controls(
-        &self,
-    ) -> ([WifiRxDmaDescriptorControl; N], WifiRxDmaDescriptorControl) {
-        let descriptors = self.table.descriptors;
-        (
-            descriptors.ring.each_ref().map(RxDescriptor::word0),
-            descriptors.reserved.word0(),
-        )
+    /// Each descriptor's control word as the walker left it, in the ring's
+    /// order. An observation for a probe's record of the descriptors'
+    /// owners, read through the layout's volatile accessor; the ring decides
+    /// nothing by it.
+    pub fn descriptor_controls(&self) -> [WifiRxDmaDescriptorControl; N] {
+        self.table
+            .descriptors
+            .ring
+            .each_ref()
+            .map(RxDescriptor::word0)
     }
 
     /// Serve the completed units: `f` gets the view, in the ring's order up
