@@ -80,7 +80,7 @@ impl<Q, A, N: QueueNotify, M: QueueNotify> Exchange<Q, A, N, M> {
     }
 
     /// The asking end and the answering end.
-    pub fn split(&mut self) -> (Asking<'_, Q, A, N, M>, Answering<'_, Q, A, N, M>) {
+    pub fn split(&mut self) -> Ends<'_, Q, A, N, M> {
         let (requests, taken) = self.requests.split();
         let (answers, back) = self.answers.split();
         (
@@ -96,6 +96,9 @@ impl<Q, A, N: QueueNotify, M: QueueNotify> Exchange<Q, A, N, M> {
         )
     }
 }
+
+/// The two ends of one exchange, as [`Exchange::split`] gives them.
+pub type Ends<'a, Q, A, N, M> = (Asking<'a, Q, A, N, M>, Answering<'a, Q, A, N, M>);
 
 /// The asking end: it hands requests and takes their answers.
 pub struct Asking<'a, Q, A, N = AtomicWaker, M = AtomicWaker> {
