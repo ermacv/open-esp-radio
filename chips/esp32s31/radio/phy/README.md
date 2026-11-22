@@ -326,8 +326,9 @@ registration and common tracking. Borrowed typed step tokens carry each
 hardware command directly to one poll loop; consuming a completion updates
 that same cursor and coefficient bank. Short ready leaves share a bounded
 poll, while an incomplete DC/IQ observation waits on the caller's timer.
-Other required 1–20 us hardware settles count machine cycles through `oer-portable-riscv`,
-using the stable frequency adopted by the HAL clock owner at runtime handover.
+Other required 1–20 us hardware settles are `oer_portable_time::settle` holds on
+the settle counter the caller gives beside its timer (`executor::wait::PhyTimer`):
+on the chip, the HAL's `CycleCounter` at the CPU rate the runtime handover adopted.
 PBus/I2C leaves retain their bounded direct observation policy.
 TXDC/PWDET retains its direct search/root interpreter inside the owned PHY
 transaction, without CPU-admission queries between its direct operations. Each runtime SAR/PWDET conversion uses the explicit [step machine](src/tx/sar.rs)
@@ -426,7 +427,7 @@ The timing mechanisms have different scopes:
 
 | Mechanism | Meaning | Enforcement / limitation |
 | --- | --- | --- |
-| Vendor minimum settle | Wait at least the required time after a hardware action | Named 1–20 µs settles use `mcycle`; longer settles use the caller's timer. Preemption can lengthen them. |
+| Vendor minimum settle | Wait at least the required time after a hardware action | Named 1–20 µs settles count cycles on the counter beside the caller's timer; longer settles use the timer. Preemption can lengthen them. |
 | Readiness deadline | Our bound for observing completion or giving up on busy hardware | Direct observations use 20 µs; T7 accepts a completed answer after its 100 µs busy window; SAR gives up after 40 µs without a ready sample and accepts any ready sample. These are not vendor maximum delays. |
 | CPU admission | Decide whether another complete atom may run | Stop at a ready peer or 900 µs admission threshold, reserving 100 µs toward the 1 ms contract. No universal atom/poll elapsed-time cutoff. |
 | RF admission | Decide whether the shared RF transaction may start | Pending tracking state and the owned PHY transaction; grant-protect brackets request hardware arbitration. No hard-window calendar, grant proof or one-period deferral bound. |

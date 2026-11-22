@@ -11,9 +11,6 @@ chip, PAC, executor or terminal owner:
   and cooperative wait. The normal map is restored on success and finite error;
   cancellation retains the current hardware state with its outer owner.
 - `pbus`: debug/work-mode ordering and one completion observation before clear.
-- `settle`: named minimum machine-cycle settles from 1 through 20 microseconds,
-  using the CPU rate already adopted by the clock owner. Wrapping samples and
-  interrupt preemption preserve the minimum; interrupts remain enabled.
 
 The S31 binding owns the retained-wake pair profile. The HAL supplies atom ports,
 fixed vendor write series, exclusive register custody and restore backing.

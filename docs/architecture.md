@@ -555,9 +555,16 @@ probe has one at each of P1 to P4).
   The AES driver waits for each Typical block synchronously on its `STATE`
   flag within such a settle, sourced from the measured block time; a block
   still working at its end is a typed timeout.
-  PHY short busy-wait settles count `mcycle` through `oer-portable-riscv`, at the stable CPU
-  frequency the clock owner adopts from its register state during runtime
-  handover. They require neither a ROM delay nor ROM clock calibration.
+  Every such settle is `oer_portable_time::settle`, counted in cycles of a
+  `SettleCounter`. On the chip that counter is the HAL's `CycleCounter`: the
+  runtime handover adopts the CPU rate from the clock registers as a value
+  (an unsupported CPU clock is a typed boot failure), and the counter made
+  from it samples `mcycle` and rounds each limit up to whole cycles. Each
+  driver takes a copy where it takes its clock (the AES engine, entropy, the
+  MAC stop, the TX abort, the receive ring's doorbell, the PHY beside its
+  timer). The counter holds the rate the image runs at; a lower rate would
+  make a settle longer than its limit, never shorter. No settle needs a ROM
+  delay or ROM clock calibration.
 - PHY's shared transport and RX-gain drivers check CPU admission between
   complete hardware atoms. The contracts are a 50 µs atom and a 1 ms poll
   without a ready peer; admission stops at 900 µs to reserve the next atom
