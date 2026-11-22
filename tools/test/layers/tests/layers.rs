@@ -393,6 +393,58 @@ fn scoped_dependencies(
         .collect()
 }
 
+/// Every manifest under `directory`, `target` aside.
+fn manifests(directory: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if path.file_name().is_some_and(|name| name != "target") {
+                manifests(&path, found);
+            }
+        } else if path.file_name().is_some_and(|name| name == "Cargo.toml") {
+            found.push(path);
+        }
+    }
+}
+
+/// "Portable protocols take no `critical-section` and no blocking mutex"
+/// (`CLAUDE.md`, Execution), read from the manifests: no crate under
+/// `protocols/`, in the workspace or outside it, names `critical-section`
+/// or `embassy-sync` among its direct dependencies or dev-dependencies,
+/// target-specific ones included. A dependency's own dependencies are not
+/// read: the rule states what a protocol takes itself.
+#[test]
+fn no_protocol_names_a_critical_section_or_a_blocking_mutex() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let mut found = Vec::new();
+    manifests(&root.join("protocols"), &mut found);
+    assert!(!found.is_empty(), "the protocols have manifests");
+    let offending: Vec<String> = found
+        .iter()
+        .flat_map(|path| {
+            let manifest = read_toml(path);
+            let named: BTreeSet<String> = ["dependencies", "dev-dependencies"]
+                .into_iter()
+                .flat_map(|table| scoped_dependencies(&manifest, &workspace, table))
+                .filter(|name| name == "critical-section" || name == "embassy-sync")
+                .collect();
+            let relative = path
+                .strip_prefix(&root)
+                .unwrap_or(path)
+                .display()
+                .to_string();
+            named
+                .into_iter()
+                .map(move |name| std::format!("{relative}: {name}"))
+        })
+        .collect();
+    assert!(offending.is_empty(), "{offending:#?}");
+}
+
 fn forbidden_dependency(name: &str) -> bool {
     name.split('-')
         .any(|part| ["fatal", "reset", "hal", "pac", "mmio", "riscv"].contains(&part))

@@ -1,6 +1,6 @@
 //! An image owns capture storage, its clock, lifecycle and context. The agent
 //! serves only bounded encoded records and aggregate counters.
-use crate::console::{Console, Immediate};
+use crate::console::Producer;
 use oer_protocols_hil_protocol::{RequestIdentity, capture::*};
 
 #[cfg(oer_trace)]
@@ -43,14 +43,14 @@ impl Request {
 
 impl Answer {
     /// Pages use console backpressure; observation points never wait for IO.
-    pub async fn publish<const N: usize, const M: usize, P: Immediate>(
+    pub async fn publish<const DEPTH: usize>(
         &self,
-        console: &Console<N, M, P>,
+        producer: &mut Producer<'_, DEPTH>,
         request: RequestIdentity,
     ) {
         macro_rules! send {
             ($value:expr) => {
-                console
+                producer
                     .publish_reliably(request.session_id, request.request_id, $value)
                     .await
             };

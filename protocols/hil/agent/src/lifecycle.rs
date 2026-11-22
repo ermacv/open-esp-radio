@@ -1,5 +1,5 @@
 //! Generic lifecycle service. The image owns the terminal reset action.
-use crate::console::{Console, Dropped, Immediate, progress::ReceiverLimit};
+use crate::console::{Dropped, Producer};
 use oer_protocols_hil_protocol::{RequestIdentity, lifecycle::ResetAccepted};
 
 crate::requests! {
@@ -40,30 +40,20 @@ impl AcknowledgedReset {
     }
 }
 
-/// Why the reset acknowledgement is not known written: the image keeps the
-/// observations and performs no reset.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Unacknowledged {
-    /// The acknowledgement could not be built: nothing was queued.
-    Dropped,
-    /// The completion barrier's fan-out is exhausted.
-    Barrier(ReceiverLimit),
-}
-
-/// Publish the reset acknowledgement and wait for its write. A barrier
-/// failure returns its observations to the image without authorizing reset.
-pub async fn acknowledge_reset<const N: usize, const M: usize, P: Immediate>(
-    console: &Console<N, M, P>,
+/// Publish the reset acknowledgement through `producer` and wait for its
+/// write.
+///
+/// # Errors
+/// [`Dropped`] when the acknowledgement could not be built: nothing was
+/// queued, and the image performs no reset.
+pub async fn acknowledge_reset<const DEPTH: usize>(
+    producer: &mut Producer<'_, DEPTH>,
     request: RequestIdentity,
-) -> Result<AcknowledgedReset, Unacknowledged> {
-    let entered = console
+) -> Result<AcknowledgedReset, Dropped> {
+    let entered = producer
         .publish_reliably(request.session_id, request.request_id, &ResetAccepted)
-        .await
-        .map_err(|Dropped| Unacknowledged::Dropped)?;
-    console
-        .written(entered)
-        .await
-        .map_err(Unacknowledged::Barrier)?;
+        .await?;
+    producer.written(entered).await;
     Ok(AcknowledgedReset {
         request,
         place: entered.place(),

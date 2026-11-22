@@ -39,29 +39,28 @@ health stay in `base`; Hello is also the reachability check. The image queues
 a reset request; `lifecycle::acknowledge_reset` publishes the acknowledgement
 and returns an affine `AcknowledgedReset` only after its complete frame was
 written. The image consumes its correlation observations (the request,
-the acknowledgement's place among the console's entries, the session) in
-its existing retained reset path. An acknowledgement that could not be
-built, or a completion-barrier error, returns to the image's fault policy
-(`lifecycle::Unacknowledged`) without performing the requested action.
+the acknowledgement's place in its lane, the session) in its existing
+retained reset path. An acknowledgement that could not be built returns
+`Dropped` to the image's fault policy without performing the requested
+action. The agent owns no hardware reset operation.
 
-The console's one writer numbers each message as it takes it out of the
-queue; a producer only enters its message. A producer that waits for its
-message's write holds its place among the entries (`console::Entered`)
-and `Console::written` waits until the writer has written that many
-entries; a producer of a higher level entering between a waiter's entry
-and its count lengthens that wait by a message. The agent owns no
-hardware reset operation.
+The console takes no lock and no critical section. Its state is its one
+writer's (`console::run`, over a `Writer` the image places once): the
+encoder, the sequence it numbers messages with as it writes them, its
+counts and the base module's answers it gives itself. A producing context
+(a level of the console's hart) holds its own `Producer` on its own lane, a
+lock-free FIFO (`console::Lanes`, split once): a producer is not `Clone`
+and publishes through `&mut`. The writer writes Hello first, then at every
+pass its own answers and each lane in its declared order. A producer that
+waits for its message's write holds its place in its lane
+(`console::Entered`) and waits for the writer's count of that lane
+(`Producer::written`); one producer a lane makes the place exact, and the
+waiter borrows the producer, so a lane has one waiter and the wait cannot
+refuse.
 
-Terminal completion waits are bounded to sixteen receivers. Exhaustion returns
-`ReceiverLimit` with the requested place, last published position and capacity.
-The image retains this impossible-state fault through its existing fatal record,
-keeps the operation's owners quarantined and resets. It never performs the
-requested action after a failed barrier.
-
-`Console::run` returns a `RunFault` owning the endpoint on an invalid read length
-or counter-borrow conflict. `link_health` reports counter-borrow conflicts as a
-`ConsoleFault`. Checkpoint and rate count overflows return typed
-faults before mutation; images retain their observations and reset.
+`console::run` returns a `RunFault` owning the endpoint on an invalid read
+length. Checkpoint and rate count overflows return typed faults before
+mutation; images retain their observations and reset.
 
 The retained record is a value codec; placement and reset belong to the image.
 Const size, alignment and offset checks fix its layout. `AnyBitPattern` proves

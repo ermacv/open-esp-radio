@@ -1,7 +1,10 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
+
+use core::pin::pin;
+use core::task::{Context, Poll, Waker};
 
 use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
 use embassy_futures::block_on;
@@ -13,7 +16,6 @@ use oer_protocols_hil_protocol::base::{
 use oer_protocols_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
 
 use super::*;
-use oer_portable_diagnostics::{Note, Written};
 
 crate::requests! {
     enum WatchdogRequest (sessions = false) {
@@ -22,35 +24,19 @@ crate::requests! {
 }
 
 const BOOT: u64 = 77;
+const DEPTH: usize = 8;
 
-/// The early writer of a test thread: it keeps the words of the notes it
-/// is given while it owns the peripheral.
+/// The early writer of a test thread: the bytes it dropped.
 struct Captured;
 
 impl Immediate for Captured {
-    fn note(note: &Note<'_>) -> Written {
-        if !EARLY_OWNS.get() {
-            return Written::Retired;
-        }
-        EARLY.with(|notes| notes.borrow_mut().push(note.words().to_vec()));
-        Written::Whole
-    }
-
     fn take_lost() -> u32 {
         EARLY_LOST.replace(0)
     }
 }
 
-type TestConsole = Console<4, 8, Captured>;
-
-fn console() -> &'static TestConsole {
-    Box::leak(Box::new(TestConsole::new()))
-}
-
 std::thread_local! {
-    static EARLY: RefCell<Vec<Vec<u32>>> = const { RefCell::new(Vec::new()) };
-    static EARLY_OWNS: core::cell::Cell<bool> = const { core::cell::Cell::new(true) };
-    static EARLY_LOST: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+    static EARLY_LOST: Cell<u32> = const { Cell::new(0) };
 }
 
 struct Chip;
@@ -143,19 +129,43 @@ impl Write for Endpoint {
     }
 }
 
-/// Runs the console until `done` holds for what the host received.
-fn run_until(
-    console: &'static TestConsole,
+/// `K` lanes of the test's depth, placed for the test's whole run.
+fn lanes<const K: usize>() -> [Ends<'static, DEPTH>; K] {
+    Box::leak(Box::new(Lanes::<K, DEPTH>::new())).split()
+}
+
+/// The ends apart: the producers and the writer's drains.
+fn apart<const K: usize>(
+    ends: [Ends<'static, DEPTH>; K],
+) -> (
+    Vec<Producer<'static, DEPTH>>,
+    [LaneDrain<'static, DEPTH>; K],
+) {
+    let mut producers = Vec::new();
+    let drains = ends.map(|Ends { producer, drain }| {
+        producers.push(producer);
+        drain
+    });
+    (producers, drains)
+}
+
+/// Runs the writer until `done` holds for what the host received.
+fn run_until<const K: usize>(
+    lanes: &mut [LaneDrain<'static, DEPTH>; K],
     host: &Host,
-    mut served: impl FnMut(RequestIdentity, Probe),
+    serve: impl FnMut(RequestIdentity, WatchdogRequest) -> Result<(), Busy>,
     done: impl Fn(&Host) -> bool,
 ) {
+    let mut writer = Writer::new();
     let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-    let run = console.run(
+    let run = run::<Captured, _, _, K, DEPTH>(
+        &mut writer,
+        lanes,
+        BOOT,
         Endpoint(host.clone()),
         intake,
         &Chip,
-        |request, WatchdogRequest::Test(own)| served(request, own),
+        serve,
     );
     let watch = async {
         for _ in 0..10_000 {
@@ -172,15 +182,18 @@ fn run_until(
     }
 }
 
+fn poll<F: core::future::Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
+    future.poll(&mut Context::from_waker(Waker::noop()))
+}
+
 #[test]
 fn hello_comes_first_and_base_requests_are_answered_in_order() {
-    let console = console();
+    let (_, mut drains) = apart(lanes::<1>());
     let host = Host::default();
-    console.start(BOOT);
     host.send(0, 5, GetBootStatus);
     host.send(0, 6, GetLinkHealth);
     run_until(
-        console,
+        &mut drains,
         &host,
         |_, _| unreachable!(),
         |host| host.frames().len() == 3,
@@ -195,19 +208,20 @@ fn hello_comes_first_and_base_requests_are_answered_in_order() {
 }
 
 #[test]
-fn the_image_serves_its_own_requests_and_publishes_their_replies() {
-    let console = console();
+fn the_image_serves_its_own_requests_and_its_producer_s_reply_is_written() {
+    let (mut producers, mut drains) = apart(lanes::<1>());
     let host = Host::default();
-    console.start(BOOT);
     host.send(0, 9, Probe(ProbeMode::Complete));
+    let mut producer = producers.remove(0);
     run_until(
-        console,
+        &mut drains,
         &host,
-        |request, Probe(mode)| {
+        |request, WatchdogRequest::Test(Probe(mode))| {
             assert_eq!(request.request_id, 9);
-            console
+            producer
                 .publish(0, request.request_id, &ProbeArmed(mode))
                 .expect("room for the reply");
+            Ok(())
         },
         |host| host.frames().len() == 2,
     );
@@ -215,13 +229,30 @@ fn the_image_serves_its_own_requests_and_publishes_their_replies() {
 }
 
 #[test]
-fn a_rejection_names_the_request() {
-    let console = console();
+fn a_busy_hand_over_is_answered_rejected_by_the_writer() {
+    let (_, mut drains) = apart(lanes::<1>());
     let host = Host::default();
-    console.start(BOOT);
+    host.send(0, 4, Probe(ProbeMode::Complete));
+    run_until(
+        &mut drains,
+        &host,
+        |_, _| Err(Busy),
+        |host| host.frames().len() == 2,
+    );
+    let (request, sequence, key) = host.frames()[1];
+    assert_eq!(
+        (request, sequence, key),
+        (4, 1, oer_protocols_hil_protocol::base::Rejected::KEY)
+    );
+}
+
+#[test]
+fn a_rejection_names_the_request() {
+    let (_, mut drains) = apart(lanes::<1>());
+    let host = Host::default();
     host.send(3, 4, Probe(ProbeMode::Complete));
     run_until(
-        console,
+        &mut drains,
         &host,
         |_, _| unreachable!(),
         |host| host.frames().len() == 2,
@@ -236,15 +267,14 @@ fn a_rejection_names_the_request() {
 
 #[test]
 fn hello_leads_the_boot_although_the_image_published_first() {
-    let console = console();
+    let (mut producers, mut drains) = apart(lanes::<1>());
     let host = Host::default();
-    console.start(BOOT);
     assert_eq!(
-        console.publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
+        producers[0].publish(0, 0, &ProbeArmed(ProbeMode::Complete)),
         Ok(())
     );
     run_until(
-        console,
+        &mut drains,
         &host,
         |_, _| unreachable!(),
         |host| host.frames().len() == 2,
@@ -253,71 +283,49 @@ fn hello_leads_the_boot_although_the_image_published_first() {
 }
 
 #[test]
-fn a_full_queue_drops_and_counts_instead_of_blocking() {
-    let console = console();
-    console.start(BOOT);
-    for request in 0..8 {
-        assert_eq!(console.publish(0, request, &GetBootStatus), Ok(()));
+fn a_full_lane_drops_and_counts_its_own_message_alone() {
+    let (mut producers, drains) = apart(lanes::<2>());
+    for request in 0..DEPTH as u32 {
+        assert_eq!(producers[0].publish(0, request, &GetBootStatus), Ok(()));
     }
-    assert_eq!(console.publish(0, 8, &GetBootStatus), Err(Dropped));
-    assert_eq!(console.link_health().unwrap().tx_dropped, 1);
+    assert_eq!(producers[0].publish(0, 8, &GetBootStatus), Err(Dropped));
+    assert_eq!(
+        producers[1].publish(0, 9, &GetBootStatus),
+        Ok(()),
+        "another lane has its own room"
+    );
+    let writer = Writer::new();
+    assert_eq!(writer.sent(&drains).dropped, 1);
 }
-
-/// The requests of the messages in the queue, in its order.
-fn queued(console: &TestConsole) -> Vec<u32> {
-    core::iter::from_fn(|| console.messages.try_receive().ok())
-        .map(|message| message.request_id)
-        .collect()
-}
-
-/// A producer's `index`th message: the immediate producer's requests from
-/// 100, the waiting producer's from 200.
-const IMMEDIATE: u32 = 100;
-const WAITING: u32 = 200;
 
 #[test]
-fn the_writer_numbers_the_messages_in_the_queue_s_order() {
-    use core::task::{Context, Poll, Waker};
+fn the_writer_numbers_in_its_order_own_answers_first_then_each_lane_in_turn() {
     const EACH: u32 = 3;
-    // Every order of the two producers' messages: a bit set is the
-    // immediate producer's turn (a higher level), clear the waiting one's.
+    // Every order of the two lanes' producers: the lanes' FIFOs keep each
+    // context's order, and the writer drains lane 0 before lane 1.
     for order in 0_u32..(1 << (2 * EACH)) {
         if order.count_ones() != EACH {
             continue;
         }
-        let console = console();
-        let host = Host::default();
-        console.start(BOOT);
-        let (mut immediate, mut waiting) = (0, 0);
-        let mut context = Context::from_waker(Waker::noop());
-        let mut entered = Vec::new();
+        let (mut producers, mut drains) = apart(lanes::<2>());
+        let (mut first, mut second) = (0, 0);
         for turn in 0..2 * EACH {
+            let message = ProbeArmed(ProbeMode::Complete);
             if order & (1 << turn) != 0 {
-                console
-                    .publish(0, IMMEDIATE + immediate, &ProbeArmed(ProbeMode::Complete))
+                producers[1]
+                    .publish(0, 200 + second, &message)
                     .expect("room");
-                immediate += 1;
+                second += 1;
             } else {
-                let mut publishing = core::pin::pin!(console.publish_reliably(
-                    0,
-                    WAITING + waiting,
-                    &ProbeArmed(ProbeMode::Complete)
-                ));
-                let Poll::Ready(Ok(place)) = publishing.as_mut().poll(&mut context) else {
-                    panic!("room for the message");
-                };
-                entered.push((place, Entered(turn)));
-                waiting += 1;
+                producers[0]
+                    .publish(0, 100 + first, &message)
+                    .expect("room");
+                first += 1;
             }
         }
-        for (place, turn) in &entered {
-            assert_eq!(
-                place, turn,
-                "order {order:06b}: the waiting producer's place is its entry's"
-            );
-        }
+        let host = Host::default();
         run_until(
-            console,
+            &mut drains,
             &host,
             |_, _| unreachable!(),
             |host| host.frames().len() == 1 + 2 * EACH as usize,
@@ -327,59 +335,215 @@ fn the_writer_numbers_the_messages_in_the_queue_s_order() {
         assert_eq!(
             numbers,
             (0..=2 * EACH).collect::<Vec<_>>(),
-            "Hello, then the queue's order"
+            "numbered as written"
         );
-        for first in [IMMEDIATE, WAITING] {
-            let own: Vec<u32> = frames
-                .iter()
-                .map(|(request, ..)| *request)
-                .filter(|request| (first..first + EACH).contains(request))
-                .collect();
-            assert_eq!(own, (first..first + EACH).collect::<Vec<_>>());
-        }
+        let requests: Vec<u32> = frames
+            .iter()
+            .skip(1)
+            .map(|(request, ..)| *request)
+            .collect();
+        assert_eq!(
+            requests,
+            [100, 101, 102, 200, 201, 202],
+            "order {order:06b}: lane 0's batch, then lane 1's"
+        );
     }
 }
 
 #[test]
-fn a_producer_that_waits_for_room_enters_after_the_room_and_holds_no_number() {
-    use core::task::{Context, Poll, Waker};
-    let console = console();
-    console.start(BOOT);
-    for request in 0..8 {
+fn a_reliable_producer_waits_for_its_lane_s_room() {
+    let (mut producers, drains) = apart(lanes::<1>());
+    let mut producer = producers.remove(0);
+    for request in 0..DEPTH as u32 {
+        producer.publish(0, request, &GetBootStatus).expect("room");
+    }
+    {
+        let mut waiting = pin!(producer.publish_reliably(0, 50, &ProbeArmed(ProbeMode::Complete)));
+        assert!(poll(waiting.as_mut()).is_pending(), "the lane is full");
+        assert!(
+            drains[0].receiver.try_receive().is_some(),
+            "the writer takes one"
+        );
         assert_eq!(
-            console.publish(0, IMMEDIATE + request, &GetBootStatus),
-            Ok(())
+            poll(waiting.as_mut()),
+            Poll::Ready(Ok(Entered(DEPTH as u32)))
         );
     }
-    let mut context = Context::from_waker(Waker::noop());
-    let mut waiting =
-        core::pin::pin!(console.publish_reliably(0, WAITING, &ProbeArmed(ProbeMode::Complete)));
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    // Room comes, and a higher level takes it before the waiting producer
-    // runs: the waiting one waits again.
-    assert!(console.messages.try_receive().is_ok());
-    assert_eq!(console.publish(0, IMMEDIATE + 8, &GetBootStatus), Ok(()));
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    // While it waits, a message lost to the full queue spends no place.
+}
+
+#[test]
+fn a_waiter_is_released_by_its_own_message_s_write_and_not_before() {
+    let (mut producers, mut drains) = apart(lanes::<1>());
+    let mut producer = producers.remove(0);
+    let first =
+        block_on(producer.publish_reliably(0, 1, &ProbeArmed(ProbeMode::Complete))).unwrap();
+    let second =
+        block_on(producer.publish_reliably(0, 2, &ProbeArmed(ProbeMode::Complete))).unwrap();
+    assert_eq!((first, second), (Entered(0), Entered(1)));
+    let mut writer = Writer::new();
+    let host = Host::default();
+    let message = drains[0].receiver.try_receive().unwrap();
+    block_on(writer.write_lane(
+        &mut Endpoint(host.clone()),
+        BOOT,
+        &mut drains[0],
+        message,
+        &Chip,
+    ));
+    {
+        let mut waiting = pin!(producer.written(second));
+        assert!(
+            poll(waiting.as_mut()).is_pending(),
+            "the first written, not the second"
+        );
+        let message = drains[0].receiver.try_receive().unwrap();
+        block_on(writer.write_lane(
+            &mut Endpoint(host.clone()),
+            BOOT,
+            &mut drains[0],
+            message,
+            &Chip,
+        ));
+        assert_eq!(poll(waiting.as_mut()), Poll::Ready(()));
+    }
     assert_eq!(
-        console.publish(0, IMMEDIATE + 9, &GetBootStatus),
-        Err(Dropped)
-    );
-    assert_eq!(console.link_health().unwrap().tx_dropped, 1);
-    assert!(console.messages.try_receive().is_ok());
-    assert_eq!(
-        waiting.as_mut().poll(&mut context),
-        Poll::Ready(Ok(Entered(9)))
-    );
-    assert_eq!(
-        queued(console),
-        [102, 103, 104, 105, 106, 107, 108, WAITING],
-        "after the room, behind the higher level's"
+        poll(pin!(producer.written(first))),
+        Poll::Ready(()),
+        "a wait after the write returns at once"
     );
 }
 
-fn rearm(step: u32) -> Note<'static> {
-    Note::rearm(step, 20, 20_000)
+#[test]
+fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_endpoint() {
+    /// Where the split transport is: its first write not taken yet, a half
+    /// taken and the gate shut, or the gate opened.
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum Step {
+        Whole,
+        Split,
+        Open,
+    }
+
+    struct SplitTx<'a> {
+        host: Host,
+        gate: &'a Cell<bool>,
+        step: Step,
+    }
+    impl embedded_io_async::ErrorType for SplitTx<'_> {
+        type Error = core::convert::Infallible;
+    }
+    impl Write for SplitTx<'_> {
+        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+            if self.step == Step::Whole {
+                self.step = Step::Split;
+                let count = bytes.len() / 2;
+                self.host
+                    .from_device
+                    .borrow_mut()
+                    .extend_from_slice(&bytes[..count]);
+                return Ok(count);
+            }
+            if self.step == Step::Split {
+                while !self.gate.get() {
+                    embassy_futures::yield_now().await;
+                }
+                self.step = Step::Open;
+            }
+            self.host.from_device.borrow_mut().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    let (mut producers, mut drains) = apart(lanes::<1>());
+    let mut producer = producers.remove(0);
+    let entered = block_on(producer.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
+        .expect("the reply is built");
+    let message = drains[0].receiver.try_receive().expect("queued reply");
+    let host = Host::default();
+    let gate = Cell::new(false);
+    let mut tx = SplitTx {
+        host: host.clone(),
+        gate: &gate,
+        step: Step::Whole,
+    };
+    let mut writer = Writer::new();
+    let (drain, _) = drains.split_at_mut(1);
+    let mut writing = pin!(writer.write_lane(&mut tx, BOOT, &mut drain[0], message, &Chip));
+    let mut written = pin!(producer.written(entered));
+    assert_eq!(poll(written.as_mut()), Poll::Pending);
+    assert_eq!(poll(writing.as_mut()), Poll::Pending);
+    assert!(!host.from_device.borrow().is_empty());
+    assert!(host.frames().is_empty());
+    assert_eq!(poll(written.as_mut()), Poll::Pending);
+    gate.set(true);
+    assert_eq!(poll(writing.as_mut()), Poll::Ready(()));
+    assert_eq!(poll(written.as_mut()), Poll::Ready(()));
+    assert_eq!(host.frames(), [(9, 0, ProbeArmed::KEY)]);
+}
+
+#[test]
+fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
+    struct Takes(usize);
+    impl embedded_io_async::ErrorType for Takes {
+        type Error = core::convert::Infallible;
+    }
+    impl Write for Takes {
+        async fn write(&mut self, _bytes: &[u8]) -> Result<usize, Self::Error> {
+            Ok(self.0)
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    for taken in [0, usize::MAX] {
+        let mut writer = Writer::new();
+        let message = Outbound::new(0, 0, 9, &ProbeArmed(ProbeMode::Complete)).unwrap();
+        assert!(!block_on(writer.write(
+            &mut Takes(taken),
+            BOOT,
+            message,
+            &Chip
+        )));
+        assert_eq!((writer.dropped, writer.sent_frames), (1, 0));
+    }
+}
+
+#[test]
+fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
+    use oer_protocols_hil_protocol::lifecycle::ResetAccepted;
+
+    let (mut producers, mut drains) = apart(lanes::<1>());
+    let mut producer = producers.remove(0);
+    let request = RequestIdentity {
+        boot_id: BOOT,
+        request_id: u32::MAX,
+        session_id: 0x89ab_cdef_0123_4567,
+    };
+    let mut acknowledging = pin!(crate::lifecycle::acknowledge_reset(&mut producer, request));
+    assert!(poll(acknowledging.as_mut()).is_pending());
+    let message = drains[0].receiver.try_receive().unwrap();
+    let host = Host::default();
+    assert!(host.frames().is_empty());
+    let mut writer = Writer::new();
+    block_on(writer.write_lane(
+        &mut Endpoint(host.clone()),
+        BOOT,
+        &mut drains[0],
+        message,
+        &Chip,
+    ));
+    let Poll::Ready(Ok(acknowledged)) = poll(acknowledging.as_mut()) else {
+        panic!("a complete write releases the reset acknowledgement");
+    };
+    assert_eq!(host.frames(), [(u32::MAX, 0, ResetAccepted::KEY)]);
+    assert_eq!(
+        acknowledged.observations(),
+        [u32::MAX, 0, 0x0123_4567, 0x89ab_cdef]
+    );
 }
 
 /// The notes a stream of console lines carries, in order: the sequence each
@@ -401,51 +565,14 @@ fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
 }
 
 #[test]
-fn a_note_before_the_transport_owns_the_peripheral_goes_to_the_early_writer() {
-    let console = console();
-    EARLY.with(|notes| notes.borrow_mut().clear());
-    console.note_immediately(&rearm(1));
-    block_on(console.note_reliably(&rearm(2)));
-    EARLY.with(|notes| assert_eq!(notes.borrow().len(), 2));
-    assert!(console.notes.try_receive().is_err(), "nothing was queued");
-    assert_eq!(console.dropped_notes(), 0);
-}
-
-#[test]
-fn a_note_after_the_early_writer_gave_up_the_peripheral_is_queued() {
-    let console = console();
-    EARLY.with(|notes| notes.borrow_mut().clear());
-    EARLY_OWNS.set(false);
-    console.note_immediately(&rearm(1));
-    block_on(console.note_reliably(&rearm(2)));
-    EARLY_OWNS.set(true);
-    EARLY.with(|notes| assert!(notes.borrow().is_empty()));
-    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 1);
-    assert_eq!(console.notes.try_receive().expect("queued").words()[0], 2);
-}
-
-#[test]
-fn an_immediate_note_is_dropped_and_counted_when_the_queue_is_full() {
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    for step in 0..4 {
-        console.note_immediately(&rearm(step));
-    }
-    assert_eq!(console.dropped_notes(), 0);
-    console.note_immediately(&rearm(9));
-    assert_eq!(console.dropped_notes(), 1);
-    assert_eq!(console.link_health().unwrap().notes_dropped, 1);
-}
-
-#[test]
 fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
-    let console = console();
+    let (_, mut drains) = apart(lanes::<1>());
     EARLY_LOST.set(37);
     let host = Host::default();
     run_until(
-        console,
+        &mut drains,
         &host,
-        |_, _| {},
+        |_, _| Ok(()),
         |host| {
             decoded(&host.from_device.borrow())
                 .iter()
@@ -453,262 +580,6 @@ fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
         },
     );
     assert_eq!(EARLY_LOST.get(), 0);
-}
-
-#[test]
-fn queued_notes_are_numbered_when_written_so_an_immediate_one_cannot_reorder_them() {
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    block_on(console.note_reliably(&rearm(1)));
-    block_on(console.note_reliably(&rearm(2)));
-    let first = console.notes.try_receive().expect("queued");
-    let second = console.notes.try_receive().expect("queued");
-    // Written in the order they were queued, each numbered at its write.
-    let mut wire = Vec::new();
-    let mut sink = Sink(&mut wire);
-    block_on(console.write_note(&mut sink, &first));
-    block_on(console.write_note(&mut sink, &second));
-    let notes = decoded(&wire);
-    assert_eq!(notes.len(), 2);
-    // The sequence is shared by the process, so only its order is checked.
-    assert!(notes[1].0 > notes[0].0);
-    assert_eq!(notes[0].1, [1, 20, 0, 20_000, 0]);
-    assert_eq!(notes[1].1, [2, 20, 0, 20_000, 0]);
-}
-
-#[test]
-fn a_reliable_note_waits_for_room_instead_of_being_lost() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    let console = console();
-    console.running.store(true, Ordering::Release);
-    for step in 0..4 {
-        block_on(console.note_reliably(&rearm(step)));
-    }
-    let late = rearm(9);
-    let mut waiting = core::pin::pin!(console.note_reliably(&late));
-    let mut context = Context::from_waker(Waker::noop());
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Pending);
-    assert_eq!(console.dropped_notes(), 0);
-    let _ = console.notes.try_receive().expect("queued");
-    assert_eq!(waiting.as_mut().poll(&mut context), Poll::Ready(()));
-}
-
-/// An endpoint that keeps what is written.
-struct Sink<'a>(&'a mut Vec<u8>);
-
-impl embedded_io_async::ErrorType for Sink<'_> {
-    type Error = core::convert::Infallible;
-}
-
-impl Write for Sink<'_> {
-    async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-        self.0.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    async fn flush(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
-#[test]
-fn a_control_reply_is_not_written_until_the_entire_frame_and_trailer_reach_the_endpoint() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
-
-    /// Where the split transport is: its first write not taken yet, a half
-    /// taken and the gate shut, or the gate opened.
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum Step {
-        Whole,
-        Split,
-        Open,
-    }
-
-    struct SplitTx<'a> {
-        host: Host,
-        gate: &'a Signal<NoopRawMutex, ()>,
-        step: Step,
-    }
-    impl embedded_io_async::ErrorType for SplitTx<'_> {
-        type Error = core::convert::Infallible;
-    }
-    impl Write for SplitTx<'_> {
-        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
-            if self.step == Step::Whole {
-                self.step = Step::Split;
-                let count = bytes.len() / 2;
-                self.host
-                    .from_device
-                    .borrow_mut()
-                    .extend_from_slice(&bytes[..count]);
-                return Ok(count);
-            }
-            if self.step == Step::Split {
-                self.gate.wait().await;
-                self.step = Step::Open;
-            }
-            self.host.from_device.borrow_mut().extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-        async fn flush(&mut self) -> Result<(), Self::Error> {
-            Ok(())
-        }
-    }
-
-    let console = console();
-    console.start(BOOT);
-    let entered = block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
-        .expect("the reply is built");
-    let message = console.messages.try_receive().expect("queued reply");
-    let host = Host::default();
-    let gate = Signal::new();
-    let mut tx = SplitTx {
-        host: host.clone(),
-        gate: &gate,
-        step: Step::Whole,
-    };
-    let mut writing = core::pin::pin!(console.write_queued(&mut tx, message, &Chip));
-    let mut written = core::pin::pin!(console.written(entered));
-    let mut context = Context::from_waker(Waker::noop());
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
-    assert_eq!(writing.as_mut().poll(&mut context), Poll::Pending);
-    assert!(!host.from_device.borrow().is_empty());
-    assert!(host.frames().is_empty());
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Pending);
-    gate.signal(());
-    assert_eq!(writing.as_mut().poll(&mut context), Poll::Ready(()));
-    assert_eq!(written.as_mut().poll(&mut context), Poll::Ready(Ok(())));
-    assert_eq!(host.frames(), [(9, 1, ProbeArmed::KEY)]);
-}
-
-#[test]
-fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
-    struct Takes(usize);
-    impl embedded_io_async::ErrorType for Takes {
-        type Error = core::convert::Infallible;
-    }
-    impl Write for Takes {
-        async fn write(&mut self, _bytes: &[u8]) -> Result<usize, Self::Error> {
-            Ok(self.0)
-        }
-        async fn flush(&mut self) -> Result<(), Self::Error> {
-            Ok(())
-        }
-    }
-
-    for taken in [0, usize::MAX] {
-        let console = console();
-        console.start(BOOT);
-        block_on(console.publish_reliably(0, 9, &ProbeArmed(ProbeMode::Complete)))
-            .expect("the reply is built");
-        let message = console.messages.try_receive().expect("queued reply");
-        let lost = console.dropped_messages.load(Ordering::Relaxed);
-        let sent = console.sent_frames.load(Ordering::Relaxed);
-        block_on(console.write_queued(&mut Takes(taken), message, &Chip));
-        assert_eq!(console.dropped_messages.load(Ordering::Relaxed), lost + 1);
-        assert_eq!(console.sent_frames.load(Ordering::Relaxed), sent);
-    }
-}
-
-#[test]
-fn reset_acknowledgement_requires_the_complete_write_and_keeps_correlation() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    use oer_protocols_hil_protocol::lifecycle::ResetAccepted;
-
-    let console = console();
-    console.start(BOOT);
-    let request = RequestIdentity {
-        boot_id: BOOT,
-        request_id: u32::MAX,
-        session_id: 0x89ab_cdef_0123_4567,
-    };
-    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
-    let mut cx = Context::from_waker(Waker::noop());
-    assert!(acknowledging.as_mut().poll(&mut cx).is_pending());
-    let message = console.messages.try_receive().unwrap();
-    let host = Host::default();
-    assert!(host.frames().is_empty());
-    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
-    let Poll::Ready(Ok(acknowledged)) = acknowledging.as_mut().poll(&mut cx) else {
-        panic!("a complete write releases the reset acknowledgement");
-    };
-    assert_eq!(host.frames(), [(u32::MAX, 1, ResetAccepted::KEY)]);
-    assert_eq!(
-        acknowledged.observations(),
-        [u32::MAX, 0, 0x0123_4567, 0x89ab_cdef]
-    );
-}
-
-#[test]
-fn reset_barrier_exhaustion_returns_no_reset_authority() {
-    use core::{
-        future::Future as _,
-        task::{Context, Poll, Waker},
-    };
-    let console = console();
-    console.start(BOOT);
-    let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16)
-        .map(|_| Box::pin(console.written(Entered(10))))
-        .collect();
-    for waiter in &mut waiting {
-        assert!(waiter.as_mut().poll(&mut cx).is_pending());
-    }
-    let request = RequestIdentity {
-        boot_id: BOOT,
-        session_id: 0,
-        request_id: 9,
-    };
-    let mut acknowledging = core::pin::pin!(crate::lifecycle::acknowledge_reset(console, request));
-    let Poll::Ready(Err(fault)) = acknowledging.as_mut().poll(&mut cx) else {
-        panic!("no reset authority after the completion barrier fails");
-    };
-    assert_eq!(
-        fault,
-        crate::lifecycle::Unacknowledged::Barrier(progress::ReceiverLimit {
-            sequence: 0,
-            next: Some(0),
-            capacity: 16
-        })
-    );
-}
-
-#[test]
-fn failed_terminal_barrier_propagates_without_performing_the_terminal_action() {
-    use core::future::Future;
-    use core::task::{Context, Poll, Waker};
-    let console = console();
-    let mut cx = Context::from_waker(Waker::noop());
-    let mut waiting: Vec<_> = (0..16)
-        .map(|_| Box::pin(console.written(Entered(10))))
-        .collect();
-    for future in &mut waiting {
-        assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending);
-    }
-    let acted = core::cell::Cell::new(false);
-    let mut terminal = core::pin::pin!(async {
-        console.written(Entered(20)).await?;
-        acted.set(true);
-        Ok(())
-    });
-    assert_eq!(
-        terminal.as_mut().poll(&mut cx),
-        Poll::Ready(Err(progress::ReceiverLimit {
-            sequence: 20,
-            next: Some(0),
-            capacity: 16,
-        }))
-    );
-    assert!(!acted.get());
 }
 
 struct BrokenRead {
@@ -740,17 +611,21 @@ impl Drop for BrokenRead {
 #[test]
 fn invalid_read_length_returns_the_transport_without_releasing_it() {
     for length in [RX_CHUNK + 1, usize::MAX] {
-        let console = console();
-        let dropped = Rc::new(core::cell::Cell::new(false));
+        let (_, mut drains) = apart(lanes::<1>());
+        let mut writer = Writer::new();
+        let dropped = Rc::new(Cell::new(false));
         let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-        let failure = block_on(console.run(
+        let failure = block_on(run::<Captured, crate::base::NoRequests, _, 1, DEPTH>(
+            &mut writer,
+            &mut drains,
+            BOOT,
             BrokenRead {
                 length,
                 dropped: dropped.clone(),
             },
             intake,
             &Chip,
-            |_, _: crate::base::NoRequests| {},
+            |_, _| Ok(()),
         ));
         assert_eq!(
             failure.cause,
@@ -763,38 +638,6 @@ fn invalid_read_length_returns_the_transport_without_releasing_it() {
         drop(failure);
         assert!(dropped.get());
     }
-}
-
-#[test]
-fn counter_borrow_conflicts_return_typed_faults() {
-    let console = console();
-    console.received.lock(|received| {
-        let _exclusive = received.borrow_mut();
-        assert_eq!(
-            console.link_health(),
-            Err(ConsoleFault::CountersBorrowed { writing: false })
-        );
-    });
-    let dropped = Rc::new(core::cell::Cell::new(false));
-    let failure = console.received.lock(|received| {
-        let _reader = received.borrow();
-        let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-        block_on(console.run(
-            BrokenRead {
-                length: 0,
-                dropped: dropped.clone(),
-            },
-            intake,
-            &Chip,
-            |_, _: crate::base::NoRequests| {},
-        ))
-    });
-    assert_eq!(
-        failure.cause,
-        ConsoleFault::CountersBorrowed { writing: true }
-    );
-    assert!(!dropped.get());
-    assert!(console.link_health().is_ok());
 }
 
 #[test]
@@ -852,10 +695,10 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
         let platform = Observed {
             retained: RefCell::new(retained),
         };
-        let console = console();
-        console.start(BOOT);
+        let mut writer = Writer::new();
         let message = Outbound::new(1, 0, 1, &platform.boot_evidence()).unwrap();
-        block_on(console.write_message(&mut Output { refused, calls: 0 }, &message, &platform));
+        let _written =
+            block_on(writer.write(&mut Output { refused, calls: 0 }, BOOT, message, &platform));
         if refused <= 2 {
             assert_eq!(*platform.retained.borrow(), retained);
         } else {
@@ -885,21 +728,35 @@ impl ProbeHandler for Prober {
 
 #[test]
 fn a_service_answers_each_request_through_its_handler_with_the_request_identity() {
-    let console = console();
-    console.start(BOOT);
+    let (mut producers, mut drains) = apart(lanes::<1>());
+    let mut producer = producers.remove(0);
     let mut prober = Prober { calls: 0 };
     let identity = oer_protocols_hil_protocol::RequestIdentity {
         boot_id: BOOT,
         session_id: 0,
         request_id: 21,
     };
-    block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(&mut prober, console, identity))
-        .expect("the response is built");
+    block_on(ProbeService::Probe(Probe(ProbeMode::Stall)).serve(
+        &mut prober,
+        &mut producer,
+        identity,
+    ))
+    .expect("the response is built");
     assert_eq!(prober.calls, 1);
-    let message = console.messages.try_receive().expect("the queued response");
+    let message = drains[0]
+        .receiver
+        .try_receive()
+        .expect("the queued response");
     let host = Host::default();
-    block_on(console.write_queued(&mut Endpoint(host.clone()), message, &Chip));
-    assert_eq!(host.frames(), [(21, 1, ProbeArmed::KEY)]);
+    let mut writer = Writer::new();
+    block_on(writer.write_lane(
+        &mut Endpoint(host.clone()),
+        BOOT,
+        &mut drains[0],
+        message,
+        &Chip,
+    ));
+    assert_eq!(host.frames(), [(21, 0, ProbeArmed::KEY)]);
     assert_eq!(
         <ProbeService as crate::base::Service>::REQUESTS,
         [Probe::KEY]

@@ -6,38 +6,33 @@ use core::{convert::Infallible, future::Future};
 use oer_chips_esp32s31_platform_runtime::{exception::Observed, reset_causes::ResetCause};
 use oer_chips_family_platform_runtime::{panic::PanicRecord, trap::PreviousException};
 use oer_protocols_hil_agent::base::{Intake, Requests};
+use oer_protocols_hil_agent::console::{self, Writer};
 use oer_protocols_hil_protocol::{
     Message, RequestIdentity,
     base::{
         BootEvidence, ExceptionFault, Fault, ImageKeySet, PlatformPanic, PostMortemCheckpoints,
-        PostMortemSummary, RejectReason, Rejected, ResetReason, TrapLine, TrapObservation,
-        TrapState,
+        PostMortemSummary, ResetReason, TrapLine, TrapObservation, TrapState,
     },
 };
 
-use crate::Outbox;
+use crate::{DEPTH, LaneDrain, Outbox, Producer};
 
-/// The notes and messages the console holds until it writes them.
-const NOTES: usize = 8;
-const MESSAGES: usize = 8;
+/// What the console of an image is made of: the mailbox's console end, the
+/// writer's place and its lanes' writer ends.
+pub struct Mount<'a, R, const K: usize> {
+    pub outbox: Outbox<'a, R>,
+    pub writer: &'a mut Writer,
+    pub drains: [LaneDrain; K],
+}
 
-/// Writes a note through the early USB writer, until the console opens.
+/// What the early USB writer dropped before the console took the
+/// peripheral.
 struct EarlyUsb;
 
-impl oer_protocols_hil_agent::console::Immediate for EarlyUsb {
-    fn note(note: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
-        oer_chips_esp32s31_platform_runtime::console::early(note)
-    }
-
+impl console::Immediate for EarlyUsb {
     fn take_lost() -> u32 {
         oer_chips_esp32s31_platform_runtime::console::take_early_lost()
     }
-}
-
-type HilConsole = oer_protocols_hil_agent::console::Console<NOTES, MESSAGES, EarlyUsb>;
-
-oer_chips_family_platform_runtime::placed_static! {
-    static CONSOLE: HilConsole = oer_protocols_hil_agent::console::Console::new(), in critical_data "logging";
 }
 
 /// What the image announces in its Hello: the keys of its services and the
@@ -48,9 +43,11 @@ pub struct Image {
     pub maximum_payload_bytes: u16,
 }
 
-/// Publish `body` as the answer to `identity`, without waiting.
-pub fn answer<M: Message>(identity: RequestIdentity, body: &M) {
-    let _sequence = CONSOLE.publish(identity.session_id, identity.request_id, body);
+/// Publish `body` as the answer to `identity` through the context's own
+/// `producer`, without waiting; a full lane drops it and counts the loss in
+/// the link's health.
+pub fn answer<M: Message>(producer: &mut Producer, identity: RequestIdentity, body: &M) {
+    let _counted = producer.publish(identity.session_id, identity.request_id, body);
 }
 
 /// What the image read before its boot: the base module's boot evidence.
@@ -71,35 +68,32 @@ pub struct Records {
 /// as its post-mortem. Never returns once the answer is written.
 ///
 /// # Errors
-/// `console_fault` when the answer could not be built (nothing was queued)
-/// or the console could not confirm the write: its
-/// barrier's fan-out ([`oer_protocols_hil_agent::console::progress::ReceiverLimit`])
-/// is exhausted, which its contract makes a terminal fault. The image does
-/// not trap; it ends with the error.
+/// `console_fault` when the answer could not be built: nothing was queued.
+/// The image does not trap; it ends with the error.
 pub async fn answer_then_trap<M: Message, E>(
+    producer: &mut Producer,
     identity: RequestIdentity,
     body: &M,
     console_fault: E,
 ) -> Result<Infallible, E> {
-    let Ok(entered) = CONSOLE
+    let Ok(entered) = producer
         .publish_reliably(identity.session_id, identity.request_id, body)
         .await
     else {
         return Err(console_fault);
     };
-    match CONSOLE.written(entered).await {
-        Ok(()) => oer_portable_riscv::illegal_instruction(),
-        Err(_limit) => Err(console_fault),
-    }
+    producer.written(entered).await;
+    oer_portable_riscv::illegal_instruction()
 }
 
 /// Serve the host over `console` (the image's USB console: the platform
 /// runtime's, or a probe's own endpoint) until the chip resets: the base module
 /// from this boot's identity `boot` and `records`, each request of the
 /// image's services handed to the worker through `outbox` (or refused as
-/// busy), and the worker `start` makes, which answers them, side by side.
-/// The worker's future is made only where it runs, so the image's future
-/// holds it once.
+/// busy), and the worker `start` makes, side by side. The image places the
+/// console's writer and lanes once (`mount`); the drains are its lanes'
+/// writer ends, whose producers its contexts hold and answer through. The worker's
+/// future is made only where it runs, so the image's future holds it once.
 ///
 /// # Errors
 /// `console_fault` when the console's transport broke its contract, or the
@@ -109,16 +103,16 @@ pub async fn serve<
     R: Requests,
     E,
     W: Future<Output = Result<Infallible, E>>,
+    const K: usize,
 >(
     console: C,
     boot: u64,
     records: Records,
     image: Image,
-    outbox: Outbox<'_, R>,
+    mount: Mount<'_, R, K>,
     console_fault: E,
     start: impl FnOnce() -> W,
 ) -> Result<Infallible, E> {
-    CONSOLE.start(boot);
     let intake = Intake::new(
         boot,
         image.keys,
@@ -126,11 +120,24 @@ pub async fn serve<
         oer_chips_family_platform_runtime::layout::payload_crc32(),
     );
     let platform = Platform(records);
-    let serve = CONSOLE.run(console, intake, &platform, |identity, request: R| {
-        if outbox.hand(identity, request).is_err() {
-            answer(identity, &Rejected(RejectReason::Busy));
-        }
-    });
+    let Mount {
+        outbox,
+        writer,
+        mut drains,
+    } = mount;
+    let serve = console::run::<EarlyUsb, R, C, K, DEPTH>(
+        writer,
+        &mut drains,
+        boot,
+        console,
+        intake,
+        &platform,
+        |identity, request: R| {
+            outbox
+                .hand(identity, request)
+                .map_err(|crate::Busy| console::Busy)
+        },
+    );
     match embassy_futures::select::select(serve, start()).await {
         embassy_futures::select::Either::First(_fault) => Err(console_fault),
         embassy_futures::select::Either::Second(ended) => ended,

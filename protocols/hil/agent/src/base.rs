@@ -425,24 +425,19 @@ macro_rules! service {
         }
 
         impl $name {
-            /// Answer `identity`'s request through `handler` on `console`;
-            /// the response's place among the console's entries, or its
-            /// loss (counted).
-            $vis async fn serve<
-                H: $handler,
-                const NOTES: usize,
-                const MESSAGES: usize,
-                P: $crate::console::Immediate,
-            >(
+            /// Answer `identity`'s request through `handler` on `producer`'s
+            /// lane; the response's place in the lane, or its loss
+            /// (counted).
+            $vis async fn serve<H: $handler, const DEPTH: usize>(
                 self,
                 handler: &mut H,
-                console: &$crate::console::Console<NOTES, MESSAGES, P>,
+                producer: &mut $crate::console::Producer<'_, DEPTH>,
                 identity: $crate::__protocol::RequestIdentity,
             ) -> Result<$crate::console::Entered, $crate::console::Dropped> {
                 match self {
                     $(Self::$variant(request) => {
                         let response = handler.$method(request).await;
-                        console
+                        producer
                             .publish_reliably(identity.session_id, identity.request_id, &response)
                             .await
                     })*

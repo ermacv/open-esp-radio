@@ -164,7 +164,7 @@ fn service_keys_only_appear_when_mounted_and_maximum_pages_fit_frames() {
 fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     use crate::{
         base::{Intake, Platform},
-        console::{Console, Immediate},
+        console::{Ends, Immediate, Lanes, Writer, run},
     };
     use embassy_futures::{block_on, select::select};
     use oer_protocols_hil_protocol::{
@@ -174,9 +174,6 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     use std::{cell::RefCell, collections::VecDeque, rc::Rc, vec::Vec};
     struct Early;
     impl Immediate for Early {
-        fn note(_: &oer_portable_diagnostics::Note<'_>) -> oer_portable_diagnostics::Written {
-            oer_portable_diagnostics::Written::Retired
-        }
         fn take_lost() -> u32 {
             0
         }
@@ -243,20 +240,31 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     collector.begin(ID, u64::MAX).unwrap();
     collector.event(Step);
     collector.freeze().unwrap();
-    let console = Console::<1, 8, Early>::new();
-    console.start(77);
+    let mut lanes = Lanes::<1, 8>::new();
+    let [
+        Ends {
+            mut producer,
+            drain,
+        },
+    ] = lanes.split();
+    let mut drains = [drain];
+    let mut writer = Writer::new();
     crate::image_keys! { KEYS = [Request] }
     let host = Host::default();
     host.send(1, Describe);
     host.send(2, ReadRecords(request(0, 1)));
     host.send(3, ReadCounters(request(0, 1)));
     host.send(4, ReadRecords(request(1, 1)));
-    let run = console.run(
+    let run = run::<Early, Request, _, 1, 8>(
+        &mut writer,
+        &mut drains,
+        77,
         Endpoint(host.clone()),
         Intake::new(77, KEYS, 0, 0),
         &Chip,
         |identity, request: Request| {
-            block_on(request.serve(&collector).publish(&console, identity))
+            block_on(request.serve(&collector).publish(&mut producer, identity));
+            Ok(())
         },
     );
     let watch = async {

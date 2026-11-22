@@ -2,54 +2,57 @@
 //!
 //! Every chip and image uses this console. The chip supplies its byte
 //! transport (one duplex `embedded-io-async` endpoint) and the early writer
-//! of its USB FIFO for the time before the transport owns the peripheral; the image supplies its [`crate::base::Platform`] and
-//! serves its own requests. The console owns everything between: the ordered
-//! queue of outgoing messages, the queue of diagnostic notes, the request
-//! intake with the base module, and the link counters.
+//! of its USB FIFO for the time before the transport owns the peripheral;
+//! the image supplies its [`crate::base::Platform`] and serves its own
+//! requests. The console's state is its one writer's, [`run`], and what the
+//! producers share with it are lock-free FIFOs and atomics: no lock, no
+//! critical section.
 //!
-//! Producers never touch the endpoint. They serialize their message into
-//! the queue ([`Console::publish`] drops it when the queue is full,
-//! [`Console::publish_reliably`] waits for room first), and the one
-//! [`Console::run`] task frames and writes messages and notes in queue order.
-//! The writer numbers each message as it takes it out of the queue, so the
-//! numbers follow the queue's order by construction, whatever level each
-//! producer runs at; a producer only enters its message and takes no
-//! number. A producer that must know its message written waits for its
-//! place among the entries ([`Entered`], [`Console::written`]).
+//! - [`Lanes`]: one FIFO of outgoing messages a producing context, the
+//!   image's, split once into a [`Producer`] a context and the writer's
+//!   [`Drain`]. A producing context is a level of the console's hart: no
+//!   producer runs on another hart, since no waker crosses harts. A
+//!   producer's handle is its context's alone: it is not `Clone`, and it
+//!   publishes through `&mut`.
+//! - [`Writer`]: what only the writer touches (the encoder, the sequence it
+//!   numbers messages with, its counts, and the answers of the base module
+//!   it gives itself), placed once by the image and lent to [`run`].
 //!
-//! What is in the message queue at once is bounded by the host, not by a
-//! type: the host drives one request at a time per session and keeps at
-//! most one posted beside it, and an image answers each once, so beside a
-//! burst of the image's own events (bounded by its depth, `MESSAGES`) the
-//! queue holds the answers of those two requests and of the base module's. A note is a typed
-//! [`oer_portable_diagnostics::Note`]; the console numbers it when it writes it, so
-//! the host sees a lost one and never a reordered one. The console formats
-//! no text.
+//! The writer numbers each message as it takes it out of a FIFO, so the
+//! numbers follow the written order by construction. It writes Hello first,
+//! then, at every pass, its own answers, then each lane in its declared
+//! order, at most [`DRAIN_BATCH`] messages a lane. A producer that must know
+//! its message written holds its place in its own lane ([`Entered`]) and
+//! waits for the writer's count of that lane ([`Producer::written`]): one
+//! producer a lane, so the place is exact, and the waiter borrows its
+//! producer, so a lane has one waiter at a time and the wait cannot refuse.
+//!
+//! What is in a lane at once is bounded by the host, not by a type: the
+//! host drives one request at a time per session and keeps at most one
+//! posted beside it, and an image answers each once. A note is a typed
+//! [`oer_portable_diagnostics::Note`]; the console writes one only for the
+//! early writer's losses, numbered when written. The console formats no
+//! text.
 
-pub mod progress;
+use core::future::poll_fn;
+use core::sync::atomic::{AtomicU32, Ordering};
+use core::task::Poll;
 
-use core::cell::RefCell;
-use core::marker::PhantomData;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-
-use embassy_futures::select::{Either3, select3};
-use embassy_sync::blocking_mutex::{Mutex, raw::CriticalSectionRawMutex};
-use embassy_sync::channel::Channel;
-use embassy_sync::mutex::Mutex as AsyncMutex;
+use embassy_futures::select::{Either, select, select_array};
 use embedded_io_async::{Read, Write};
-use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, Written, emit_note};
-use oer_protocols_hil_protocol::base::{ImageKeySet, LinkHealth, Rejected};
-use oer_protocols_hil_protocol::{
-    DecodeCounters, FrameEncoder, Message, Outbound, RequestIdentity,
-};
+use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
+use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_waker::AtomicWaker;
+use oer_protocols_hil_protocol::base::{ImageKeySet, Rejected};
+use oer_protocols_hil_protocol::{FrameEncoder, Message, Outbound, RequestIdentity};
 
 use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
 
-/// A broken transport or overlapping access to the private decoder counters.
+/// A broken transport: it answered a read longer than the buffer it was
+/// given.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConsoleFault {
     ReadLength { length: usize, capacity: usize },
-    CountersBorrowed { writing: bool },
 }
 
 /// The transport stays owned by the failure until the image records and resets.
@@ -58,9 +61,12 @@ pub struct RunFault<E> {
     pub endpoint: E,
 }
 
-/// Messages and notes written back to back before the task looks at the
-/// queues again.
-const DRAIN_BATCH: usize = 4;
+/// Messages written back to back from one lane before the writer looks at
+/// the next.
+pub const DRAIN_BATCH: usize = 4;
+/// The writer's own answers held at once: the base module's answers to the
+/// requests of one read, and the busy rejections among them.
+pub const OWN: usize = 8;
 /// The boot's first message: the host's handshake expects Hello here.
 const HELLO_SEQUENCE: u32 = 0;
 /// Bytes read from the endpoint at once.
@@ -70,17 +76,12 @@ const RX_CHUNK: usize = 128;
 /// the early writer, which drops what the FIFO has no room for and counts it.
 /// A type, not a pointer, so that the call is a direct one.
 pub trait Immediate {
-    /// Writes `note` now. [`Written::Retired`] when the early writer no
-    /// longer owns the peripheral, which the transport has taken; every
-    /// other outcome is the early writer's, a dropped one counted by it.
-    fn note(note: &Note<'_>) -> Written;
-
     /// The bytes the early writer dropped since the last call.
     fn take_lost() -> u32;
 }
 
-/// A message's place among the queue's entries since the boot's start, for
-/// a wait until it is written ([`Console::written`]).
+/// A message's place in its lane, for a wait until it is written
+/// ([`Producer::written`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entered(u32);
 
@@ -91,140 +92,142 @@ impl Entered {
     }
 }
 
-/// A message lost before the queue: it could not be built, or the queue
-/// was full. Counted in the link's health.
+/// A message lost before its lane: it could not be built, or the lane was
+/// full. Counted in the link's health.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Dropped;
 
-/// One console. `NOTES` bounds the queued notes and `MESSAGES` the queued
-/// messages; `P` is the chip's early writer.
-pub struct Console<const NOTES: usize, const MESSAGES: usize, P: Immediate> {
-    immediate: PhantomData<P>,
-    running: AtomicBool,
-    boot_low: AtomicU32,
-    boot_high: AtomicU32,
-    /// The next message's sequence: the writer's alone, taken as it takes
-    /// the message out of the queue.
-    sequence: AtomicU32,
-    /// The messages entered into the queue since the boot's start.
-    entries: AtomicU32,
-    /// The entries the writer took out of the queue.
-    taken: AtomicU32,
-    // The one encoder of the message writer, kept here rather than in the
-    // writer's future, which is moved into its task.
-    encoder: AsyncMutex<CriticalSectionRawMutex, FrameEncoder>,
-    messages: Channel<CriticalSectionRawMutex, Outbound, MESSAGES>,
-    notes: Channel<CriticalSectionRawMutex, Note<'static>, NOTES>,
-    written: progress::SerializedEvents,
-    sent_frames: AtomicU32,
-    dropped_messages: AtomicU32,
-    received: Mutex<CriticalSectionRawMutex, RefCell<DecodeCounters>>,
-    lost: NoteLoss,
-}
+/// A request the image could not take now: the writer answers it
+/// `Rejected(Busy)`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Busy;
 
-/// What the note queue lost.
-struct NoteLoss {
+/// One producing context's FIFO and what the writer tells it.
+struct Lane<const DEPTH: usize> {
+    queue: WakingSpscQueue<Outbound, DEPTH>,
+    /// The lane's messages lost before it, by its producer.
     dropped: AtomicU32,
-    write_errors: AtomicU32,
+    /// The lane's entries the writer wrote whole.
+    written: AtomicU32,
+    /// The lane's one waiter for a write ([`Producer::written`]).
+    waiter: AtomicWaker,
 }
 
-impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MESSAGES, P> {
+/// What a lane's two ends share besides its FIFO.
+#[derive(Clone, Copy)]
+struct Shared<'a> {
+    dropped: &'a AtomicU32,
+    written: &'a AtomicU32,
+    waiter: &'a AtomicWaker,
+}
+
+/// The image's `K` lanes of `DEPTH` messages each, split once.
+pub struct Lanes<const K: usize, const DEPTH: usize> {
+    lanes: [Lane<DEPTH>; K],
+}
+
+impl<const K: usize, const DEPTH: usize> Default for Lanes<K, DEPTH> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const K: usize, const DEPTH: usize> Lanes<K, DEPTH> {
     pub const fn new() -> Self {
         Self {
-            immediate: PhantomData,
-            running: AtomicBool::new(false),
-            boot_low: AtomicU32::new(0),
-            boot_high: AtomicU32::new(0),
-            sequence: AtomicU32::new(0),
-            entries: AtomicU32::new(0),
-            taken: AtomicU32::new(0),
-            encoder: AsyncMutex::new(FrameEncoder::new()),
-            messages: Channel::new(),
-            notes: Channel::new(),
-            written: progress::SerializedEvents::new(),
-            sent_frames: AtomicU32::new(0),
-            dropped_messages: AtomicU32::new(0),
-            received: Mutex::new(RefCell::new(DecodeCounters {
-                frames: 0,
-                cobs_errors: 0,
-                too_short: 0,
-                header_errors: 0,
-                framing_version_errors: 0,
-                message_kind_errors: 0,
-                payload_length_errors: 0,
-                checksum_errors: 0,
-                deserialize_errors: 0,
-                overflows: 0,
-            })),
-            lost: NoteLoss {
-                dropped: AtomicU32::new(0),
-                write_errors: AtomicU32::new(0),
-            },
+            lanes: [const {
+                Lane {
+                    queue: WakingSpscQueue::new(),
+                    dropped: AtomicU32::new(0),
+                    written: AtomicU32::new(0),
+                    waiter: AtomicWaker::new(),
+                }
+            }; K],
         }
     }
 
-    /// Installs the boot's identity before any message is published.
-    ///
-    /// Sequence 0 is the boot's Hello, which [`Console::run`] writes before
-    /// anything queued; messages published earlier take the sequences after
-    /// it, so a boot always begins with Hello whichever task publishes first.
-    pub fn start(&self, boot_id: u64) {
-        self.boot_low.store(boot_id as u32, Ordering::Relaxed);
-        self.boot_high
-            .store((boot_id >> 32) as u32, Ordering::Relaxed);
-        self.sequence.store(HELLO_SEQUENCE + 1, Ordering::Relaxed);
-        self.entries.store(0, Ordering::Relaxed);
-        self.taken.store(0, Ordering::Relaxed);
-        self.written.publish_next(0);
+    /// Each lane's two ends, in the lanes' order: the producer its context
+    /// holds and the drain the writer holds.
+    pub fn split(&mut self) -> [Ends<'_, DEPTH>; K] {
+        self.lanes.each_mut().map(|lane| {
+            let Lane {
+                queue,
+                dropped,
+                written,
+                waiter,
+            } = lane;
+            let (sender, receiver) = queue.split();
+            let shared = Shared {
+                dropped,
+                written,
+                waiter,
+            };
+            Ends {
+                producer: Producer {
+                    sender,
+                    shared,
+                    entered: 0,
+                },
+                drain: LaneDrain {
+                    receiver,
+                    shared,
+                    taken: 0,
+                },
+            }
+        })
     }
+}
 
-    pub fn boot_id(&self) -> u64 {
-        u64::from(self.boot_low.load(Ordering::Acquire))
-            | (u64::from(self.boot_high.load(Ordering::Acquire)) << 32)
-    }
+/// One lane's two ends.
+pub struct Ends<'a, const DEPTH: usize> {
+    pub producer: Producer<'a, DEPTH>,
+    pub drain: LaneDrain<'a, DEPTH>,
+}
 
-    /// Queues `body` without making the caller wait, from any level; a full
-    /// queue drops it and counts the loss. It gives no place to wait on: a
-    /// producer of a level above another's may enter behind that one's
-    /// message and count first, so its count would name the message before
-    /// its own ([`Console::entered`]).
+/// A producing context's handle on its lane. Its context's alone: not
+/// `Clone`, publishing through `&mut`. A producing context is a level of
+/// the console's hart, and the producer is moved there once.
+pub struct Producer<'a, const DEPTH: usize> {
+    sender: WakingSpscSender<'a, Outbound, DEPTH>,
+    shared: Shared<'a>,
+    /// The lane's entries so far: its producer's alone, so exact.
+    entered: u32,
+}
+
+impl<const DEPTH: usize> Producer<'_, DEPTH> {
+    /// Queues `body` without waiting; a full lane drops it and counts the
+    /// loss.
     ///
     /// # Errors
-    /// [`Dropped`] when the message could not be built or the queue was
-    /// full: counted in the link's health, no number spent on it.
+    /// [`Dropped`] when the message could not be built or the lane was
+    /// full: counted in the link's health.
     pub fn publish<M: Message>(
-        &self,
+        &mut self,
         session_id: u64,
         request_id: u32,
         body: &M,
     ) -> Result<(), Dropped> {
         let queued = Outbound::new(0, session_id, request_id, body)
             .ok()
-            .and_then(|message| self.messages.try_send(message).ok());
+            .and_then(|message| self.sender.try_send(message).ok());
         match queued {
             Some(()) => {
-                let _place = self.entered();
+                let _place = self.enter();
                 Ok(())
             }
             None => Err(self.drop_message()),
         }
     }
 
-    /// Queues `body`, waiting for room: for control-plane boundaries a full
-    /// telemetry queue must not erase. High-rate observations use
-    /// [`Console::publish`], which never applies backpressure.
-    ///
-    /// The place it answers is right for a producer on the console's own
-    /// level, the lowest that produces: no producer preempts it from below,
-    /// so the place is its message's or, when a higher level entered
-    /// between its entry and its count, the one after. A wait for room
-    /// already binds its caller to that level.
+    /// Queues `body`, waiting for room in its lane: for control-plane
+    /// boundaries a full lane must not erase. Its place in the lane is the
+    /// message's own, for [`Self::written`].
     ///
     /// # Errors
     /// [`Dropped`] when the message could not be built: counted, nothing
     /// queued.
     pub async fn publish_reliably<M: Message>(
-        &self,
+        &mut self,
         session_id: u64,
         request_id: u32,
         body: &M,
@@ -232,245 +235,259 @@ impl<const NOTES: usize, const MESSAGES: usize, P: Immediate> Console<NOTES, MES
         let Ok(message) = Outbound::new(0, session_id, request_id, body) else {
             return Err(self.drop_message());
         };
-        self.messages.send(message).await;
-        Ok(self.entered())
+        self.sender.ready().await.send(message);
+        Ok(self.enter())
     }
 
-    /// The count of entries so far, taken by a producer just after its own
-    /// entry. Between a producer's entry and its count a producer of a
-    /// higher level may enter and count: the lower producer's count then
-    /// names the message after its own (a wait lasts a message longer), and
-    /// the higher producer's names the lower one's message, one before its
-    /// own (a wait would end before its message is written). Only a
-    /// producer that nothing preempts from below, the console's own level,
-    /// may therefore wait on its count ([`Console::publish_reliably`]).
-    fn entered(&self) -> Entered {
-        Entered(self.entries.fetch_add(1, Ordering::Relaxed))
+    /// Waits until the writer has written its lane's messages up to
+    /// `entered`: that message written whole. A lane has one waiter at a
+    /// time, its producer's borrow, so the wait has a place and no refusal.
+    pub async fn written(&mut self, entered: Entered) {
+        let target = entered.0.wrapping_add(1);
+        let shared = self.shared;
+        poll_fn(|cx| {
+            shared.waiter.register(cx.waker());
+            let written = shared.written.load(Ordering::Acquire);
+            // Places are exact within the lane; within half the counter's
+            // range the order of two of them is unambiguous.
+            if written.wrapping_sub(target) < (1 << 31) {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
     }
 
-    /// A message lost before the queue, counted.
+    fn enter(&mut self) -> Entered {
+        let place = self.entered;
+        self.entered = place.wrapping_add(1);
+        Entered(place)
+    }
+
     fn drop_message(&self) -> Dropped {
-        self.dropped_messages.fetch_add(1, Ordering::Relaxed);
+        self.shared.dropped.fetch_add(1, Ordering::Relaxed);
         Dropped
     }
+}
 
-    /// Waits until the writer has written the entries up to `entered`, a
-    /// place [`Console::publish_reliably`] gave on the console's own level:
-    /// its message, or the one after it, written.
-    pub async fn written(&self, entered: Entered) -> Result<(), progress::ReceiverLimit> {
-        self.written.wait_for(entered.0).await
+/// The writer's end of one lane.
+pub struct LaneDrain<'a, const DEPTH: usize> {
+    receiver: WakingSpscReceiver<'a, Outbound, DEPTH>,
+    shared: Shared<'a>,
+    /// The lane's entries the writer took out.
+    taken: u32,
+}
+
+/// What only the writer touches: the encoder, the sequence it numbers with,
+/// its counts and its own answers. The image places it once and lends it to
+/// [`run`].
+pub struct Writer {
+    encoder: FrameEncoder,
+    sequence: u32,
+    sent_frames: u32,
+    /// Messages the writer lost: not encoded, not written whole, or its own
+    /// answers past [`OWN`].
+    dropped: u32,
+    /// The writer's notes not written whole.
+    notes_dropped: u32,
+    own: heapless::Deque<Outbound, OWN>,
+}
+
+impl Default for Writer {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    /// Writes `note` through the early writer while it owns the USB
-    /// peripheral, and queues it for [`Console::run`] once the transport
-    /// does, waiting for room instead of losing it. Only for reporting
-    /// outside measured hot paths, which must not depend on USB progress.
-    pub async fn note_reliably(&self, note: &Note<'static>) {
-        if !self.running.load(Ordering::Acquire) && P::note(note) != Written::Retired {
-            return;
+impl Writer {
+    pub const fn new() -> Self {
+        Self {
+            encoder: FrameEncoder::new(),
+            sequence: HELLO_SEQUENCE,
+            sent_frames: 0,
+            dropped: 0,
+            notes_dropped: 0,
+            own: heapless::Deque::new(),
         }
-        loop {
-            core::future::poll_fn(|cx| self.notes.poll_ready_to_send(cx)).await;
-            if self.notes.try_send(*note).is_ok() {
-                return;
-            }
-        }
     }
 
-    /// Counts a message its producer could not build.
-    pub fn lose_message(&self) {
-        self.dropped_messages.fetch_add(1, Ordering::Relaxed);
-    }
-
-    /// Reports `note` without waiting: through the early writer while it
-    /// owns the USB peripheral, otherwise in the note queue, where a full
-    /// queue drops it and counts the loss. For synchronous callers.
-    pub fn note_immediately(&self, note: &Note<'static>) {
-        if !self.running.load(Ordering::Acquire) && P::note(note) != Written::Retired {
-            return;
-        }
-        if self.notes.try_send(*note).is_err() {
-            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    /// Notes lost to a full queue or a failed write.
-    pub fn dropped_notes(&self) -> u32 {
-        self.lost.dropped.load(Ordering::Relaxed)
-    }
-
-    fn sent(&self) -> Sent {
+    /// The counts the link's health reports: the writer's and every lane's
+    /// losses.
+    fn sent<const K: usize, const DEPTH: usize>(&self, lanes: &[LaneDrain<'_, DEPTH>; K]) -> Sent {
+        let dropped = lanes
+            .iter()
+            .map(|lane| lane.shared.dropped.load(Ordering::Relaxed))
+            .fold(self.dropped, u32::wrapping_add);
         Sent {
-            frames: self.sent_frames.load(Ordering::Acquire),
-            dropped: self.dropped_messages.load(Ordering::Acquire),
-            notes_dropped: self.dropped_notes(),
+            frames: self.sent_frames,
+            dropped,
+            notes_dropped: self.notes_dropped,
         }
     }
 
-    /// The link's counters now, or a fault if the private counters are borrowed.
-    pub fn link_health(&self) -> Result<LinkHealth, ConsoleFault> {
-        let received = self.received.lock(|received| {
-            received
-                .try_borrow()
-                .map(|received| *received)
-                .map_err(|_| ConsoleFault::CountersBorrowed { writing: false })
-        })?;
-        Ok(crate::base::link_health(received, self.sent()))
+    /// Queues one of the writer's own answers, or counts its loss.
+    fn own<M: Message>(&mut self, request: RequestIdentity, body: &M) {
+        let queued = Outbound::new(0, request.session_id, request.request_id, body)
+            .ok()
+            .and_then(|message| self.own.push_back(message).ok());
+        if queued.is_none() {
+            self.dropped = self.dropped.wrapping_add(1);
+        }
     }
 
-    /// Publishes an answer of the base module for an image serving
+    /// Queues the base module's answer to `request` for an image serving
     /// `image_keys` on `platform`.
     fn answer(
-        &self,
+        &mut self,
         request: RequestIdentity,
         answer: Answer,
         image_keys: ImageKeySet<'_>,
         platform: &impl Platform,
     ) {
-        let (session, id) = (request.session_id, request.request_id);
-        // A lost answer is counted in the link's health; the host's request
-        // then times out.
-        let _counted = match answer {
-            Answer::Hello(hello) => self.publish(session, id, &hello),
-            Answer::ImageKeys(first) => self.publish(session, id, &image_keys.page(first)),
-            Answer::Boot => self.publish(session, id, &platform.boot_evidence()),
+        match answer {
+            Answer::Hello(hello) => self.own(request, &hello),
+            Answer::ImageKeys(first) => self.own(request, &image_keys.page(first)),
+            Answer::Boot => self.own(request, &platform.boot_evidence()),
             Answer::PostMortem(first) => {
-                self.publish(session, id, &platform.post_mortem_checkpoints(first))
+                self.own(request, &platform.post_mortem_checkpoints(first));
             }
-            Answer::Link(link) => self.publish(session, id, &link),
-            Answer::Rejected(reason) => self.publish(session, id, &Rejected(reason)),
-        };
-    }
-
-    /// Serves the endpoint until the chip resets: writes queued messages and
-    /// notes, and hands each request of the image to `serve`, which must
-    /// not block; the base module's requests are answered here. A broken read
-    /// contract or counter borrow returns a fault retaining the endpoint.
-    pub async fn run<C: Requests, E: Read + Write>(
-        &self,
-        mut endpoint: E,
-        mut intake: Intake<'_>,
-        platform: &impl Platform,
-        mut serve: impl FnMut(RequestIdentity, C),
-    ) -> RunFault<E> {
-        self.running.store(true, Ordering::Release);
-        let image_keys = intake.image_keys();
-        match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
-            Ok(hello) => {
-                let _written = self.write_message(&mut endpoint, &hello, platform).await;
-            }
-            Err(_) => self.lose_message(),
-        }
-        // What the early writer dropped before it gave up the peripheral: a
-        // loss is never silent.
-        let lost = P::take_lost();
-        if lost != 0 {
-            self.write_note(&mut endpoint, &Note::diag_lost(lost)).await;
-        }
-        let mut chunk = [0_u8; RX_CHUNK];
-        loop {
-            match select3(
-                self.messages.receive(),
-                endpoint.read(&mut chunk),
-                self.notes.receive(),
-            )
-            .await
-            {
-                Either3::First(message) => {
-                    self.write_queued(&mut endpoint, message, platform).await;
-                }
-                Either3::Second(Ok(length)) => {
-                    let Some(bytes) = chunk.get(..length) else {
-                        return RunFault {
-                            cause: ConsoleFault::ReadLength {
-                                length,
-                                capacity: chunk.len(),
-                            },
-                            endpoint,
-                        };
-                    };
-                    intake.receive_each::<C>(bytes, self.sent(), |request| match request {
-                        Request::Answer(identity, answer) => {
-                            self.answer(identity, answer, image_keys, platform)
-                        }
-                        Request::Serve(identity, own) => serve(identity, own),
-                    });
-                    let counters = intake.counters();
-                    let updated = self.received.lock(|received| {
-                        received
-                            .try_borrow_mut()
-                            .map(|mut received| *received = counters)
-                    });
-                    if updated.is_err() {
-                        return RunFault {
-                            cause: ConsoleFault::CountersBorrowed { writing: true },
-                            endpoint,
-                        };
-                    }
-                }
-                Either3::Second(Err(_)) => {}
-                Either3::Third(note) => self.write_note(&mut endpoint, &note).await,
-            }
-            for _ in 1..DRAIN_BATCH {
-                if let Ok(message) = self.messages.try_receive() {
-                    self.write_queued(&mut endpoint, message, platform).await;
-                } else if let Ok(note) = self.notes.try_receive() {
-                    self.write_note(&mut endpoint, &note).await;
-                } else {
-                    break;
-                }
-            }
-            embassy_futures::yield_now().await;
+            Answer::Link(link) => self.own(request, &link),
+            Answer::Rejected(reason) => self.own(request, &Rejected(reason)),
         }
     }
 
-    /// Numbers a message taken out of the queue, writes it, and on its
-    /// write tells the waiters how many entries are written.
-    async fn write_queued(
-        &self,
+    /// Numbers `message` and writes it whole; whether it was.
+    async fn write(
+        &mut self,
         tx: &mut impl Write,
+        boot: u64,
         mut message: Outbound,
         platform: &impl Platform,
-    ) {
-        message.message_sequence = self.sequence.fetch_add(1, Ordering::Relaxed);
-        let taken = self.taken.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
-        if self.write_message(tx, &message, platform).await {
-            self.written.publish_next(taken);
-        }
-    }
-
-    /// Writes one message whole; whether it was.
-    async fn write_message(
-        &self,
-        tx: &mut impl Write,
-        message: &Outbound,
-        platform: &impl Platform,
     ) -> bool {
-        let mut encoder = self.encoder.lock().await;
-        let Ok(frame) = encoder.encode_outbound(self.boot_id(), message) else {
-            self.dropped_messages.fetch_add(1, Ordering::Relaxed);
+        message.message_sequence = self.sequence;
+        self.sequence = self.sequence.wrapping_add(1);
+        let Ok(frame) = self.encoder.encode_outbound(boot, &message) else {
+            self.dropped = self.dropped.wrapping_add(1);
             return false;
         };
         if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
-            self.sent_frames.fetch_add(1, Ordering::Relaxed);
+            self.sent_frames = self.sent_frames.wrapping_add(1);
             if message.key == oer_protocols_hil_protocol::base::BootEvidence::KEY {
                 platform.boot_evidence_written();
             }
             true
         } else {
-            self.dropped_messages.fetch_add(1, Ordering::Relaxed);
+            self.dropped = self.dropped.wrapping_add(1);
             false
         }
     }
 
+    /// Writes one lane's message and, on its write, tells the lane's waiter
+    /// how many of its entries are written.
+    async fn write_lane<const DEPTH: usize>(
+        &mut self,
+        tx: &mut impl Write,
+        boot: u64,
+        lane: &mut LaneDrain<'_, DEPTH>,
+        message: Outbound,
+        platform: &impl Platform,
+    ) {
+        lane.taken = lane.taken.wrapping_add(1);
+        if self.write(tx, boot, message, platform).await {
+            lane.shared.written.store(lane.taken, Ordering::Release);
+            lane.shared.waiter.wake();
+        }
+    }
+
     /// Numbers and writes one note as a whole line.
-    async fn write_note(&self, tx: &mut impl Write, note: &Note<'_>) {
+    async fn write_note(&mut self, tx: &mut impl Write, note: &Note<'_>) {
         let mut line = NoteLine::new();
         line.encode(note);
         if write_whole(tx, line.framed()).await.is_err() {
-            self.lost.write_errors.fetch_add(1, Ordering::Relaxed);
-            self.lost.dropped.fetch_add(1, Ordering::Relaxed);
+            self.notes_dropped = self.notes_dropped.wrapping_add(1);
         }
+    }
+}
+
+/// Serves the endpoint until the chip resets, for the boot `boot`: writes
+/// Hello, then at every pass the writer's own answers and each lane's
+/// messages in the lanes' order, and hands each request of the image to
+/// `serve`, which must not block; a [`Busy`] it answers is the writer's
+/// `Rejected(Busy)`. The base module's requests are answered here. A broken
+/// read contract returns a fault retaining the endpoint.
+pub async fn run<P: Immediate, C: Requests, E: Read + Write, const K: usize, const DEPTH: usize>(
+    writer: &mut Writer,
+    lanes: &mut [LaneDrain<'_, DEPTH>; K],
+    boot: u64,
+    mut endpoint: E,
+    mut intake: Intake<'_>,
+    platform: &impl Platform,
+    mut serve: impl FnMut(RequestIdentity, C) -> Result<(), Busy>,
+) -> RunFault<E> {
+    let image_keys = intake.image_keys();
+    match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
+        Ok(hello) => {
+            let _written = writer.write(&mut endpoint, boot, hello, platform).await;
+        }
+        Err(_) => writer.dropped = writer.dropped.wrapping_add(1),
+    }
+    // What the early writer dropped before it gave up the peripheral: a
+    // loss is never silent.
+    let lost = P::take_lost();
+    if lost != 0 {
+        writer
+            .write_note(&mut endpoint, &Note::diag_lost(lost))
+            .await;
+    }
+    let mut chunk = [0_u8; RX_CHUNK];
+    loop {
+        let read = {
+            let ready = select_array(lanes.each_mut().map(|lane| lane.receiver.ready()));
+            select(ready, endpoint.read(&mut chunk)).await
+        };
+        match read {
+            Either::First(_) | Either::Second(Err(_)) => {}
+            Either::Second(Ok(length)) => {
+                let Some(bytes) = chunk.get(..length) else {
+                    return RunFault {
+                        cause: ConsoleFault::ReadLength {
+                            length,
+                            capacity: chunk.len(),
+                        },
+                        endpoint,
+                    };
+                };
+                let sent = writer.sent(lanes);
+                intake.receive_each::<C>(bytes, sent, |request| match request {
+                    Request::Answer(identity, answer) => {
+                        writer.answer(identity, answer, image_keys, platform);
+                    }
+                    Request::Serve(identity, own) => {
+                        if serve(identity, own).is_err() {
+                            writer.own(
+                                identity,
+                                &Rejected(oer_protocols_hil_protocol::base::RejectReason::Busy),
+                            );
+                        }
+                    }
+                });
+            }
+        }
+        while let Some(message) = writer.own.pop_front() {
+            let _written = writer.write(&mut endpoint, boot, message, platform).await;
+        }
+        for lane in lanes.iter_mut() {
+            for _ in 0..DRAIN_BATCH {
+                let Some(message) = lane.receiver.try_receive() else {
+                    break;
+                };
+                writer
+                    .write_lane(&mut endpoint, boot, lane, message, platform)
+                    .await;
+            }
+        }
+        embassy_futures::yield_now().await;
     }
 }
 
