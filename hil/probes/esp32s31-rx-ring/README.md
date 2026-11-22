@@ -30,7 +30,7 @@ The cases, their thresholds and the verdict are
 | `snapshot-cold` | before the bring-up: the reset cause, as the adoption read it, and the radio domain's power, clock and reset words (`RadioDomain::observe_power`: PMU, HP_SYS_CLKRST, and MODEM_SYSCON and MODEM_LPCON when the modem register bus reads open, unreadable otherwise) |
 | `bring-up` | the PHY's registration, coexistence, power, the clocks, the PHY client, the tracking due, the MAC's cold start on the ring, the channel; then it reads its snapshot after the bring-up |
 | `snapshot-up` | the cold snapshot's words read again after the bring-up, the temperature code, the RF PLL's frequency block and the PHY's calibration results |
-| `receive-counters` | the MAC's receive counters, the walker's standing and every descriptor's control word; no ring's state after a failed turn's stop |
+| `receive-counters` | the MAC's receive counters, the walker's standing and every descriptor's control word, raw and as its fields read (armed, done with its `LENGTH`, other); no ring's state after a failed turn's stop |
 | `expect` | the sender's address: a unit is the sender's when it is to the station from that address, never learned from a first frame |
 | `window` | serves the ring for the given time: every single lent for a spare (copied in place when none is held), every chain copied in place, each checked; with chains recorded, each chain's descriptors and continuation words by position |
 | `stall` | leaves the ring unserved for the given time, then reads where the walker stands |

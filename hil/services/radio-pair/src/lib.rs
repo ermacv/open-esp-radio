@@ -14,7 +14,7 @@
 //!
 //! Both images serve [`Radio`]'s endpoints: the bring-up, the stop, the
 //! boot's two snapshots and the receive path's counters. The sender
-//! (`esp32s31-case-c-sender`) adds its own (target, round); the
+//! (`esp32s31-case-c-sender`) adds its own (target, round, single); the
 //! receiver (`esp32s31-rx-ring`) adds its own (expect, window,
 //! stall, turn). No endpoint waits for the host: each answers what its
 //! hardware did, a wait inside a handler bounded by its hardware's source
@@ -51,6 +51,8 @@ oer_protocols_hil_protocol::messages! {
     topic Targeted = "radio-pair/targeted";
     endpoint Round = "radio-pair/round" => Sent;
     topic Sent = "radio-pair/sent";
+    endpoint Single = "radio-pair/single" => SentOne;
+    topic SentOne = "radio-pair/sent-one";
     endpoint Expect = "radio-pair/expect" => Expecting;
     topic Expecting = "radio-pair/expecting";
     endpoint Window = "radio-pair/window" => Windowed;
@@ -80,6 +82,8 @@ pub enum Refusal {
     NoReceiver,
     /// A snapshot page past the last.
     NoSuchPage,
+    /// A frame's length outside [`SINGLE_LENGTHS`].
+    LengthOutOfRange,
 }
 
 /// A failure inside a step: the probe's phase and its index there, the
@@ -319,6 +323,18 @@ pub struct RingState {
     pub standing: Standing,
     /// The ring's descriptors in its order, then R's.
     pub controls: heapless::Vec<u32, RING_DESCRIPTORS>,
+    /// The same descriptors read through the layout's fields.
+    pub seats: heapless::Vec<Seat, RING_DESCRIPTORS>,
+}
+
+/// A descriptor as its control word's fields read: armed as software arms
+/// it (`OWNER` set, `RX_DONE` clear, `LENGTH` its size), done with the
+/// hardware's `LENGTH`, or any other word.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Seat {
+    Armed,
+    Done { length: u16 },
+    Other,
 }
 
 /// What the ring's walker read (`RxRing::standing`).
@@ -451,6 +467,25 @@ pub enum QueueOwnership {
     Enabled,
     Valid,
     Published,
+}
+
+/// The lengths [`Single`] takes: a Data header to the frame pool's slot.
+pub const SINGLE_LENGTHS: core::ops::RangeInclusive<u16> = 24..=1_500;
+
+/// Send one non-QoS Data frame of `length` octets (without its FCS) to the
+/// receiver, awaited.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Single {
+    pub length: u16,
+}
+
+/// The answer to [`Single`]: how the frame ended (its completion's status:
+/// 0 acknowledged, 5 an ACK timeout), or the failed step.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum SentOne {
+    Ended { status: u32 },
+    Failed(Failure),
+    Refused(Refusal),
 }
 
 /// One case's ends by the frame before it: acknowledged (status 0), ACK
@@ -591,6 +626,7 @@ oer_protocols_hil_agent::requests! {
         Stop(Stop),
         Target(Target),
         Round(Round),
+        Single(Single),
     }
 }
 

@@ -421,6 +421,7 @@ fn refuse(identity: RequestIdentity, request: SenderRequest, refusal: Refusal) {
         SenderRequest::Stop(_) => answer(identity, &service::Stopped::Refused(refusal)),
         SenderRequest::Target(_) => answer(identity, &service::Targeted::Refused(refusal)),
         SenderRequest::Round(_) => answer(identity, &service::Sent::Refused(refusal)),
+        SenderRequest::Single(_) => answer(identity, &service::SentOne::Refused(refusal)),
     }
 }
 
@@ -588,6 +589,45 @@ async fn worker(
             }
             SenderRequest::Round(_) if matches!(steps, Steps::Failed) => {
                 answer(id, &service::Sent::Refused(Refusal::StepFailed));
+            }
+            SenderRequest::Single(_) if matches!(steps, Steps::Failed) => {
+                answer(id, &service::SentOne::Refused(Refusal::StepFailed));
+            }
+            SenderRequest::Single(request) => {
+                let Some(peer) = receiver else {
+                    answer(id, &service::SentOne::Refused(Refusal::NoReceiver));
+                    continue;
+                };
+                if !service::SINGLE_LENGTHS.contains(&request.length) {
+                    answer(id, &service::SentOne::Refused(Refusal::LengthOutOfRange));
+                    continue;
+                }
+                match transmit::single(
+                    &frames,
+                    &mut ordinary,
+                    &mut access,
+                    station,
+                    peer,
+                    usize::from(request.length),
+                )
+                .await
+                {
+                    Ok(ended) => answer(
+                        id,
+                        &service::SentOne::Ended {
+                            status: ended.status,
+                        },
+                    ),
+                    Err((phase, index)) => {
+                        answer(
+                            id,
+                            &service::SentOne::Failed(service::Failure { phase, index }),
+                        );
+                        // As after a failed round: the frame may still be
+                        // the hardware's.
+                        steps = Steps::Failed;
+                    }
+                }
             }
             SenderRequest::Target(request) => {
                 receiver = Some(request.receiver);

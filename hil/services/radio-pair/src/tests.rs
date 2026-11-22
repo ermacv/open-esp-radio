@@ -70,6 +70,8 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
                 cursor: Cursor::Moved,
             },
             controls: core::iter::repeat_n(u32::MAX, RING_DESCRIPTORS).collect(),
+            seats: core::iter::repeat_n(Seat::Done { length: u16::MAX }, RING_DESCRIPTORS)
+                .collect(),
         }),
     };
     let ends = CaseEnds {
@@ -168,6 +170,7 @@ fn every_request_fits_the_images_payload_bound() {
         encoded_length(&SnapshotCold { page: u8::MAX }),
         encoded_length(&SnapshotUp { page: u8::MAX }),
         encoded_length(&Round { rounds: u32::MAX }),
+        encoded_length(&Single { length: u16::MAX }),
         encoded_length(&Expect { sender: [0xff; 6] }),
         encoded_length(&Target {
             receiver: [0xff; 6],
@@ -191,7 +194,7 @@ fn both_images_share_the_radio_s_endpoints_and_keep_their_own_apart() {
     // Five endpoints (two snapshots, the bring-up, the counters, the stop)
     // and their four answers: the two snapshots share their page.
     assert_eq!(shared.len(), 9);
-    // Each side's own: two endpoints and two answers, four and four.
-    assert_eq!(sender.len(), 9 + 4);
+    // Each side's own: three endpoints and three answers, four and four.
+    assert_eq!(sender.len(), 9 + 6);
     assert_eq!(receiver.len(), 9 + 8);
 }

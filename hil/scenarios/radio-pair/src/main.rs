@@ -101,8 +101,27 @@ struct Addresses {
 
 static ADDRESSES: Mutex<Option<Addresses>> = Mutex::new(None);
 
+mod first_frame;
+
+/// The default cases and `first-frame`, which runs only when its name is
+/// given (`--case first-frame`): it boots the receiver some thirty times.
+const ALL_CASES: [Case; 6] = [
+    CASES[0],
+    CASES[1],
+    CASES[2],
+    CASES[3],
+    CASES[4],
+    Case {
+        name: "first-frame",
+        run: first_frame::first_frame,
+    },
+];
+
 fn main() -> ExitCode {
-    oer_tools_hil_harness::main(&SCENARIO, &CASES)
+    let named = std::env::args()
+        .any(|argument| argument == "first-frame" || argument == "--case=first-frame");
+    let cases: &[Case] = if named { &ALL_CASES } else { &CASES };
+    oer_tools_hil_harness::main(&SCENARIO, cases)
 }
 
 /// Which snapshot of a boot.

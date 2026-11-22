@@ -21,6 +21,23 @@ cargo hil run radio-pair --board receiver=s31-a --board sender=s31-b
 | `case-c` | the sender's 6 000 rounds of case C posted (about 45 s, past R4's end); meanwhile the receiver's R1 and R2 (a 2 s window, chains recorded), R3 (a 100 ms stall, the walker's standing, a 1 s window) and R4 (50 turns of a 200 ms window, the stop, the cold start, a 200 ms window); the counters after R2 and R4; then the sender's ends | each R's thresholds (`tasks/277`, `281`) and the rounds without a failure; a failing case names every R that failed, and the receiver's step that ran when the sender's rounds failed; both boards' snapshots and counters are then kept again |
 | `stop` | each board's stop: the walker's edge, the stop request and its hold, the reset after a stop, the release | both stopped |
 
+`first-frame` runs only when named (`--case first-frame`; `--list` does
+not show it): it boots the receiver some thirty times. For each length of
+100, 192, 193, 230, 252, 253, 256, 300 and 700 octets, three complete
+boots:
+1. the receiver reset, brought up and told its sender;
+2. its counters, every descriptor armed (else the boot is repeated);
+3. the sender's `single` frame of that length;
+4. the counters again: every descriptor that is not armed lies among the
+   places one frame of that length can reach (R, then d0…), and the sender
+   named the frame's end (else repeated);
+5. a 1 s window;
+6. the stop.
+
+A length may take eight boots. Each complete boot is kept in
+`receiver/first-frame` with the prediction of `tasks/360` beside it; the
+case passes when every length has its boots, whatever the prediction.
+
 The thresholds: R1 at least 1 000 sender units, none mismatched, no length
 disagreement, no anomaly, the 15 spares held; R2 at least 200 chains of each
 of the 700- and 1 500-octet cases, none mismatched; R3 the cursor steady in

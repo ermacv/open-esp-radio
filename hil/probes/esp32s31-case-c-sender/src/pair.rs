@@ -465,13 +465,24 @@ pub(crate) fn ring_state<const N: usize>(
     ),
 ) -> service::RingState {
     let (ring, reserved) = controls;
+    let all = || ring.iter().chain(core::iter::once(&reserved));
     service::RingState {
         standing: standing_of(standing),
-        controls: ring
-            .iter()
-            .chain(core::iter::once(&reserved))
-            .map(|control| control.bits())
-            .collect(),
+        controls: all().map(|control| control.bits()).collect(),
+        seats: all().map(|control| seat(*control)).collect(),
+    }
+}
+
+/// A descriptor's control word as its fields read.
+fn seat(control: oer_chips_esp32s31_hal::layouts::WifiRxDmaDescriptorControl) -> service::Seat {
+    if control.rx_done() {
+        service::Seat::Done {
+            length: control.length(),
+        }
+    } else if control.owner() && control.length() == control.size() {
+        service::Seat::Armed
+    } else {
+        service::Seat::Other
     }
 }
 
