@@ -133,7 +133,9 @@ impl Writer {
     }
 
     /// Writes the base module's answer to `request` for an image serving
-    /// `image_keys` on `platform`.
+    /// `image_keys` on `platform`. The message is built in a synchronous
+    /// step and written by one await, so that the dispatch on the answer is
+    /// a function of its own, not a state of the console's future.
     async fn answer(
         &mut self,
         tx: &mut impl Write,
@@ -143,26 +145,12 @@ impl Writer {
         image_keys: ImageKeySet<'_>,
         platform: &impl Platform,
     ) {
-        let _written = match answer {
-            Answer::Hello(hello) => self.reply(tx, boot, request, &hello, platform).await,
-            Answer::ImageKeys(first) => {
-                self.reply(tx, boot, request, &image_keys.page(first), platform)
-                    .await
+        match base_message(request, answer, image_keys, platform) {
+            Some(message) => {
+                let _written = self.write(tx, boot, message, platform).await;
             }
-            Answer::Boot => {
-                self.reply(tx, boot, request, &platform.boot_evidence(), platform)
-                    .await
-            }
-            Answer::PostMortem(first) => {
-                let page = platform.post_mortem_checkpoints(first);
-                self.reply(tx, boot, request, &page, platform).await
-            }
-            Answer::Link(link) => self.reply(tx, boot, request, &link, platform).await,
-            Answer::Rejected(reason) => {
-                self.reply(tx, boot, request, &Rejected(reason), platform)
-                    .await
-            }
-        };
+            None => self.lose(),
+        }
     }
 
     /// Writes the worker's answer; the trap it asks for once written whole.
@@ -224,6 +212,27 @@ impl Writer {
         if write_whole(tx, line.framed()).await.is_err() {
             self.notes_dropped = self.notes_dropped.wrapping_add(1);
         }
+    }
+}
+
+/// The base module's answer to `request` as a message, or `None` when it
+/// cannot be encoded.
+fn base_message(
+    request: RequestIdentity,
+    answer: Answer,
+    image_keys: ImageKeySet<'_>,
+    platform: &impl Platform,
+) -> Option<Outbound> {
+    fn message<M: Message>(request: RequestIdentity, body: &M) -> Option<Outbound> {
+        Outbound::new(0, request.session_id, request.request_id, body).ok()
+    }
+    match answer {
+        Answer::Hello(hello) => message(request, &hello),
+        Answer::ImageKeys(first) => message(request, &image_keys.page(first)),
+        Answer::Boot => message(request, &platform.boot_evidence()),
+        Answer::PostMortem(first) => message(request, &platform.post_mortem_checkpoints(first)),
+        Answer::Link(link) => message(request, &link),
+        Answer::Rejected(reason) => message(request, &Rejected(reason)),
     }
 }
 
