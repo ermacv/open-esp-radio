@@ -19,54 +19,29 @@ first, with Frame Control one of the cases'. It is then checked:
 - its length agrees with its case's: the bytes after the header are the
   MPDU without its FCS, rounded up to a word (`HW_RX_CHAIN_LAPS_20261117`).
 
-Once started it prints `MARK 6` and waits up to 120 s for the sender's
-first unit (the `Waited` record); the cases begin with it, so the lease
-starts the sender on that mark. Every window counts the sender's units and the ring's anomalies by kind
-(`Length`, `DoorbellPending`). A window with no sender unit fails its case.
+The probe speaks the HIL protocol (`console = "hil"`): its console serves
+the agent (`hil/agent`) and the receiver's requests
+(`oer-hil-services-radio-pair`), each answered by what its hardware did.
+The cases, their thresholds and the verdict are
+[`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s.
 
-| Case | What | Pass |
-|---|---|---|
-| R1 singles | one 2 s window: every single lent for a spare (copied in place when none is held), its handle back to the spares | ≥ 1 000 sender units, no mismatch, no length disagreement, no anomaly, the 15 spares held at the end |
-| R2 chains | the same window: every chain copied in place, its descriptors against its case's (`expected`); each continuation's control word recorded by position (first, middle) | ≥ 200 chains each of the 700 and 1 500 cases, none mismatched; the words are a record, no condition |
-| R3 stall | 100 ms without serving, then the walker's standing (cursor, tail word, cursor), then a 1 s window | the cursor unchanged in one of the two recorded states (NEXT zero with the tail completed, or NEXT on the armed tail), which is recorded; ≥ 100 sender units after, no mismatch, no anomaly |
-| R4 turns | 50 turns: a 200 ms window; the stop (the walker's edge, the stop request and its hold, the reset after a stop, the release); the cold start (preparation, channel, core, publication, walker); a 200 ms window | every turn: the 32 handles back, ≥ 50 sender units after the start and some before, no mismatch, no anomaly; the stop's and the start's microseconds recorded |
-
-| Record | Values |
+| Request | What the probe does |
 |---|---|
-| 1 up | |
-| 2 waited | the wait's milliseconds, the foreign units in it |
-| 5 failed | phase, index |
-| 20 window | case, sender units, singles, chains, mismatched, length disagreements, foreign units, `Length` anomalies, `DoorbellPending` anomalies, spares held |
-| 21 chains | case tag, chains, descriptors least and most, expected, mismatched |
-| 22 word | position (0 first, 1 middle), the control word, how many |
-| 23 standing | state (0, 1, or 2 neither), LAST, NEXT (`u32::MAX` zero, `u32::MAX - 1` elsewhere), the tail, its completion, unchanged |
-| 24 turn | index, sender units after, handles, stop µs, start µs, sender units before, mismatched after, `Length` and `DoorbellPending` anomalies |
-| 25 verdict | case 1 to 4, 1 for its pass |
+| `snapshot-cold` | the reset cause, as the adoption read it, before the bring-up |
+| `bring-up` | the PHY's registration, coexistence, power, the clocks, the PHY client, the tracking due, the MAC's cold start on the ring, the channel; then it reads its snapshot after the bring-up |
+| `snapshot-up` | the temperature code, the RF PLL's frequency block and the PHY's calibration results |
+| `receive-counters` | the MAC's receive counters, the walker's standing and every descriptor's control word |
+| `expect` | the sender's address: a unit is the sender's when it is to the station from that address, never learned from a first frame |
+| `window` | serves the ring for the given time: every single lent for a spare (copied in place when none is held), every chain copied in place, each checked; with chains recorded, each chain's descriptors and continuation words by position |
+| `stall` | leaves the ring unserved for the given time, then reads where the walker stands |
+| `turn` | a window, the stop (the walker's edge, the stop request and its hold, the reset after a stop, the release), the cold start, a window |
+| `stop` | the stop; afterwards every step but the cold snapshot is refused until the next boot |
 
-The console prints `MARK <n>` at each case (6 the wait for the sender), then one line a record, then
-`OER-RESULT: pass rx-ring` when the four cases pass and nothing failed.
+A step that fails answers its phase and index, and the probe goes down:
+it refuses every step but the cold snapshot until the next boot.
 
-## Running
-
-Build both images before the lease, from one commit:
-
-```console
-cargo fw build esp32s31-rx-ring --diagnostic
-cargo fw build esp32s31-case-c-sender --diagnostic
-```
-
-Three boards under one lease: s31-a receives, s31-b sends, and c5-a
-teaches s31-b its peer (frames to s31-b's station from s31-a's address).
-
-```console
-cargo stand --owner wifi lease --board s31-a --board s31-b --board c5-a --air exclusive -- sh -c '
-  cargo stand board send c5-a --timeout 30s SYNC "MODE 13 20 6m" &&
-  { cargo fw run esp32s31-rx-ring --board s31-a --timeout 300s > rx.log &
-    until grep -q "MARK 6" rx.log; do sleep 0.1; done
-    cargo fw run esp32s31-case-c-sender --board s31-b --timeout 400s > tx.log &
-    until grep -q "MARK 70" tx.log; do sleep 0.1; done
-    cargo stand board send c5-a --timeout 30s "TX 300 10000 512 <s31-b> <s31-a> <s31-a> 0"
-    wait; }'
-```
-
-Every owner stays held until the leased host reset.
+The radio work is the radio level's one task (the interrupt executor of
+level 2); the console and the agent run on the application level and hand
+each request over through the agent's mailbox. An answer the radio level
+publishes while the console publishes its own is dropped and counted by the
+console, and the host then sees its request time out, an incomplete case.

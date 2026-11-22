@@ -29,30 +29,18 @@ its own (8 descriptors and R, 256-octet buffers):
 - the core opened by the preparation's proof, the cold publication, the
   walker, the MAC's receive.
 
-It learns its peer from the first frame addressed to its station, served
-from that ring with every unit copied in place. Then it sends the rounds,
-12 000 of them. The rounds' length is the `End` record's.
+The probe speaks the HIL protocol (`console = "hil"`): its console serves
+the agent (`hil/agent`) and the sender's requests
+(`oer-hil-services-radio-pair`); the cases and the verdict are
+[`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s.
 
-| Record | Values |
+| Request | What the probe does |
 |---|---|
-| 1 up | |
-| 4 end | the rounds' microseconds |
-| 5 failed | phase, index |
-| 13 peer | the peer's address, its first two octets and its last four |
-| 15 sent (case C) | the case's tag; acknowledged by the frame before (none, then each case); ACK timeouts by the frame before; other ends |
-| 16 sent (cell E) | the case's tag, its protected length, acknowledged, ACK timeouts, other ends |
+| `snapshot-cold`, `bring-up`, `snapshot-up`, `receive-counters`, `stop` | as the receiver's ([`esp32s31-rx-ring`](../esp32s31-rx-ring/README.md)) |
+| `listen` | drains its ring, then learns as its peer the sender of the first frame to its station that comes after this answer |
+| `peer` | serves its ring once and answers the peer it heard, or that it heard none yet, without waiting |
+| `round` | the given number of case C's rounds to the peer, one frame of each case a round, each awaited; per case, by the frame before it: acknowledged, ACK timeouts, other ends, and the rounds' microseconds |
 
-The console prints `MARK <n>` (70 the peer, 90 and 91 the rounds), then one
-line a record, `R <kind> <values…>`, then `OER-RESULT: pass case-c-sender`
-unless a failure was recorded.
-
-## Running
-
-Build with `cargo fw build esp32s31-case-c-sender --diagnostic` before the
-lease. The injector (`tools/lab/peers/esp32c5-wifi-injector`) teaches the
-sender its peer: frames to the sender's station from the receiver's address
-(`tasks/167`). The receiver is `esp32s31-rx-ring`; see its README for the
-three boards' lease.
-
-Every owner stays held until the leased host reset; the probe returns no
-reusable radio.
+With `--features ccmp`, `round` sends cell E's protected QoS cases instead;
+each case's ends are its first column, and a seal the protocol layer refused
+is answered as a failure.
