@@ -42,6 +42,7 @@ use embassy_futures::select::{Either, select, select_array};
 use embedded_io_async::{Read, Write};
 use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_sync::PriorityWaker;
 use oer_portable_waker::AtomicWaker;
 use oer_protocols_hil_protocol::base::{ImageKeySet, Rejected};
 use oer_protocols_hil_protocol::{FrameEncoder, Message, Outbound, RequestIdentity};
@@ -102,15 +103,22 @@ pub struct Dropped;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Busy;
 
+/// A lane's FIFO: the writer, on the console's level, the lowest that
+/// produces, is woken by an ordinary waker when a message is entered (a
+/// wake downward); a producer, on that level or above it on the same hart,
+/// waits for room behind a [`PriorityWaker`] (a wake upward).
+type Queue<const DEPTH: usize> = WakingSpscQueue<Outbound, DEPTH, AtomicWaker, PriorityWaker>;
+
 /// One producing context's FIFO and what the writer tells it.
 struct Lane<const DEPTH: usize> {
-    queue: WakingSpscQueue<Outbound, DEPTH>,
+    queue: Queue<DEPTH>,
     /// The lane's messages lost before it, by its producer.
     dropped: AtomicU32,
     /// The lane's entries the writer wrote whole.
     written: AtomicU32,
-    /// The lane's one waiter for a write ([`Producer::written`]).
-    waiter: AtomicWaker,
+    /// The lane's one waiter for a write ([`Producer::written`]): woken by
+    /// the writer, below or beside it, so a [`PriorityWaker`].
+    waiter: PriorityWaker,
 }
 
 /// What a lane's two ends share besides its FIFO.
@@ -118,7 +126,7 @@ struct Lane<const DEPTH: usize> {
 struct Shared<'a> {
     dropped: &'a AtomicU32,
     written: &'a AtomicU32,
-    waiter: &'a AtomicWaker,
+    waiter: &'a PriorityWaker,
 }
 
 /// The image's `K` lanes of `DEPTH` messages each, split once.
@@ -137,10 +145,12 @@ impl<const K: usize, const DEPTH: usize> Lanes<K, DEPTH> {
         Self {
             lanes: [const {
                 Lane {
-                    queue: WakingSpscQueue::new(),
+                    // The constructor of a queue with named notifies; both
+                    // ends are on the console's hart.
+                    queue: WakingSpscQueue::across_harts(AtomicWaker::new(), PriorityWaker::new()),
                     dropped: AtomicU32::new(0),
                     written: AtomicU32::new(0),
-                    waiter: AtomicWaker::new(),
+                    waiter: PriorityWaker::new(),
                 }
             }; K],
         }
@@ -188,7 +198,7 @@ pub struct Ends<'a, const DEPTH: usize> {
 /// `Clone`, publishing through `&mut`. A producing context is a level of
 /// the console's hart, and the producer is moved there once.
 pub struct Producer<'a, const DEPTH: usize> {
-    sender: WakingSpscSender<'a, Outbound, DEPTH>,
+    sender: WakingSpscSender<'a, Outbound, DEPTH, AtomicWaker, PriorityWaker>,
     shared: Shared<'a>,
     /// The lane's entries so far: its producer's alone, so exact.
     entered: u32,
@@ -273,7 +283,7 @@ impl<const DEPTH: usize> Producer<'_, DEPTH> {
 
 /// The writer's end of one lane.
 pub struct LaneDrain<'a, const DEPTH: usize> {
-    receiver: WakingSpscReceiver<'a, Outbound, DEPTH>,
+    receiver: WakingSpscReceiver<'a, Outbound, DEPTH, AtomicWaker, PriorityWaker>,
     shared: Shared<'a>,
     /// The lane's entries the writer took out.
     taken: u32,

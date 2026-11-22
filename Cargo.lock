@@ -2311,6 +2311,7 @@ dependencies = [
  "heapless 0.9.3",
  "oer-portable-diagnostics",
  "oer-portable-memory",
+ "oer-portable-sync",
  "oer-portable-trace",
  "oer-portable-waker",
  "oer-protocols-hil-protocol",
