@@ -1135,3 +1135,18 @@ fn dma_prepare() {
         );
     }
 }
+
+/// `is_done` answers `DONE` alone of the field's four codes.
+#[test]
+fn only_the_done_code_is_done() {
+    for code in 0..4_u32 {
+        let mut memory: Vec<u32> = vec![0; instances::aes::SIZE.div_ceil(4)];
+        memory[aes::state::OFFSET / 4] = code << aes::state::STATE_MASK.trailing_zeros();
+        let program = aes::AesProgram::host(&mut memory).expect("memory holds the part");
+        assert_eq!(
+            ops::is_done(&program),
+            aes::state::State::from_bits(code) == Some(aes::state::State::Done),
+            "code {code}"
+        );
+    }
+}

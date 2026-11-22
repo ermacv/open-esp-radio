@@ -27,41 +27,63 @@ struct Port {
     busy_left: usize,
     stuck: bool,
     invalid: Option<AesStateField>,
+    /// Every atom called, in order.
+    calls: std::vec::Vec<&'static str>,
 }
 struct Fake(Rc<RefCell<Port>>);
 impl Registers for Fake {
     fn enable_clock(&mut self) {
+        self.0.borrow_mut().calls.push("enable_clock");
         self.0.borrow_mut().clocked = true;
     }
     fn disable_clock(&mut self) {
+        self.0.borrow_mut().calls.push("disable_clock");
         self.0.borrow_mut().clocked = false;
     }
     fn assert_reset(&mut self) {
+        self.0.borrow_mut().calls.push("assert_reset");
         let mut p = self.0.borrow_mut();
         p.key = [0; 8];
         p.input = [0; 4];
         p.output = [0; 4];
         p.started = false;
     }
-    fn release_reset(&mut self) {}
-    fn release_parent_resets(&mut self) {}
-    fn disable_interrupt(&mut self) {}
-    fn disable_dma(&mut self) {}
+    fn release_reset(&mut self) {
+        self.0.borrow_mut().calls.push("release_reset");
+    }
+    fn release_parent_resets(&mut self) {
+        self.0.borrow_mut().calls.push("release_parent_resets");
+    }
+    fn disable_interrupt(&mut self) {
+        self.0.borrow_mut().calls.push("disable_interrupt");
+    }
+    fn disable_dma(&mut self) {
+        self.0.borrow_mut().calls.push("disable_dma");
+    }
     fn decrypt128(&mut self) {
+        self.0.borrow_mut().calls.push("decrypt128");
         self.0.borrow_mut().encrypting = false;
     }
     fn encrypt128(&mut self) {
+        self.0.borrow_mut().calls.push("encrypt128");
         self.0.borrow_mut().encrypting = true;
     }
-    fn disable_pseudo_rounds(&mut self) {}
-    fn hold(&mut self) {}
+    fn disable_pseudo_rounds(&mut self) {
+        self.0.borrow_mut().calls.push("disable_pseudo_rounds");
+    }
+    fn hold(&mut self) {
+        self.0.borrow_mut().calls.push("hold");
+    }
     fn write_key(&mut self, words: &KeyWords) {
+        self.0.borrow_mut().calls.push("write_key");
         self.0.borrow_mut().key = *words;
     }
     fn write_block(&mut self, words: &BlockWords) {
+        self.0.borrow_mut().calls.push("write_block");
         self.0.borrow_mut().input = *words;
     }
     fn start(&mut self) {
+        self.0.borrow_mut().calls.push("start");
         let mut p = self.0.borrow_mut();
         assert!(p.clocked);
         p.starts += 1;
@@ -88,6 +110,7 @@ impl Registers for Fake {
         });
     }
     fn state(&self) -> AesStateField {
+        self.0.borrow_mut().calls.push("state");
         let mut p = self.0.borrow_mut();
         p.reads += 1;
         if !p.started {
@@ -106,6 +129,7 @@ impl Registers for Fake {
         IDLE
     }
     fn read_block(&self) -> BlockWords {
+        self.0.borrow_mut().calls.push("read_block");
         self.0.borrow().output
     }
 }
@@ -290,4 +314,41 @@ impl Registers for StuckSetup {
     fn read_block(&self) -> BlockWords {
         self.0.read_block()
     }
+}
+
+/// A key's load clocks and resets the accelerator before its configuration
+/// and checks `STATE` before the key; the clear erases, then gates.
+#[test]
+fn the_load_and_the_clear_call_the_atoms_in_the_vendor_order() {
+    let port = Rc::new(RefCell::new(Port::default()));
+    let mut engine = AesBlocks::new(Fake(Rc::clone(&port)), Ticking::default());
+    let key = Aes128Key::copy_from(&RFC3394_4_1_KEK);
+    let keyed = engine.load(&key).expect("an idle accelerator");
+    assert_eq!(
+        port.borrow().calls,
+        [
+            "enable_clock",
+            "assert_reset",
+            "release_reset",
+            "release_parent_resets",
+            "disable_interrupt",
+            "disable_dma",
+            "disable_pseudo_rounds",
+            "hold",
+            "state",
+            "write_key",
+        ]
+    );
+    port.borrow_mut().calls.clear();
+    drop(keyed);
+    assert_eq!(
+        port.borrow().calls,
+        [
+            "assert_reset",
+            "release_reset",
+            "write_key",
+            "write_block",
+            "disable_clock",
+        ]
+    );
 }
