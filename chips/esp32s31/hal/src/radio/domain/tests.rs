@@ -29,7 +29,10 @@ fn refuse_poisoned_clock_changes(
     );
     assert_eq!(radio.disable_slot(0), Err(ModemClockError::Poisoned));
     assert_eq!(
-        radio.set_wifi_initialized(&wifi, true),
+        radio.set_wifi_initialized(
+            &wifi,
+            crate::radio::ieee80211::client::WifiInitialization::Initialized,
+        ),
         Err(ModemClockError::Poisoned)
     );
     let Err((radio, error)) = radio.into_parts() else {
@@ -225,13 +228,16 @@ fn split_coex_ports_borrow_the_actual_domain_priority_table() {
 fn the_mac_block_reset_pulses_before_it_writes_back() {
     #[derive(Debug, PartialEq)]
     enum Write {
-        Reset(bool),
+        Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset),
         WriteBack(u8),
     }
     struct Port(std::vec::Vec<Write>);
     impl super::MacBlockResetPort for Port {
-        fn set_wifi_mac_reset(&mut self, asserted: bool) {
-            self.0.push(Write::Reset(asserted));
+        fn set_wifi_mac_reset(
+            &mut self,
+            reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
+        ) {
+            self.0.push(Write::Reset(reset));
         }
         fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
             self.0.push(Write::WriteBack(cbw));
@@ -242,7 +248,11 @@ fn the_mac_block_reset_pulses_before_it_writes_back() {
         super::reset_wifi_mac_block(&mut port, 3);
     assert_eq!(
         port.0,
-        [Write::Reset(true), Write::Reset(false), Write::WriteBack(3)]
+        [
+            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted),
+            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released),
+            Write::WriteBack(3)
+        ]
     );
 }
 
@@ -252,13 +262,16 @@ fn the_mac_block_reset_pulses_before_it_writes_back() {
 fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
     #[derive(Debug, PartialEq)]
     enum Write {
-        Reset(bool),
+        Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset),
         WriteBack(u8),
     }
     struct Port(std::vec::Vec<Write>);
     impl super::MacBlockResetPort for Port {
-        fn set_wifi_mac_reset(&mut self, asserted: bool) {
-            self.0.push(Write::Reset(asserted));
+        fn set_wifi_mac_reset(
+            &mut self,
+            reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
+        ) {
+            self.0.push(Write::Reset(reset));
         }
         fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
             self.0.push(Write::WriteBack(cbw));
@@ -272,6 +285,10 @@ fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
     ) = super::reset_stopped_wifi_mac_block(&mut port, stop, 1);
     assert_eq!(
         port.0,
-        [Write::Reset(true), Write::Reset(false), Write::WriteBack(1)]
+        [
+            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted),
+            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released),
+            Write::WriteBack(1)
+        ]
     );
 }

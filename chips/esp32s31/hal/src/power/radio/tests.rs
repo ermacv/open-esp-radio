@@ -39,7 +39,9 @@ struct Port {
 impl Port {
     fn new(log: &Log) -> Self {
         Self {
-            power: WifiPowerBaseline::for_host_test(false),
+            power: WifiPowerBaseline::for_host_test(
+                oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled,
+            ),
             power_readback: Ok(()),
             power_sequence_failure: None,
             log: log.clone(),
@@ -145,14 +147,18 @@ const COMMON: [PlatformClock; 3] = [
 
 #[test]
 fn common_power_holds_one_platform_reference_of_each_shared_gate() {
-    let cold = WifiPowerBaseline::for_host_test(false);
+    let cold = WifiPowerBaseline::for_host_test(
+        oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Disabled,
+    );
     let (log, mut port, platform) = setup();
     port.power = cold;
     let mut power = CommonRadioPower::default();
 
     let wifi = entered::<WifiClient>(&mut power, &mut port, &platform);
     // A later protocol must not pulse the Wi-Fi resets or take references.
-    port.power = WifiPowerBaseline::for_host_test(true);
+    port.power = WifiPowerBaseline::for_host_test(
+        oer_chips_esp32s31_pac::hp_sys_clkrst::modem_ctrl0::RegModemClkEn::Enabled,
+    );
     let bluetooth = entered::<BluetoothClient>(&mut power, &mut port, &platform);
     assert_eq!(
         *log.borrow(),

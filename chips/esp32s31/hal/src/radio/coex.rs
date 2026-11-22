@@ -272,7 +272,7 @@ impl<'registers, P: crate::radio::phy::registers::RadioPlacement> CoexClockPort<
     }
 }
 
-pub use crate::radio::modem::{ExternalCoexRole, ExternalCoexWires};
+pub use crate::radio::modem::{ExternalCoexGrantValidity, ExternalCoexRole, ExternalCoexWires};
 
 /// An external priority level (`esp_coex_pti_level_t`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -314,8 +314,8 @@ pub struct ExternalCoexConfig {
     pub wires: ExternalCoexWires,
     /// Grant delay in microseconds; the hardware holds 0 to 15.
     pub grant_delay_us: u8,
-    /// Whether the external grant is valid high.
-    pub validate_high: bool,
+    /// The level at which the external grant is valid.
+    pub grant_validity: ExternalCoexGrantValidity,
     /// The two levels `esp_coex_external_set` receives last; ESP-IDF passes
     /// `MID` and `HIGH`.
     pub levels: [ExternalCoexLevel; 2],
@@ -329,7 +329,7 @@ impl ExternalCoexConfig {
             role,
             wires,
             grant_delay_us: 0,
-            validate_high: true,
+            grant_validity: ExternalCoexGrantValidity::ValidHigh,
             levels: [ExternalCoexLevel::Mid, ExternalCoexLevel::High],
         }
     }

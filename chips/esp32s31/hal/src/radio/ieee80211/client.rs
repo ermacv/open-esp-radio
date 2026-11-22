@@ -76,11 +76,20 @@ pub struct WifiPowered {
     registers: WifiClientRegisters,
 }
 
+/// Whether Wi-Fi is marked initialized for the modem clocks, as
+/// `modem_clock_configure_wifi_status` records `esp_wifi_init` and
+/// `esp_wifi_deinit`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WifiInitialization {
+    Uninitialized,
+    Initialized,
+}
+
 /// Wi-Fi client with its module clocks enabled.
 #[must_use = "the clocked Wi-Fi client must disable its clocks"]
 pub struct WifiClocked {
     registers: WifiClientRegisters,
-    initialized: bool,
+    initialized: WifiInitialization,
     station_wake: StationWakeState,
     clocks: WifiClocksOn,
 }
@@ -246,7 +255,7 @@ impl WifiPowered {
             Ok(()) => Ok((
                 WifiClocked {
                     registers: self.registers,
-                    initialized: false,
+                    initialized: WifiInitialization::Uninitialized,
                     station_wake: StationWakeState::default(),
                     clocks: WifiClocksOn { _private: () },
                 },
@@ -268,7 +277,7 @@ impl WifiClocked {
     pub fn set_initialized<B: PlatformClockBackend, T>(
         &mut self,
         radio: &mut RadioDomain<B, T>,
-        initialized: bool,
+        initialized: WifiInitialization,
     ) -> Result<(), ModemClockError> {
         radio.set_wifi_initialized(&self.registers.mac, initialized)?;
         self.initialized = initialized;
@@ -282,7 +291,7 @@ impl WifiClocked {
     pub fn for_host_test(cold: WifiCold) -> Self {
         Self {
             registers: cold.registers,
-            initialized: false,
+            initialized: WifiInitialization::Uninitialized,
             station_wake: StationWakeState::default(),
             clocks: WifiClocksOn { _private: () },
         }
@@ -294,7 +303,7 @@ impl WifiClocked {
     }
 
     /// Whether Wi-Fi is marked initialized.
-    pub const fn initialized(&self) -> bool {
+    pub const fn initialized(&self) -> WifiInitialization {
         self.initialized
     }
 
@@ -386,7 +395,7 @@ impl WifiClocked {
         radio: &mut RadioDomain<B, T>,
     ) -> Result<ClockReleased, (StoppedInstallation, ClockPoisoned)> {
         let release = self
-            .set_initialized(radio, false)
+            .set_initialized(radio, WifiInitialization::Uninitialized)
             .and_then(|()| radio.disable_modem_clocks(&self.registers.mac));
         self.finish_clock_release(release)
     }

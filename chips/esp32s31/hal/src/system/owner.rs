@@ -224,28 +224,40 @@ pub trait SharedPhyAccess: sealed::SharedPhyAccess {
         );
     }
 
-    fn set_rf_circuit_power(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_rf_circuit_power(enabled);
+    fn power_on_rf_circuits(&mut self) {
+        phy_pac_mut(self).power_on_rf_circuits();
     }
 
-    fn set_bb_i2c_power_tie(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_bb_i2c_power_tie(enabled);
+    fn power_off_rf_circuits(&mut self) {
+        phy_pac_mut(self).power_off_rf_circuits();
+    }
+
+    fn tie_baseband_i2c_power(&mut self) {
+        phy_pac_mut(self).tie_baseband_i2c_power();
     }
 
     fn analog_i2c_is_powered(&self) -> bool {
         sealed::SharedPhyAccess::pac(self).analog_i2c_is_powered()
     }
 
-    fn set_analog_i2c_power(&mut self, enabled: bool) {
-        phy_pac_mut(self).set_analog_i2c_power(enabled);
+    fn power_on_analog_i2c(&mut self) {
+        phy_pac_mut(self).power_on_analog_i2c();
+    }
+
+    fn power_off_analog_i2c(&mut self) {
+        phy_pac_mut(self).power_off_analog_i2c();
     }
 
     fn analog_i2c_reset_is_released(&self) -> bool {
         sealed::SharedPhyAccess::pac(self).analog_i2c_reset_is_released()
     }
 
-    fn set_analog_i2c_reset_released(&mut self, released: bool) {
-        phy_pac_mut(self).set_analog_i2c_reset_released(released);
+    fn release_analog_i2c_reset(&mut self) {
+        phy_pac_mut(self).release_analog_i2c_reset();
+    }
+
+    fn assert_analog_i2c_reset(&mut self) {
+        phy_pac_mut(self).assert_analog_i2c_reset();
     }
 
     fn enable_frontend_baseband_power(&mut self) {
@@ -357,7 +369,7 @@ pub(crate) fn phy_parts_mut(
 pub struct RadioAccess {
     pub(crate) registers: WifiRadioRegisters,
     station_wake: StationWakeState,
-    initialized: bool,
+    initialized: crate::radio::ieee80211::client::WifiInitialization,
 }
 
 impl RadioAccess {
@@ -381,7 +393,7 @@ impl RadioAccess {
     pub(crate) fn from_clocked(
         registers: WifiRadioRegisters,
         station_wake: StationWakeState,
-        initialized: bool,
+        initialized: crate::radio::ieee80211::client::WifiInitialization,
     ) -> Self {
         Self {
             registers,
@@ -390,7 +402,13 @@ impl RadioAccess {
         }
     }
 
-    pub(crate) fn into_clocked_parts(self) -> (WifiRadioRegisters, StationWakeState, bool) {
+    pub(crate) fn into_clocked_parts(
+        self,
+    ) -> (
+        WifiRadioRegisters,
+        StationWakeState,
+        crate::radio::ieee80211::client::WifiInitialization,
+    ) {
         (self.registers, self.station_wake, self.initialized)
     }
 

@@ -296,13 +296,16 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
         crate::system::owner::PhyRegistrationGrant::new(self.state.phy.begin_registration_epoch())
     }
 
-    /// Apply the Wi-Fi receive enable leaf on this owned domain.
+    /// Enable the Wi-Fi receive path on this owned domain.
     #[cfg(target_arch = "riscv32")]
-    pub fn set_wifi_rx_enabled(&mut self, enabled: bool) {
-        crate::radio::ieee80211::baseband::set_wifi_enabled(
-            self.state.registers.radio_phy_mut(),
-            enabled,
-        );
+    pub fn enable_wifi_rx(&mut self) {
+        crate::radio::ieee80211::baseband::enable_wifi(self.state.registers.radio_phy_mut());
+    }
+
+    /// Disable the Wi-Fi receive path on this owned domain.
+    #[cfg(target_arch = "riscv32")]
+    pub fn disable_wifi_rx(&mut self) {
+        crate::radio::ieee80211::baseband::disable_wifi(self.state.registers.radio_phy_mut());
     }
 
     /// Record a programmed PHY grant-protect request without register
@@ -533,11 +536,15 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
     pub fn set_wifi_initialized(
         &mut self,
         _owner: &WifiRadioRegisters,
-        initialized: bool,
+        initialized: crate::radio::ieee80211::client::WifiInitialization,
     ) -> Result<(), ModemClockError> {
+        // The family planner's one translation of the name into its flag.
         self.state_mut()
             .clocks
-            .set_wifi_initialized(initialized)
+            .set_wifi_initialized(matches!(
+                initialized,
+                crate::radio::ieee80211::client::WifiInitialization::Initialized
+            ))
             .map_err(modem_error)
     }
 
@@ -832,18 +839,20 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 /// The writes of [`RadioDomain::reset_wifi_mac_block`].
 pub(crate) trait MacBlockResetPort {
     /// `RST_WIFIMAC`, asserted or released.
-    fn set_wifi_mac_reset(&mut self, asserted: bool);
+    fn set_wifi_mac_reset(
+        &mut self,
+        reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
+    );
     /// What the domain keeps inside the block, for the lowered width `cbw`.
     fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8);
 }
 
 impl MacBlockResetPort for SharedRadioRegisters {
-    fn set_wifi_mac_reset(&mut self, asserted: bool) {
-        self.radio_phy_mut().set_wifi_mac_reset(if asserted {
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted
-        } else {
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
-        });
+    fn set_wifi_mac_reset(
+        &mut self,
+        reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
+    ) {
+        self.radio_phy_mut().set_wifi_mac_reset(reset);
     }
     fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
         SharedRadioRegisters::write_back_wifi_mac_foreign_words(self, cbw);
@@ -856,8 +865,8 @@ pub(crate) fn reset_wifi_mac_block(
     port: &mut impl MacBlockResetPort,
     cbw: u8,
 ) -> crate::radio::ieee80211::init::MacBlockReset {
-    port.set_wifi_mac_reset(true);
-    port.set_wifi_mac_reset(false);
+    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted);
+    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released);
     port.write_back_wifi_mac_foreign_words(cbw);
     crate::radio::ieee80211::init::MacBlockReset::after_pulse()
 }
@@ -905,8 +914,13 @@ impl<B: PlatformClockBackend, P>
     for ExternalBinding<'_, B, P>
 {
     type Error = crate::radio::coex::ExternalCoexError;
+    // The family port's one translation of its flag into the two atoms.
     fn enabled(&mut self, enabled: bool) {
-        self.registers.set_external_coex_enabled(enabled);
+        if enabled {
+            self.registers.enable_external_coex();
+        } else {
+            self.registers.disable_external_coex();
+        }
     }
     fn clear_priorities(&mut self, config: crate::radio::coex::ExternalCoexConfig) {
         self.registers.clear_external_coex_priorities(config.role);
@@ -958,7 +972,7 @@ impl<B: PlatformClockBackend, P: PlatformClockProvider<Backend = B>>
     }
     fn grant(&mut self, config: crate::radio::coex::ExternalCoexConfig, delay: Self::Delay) {
         self.registers
-            .configure_external_coex_grant(delay, config.validate_high);
+            .configure_external_coex_grant(delay, config.grant_validity);
     }
     fn priorities(&mut self, config: crate::radio::coex::ExternalCoexConfig) {
         self.registers.publish_external_coex_priorities(

@@ -41,79 +41,102 @@ pub enum ModemClockDevice {
     Ieee802154Mac,
 }
 
-const fn gate(enable: bool) -> oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate {
-    if enable {
-        oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-    } else {
-        oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Disabled
-    }
-}
+use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, Reset};
 
 impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
-    /// Apply one vendor modem clock device action.
-    ///
-    /// The write order within each action is the vendor order. Front-end
-    /// devices perform no register access when disabled, as in the vendor.
+    /// Apply one vendor modem clock device's enabling action, in the vendor's
+    /// write order.
     #[doc(hidden)]
-    pub fn configure_modem_clock_device(&mut self, device: ModemClockDevice, enable: bool) {
+    pub fn enable_modem_clock_device(&mut self, device: ModemClockDevice) {
         let syscon = &mut self.peripherals.modem_syscon_clock_reset;
         match device {
             ModemClockDevice::ModemAdcCommonFe => {
-                if enable {
-                    super::ops::enable_modem_frontend_apb_clock(syscon);
-                    super::ops::enable_modem_frontend_80m_clock(syscon);
-                }
+                super::ops::enable_modem_frontend_apb_clock(syscon);
+                super::ops::enable_modem_frontend_80m_clock(syscon);
             }
             ModemClockDevice::ModemPrivateFe => {
-                if enable {
-                    super::ops::enable_modem_frontend_160m_clock(syscon);
-                    super::ops::enable_modem_frontend_dac_clock(syscon);
-                    super::ops::enable_modem_frontend_pwdet_clock(syscon);
-                    super::ops::enable_modem_frontend_adc_clock(syscon);
-                }
+                super::ops::enable_modem_frontend_160m_clock(syscon);
+                super::ops::enable_modem_frontend_dac_clock(syscon);
+                super::ops::enable_modem_frontend_pwdet_clock(syscon);
+                super::ops::enable_modem_frontend_adc_clock(syscon);
             }
             ModemClockDevice::PllSourceGate => {
-                configure_pll_source_gate(
-                    &mut PllSourceGate(&mut self.peripherals.hp_sys_clkrst_radio),
-                    enable,
-                );
+                open_pll_source_gate(&mut PllSourceGate(
+                    &mut self.peripherals.hp_sys_clkrst_radio,
+                ));
             }
-            ModemClockDevice::WifiApb => super::ops::set_modem_wifi_apb_clock(syscon, gate(enable)),
-            ModemClockDevice::WifiBaseband44m => {
-                super::ops::set_modem_wifi_baseband_44m_clock(syscon, gate(enable));
-            }
-            ModemClockDevice::WifiMac => super::ops::set_modem_wifi_mac_clock(syscon, gate(enable)),
             ModemClockDevice::WifiBaseband => {
-                configure_wifi_baseband(&mut BasebandClock(syscon), enable);
+                enable_wifi_baseband(&mut BasebandClock(syscon));
             }
-            ModemClockDevice::WifiBaseband80x1 => {
-                super::ops::set_bluetooth_wifi_baseband_80x1_clock(syscon, gate(enable));
+            gated => set_gated_device(syscon, gated, ClockGate::Enabled),
+        }
+    }
+
+    /// Apply one vendor modem clock device's disabling action, in the vendor's
+    /// write order. Front-end devices perform no register access, as in the
+    /// vendor.
+    #[doc(hidden)]
+    pub fn disable_modem_clock_device(&mut self, device: ModemClockDevice) {
+        let syscon = &mut self.peripherals.modem_syscon_clock_reset;
+        match device {
+            ModemClockDevice::ModemAdcCommonFe | ModemClockDevice::ModemPrivateFe => {}
+            ModemClockDevice::PllSourceGate => {
+                close_pll_source_gate(&mut PllSourceGate(
+                    &mut self.peripherals.hp_sys_clkrst_radio,
+                ));
             }
-            ModemClockDevice::Etm => super::ops::set_bluetooth_etm_clock(syscon, gate(enable)),
-            ModemClockDevice::BluetoothMac => {
-                super::ops::set_bluetooth_mac_clock(syscon, gate(enable));
+            ModemClockDevice::WifiBaseband => {
+                disable_wifi_baseband(&mut BasebandClock(syscon));
             }
-            ModemClockDevice::BluetoothPeripheral => {
-                super::ops::set_bluetooth_peripheral_clocks(syscon, gate(enable));
-            }
-            ModemClockDevice::BluetoothApb => {
-                super::ops::set_bluetooth_apb_clock(syscon, gate(enable));
-                super::ops::set_bluetooth_modem_security_apb_clock(syscon, gate(enable));
-            }
-            ModemClockDevice::BluetoothIeee802154CommonBaseband => {
-                super::ops::set_bluetooth_baseband_clock(syscon, gate(enable));
-            }
-            ModemClockDevice::Ieee802154Mac => {
-                super::ops::set_modem_ieee802154_apb_clock(syscon, gate(enable));
-                super::ops::set_modem_ieee802154_mac_clock(syscon, gate(enable));
-            }
+            gated => set_gated_device(syscon, gated, ClockGate::Disabled),
         }
     }
 }
 
+/// The devices that are gates alone, written with `gate`: each field is one
+/// `ClockGate` the vendor sets on enable and clears on disable.
+fn set_gated_device<P: oer_portable_mmio::Placement>(
+    syscon: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
+    device: ModemClockDevice,
+    gate: ClockGate,
+) {
+    match device {
+        ModemClockDevice::WifiApb => super::ops::set_modem_wifi_apb_clock(syscon, gate),
+        ModemClockDevice::WifiBaseband44m => {
+            super::ops::set_modem_wifi_baseband_44m_clock(syscon, gate);
+        }
+        ModemClockDevice::WifiMac => super::ops::set_modem_wifi_mac_clock(syscon, gate),
+        ModemClockDevice::WifiBaseband80x1 => {
+            super::ops::set_bluetooth_wifi_baseband_80x1_clock(syscon, gate);
+        }
+        ModemClockDevice::Etm => super::ops::set_bluetooth_etm_clock(syscon, gate),
+        ModemClockDevice::BluetoothMac => super::ops::set_bluetooth_mac_clock(syscon, gate),
+        ModemClockDevice::BluetoothPeripheral => {
+            super::ops::set_bluetooth_peripheral_clocks(syscon, gate);
+        }
+        ModemClockDevice::BluetoothApb => {
+            super::ops::set_bluetooth_apb_clock(syscon, gate);
+            super::ops::set_bluetooth_modem_security_apb_clock(syscon, gate);
+        }
+        ModemClockDevice::BluetoothIeee802154CommonBaseband => {
+            super::ops::set_bluetooth_baseband_clock(syscon, gate);
+        }
+        ModemClockDevice::Ieee802154Mac => {
+            super::ops::set_modem_ieee802154_apb_clock(syscon, gate);
+            super::ops::set_modem_ieee802154_mac_clock(syscon, gate);
+        }
+        ModemClockDevice::ModemAdcCommonFe
+        | ModemClockDevice::ModemPrivateFe
+        | ModemClockDevice::PllSourceGate
+        | ModemClockDevice::WifiBaseband => {}
+    }
+}
+
 pub(super) trait PllSourceGatePort {
-    fn prepare(&mut self, enabled: bool);
-    fn select(&mut self, enabled: bool);
+    fn prepare_open(&mut self);
+    fn open(&mut self);
+    fn prepare_close(&mut self);
+    fn close(&mut self);
 }
 
 pub(super) struct PllSourceGate<'a, P: oer_portable_mmio::Placement>(
@@ -121,88 +144,92 @@ pub(super) struct PllSourceGate<'a, P: oer_portable_mmio::Placement>(
 );
 
 impl<P: oer_portable_mmio::Placement> PllSourceGatePort for PllSourceGate<'_, P> {
-    fn prepare(&mut self, enabled: bool) {
-        if enabled {
-            self.0.prepare_open_modem_pll_source_gate();
-        } else {
-            self.0.prepare_close_modem_pll_source_gate();
-        }
+    fn prepare_open(&mut self) {
+        self.0.prepare_open_modem_pll_source_gate();
     }
-
-    fn select(&mut self, enabled: bool) {
-        if enabled {
-            self.0.open_modem_pll_source_gate();
-        } else {
-            self.0.close_modem_pll_source_gate();
-        }
+    fn open(&mut self) {
+        self.0.open_modem_pll_source_gate();
+    }
+    fn prepare_close(&mut self) {
+        self.0.prepare_close_modem_pll_source_gate();
+    }
+    fn close(&mut self) {
+        self.0.close_modem_pll_source_gate();
     }
 }
 
 // SOURCE: ESP_IDF_4D59230D_S31_MODEM_PLL_GATE. Both edges use two whole-word
 // stores, with preparation before source selection; no RMW or delay intervenes.
-pub(super) fn configure_pll_source_gate(port: &mut impl PllSourceGatePort, enabled: bool) {
-    port.prepare(enabled);
-    port.select(enabled);
+pub(super) fn open_pll_source_gate(port: &mut impl PllSourceGatePort) {
+    port.prepare_open();
+    port.open();
+}
+pub(super) fn close_pll_source_gate(port: &mut impl PllSourceGatePort) {
+    port.prepare_close();
+    port.close();
 }
 
 trait BasebandClockPort {
-    fn reset(&mut self, asserted: bool);
-    fn clock(&mut self, enabled: bool);
+    fn reset(&mut self, reset: Reset);
+    fn clock(&mut self, gate: ClockGate);
 }
 struct BasebandClock<'a, P: oer_portable_mmio::Placement>(
     &'a mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 );
 impl<P: oer_portable_mmio::Placement> BasebandClockPort for BasebandClock<'_, P> {
-    fn reset(&mut self, asserted: bool) {
-        super::ops::set_wifi_baseband_reset(
-            self.0,
-            if asserted {
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted
-            } else {
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
-            },
-        );
+    fn reset(&mut self, reset: Reset) {
+        super::ops::set_wifi_baseband_reset(self.0, reset);
     }
-    fn clock(&mut self, enabled: bool) {
-        super::ops::set_modem_wifi_baseband_clocks(self.0, gate(enabled));
+    fn clock(&mut self, gate: ClockGate) {
+        super::ops::set_modem_wifi_baseband_clocks(self.0, gate);
     }
 }
-// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK. Reset precedes the enabling gate edge.
-fn configure_wifi_baseband(port: &mut impl BasebandClockPort, enabled: bool) {
-    if enabled {
-        port.reset(true);
-        port.reset(false);
-    }
-    port.clock(enabled);
+// SOURCE: ESP_IDF_7B9CC1AC_S31_MODEM_CLOCK. Reset precedes the enabling gate
+// edge; the disabling edge does not reset.
+fn enable_wifi_baseband(port: &mut impl BasebandClockPort) {
+    port.reset(Reset::Asserted);
+    port.reset(Reset::Released);
+    port.clock(ClockGate::Enabled);
+}
+fn disable_wifi_baseband(port: &mut impl BasebandClockPort) {
+    port.clock(ClockGate::Disabled);
 }
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    impl PllSourceGatePort for Port {
-        fn prepare(&mut self, enabled: bool) {
-            self.0.push(("prepare", enabled));
+    #[derive(Default)]
+    struct GatePort(std::vec::Vec<&'static str>);
+    impl PllSourceGatePort for GatePort {
+        fn prepare_open(&mut self) {
+            self.0.push("prepare open");
         }
-        fn select(&mut self, enabled: bool) {
-            self.0.push(("select", enabled));
+        fn open(&mut self) {
+            self.0.push("open");
+        }
+        fn prepare_close(&mut self) {
+            self.0.push("prepare close");
+        }
+        fn close(&mut self) {
+            self.0.push("close");
         }
     }
 
     #[test]
     fn pll_gate_prepares_each_edge_before_selecting_its_source() {
-        let mut port = Port::default();
-        for enabled in [true, false, true] {
-            configure_pll_source_gate(&mut port, enabled);
-        }
+        let mut port = GatePort::default();
+        open_pll_source_gate(&mut port);
+        close_pll_source_gate(&mut port);
+        open_pll_source_gate(&mut port);
         assert_eq!(
             port.0,
             [
-                ("prepare", true),
-                ("select", true),
-                ("prepare", false),
-                ("select", false),
-                ("prepare", true),
-                ("select", true),
+                "prepare open",
+                "open",
+                "prepare close",
+                "close",
+                "prepare open",
+                "open"
             ]
         );
     }
@@ -216,7 +243,11 @@ mod tests {
         let mut memory = std::vec![u32::MAX; words];
         let mut registers = HpSysClkrstRadio::host(&mut memory).unwrap();
         for enabled in [true, false, true] {
-            configure_pll_source_gate(&mut PllSourceGate(&mut registers), enabled);
+            if enabled {
+                open_pll_source_gate(&mut PllSourceGate(&mut registers));
+            } else {
+                close_pll_source_gate(&mut PllSourceGate(&mut registers));
+            }
             let observed = registers.read_modem_conf();
             assert!(observed.modem_apb_clk_en());
             assert!(!observed.modem_rst_en());
@@ -227,27 +258,33 @@ mod tests {
         }
     }
     #[derive(Default)]
-    struct Port(std::vec::Vec<(&'static str, bool)>);
+    struct Port(std::vec::Vec<&'static str>);
     impl BasebandClockPort for Port {
-        fn reset(&mut self, asserted: bool) {
-            self.0.push(("reset", asserted));
+        fn reset(&mut self, reset: Reset) {
+            self.0.push(match reset {
+                Reset::Asserted => "assert reset",
+                Reset::Released => "release reset",
+            });
         }
-        fn clock(&mut self, enabled: bool) {
-            self.0.push(("clock", enabled));
+        fn clock(&mut self, gate: ClockGate) {
+            self.0.push(match gate {
+                ClockGate::Enabled => "enable clock",
+                ClockGate::Disabled => "disable clock",
+            });
         }
     }
     #[test]
     fn wifi_baseband_pulses_reset_before_enabling_clocks_and_never_resets_on_disable() {
         let mut port = Port::default();
-        configure_wifi_baseband(&mut port, true);
-        configure_wifi_baseband(&mut port, false);
+        enable_wifi_baseband(&mut port);
+        disable_wifi_baseband(&mut port);
         assert_eq!(
             port.0,
             [
-                ("reset", true),
-                ("reset", false),
-                ("clock", true),
-                ("clock", false)
+                "assert reset",
+                "release reset",
+                "enable clock",
+                "disable clock"
             ]
         );
     }

@@ -346,28 +346,28 @@ description = "Observed source use; the individual hardware meaning is unknown. 
 name = "CLK_WIFIPWR_ST_MAP"
 bits = "19:16"
 class = "plain"
-description = "Bit 1: Bit one of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the Wi-Fi-power clock state map, set by the reviewed shared active-state initialization."
+description = "The Wi-Fi-power clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_COEX_ST_MAP"
 bits = "23:20"
 class = "plain"
-description = "Bit 1: Bit one of the coexistence clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the coexistence clock state map, set by the reviewed shared active-state initialization."
+description = "The coexistence clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_I2C_MST_ST_MAP"
 bits = "27:24"
 class = "plain"
-description = "Bit 1: Bit one of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the PHY-I2C-master clock state map, set by the reviewed shared active-state initialization."
+description = "The PHY-I2C-master clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers.fields]]
 name = "CLK_LP_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
-description = "Bit 1: Bit one of the low-power APB clock state map, set by the reviewed shared active-state initialization. Bit 2: Bit two of the low-power APB clock state map, set by the reviewed shared active-state initialization."
+description = "The low-power APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
 values = { dictionary = "ICG_STATE_MAP" }
 
 [[registers]]

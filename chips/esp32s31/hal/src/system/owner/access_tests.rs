@@ -1,3 +1,4 @@
+use crate::radio::ieee80211::client::WifiInitialization;
 use crate::{
     radio::ieee80211::{
         client::{WifiClocked, WifiCold},
@@ -16,8 +17,8 @@ fn moving_the_radio_owner_preserves_its_runtime_state_through_handoff() {
         .expect("identity capacity");
     let clocked = WifiClocked::for_host_test(WifiCold::from_partition(partitions.wifi).0);
     let (mut owner, clocks) = clocked.into_running();
-    assert!(!owner.initialized);
-    owner.initialized = true;
+    assert_eq!(owner.initialized, WifiInitialization::Uninitialized);
+    owner.initialized = WifiInitialization::Initialized;
 
     // The unscheduled outcome is decided from owned software state and does
     // not touch MMIO on the host. Each borrow returns before the owner moves.
@@ -27,9 +28,9 @@ fn moving_the_radio_owner_preserves_its_runtime_state_through_handoff() {
     );
     drop(owner.wifi_mac_hal());
     let clocked = WifiClocked::from_running(owner, clocks);
-    assert!(clocked.initialized());
+    assert_eq!(clocked.initialized(), WifiInitialization::Initialized);
     let (mut owner, _clocks) = clocked.into_running();
-    assert!(owner.initialized);
+    assert_eq!(owner.initialized, WifiInitialization::Initialized);
     assert_eq!(
         owner.station_wake_hal().set_station_tbtt_interval(100),
         Err(StaTbttScheduleError::NotScheduled),

@@ -56,14 +56,14 @@ impl Sar {
                 && matches!(clocks.clk_wifibb_80x1_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && matches!(clocks.clk_wifibb_160x1_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && matches!(clocks.clk_wifi_apb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
-                && clocks.clk_fe_80m_en()
-                && clocks.clk_fe_160m_en()
-                && clocks.clk_fe_apb_en()
+                && matches!(clocks.clk_fe_80m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_fe_160m_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_fe_apb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && matches!(clocks.clk_bt_apb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
                 && matches!(clocks.clk_btbb_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
-                && clocks.clk_fe_pwdet_adc_en()
-                && clocks.clk_fe_adc_en()
-                && clocks.clk_fe_dac_en(),
+                && matches!(clocks.clk_fe_pwdet_adc_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_fe_adc_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled)
+                && matches!(clocks.clk_fe_dac_en(), pac::modem_syscon::dictionaries::ClockGate::Enabled),
             matches!(p.modem_syscon_clock_reset.read_clk_conf().clk_i2c_mst_sel_160m(), pac::modem_syscon::clk_conf::ClkI2cMstSel160m::I2cMst160m),
         ];
         observations

@@ -41,14 +41,14 @@ pub(crate) fn enable_phy_calibration_clocks<P: Placement>(
         w.set_clk_wifibb_80x1_en(ClockGate::Enabled);
         w.set_clk_wifibb_160x1_en(ClockGate::Enabled);
         w.set_clk_wifi_apb_en(ClockGate::Enabled);
-        w.set_clk_fe_80m_en(true);
-        w.set_clk_fe_160m_en(true);
-        w.set_clk_fe_apb_en(true);
+        w.set_clk_fe_80m_en(ClockGate::Enabled);
+        w.set_clk_fe_160m_en(ClockGate::Enabled);
+        w.set_clk_fe_apb_en(ClockGate::Enabled);
         w.set_clk_bt_apb_en(ClockGate::Enabled);
         w.set_clk_btbb_en(ClockGate::Enabled);
-        w.set_clk_fe_pwdet_adc_en(true);
-        w.set_clk_fe_adc_en(true);
-        w.set_clk_fe_dac_en(true);
+        w.set_clk_fe_pwdet_adc_en(ClockGate::Enabled);
+        w.set_clk_fe_adc_en(ClockGate::Enabled);
+        w.set_clk_fe_dac_en(ClockGate::Enabled);
     });
 }
 
@@ -123,6 +123,7 @@ pub(crate) fn set_wifi_baseband_enable<P: Placement>(
 }
 
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD, ROM_REV0_RADIO_ACCESSOR_FIELDS.
+#[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) fn set_wifi_baseband_40mhz_state<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio<P>,
     value: oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital,
@@ -254,7 +255,7 @@ pub(crate) fn enable_modem_frontend_apb_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_apb_en(true);
+        w.set_clk_fe_apb_en(ClockGate::Enabled);
     });
 }
 
@@ -263,7 +264,7 @@ pub(crate) fn enable_modem_frontend_80m_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_80m_en(true);
+        w.set_clk_fe_80m_en(ClockGate::Enabled);
     });
 }
 
@@ -272,7 +273,7 @@ pub(crate) fn enable_modem_frontend_160m_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_160m_en(true);
+        w.set_clk_fe_160m_en(ClockGate::Enabled);
     });
 }
 
@@ -281,7 +282,7 @@ pub(crate) fn enable_modem_frontend_dac_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_dac_en(true);
+        w.set_clk_fe_dac_en(ClockGate::Enabled);
     });
 }
 
@@ -290,7 +291,7 @@ pub(crate) fn enable_modem_frontend_pwdet_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_pwdet_adc_en(true);
+        w.set_clk_fe_pwdet_adc_en(ClockGate::Enabled);
     });
 }
 
@@ -299,7 +300,7 @@ pub(crate) fn enable_modem_frontend_adc_clock<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_fe_adc_en(true);
+        w.set_clk_fe_adc_en(ClockGate::Enabled);
     });
 }
 
@@ -472,10 +473,7 @@ pub(crate) fn restore_modem_register_bus_clock<P: Placement>(
 pub(crate) fn configure_modem_source_clocks<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::hp_sys_clkrst::HpSysClkrstRadio<P>,
 ) {
-    super::clock_device::configure_pll_source_gate(
-        &mut super::clock_device::PllSourceGate(registers),
-        true,
-    );
+    super::clock_device::open_pll_source_gate(&mut super::clock_device::PllSourceGate(registers));
 }
 
 // SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, S31_PMU_HEADERS.
@@ -519,13 +517,10 @@ pub(crate) fn power_off_rf_circuits<P: Placement>(
 /// read of the bit returns is not established.
 ///
 /// SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
-pub(crate) fn set_baseband_i2c_power_tie<P: Placement>(
+pub(crate) fn tie_baseband_i2c_power<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::pmu::PmuRadio<P>,
-    enabled: bool,
 ) {
-    if enabled {
-        registers.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
-    }
+    registers.trigger_imm_hp_ck_power_0_tie_high_xpd_bb_i2c();
 }
 
 // SOURCE: BLOB_LIBPHY_PHY_OPEN_I2C_XPD_NEW, S31_PMU_HEADERS.
@@ -776,7 +771,7 @@ pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
 
 #[cfg(test)]
 mod tests {
-    use super::set_baseband_i2c_power_tie;
+    use super::tie_baseband_i2c_power;
     use oer_chips_esp32s31_pac::{instances, pmu::PmuRadio};
     use std::vec;
 
@@ -784,13 +779,11 @@ mod tests {
     const IMM_HP_CK_POWER_0: usize = 0xf0;
 
     #[test]
-    fn the_tie_triggers_high_and_its_release_writes_nothing() {
+    fn the_tie_stores_its_one_trigger() {
         for fill in [0, u32::MAX] {
             let mut memory = vec![fill; instances::pmu::SIZE.div_ceil(4)];
             let mut expected = memory.clone();
-            set_baseband_i2c_power_tie(&mut PmuRadio::host(&mut memory).expect("PMU"), false);
-            assert_eq!(memory, expected, "the release writes nothing");
-            set_baseband_i2c_power_tie(&mut PmuRadio::host(&mut memory).expect("PMU"), true);
+            tie_baseband_i2c_power(&mut PmuRadio::host(&mut memory).expect("PMU"));
             expected[IMM_HP_CK_POWER_0 / 4] = 1 << 28;
             assert_eq!(memory, expected, "the tie stores its one trigger");
         }

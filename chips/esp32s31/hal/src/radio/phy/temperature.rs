@@ -62,16 +62,16 @@ impl<P: crate::radio::phy::registers::RadioPlacement> TemperaturePort for RadioP
         ops::enable_phy_conversion(&mut blocks.lp_tsens);
     }
     fn hold_sar_reset(&mut self) {
-        self.set_analog_i2c_reset_released(false);
+        self.assert_analog_i2c_reset();
     }
     fn release_sar_reset(&mut self) {
-        self.set_analog_i2c_reset_released(true);
+        self.release_analog_i2c_reset();
     }
     fn power_on_sar(&mut self) {
-        self.set_analog_i2c_power(true);
+        self.power_on_analog_i2c();
     }
     fn power_off_sar(&mut self) {
-        self.set_analog_i2c_power(false);
+        self.power_off_analog_i2c();
     }
     fn sensor_clock(&mut self, clock: LpTsensClkEn) {
         ops::set_clock(&mut self.peripherals.lp_periclkrst, clock);

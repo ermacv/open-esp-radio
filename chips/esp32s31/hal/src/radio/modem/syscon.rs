@@ -18,60 +18,24 @@ use crate::radio::phy::RadioPhyRegisters;
 
 /// The eighteen PHY-calibration clock gates of `CLK_CONF1`, from one read,
 /// in the order [`restore_calibration_clocks`] writes them.
-fn calibration_clocks<P: Placement>(registers: &ModemSysconClockReset<P>) -> [bool; 18] {
+fn calibration_clocks<P: Placement>(registers: &ModemSysconClockReset<P>) -> [ClockGate; 18] {
     let clk_conf1 = registers.read_clk_conf1();
     [
-        matches!(
-            clk_conf1.clk_wifibb_22m_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_40m_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_44m_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_80m_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_40x_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_80x_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_40x1_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_80x1_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifibb_160x1_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_wifi_apb_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
+        clk_conf1.clk_wifibb_22m_en(),
+        clk_conf1.clk_wifibb_40m_en(),
+        clk_conf1.clk_wifibb_44m_en(),
+        clk_conf1.clk_wifibb_80m_en(),
+        clk_conf1.clk_wifibb_40x_en(),
+        clk_conf1.clk_wifibb_80x_en(),
+        clk_conf1.clk_wifibb_40x1_en(),
+        clk_conf1.clk_wifibb_80x1_en(),
+        clk_conf1.clk_wifibb_160x1_en(),
+        clk_conf1.clk_wifi_apb_en(),
         clk_conf1.clk_fe_80m_en(),
         clk_conf1.clk_fe_160m_en(),
         clk_conf1.clk_fe_apb_en(),
-        matches!(
-            clk_conf1.clk_bt_apb_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
-        matches!(
-            clk_conf1.clk_btbb_en(),
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-        ),
+        clk_conf1.clk_bt_apb_en(),
+        clk_conf1.clk_btbb_en(),
         clk_conf1.clk_fe_pwdet_adc_en(),
         clk_conf1.clk_fe_adc_en(),
         clk_conf1.clk_fe_dac_en(),
@@ -82,75 +46,27 @@ fn calibration_clocks<P: Placement>(registers: &ModemSysconClockReset<P>) -> [bo
 /// `CLK_CONF1` keeps the value read.
 fn restore_calibration_clocks<P: Placement>(
     registers: &mut ModemSysconClockReset<P>,
-    clocks: [bool; 18],
+    clocks: [ClockGate; 18],
 ) {
     registers.modify_clk_conf1(|w| {
-        w.set_clk_wifibb_22m_en(if clocks[0] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_40m_en(if clocks[1] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_44m_en(if clocks[2] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_80m_en(if clocks[3] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_40x_en(if clocks[4] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_80x_en(if clocks[5] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_40x1_en(if clocks[6] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_80x1_en(if clocks[7] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifibb_160x1_en(if clocks[8] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_wifi_apb_en(if clocks[9] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_fe_80m_en(clocks[10])
-        .set_clk_fe_160m_en(clocks[11])
-        .set_clk_fe_apb_en(clocks[12])
-        .set_clk_bt_apb_en(if clocks[13] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_btbb_en(if clocks[14] {
-            ClockGate::Enabled
-        } else {
-            ClockGate::Disabled
-        })
-        .set_clk_fe_pwdet_adc_en(clocks[15])
-        .set_clk_fe_adc_en(clocks[16])
-        .set_clk_fe_dac_en(clocks[17]);
+        w.set_clk_wifibb_22m_en(clocks[0])
+            .set_clk_wifibb_40m_en(clocks[1])
+            .set_clk_wifibb_44m_en(clocks[2])
+            .set_clk_wifibb_80m_en(clocks[3])
+            .set_clk_wifibb_40x_en(clocks[4])
+            .set_clk_wifibb_80x_en(clocks[5])
+            .set_clk_wifibb_40x1_en(clocks[6])
+            .set_clk_wifibb_80x1_en(clocks[7])
+            .set_clk_wifibb_160x1_en(clocks[8])
+            .set_clk_wifi_apb_en(clocks[9])
+            .set_clk_fe_80m_en(clocks[10])
+            .set_clk_fe_160m_en(clocks[11])
+            .set_clk_fe_apb_en(clocks[12])
+            .set_clk_bt_apb_en(clocks[13])
+            .set_clk_btbb_en(clocks[14])
+            .set_clk_fe_pwdet_adc_en(clocks[15])
+            .set_clk_fe_adc_en(clocks[16])
+            .set_clk_fe_dac_en(clocks[17]);
     });
 }
 
@@ -199,7 +115,7 @@ pub struct ModemSysconPowerObservation {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ModemSysconPowerBaseline {
-    phy_calibration_clocks: [bool; 18],
+    phy_calibration_clocks: [ClockGate; 18],
     phy_i2c_160mhz: ClkI2cMstSel160m,
 }
 
@@ -207,7 +123,7 @@ impl ModemSysconPowerBaseline {
     /// Every gate disabled: the baseline of a host test.
     #[cfg(any(test, feature = "test-support"))]
     pub(super) const DISABLED: Self = Self {
-        phy_calibration_clocks: [false; 18],
+        phy_calibration_clocks: [ClockGate::Disabled; 18],
         phy_i2c_160mhz: ClkI2cMstSel160m::Default,
     };
 }
@@ -526,20 +442,31 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             ) && matches!(
                 wifi_apb,
                 oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-            ) && frontend_80m
-                && frontend_160m
-                && frontend_apb
-                && matches!(
-                    bluetooth_apb,
-                    oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-                )
-                && matches!(
-                    bluetooth_baseband,
-                    oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
-                )
-                && frontend_power_detector_adc
-                && frontend_adc
-                && frontend_dac,
+            ) && matches!(
+                frontend_80m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                frontend_160m,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                frontend_apb,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                bluetooth_apb,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                bluetooth_baseband,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                frontend_power_detector_adc,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                frontend_adc,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ) && matches!(
+                frontend_dac,
+                oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate::Enabled
+            ),
             phy_i2c_160mhz_selected: matches!(
                 self.peripherals
                     .modem_syscon_clock_reset
@@ -566,15 +493,6 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
 
     pub(crate) fn set_wifi_baseband_enabled(&mut self, enable: WifiEnable) {
         super::ops::set_wifi_baseband_enable(&mut self.peripherals.modem_syscon_radio, enable);
-    }
-
-    pub fn set_bss_cbw_40_digital(&mut self, enabled: bool) {
-        let state = if enabled {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Enabled
-        } else {
-            oer_chips_esp32s31_pac::modem_syscon::wifi_bb_cfg::BssCbw40Digital::Disabled
-        };
-        super::ops::set_wifi_baseband_40mhz_state(&mut self.peripherals.modem_syscon_radio, state);
     }
 
     pub fn set_bb_agc_update_mode(&mut self, mode: WifiBasebandAgcUpdate) {

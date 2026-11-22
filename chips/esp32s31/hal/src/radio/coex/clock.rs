@@ -18,11 +18,10 @@ const XTAL_MHZ: u32 = 40;
 
 /// Convert one decoded clock sample into the timer clock used by the core.
 ///
-/// `real_chip` selects the silicon Selector8 frequency; the alternative is the
-/// vendor's FPGA constant retained for compiled comparison.
+/// The silicon Selector8 frequency: the vendor's FPGA constant has no S31
+/// board.
 pub fn timer_clock(
     observation: Option<CoexistenceLowPowerClockObservation>,
-    real_chip: bool,
 ) -> Result<CoexTimerClock, CoexError> {
     let observation = observation.ok_or(CoexError::UnsupportedClock)?;
     let selector = match observation.source {
@@ -35,13 +34,13 @@ pub fn timer_clock(
         selector,
         observation.divider_minus_one,
         XTAL_MHZ,
-        real_chip,
+        true,
     ))
 }
 
 impl<P: crate::radio::phy::registers::RadioPlacement> CoexClockHardware for CoexClockPort<'_, P> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
-        timer_clock(self.sample_low_power_clock(), true)
+        timer_clock(self.sample_low_power_clock())
     }
 }
 

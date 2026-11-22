@@ -9,6 +9,10 @@
 use crate::radio::modem::values::{ExternalCoexGrantDelay, ExternalCoexNibble};
 use oer_chips_esp32s31_pac::coex::pti::WorkMode;
 
+/// Whether the external grant is valid high or low
+/// (`hal_set_extern_coex_validity`).
+pub use oer_chips_esp32s31_pac::coex::control::ValidateHigh as ExternalCoexGrantValidity;
+
 /// Signal wires between the chip and the external radio
 /// (`external_coex_wire_t`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,7 +111,7 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     pub fn configure_external_coex_grant(
         &mut self,
         delay: ExternalCoexGrantDelay,
-        validate_high: bool,
+        validity: ExternalCoexGrantValidity,
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
@@ -115,7 +119,7 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
             w.set_grant_delay(delay.field());
         });
         block.modify_control(|w| {
-            w.set_validate_high(validate_high);
+            w.set_validate_high(validity);
         });
     }
 
@@ -195,16 +199,29 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
         });
     }
 
-    /// `hal_enable_extern_coex` (`true`) or `hal_disable_extern_coex`
-    /// (`false`): both enable masks, the second enable bit, then the control
-    /// enable.
-    pub fn set_external_coex_enabled(&mut self, enabled: bool) {
+    /// `hal_enable_extern_coex`: both enable masks, the second enable bit,
+    /// then the control enable.
+    pub fn enable_external_coex(&mut self) {
+        self.write_external_coex_enable(
+            oer_portable_mmio::Bits::constant::<0xf>(),
+            oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Enabled,
+        );
+    }
+
+    /// `hal_disable_extern_coex`: the same four writes, cleared.
+    pub fn disable_external_coex(&mut self) {
+        self.write_external_coex_enable(
+            oer_portable_mmio::Bits::constant::<0>(),
+            oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Disabled,
+        );
+    }
+
+    fn write_external_coex_enable(
+        &mut self,
+        mask: oer_portable_mmio::Bits<4>,
+        enable: oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable,
+    ) {
         let block = &mut *self.block;
-        let mask: oer_portable_mmio::Bits<4> = if enabled {
-            oer_portable_mmio::Bits::constant::<0xf>()
-        } else {
-            oer_portable_mmio::Bits::constant::<0>()
-        };
         block.modify_enable_mask_0(|w| {
             w.set_mask(mask);
         });
@@ -212,10 +229,10 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
             w.set_mask(mask);
         });
         block.modify_enable_1(|w| {
-            w.set_enable(enabled);
+            w.set_enable(enable);
         });
         block.modify_control(|w| {
-            w.set_enable(enabled);
+            w.set_enable(enable);
         });
     }
 }
@@ -229,9 +246,13 @@ impl crate::radio::modem::SharedRadioRegisters {
         ExternalCoexControl::new(&mut self.coexistence.coex_external)
             .configure_external_coex_mode(role, wires);
     }
-    pub fn configure_external_coex_grant(&mut self, delay: ExternalCoexGrantDelay, high: bool) {
+    pub fn configure_external_coex_grant(
+        &mut self,
+        delay: ExternalCoexGrantDelay,
+        validity: ExternalCoexGrantValidity,
+    ) {
         ExternalCoexControl::new(&mut self.coexistence.coex_external)
-            .configure_external_coex_grant(delay, high);
+            .configure_external_coex_grant(delay, validity);
     }
     pub fn publish_external_coex_priorities(
         &mut self,
@@ -246,9 +267,11 @@ impl crate::radio::modem::SharedRadioRegisters {
         ExternalCoexControl::new(&mut self.coexistence.coex_external)
             .clear_external_coex_priorities(role);
     }
-    pub fn set_external_coex_enabled(&mut self, enabled: bool) {
-        ExternalCoexControl::new(&mut self.coexistence.coex_external)
-            .set_external_coex_enabled(enabled);
+    pub fn enable_external_coex(&mut self) {
+        ExternalCoexControl::new(&mut self.coexistence.coex_external).enable_external_coex();
+    }
+    pub fn disable_external_coex(&mut self) {
+        ExternalCoexControl::new(&mut self.coexistence.coex_external).disable_external_coex();
     }
 }
 
@@ -260,11 +283,31 @@ mod tests {
     #[test]
     fn grant_delay_replaces_the_entire_vendor_byte_and_keeps_all_other_words() {
         for (initial, delay, high, expected_word) in [
-            (0xffff_ffff, 0, true, 0xffff_fe01),
-            (0xffff_fffe, 5, false, 0xffff_fea0),
-            (0x5a5a_5a5a, 15, false, 0x5a5a_5be0),
-            (0xa5a5_a5a5, 0, true, 0xa5a5_a401),
-            (0, 5, false, 0xa0),
+            (
+                0xffff_ffff,
+                0,
+                ExternalCoexGrantValidity::ValidHigh,
+                0xffff_fe01,
+            ),
+            (
+                0xffff_fffe,
+                5,
+                ExternalCoexGrantValidity::ValidLow,
+                0xffff_fea0,
+            ),
+            (
+                0x5a5a_5a5a,
+                15,
+                ExternalCoexGrantValidity::ValidLow,
+                0x5a5a_5be0,
+            ),
+            (
+                0xa5a5_a5a5,
+                0,
+                ExternalCoexGrantValidity::ValidHigh,
+                0xa5a5_a401,
+            ),
+            (0, 5, ExternalCoexGrantValidity::ValidLow, 0xa0),
         ] {
             let mut memory = vec![initial; instances::coex::SIZE.div_ceil(4)];
             let mut expected = memory.clone();

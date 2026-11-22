@@ -45,7 +45,6 @@ pub struct CoexDomainTimer<'radio> {
 /// Exclusive clock access; each sample reads the current hardware fields.
 pub struct CoexDomainClock<'radio> {
     port: CoexClockPort<'radio>,
-    real_chip: bool,
 }
 
 /// A public clock selection refused before any register write.
@@ -88,10 +87,7 @@ impl<'radio> CoexDomainPorts<'radio> {
         let (bank, port) = radio.coex_ports();
         Self {
             timer: CoexDomainTimer { bank },
-            clock: CoexDomainClock {
-                port,
-                real_chip: true,
-            },
+            clock: CoexDomainClock { port },
         }
     }
 
@@ -104,19 +100,12 @@ impl<'radio> CoexDomainPorts<'radio> {
     ///
     /// SOURCE: complete pinned libcoexist.a[coexist_core.o]::coex_core_pre_init.
     pub fn configure_timer_clock(&mut self) {
-        let config = if self.clock.real_chip {
-            const {
-                match TimerClockConfig::new(CoexClockSelector::Selector4, 50) {
-                    Ok(config) => config,
-                    Err(_) => panic!("the silicon clock selection is valid"),
-                }
-            }
-        } else {
-            const {
-                match TimerClockConfig::new(CoexClockSelector::Selector8, 1) {
-                    Ok(config) => config,
-                    Err(_) => panic!("the FPGA clock selection is valid"),
-                }
+        // The silicon selection; the vendor's FPGA alternative (selector 8,
+        // divisor 1) has no S31 board.
+        let config = const {
+            match TimerClockConfig::new(CoexClockSelector::Selector4, 50) {
+                Ok(config) => config,
+                Err(_) => panic!("the silicon clock selection is valid"),
             }
         };
         self.clock
@@ -143,7 +132,7 @@ impl<'radio> CoexDomainPorts<'radio> {
 
 impl CoexClockHardware for CoexDomainClock<'_> {
     fn sample(&mut self) -> Result<CoexTimerClock, CoexError> {
-        timer_clock(self.port.sample_low_power_clock(), self.real_chip)
+        timer_clock(self.port.sample_low_power_clock())
     }
 }
 
