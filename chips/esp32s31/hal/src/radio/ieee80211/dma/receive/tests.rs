@@ -274,6 +274,31 @@ fn the_descriptor_controls_are_each_word_the_walker_left_in_order_then_r() {
     assert_eq!(reserved, bench.arm_word());
 }
 
+brand!(observed_reserved);
+#[test]
+fn the_reserved_word_is_r_s_own_and_answered_last() {
+    let bench = bench::<observed_reserved::Rx>();
+    // R done with a length no ring descriptor has, d0 and d3 with two others.
+    let r_word = rx_landed_word(SIZE as u32, 100, true);
+    bench.ring.table.descriptors.reserved.write_word0(r_word);
+    bench.complete(0, 60, true);
+    bench.complete(3, 84, false);
+    let (ring, reserved) = bench.ring.descriptor_controls();
+    assert_eq!(reserved, r_word, "R's own word, answered last");
+    assert!(
+        ring.iter().all(|control| *control != r_word),
+        "no ring descriptor answers R's word"
+    );
+    for (index, control) in ring.iter().enumerate() {
+        let expected = match index {
+            0 => rx_landed_word(SIZE as u32, 60, true),
+            3 => rx_landed_word(SIZE as u32, 84, false),
+            _ => bench.arm_word(),
+        };
+        assert_eq!(*control, expected, "descriptor {index}");
+    }
+}
+
 brand!(single);
 #[test]
 fn a_single_unit_is_exchanged_for_a_spare_linked_behind_the_tail_and_rung_once() {
