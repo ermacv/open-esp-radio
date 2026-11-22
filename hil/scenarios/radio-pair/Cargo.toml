@@ -6,6 +6,7 @@ rust-version.workspace = true
 license = "Apache-2.0"
 repository.workspace = true
 publish = false
+default-run = "oer-hil-scenarios-radio-pair"
 description = "The HIL radio pair: the receive ring's cases R1 to R4 over case C's frames from the sender, each boot's snapshots and receive counters, and the compare of two runs' words"
 
 [dependencies]
