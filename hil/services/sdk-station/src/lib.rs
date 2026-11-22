@@ -146,12 +146,12 @@ pub struct Ipv4 {
 
 oer_protocols_hil_agent::service! {
     /// The SDK station service's requests.
-    pub enum Request (sessions = false, handler = Handler) {
-        Connect(Connect) => connect,
-        WaitIpv4(WaitIpv4) => wait_ipv4,
-        Exchange(Exchange) => exchange,
-        WaitLinkDown(WaitLinkDown) => wait_link_down,
-        GetStatus(GetStatus) => status,
+    pub enum Request (sessions = false, observer = Observer, commands = Command, commander = Commander) {
+        Connect(Connect) => command connect,
+        WaitIpv4(WaitIpv4) => command wait_ipv4,
+        Exchange(Exchange) => command exchange,
+        WaitLinkDown(WaitLinkDown) => command wait_link_down,
+        GetStatus(GetStatus) => command status,
     }
 }
 

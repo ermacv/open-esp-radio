@@ -467,10 +467,10 @@ probe has one at each of P1 to P4).
   bound.
 - A level's task between the handlers and the application (a `LevelTask`
   entry, or an interrupt-mode executor's task) talks to its owner alone.
-  The owner is a task of the application's level: it holds what the world
-  asks of the level (in the pair's probes, the HIL inbox), commands the
-  level's task through its private hand-over (`portable/memory`'s
-  `Exchange`, one command in work and its one result) and answers. The
+  The owner runs on the application's level (in the pair's probes, an
+  object whose methods the HIL console calls): it commands the level's
+  task through its private hand-over (`portable/memory`'s `Exchange`, one
+  command in work and its one result) and answers. The
   level's task wakes its owner below it; the owner starts a command by the
   level's wake on the same hart. The hand-over's ends are split once at the
   image's composition and named nowhere else.
@@ -1323,10 +1323,11 @@ its model and conformance case.
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
-- A port's owner is a task of the application's level; the tasks of its
-  levels are its own, commanded through its private hand-over and named
-  nowhere outside it. The pair's probes are the composition that applies
-  it today: their radio's owner on P1 and the radio's task on P2.
+- A port's owner runs on the application's level; the tasks of its levels
+  are its own, commanded through its private hand-over and named nowhere
+  outside it. The pair's probes are the composition that applies it today:
+  their radio's owner on P1, called by the HIL console, and the radio's
+  task on P2.
 - The Wi-Fi port is two traits of one owner, the task that holds it (the
   contract; its S31 backend, `chips/esp32s31/radio/ieee80211/backend`, is a
   source outside the build, awaiting deletion at its successor): the
@@ -1625,12 +1626,12 @@ under test; it stores nothing and knows no scenario, service or equipment.
 
 | Part | Where | Knows |
 | --- | --- | --- |
-| Protocol | `protocols/hil/protocol` | Keys, framing, the envelope, `base` (Hello, image keys, boot evidence, link health, refusal), `lifecycle` (requested reset) and generic capture pages |
-| Agent | `protocols/hil/agent` | The device's request intake, console, image keys and services: `service!` declares a service whose every endpoint has a required handler method, and `image_keys!` refuses two services of an image serving one request at compile time |
+| Protocol | `protocols/hil/protocol` | Keys, framing (a message serialized once from its reference into the encoder's buffer), the envelope, `base` (Hello, image keys, boot evidence, link health, refusal) and generic capture pages |
+| Agent | `protocols/hil/agent` | The device's request intake, console, image keys and services: `service!` declares a service and the kind of each endpoint, and `image_keys!` refuses two services of an image serving one request at compile time |
 | Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |
 | CLI | `tools/hil/cli` | `cargo hil list` and `run`: scenarios are packages marked `hil-scenario` in their metadata |
-| SDK agent | `hil/agent` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the one-deep hand-over of a request to the image's worker |
+| SDK agent | `hil/agent` | The agent on the application entry: the HIL console over the SDK's console, the base module from the SDK's boot identity and evidence, and the image's handlers it calls |
 | Scenarios | `hil/` | `images/` the RPC images several scenarios share, `services/` test-only service vocabularies, `hil-agent/` the agent on the application entry, one host program per scenario with its cases and verdict |
 
 A boot is named by the `boot_id` every frame carries. Its first frame is its
@@ -1642,6 +1643,15 @@ earlier boot ended with it. A request without a response is unconfirmed:
 its boot takes no further request in the scenario. A case's verdict is pass,
 fail (the device refutes it) or incomplete (the stand, the link, an
 unconfirmed request or a cancellation); the program exits 0, 1 or 2.
+
+An endpoint is of one of two kinds, which its service declares. An
+**observation** is answered at once: a synchronous method of what observes,
+called in the console's step that decoded the request. A **command** is
+answered later: an `async` method of what commands, which the console's task
+awaits beside its read of the endpoint. The image gives the console the two
+as separate values, so an observation is answered while a command works;
+one command is in work at a time, and a second is refused `Rejected(Busy)`.
+No handler replies by itself and no message is unsolicited.
 
 Domain message codecs live beside their owners; a message's key hashes its
 path and schema, and the host checks the keys the image announces before

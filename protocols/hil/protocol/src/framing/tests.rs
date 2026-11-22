@@ -215,23 +215,19 @@ fn an_intact_frame_whose_payload_is_not_its_type_is_a_payload_error() {
 }
 
 #[test]
-fn a_message_serialized_by_its_producer_frames_like_an_encoded_one() {
+fn a_message_encoded_from_its_reference_frames_like_its_envelope() {
     let expected = command(11);
     let mut encoder = FrameEncoder::new();
     let direct = encoder.encode(&expected).unwrap().to_vec();
-    let outbound = Outbound::new(
-        expected.message_sequence,
-        expected.session_id,
-        expected.request_id,
-        &expected.body,
-    )
-    .unwrap();
-    assert!(outbound.is::<Command>());
-    let queued = encoder
-        .encode_outbound(expected.boot_id, &outbound)
-        .unwrap()
-        .to_vec();
-    assert_eq!(queued, direct);
+    let to = Addressed {
+        boot_id: expected.boot_id,
+        message_sequence: expected.message_sequence,
+        session_id: expected.session_id,
+        request_id: expected.request_id,
+    };
+    let by_reference = encoder.encode_message(to, &expected.body).unwrap().to_vec();
+    assert_eq!(by_reference, direct);
+    assert_eq!(KEYS.len(), 2, "the test's command and its answer");
 }
 
 #[test]

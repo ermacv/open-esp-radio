@@ -1,7 +1,7 @@
 use crate::test_messages::{Trigger, Triggered};
 use oer_protocols_hil_protocol::base::{ImageKeyPage, sorted_keys};
 
-crate::requests! {
+crate::__requests! {
     enum WatchdogRequest (sessions = false) {
         Test(crate::test_messages::Probe),
     }
@@ -133,7 +133,7 @@ fn the_image_serves_its_own_requests_outside_sessions() {
 
 #[test]
 fn an_image_with_sessions_keeps_them() {
-    crate::requests! {
+    crate::__requests! {
         enum Sessioned (sessions = true) {
             Reset(Trigger),
         }
@@ -171,7 +171,7 @@ fn every_request_of_one_chunk_is_handed_over_in_order() {
     assert_eq!(seen, [(3, 1), (4, 2)]);
 }
 
-crate::requests! {
+crate::__requests! {
     #[expect(dead_code, reason = "the test mounts the service for its keys alone")]
     enum Mounted (sessions = false) {
         Watchdog(Probe),
@@ -181,7 +181,7 @@ crate::requests! {
     publishes [Triggered, #[cfg(any())] crate::test_messages::Switched]
 }
 
-crate::requests! {
+crate::__requests! {
     enum Sharing (sessions = false) {
         Reset(Trigger),
     }

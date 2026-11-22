@@ -50,7 +50,7 @@ use oer_chips_esp32s31_radio_phy::{
     PhyCalibrationIdentity, concurrent::ConcurrentPhy, phy_get_rf_cal_version,
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
-use oer_hil_services_radio_pair::{self as service, ReceiverRequest, Refusal};
+use oer_hil_services_radio_pair::{self as service, ReceiverCommand, ReceiverRequest, Refusal};
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
@@ -102,14 +102,13 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts, work: crate::radio::Work<ReceiverRequest, Answer>, reset: u32) = session_task;
+        session(parts: SessionParts, work: crate::radio::Work<ReceiverCommand, Answer>, reset: u32) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
     AppTasks: Executor<Esp32s31, 0> {
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog;
         host(host: Host) = host_task;
-        radio(inbox: oer_hil_agent::Inbox<'static, ReceiverRequest>, commands: crate::radio::Commands<ReceiverRequest, Answer>) = radio_owner;
     }
 }
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
@@ -256,10 +255,11 @@ fn main(
     // The pads stay held by `main`, which never returns, so that nothing
     // switches them off.
     let _pads = pads;
-    let Some(mailbox) = MAILBOX.try_take() else {
-        fail(name!("mailbox"; 32));
+    // The owner's cold snapshot, read before the radio's parts go to the
+    // radio level's task.
+    let observing = Observing {
+        cold: pair::cold(u32::from(reset_cause.code()), &parts.radio, &parts.clocks),
     };
-    let (mailbox, inbox) = mailbox.split();
     let Some(handover) = RADIO.try_take() else {
         fail(name!("radio-handover"; 32));
     };
@@ -275,8 +275,9 @@ fn main(
             previous_panic: None,
             previous_exception: None,
         },
-        mailbox,
         writer,
+        observing,
+        owner: Owner { commands },
     };
     if RadioTasks::session(&radio_executor, parts, work, u32::from(reset_cause.code())).is_err() {
         fail(name!("session-task"; 32));
@@ -296,7 +297,6 @@ fn main(
             move |spawner| {
                 if AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()
                     || AppTasks::host(spawner, host).is_err()
-                    || AppTasks::radio(spawner, inbox, commands).is_err()
                 {
                     fail(name!("task"; 32));
                 }
@@ -665,8 +665,6 @@ const IMAGE: oer_hil_agent::Image = oer_hil_agent::Image {
     maximum_payload_bytes: service::MAXIMUM_PAYLOAD_BYTES,
 };
 
-static MAILBOX: static_cell::ConstStaticCell<oer_hil_agent::Mailbox<ReceiverRequest>> =
-    static_cell::ConstStaticCell::new(oer_hil_agent::Mailbox::new());
 /// The console's state: only the console's task touches it.
 static WRITER: static_cell::ConstStaticCell<oer_hil_agent::Writer> =
     static_cell::ConstStaticCell::new(oer_hil_agent::Writer::new());
@@ -733,50 +731,62 @@ impl From<service::Turned> for Answer {
     }
 }
 
-impl Answer {
-    /// Answers the host's request through its reply.
-    fn reply(self, reply: oer_hil_agent::Reply<'_, core::convert::Infallible>) {
+impl oer_hil_agent::serve::Answer for Answer {
+    fn write<'f>(
+        &self,
+        frame: oer_hil_agent::serve::Frame<'f>,
+    ) -> oer_hil_agent::serve::Written<'f> {
         match self {
-            Self::SnapshotPage(answer) => reply.answer(&answer),
-            Self::BroughtUp(answer) => reply.answer(&answer),
-            Self::Counters(answer) => reply.answer(&answer),
-            Self::Stopped(answer) => reply.answer(&answer),
-            Self::Expecting(answer) => reply.answer(&answer),
-            Self::Windowed(answer) => reply.answer(&answer),
-            Self::Stood(answer) => reply.answer(&answer),
-            Self::Turned(answer) => reply.answer(&answer),
+            Self::SnapshotPage(answer) => frame.write(answer),
+            Self::BroughtUp(answer) => frame.write(answer),
+            Self::Counters(answer) => frame.write(answer),
+            Self::Stopped(answer) => frame.write(answer),
+            Self::Expecting(answer) => frame.write(answer),
+            Self::Windowed(answer) => frame.write(answer),
+            Self::Stood(answer) => frame.write(answer),
+            Self::Turned(answer) => frame.write(answer),
         }
+    }
+}
+
+/// The radio's owner, running on the application's level: the console calls
+/// it for each command, and it commands the radio level's task through the
+/// radio's hand-over, whose asking end it holds alone.
+pub(crate) struct Owner {
+    commands: crate::radio::Commands<ReceiverCommand, Answer>,
+}
+
+impl oer_hil_agent::serve::Run<Owner> for ReceiverCommand {
+    type Answer = Answer;
+    type Trap = core::convert::Infallible;
+    async fn run(self, owner: &mut Owner) -> oer_hil_agent::serve::Ran<Answer, Self::Trap> {
+        use oer_hil_agent::serve::{After, Unanswered};
+        // One command is in work at a time by the console's borrow of the
+        // owner, so the command's place is free.
+        owner.commands.hand(self).map_err(|_| Unanswered)?;
+        match owner.commands.answered().await {
+            oer_portable_memory::Answered::Given(answer) => Ok((answer, After::Nothing)),
+            // The radio level's task dropped its permit.
+            oer_portable_memory::Answered::Unanswered => Err(Unanswered),
+        }
+    }
+}
+
+/// What the radio's owner gives at once: its cold snapshot, read at the
+/// composition before the radio's parts went to the radio level's task.
+pub(crate) struct Observing {
+    cold: pair::Readings,
+}
+
+impl service::ReceiverObserver for Observing {
+    fn snapshot_cold(&mut self, request: service::SnapshotCold) -> service::SnapshotPage {
+        pair::page(&self.cold, request.page)
     }
 }
 
 /// The radio's hand-over between its owner and the radio level's task.
-static RADIO: static_cell::ConstStaticCell<crate::radio::Handover<ReceiverRequest, Answer>> =
+static RADIO: static_cell::ConstStaticCell<crate::radio::Handover<ReceiverCommand, Answer>> =
     static_cell::ConstStaticCell::new(crate::radio::handover());
-
-/// The radio's owner, a task of the application's level: it takes each
-/// host request, commands the radio level's task with it and answers with
-/// its result. It is the only thing that talks to the radio's level.
-async fn radio_owner(
-    mut inbox: oer_hil_agent::Inbox<'static, ReceiverRequest>,
-    mut commands: crate::radio::Commands<ReceiverRequest, Answer>,
-) {
-    loop {
-        let (request, reply) = inbox.next().await;
-        // One command is in work at a time: the owner awaits each result
-        // before it takes the next request, so the place is free.
-        if commands.hand(request).is_err() {
-            // A reply dropped unanswered is refused to the host.
-            drop(reply);
-            continue;
-        }
-        match commands.answered().await {
-            oer_portable_memory::Answered::Given(answer) => answer.reply(reply),
-            // The radio level's task dropped its permit: the host's
-            // request is refused through the dropped reply.
-            oer_portable_memory::Answered::Unanswered => drop(reply),
-        }
-    }
-}
 
 /// What the host's link takes at boot: the console, this boot's identity,
 /// what the adoption read and the mailbox's console end.
@@ -784,8 +794,9 @@ pub(crate) struct Host {
     pub(crate) console: usb::Console,
     pub(crate) boot: u64,
     pub(crate) records: oer_hil_agent::Records,
-    pub(crate) mailbox: oer_hil_agent::Console<'static, ReceiverRequest>,
     pub(crate) writer: &'static mut oer_hil_agent::Writer,
+    pub(crate) observing: Observing,
+    pub(crate) owner: Owner,
 }
 
 /// How the receiver's serving ends: the console's transport broke.
@@ -802,20 +813,21 @@ async fn host_task(host: Host) {
         console,
         boot,
         records,
-        mailbox,
         writer,
+        mut observing,
+        mut owner,
     } = host;
-    match oer_hil_agent::serve(
+    match oer_hil_agent::serve::<_, ReceiverRequest, _, _, _>(
         console,
         boot,
         records,
         IMAGE,
         oer_hil_agent::Mount {
-            console: mailbox,
             writer,
+            observer: &mut observing,
+            commander: &mut owner,
         },
         Ended::Console,
-        core::future::pending::<Result<core::convert::Infallible, Ended>>,
     )
     .await
     {
@@ -833,7 +845,7 @@ static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<Se
 #[define_opaque(SessionRun)]
 fn session_future(
     parts: SessionParts,
-    inbox: crate::radio::Work<ReceiverRequest, Answer>,
+    inbox: crate::radio::Work<ReceiverCommand, Answer>,
     reset: u32,
 ) -> SessionRun {
     async move {
@@ -846,7 +858,7 @@ fn session_future(
 
 async fn session_task(
     parts: SessionParts,
-    inbox: crate::radio::Work<ReceiverRequest, Answer>,
+    inbox: crate::radio::Work<ReceiverCommand, Answer>,
     reset: u32,
 ) {
     let Some(place) = SESSION.try_take() else {
@@ -890,44 +902,38 @@ fn answer(done: Reply<'_>, body: impl Into<Answer>) {
 }
 
 /// Answer `request` with its endpoint's refusal.
-fn refuse(identity: Reply<'_>, request: ReceiverRequest, refusal: Refusal) {
+fn refuse(identity: Reply<'_>, request: ReceiverCommand, refusal: Refusal) {
     match request {
-        ReceiverRequest::SnapshotCold(_) | ReceiverRequest::SnapshotUp(_) => {
+        ReceiverCommand::SnapshotUp(_) => {
             answer(identity, service::SnapshotPage::Refused(refusal));
         }
-        ReceiverRequest::BringUp(_) => answer(identity, service::BroughtUp::Refused(refusal)),
-        ReceiverRequest::ReceiveCounters(_) => {
+        ReceiverCommand::BringUp(_) => answer(identity, service::BroughtUp::Refused(refusal)),
+        ReceiverCommand::ReceiveCounters(_) => {
             answer(identity, service::Counters::Refused(refusal));
         }
-        ReceiverRequest::Stop(_) => answer(identity, service::Stopped::Refused(refusal)),
-        ReceiverRequest::Expect(_) => answer(identity, service::Expecting::Refused(refusal)),
-        ReceiverRequest::Window(_) => answer(identity, service::Windowed::Refused(refusal)),
-        ReceiverRequest::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
-        ReceiverRequest::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
+        ReceiverCommand::Stop(_) => answer(identity, service::Stopped::Refused(refusal)),
+        ReceiverCommand::Expect(_) => answer(identity, service::Expecting::Refused(refusal)),
+        ReceiverCommand::Window(_) => answer(identity, service::Windowed::Refused(refusal)),
+        ReceiverCommand::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
+        ReceiverCommand::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
     }
 }
 
-/// After the bring-up's failure or the stop: the cold snapshot still answers, every
-/// other step is refused, until the next boot.
+/// After the bring-up's failure or the stop: every step is refused, until
+/// the next boot; the cold snapshot is the owner's and still answers.
 async fn down(
-    mut inbox: crate::radio::Work<ReceiverRequest, Answer>,
-    cold: &pair::Readings,
+    mut inbox: crate::radio::Work<ReceiverCommand, Answer>,
 ) -> Result<core::convert::Infallible, Ended> {
     loop {
         let (request, identity) = inbox.next().await;
-        match request {
-            ReceiverRequest::SnapshotCold(request) => {
-                answer(identity, pair::page(cold, request.page));
-            }
-            other => refuse(identity, other, Refusal::Down),
-        }
+        refuse(identity, request, Refusal::Down);
     }
 }
 
 /// The receiver's worker: each step the host asks for, in its order.
 async fn worker(
     parts: SessionParts,
-    mut inbox: crate::radio::Work<ReceiverRequest, Answer>,
+    mut inbox: crate::radio::Work<ReceiverCommand, Answer>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
     let cold = pair::cold(reset, &parts.radio, &parts.clocks);
@@ -937,10 +943,7 @@ async fn worker(
     let bring = loop {
         let (request, id) = inbox.next().await;
         match request {
-            ReceiverRequest::SnapshotCold(request) => {
-                answer(id, pair::page(&cold, request.page));
-            }
-            ReceiverRequest::BringUp(_) => break id,
+            ReceiverCommand::BringUp(_) => break id,
             other => refuse(id, other, Refusal::NotUp),
         }
     };
@@ -1034,7 +1037,7 @@ async fn worker(
                 bring,
                 service::BroughtUp::Failed(service::Failure { phase, index }),
             );
-            return down(inbox, &cold).await;
+            return down(inbox).await;
         }
     };
     answer(bring, service::BroughtUp::Up { station, ap });
@@ -1060,12 +1063,11 @@ async fn worker(
     loop {
         let (request, id) = inbox.next().await;
         match request {
-            ReceiverRequest::SnapshotCold(request) => answer(id, pair::page(&cold, request.page)),
-            ReceiverRequest::SnapshotUp(request) => answer(id, pair::page(&up, request.page)),
-            ReceiverRequest::BringUp(_) => {
+            ReceiverCommand::SnapshotUp(request) => answer(id, pair::page(&up, request.page)),
+            ReceiverCommand::BringUp(_) => {
                 answer(id, service::BroughtUp::Refused(Refusal::AlreadyUp));
             }
-            ReceiverRequest::ReceiveCounters(_) => match (&mut receiving, turns.access.as_ref()) {
+            ReceiverCommand::ReceiveCounters(_) => match (&mut receiving, turns.access.as_ref()) {
                 (Receiving::Up { ring, .. }, Some((access, _))) => answer(
                     id,
                     pair::counters(
@@ -1081,13 +1083,13 @@ async fn worker(
                 }
                 (_, None) => answer(id, service::Counters::Refused(Refusal::Down)),
             },
-            ReceiverRequest::Stop(_) => {
+            ReceiverCommand::Stop(_) => {
                 let (Receiving::Up { ring, enabled, .. }, Some((mut access, clocks_on))) = (
                     core::mem::replace(&mut receiving, Receiving::Stopped),
                     turns.access.take(),
                 ) else {
                     answer(id, service::Stopped::Refused(Refusal::Down));
-                    return down(inbox, &cold).await;
+                    return down(inbox).await;
                 };
                 match held_radio(turns.slot) {
                     Ok(radio) => {
@@ -1107,9 +1109,9 @@ async fn worker(
                         );
                     }
                 }
-                return down(inbox, &cold).await;
+                return down(inbox).await;
             }
-            ReceiverRequest::Turn(request) => {
+            ReceiverCommand::Turn(request) => {
                 let Some(sender) = sender else {
                     answer(id, service::Turned::Refused(Refusal::NoSender));
                     continue;
@@ -1291,11 +1293,11 @@ async fn worker(
                     }
                 };
                 match other {
-                    ReceiverRequest::Expect(expect) => {
+                    ReceiverCommand::Expect(expect) => {
                         sender = Some(expect.sender);
                         answer(id, service::Expecting::Expecting);
                     }
-                    ReceiverRequest::Window(request) => {
+                    ReceiverCommand::Window(request) => {
                         let Some(sender) = sender else {
                             answer(id, service::Windowed::Refused(Refusal::NoSender));
                             continue;
@@ -1364,7 +1366,7 @@ async fn worker(
                             }
                         }
                     }
-                    ReceiverRequest::Stall(request) => {
+                    ReceiverCommand::Stall(request) => {
                         wait_micros(u64::from(request.millis) * 1_000).await;
                         answer(
                             id,
@@ -1372,12 +1374,11 @@ async fn worker(
                         );
                     }
                     // Answered above.
-                    ReceiverRequest::SnapshotCold(_)
-                    | ReceiverRequest::SnapshotUp(_)
-                    | ReceiverRequest::BringUp(_)
-                    | ReceiverRequest::ReceiveCounters(_)
-                    | ReceiverRequest::Stop(_)
-                    | ReceiverRequest::Turn(_) => {}
+                    ReceiverCommand::SnapshotUp(_)
+                    | ReceiverCommand::BringUp(_)
+                    | ReceiverCommand::ReceiveCounters(_)
+                    | ReceiverCommand::Stop(_)
+                    | ReceiverCommand::Turn(_) => {}
                 }
             }
         }

@@ -3,29 +3,44 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::vec::Vec;
 
-use crate::test_messages::{Probe, ProbeArmed, ProbeMode};
+use crate::serve::{Ran, Trap, Unanswered};
+use crate::test_messages::{Probe, ProbeArmed, ProbeMode, Switch, Switched, Trigger, Triggered};
 use embassy_futures::block_on;
-use embassy_futures::select::{Either3, select3};
+use embassy_futures::select::{Either as Race, select};
 use oer_protocols_hil_protocol::base::{
     BootEvidence, GetBootStatus, GetImageKeys, GetLinkHealth, Hello, ImageKeySet,
     PostMortemCheckpoints, RejectReason, ResetReason, sorted_keys,
 };
-use oer_protocols_hil_protocol::{Envelope, FrameDecoder, Key, WireKind};
+use oer_protocols_hil_protocol::{Envelope, FrameDecoder, Key, Message, WireKind};
 
 use super::*;
-use crate::mailbox::{Inbox, Mailbox, Trap};
 
-crate::requests! {
-    enum WatchdogRequest (sessions = false) {
-        Test(Probe),
+crate::service! {
+    /// A test service: an observation and a command.
+    enum Probes (sessions = false, observer = ProbeObserver, commands = ProbeCommand, commander = ProbeCommander) {
+        Switch(Switch) => observe switch,
+        Probe(Probe) => command probe,
     }
 }
 
-crate::requests! {
-    /// A set that may trap after an answer, as the fault service's.
-    #[expect(dead_code, reason = "the trap tests answer without reading the probe")]
-    enum TrappingRequest (sessions = false, traps) {
-        Test(Probe),
+crate::service! {
+    /// A set whose command may end in a trap, as the fault service's.
+    enum Trapping (sessions = false, observer = TrapObserver, commands = TrapCommand, commander = TrapCommander, traps = true) {
+        Probe(Probe) => command probe,
+    }
+}
+
+crate::service! {
+    /// A set whose commands the image runs itself.
+    enum Forwarded (sessions = false, observer = ForwardObserver, commands = ForwardCommand) {
+        Probe(Probe) => command probe,
+    }
+}
+
+crate::service! {
+    /// A second service, composed beside the first.
+    enum Others (sessions = false, observer = OtherObserver, commands = OtherCommand, commander = OtherCommander) {
+        Trigger(Trigger) => command trigger,
     }
 }
 
@@ -65,13 +80,15 @@ impl Platform for Chip {
     }
 }
 
-const SERVED: [Key; 6] = sorted_keys([
+const SERVED: [Key; 8] = sorted_keys([
     GetImageKeys::KEY,
     GetBootStatus::KEY,
     GetLinkHealth::KEY,
     Hello::KEY,
     Probe::KEY,
     ProbeArmed::KEY,
+    Switch::KEY,
+    Switched::KEY,
 ]);
 
 /// The host side of the endpoint: bytes to deliver and bytes written.
@@ -134,23 +151,93 @@ impl Write for Endpoint {
     }
 }
 
-/// The two ends of a mailbox placed for the test's whole run.
-fn mailbox<R: Requests + 'static>() -> (Console<'static, R>, Inbox<'static, R>) {
-    Box::leak(Box::new(Mailbox::<R>::new())).split()
+/// Answers observations: counts them.
+#[derive(Default)]
+struct Observing {
+    switches: Cell<u32>,
 }
 
-/// Runs the console over `endpoint` beside `worker` until `done` holds for
-/// what the host received; the run's end, if it ended first.
-fn run_with<R: Requests, E: Read + Write>(
-    console: &mut Console<'static, R>,
+impl ProbeObserver for Observing {
+    fn switch(&mut self, _request: Switch) -> Switched {
+        self.switches.set(self.switches.get() + 1);
+        Switched
+    }
+}
+
+impl TrapObserver for Observing {}
+impl ForwardObserver for Observing {}
+impl OtherObserver for Observing {}
+
+/// Answers commands once its gate opens; a gate that never opens is a
+/// command that does not come back.
+struct Commanding<'a> {
+    gate: &'a Cell<bool>,
+    started: &'a Cell<u32>,
+}
+
+async fn through(gate: &Cell<bool>) {
+    while !gate.get() {
+        embassy_futures::yield_now().await;
+    }
+}
+
+impl ProbeCommander for Commanding<'_> {
+    async fn probe(&mut self, Probe(mode): Probe) -> ProbeArmed {
+        self.started.set(self.started.get() + 1);
+        through(self.gate).await;
+        ProbeArmed(mode)
+    }
+}
+
+impl TrapCommander for Commanding<'_> {
+    async fn probe(&mut self, Probe(mode): Probe) -> (ProbeArmed, After<Trap>) {
+        through(self.gate).await;
+        (ProbeArmed(mode), After::Trap(Trap))
+    }
+}
+
+impl OtherCommander for Commanding<'_> {
+    async fn trigger(&mut self, _request: Trigger) -> Triggered {
+        Triggered
+    }
+}
+
+/// The image's own run of its commands: one that gives no answer.
+struct Silent;
+
+impl Run<Silent> for ForwardCommand {
+    type Answer = core::convert::Infallible;
+    type Trap = core::convert::Infallible;
+    async fn run(self, _commander: &mut Silent) -> Ran<Self::Answer, Self::Trap> {
+        let ForwardCommand::Probe(Probe(_mode)) = self;
+        Err(Unanswered)
+    }
+}
+
+/// Runs the console over `endpoint` for the service set `R` until `done`
+/// holds for what the host received; the run's end, if it ended first.
+fn run_with<R, O, C, E: Read + Write>(
+    observer: &mut O,
+    commander: &mut C,
     endpoint: E,
     host: &Host,
-    worker: impl core::future::Future<Output = ()>,
     done: impl Fn(&Host) -> bool,
-) -> Option<Ended<E, R::Trap>> {
+) -> Option<Ended<E, <R::Command as Run<C>>::Trap>>
+where
+    R: Serve<O>,
+    R::Command: Run<C>,
+{
     let mut writer = Writer::new();
     let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-    let run = run::<Captured, R, E>(&mut writer, console, BOOT, endpoint, intake, &Chip);
+    let run = run::<Captured, R, O, C, E>(
+        &mut writer,
+        observer,
+        commander,
+        BOOT,
+        endpoint,
+        intake,
+        &Chip,
+    );
     let watch = async {
         for _ in 0..10_000 {
             if done(host) {
@@ -160,39 +247,25 @@ fn run_with<R: Requests, E: Read + Write>(
         }
         panic!("the console did not finish: {:?}", host.frames());
     };
-    match block_on(select3(run, worker, watch)) {
-        Either3::First(ended) => Some(ended),
-        Either3::Second(()) | Either3::Third(()) => None,
+    match block_on(select(run, watch)) {
+        Race::First(ended) => Some(ended),
+        Race::Second(()) => None,
     }
 }
 
-/// Runs the console beside `worker` until `done`; the run must not end.
-fn run_until<R: Requests>(
-    console: &mut Console<'static, R>,
+/// Runs the console until `done`; the run must not end.
+fn run_until<R, O, C>(
+    observer: &mut O,
+    commander: &mut C,
     host: &Host,
-    worker: impl core::future::Future<Output = ()>,
     done: impl Fn(&Host) -> bool,
-) {
-    if run_with(console, Endpoint(host.clone()), host, worker, done).is_some() {
+) where
+    R: Serve<O>,
+    R::Command: Run<C>,
+{
+    if run_with::<R, O, C, _>(observer, commander, Endpoint(host.clone()), host, done).is_some() {
         panic!("the console ended: {:?}", host.frames());
     }
-}
-
-/// A worker that never takes a request.
-async fn idle() {
-    core::future::pending::<()>().await;
-}
-
-/// A worker that answers each probe with its mode.
-async fn prober<R: Requests>(mut inbox: Inbox<'static, R>, answer: impl Fn(R) -> ProbeMode) {
-    loop {
-        let (request, reply) = inbox.next().await;
-        reply.answer(&ProbeArmed(answer(request)));
-    }
-}
-
-fn mode(WatchdogRequest::Test(Probe(mode)): WatchdogRequest) -> ProbeMode {
-    mode
 }
 
 const REJECTED: Key = oer_protocols_hil_protocol::base::Rejected::KEY;
@@ -212,11 +285,12 @@ fn rejections(host: &Host) -> Vec<(u32, RejectReason)> {
 
 #[test]
 fn hello_comes_first_and_base_requests_are_answered_in_order() {
-    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();
     host.send(0, 5, GetBootStatus);
     host.send(0, 6, GetLinkHealth);
-    run_until(&mut console, &host, idle(), |host| host.frames().len() == 3);
+    run_until::<crate::base::NoRequests, _, _>(&mut (), &mut (), &host, |host| {
+        host.frames().len() == 3
+    });
     let frames = host.frames();
     assert_eq!(frames[0], (0, 0, Hello::KEY));
     assert_eq!(frames[1], (5, 1, BootEvidence::KEY));
@@ -227,21 +301,34 @@ fn hello_comes_first_and_base_requests_are_answered_in_order() {
 }
 
 #[test]
-fn a_base_answer_is_written_in_the_step_that_decoded_it_while_the_worker_holds_a_request() {
-    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
+fn an_observation_is_answered_in_the_step_that_decoded_it() {
     let host = Host::default();
-    host.send(0, 9, Probe(ProbeMode::Complete));
-    host.send(0, 10, GetBootStatus);
-    let gate = Cell::new(false);
-    let worker = async {
-        let (request, reply) = inbox.next().await;
-        while !gate.get() {
-            embassy_futures::yield_now().await;
-        }
-        reply.answer(&ProbeArmed(mode(request)));
-        idle().await;
+    host.send(0, 3, Switch);
+    let (gate, started) = (Cell::new(true), Cell::new(0));
+    let mut observing = Observing::default();
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
     };
-    run_until(&mut console, &host, worker, |host| {
+    run_until::<Probes, _, _>(&mut observing, &mut commanding, &host, |host| {
+        host.frames().len() == 2
+    });
+    assert_eq!(host.frames()[1], (3, 1, Switched::KEY));
+    assert_eq!((observing.switches.get(), started.get()), (1, 0));
+}
+
+#[test]
+fn a_command_is_answered_when_it_comes_back_and_the_base_module_meanwhile() {
+    let host = Host::default();
+    host.send(0, 9, Probe(ProbeMode::Stall));
+    host.send(0, 10, GetBootStatus);
+    let (gate, started) = (Cell::new(false), Cell::new(0));
+    let mut observing = Observing::default();
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
+    };
+    run_until::<Probes, _, _>(&mut observing, &mut commanding, &host, |host| {
         if host.frames().len() == 2 {
             gate.set(true);
         }
@@ -258,224 +345,80 @@ fn a_base_answer_is_written_in_the_step_that_decoded_it_while_the_worker_holds_a
 }
 
 #[test]
-fn a_reply_answers_its_own_request() {
-    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+fn while_a_command_does_not_come_back_an_observation_is_answered_a_second_command_is_busy_and_the_base_module_answers()
+ {
     let host = Host::default();
-    host.send(0, 9, Probe(ProbeMode::Stall));
-    let worker = async move {
-        let mut inbox = inbox;
-        let (request, reply) = inbox.next().await;
-        assert_eq!(reply.identity().request_id, 9);
-        reply.answer(&ProbeArmed(mode(request)));
-        idle().await;
-    };
-    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
-    assert_eq!(host.frames()[1], (9, 1, ProbeArmed::KEY));
-}
-
-#[test]
-fn a_second_request_is_refused_busy_while_one_is_in_work_and_taken_after_its_answer() {
-    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
-    let host = Host::default();
-    host.send(0, 1, Probe(ProbeMode::Complete));
-    host.send(0, 2, Probe(ProbeMode::Complete));
-    let gate = Cell::new(false);
-    let worker = async {
-        let (request, reply) = inbox.next().await;
-        while !gate.get() {
-            embassy_futures::yield_now().await;
-        }
-        reply.answer(&ProbeArmed(mode(request)));
-        let (request, reply) = inbox.next().await;
-        reply.answer(&ProbeArmed(mode(request)));
-        idle().await;
+    host.send(0, 1, Probe(ProbeMode::Stall));
+    let (gate, started) = (Cell::new(false), Cell::new(0));
+    let mut observing = Observing::default();
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
     };
     let sent = Cell::new(false);
-    run_until(&mut console, &host, worker, |host| {
-        let frames = host.frames();
-        if frames.len() == 2 {
-            gate.set(true);
-        }
-        if frames.len() == 3 && !sent.get() {
+    run_until::<Probes, _, _>(&mut observing, &mut commanding, &host, |host| {
+        if started.get() == 1 && !sent.get() {
             sent.set(true);
+            host.send(0, 2, Switch);
             host.send(0, 3, Probe(ProbeMode::Complete));
+            host.send(0, 4, GetBootStatus);
         }
-        frames.len() == 4
+        host.frames().len() == 4
     });
     assert_eq!(
         host.frames(),
         [
             (0, 0, Hello::KEY),
-            (2, 1, REJECTED),
-            (1, 2, ProbeArmed::KEY),
-            (3, 3, ProbeArmed::KEY)
+            (2, 1, Switched::KEY),
+            (3, 2, REJECTED),
+            (4, 3, BootEvidence::KEY)
         ]
     );
-    assert_eq!(rejections(&host), [(2, RejectReason::Busy)]);
-}
-
-#[test]
-fn a_request_while_the_worker_holds_a_reply_is_refused_busy_and_never_reaches_the_worker() {
-    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
-    let host = Host::default();
-    host.send(0, 1, Probe(ProbeMode::Complete));
-    let (taken, gate) = (Cell::new(0), Cell::new(false));
-    let worker = async {
-        loop {
-            let (request, reply) = inbox.next().await;
-            taken.set(taken.get() + 1);
-            while !gate.get() {
-                embassy_futures::yield_now().await;
-            }
-            reply.answer(&ProbeArmed(mode(request)));
-        }
-    };
-    let sent = Cell::new(false);
-    run_until(&mut console, &host, worker, |host| {
-        // The request place is empty: the worker took the first request
-        // and holds its reply.
-        if taken.get() == 1 && !sent.get() {
-            sent.set(true);
-            host.send(0, 2, Probe(ProbeMode::Complete));
-        }
-        if host.frames().len() == 2 {
-            gate.set(true);
-        }
-        host.frames().len() == 3
-    });
-    assert_eq!(
-        host.frames(),
-        [
-            (0, 0, Hello::KEY),
-            (2, 1, REJECTED),
-            (1, 2, ProbeArmed::KEY)
-        ]
-    );
-    assert_eq!(rejections(&host), [(2, RejectReason::Busy)]);
-    assert_eq!(
-        taken.get(),
-        1,
-        "the refused request never reached the worker"
-    );
-}
-
-#[test]
-fn a_debt_is_paid_once_when_the_next_request_s_wait_is_cancelled_after_paying() {
-    let (mut console, inbox) = mailbox::<WatchdogRequest>();
-    let host = Host::default();
-    host.send(0, 1, Probe(ProbeMode::Complete));
-    let cancelled = Cell::new(false);
-    let worker = async {
-        let mut inbox = inbox;
-        let (_request, reply) = inbox.next().await;
-        drop(reply);
-        // This call pays the debt, then waits for a request and is
-        // cancelled while it waits: no request comes before the cancel.
-        let deadline = async {
-            for _ in 0..3 {
-                embassy_futures::yield_now().await;
-            }
-        };
-        let waited = embassy_futures::select::select(inbox.next(), deadline).await;
-        assert!(matches!(
-            waited,
-            embassy_futures::select::Either::Second(())
-        ));
-        cancelled.set(true);
-        prober(inbox, mode).await;
-    };
-    let sent = Cell::new(false);
-    run_until(&mut console, &host, worker, |host| {
-        if host.frames().len() == 2 && cancelled.get() && !sent.get() {
-            sent.set(true);
-            host.send(0, 2, Probe(ProbeMode::Complete));
-        }
-        host.frames().len() == 3
-    });
-    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
-    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+    assert_eq!(rejections(&host), [(3, RejectReason::Busy)]);
+    assert_eq!(started.get(), 1, "the second command never ran");
+    assert!(!gate.get(), "the first command is still in work");
 }
 
 #[test]
 fn a_rejection_names_the_request() {
-    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
     let host = Host::default();
     host.send(3, 4, Probe(ProbeMode::Complete));
-    run_until(&mut console, &host, idle(), |host| host.frames().len() == 2);
+    let (gate, started) = (Cell::new(true), Cell::new(0));
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
+    };
+    run_until::<Probes, _, _>(&mut Observing::default(), &mut commanding, &host, |host| {
+        host.frames().len() == 2
+    });
     assert_eq!(host.frames()[1], (4, 1, REJECTED));
     assert_eq!(rejections(&host), [(4, RejectReason::InvalidState)]);
 }
 
 #[test]
-fn a_dropped_reply_is_refused_internal_and_the_console_takes_the_next_request() {
-    let (mut console, inbox) = mailbox::<WatchdogRequest>();
+fn a_command_that_gives_no_answer_is_refused_internal_and_counted() {
     let host = Host::default();
     host.send(0, 1, Probe(ProbeMode::Complete));
-    let worker = async move {
-        let mut inbox = inbox;
-        let (_request, reply) = inbox.next().await;
-        drop(reply);
-        prober(inbox, mode).await;
-    };
     let sent = Cell::new(false);
-    let mut writer_dropped = 0;
-    run_until(&mut console, &host, worker, |host| {
+    run_until::<Forwarded, _, _>(&mut Observing::default(), &mut Silent, &host, |host| {
         if host.frames().len() == 2 && !sent.get() {
             sent.set(true);
-            host.send(0, 2, Probe(ProbeMode::Complete));
-            host.send(0, 3, GetLinkHealth);
-        }
-        host.frames().len() == 4
-    });
-    let frames = host.frames();
-    assert_eq!(frames[1], (1, 1, REJECTED));
-    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
-    assert!(frames.contains(&(2, 2, ProbeArmed::KEY)) || frames.contains(&(2, 3, ProbeArmed::KEY)));
-    let mut decoder = FrameDecoder::new();
-    decoder.feed(WireKind::Event, &host.from_device.borrow(), |frame| {
-        let frame = frame.unwrap();
-        if let Some(link) = frame.decode::<oer_protocols_hil_protocol::base::LinkHealth>() {
-            writer_dropped = link.unwrap().body.tx_dropped;
-        }
-    });
-    assert_eq!(writer_dropped, 1, "the unanswered request is counted");
-}
-
-#[test]
-fn a_handler_cancelled_at_an_await_is_refused_when_the_worker_asks_again() {
-    let (mut console, inbox) = mailbox::<WatchdogRequest>();
-    let host = Host::default();
-    host.send(0, 1, Probe(ProbeMode::Complete));
-    let worker = async move {
-        let mut inbox = inbox;
-        loop {
-            let (request, reply) = inbox.next().await;
-            // The first handler waits for ever and is cancelled by its
-            // deadline with the reply inside; the next ones answer.
-            let handler = async move {
-                if reply.identity().request_id == 1 {
-                    core::future::pending::<()>().await;
-                }
-                reply.answer(&ProbeArmed(mode(request)));
-            };
-            let deadline = async {
-                for _ in 0..3 {
-                    embassy_futures::yield_now().await;
-                }
-            };
-            let _ = embassy_futures::select::select(handler, deadline).await;
-        }
-    };
-    let sent = Cell::new(false);
-    run_until(&mut console, &host, worker, |host| {
-        if host.frames().len() == 2 && !sent.get() {
-            sent.set(true);
-            host.send(0, 2, Probe(ProbeMode::Complete));
+            host.send(0, 2, GetLinkHealth);
         }
         host.frames().len() == 3
     });
     assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
-    assert_eq!(host.frames()[2], (2, 2, ProbeArmed::KEY));
+    let mut dropped = None;
+    let mut decoder = FrameDecoder::new();
+    decoder.feed(WireKind::Event, &host.from_device.borrow(), |frame| {
+        if let Some(link) = frame
+            .unwrap()
+            .decode::<oer_protocols_hil_protocol::base::LinkHealth>()
+        {
+            dropped = Some(link.unwrap().body.tx_dropped);
+        }
+    });
+    assert_eq!(dropped, Some(1), "the unanswered command is counted");
 }
 
 /// A response its encoder refuses.
@@ -494,34 +437,46 @@ impl Message for Refusing {
 
 #[test]
 fn an_unencodable_answer_is_refused_internal_and_counted() {
-    let (mut console, mut inbox) = mailbox::<WatchdogRequest>();
+    // An answer the encoder refuses: a frame too long for its buffer.
     let host = Host::default();
-    host.send(0, 1, Probe(ProbeMode::Complete));
-    let worker = async {
-        let (_request, reply) = inbox.next().await;
-        reply.answer(&Refusing);
-        idle().await;
-    };
-    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
-    assert_eq!(rejections(&host), [(1, RejectReason::Internal)]);
+    let mut writer = Writer::new();
+    let written = writer
+        .frames
+        .frame(
+            BOOT,
+            RequestIdentity {
+                boot_id: BOOT,
+                session_id: 0,
+                request_id: 1,
+            },
+        )
+        .write(&Refusing);
+    let delivery = block_on(send(
+        &mut writer.counts,
+        &mut Endpoint(host.clone()),
+        written,
+    ));
+    assert!(matches!(delivery, Delivery::Unencoded));
+    assert_eq!(writer.counts.dropped, 1);
+    assert!(host.frames().is_empty());
 }
 
 #[test]
 fn a_trap_ends_the_run_only_after_its_answer_is_written() {
-    let (mut console, mut inbox) = mailbox::<TrappingRequest>();
     let host = Host::default();
     host.send(0, 1, Probe(ProbeMode::Complete));
-    let worker = async {
-        let (_request, reply) = inbox.next().await;
-        reply.answer_then(
-            &ProbeArmed(ProbeMode::Complete),
-            crate::mailbox::After::Trap(Trap),
-        );
-        idle().await;
+    let (gate, started) = (Cell::new(true), Cell::new(0));
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
     };
-    let ended = run_with(&mut console, Endpoint(host.clone()), &host, worker, |_| {
-        false
-    });
+    let ended = run_with::<Trapping, _, _, _>(
+        &mut Observing::default(),
+        &mut commanding,
+        Endpoint(host.clone()),
+        &host,
+        |_| false,
+    );
     assert!(matches!(ended, Some(Ended::Trap(Trap))));
     assert_eq!(host.frames(), [(0, 0, Hello::KEY), (1, 1, ProbeArmed::KEY)]);
 }
@@ -555,32 +510,72 @@ fn a_trap_whose_answer_was_not_written_does_not_end_the_run() {
         }
     }
 
-    let (mut console, mut inbox) = mailbox::<TrappingRequest>();
     let host = Host::default();
     host.send(0, 1, Probe(ProbeMode::Complete));
-    let answered = Cell::new(false);
-    let worker = async {
-        let (_request, reply) = inbox.next().await;
-        reply.answer_then(
-            &ProbeArmed(ProbeMode::Complete),
-            crate::mailbox::After::Trap(Trap),
-        );
-        answered.set(true);
-        idle().await;
+    let (gate, started) = (Cell::new(true), Cell::new(0));
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
     };
     let polls = Cell::new(0);
     let endpoint = Refuses {
         host: host.clone(),
         writes: 0,
     };
-    let ended = run_with(&mut console, endpoint, &host, worker, |_| {
-        if answered.get() {
+    let ended = run_with::<Trapping, _, _, _>(
+        &mut Observing::default(),
+        &mut commanding,
+        endpoint,
+        &host,
+        |_| {
             polls.set(polls.get() + 1);
-        }
-        polls.get() > 100
-    });
+            polls.get() > 200
+        },
+    );
     assert!(ended.is_none(), "an unwritten answer gives no trap");
     assert_eq!(host.frames(), [(0, 0, Hello::KEY)]);
+}
+
+#[test]
+fn two_services_composed_answer_each_its_own_requests() {
+    let host = Host::default();
+    host.send(0, 1, Trigger);
+    let sent = Cell::new(false);
+    let (gate, started) = (Cell::new(true), Cell::new(0));
+    let mut observers = (Observing::default(), Observing::default());
+    let mut commanders = (
+        Commanding {
+            gate: &gate,
+            started: &started,
+        },
+        Commanding {
+            gate: &gate,
+            started: &started,
+        },
+    );
+    run_until::<crate::base::Either<Probes, Others>, _, _>(
+        &mut observers,
+        &mut commanders,
+        &host,
+        |host| {
+            if host.frames().len() == 2 && !sent.get() {
+                sent.set(true);
+                host.send(0, 2, Switch);
+                host.send(0, 3, Probe(ProbeMode::Complete));
+            }
+            host.frames().len() == 4
+        },
+    );
+    assert_eq!(
+        host.frames(),
+        [
+            (0, 0, Hello::KEY),
+            (1, 1, Triggered::KEY),
+            (2, 2, Switched::KEY),
+            (3, 3, ProbeArmed::KEY)
+        ]
+    );
+    assert_eq!(observers.0.switches.get(), 1);
 }
 
 #[test]
@@ -600,14 +595,18 @@ fn a_transport_that_takes_nothing_or_too_much_loses_the_message() {
 
     for taken in [0, usize::MAX] {
         let mut writer = Writer::new();
-        let message = Outbound::new(0, 0, 9, &ProbeArmed(ProbeMode::Complete)).unwrap();
-        assert!(!block_on(writer.write(
-            &mut Takes(taken),
-            BOOT,
-            message,
-            &Chip
-        )));
-        assert_eq!((writer.dropped, writer.sent_frames), (1, 0));
+        let identity = RequestIdentity {
+            boot_id: BOOT,
+            session_id: 0,
+            request_id: 9,
+        };
+        let written = writer
+            .frames
+            .frame(BOOT, identity)
+            .write(&ProbeArmed(ProbeMode::Complete));
+        let delivery = block_on(send(&mut writer.counts, &mut Takes(taken), written));
+        assert!(matches!(delivery, Delivery::Broken));
+        assert_eq!((writer.counts.dropped, writer.counts.sent_frames), (1, 0));
     }
 }
 
@@ -629,10 +628,9 @@ fn decoded(bytes: &[u8]) -> Vec<(u32, Vec<u32>)> {
 
 #[test]
 fn the_bytes_the_early_writer_dropped_are_reported_when_the_console_starts() {
-    let (mut console, _inbox) = mailbox::<WatchdogRequest>();
     EARLY_LOST.set(37);
     let host = Host::default();
-    run_until(&mut console, &host, idle(), |host| {
+    run_until::<crate::base::NoRequests, _, _>(&mut (), &mut (), &host, |host| {
         decoded(&host.from_device.borrow())
             .iter()
             .any(|(_, words)| words == &[37])
@@ -669,13 +667,13 @@ impl Drop for BrokenRead {
 #[test]
 fn invalid_read_length_returns_the_transport_without_releasing_it() {
     for length in [RX_CHUNK + 1, usize::MAX] {
-        let (mut console, _inbox) = mailbox::<crate::base::NoRequests>();
         let mut writer = Writer::new();
         let dropped = Rc::new(Cell::new(false));
         let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
-        let ended = block_on(run::<Captured, crate::base::NoRequests, _>(
+        let ended = block_on(run::<Captured, crate::base::NoRequests, (), (), _>(
             &mut writer,
-            &mut console,
+            &mut (),
+            &mut (),
             BOOT,
             BrokenRead {
                 length,
@@ -748,6 +746,11 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             Ok(())
         }
     }
+    let mut encoder = oer_protocols_hil_protocol::FrameEncoder::new();
+    let request = encoder
+        .encode(&Envelope::new(BOOT, 0, 0, 1, GetBootStatus))
+        .unwrap()
+        .to_vec();
     for refused in [1, 2, 3] {
         let retained =
             Record::new(Class::RustPanic, Domain::Postmortem, 2, 0, 0, &[7; 44]).unwrap();
@@ -755,54 +758,25 @@ fn boot_evidence_acknowledges_retained_data_only_after_frame_and_trailer_succeed
             retained: RefCell::new(retained),
         };
         let mut writer = Writer::new();
-        let message = Outbound::new(1, 0, 1, &platform.boot_evidence()).unwrap();
-        let _written =
-            block_on(writer.write(&mut Output { refused, calls: 0 }, BOOT, message, &platform));
+        let mut intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
+        let base = Base {
+            boot: BOOT,
+            image_keys: intake.image_keys(),
+            platform: &platform,
+        };
+        let _fed = block_on(feed::<_, crate::base::NoRequests, (), _>(
+            &mut writer,
+            &mut (),
+            &mut Output { refused, calls: 0 },
+            &mut intake,
+            &base,
+            &request,
+            Work::Idle,
+        ));
         if refused <= 2 {
             assert_eq!(*platform.retained.borrow(), retained);
         } else {
             assert!(platform.retained.borrow().peek().is_err());
         }
     }
-}
-
-crate::service! {
-    /// A test service with one handled endpoint.
-    enum ProbeService (sessions = false, handler = ProbeHandler) {
-        Probe(Probe) => probe,
-    }
-}
-
-/// Answers a probe with its mode and counts the calls.
-struct Prober {
-    calls: u32,
-}
-
-impl ProbeHandler for Prober {
-    async fn probe(&mut self, Probe(mode): Probe) -> ProbeArmed {
-        self.calls += 1;
-        ProbeArmed(mode)
-    }
-}
-
-#[test]
-fn a_service_answers_each_request_through_its_handler_and_its_reply() {
-    let (mut console, mut inbox) = mailbox::<ProbeService>();
-    let host = Host::default();
-    host.send(0, 21, Probe(ProbeMode::Stall));
-    let calls = Cell::new(0);
-    let worker = async {
-        let mut prober = Prober { calls: 0 };
-        let (request, reply) = inbox.next().await;
-        request.serve(&mut prober, reply).await;
-        calls.set(prober.calls);
-        idle().await;
-    };
-    run_until(&mut console, &host, worker, |host| host.frames().len() == 2);
-    assert_eq!(calls.get(), 1);
-    assert_eq!(host.frames()[1], (21, 1, ProbeArmed::KEY));
-    assert_eq!(
-        <ProbeService as crate::base::Service>::REQUESTS,
-        [Probe::KEY]
-    );
 }

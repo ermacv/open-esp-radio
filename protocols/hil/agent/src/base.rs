@@ -30,8 +30,8 @@ pub trait Requests: Sized {
     const SESSIONS: bool;
 
     /// What the set may ask after an answer's write: `Infallible`, or
-    /// [`Trap`](crate::mailbox::Trap) for a set that declares `traps`.
-    type Trap: crate::mailbox::Traps;
+    /// [`Trap`](crate::serve::Trap) for a set that declares `traps`.
+    type Trap: crate::serve::Traps;
 
     /// `frame` as one of the image's requests: `None` when its key is none
     /// of them.
@@ -264,7 +264,7 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 /// optional `publishes` list (unsolicited topics and properties).
 ///
 /// ```ignore
-/// oer_protocols_hil_agent::requests! {
+/// oer_protocols_hil_agent::__requests! {
 ///     /// The requests this image serves.
 ///     pub enum Request (sessions = false) {
 ///         Unwrap(oer_hil_services_aes::UnwrapKey),
@@ -275,13 +275,14 @@ fn serve(frame: &Frame<'_>, boot_id: u64, hello: Hello) -> Option<Served> {
 ///
 /// `sessions` says whether a request may belong to a session; a variant
 /// and a published message take `#[cfg(...)]` attributes only. A set
-/// whose answers may end in a trap says `traps` after it: only such a set
+/// whose answers may end in a trap says `traps = true` after it: only such a set
 /// can build [`After::Trap`](crate::mailbox::After::Trap).
+#[doc(hidden)]
 #[macro_export]
-macro_rules! requests {
+macro_rules! __requests {
     (
         $(#[$meta:meta])*
-        $vis:vis enum $name:ident (sessions = $sessions:literal $(, $traps:ident)?) {
+        $vis:vis enum $name:ident (sessions = $sessions:literal $(, traps = $traps:tt)?) {
             $($(#[cfg($cfg:meta)])* $variant:ident($ty:ty)),* $(,)?
         }
         $(publishes [$($(#[cfg($published_cfg:meta)])* $published:ty),* $(,)?])?
@@ -331,25 +332,34 @@ macro_rules! requests {
     };
 }
 
-/// Declares a service whose every endpoint has a handler: the
-/// [`requests!`](crate::requests) enum and keys, a handler trait with one
-/// required method per endpoint, and `serve`, which awaits the handler of a
-/// request and answers its response through the request's reply. An image
-/// implements the trait; a missing or extra method does not compile.
+/// Declares a service: its requests (the enum and keys), and the kind of
+/// each endpoint. An **observation** is answered at once: a method of the
+/// observing value, called in the console's step that decoded the request,
+/// whose answer is serialized from a reference. A **command** is answered
+/// later: an `async` method of the commanding value, which the console
+/// awaits beside its read of the endpoint; one is in work at a time.
 ///
 /// ```ignore
 /// oer_protocols_hil_agent::service! {
-///     /// The AES service's requests.
-///     pub enum Request (sessions = false, handler = Handler) {
-///         UnwrapKey(UnwrapKey) => unwrap_key,
+///     /// The pair's receiver.
+///     pub enum Request (sessions = false, observer = Observer, commands = Command, commander = Commander) {
+///         SnapshotCold(SnapshotCold) => observe snapshot_cold,
+///         BringUp(BringUp) => command bring_up,
 ///     }
 /// }
 /// ```
 ///
-/// A handler that cannot answer still returns its endpoint's response type:
-/// failures belong in that type, so every request is answered.
+/// It generates the request enum, `trait Observer` (one method an
+/// observation, returning its endpoint's response), `enum Command` (the
+/// commands with their requests) and, with `commander = …`, `trait
+/// Commander` (one `async` method a command) with the command's run on it.
+/// Without `commander`, the image runs the commands itself
+/// ([`Run`](crate::serve::Run) for `Command`). A set that says `traps = true` may
+/// end an answer in a trap: its commands return the response and an
+/// [`After`](crate::serve::After). A handler that cannot answer still returns
+/// its endpoint's response type: failures belong in that type.
 ///
-/// An image whose handler leaves an endpoint out does not compile:
+/// An image whose observer leaves an endpoint out does not compile:
 ///
 /// ```compile_fail
 /// # mod wire {
@@ -363,19 +373,19 @@ macro_rules! requests {
 /// #     impl Message for Told { const PATH: &'static str = "doc/told"; }
 /// # }
 /// oer_protocols_hil_agent::service! {
-///     pub enum Request (sessions = false, handler = Handler) {
-///         Ask(wire::Ask) => ask,
+///     pub enum Request (sessions = false, observer = Observer, commands = Command) {
+///         Ask(wire::Ask) => observe ask,
 ///     }
 /// }
 /// struct Image;
-/// impl Handler for Image {}
+/// impl Observer for Image {}
 /// ```
 ///
 /// Two services of one image that serve the same request do not compile
 /// either:
 ///
 /// ```compile_fail
-/// oer_protocols_hil_agent::requests! {
+/// oer_protocols_hil_agent::__requests! {
 ///     pub enum First (sessions = false) { Describe(oer_protocols_hil_protocol::capture::Describe) }
 /// }
 /// oer_protocols_hil_agent::image_keys! {
@@ -386,60 +396,215 @@ macro_rules! requests {
 macro_rules! service {
     (
         $(#[$meta:meta])*
-        $vis:vis enum $name:ident (sessions = $sessions:literal, handler = $handler:ident $(, $traps:ident)?) {
-            $($variant:ident($ty:ty) => $method:ident),* $(,)?
+        $vis:vis enum $name:ident (
+            sessions = $sessions:literal,
+            observer = $observer:ident,
+            commands = $commands:ident
+            $(, commander = $commander:ident)?
+            $(, traps = $traps:tt)?
+        ) {
+            $($body:tt)*
         }
         $(publishes [$($published:ty),* $(,)?])?
     ) => {
-        $crate::requests! {
-            $(#[$meta])*
-            $vis enum $name (sessions = $sessions $(, $traps)?) {
-                $($variant($ty)),*
-            }
-            $(publishes [$($published),*])?
-        }
-
-        /// One method per endpoint of the service; each returns the
-        /// endpoint's response.
-        $vis trait $handler {
-            $(
-                fn $method(
-                    &mut self,
-                    request: $ty,
-                ) -> impl ::core::future::Future<
-                    Output = <$ty as $crate::__protocol::Endpoint>::Response,
-                >;
-            )*
-        }
-
-        impl $name {
-            /// Answer the request through `handler`: its response goes back
-            /// through `reply`.
-            $vis async fn serve<H: $handler, T>(
-                self,
-                handler: &mut H,
-                reply: $crate::mailbox::Reply<'_, T>,
-            ) {
-                match self {
-                    $(Self::$variant(request) => {
-                        reply.answer(&handler.$method(request).await);
-                    })*
-                }
-            }
+        $crate::__service! {
+            @split
+            [$(#[$meta])*] [$vis] [$name] [$sessions] [$observer] [$commands]
+            [$($commander)?] [$($traps)?] [$($($published),*)?]
+            [] [] [] ; $($body)*
         }
     };
 }
 
-/// The trap type of a [`requests!`](crate::requests) set: `Infallible`
-/// unless the set says `traps`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __service {
+    (
+        @split $meta:tt $vis:tt $name:tt $sessions:tt $observer:tt $commands:tt $commander:tt
+        $traps:tt $published:tt [$($all:tt)*] [$($observe:tt)*] [$($command:tt)*] ;
+        $variant:ident($ty:ty) => observe $method:ident $(, $($rest:tt)*)?
+    ) => {
+        $crate::__service! {
+            @split $meta $vis $name $sessions $observer $commands $commander $traps $published
+            [$($all)* ($variant $ty)] [$($observe)* ($variant $method $ty)] [$($command)*] ;
+            $($($rest)*)?
+        }
+    };
+    (
+        @split $meta:tt $vis:tt $name:tt $sessions:tt $observer:tt $commands:tt $commander:tt
+        $traps:tt $published:tt [$($all:tt)*] [$($observe:tt)*] [$($command:tt)*] ;
+        $variant:ident($ty:ty) => command $method:ident $(, $($rest:tt)*)?
+    ) => {
+        $crate::__service! {
+            @split $meta $vis $name $sessions $observer $commands $commander $traps $published
+            [$($all)* ($variant $ty)] [$($observe)*] [$($command)* ($variant $method $ty)] ;
+            $($($rest)*)?
+        }
+    };
+    (
+        @split [$(#[$meta:meta])*] [$vis:vis] [$name:ident] [$sessions:literal] [$observer:ident]
+        [$commands:ident] [$($commander:ident)?] $traps:tt [$($published:ty),*]
+        [$(($variant:ident $ty:ty))*]
+        [$(($ov:ident $om:ident $oty:ty))*]
+        [$(($cv:ident $cm:ident $cty:ty))*] ;
+    ) => {
+        $crate::__requests! {
+            $(#[$meta])*
+            $vis enum $name (sessions = $sessions, traps = $traps) {
+                $($variant($ty)),*
+            }
+            publishes [$($published),*]
+        }
+
+        /// What answers the service's observations, at once.
+        $vis trait $observer {
+            $(
+                fn $om(
+                    &mut self,
+                    request: $oty,
+                ) -> <$oty as $crate::__protocol::Endpoint>::Response;
+            )*
+        }
+
+        $crate::__nothing_observes! { [$($ov)*] $observer }
+
+        /// The service's commands, with their requests.
+        $vis enum $commands {
+            $($cv($cty),)*
+        }
+
+        impl<O: $observer> $crate::serve::Serve<O> for $name {
+            type Command = $commands;
+            fn serve<'f>(
+                self,
+                observer: &mut O,
+                frame: $crate::serve::Frame<'f>,
+            ) -> $crate::serve::Served<'f, $commands> {
+                // Both are used by one kind of arm or the other.
+                let served = (observer, frame);
+                match self {
+                    $(Self::$ov(request) => {
+                        let (observer, frame) = served;
+                        $crate::serve::Served::Observed(frame.write(&observer.$om(request)))
+                    })*
+                    $(Self::$cv(request) => {
+                        let _unused = served;
+                        $crate::serve::Served::Command($commands::$cv(request))
+                    })*
+                }
+            }
+        }
+
+        $crate::__commander! {
+            [$($commander)?] [$name] [$vis] [$commands] $traps
+            [$(($cv $cm $cty))*]
+        }
+    };
+}
+
+/// The commanding trait of a service that names one, and its commands' run.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __commander {
+    ([] $($rest:tt)*) => {};
+    (
+        [$commander:ident] [$name:ident] [$vis:vis] [$commands:ident] $traps:tt
+        [$(($cv:ident $cm:ident $cty:ty))*]
+    ) => {
+        /// What answers the service's commands, later.
+        $vis trait $commander {
+            $(
+                fn $cm(
+                    &mut self,
+                    request: $cty,
+                ) -> impl ::core::future::Future<
+                    Output = $crate::__command_output!(
+                        $traps <$cty as $crate::__protocol::Endpoint>::Response
+                    ),
+                >;
+            )*
+        }
+
+        const _: () = {
+            /// One command's answer, written from where it lies.
+            pub enum Answer {
+                $($cv(<$cty as $crate::__protocol::Endpoint>::Response),)*
+            }
+
+            impl $crate::serve::Answer for Answer {
+                fn write<'f>(&self, frame: $crate::serve::Frame<'f>) -> $crate::serve::Written<'f> {
+                    match *self {
+                        $(Self::$cv(ref answer) => frame.write(answer),)*
+                    }
+                }
+            }
+
+            impl<C: $commander> $crate::serve::Run<C> for $commands {
+                type Answer = Answer;
+                type Trap = <$name as $crate::base::Requests>::Trap;
+                async fn run(self, commander: &mut C) -> $crate::serve::Ran<Answer, Self::Trap> {
+                    match self {
+                        $($commands::$cv(request) => Ok($crate::__command_then!(
+                            $traps Answer::$cv, commander.$cm(request).await
+                        )),)*
+                    }
+                }
+            }
+        };
+    };
+}
+
+/// A service without observations is observed by nothing: `()`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nothing_observes {
+    ([] $observer:ident) => {
+        impl $observer for () {}
+    };
+    ([$($ov:ident)+] $observer:ident) => {};
+}
+
+/// A command's output: its response, and with `traps` what follows its write.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __command_output {
+    ([] $response:ty) => {
+        $response
+    };
+    ([true] $response:ty) => {
+        ($response, $crate::serve::After<$crate::serve::Trap>)
+    };
+}
+
+/// A command's output as its answer and what follows its write.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __command_then {
+    ([] $wrap:path, $output:expr) => {
+        ($wrap($output), $crate::serve::After::Nothing)
+    };
+    ([true] $wrap:path, $output:expr) => {{
+        let (answer, after) = $output;
+        ($wrap(answer), after)
+    }};
+}
+
+/// The trap type of a `__requests!` set: `Infallible`
+/// unless the set says `traps = true`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __trap {
     () => {
         ::core::convert::Infallible
     };
-    (traps) => {
-        $crate::mailbox::Trap
+    ([]) => {
+        ::core::convert::Infallible
+    };
+    (true) => {
+        $crate::serve::Trap
+    };
+    ([true]) => {
+        $crate::serve::Trap
     };
 }
 
@@ -509,7 +674,7 @@ pub enum Either<A, B> {
 
 impl<A: Requests, B: Requests> Requests for Either<A, B> {
     const SESSIONS: bool = A::SESSIONS || B::SESSIONS;
-    type Trap = <A::Trap as crate::mailbox::Traps>::Or<B::Trap>;
+    type Trap = <A::Trap as crate::serve::Traps>::Or<B::Trap>;
 
     fn decode(frame: &Frame<'_>) -> Option<Result<Self, DecodeError>> {
         A::decode(frame)

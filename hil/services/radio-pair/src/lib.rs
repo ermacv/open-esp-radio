@@ -622,32 +622,34 @@ pub enum Turned {
     Refused(Refusal),
 }
 
-oer_protocols_hil_agent::requests! {
-    /// The sender's requests: the radio's and its own.
-    pub enum SenderRequest (sessions = false) {
-        SnapshotCold(SnapshotCold),
-        SnapshotUp(SnapshotUp),
-        BringUp(BringUp),
-        ReceiveCounters(ReceiveCounters),
-        Stop(Stop),
-        Target(Target),
-        Round(Round),
-        Single(Single),
+oer_protocols_hil_agent::service! {
+    /// The sender's requests: the radio's and its own. The cold snapshot is
+    /// the radio's owner's own reading, answered at once; the rest are the
+    /// radio's task's, which the image runs itself.
+    pub enum SenderRequest (sessions = false, observer = SenderObserver, commands = SenderCommand) {
+        SnapshotCold(SnapshotCold) => observe snapshot_cold,
+        SnapshotUp(SnapshotUp) => command snapshot_up,
+        BringUp(BringUp) => command bring_up,
+        ReceiveCounters(ReceiveCounters) => command receive_counters,
+        Stop(Stop) => command stop,
+        Target(Target) => command target,
+        Round(Round) => command round,
+        Single(Single) => command single,
     }
 }
 
-oer_protocols_hil_agent::requests! {
-    /// The receiver's requests: the radio's and its own.
-    pub enum ReceiverRequest (sessions = false) {
-        SnapshotCold(SnapshotCold),
-        SnapshotUp(SnapshotUp),
-        BringUp(BringUp),
-        ReceiveCounters(ReceiveCounters),
-        Stop(Stop),
-        Expect(Expect),
-        Window(Window),
-        Stall(Stall),
-        Turn(Turn),
+oer_protocols_hil_agent::service! {
+    /// The receiver's requests: the radio's and its own, as the sender's.
+    pub enum ReceiverRequest (sessions = false, observer = ReceiverObserver, commands = ReceiverCommand) {
+        SnapshotCold(SnapshotCold) => observe snapshot_cold,
+        SnapshotUp(SnapshotUp) => command snapshot_up,
+        BringUp(BringUp) => command bring_up,
+        ReceiveCounters(ReceiveCounters) => command receive_counters,
+        Stop(Stop) => command stop,
+        Expect(Expect) => command expect,
+        Window(Window) => command window,
+        Stall(Stall) => command stall,
+        Turn(Turn) => command turn,
     }
 }
 

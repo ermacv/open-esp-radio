@@ -130,8 +130,24 @@ impl FrameEncoder {
     /// A leading delimiter discards any preceding ROM or text output. The
     /// trailing delimiter terminates this frame for an incremental decoder.
     pub fn encode<M: Message>(&mut self, message: &Envelope<M>) -> Result<&[u8], EncodeError> {
+        let to = Addressed {
+            boot_id: message.boot_id,
+            message_sequence: message.message_sequence,
+            session_id: message.session_id,
+            request_id: message.request_id,
+        };
+        self.encode_message(to, &message.body)
+    }
+
+    /// Encodes `body` as one frame addressed `to`: the body is serialized
+    /// once, from its reference, into this encoder's buffer.
+    pub fn encode_message<M: Message>(
+        &mut self,
+        to: Addressed,
+        body: &M,
+    ) -> Result<&[u8], EncodeError> {
         let payload_length = postcard::to_slice(
-            &message.body,
+            body,
             self.raw
                 .get_mut(WIRE_HEADER_BYTES..WIRE_HEADER_BYTES + MAX_POSTCARD_BYTES)
                 .ok_or(EncodeError::Serialize)?,
@@ -141,39 +157,10 @@ impl FrameEncoder {
         let header = Header {
             kind: M::WIRE_KIND,
             key: M::KEY,
-            boot_id: message.boot_id,
-            message_sequence: message.message_sequence,
-            session_id: message.session_id,
-            request_id: message.request_id,
-        };
-        self.frame(&header, payload_length)
-    }
-
-    /// Frames `message`, serialized earlier by its producer, for boot
-    /// `boot_id`.
-    pub fn encode_outbound(
-        &mut self,
-        boot_id: u64,
-        message: &Outbound,
-    ) -> Result<&[u8], EncodeError> {
-        let payload_length = message.payload.len();
-        let end = WIRE_HEADER_BYTES
-            .checked_add(payload_length)
-            .ok_or(EncodeError::Serialize)?;
-        let destination = self
-            .raw
-            .get_mut(WIRE_HEADER_BYTES..end)
-            .ok_or(EncodeError::Serialize)?;
-        for (byte, source) in destination.iter_mut().zip(&message.payload) {
-            *byte = *source;
-        }
-        let header = Header {
-            kind: message.kind,
-            key: message.key,
-            boot_id,
-            message_sequence: message.message_sequence,
-            session_id: message.session_id,
-            request_id: message.request_id,
+            boot_id: to.boot_id,
+            message_sequence: to.message_sequence,
+            session_id: to.session_id,
+            request_id: to.request_id,
         };
         self.frame(&header, payload_length)
     }
@@ -241,6 +228,15 @@ impl FrameEncoder {
     }
 }
 
+/// Where a frame goes: its boot, its number and the request it answers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Addressed {
+    pub boot_id: u64,
+    pub message_sequence: u32,
+    pub session_id: u64,
+    pub request_id: u32,
+}
+
 struct Header {
     kind: WireKind,
     key: Key,
@@ -248,67 +244,6 @@ struct Header {
     message_sequence: u32,
     session_id: u64,
     request_id: u32,
-}
-
-/// One message its producer serialized, waiting for the sender's single
-/// [`FrameEncoder`], which adds the boot and completes the frame. A queue of
-/// these carries messages of every type.
-#[derive(Clone, Eq, PartialEq)]
-pub struct Outbound {
-    pub kind: WireKind,
-    pub key: Key,
-    pub message_sequence: u32,
-    pub session_id: u64,
-    pub request_id: u32,
-    pub payload: heapless::Vec<u8, MAX_POSTCARD_BYTES>,
-}
-
-impl fmt::Debug for Outbound {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("Outbound")
-            .field("kind", &self.kind)
-            .field("key", &self.key)
-            .field("message_sequence", &self.message_sequence)
-            .field("session_id", &self.session_id)
-            .field("request_id", &self.request_id)
-            .field("payload_length", &self.payload.len())
-            .finish()
-    }
-}
-
-impl Outbound {
-    pub fn new<M: Message>(
-        message_sequence: u32,
-        session_id: u64,
-        request_id: u32,
-        body: &M,
-    ) -> Result<Self, EncodeError> {
-        let mut payload = heapless::Vec::from_array([0; MAX_POSTCARD_BYTES]);
-        let length = postcard::to_slice(body, &mut payload)
-            .map_err(|_| EncodeError::Serialize)?
-            .len();
-        payload.truncate(length);
-        Ok(Self {
-            kind: M::WIRE_KIND,
-            key: M::KEY,
-            message_sequence,
-            session_id,
-            request_id,
-            payload,
-        })
-    }
-
-    /// Whether this is message `M`.
-    pub fn is<M: Message>(&self) -> bool {
-        self.key == M::KEY
-    }
-}
-
-impl Drop for Outbound {
-    fn drop(&mut self) {
-        self.payload.zeroize();
-    }
 }
 
 impl Drop for FrameEncoder {

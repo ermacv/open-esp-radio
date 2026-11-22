@@ -1,23 +1,24 @@
 //! The HIL console over the platform runtime's USB console on the
 //! ESP32-S31: the one mount of probes and of images on the entry alike.
 
-use core::{convert::Infallible, future::Future};
+use core::convert::Infallible;
 
 use oer_chips_esp32s31_platform_runtime::{exception::Observed, reset_causes::ResetCause};
 use oer_chips_family_platform_runtime::{panic::PanicRecord, trap::PreviousException};
-use oer_protocols_hil_agent::base::{Intake, Requests};
+use oer_protocols_hil_agent::base::Intake;
 use oer_protocols_hil_agent::console::{self, Ended, Writer};
-use oer_protocols_hil_agent::mailbox::Console;
+use oer_protocols_hil_agent::serve::{Run, Serve};
 use oer_protocols_hil_protocol::base::{
     BootEvidence, ExceptionFault, Fault, ImageKeySet, PlatformPanic, PostMortemCheckpoints,
     PostMortemSummary, ResetReason, TrapLine, TrapObservation, TrapState,
 };
 
-/// What the console of an image is made of: the mailbox's console end and
-/// the writer's place, both the image's, placed once.
-pub struct Mount<'a, R: Requests> {
-    pub console: Console<'a, R>,
+/// What the console of an image is made of, all the image's: the writer's
+/// place, what observes and what commands, split once at its composition.
+pub struct Mount<'a, O, C> {
     pub writer: &'a mut Writer,
+    pub observer: &'a mut O,
+    pub commander: &'a mut C,
 }
 
 /// What the early USB writer dropped before the console took the
@@ -52,32 +53,28 @@ pub struct Records {
 
 /// Serve the host over `console` (the image's USB console: the platform
 /// runtime's, or a probe's own endpoint) until the chip resets: the base
-/// module from this boot's identity `boot` and `records`, and each request
-/// of the image's services handed to the worker `start` makes, side by
-/// side, through the mailbox's console end in `mount`. The worker answers
-/// through each request's reply. An answer that asks for a trap ends here,
-/// once written whole, on an illegal instruction: the runtime's exception
-/// path records the exception and resets, and the next boot serves the
-/// record as its post-mortem. The worker's future is made only where it
-/// runs, so the image's future holds it once.
+/// module from this boot's identity `boot` and `records`, the observations
+/// of the image's services set `R` on `mount`'s observing value in the step
+/// that decoded them, and its commands on the commanding value, one at a
+/// time. A command whose answer asks for a trap ends here, once written
+/// whole, on an illegal instruction: the runtime's exception path records the
+/// exception and resets, and the next boot serves the record as its
+/// post-mortem.
 ///
 /// # Errors
-/// `console_fault` when the console's transport broke its contract, or the
-/// error the worker ended with.
-pub async fn serve<
-    C: embedded_io_async::Read + embedded_io_async::Write,
-    R: Requests,
-    E,
-    W: Future<Output = Result<Infallible, E>>,
->(
+/// `console_fault` when the console's transport broke its contract.
+pub async fn serve<C: embedded_io_async::Read + embedded_io_async::Write, R, O, D, E>(
     console: C,
     boot: u64,
     records: Records,
     image: Image,
-    mount: Mount<'_, R>,
+    mount: Mount<'_, O, D>,
     console_fault: E,
-    start: impl FnOnce() -> W,
-) -> Result<Infallible, E> {
+) -> Result<Infallible, E>
+where
+    R: Serve<O>,
+    R::Command: Run<D>,
+{
     let intake = Intake::new(
         boot,
         image.keys,
@@ -86,17 +83,17 @@ pub async fn serve<
     );
     let platform = Platform(records);
     let Mount {
-        console: mut mailbox,
         writer,
+        observer,
+        commander,
     } = mount;
-    let serve =
-        console::run::<EarlyUsb, R, C>(writer, &mut mailbox, boot, console, intake, &platform);
-    match embassy_futures::select::select(serve, start()).await {
-        embassy_futures::select::Either::First(Ended::Fault(_fault)) => Err(console_fault),
-        embassy_futures::select::Either::First(Ended::Trap(_)) => {
-            oer_portable_riscv::illegal_instruction()
-        }
-        embassy_futures::select::Either::Second(ended) => ended,
+    match console::run::<EarlyUsb, R, O, D, C>(
+        writer, observer, commander, boot, console, intake, &platform,
+    )
+    .await
+    {
+        Ended::Fault(_fault) => Err(console_fault),
+        Ended::Trap(_) => oer_portable_riscv::illegal_instruction(),
     }
 }
 

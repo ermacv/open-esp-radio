@@ -3,33 +3,35 @@
 //! Every chip and image uses this console. The chip supplies its byte
 //! transport (one duplex `embedded-io-async` endpoint) and the early writer
 //! of its USB FIFO for the time before the transport owns the peripheral;
-//! the image supplies its [`crate::base::Platform`] and its worker, which
-//! serves the image's own requests. The console's state is a [`Writer`]
-//! the image places once and lends to [`run`], the one task that writes:
-//! the encoder, the sequence it numbers messages with as it writes them and
-//! the counts the link's health reports. Nobody publishes into it.
+//! the image supplies its [`crate::base::Platform`] and its handlers: what
+//! observes and what commands ([`crate::serve`]), two values split once at
+//! its composition. The console's state is a [`Writer`] the image places once
+//! and lends to [`run`]: the encoder, the sequence it numbers messages with as
+//! it writes them and the counts the link's health reports.
 //!
-//! [`run`] writes Hello first. It answers each base-module request in the
-//! step that decoded it, hands each request of the image to the worker
-//! through the [`Mailbox`](crate::mailbox::Mailbox), and writes the
-//! worker's answer when it comes back: one request is in work at a time,
-//! and another meanwhile is refused `Rejected(Busy)`. An answer the worker
-//! could not encode, or a reply it dropped, is refused to the host as
-//! `Rejected(Internal)` and counted. What follows an answer's write
-//! ([`After`]) is done here, after the write: a trap ends the run. A note is
-//! a typed [`oer_portable_diagnostics::Note`]; the console writes one only
-//! for the early writer's losses. The console formats no text.
+//! [`run`] writes Hello first. It answers each base-module request, and each
+//! observation of the image, in the step that decoded it. A command of the
+//! image is run on the commanding value: the console awaits it beside its
+//! read of the endpoint and writes its answer when it comes, still answering
+//! the base module and the observations meanwhile; a second command meanwhile
+//! is refused `Rejected(Busy)`. Every answer is serialized once, from a
+//! reference, into the encoder's buffer. A command that gave no answer, or an
+//! answer that cannot be encoded, is refused to the host as
+//! `Rejected(Internal)` and counted. What follows a command's write
+//! ([`After`]) is done here, after the write: a trap ends the run. A note is a
+//! typed [`oer_portable_diagnostics::Note`]; the console writes one only for
+//! the early writer's losses. The console formats no text.
+
+use core::pin::pin;
 
 use embassy_futures::select::{Either, select};
 use embedded_io_async::{Read, Write};
 use oer_portable_diagnostics::{MAX_NOTE_LINE, Note, emit_note};
 use oer_protocols_hil_protocol::base::{ImageKeySet, RejectReason, Rejected};
-use oer_protocols_hil_protocol::{FrameEncoder, Message, Outbound, RequestIdentity};
+use oer_protocols_hil_protocol::{FrameEncoder, RequestIdentity};
 
-use crate::base::{Answer, Intake, Platform, Request, Requests, Sent};
-use oer_portable_memory::Answered;
-
-use crate::mailbox::{After, Console, Outcome};
+use crate::base::{Answer, Intake, Platform, Request, Sent};
+use crate::serve::{After, Answer as _, Frame, Run, Serve, Served, Written};
 
 /// A broken transport: it answered a read longer than the buffer it was
 /// given.
@@ -48,12 +50,10 @@ pub struct RunFault<E> {
 pub enum Ended<E, T> {
     /// The transport broke its contract.
     Fault(RunFault<E>),
-    /// An answer asked for a trap and was written whole.
+    /// A command's answer asked for a trap and was written whole.
     Trap(T),
 }
 
-/// The boot's first message: the host's handshake expects Hello here.
-const HELLO_SEQUENCE: u32 = 0;
 /// Bytes read from the endpoint at once.
 const RX_CHUNK: usize = 128;
 
@@ -65,44 +65,29 @@ pub trait Immediate {
     fn take_lost() -> u32;
 }
 
-/// Whether a request of the image is with the worker, and which.
-#[derive(Clone, Copy)]
-enum Work {
-    Idle,
-    Handed(RequestIdentity),
-}
-
-/// The console's state: the encoder, the sequence it numbers with and its
-/// counts. Only [`run`] touches it; the image places it once and lends it.
-pub struct Writer {
+/// The encoder and the sequence it numbers messages with.
+struct Frames {
     encoder: FrameEncoder,
     sequence: u32,
+}
+
+impl Frames {
+    fn frame(&mut self, boot: u64, request: RequestIdentity) -> Frame<'_> {
+        Frame::new(&mut self.encoder, &mut self.sequence, boot, request)
+    }
+}
+
+/// What the link's health reports of the console's writes.
+struct Counts {
     sent_frames: u32,
-    /// Messages lost: not encoded, not written whole, or the worker's
-    /// answers it could not encode or dropped.
+    /// Messages lost: not encoded, not written whole, or commands that gave
+    /// no answer.
     dropped: u32,
     /// The console's notes not written whole.
     notes_dropped: u32,
 }
 
-impl Default for Writer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Writer {
-    pub const fn new() -> Self {
-        Self {
-            encoder: FrameEncoder::new(),
-            sequence: HELLO_SEQUENCE,
-            sent_frames: 0,
-            dropped: 0,
-            notes_dropped: 0,
-        }
-    }
-
-    /// The counts the link's health reports.
+impl Counts {
     const fn sent(&self) -> Sent {
         Sent {
             frames: self.sent_frames,
@@ -114,189 +99,269 @@ impl Writer {
     fn lose(&mut self) {
         self.dropped = self.dropped.wrapping_add(1);
     }
+}
 
-    /// Writes `body` as the answer to `request`; whether it was written
-    /// whole.
-    async fn reply<M: Message>(
-        &mut self,
-        tx: &mut impl Write,
-        boot: u64,
-        request: RequestIdentity,
-        body: &M,
-        platform: &impl Platform,
-    ) -> bool {
-        match Outbound::new(0, request.session_id, request.request_id, body) {
-            Ok(message) => self.write(tx, boot, message, platform).await,
-            Err(_) => {
-                self.lose();
-                false
-            }
-        }
+/// The console's state: the encoder, the sequence it numbers with and its
+/// counts. Only [`run`] touches it; the image places it once and lends it.
+pub struct Writer {
+    frames: Frames,
+    counts: Counts,
+}
+
+impl Default for Writer {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    /// Writes the base module's answer to `request` for an image serving
-    /// `image_keys` on `platform`. The message is built in a synchronous
-    /// step and written by one await, so that the dispatch on the answer is
-    /// a function of its own, not a state of the console's future.
-    async fn answer(
-        &mut self,
-        tx: &mut impl Write,
-        boot: u64,
-        request: RequestIdentity,
-        answer: Answer,
-        image_keys: ImageKeySet<'_>,
-        platform: &impl Platform,
-    ) {
-        match base_message(request, answer, image_keys, platform) {
-            Some(message) => {
-                let _written = self.write(tx, boot, message, platform).await;
-            }
-            None => self.lose(),
-        }
-    }
+/// How an answer's frame ended.
+enum Delivery {
+    Whole,
+    /// It could not be encoded: nothing was written.
+    Unencoded,
+    /// The transport did not take it whole.
+    Broken,
+}
 
-    /// Writes the worker's answer; the trap it asks for once written whole.
-    async fn worker_answer<T>(
-        &mut self,
-        tx: &mut impl Write,
-        boot: u64,
-        identity: RequestIdentity,
-        answered: Answered<Outcome<T>>,
-        platform: &impl Platform,
-    ) -> Option<T> {
-        match answered {
-            Answered::Given(Outcome::Encoded(message, after)) => {
-                let written = self.write(tx, boot, message, platform).await;
-                match after {
-                    After::Trap(trap) if written => Some(trap),
-                    After::Trap(_) | After::Nothing => None,
-                }
-            }
-            Answered::Given(Outcome::Unencodable) | Answered::Unanswered => {
-                self.lose();
-                let refusal = Rejected(RejectReason::Internal);
-                let _written = self.reply(tx, boot, identity, &refusal, platform).await;
-                None
-            }
-        }
-    }
-
-    /// Numbers `message` and writes it whole; whether it was.
-    async fn write(
-        &mut self,
-        tx: &mut impl Write,
-        boot: u64,
-        mut message: Outbound,
-        platform: &impl Platform,
-    ) -> bool {
-        message.message_sequence = self.sequence;
-        self.sequence = self.sequence.wrapping_add(1);
-        let Ok(frame) = self.encoder.encode_outbound(boot, &message) else {
-            self.lose();
-            return false;
-        };
-        if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
-            self.sent_frames = self.sent_frames.wrapping_add(1);
-            if message.key == oer_protocols_hil_protocol::base::BootEvidence::KEY {
-                platform.boot_evidence_written();
-            }
-            true
-        } else {
-            self.lose();
-            false
-        }
-    }
-
-    /// Writes one note as a whole line.
-    async fn write_note(&mut self, tx: &mut impl Write, note: &Note<'_>) {
-        let mut line = NoteLine::new();
-        line.encode(note);
-        if write_whole(tx, line.framed()).await.is_err() {
-            self.notes_dropped = self.notes_dropped.wrapping_add(1);
+impl Writer {
+    pub const fn new() -> Self {
+        Self {
+            frames: Frames {
+                encoder: FrameEncoder::new(),
+                sequence: 0,
+            },
+            counts: Counts {
+                sent_frames: 0,
+                dropped: 0,
+                notes_dropped: 0,
+            },
         }
     }
 }
 
-/// The base module's answer to `request` as a message, or `None` when it
-/// cannot be encoded.
-fn base_message(
+/// Writes an encoded frame whole, counting it or its loss.
+async fn send(counts: &mut Counts, tx: &mut impl Write, written: Written<'_>) -> Delivery {
+    let Ok(frame) = written.0 else {
+        counts.lose();
+        return Delivery::Unencoded;
+    };
+    if write_whole(tx, frame).await.is_ok() && write_whole(tx, b"\r\n").await.is_ok() {
+        counts.sent_frames = counts.sent_frames.wrapping_add(1);
+        Delivery::Whole
+    } else {
+        counts.lose();
+        Delivery::Broken
+    }
+}
+
+/// Writes `Rejected(reason)` as the answer to `request`.
+async fn reject(
+    writer: &mut Writer,
+    tx: &mut impl Write,
+    boot: u64,
     request: RequestIdentity,
-    answer: Answer,
+    reason: RejectReason,
+) {
+    let written = writer.frames.frame(boot, request).write(&Rejected(reason));
+    let _sent = send(&mut writer.counts, tx, written).await;
+}
+
+/// The base module's answer to `request` for an image serving `image_keys`
+/// on `platform`, serialized from its reference. A function of its own, so
+/// that the dispatch on the answer is not a state of the console's future.
+fn base_frame<'f>(
+    frame: Frame<'f>,
+    answer: &Answer,
     image_keys: ImageKeySet<'_>,
     platform: &impl Platform,
-) -> Option<Outbound> {
-    fn message<M: Message>(request: RequestIdentity, body: &M) -> Option<Outbound> {
-        Outbound::new(0, request.session_id, request.request_id, body).ok()
-    }
+) -> Written<'f> {
     match answer {
-        Answer::Hello(hello) => message(request, &hello),
-        Answer::ImageKeys(first) => message(request, &image_keys.page(first)),
-        Answer::Boot => message(request, &platform.boot_evidence()),
-        Answer::PostMortem(first) => message(request, &platform.post_mortem_checkpoints(first)),
-        Answer::Link(link) => message(request, &link),
-        Answer::Rejected(reason) => message(request, &Rejected(reason)),
+        Answer::Hello(hello) => frame.write(hello),
+        Answer::ImageKeys(first) => frame.write(&image_keys.page(*first)),
+        Answer::Boot => frame.write(&platform.boot_evidence()),
+        Answer::PostMortem(first) => frame.write(&platform.post_mortem_checkpoints(*first)),
+        Answer::Link(link) => frame.write(link),
+        Answer::Rejected(reason) => frame.write(&Rejected(*reason)),
     }
+}
+
+/// What the console's step knows besides its state: this boot, the image's
+/// keys and its platform.
+struct Base<'a, P> {
+    boot: u64,
+    image_keys: ImageKeySet<'a>,
+    platform: &'a P,
+}
+
+/// Whether a command is in work.
+#[derive(Clone, Copy)]
+enum Work {
+    Idle,
+    Busy,
+}
+
+/// What feeding bytes came to.
+enum Fed<C> {
+    /// Every byte was taken.
+    Done,
+    /// A command was decoded at this many bytes in, while none was in work.
+    Command(RequestIdentity, C, usize),
+}
+
+/// Feeds `bytes` to the intake, answering the base module and the image's
+/// observations as they are decoded; a command of the image is given back
+/// while idle and refused busy while one is in work.
+async fn feed<P: Platform, R: Serve<O>, O, E: Write>(
+    writer: &mut Writer,
+    observer: &mut O,
+    tx: &mut E,
+    intake: &mut Intake<'_>,
+    base: &Base<'_, P>,
+    bytes: &[u8],
+    work: Work,
+) -> Fed<R::Command> {
+    for (index, &byte) in bytes.iter().enumerate() {
+        let Some(request) = intake.receive_byte::<R>(byte, writer.counts.sent()) else {
+            continue;
+        };
+        match request {
+            Request::Answer(identity, answer) => {
+                let frame = writer.frames.frame(base.boot, identity);
+                let written = base_frame(frame, &answer, base.image_keys, base.platform);
+                let sent = send(&mut writer.counts, tx, written).await;
+                if let (Delivery::Whole, Answer::Boot) = (sent, &answer) {
+                    base.platform.boot_evidence_written();
+                }
+            }
+            Request::Serve(identity, own) => {
+                match own.serve(observer, writer.frames.frame(base.boot, identity)) {
+                    Served::Observed(written) => {
+                        if let Delivery::Unencoded = send(&mut writer.counts, tx, written).await {
+                            reject(writer, tx, base.boot, identity, RejectReason::Internal).await;
+                        }
+                    }
+                    Served::Command(command) => match work {
+                        Work::Idle => {
+                            return Fed::Command(identity, command, index.saturating_add(1));
+                        }
+                        Work::Busy => {
+                            reject(writer, tx, base.boot, identity, RejectReason::Busy).await;
+                        }
+                    },
+                }
+            }
+        }
+    }
+    Fed::Done
 }
 
 /// Serves the endpoint for the boot `boot` until the chip resets: writes
-/// Hello, answers the base module's requests as they are decoded, hands the
-/// image's requests to the worker through `mailbox` one at a time and
-/// writes their answers. Ends with a fault retaining the endpoint on a
-/// broken read contract, or with the trap an answer asked for once it is
-/// written.
-pub async fn run<P: Immediate, C: Requests, E: Read + Write>(
+/// Hello, answers the base module's requests and the image's observations
+/// (on `observer`) as they are decoded, runs the image's commands (on
+/// `commander`) one at a time and writes their answers. Ends with a fault
+/// retaining the endpoint on a broken read contract, or with the trap a
+/// command's answer asked for once it is written.
+pub async fn run<P: Immediate, R, O, C, E: Read + Write>(
     writer: &mut Writer,
-    mailbox: &mut Console<'_, C>,
+    observer: &mut O,
+    commander: &mut C,
     boot: u64,
     mut endpoint: E,
     mut intake: Intake<'_>,
     platform: &impl Platform,
-) -> Ended<E, C::Trap> {
-    let image_keys = intake.image_keys();
-    match Outbound::new(HELLO_SEQUENCE, 0, 0, &intake.hello()) {
-        Ok(hello) => {
-            let _written = writer.write(&mut endpoint, boot, hello, platform).await;
-        }
-        Err(_) => writer.lose(),
-    }
+) -> Ended<E, <R::Command as Run<C>>::Trap>
+where
+    R: Serve<O>,
+    R::Command: Run<C>,
+{
+    let base = Base {
+        boot,
+        image_keys: intake.image_keys(),
+        platform,
+    };
+    let hello = intake.hello();
+    let written = writer
+        .frames
+        .frame(
+            boot,
+            RequestIdentity {
+                boot_id: boot,
+                session_id: 0,
+                request_id: 0,
+            },
+        )
+        .write(&hello);
+    let _sent = send(&mut writer.counts, &mut endpoint, written).await;
     // What the early writer dropped before it gave up the peripheral: a
     // loss is never silent.
     let lost = P::take_lost();
     if lost != 0 {
-        writer
-            .write_note(&mut endpoint, &Note::diag_lost(lost))
-            .await;
+        write_note(&mut writer.counts, &mut endpoint, &Note::diag_lost(lost)).await;
     }
-    let mut work = Work::Idle;
     let mut chunk = [0_u8; RX_CHUNK];
+    // The bytes of the last read not yet fed.
+    let (mut start, mut end) = (0, 0);
     loop {
-        // The answer's arrival is awaited only while a request is in work;
-        // the answer is taken in the arm that writes it, so no future's
-        // output carries it.
-        let read = match work {
-            Work::Idle => Either::Second(endpoint.read(&mut chunk).await),
-            Work::Handed(identity) => {
-                match select(mailbox.0.arrived(), endpoint.read(&mut chunk)).await {
-                    Either::First(()) => Either::First(identity),
-                    Either::Second(read) => Either::Second(read),
+        // Idle: feed what is left of the last read, then read again.
+        let (identity, command) = loop {
+            if start == end {
+                match endpoint.read(&mut chunk).await {
+                    Ok(length) if length <= chunk.len() => (start, end) = (0, length),
+                    Ok(length) => {
+                        return Ended::Fault(RunFault {
+                            cause: ConsoleFault::ReadLength {
+                                length,
+                                capacity: chunk.len(),
+                            },
+                            endpoint,
+                        });
+                    }
+                    Err(_) => continue,
+                }
+            }
+            let Some(bytes) = chunk.get(start..end) else {
+                start = end;
+                continue;
+            };
+            match feed::<_, R, O, E>(
+                writer,
+                observer,
+                &mut endpoint,
+                &mut intake,
+                &base,
+                bytes,
+                Work::Idle,
+            )
+            .await
+            {
+                Fed::Done => start = end,
+                Fed::Command(identity, command, used) => {
+                    start = start.saturating_add(used).min(end);
+                    break (identity, command);
                 }
             }
         };
-        match read {
-            Either::First(identity) => {
-                if let Some(answered) = mailbox.0.take() {
-                    work = Work::Idle;
-                    if let Some(trap) = writer
-                        .worker_answer(&mut endpoint, boot, identity, answered, platform)
-                        .await
-                    {
-                        return Ended::Trap(trap);
-                    }
-                }
+        // A command in work: it borrows the commanding value alone, while the
+        // observations and the base module are answered beside it.
+        let mut work = pin!(command.run(commander));
+        let ran = loop {
+            if let Some(bytes) = chunk.get(start..end).filter(|bytes| !bytes.is_empty()) {
+                let _fed = feed::<_, R, O, E>(
+                    writer,
+                    observer,
+                    &mut endpoint,
+                    &mut intake,
+                    &base,
+                    bytes,
+                    Work::Busy,
+                )
+                .await;
+                start = end;
             }
-            Either::Second(Err(_)) => {}
-            Either::Second(Ok(length)) => {
-                let Some(bytes) = chunk.get(..length) else {
+            match select(work.as_mut(), endpoint.read(&mut chunk)).await {
+                Either::First(ran) => break ran,
+                Either::Second(Ok(length)) if length <= chunk.len() => (start, end) = (0, length),
+                Either::Second(Ok(length)) => {
                     return Ended::Fault(RunFault {
                         cause: ConsoleFault::ReadLength {
                             length,
@@ -304,35 +369,53 @@ pub async fn run<P: Immediate, C: Requests, E: Read + Write>(
                         },
                         endpoint,
                     });
-                };
-                for &byte in bytes {
-                    let Some(request) = intake.receive_byte::<C>(byte, writer.sent()) else {
-                        continue;
-                    };
-                    match request {
-                        Request::Answer(identity, answer) => {
-                            writer
-                                .answer(&mut endpoint, boot, identity, answer, image_keys, platform)
-                                .await;
-                        }
-                        Request::Serve(identity, own) => {
-                            let handed = match work {
-                                Work::Idle => mailbox.0.hand((identity, own)).is_ok(),
-                                Work::Handed(_) => false,
-                            };
-                            if handed {
-                                work = Work::Handed(identity);
-                            } else {
-                                let busy = Rejected(RejectReason::Busy);
-                                let _written = writer
-                                    .reply(&mut endpoint, boot, identity, &busy, platform)
-                                    .await;
-                            }
+                }
+                Either::Second(Err(_)) => {}
+            }
+        };
+        match ran {
+            Ok((answer, after)) => {
+                let written = answer.write(writer.frames.frame(boot, identity));
+                match send(&mut writer.counts, &mut endpoint, written).await {
+                    Delivery::Whole => {
+                        if let After::Trap(trap) = after {
+                            return Ended::Trap(trap);
                         }
                     }
+                    Delivery::Unencoded => {
+                        reject(
+                            writer,
+                            &mut endpoint,
+                            boot,
+                            identity,
+                            RejectReason::Internal,
+                        )
+                        .await;
+                    }
+                    Delivery::Broken => {}
                 }
             }
+            Err(_unanswered) => {
+                writer.counts.lose();
+                reject(
+                    writer,
+                    &mut endpoint,
+                    boot,
+                    identity,
+                    RejectReason::Internal,
+                )
+                .await;
+            }
         }
+    }
+}
+
+/// Writes one note as a whole line.
+async fn write_note(counts: &mut Counts, tx: &mut impl Write, note: &Note<'_>) {
+    let mut line = NoteLine::new();
+    line.encode(note);
+    if write_whole(tx, line.framed()).await.is_err() {
+        counts.notes_dropped = counts.notes_dropped.wrapping_add(1);
     }
 }
 

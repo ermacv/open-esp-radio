@@ -77,8 +77,8 @@ impl From<KeyUnwrapError> for UnwrapError {
 
 oer_protocols_hil_agent::service! {
     /// The AES service's requests.
-    pub enum Request (sessions = false, handler = Handler) {
-        UnwrapKey(UnwrapKey) => unwrap_key,
+    pub enum Request (sessions = false, observer = Observer, commands = Command, commander = Commander) {
+        UnwrapKey(UnwrapKey) => command unwrap_key,
     }
 }
 
@@ -94,7 +94,7 @@ impl<E> Engine<E> {
     }
 }
 
-impl<E: Aes128Engine> Handler for Engine<E> {
+impl<E: Aes128Engine> Commander for Engine<E> {
     async fn unwrap_key(&mut self, request: UnwrapKey) -> Unwrapped {
         // A request never exceeds the buffer: both hold MAX_WRAPPED bytes.
         let Ok(wrapped) = KeyData::<MAX_WRAPPED>::try_copy(&request.wrapped) else {

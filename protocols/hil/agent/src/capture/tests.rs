@@ -165,9 +165,8 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     use crate::{
         base::{Intake, Platform},
         console::{Immediate, Writer, run},
-        mailbox::Mailbox,
     };
-    use embassy_futures::{block_on, select::select3};
+    use embassy_futures::{block_on, select::select};
     use oer_protocols_hil_protocol::{
         Envelope, FrameDecoder, FrameEncoder, Message, WireKind,
         base::{BootEvidence, PostMortemCheckpoints, ResetReason},
@@ -241,8 +240,6 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
     collector.begin(ID, u64::MAX).unwrap();
     collector.event(Step);
     collector.freeze().unwrap();
-    let mut mailbox = Mailbox::<Request>::new();
-    let (mut console, mut inbox) = mailbox.split();
     let mut writer = Writer::new();
     crate::image_keys! { KEYS = [Request] }
     let host = Host::default();
@@ -255,20 +252,18 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
         _ => host.send(4, ReadRecords(request(1, 1))),
     };
     send(0);
-    let run = run::<Early, Request, _>(
+    // The capture's requests are observations of the reader: the
+    // collector is the observing value, and nothing commands.
+    let mut nothing = ();
+    let run = run::<Early, Request, _, (), _>(
         &mut writer,
-        &mut console,
+        &mut collector,
+        &mut nothing,
         77,
         Endpoint(host.clone()),
         Intake::new(77, KEYS, 0, 0),
         &Chip,
     );
-    let worker = async {
-        loop {
-            let (request, reply) = inbox.next().await;
-            request.serve(&collector).reply(reply);
-        }
-    };
     let watch = async {
         let mut sent = 1;
         for _ in 0..1000 {
@@ -304,7 +299,7 @@ fn fake_console_serves_the_same_capture_and_a_typed_refusal() {
         panic!("fake console did not answer capture requests");
     };
     assert!(matches!(
-        block_on(select3(run, worker, watch)),
-        embassy_futures::select::Either3::Third(())
+        block_on(select(run, watch)),
+        embassy_futures::select::Either::Second(())
     ));
 }
