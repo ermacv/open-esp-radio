@@ -68,8 +68,10 @@ const fn word_rounded(value: u16) -> u16 {
 /// The places one frame of `length` octets may reach from R on: R, then as
 /// many ring descriptors as its bytes past R's buffer fill.
 fn reach(length: u16) -> Vec<Place> {
+    // PROBE (tasks/361): BASE is d0, which takes R's 192 octets, then the
+    // ring's buffers.
     let past = length.saturating_sub(R_FRAME);
-    let ring = usize::from(units(past, BUFFER));
+    let ring = usize::from(units(past, BUFFER)).saturating_add(1);
     core::iter::once(Place::R)
         .chain((0..ring).map(Place::Ring))
         .collect()
