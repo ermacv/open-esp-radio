@@ -54,10 +54,10 @@ struct Never;
 
 impl BlockEngine for Never {
     fn encrypt(&mut self, _: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::Unavailable)
+        Err(BlockError::InvalidState { observation: 5 })
     }
     fn decrypt(&mut self, _: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::Unavailable)
+        Err(BlockError::InvalidState { observation: 5 })
     }
 }
 
@@ -129,7 +129,6 @@ fn the_service_serves_exactly_its_endpoint() {
 #[test]
 fn every_engine_failure_has_its_own_answer() {
     for (error, expected) in [
-        (BlockError::Unavailable, UnwrapError::EngineUnavailable),
         (
             BlockError::Timeout { observation: 3 },
             UnwrapError::EngineTimeout { observation: 3 },

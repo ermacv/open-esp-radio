@@ -54,8 +54,6 @@ pub enum UnwrapError {
     InvalidLength,
     /// The initial value did not verify (RFC 3394 §2.2.3).
     IntegrityCheckFailed,
-    /// The engine retains a failed resource and accepts no more blocks.
-    EngineUnavailable,
     /// A block did not complete within the engine's budget.
     EngineTimeout { observation: u32 },
     /// The engine observed a status outside the operation's domain.
@@ -69,7 +67,6 @@ impl From<KeyUnwrapError> for UnwrapError {
         match error {
             KeyUnwrapError::InvalidLength => Self::InvalidLength,
             KeyUnwrapError::IntegrityCheckFailed => Self::IntegrityCheckFailed,
-            KeyUnwrapError::Engine(BlockError::Unavailable) => Self::EngineUnavailable,
             KeyUnwrapError::Engine(BlockError::Timeout { observation }) => {
                 Self::EngineTimeout { observation }
             }

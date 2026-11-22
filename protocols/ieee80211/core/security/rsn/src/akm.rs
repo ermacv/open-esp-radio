@@ -198,7 +198,7 @@ mod tests {
         for akm in [Akm::PskSha256, Akm::Sae] {
             assert_eq!(
                 akm.mic(&kck, &mut Refusing).err(),
-                Some(BlockError::Unavailable)
+                Some(BlockError::InvalidState { observation: 3 })
             );
         }
         let mut refusing = Refusing;

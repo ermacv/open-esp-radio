@@ -11,8 +11,6 @@ pub type Block = [u8; 16];
 /// A block engine's refusal, independent of the mode's input errors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockError {
-    /// The engine retains a failed resource and accepts no more blocks.
-    Unavailable,
     /// Completion did not arrive within the engine's policy budget.
     Timeout { observation: u32 },
     /// A status outside the selected operation's domain was observed.

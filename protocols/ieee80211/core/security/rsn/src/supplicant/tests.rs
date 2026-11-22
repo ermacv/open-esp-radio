@@ -29,7 +29,7 @@ fn process(
 }
 
 const REFUSED: oer_portable_crypto::KeyUnwrapError = oer_portable_crypto::KeyUnwrapError::Engine(
-    oer_portable_crypto::block::BlockError::Unavailable,
+    oer_portable_crypto::block::BlockError::InvalidState { observation: 3 },
 );
 
 fn owned(frame: &RsnTxFrame<512>) -> crate::OwnedEapolFrame<512> {

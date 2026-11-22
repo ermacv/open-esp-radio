@@ -9051,12 +9051,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
     (
-        "chips/esp32s31/drivers/aes/src/lib.rs",
-        "clippy::struct_excessive_bools",
-        1,
-        "the family's drivers and facts, in the stand campaign",
-    ),
-    (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,

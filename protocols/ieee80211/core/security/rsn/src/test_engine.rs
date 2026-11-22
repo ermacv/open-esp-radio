@@ -12,7 +12,7 @@ impl Aes128Engine for Refusing {
     type Keyed<'a> = NeverKeyed;
 
     fn load(&mut self, _key: &Aes128Key) -> Result<Self::Keyed<'_>, BlockError> {
-        Err(BlockError::Unavailable)
+        Err(BlockError::InvalidState { observation: 3 })
     }
 }
 
@@ -21,9 +21,9 @@ pub(crate) struct NeverKeyed;
 
 impl BlockEngine for NeverKeyed {
     fn encrypt(&mut self, _block: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::Unavailable)
+        Err(BlockError::InvalidState { observation: 3 })
     }
     fn decrypt(&mut self, _block: &mut Block) -> Result<(), BlockError> {
-        Err(BlockError::Unavailable)
+        Err(BlockError::InvalidState { observation: 3 })
     }
 }
