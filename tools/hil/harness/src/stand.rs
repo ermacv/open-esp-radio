@@ -8,8 +8,6 @@
 //! goes through it, and it alone brings the board to its end state.
 
 use std::{
-    io::{Read, Write},
-    os::unix::net::UnixStream,
     path::Path,
     path::PathBuf,
     sync::{Mutex, PoisonError},
@@ -25,7 +23,7 @@ use oer_tools_lab_arbiter::{
     readiness::ROUTER,
 };
 use oer_tools_lab_client::{
-    client::{Client, Running},
+    client::Client,
     protocol::{FlashVia, LeaseRequest, Operation},
 };
 use oer_tools_lab_model::{BoardRole, Stand};
@@ -315,55 +313,10 @@ impl StandBoard {
             board: self.board.clone(),
             reset,
         })?;
-        let line = bridge(console).map_err(|error| error.to_string())?;
+        let line =
+            oer_tools_lab_client::line::bridge(console).map_err(|error| error.to_string())?;
         Link::start(Box::new(line)).map_err(|error| error.to_string())
     }
-}
-
-/// A local socket the link reads and writes as its serial line, joined to
-/// the service's console operation: closing the link's end cancels it.
-fn bridge(console: Running) -> std::io::Result<UnixStream> {
-    let (line, served) = UnixStream::pair()?;
-    let mut to_link = served.try_clone()?;
-    let mut from_link = served;
-    let input = console.input();
-    let mut output = console;
-    std::thread::spawn(move || {
-        let mut buffer = vec![0u8; 4096];
-        loop {
-            match output.read(&mut buffer) {
-                Ok(0) | Err(_) => break,
-                Ok(read) => {
-                    let Some(chunk) = buffer.get(..read) else {
-                        break;
-                    };
-                    if to_link.write_all(chunk).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-        let _ = to_link.shutdown(std::net::Shutdown::Both);
-    });
-    std::thread::spawn(move || {
-        let mut buffer = vec![0u8; 4096];
-        loop {
-            match from_link.read(&mut buffer) {
-                Ok(0) | Err(_) => break,
-                Ok(read) => {
-                    let Some(chunk) = buffer.get(..read) else {
-                        break;
-                    };
-                    if input.send(chunk).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-        // The link is gone: its console stops.
-        let _ = input.cancel();
-    });
-    Ok(line)
 }
 
 impl finish::Board for StandBoard {

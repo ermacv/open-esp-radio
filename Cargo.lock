@@ -2916,6 +2916,7 @@ dependencies = [
  "oer-portable-trace",
  "oer-tools-analysis-elf",
  "oer-tools-chip-profile",
+ "oer-tools-hil-link",
  "oer-tools-image-build",
  "oer-tools-image-bundle",
  "oer-tools-image-checks",

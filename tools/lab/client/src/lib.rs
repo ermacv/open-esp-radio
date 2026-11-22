@@ -23,5 +23,6 @@
 )]
 
 pub mod client;
+pub mod line;
 pub mod peer;
 pub mod protocol;
