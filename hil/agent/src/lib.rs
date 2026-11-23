@@ -19,16 +19,14 @@
 //! its boot ([`Records`]) and the value a console fault ends it with. It
 //! holds:
 //!
-//! - [`Mailbox`]: the exchange between the console's task and the image's
-//!   worker: one request in work at a time, its answer back through the
-//!   [`Reply`] that [`Inbox::next`] gives with it; another request
-//!   meanwhile is refused as busy;
 //! - [`Writer`]: the console's state, which the image places once and only
 //!   the console's task touches;
 //! - on the chip, [`serve`]: the HIL console over the platform runtime's
 //!   USB console, which answers the base module (Hello, boot evidence, link
-//!   health) from the image's boot identity and records beside the worker,
-//!   and traps on an illegal instruction once an answer that asks for it
+//!   health) from the image's boot identity and records, calls the image's
+//!   handlers ([`Mount`]: what observes, answered in the step that decoded
+//!   the request, and what commands, awaited one at a time), and traps on an
+//!   illegal instruction once a command's answer that asks for it
 //!   ([`After::Trap`], only for a set that serves the fault service) is
 //!   written, so that a scenario checks the exception path from the trap to
 //!   the next boot's evidence.
@@ -38,7 +36,7 @@
 //! registers apart from what the exception hook read after the stop.
 
 pub use oer_protocols_hil_agent::console::Writer;
-pub use oer_protocols_hil_agent::mailbox::{After, Console, Inbox, Mailbox, Reply, Trap};
+pub use oer_protocols_hil_agent::serve::{self, After, Trap};
 
 #[cfg(target_arch = "riscv32")]
 mod esp32s31;

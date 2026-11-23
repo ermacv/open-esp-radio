@@ -14,7 +14,7 @@
 //! know, and has it stop.
 //!
 //! The messages are shared by the image, which serves them through
-//! [`Request`] and its [`Handler`], and the host scenario, which sends them
+//! [`Request`] and its [`Commander`], and the host scenario, which sends them
 //! and checks the answers against what its own station sees.
 
 use postcard_schema::Schema;
@@ -134,10 +134,10 @@ pub enum AccessPointError {
 
 oer_protocols_hil_agent::service! {
     /// The Wi-Fi access-point service's requests.
-    pub enum Request (sessions = false, handler = Handler) {
-        Serve(Serve) => serve,
-        GetStatus(GetStatus) => status,
-        Stop(Stop) => stop,
+    pub enum Request (sessions = false, observer = Observer, commands = Command, commander = Commander) {
+        Serve(Serve) => command serve,
+        GetStatus(GetStatus) => command status,
+        Stop(Stop) => command stop,
     }
 }
 

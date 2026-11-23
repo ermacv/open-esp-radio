@@ -35,8 +35,9 @@ the agent (`hil/agent`) and the sender's requests
 (`oer-hil-services-radio-pair`); the cases and the verdict are
 [`hil/scenarios/radio-pair`](../../scenarios/radio-pair/README.md)'s. As
 the receiver's, its radio work is the radio level's task, private to the
-radio's owner on the application level, which takes each request from the
-agent's mailbox, commands it through the radio's hand-over (`src/radio.rs`)
+radio's owner, which runs on the application level as an object the HIL
+console calls: the cold snapshot it answers at once, each command it hands
+to the radio level's task through the radio's hand-over (`src/radio.rs`)
 and answers with its result. Nothing of the HIL agent is named on level 2
 but the service's request and answer types as data.
 

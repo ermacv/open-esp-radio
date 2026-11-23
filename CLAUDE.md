@@ -92,8 +92,8 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   asks, never pushed into a place several contexts enter. Between
   contexts that preempt each other the one shared thing is an owner's
   private hand-over to its own level's task, a primitive of `portable/`
-  in its home; a level's task talks to its owner alone, and the owner is
-  a task of the application's level. A static that several contexts
+  in its home; a level's task talks to its owner alone, and the owner
+  runs on the application's level. A static that several contexts
   enter behind a lock, a critical section or a claim that can be refused
   at run time is debt to remove, never a precedent to repeat.
 - **DMA memory.** Memory the hardware reads or writes has three facts, and

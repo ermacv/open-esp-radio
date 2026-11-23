@@ -10632,12 +10632,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R3 cleans the cores and the contracts (tasks/312)",
     ),
     (
-        "protocols/hil/agent/src/mailbox.rs",
-        "clippy::large_enum_variant",
-        1,
-        "the answer's outcome is a sum whose one variant holds the encoded answer by value; its place is one slot sized for that variant whatever the others hold",
-    ),
-    (
         "protocols/hil/protocol/src/key.rs",
         "unused_doc_comments",
         1,

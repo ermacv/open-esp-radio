@@ -29,8 +29,8 @@ mod io;
 mod key;
 pub use envelope::{Envelope, WireKind};
 pub use framing::{
-    DecodeCounters, DecodeError, EncodeError, FRAMING_VERSION, Frame, FrameDecoder, FrameEncoder,
-    MAX_POSTCARD_BYTES, MAX_WIRE_FRAME_BYTES, Outbound, RequestIdentity,
+    Addressed, DecodeCounters, DecodeError, EncodeError, FRAMING_VERSION, Frame, FrameDecoder,
+    FrameEncoder, MAX_POSTCARD_BYTES, MAX_WIRE_FRAME_BYTES, RequestIdentity,
 };
 #[cfg(feature = "async-io")]
 pub use io::{WriteFrameError, write_frame};

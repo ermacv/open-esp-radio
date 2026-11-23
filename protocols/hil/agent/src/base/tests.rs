@@ -1,7 +1,7 @@
 use crate::test_messages::{Trigger, Triggered};
 use oer_protocols_hil_protocol::base::{ImageKeyPage, sorted_keys};
 
-crate::requests! {
+crate::__requests! {
     enum WatchdogRequest (sessions = false) {
         Test(crate::test_messages::Probe),
     }
@@ -21,12 +21,27 @@ const SERVED: [Key; 5] = sorted_keys([
     Probe::KEY,
 ]);
 
-fn intake() -> Intake<'static> {
-    Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0)
+/// An intake with the decoder the console would lend it.
+struct Feeder {
+    intake: Intake<'static>,
+    decoder: oer_protocols_hil_protocol::FrameDecoder,
+}
+
+impl Feeder {
+    fn receive_byte<C: Requests>(&mut self, byte: u8, sent: Sent) -> Option<Request<C>> {
+        self.intake.receive_byte(&mut self.decoder, byte, sent)
+    }
+}
+
+fn intake() -> Feeder {
+    Feeder {
+        intake: Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0),
+        decoder: oer_protocols_hil_protocol::FrameDecoder::new(),
+    }
 }
 
 fn send<M: Message, C: Requests>(
-    intake: &mut Intake<'_>,
+    intake: &mut Feeder,
     boot: u64,
     session: u64,
     body: M,
@@ -67,7 +82,7 @@ fn the_base_module_answers_its_requests() {
         GetImageKeys { first: 0 },
     )) {
         Answer::ImageKeys(first) => {
-            let ImageKeyPage { total, keys, .. } = intake.image_keys().page(first);
+            let ImageKeyPage { total, keys, .. } = intake.intake.image_keys().page(first);
             assert_eq!(total, 5);
             assert_eq!(keys.as_slice(), &SERVED);
         }
@@ -133,7 +148,7 @@ fn the_image_serves_its_own_requests_outside_sessions() {
 
 #[test]
 fn an_image_with_sessions_keeps_them() {
-    crate::requests! {
+    crate::__requests! {
         enum Sessioned (sessions = true) {
             Reset(Trigger),
         }
@@ -171,7 +186,7 @@ fn every_request_of_one_chunk_is_handed_over_in_order() {
     assert_eq!(seen, [(3, 1), (4, 2)]);
 }
 
-crate::requests! {
+crate::__requests! {
     #[expect(dead_code, reason = "the test mounts the service for its keys alone")]
     enum Mounted (sessions = false) {
         Watchdog(Probe),
@@ -181,7 +196,7 @@ crate::requests! {
     publishes [Triggered, #[cfg(any())] crate::test_messages::Switched]
 }
 
-crate::requests! {
+crate::__requests! {
     enum Sharing (sessions = false) {
         Reset(Trigger),
     }

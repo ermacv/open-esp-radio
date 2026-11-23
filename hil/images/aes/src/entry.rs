@@ -1,13 +1,12 @@
 // The SDK RPC image: the library's boot with the AES engine and the
 // console, the HIL agent serving the base module and the AES service, and
-// one worker that answers the AES requests in order on the engine.
+// the engine that answers the AES requests, one at a time.
 
-use oer::{AesEngine, AppResult, Boot, Console, Error, Peripherals, Started};
-use oer_hil_agent::{Inbox, Mailbox, Records, Writer};
-use oer_hil_services_aes::{Handler as _, Request};
+use oer::{Boot, Console, Error, Peripherals, Started};
+use oer_hil_agent::{Records, Writer};
+use oer_hil_services_aes::{Engine, Request};
 use static_cell::ConstStaticCell;
 
-static MAILBOX: ConstStaticCell<Mailbox<Request>> = ConstStaticCell::new(Mailbox::new());
 /// The console's state: only the console's task touches it.
 static WRITER: ConstStaticCell<Writer> = ConstStaticCell::new(Writer::new());
 
@@ -22,35 +21,24 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         previous_panic: evidence.previous_panic,
         previous_exception: evidence.previous_exception.map(|record| (record.trap, record.observed)),
     };
-    let (mailbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     let writer = WRITER.try_take().ok_or(Error::Storage)?;
-    Ok(boot.run(move || {
-        oer_hil_agent::serve(
+    Ok(boot.run(move || async move {
+        // The AES service is commands alone: nothing observes, and the
+        // engine commands, each unwrap to completion on the library's
+        // synchronous AES engine.
+        let mut commander = Engine::new(engine);
+        oer_hil_agent::serve::<_, Request, _, _, _>(
             console,
             oer::boot_id(),
             records,
             services::IMAGE,
             oer_hil_agent::Mount {
-                console: mailbox,
                 writer,
+                observer: &mut (),
+                commander: &mut commander,
             },
             Error::Console,
-            move || worker(engine, inbox),
         )
+        .await
     }))
-}
-
-/// Answer each AES request in order, each to completion on the library's
-/// synchronous AES engine.
-async fn worker(
-    engine: AesEngine,
-    mut requests: Inbox<'static, Request>,
-) -> AppResult {
-    let mut engine = oer_hil_services_aes::Engine::new(engine);
-    loop {
-        let (request, reply) = requests.next().await;
-        match request {
-            Request::UnwrapKey(unwrap) => reply.answer(&engine.unwrap_key(unwrap).await),
-        }
-    }
 }
