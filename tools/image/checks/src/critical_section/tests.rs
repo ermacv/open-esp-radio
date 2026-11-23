@@ -65,6 +65,28 @@ fn only_the_declared_hart_may_use_the_section() {
 }
 
 #[test]
+fn the_report_names_each_caller_of_the_section_by_name_and_address() {
+    let image = graph(0x13, ENTRIES[0]);
+    let report = audit_roots(&image, &entries(), BOOT).unwrap();
+    let tail = report
+        .split("caller\taddress\n")
+        .nth(1)
+        .expect("the callers' rows");
+    assert_eq!(
+        tail,
+        format!("{}\t{SECTION:#010x}\n", ENTRIES[0]),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_report_without_a_caller_says_none() {
+    let image = graph(0x13, "unrelated");
+    let report = audit_roots(&image, &entries(), BOOT).unwrap();
+    assert!(report.ends_with("caller\taddress\nnone\n"), "{report}");
+}
+
+#[test]
 fn a_foreign_hole_is_refused_even_without_a_linked_section() {
     let image = graph(0x0007_80e7, "unrelated"); // jalr ra, 0(a5)
     let error = audit_roots(&image, &entries(), BOOT)

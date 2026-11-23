@@ -15,16 +15,31 @@ const READ_MSTATUS: u32 = 0x3000_2573;
 const READ_THRESHOLD: u32 = 0x3470_2573;
 /// `csrrci x0, mstatus, 2`: clears SIE, not MIE.
 const CLEAR_SIE: u32 = 0x3001_7073;
+/// `csrrc x0, mstatus, t1`: clears the bits `t1` names, as a trap entry does.
+const CLEAR_BY_REGISTER: u32 = 0x3003_3073;
+/// `csrrc a0, mstatus, x0`: reads only.
+const CLEAR_BY_ZERO: u32 = 0x3000_3573;
+/// `csrrw x0, mstatus, t0`: writes `mstatus` whole.
+const WRITE_MSTATUS: u32 = 0x3002_9073;
 /// `addi x0, x0, 0`.
 const NOP: u32 = 0x0000_0013;
 
 #[test]
 fn a_fixture_that_masks_in_two_functions_is_reported_by_function_and_address() {
-    // Two functions: one clears MIE, one writes the threshold; each also
-    // reads its CSR, which is no mask.
+    // Two functions: one clears MIE, clears bits by a register and writes
+    // mstatus whole, one writes the threshold; each also reads its CSR, which
+    // is no mask.
     let first = scan(
         0x4000_0000,
-        &code(&[NOP, READ_MSTATUS, CLEAR_MIE, CLEAR_SIE]),
+        &code(&[
+            NOP,
+            READ_MSTATUS,
+            CLEAR_MIE,
+            CLEAR_SIE,
+            CLEAR_BY_REGISTER,
+            CLEAR_BY_ZERO,
+            WRITE_MSTATUS,
+        ]),
     );
     let second = scan(0x4000_0100, &code(&[READ_THRESHOLD, WRITE_THRESHOLD]));
     assert_eq!(
@@ -32,7 +47,11 @@ fn a_fixture_that_masks_in_two_functions_is_reported_by_function_and_address() {
             .iter()
             .map(|site| (site.address, site.mask))
             .collect::<Vec<_>>(),
-        [(0x4000_0008, Mask::ClearsMie)]
+        [
+            (0x4000_0008, Mask::ClearsMie),
+            (0x4000_0010, Mask::ClearsMstatusBits),
+            (0x4000_0018, Mask::WritesMstatus)
+        ]
     );
     assert_eq!(
         second
@@ -54,10 +73,15 @@ fn a_fixture_that_masks_in_two_functions_is_reported_by_function_and_address() {
     assert!(report.contains("0x40000008\t"), "{report}");
     assert!(report.contains("clears mstatus.MIE\tmasks"), "{report}");
     assert!(
+        report.contains("clears mstatus bits by a register\tmasks"),
+        "{report}"
+    );
+    assert!(report.contains("writes mstatus\tmasks"), "{report}");
+    assert!(
         report.contains("writes the threshold\tthresholds"),
         "{report}"
     );
-    assert_eq!(report.lines().count(), 4, "{report}");
+    assert_eq!(report.lines().count(), 6, "{report}");
 }
 
 #[test]
