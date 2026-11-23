@@ -17,6 +17,7 @@ links = "oer_chips_family_platform_port"
 esp32s31 = []
 
 [dependencies]
+oer-portable-bounded = { path = "../../../../portable/bounded" }
 oer-portable-mmio = { path = "../../../../portable/mmio" }
 oer-chips-family-platform-layout.workspace = true
 

@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "The one volatile register-access core under the generated register code"
 
+[dependencies]
+oer-portable-bounded = { path = "../bounded" }
+
 [dev-dependencies]
 oer-tools-test-ui-cases = { path = "../../tools/test/ui-cases" }
 

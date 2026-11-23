@@ -2,7 +2,7 @@ use super::{
     ChannelCbwFields, PhyFrequencyI2cNumberAddresses, bss_tx_offset, channel_cbw_fields,
     configure_i2c_number_addresses, configure_nrx_frequency,
     configure_nrx_frequency_between_samples, nrx_frequency_quotient, residue_of_eight,
-    residue_of_four, residue_of_sixteen, rv32_signed_div,
+    residue_of_sixteen, rv32_signed_div,
 };
 use crate::radio::phy::registers::FrequencyRegisters;
 use oer_portable_mmio::Bits;
@@ -42,8 +42,9 @@ fn nrx_division_matches_the_complete_rv32_input_domain() {
     assert_eq!(rv32_signed_div(i32::MIN, -1), i32::MIN);
     assert_eq!(rv32_signed_div(-1_610_612_736, 7), -230_087_533);
 
-    assert_eq!(nrx_frequency_quotient(0, 0).get(), 0x00ff_ffff);
-    assert_eq!(nrx_frequency_quotient(0x19, 7).get(), 0x0049_2493);
+    assert_eq!(nrx_frequency_quotient(0, 0), 0xffff_ffff);
+    // The whole quotient; the field keeps its low 24 bits, 0x49_2493.
+    assert_eq!(nrx_frequency_quotient(0x19, 7), 0xf249_2493);
 }
 
 #[test]
@@ -107,8 +108,8 @@ fn the_nrx_frequency_keeps_the_high_fields_it_read_and_stores_the_quotient() {
         );
         assert_eq!(written.bits_29_31_opaque(), read.bits_29_31_opaque());
         assert_eq!(
-            written.bits_0_23_opaque(),
-            nrx_frequency_quotient(shift, 2412)
+            written.bits_0_23_opaque().get(),
+            nrx_frequency_quotient(shift, 2412) & 0x00ff_ffff
         );
     }
 }
@@ -141,8 +142,8 @@ fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second
     assert_eq!(written.frequency_numerator_shift(), second_low);
     assert_eq!(written.bits_29_31_opaque(), second_high);
     assert_eq!(
-        written.bits_0_23_opaque(),
-        nrx_frequency_quotient(first_shift, 2412)
+        written.bits_0_23_opaque().get(),
+        nrx_frequency_quotient(first_shift, 2412) & 0x00ff_ffff
     );
 }
 
@@ -164,7 +165,10 @@ fn cbw_fields(
 #[test]
 fn every_residue_is_the_value_modulo_the_field_s_power_of_two() {
     for value in 0..=u8::MAX {
-        assert_eq!(residue_of_four(value).get(), u32::from(value % 4));
+        assert_eq!(
+            crate::radio::phy::residue_of_four(u16::from(value)).get(),
+            u32::from(value % 4)
+        );
         assert_eq!(residue_of_eight(value).get(), u32::from(value % 8));
         assert_eq!(residue_of_sixteen(value).get(), u32::from(value % 16));
     }

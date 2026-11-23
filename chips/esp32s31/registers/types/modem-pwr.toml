@@ -1625,7 +1625,9 @@ description = "Project-assigned name. Shared TBTT staging word: bits 35:10 of th
 name = "TSF_BITS_35_10"
 bits = "25:0"
 class = "plain"
+description = "TSF bits 35:10 of the station's first TBTT: the target word compares only these."
 value-range = { min = 0x0, max = 0x3ffffff, sources = ["BLOB_LIBPP_HAL_TSF"] }
+window = { quantity = "u64", from = 10, sources = ["BLOB_LIBPP_HAL_TSF"] }
 
 [[registers.fields]]
 name = "BITS_26_31_OPAQUE"

@@ -524,6 +524,22 @@ golden!(
 );
 
 golden!(
+    bb_rx_iq_coefficients_keep_their_low_bits,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::set_rx_iq_gain_coefficient(&mut b, -1);
+        bb::set_rx_iq_phase_coefficient(&mut b, -100);
+    },
+    // The two's-complement bytes 0xff and 0x9c keep their low six and
+    // seven bits: 0x3f at 21:16 and 0x1c at 28:22.
+    [
+        (0x00000000, &[(0x0438, 0x073f0000)]),
+        (0xffffffff, &[(0x0438, 0xe73fffff)])
+    ]
+);
+
+golden!(
     bb_front_end_suffix,
     BasebandRegisters,
     7989,
@@ -953,6 +969,24 @@ golden!(
     ]
 );
 
+// The spills land on cleared bits: test value 0x3a4 has bit 0 clear and
+// bit 9 set, path 2 has bit 0 clear. The ROM's composition
+// (0x13 << 2 | 0x3a4 << 6 | 2 << 15) & 0x0001fffc, with the transaction bit,
+// is 0x0001e94e: SELECTOR 0x3, TEST_VALUE 0x1a4 | 1 (the selector's bit 4)
+// = 0x1a5, PATH 2 | 1 (the test value's bit 9) = 3.
+golden!(
+    pbus_force_test_spills_into_cleared_bits,
+    PhyPbus,
+    instances::fe::SIZE / 4,
+    |b| {
+        pb::publish_force_test(&mut b, 0x13, 2, 0x3a4);
+    },
+    [
+        (0x00000000, &[(0x0884, 0x0001e94e)]),
+        (0xffffffff, &[(0x0884, 0xffffe94f)]),
+    ]
+);
+
 golden!(
     pbus_clock_pairs,
     PhyPbus,
@@ -1188,7 +1222,7 @@ fn a_frequency_memory_address_past_the_memory_does_not_exist() {
         Some(0x7ff)
     );
     assert_eq!(
-        fr::FrequencyMemoryAddress::scaled::<7, 6>(u8::MAX, u8::MAX).get(),
+        fr::FrequencyMemoryAddress::scaled::<7, { 255 + 6 }>(u8::MAX).get(),
         255 + 255 * 7 + 6
     );
 }

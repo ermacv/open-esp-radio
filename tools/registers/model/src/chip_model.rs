@@ -30,11 +30,11 @@ pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedFiel
 pub use error::{Error, ErrorKind};
 pub use source::{
     AnalogInstance, AnalogSpace, ClockSource, Command, Control, Definitions, Dictionary, Dim,
-    Extent, Field, FieldClass, Flag, FlagSet, GateGroup, Group, Instance, Interrupt,
+    Extent, Field, FieldClass, Flag, FlagSet, GateGroup, Group, Instance, Integer, Interrupt,
     InterruptOutput, InterruptPair, InterruptSources, LayoutPlacement, Mux, OpaqueReview, Pointer,
     PointerEncoding, ROOT_SCHEMA, RamRegion, ReadSafe, Register, Reserved, Reset, ReviewOverride,
     RootFile, SharedControl, Sourced, Space, TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview,
-    UnboundInterrupt, Value, ValueRange, View, WriteRange,
+    UnboundInterrupt, Value, ValueRange, View, Window, WriteRange,
 };
 
 /// Where an expanded register is.

@@ -1165,7 +1165,6 @@ name = "WIFI_MAX_GAIN_INDEX"
 bits = "14:8"
 class = "plain"
 description = "Highest Wi-Fi receive-gain table index: librftest rx_max_gain returns these bits for its Wi-Fi path. Complete phy_agc_reg_init writes parameter byte 0x121 and phy_set_rx_gain_table the final Wi-Fi RX gain index after table publication."
-write-range = { min = 0x0, max = 0x7f }
 
 [[registers.fields]]
 name = "FORCED_GAIN_ENABLE"
@@ -1422,7 +1421,6 @@ name = "INITIAL_GAIN_INDEX"
 bits = "8:2"
 class = "plain"
 description = "AGC initial receive-gain index: librftest rx_init_gain writes its gain argument here and into RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX. Complete phy_agc_reg_init writes the low seven bits of parameter byte 0x121 minus one."
-write-range = { min = 0x0, max = 0x7f }
 
 [[registers.fields]]
 name = "BITS_0_1_OPAQUE"
@@ -1653,7 +1651,6 @@ name = "INITIAL_GAIN_INDEX"
 bits = "24:18"
 class = "plain"
 description = "AGC initial receive-gain index: librftest rx_init_gain writes its gain argument here and into AGC_GAIN_LIMIT_LOW.INITIAL_GAIN_INDEX. Bits 24:18 receive parameter byte 0x121 minus one during initialization and the final Wi-Fi index capped at 0x4c after table publication."
-write-range = { min = 0x0, max = 0x7f }
 
 [[registers.fields]]
 name = "BIT_25_OPAQUE"
@@ -2102,8 +2099,7 @@ description = "NRX initialization and frequency quotient word. Complete phy_nrx_
 name = "BITS_0_23_OPAQUE"
 bits = "23:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xffffff }
-description = "phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified. SOURCE: VENDOR_NRX_QUOTIENT_SHIFT."
+description = "phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified."
 
 [[registers.fields]]
 name = "FREQUENCY_NUMERATOR_SHIFT"

@@ -21,22 +21,24 @@ pub const COEX_EVENT_COUNT: usize = 49;
 /// Index is the event number.
 /// Events 1, 3, 10 and 15 are the cold Wi-Fi MAC priorities (5, 7, 3 and 1);
 /// event 48 is the PHY grant-protect request (15).
-const VENDOR_PTI_TABLE: [u8; COEX_EVENT_COUNT] = const {
-    let table = [
-        0x0a, 0x05, 0x07, 0x07, 0x0a, 0x01, 0x01, 0x01, 0x01, 0x07, 0x03, 0x02, 0x01, 0x01, 0x01,
-        0x01, 0x04, 0x09, 0x04, 0x04, 0x09, 0x04, 0x09, 0x04, 0x04, 0x05, 0x05, 0x05, 0x05, 0x04,
-        0x04, 0x04, 0x04, 0x02, 0x02, 0x02, 0x0f, 0x0a, 0x04, 0x0e, 0x00, 0x0c, 0x08, 0x03, 0x01,
-        0x0a, 0x0a, 0x0f, 0x0f,
-    ];
-    let mut remaining = table.as_slice();
-    while let Some((priority, rest)) = remaining.split_first() {
-        if *priority > CoexPti::MAX {
-            panic!("the vendor table must hold four-bit priorities");
-        }
-        remaining = rest;
-    }
-    table
-};
+/// Each priority checked to fit the four-bit field where the table is built.
+macro_rules! priorities {
+    ($($value:literal),+ $(,)?) => {
+        [$(const {
+            match CoexPti::new($value) {
+                Some(priority) => priority,
+                None => panic!("the vendor table must hold four-bit priorities"),
+            }
+        }),+]
+    };
+}
+
+const VENDOR_PTI_TABLE: [CoexPti; COEX_EVENT_COUNT] = priorities![
+    0x0a, 0x05, 0x07, 0x07, 0x0a, 0x01, 0x01, 0x01, 0x01, 0x07, 0x03, 0x02, 0x01, 0x01, 0x01, 0x01,
+    0x04, 0x09, 0x04, 0x04, 0x09, 0x04, 0x09, 0x04, 0x04, 0x05, 0x05, 0x05, 0x05, 0x04, 0x04, 0x04,
+    0x04, 0x02, 0x02, 0x02, 0x0f, 0x0a, 0x04, 0x0e, 0x00, 0x0c, 0x08, 0x03, 0x01, 0x0a, 0x0a, 0x0f,
+    0x0f,
+];
 
 /// One coexistence event number.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -164,7 +166,7 @@ pub mod wifi_events {
 /// One four-bit coexistence priority, the shared-table domain every
 /// supported chip's MAC PTI fields accept.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct CoexPti(u8);
+pub struct CoexPti(oer_portable_bounded::Index<16>);
 
 impl CoexPti {
     /// The shared priority domain's maximum. Chip bindings const-check this
@@ -173,15 +175,20 @@ impl CoexPti {
 
     /// A priority of the four-bit hardware domain, or `None` above it.
     pub const fn new(value: u8) -> Option<Self> {
-        if value <= Self::MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_bounded::Index::new(value as usize) {
+            Ok(priority) => Some(Self(priority)),
+            Err(_) => None,
         }
     }
 
     /// The priority value.
     pub const fn value(self) -> u8 {
+        self.0.to_u8()
+    }
+
+    /// The priority as a number below sixteen, for a field that holds every
+    /// one.
+    pub const fn index(self) -> oer_portable_bounded::Index<16> {
         self.0
     }
 }
@@ -191,23 +198,22 @@ impl CoexPti {
 /// The vendor coexistence scheduler changes entries at run time; the table
 /// is therefore shared state of the arbiter, not a constant of any protocol.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CoexPtiTable([u8; COEX_EVENT_COUNT]);
+pub struct CoexPtiTable([CoexPti; COEX_EVENT_COUNT]);
 
 impl CoexPtiTable {
     /// The vendor cold table.
     pub const VENDOR: Self = Self(VENDOR_PTI_TABLE);
 
     pub const fn pti(&self, event: CoexEventId) -> CoexPti {
-        // The const initializer validates the entire cold image, and the
-        // only mutation accepts an already checked CoexPti.
-        CoexPti(*event.entry(&self.0))
+        *event.entry(&self.0)
     }
 
     pub fn set(&mut self, event: CoexEventId, pti: CoexPti) {
-        *event.entry_mut(&mut self.0) = pti.value();
+        *event.entry_mut(&mut self.0) = pti;
     }
 
-    pub const fn as_bytes(&self) -> &[u8; COEX_EVENT_COUNT] {
+    /// Every event's priority, by event number.
+    pub const fn priorities(&self) -> &[CoexPti; COEX_EVENT_COUNT] {
         &self.0
     }
 }

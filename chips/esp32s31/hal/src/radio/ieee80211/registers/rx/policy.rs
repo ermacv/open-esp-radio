@@ -1,7 +1,8 @@
 //! Generated-PAC ownership for finite receive-policy transitions.
 
 use crate::radio::ieee80211::registers::interface_index;
-use oer_portable_mmio::{Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::Placement;
 
 use oer_chips_esp32s31_pac::wifi_mac::{WifiMacBssidPolicy, WifiMacInterfaceAddress};
 

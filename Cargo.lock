@@ -1458,6 +1458,7 @@ dependencies = [
  "oer-chips-family-radio-phy",
  "oer-chips-family-radio-power",
  "oer-chips-family-registers-analog-i2c",
+ "oer-portable-bounded",
  "oer-portable-diagnostics",
  "oer-portable-memory",
  "oer-portable-mmio",
@@ -1483,6 +1484,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "oer-chips-family-registers-analog-i2c",
+ "oer-portable-bounded",
  "oer-portable-memory",
  "oer-portable-mmio",
  "oer-portable-riscv",
@@ -1577,6 +1579,7 @@ dependencies = [
  "oer-chips-family-drivers-watchdog",
  "oer-chips-family-platform-layout",
  "oer-chips-family-registers-analog-i2c",
+ "oer-portable-bounded",
  "oer-portable-time",
  "oer-portable-time-virtual",
 ]
@@ -1694,6 +1697,7 @@ version = "0.1.0"
 dependencies = [
  "oer-chips-family-facts",
  "oer-chips-family-platform-layout",
+ "oer-portable-bounded",
  "oer-portable-mmio",
 ]
 
@@ -1723,6 +1727,7 @@ dependencies = [
 name = "oer-chips-family-radio-coex"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-bounded",
  "oer-protocols-radio-coex",
 ]
 
@@ -2057,6 +2062,7 @@ dependencies = [
  "oer-chips-family-platform-runtime",
  "oer-hil-agent",
  "oer-hil-services-timer-facts",
+ "oer-portable-bounded",
  "oer-portable-diagnostics",
  "oer-portable-embassy-time",
  "oer-portable-mmio",
@@ -2137,6 +2143,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-portable-bounded"
+version = "0.1.0"
+dependencies = [
+ "oer-tools-test-ui-cases",
+]
+
+[[package]]
 name = "oer-portable-cooperate"
 version = "0.1.0"
 dependencies = [
@@ -2193,6 +2206,7 @@ dependencies = [
 name = "oer-portable-mmio"
 version = "0.1.0"
 dependencies = [
+ "oer-portable-bounded",
  "oer-tools-test-ui-cases",
 ]
 

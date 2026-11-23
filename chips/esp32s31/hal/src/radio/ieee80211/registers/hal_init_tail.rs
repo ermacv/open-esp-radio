@@ -2,32 +2,25 @@
 
 use oer_chips_esp32s31_pac::wifi_mac::rx_csi_control::{Bits0_7Opaque, Bits8_15Opaque};
 
-use super::{MacPlacement, MacSlowClockCalibrationValue, WifiRadioRegisters, WifiRxDmaRegisters};
+use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters};
 
-/// The RTC calibration field after the vendor OS-interface conversion.
+/// The OS interface's slow-clock calibration, whole: the field's vendor
+/// cut publishes its low eighteen bits, as `hal_timer_update_by_rtc` does.
 /// It carries only a register value, not evidence that a clock was measured.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacRtcCalibration(MacSlowClockCalibrationValue);
+pub struct MacRtcCalibration(u32);
 
 impl MacRtcCalibration {
-    pub const ZERO: Self = Self(MacSlowClockCalibrationValue::ZERO);
+    pub const ZERO: Self = Self(0);
 
-    /// Preserve the exact truncation performed by `hal_timer_update_by_rtc`.
+    /// The OS interface's number, which the field cuts.
     pub const fn from_osi_value(value: u32) -> Self {
-        Self(MacSlowClockCalibrationValue::from_low_bits(value))
+        Self(value)
     }
 
+    /// The OS interface's number.
     pub const fn value(self) -> u32 {
-        self.0.get()
-    }
-
-    /// The calibration as its register field.
-    pub const fn field(
-        self,
-    ) -> oer_portable_mmio::Bits<
-        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
-    > {
-        self.0.field()
+        self.0
     }
 }
 
@@ -72,7 +65,41 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
             w.set_lp_clock_sync_enable(true);
         });
         rtc.modify_slow_clock_calibration(|w| {
-            w.set_value(slow_clock_calibration.field());
+            w.set_slow_clock_calibration_low_bits(slow_clock_calibration.value());
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MacRtcCalibration;
+    use crate::radio::ieee80211::registers::HostWords;
+
+    #[test]
+    fn the_calibration_s_low_eighteen_bits_are_published_and_its_word_s_others_kept() {
+        for (fill, calibration, value) in [
+            (0, 0x0001_2345, 0x1_2345),
+            // The OS interface's bits above eighteen are the field's cut.
+            (0, 0xfffc_0005, 0x5),
+            (u32::MAX, 0x0004_0000, 0),
+        ] {
+            let mut memory = HostWords::filled(fill);
+            let mut owners = memory.owners();
+            owners.registers.initialize_mac_hal_tail(
+                &mut owners.rx_dma,
+                MacRtcCalibration::from_osi_value(calibration),
+            );
+            let word = owners
+                .registers
+                .mac
+                .wifi_mac_rtc_timer_update
+                .read_slow_clock_calibration();
+            assert_eq!(word.value().get(), value, "{calibration:#x}");
+            assert_eq!(
+                word.bits_18_31_opaque().get(),
+                fill >> 18,
+                "{calibration:#x}"
+            );
+        }
     }
 }

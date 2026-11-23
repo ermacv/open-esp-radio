@@ -42,3 +42,15 @@ pub use registers::RadioPhyRegisters;
 
 #[cfg(target_arch = "riscv32")]
 pub(crate) mod sequence;
+
+/// `value` modulo four, a two-bit field's value: every residue is one of
+/// its four constants. The PHY's one residue, of a ten-bit tone selector
+/// and of a channel's bandwidth code.
+pub(crate) const fn residue_of_four(value: u16) -> oer_portable_mmio::Bits<2> {
+    match value % 4 {
+        0 => oer_portable_mmio::Bits::constant::<0>(),
+        1 => oer_portable_mmio::Bits::constant::<1>(),
+        2 => oer_portable_mmio::Bits::constant::<2>(),
+        _ => oer_portable_mmio::Bits::constant::<3>(),
+    }
+}

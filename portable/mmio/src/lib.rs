@@ -11,7 +11,7 @@
 //!   whose other words another owner writes, each reach only their own
 //!   words. Every read and write names its word as a const generic, checked
 //!   against the list when it is monomorphized; a runtime array index is an
-//!   [`Index`], made only by a checked constructor.
+//!   [`Index`] (`oer-portable-bounded`), made only by a checked constructor.
 //! - **Where a block lives.** A block of device registers is made only by
 //!   [`assume_owned`], the one `unsafe` promise a chip's PAC root makes, for
 //!   the whole set of blocks it owns at once ([`Claim`]: a block or a tuple of
@@ -52,6 +52,7 @@
     )
 )]
 
+use oer_portable_bounded::Index;
 #[cfg(test)]
 extern crate std;
 
@@ -1111,7 +1112,8 @@ pub trait Words {
     /// one:
     ///
     /// ```
-    /// use oer_portable_mmio::{Block, Host, Index, Part, Registers, Words};
+    /// use oer_portable_bounded::Index;
+    /// use oer_portable_mmio::{Block, Host, Part, Registers, Words};
     /// // A line's other bytes; a shared block holds its pending bytes.
     /// struct Lines;
     /// impl Registers for Lines {
@@ -1144,7 +1146,8 @@ pub trait Words {
     /// ```
     ///
     /// ```compile_fail,E0080
-    /// use oer_portable_mmio::{Block, Host, Index, Part, Registers, Words};
+    /// use oer_portable_bounded::Index;
+    /// use oer_portable_mmio::{Block, Host, Part, Registers, Words};
     /// // A line's other bytes; a shared block holds its pending bytes.
     /// struct Lines;
     /// impl Registers for Lines {
@@ -1614,48 +1617,6 @@ pub mod check {
     }
 }
 
-/// An index below `COUNT`: an element of a register array.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Index<const COUNT: usize>(usize);
-
-/// An index outside its array.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IndexError {
-    /// The refused index.
-    pub index: usize,
-    /// The array's element count.
-    pub count: usize,
-}
-
-impl<const COUNT: usize> Index<COUNT> {
-    /// The index `index`, if it is below `COUNT`.
-    pub const fn new(index: usize) -> Result<Self, IndexError> {
-        if index < COUNT {
-            Ok(Self(index))
-        } else {
-            Err(IndexError {
-                index,
-                count: COUNT,
-            })
-        }
-    }
-
-    /// The index `I`, checked at compile time.
-    pub const fn constant<const I: usize>() -> Self {
-        const {
-            if !(I < COUNT) {
-                panic!("the index lies inside the array");
-            }
-        };
-        Self(I)
-    }
-
-    /// The index as a number below `COUNT`.
-    pub const fn get(self) -> usize {
-        self.0
-    }
-}
-
 /// A command start refused, writing nothing: a self-clearing bit of the
 /// command register still reads one, and a start would write zero over it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1722,6 +1683,72 @@ impl<const WIDTH: u32> Bits<WIDTH> {
     pub const fn get(self) -> u32 {
         self.0
     }
+
+    /// `SCALE · index + BIAS`: a constant times a bounded number plus a
+    /// constant, whose largest value the field holds, checked where it is
+    /// monomorphized. A field too narrow refuses to build:
+    ///
+    /// ```compile_fail,E0080
+    /// use oer_portable_bounded::Index;
+    /// use oer_portable_mmio::Bits;
+    /// let field: Bits<4> = Bits::affine::<3, 1, 8>(Index::constant::<7>());
+    /// # let _ = field;
+    /// ```
+    pub const fn affine<const SCALE: u32, const BIAS: u32, const COUNT: usize>(
+        index: Index<COUNT>,
+    ) -> Self {
+        const {
+            if COUNT == 0 || COUNT as u64 > 1_u64 << 32 {
+                panic!("an index type has a number and its numbers are 32-bit");
+            }
+            let largest = (COUNT as u64 - 1) * SCALE as u64 + BIAS as u64;
+            if largest > Self::MAX as u64 {
+                panic!("the field holds the largest value");
+            }
+        };
+        // The sum fits by the check above.
+        Self(index.to_u32().wrapping_mul(SCALE).wrapping_add(BIAS))
+    }
+
+    /// The value as its low `LOW` bits and its high `HIGH` bits, the two
+    /// fields one number is written to: `LOW + HIGH` is the width, checked
+    /// where it is monomorphized, so no bit is lost.
+    ///
+    /// ```compile_fail,E0080
+    /// let (low, high) = oer_portable_mmio::Bits::<11>::constant::<5>().split::<8, 2>();
+    /// # let _ = (low, high);
+    /// ```
+    pub const fn split<const LOW: u32, const HIGH: u32>(self) -> (Bits<LOW>, Bits<HIGH>) {
+        const {
+            if LOW == 0 || HIGH == 0 || LOW as u64 + HIGH as u64 != WIDTH as u64 {
+                panic!("the two parts are the whole value");
+            }
+        };
+        (
+            Bits(self.0 & Bits::<LOW>::MAX),
+            Bits(self.0.wrapping_shr(LOW)),
+        )
+    }
+
+    /// The little-endian bytes `bytes` as one value: `8 · N` bits, which
+    /// the field holds, checked where it is monomorphized.
+    ///
+    /// ```compile_fail,E0080
+    /// let field: oer_portable_mmio::Bits<12> = oer_portable_mmio::Bits::from_le_bytes([1, 2]);
+    /// # let _ = field;
+    /// ```
+    pub fn from_le_bytes<const N: usize>(bytes: [u8; N]) -> Self {
+        const {
+            if N == 0 || N > 4 || (N as u64) * 8 > WIDTH as u64 {
+                panic!("the field holds every byte");
+            }
+        };
+        let mut word = [0_u8; 4];
+        for (to, from) in word.iter_mut().zip(bytes) {
+            *to = from;
+        }
+        Self(u32::from_le_bytes(word))
+    }
 }
 
 /// A byte into a field of at least eight bits: every value fits, so the
@@ -1764,7 +1791,8 @@ impl<const WIDTH: u32> From<u16> for Bits<WIDTH> {
 /// at most `2^WIDTH`. A field too narrow for the array refuses to build:
 ///
 /// ```compile_fail,E0080
-/// use oer_portable_mmio::{Bits, Index};
+/// use oer_portable_bounded::Index;
+/// use oer_portable_mmio::Bits;
 /// let field: Bits<2> = Bits::from(Index::<5>::constant::<4>());
 /// # let _ = field;
 /// ```
@@ -1778,10 +1806,7 @@ impl<const COUNT: usize, const WIDTH: u32> From<Index<COUNT>> for Bits<WIDTH> {
                 panic!("the field holds every index of the array");
             }
         };
-        // The index is below `COUNT`, at most `2^32`: its low four bytes
-        // are the whole index.
-        let [b0, b1, b2, b3, ..] = index.get().to_le_bytes();
-        Self(u32::from_le_bytes([b0, b1, b2, b3]))
+        Self(index.to_u32())
     }
 }
 

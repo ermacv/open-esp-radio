@@ -141,6 +141,9 @@ pub(super) struct FieldPlan<'m> {
     pub(super) setter: Setter,
     /// The layout ranges the field carries.
     pub(super) carries: Vec<Carried>,
+    /// The policy's vendor narrowings of the field, each a setter of its
+    /// own on the writer.
+    pub(super) narrowings: Vec<&'m crate::chip_policy::VendorNarrowing>,
 }
 
 impl FieldPlan<'_> {
@@ -381,7 +384,7 @@ pub(super) struct Template<'m> {
     pub(super) width: u32,
     pub(super) elements: Vec<Elem>,
     /// `(offset, stride, count)` when the elements are one evenly spaced
-    /// array, indexed by `oer_portable_mmio::Index<count>`.
+    /// array, indexed by `oer_portable_bounded::Index<count>`.
     pub(super) array: Option<(u64, u64, u64)>,
     pub(super) fields: Vec<FieldPlan<'m>>,
     pub(super) fifo: bool,
@@ -632,6 +635,7 @@ impl<'m> TypePlan<'m> {
         block: &'m BlockType,
         regions: &[RamRegion],
         layouts: &[crate::layouts::MemoryLayout],
+        narrowings: &[(&str, &str, &'m crate::chip_policy::VendorNarrowing)],
     ) -> Result<Self, Error> {
         let name = block.name();
         let prefix = names::block_prefix(block);
@@ -731,6 +735,28 @@ impl<'m> TypePlan<'m> {
                     commands.get(&(key.as_str(), field.name.as_str())).copied(),
                 )?;
                 plan.prefix = prefixes.get(&format!("{key}.{}", field.name)).copied();
+                plan.narrowings = narrowings
+                    .iter()
+                    .filter(|(register, name, _)| *register == key.as_str() && *name == field.name)
+                    .map(|(_, _, narrowing)| *narrowing)
+                    .collect();
+                if !plan.narrowings.is_empty()
+                    && (!plan.setter()
+                        || plan.setter != Setter::Native
+                        || plan.field.family.is_some())
+                {
+                    return Err(Error::new(
+                        &format!("{entity}.{}", field.name),
+                        "a vendor narrowing is on a field written by its own native setter",
+                    ));
+                }
+                if plan.prefix.is_some() && (field.window.is_some() || !plan.narrowings.is_empty())
+                {
+                    return Err(Error::new(
+                        &format!("{entity}.{}", field.name),
+                        "a window or a vendor narrowing is on a field written by its own native setter",
+                    ));
+                }
                 plan.carries = carried(field, layouts);
                 plan.doorbell = block
                     .file
@@ -775,6 +801,17 @@ impl<'m> TypePlan<'m> {
                 template.key.clone(),
             )
         });
+        for (key, field, narrowing) in narrowings {
+            let matched = templates.iter().any(|template| {
+                template.key == *key && template.fields.iter().any(|plan| plan.field.name == *field)
+            });
+            if !matched {
+                return Err(Error::new(
+                    &narrowing.name,
+                    format!("{key}.{field} is no field of {name}"),
+                ));
+            }
+        }
         let plan = Self {
             name,
             module: names::ident(&names::snake(name)),
@@ -809,6 +846,12 @@ impl<'m> TypePlan<'m> {
                 }
                 if field.prefix.is_some() {
                     names.push(format!("set_{}_prefix", field.stem));
+                }
+                if field.setter() && field.field.window.is_some() {
+                    names.push(format!("set_{}_window", field.stem));
+                }
+                for narrowing in &field.narrowings {
+                    names.push(narrowing.name.clone());
                 }
                 if template.w1c() {
                     names.push(format!("retain_{}", field.stem));
@@ -981,6 +1024,14 @@ fn field_plan<'m>(
             "a command register's bit is one self-clearing bit",
         ));
     }
+    let plain =
+        matches!(field.class, FieldClass::Plain | FieldClass::WriteOnly) && !zero && role.is_none();
+    if field.window.is_some() && (!plain || setter != Setter::Native) {
+        return Err(Error::new(
+            &entity,
+            "a window is on a field written by its own native setter",
+        ));
+    }
     Ok(FieldPlan {
         field,
         indexed_stem: field
@@ -1000,6 +1051,7 @@ fn field_plan<'m>(
         range,
         setter,
         carries: Vec::new(),
+        narrowings: Vec::new(),
     })
 }
 
@@ -1193,7 +1245,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 let ones = field.ones();
                 let _ = writeln!(
                     output,
-                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_mmio::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
+                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_bounded::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add(index.to_u32().wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
                     family.count,
                     field.write_type(None),
                     field.low,
@@ -1233,6 +1285,30 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                     field.field.name,
                     field.stem,
                     !field.mask(),
+                );
+            }
+            if let Some(window) = &field.field.window {
+                render_narrowed(
+                    output,
+                    field,
+                    &format!("set_{}_window", field.stem),
+                    (
+                        window.quantity,
+                        window.from,
+                        crate::chip_policy::Arithmetic::LowBits,
+                    ),
+                    "The hardware takes no other bit of the quantity.",
+                    &window.sources,
+                );
+            }
+            for narrowing in &field.narrowings {
+                render_narrowed(
+                    output,
+                    field,
+                    &narrowing.name,
+                    (narrowing.value, narrowing.from, narrowing.arithmetic),
+                    &narrowing.description,
+                    &narrowing.sources,
                 );
             }
             // A pointer takes a typed reference or the zero image, the null
@@ -1281,6 +1357,84 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
     output.push_str("}\n\n");
 }
 
+/// A setter of a wider number: a window's quantity or a vendor's number,
+/// whole, its arithmetic writing the field. The field's other lanes are
+/// kept. The one way a value is fitted into a field outside the PAC, a fact
+/// of the model or of the policy with its sources.
+fn render_narrowed(
+    output: &mut String,
+    field: &FieldPlan<'_>,
+    method: &str,
+    (value, from, arithmetic): (
+        crate::chip_model::Integer,
+        u32,
+        crate::chip_policy::Arithmetic,
+    ),
+    why: &str,
+    sources: &[String],
+) {
+    use crate::{chip_model::Integer, chip_policy::Arithmetic};
+    let ty = value.name();
+    // The number (shifted to the field for the low bits, clamped for the
+    // saturation) as an unsigned word of at most 32 bits.
+    let (prelude, number, summary) = match arithmetic {
+        Arithmetic::LowBits => {
+            let shifted = if from == 0 {
+                "value".to_owned()
+            } else {
+                format!("(value >> {from})")
+            };
+            (
+                String::new(),
+                shifted,
+                format!("bits {from}..{} of the `{ty}`", from + field.width),
+            )
+        }
+        Arithmetic::SymmetricSaturation => {
+            let limit = (1_u64 << (field.width - 1)) - 1;
+            (
+                format!("let value = value.max(-{limit}_{ty}).min({limit}_{ty});\n"),
+                "value".to_owned(),
+                format!("the `{ty}` clamped to ±{limit}, in two's complement"),
+            )
+        }
+    };
+    let word = match value {
+        Integer::U8 | Integer::U16 => format!("u32::from({number})"),
+        Integer::U32 => number,
+        Integer::U64 => format!(
+            "{{ let [b0, b1, b2, b3, _, _, _, _] = {number}.to_le_bytes(); u32::from_le_bytes([b0, b1, b2, b3]) }}"
+        ),
+        Integer::I32 => format!("{number}.cast_unsigned()"),
+        Integer::I8 | Integer::I16 => format!("u32::from({number}.cast_unsigned())"),
+    };
+    // A field of the whole word takes the word; a narrower one its bits,
+    // the word's other lanes kept.
+    let assignment = if field.width == 32 {
+        format!("self.0 = {word};")
+    } else {
+        let cut_bits = format!("({word} & 0x{:x})", field.ones());
+        let positioned = if field.low == 0 {
+            cut_bits
+        } else {
+            format!("({cut_bits} << {})", field.low)
+        };
+        format!(
+            "self.0 = (self.0 & 0x{:08x}) | {positioned};",
+            !field.mask()
+        )
+    };
+    let _ = writeln!(
+        output,
+        "/// Set `{}` to {summary}: {}\n///\n/// SOURCE: {}.\n\
+         #[inline]\npub fn {method}(&mut self, value: {ty}) -> &mut Self {{\n{prelude}\
+         {assignment}\nself\n}}\n",
+        field.field.name,
+        clean(why),
+        sources.join(", "),
+    );
+}
+
 /// The field read as each layout range it carries.
 fn render_carried_getters(output: &mut String, field: &FieldPlan<'_>) {
     for Carried { stem, ty, reach } in &field.carries {
@@ -1314,7 +1468,7 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
         };
         let _ = writeln!(
             output,
-            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_mmio::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
+            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_bounded::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add(index.to_u32().wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
             field.method(),
             family.count,
             field.native(),
@@ -1699,7 +1853,7 @@ fn render_range(output: &mut String, field: &FieldPlan<'_>, min: u32, max: u32) 
 }
 
 /// How an owner's method names a word: one element, or every element of
-/// an array by an `oer_portable_mmio::Index`.
+/// an array by an `oer_portable_bounded::Index`.
 #[derive(Clone, Copy)]
 pub(super) enum Call {
     Fixed(u64),
@@ -1723,7 +1877,7 @@ impl Call {
         match self {
             Self::Fixed(_) => String::new(),
             Self::Indexed { count, .. } | Self::IndexedByte { count, .. } => {
-                format!(", index: oer_portable_mmio::Index<{count}>")
+                format!(", index: oer_portable_bounded::Index<{count}>")
             }
             Self::FixedByte(_) => String::new(),
         }

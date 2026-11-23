@@ -1738,7 +1738,7 @@ impl DeviceTablePublication {
     /// count includes zero and the table's full capacity.
     pub(crate) const fn new(
         first_entry: crate::layouts::DmaRef<crate::layouts::BleDeviceTable>,
-        count: oer_portable_mmio::Index<{ Self::CAPACITY + 1 }>,
+        count: oer_portable_bounded::Index<{ Self::CAPACITY + 1 }>,
     ) -> Self {
         const { assert!(DeviceTablePublication::CAPACITY <= u8::MAX as usize) };
         let count = count.get() as u8;

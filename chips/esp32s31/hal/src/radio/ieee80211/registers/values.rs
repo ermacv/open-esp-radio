@@ -35,12 +35,12 @@ pub(crate) const fn interface_bssid_select(
 /// The interface's element of the four-entry interface register arrays.
 pub const fn interface_index(
     interface: MacInterface,
-) -> oer_portable_mmio::Index<{ oer_chips_esp32s31_pac::wifi_mac::config::COUNT }> {
+) -> oer_portable_bounded::Index<{ oer_chips_esp32s31_pac::wifi_mac::config::COUNT }> {
     match interface {
-        MacInterface::Station => oer_portable_mmio::Index::constant::<0>(),
-        MacInterface::AccessPoint => oer_portable_mmio::Index::constant::<1>(),
-        MacInterface::Context2 => oer_portable_mmio::Index::constant::<2>(),
-        MacInterface::Context3 => oer_portable_mmio::Index::constant::<3>(),
+        MacInterface::Station => oer_portable_bounded::Index::constant::<0>(),
+        MacInterface::AccessPoint => oer_portable_bounded::Index::constant::<1>(),
+        MacInterface::Context2 => oer_portable_bounded::Index::constant::<2>(),
+        MacInterface::Context3 => oer_portable_bounded::Index::constant::<3>(),
     }
 }
 
@@ -128,63 +128,6 @@ impl MacRxBeaconClearRequest {
     }
 }
 
-/// The eighteen-bit slow-clock calibration hal_timer_update_by_rtc publishes.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacSlowClockCalibrationValue(
-    oer_portable_mmio::Bits<
-        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
-    >,
-);
-
-impl MacSlowClockCalibrationValue {
-    pub const MIN: u32 = 0x00000000;
-
-    /// Zero, the calibration the HAL publishes before a measurement.
-    pub const ZERO: Self = Self(oer_portable_mmio::Bits::constant::<0>());
-
-    /// The low eighteen bits of `value`: the vendor's own truncation of the
-    /// OS interface's calibration (`hal_timer_update_by_rtc`).
-    pub const fn from_low_bits(value: u32) -> Self {
-        Self(oer_portable_mmio::Bits::truncate(value))
-    }
-    pub const MAX: u32 = oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_MAX;
-
-    /// Construct a value only when it lies in the reviewed inclusive range.
-    pub const fn new(value: u32) -> Option<Self> {
-        if value <= Self::MAX {
-            match oer_portable_mmio::Bits::new(value) {
-                Ok(field) => Some(Self(field)),
-                Err(_) => None,
-            }
-        } else {
-            None
-        }
-    }
-
-    /// The value of a 18-bit field, which the range holds whole.
-    pub const fn from_bits(
-        bits: oer_portable_mmio::Bits<
-            { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
-        >,
-    ) -> Self {
-        Self(bits)
-    }
-
-    /// Return the checked numeric value.
-    pub const fn get(self) -> u32 {
-        self.0.get()
-    }
-
-    /// The value as its register field.
-    pub const fn field(
-        self,
-    ) -> oer_portable_mmio::Bits<
-        { oer_chips_esp32s31_pac::modem_pwr::slow_clock_calibration::VALUE_WIDTH },
-    > {
-        self.0
-    }
-}
-
 /// The low twenty address bits of a Wi-Fi DMA descriptor that the RX walker cursors and the TX queue head hold.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct WifiDescriptorAddressLow(u32);
@@ -231,14 +174,10 @@ impl MacPti {
 
     /// Preserve a shared coexistence priority in the MAC field. The entire
     /// source domain must fit the generated field geometry at compile time.
-    pub const fn from_coex(pti: oer_chips_family_radio_coex::CoexPti) -> Self {
-        const {
-            if oer_chips_family_radio_coex::CoexPti::MAX as u32 > Self::MAX {
-                panic!("the coexistence priority domain must fit the MAC PTI field");
-            }
-        };
-        // The domain fits the field (checked above, at build): nothing is cut.
-        Self(oer_portable_mmio::Bits::truncate(pti.value() as u32))
+    pub fn from_coex(pti: oer_chips_family_radio_coex::CoexPti) -> Self {
+        // The field holds every number below sixteen, checked by the `From`
+        // where it is monomorphized.
+        Self(oer_portable_mmio::Bits::from(pti.index()))
     }
 
     /// Construct a value only when it lies in the reviewed inclusive range.

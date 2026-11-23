@@ -42,7 +42,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
         &mut self,
         descriptor: DmaRef<BleDirectionFindingDescriptor>,
     ) -> BluetoothDirectionFindingDisabledBaselinePrepared {
-        let slot = oer_portable_mmio::Index::constant::<0>();
+        let slot = oer_portable_bounded::Index::constant::<0>();
         let ring = &mut self.bluetooth.ble_hw_cte_ring_control;
 
         device_fence();

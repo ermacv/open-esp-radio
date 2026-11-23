@@ -200,14 +200,12 @@ impl<P: Placement> ProgramRegisters for Timg0AlarmProgram<P> {
     }
 
     fn load_interval(&mut self, micros: u64) {
-        // Both supported targets are little-endian. Admission above proves
-        // the high word fits the generated field before Bits::truncate.
-        let [low, high]: [u32; 2] = bytemuck::cast(micros);
+        // The vendor's stores; admission above proves `micros` fits them.
         self.0.modify_t0alarmlo(|w| {
-            w.set_t_alarm_lo(low);
+            w.set_t_alarm_lo_window(micros);
         });
         self.0.modify_t0alarmhi(|w| {
-            w.set_t_alarm_hi(Bits::truncate(high));
+            w.set_t_alarm_hi_window(micros);
         });
         self.0.modify_t0loadlo(|w| {
             w.set_t_load_lo(0);

@@ -20,8 +20,8 @@ fn table_retains_both_bytes_and_vendor_rate_remap() {
         })
     );
     assert_eq!(table.pair(43), None);
-    assert_eq!(table.primary_index(25), 25);
-    assert_eq!(table.primary_index(26), 16);
+    assert_eq!(table.primary_byte(25), 25);
+    assert_eq!(table.primary_byte(26), 16);
 }
 
 #[test]
@@ -29,7 +29,8 @@ fn tb_ru_delta_matches_unsigned_blob_clamp() {
     assert_eq!(relative_index(3, 10), 0);
     assert_eq!(relative_index(10, 10), 0);
     assert_eq!(relative_index(21, 10), 11);
-    assert_eq!(relative_index(0x80, 10), 54);
+    // The vendor's byte: the field's cut keeps its low six bits (54).
+    assert_eq!(relative_index(0x80, 10), 118);
 }
 
 #[test]

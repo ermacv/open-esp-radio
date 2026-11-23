@@ -4,12 +4,10 @@
 use oer_chips_family_boot::{
     Access, Busy,
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
-    psram::{
-        CacheAccess, ChipSelectTiming, PsramCommand, PsramCommandRegisters,
-        PsramControllerRegisters,
-    },
+    psram::{PsramCommand, PsramCommandRegisters, PsramControllerRegisters},
 };
-use oer_portable_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{
     instances, iomux_mspi_pin::IomuxMspiPsramPins, spi_mem_s::Memspi2Psram,
@@ -172,27 +170,40 @@ impl<P: Placement, Q: Placement, R: Placement> PsramControllerRegisters
         });
     }
 
-    fn set_chip_select_timing(&mut self, _: Access<'_>, timing: ChipSelectTiming) {
-        let cycles = |n: u8| u32::from(n.max(1)) - 1;
+    /// The chip select's setup and hold of four cycles and its hold delay of
+    /// three, each field the cycles less one.
+    ///
+    /// SOURCE: ESP-IDF 4d80c1b2
+    /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:55-58` (250 MHz:
+    /// chip-select setup/hold 4, hold delay 3).
+    fn set_chip_select_timing(&mut self, _: Access<'_>) {
         self.memspi2.modify_smem_ac(|w| {
             w.set_cs_setup(true)
                 .set_cs_hold(true)
                 .set_split_trans_en(true)
-                .set_cs_setup_time(Bits::truncate(cycles(timing.setup)))
-                .set_cs_hold_time(Bits::truncate(cycles(timing.hold)))
-                .set_cs_hold_delay(Bits::truncate(cycles(timing.hold_delay)));
+                .set_cs_setup_time(Bits::constant::<{ 4 - 1 }>())
+                .set_cs_hold_time(Bits::constant::<{ 4 - 1 }>())
+                .set_cs_hold_delay(Bits::constant::<{ 3 - 1 }>());
         });
     }
 
-    fn configure_cache_access(&mut self, _: Access<'_>, cache: CacheAccess) {
+    /// The cache's dummy cycle lengths: 34 bits on reads and 16 on writes,
+    /// each field the bits less one.
+    ///
+    /// SOURCE: ESP-IDF 4d80c1b2
+    /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:33-38` (250 MHz:
+    /// dummy bits 34/16) and
+    /// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:130-150`
+    /// (the fields hold the bit count minus one: 33 and 15).
+    fn configure_cache_access(&mut self, _: Access<'_>) {
         let spi = &mut self.memspi2;
         spi.modify_cache_sctrl(|w| {
             w.set_cache_usr_saddr_4byte(true)
                 .set_usr_wr_sram_dummy(true)
                 .set_usr_rd_sram_dummy(true)
                 .set_cache_sram_usr_rcmd(true)
-                .set_sram_rdummy_cyclelen(Bits::truncate(u32::from(cache.read_dummy_cyclelen)))
-                .set_sram_wdummy_cyclelen(Bits::truncate(u32::from(cache.write_dummy_cyclelen)))
+                .set_sram_rdummy_cyclelen(Bits::constant::<{ 34 - 1 }>())
+                .set_sram_wdummy_cyclelen(Bits::constant::<{ 16 - 1 }>())
                 .set_sram_addr_bitlen(ADDRESS_BITLEN)
                 .set_cache_sram_usr_wcmd(true)
                 .set_sram_oct(true);
@@ -285,37 +296,58 @@ impl<P: Placement, Q: Placement, R: Placement> PsramCommandRegisters for PsramRe
         });
     }
 
+    /// A mode register command: a 16-bit opcode, a 32-bit address, then 16
+    /// data bits out (a write) or 16 dummy and 16 data bits in (a read).
+    /// Each phase is enabled with its length less one, or disabled with 0.
+    ///
+    /// SOURCE: ESP-IDF 4d80c1b2
+    /// `components/esp_psram/device/esp_psram_impl_ap_oct.c:27-31,156-174,189-206`
+    /// (0x4040 read, 0xc0c0 write, 16-bit command and data, 32-bit address)
+    /// and `:33-38` (register dummy 16 at 250 MHz).
     fn configure(&mut self, _: Access<'_>, command: PsramCommand) {
-        let length = |bits: u32| bits.max(1) - 1;
+        let (opcode, address, output, input, dummy) = match command {
+            PsramCommand::RegisterRead { address } => (
+                0x4040,
+                address,
+                None,
+                Some(Bits::constant::<{ 16 - 1 }>()),
+                Some(Bits::constant::<{ 16 - 1 }>()),
+            ),
+            PsramCommand::RegisterWrite { address } => (
+                0xc0c0,
+                address,
+                Some(Bits::constant::<{ 16 - 1 }>()),
+                None,
+                None,
+            ),
+        };
         let spi = &mut self.memspi3;
         spi.modify_user2(|w| {
-            w.set_usr_command_bitlen(Bits::truncate(length(u32::from(command.command_bits))))
-                .set_usr_command_value(command.command);
+            w.set_usr_command_bitlen(Bits::constant::<{ 16 - 1 }>())
+                .set_usr_command_value(opcode);
         });
         spi.modify_user(|w| {
-            w.set_usr_command(command.command_bits > 0)
-                .set_usr_addr(command.address_bits > 0)
-                .set_usr_mosi(command.output_bits > 0)
-                .set_usr_miso(command.input_bits > 0)
-                .set_usr_dummy(command.dummy_bits > 0);
+            w.set_usr_command(true)
+                .set_usr_addr(true)
+                .set_usr_mosi(output.is_some())
+                .set_usr_miso(input.is_some())
+                .set_usr_dummy(dummy.is_some());
         });
         spi.modify_user1(|w| {
-            w.set_usr_addr_bitlen(Bits::truncate(length(u32::from(command.address_bits))))
-                .set_usr_dummy_cyclelen(Bits::truncate(length(u32::from(command.dummy_bits))));
+            w.set_usr_addr_bitlen(Bits::constant::<{ 32 - 1 }>())
+                .set_usr_dummy_cyclelen(dummy.unwrap_or(Bits::constant::<0>()));
         });
-        if command.address_bits > 0 {
-            spi.modify_addr(|w| {
-                w.set_usr_addr_value(command.address);
-            });
-            spi.modify_cache_fctrl(|w| {
-                w.set_cache_usr_addr_4byte(command.address_bits == 32);
-            });
-        }
+        spi.modify_addr(|w| {
+            w.set_usr_addr_value(address);
+        });
+        spi.modify_cache_fctrl(|w| {
+            w.set_cache_usr_addr_4byte(true);
+        });
         spi.modify_mosi_dlen(|w| {
-            w.set_usr_mosi_dbitlen(Bits::truncate(length(u32::from(command.output_bits))));
+            w.set_usr_mosi_dbitlen(output.unwrap_or(Bits::constant::<0>()));
         });
         spi.modify_miso_dlen(|w| {
-            w.set_usr_miso_dbitlen(Bits::truncate(length(u32::from(command.input_bits))));
+            w.set_usr_miso_dbitlen(input.unwrap_or(Bits::constant::<0>()));
         });
     }
 

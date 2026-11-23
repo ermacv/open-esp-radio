@@ -12,7 +12,8 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
-use oer_portable_mmio::{Bits, Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Placement};
 
 /// Exclusive atom loan from the master owner.
 pub struct MasterPort<'a, P: Placement> {
@@ -198,9 +199,10 @@ pub(crate) fn is_busy<P: Placement>(master: &I2cAnaMst<P>, host: Host) -> bool {
 
 /// Publish the complete complemented read mask used by the vendor leaf.
 fn publish_read_mask<P: Placement>(master: &mut I2cAnaMst<P>, block: Route) {
-    // SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C. The vendor's own cut:
-    // a whole-word mask's top byte is the published word's fixed `0xff`.
-    master.publish_phy_i2c_read_mask(Bits::truncate(block.complemented_read_select()));
+    // SOURCE: ROM_REV0_PHY_I2C, BLOB_LIBPHY_PHY_I2C. The field is the
+    // complemented selection with `0xff` above it; the published word's top
+    // byte is its fixed `0xff`.
+    master.publish_phy_i2c_read_mask(Bits::from_le_bytes(block.read_mask_octets()));
 }
 
 /// Publish one complete host command in the reviewed vendor order.

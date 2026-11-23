@@ -150,14 +150,14 @@ impl<P: Placement> Timg1Timer1Program<P> {
         oer_portable_riscv::fence();
     }
 
-    /// The alarm words; the caller proved `micros` fits them.
+    /// The alarm words, the vendor's stores; the caller proved `micros`
+    /// fits them.
     fn set_alarm(&mut self, micros: u64) {
-        let [low, high]: [u32; 2] = bytemuck::cast(micros);
         self.0.modify_t1alarmlo(|w| {
-            w.set_t_alarm_lo(low);
+            w.set_t_alarm_lo_window(micros);
         });
         self.0.modify_t1alarmhi(|w| {
-            w.set_t_alarm_hi(Bits::truncate(high));
+            w.set_t_alarm_hi_window(micros);
         });
     }
 }
@@ -288,16 +288,14 @@ fn alarm_at<P: Placement>(
 }
 
 impl<P: Placement> Timg1AlarmProgram<P> {
-    /// The alarm words; the caller proved `micros` fits them.
+    /// The alarm words, the vendor's stores; the caller proved `micros`
+    /// fits them.
     fn set_alarm(&mut self, micros: u64) {
-        // Both supported targets are little-endian; Bits::truncate keeps
-        // the high word's generated width, which the admission fits.
-        let [low, high]: [u32; 2] = bytemuck::cast(micros);
         self.0.modify_t0alarmlo(|w| {
-            w.set_t_alarm_lo(low);
+            w.set_t_alarm_lo_window(micros);
         });
         self.0.modify_t0alarmhi(|w| {
-            w.set_t_alarm_hi(Bits::truncate(high));
+            w.set_t_alarm_hi_window(micros);
         });
     }
 }
@@ -405,6 +403,17 @@ mod tests {
         }
         let program = program(&mut words);
         assert!(!program.enabled() && !program.timer1_open());
+    }
+
+    #[test]
+    fn timer1_s_alarm_above_32_bits_keeps_its_high_word() {
+        let mut words = [0; instances::timg1::SIZE / 4];
+        let mut timer = timer1(&mut words);
+        timer
+            .arm(Duration::from_micros(0x2_0000_0003))
+            .expect("the target fits");
+        assert_eq!(timer.0.read_t1alarmlo().t_alarm_lo(), 3);
+        assert_eq!(timer.0.read_t1alarmhi().t_alarm_hi().get(), 2);
     }
 
     #[test]

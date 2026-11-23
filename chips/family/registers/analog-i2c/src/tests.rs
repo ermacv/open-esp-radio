@@ -87,7 +87,7 @@ fn a_field_names_its_bit_range_and_an_address_its_block_and_byte() {
 }
 
 #[test]
-fn a_route_complements_its_read_selection_within_its_mask() {
+fn a_route_s_read_mask_is_the_complemented_selection_with_0xff_above() {
     let route = |read_mask_bits| Route {
         request_code: 0x62,
         command_code: 0x66,
@@ -95,8 +95,8 @@ fn a_route_complements_its_read_selection_within_its_mask() {
         read_select: 0x0102,
         read_mask_bits,
     };
-    assert_eq!(route(24).complemented_read_select(), 0x00ff_fefd);
-    assert_eq!(route(32).complemented_read_select(), 0xffff_fefd);
+    assert_eq!(route(24).read_mask_octets(), [0xfd, 0xfe, 0xff]);
+    assert_eq!(route(32).read_mask_octets(), [0xfd, 0xfe, 0xff]);
     let address = route(24).address(7);
     assert_eq!((address.block(), address.index()), (0x66, 7));
 }

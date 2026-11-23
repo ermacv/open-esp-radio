@@ -3,7 +3,8 @@
 use oer_chips_family_boot::{
     Access, Busy,
     cache::{
-        CacheSyncRegisters, FetchSuspendRegisters, LineRange, SecondaryFetchRegisters, SyncCommand,
+        CacheFailure, CacheSyncRegisters, FetchSuspendRegisters, LineRange,
+        SecondaryFetchRegisters, SyncCommand,
     },
 };
 use oer_portable_mmio::{Bits, Fixed, Placement};
@@ -233,17 +234,24 @@ impl<P: Placement> SecondaryFetchRegisters for CacheRegisters<P> {
 impl<P: Placement> CacheSyncRegisters for CacheRegisters<P> {
     type Map = CacheMap;
 
-    fn set_range(&mut self, _: Access<'_>, map: CacheMap, range: LineRange) {
+    fn set_range(
+        &mut self,
+        _: Access<'_>,
+        map: CacheMap,
+        range: LineRange,
+    ) -> Result<(), CacheFailure> {
+        // The 28-bit size field is the one limit, refused before any write.
+        let size = Bits::new(range.size()).map_err(|_| CacheFailure::RangeTooLarge)?;
         self.0.modify_sync_map(|w| {
             w.set_sync_map(map.code());
         });
         self.0.modify_sync_addr(|w| {
             w.set_sync_addr(range.start());
         });
-        // The geometry's largest range fits the 28-bit size field.
         self.0.modify_sync_size(|w| {
-            w.set_sync_size(Bits::truncate(range.size()));
+            w.set_sync_size(size);
         });
+        Ok(())
     }
 
     fn start(&mut self, _: Access<'_>, command: SyncCommand) -> Result<(), Busy> {

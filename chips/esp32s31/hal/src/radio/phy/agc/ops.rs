@@ -24,11 +24,6 @@ const RX_GAIN_TABLE_FINAL_LIMIT_MAXIMUM: u8 = 0x4c;
 /// SOURCE: ROM_REV0_PHY_AGC.
 const PARAMETER_120_OFFSET: u8 = 0x50;
 
-/// A seven-bit gain index from a byte, as the vendor's `& 0x7f` keeps it.
-const fn gain_index(value: u8) -> Bits<7> {
-    Bits::truncate(value as u32)
-}
-
 /// Apply all fourteen internal MMIO edges of `phy_bb_agc_reg_update`.
 pub fn update_baseband_registers<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
     agc.wifi_bb_brx.initialize_agc_update_8070();
@@ -148,15 +143,15 @@ pub fn initialize_registers<P: PhyPlacement>(
     parameter_121: u8,
     parameter_120: u8,
 ) {
-    let limit = gain_index(parameter_121.wrapping_sub(1));
+    let limit = parameter_121.wrapping_sub(1);
     agc.wifi_bb.modify_rx_gain_limit_control(|w| {
-        w.set_initial_gain_index(limit);
+        w.set_rx_initial_gain_index_low_bits(limit);
     });
     agc.wifi_bb.modify_agc_gain_limit_low(|w| {
-        w.set_initial_gain_index(limit);
+        w.set_agc_initial_gain_index_low_bits(limit);
     });
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_wifi_max_gain_index(gain_index(parameter_121));
+        w.set_wifi_max_gain_index_low_bits(parameter_121);
     });
     // SOURCE: ROM_REV0_PHY_AGC, S31_ESP_PACS_SVD.
     agc.wifi_bb.modify_agc_saturation_control(|w| {
@@ -248,15 +243,15 @@ pub fn disable_rf_rx_saturation<P: PhyPlacement>(agc: &mut AgcRegisters<P>) {
 /// [`RX_GAIN_TABLE_FINAL_LIMIT_MAXIMUM`], each kept to seven bits.
 pub fn configure_rx_gain_limits<P: PhyPlacement>(agc: &mut AgcRegisters<P>, wifi_last_index: u8) {
     agc.wifi_bb.modify_agc_shared_control(|w| {
-        w.set_wifi_max_gain_index(gain_index(wifi_last_index));
+        w.set_wifi_max_gain_index_low_bits(wifi_last_index);
     });
-    let limit = gain_index(if wifi_last_index < RX_GAIN_TABLE_FINAL_LIMIT_MAXIMUM {
+    let limit = if wifi_last_index < RX_GAIN_TABLE_FINAL_LIMIT_MAXIMUM {
         wifi_last_index
     } else {
         RX_GAIN_TABLE_FINAL_LIMIT_MAXIMUM
-    });
+    };
     agc.wifi_bb.modify_rx_gain_limit_control(|w| {
-        w.set_initial_gain_index(limit);
+        w.set_rx_initial_gain_index_low_bits(limit);
     });
 }
 

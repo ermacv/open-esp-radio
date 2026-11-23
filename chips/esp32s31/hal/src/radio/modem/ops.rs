@@ -762,7 +762,7 @@ pub(crate) fn set_coex_timer_clock_divider<P: Placement>(
     value: CoexTimerClockDividerMinusOne,
 ) {
     registers.modify_coex_lp_clk_conf(|w| {
-        w.set_clk_coex_lp_div_num(value.field());
+        w.set_clk_coex_lp_div_num_low_bits(value.get());
     });
 }
 

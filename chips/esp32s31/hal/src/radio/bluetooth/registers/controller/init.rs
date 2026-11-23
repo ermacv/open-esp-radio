@@ -463,8 +463,8 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
             }
             HalInitOperation::ClearSlotLaneUpper { register, lane } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => oer_portable_mmio::Index::constant::<0>(),
-                    HalInitRegister::SlotMap1 => oer_portable_mmio::Index::constant::<1>(),
+                    HalInitRegister::SlotMap0 => oer_portable_bounded::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_portable_bounded::Index::constant::<1>(),
                 };
                 match lane {
                     0 => self
@@ -525,8 +525,8 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
                 index_high,
             } => {
                 let register_index = match register {
-                    HalInitRegister::SlotMap0 => oer_portable_mmio::Index::constant::<0>(),
-                    HalInitRegister::SlotMap1 => oer_portable_mmio::Index::constant::<1>(),
+                    HalInitRegister::SlotMap0 => oer_portable_bounded::Index::constant::<0>(),
+                    HalInitRegister::SlotMap1 => oer_portable_bounded::Index::constant::<1>(),
                 };
                 match (lane, set_retained_index_low, index_high) {
                     (0, false, 0) => self

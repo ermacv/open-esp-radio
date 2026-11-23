@@ -2414,3 +2414,223 @@ sources = ["TRM_S31_V01_AES"]
 instance = "AES"
 registers = ["ENDIAN", "CONTINUE", "H%s", "J0%s", "T0%s", "AAD_BLOCK_NUM", "REMAINDER_BIT_NUM", "DATE", "RX_RESET", "TX_RESET"]
 reason = "GCM, internal debugging and version words are outside the CPU Typical and the ECB/CBC/CTR DMA-AES engine."
+
+# The places the vendor fits a number of its own into a field the hardware
+# does not ask it to fit: the candidates for a refusal in the steps that own
+# those values.
+
+[[vendor-narrowings]]
+name = "set_primary_tick_image_low_bits"
+field = "COEX.CONFIGURATION%s.PRIMARY_TICK_IMAGE"
+value = "u32"
+arithmetic = "low-bits"
+description = "coex_hw_timer_set narrows the target tick to its low 24 bits before the store: the tick counter wraps at the field."
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[vendor-narrowings]]
+name = "set_secondary_tick_image_low_bits"
+field = "COEX.SECONDARY_TARGET%s.SECONDARY_TICK_IMAGE"
+value = "u32"
+arithmetic = "low-bits"
+description = "coex_hw_timer_set narrows the target tick to its low 24 bits before the store: the tick counter wraps at the field."
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[vendor-narrowings]]
+name = "set_rx_iq_gain_coefficient_low_bits"
+field = "FE.IQ_CORRECTION_CONTROL.RX_IQ_GAIN_COEFFICIENT"
+value = "i8"
+arithmetic = "low-bits"
+description = "phy_rxiq_set_reg stores the low bits of the signed coefficient's byte, without the saturation phy_txiq_set_reg makes."
+sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS"]
+
+[[vendor-narrowings]]
+name = "set_rx_iq_phase_coefficient_low_bits"
+field = "FE.IQ_CORRECTION_CONTROL.RX_IQ_PHASE_COEFFICIENT"
+value = "i8"
+arithmetic = "low-bits"
+description = "phy_rxiq_set_reg stores the low bits of the signed coefficient's byte, without the saturation phy_txiq_set_reg makes."
+sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS"]
+
+[[vendor-narrowings]]
+name = "set_estimator_control_low_bits"
+field = "FE.ESTIMATOR_CONTROL.BITS_2_16_OPAQUE"
+value = "u16"
+arithmetic = "low-bits"
+description = "phy_iq_est_enable shifts its 16-bit control left by two and masks it to the field: bit 15 is discarded."
+sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
+
+[[vendor-narrowings]]
+name = "set_selector_of_command"
+field = "FE.PBUS_COMMAND.SELECTOR"
+value = "u32"
+arithmetic = "low-bits"
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
+
+[[vendor-narrowings]]
+name = "set_test_value_of_command"
+field = "FE.PBUS_COMMAND.TEST_VALUE"
+value = "u32"
+arithmetic = "low-bits"
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
+
+[[vendor-narrowings]]
+name = "set_path_of_command"
+field = "FE.PBUS_COMMAND.PATH"
+value = "u32"
+arithmetic = "low-bits"
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
+sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
+
+[[vendor-narrowings]]
+name = "set_clk_coex_lp_div_num_low_bits"
+field = "MODEM_LPCON.COEX_LP_CLK_CONF.CLK_COEX_LP_DIV_NUM"
+value = "u32"
+arithmetic = "low-bits"
+description = "coex_hw_timer_freq_set stores the low twelve bits of its divisor minus one."
+sources = ["BLOB_LIBCOEX_HW_TIMER"]
+
+[[vendor-narrowings]]
+name = "set_slow_clock_calibration_low_bits"
+field = "MODEM_PWR.SLOW_CLOCK_CALIBRATION.VALUE"
+value = "u32"
+arithmetic = "low-bits"
+description = "hal_timer_update_by_rtc stores the low eighteen bits of the value g_wifi_osi_funcs._slowclk_cal_get returns."
+sources = ["BLOB_LIBPP_HAL_INIT_TAIL"]
+
+[[vendor-narrowings]]
+name = "set_wifi_max_gain_index_low_bits"
+field = "WIFI_BB.AGC_SHARED_CONTROL.WIFI_MAX_GAIN_INDEX"
+value = "u8"
+arithmetic = "low-bits"
+description = "phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`)."
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
+
+[[vendor-narrowings]]
+name = "set_agc_initial_gain_index_low_bits"
+field = "WIFI_BB.AGC_GAIN_LIMIT_LOW.INITIAL_GAIN_INDEX"
+value = "u8"
+arithmetic = "low-bits"
+description = "phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`)."
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
+
+[[vendor-narrowings]]
+name = "set_rx_initial_gain_index_low_bits"
+field = "WIFI_BB.RX_GAIN_LIMIT_CONTROL.INITIAL_GAIN_INDEX"
+value = "u8"
+arithmetic = "low-bits"
+description = "phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`)."
+sources = ["ROM_REV0_PHY_AGC", "BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE"]
+
+[[vendor-narrowings]]
+name = "set_nrx_quotient_low_bits"
+field = "WIFI_BB.NRX_FREQUENCY_CONTROL.BITS_0_23_OPAQUE"
+value = "u32"
+arithmetic = "low-bits"
+description = "phy_nrx_freq_set masks its signed quotient to the low 24 bits before the store."
+sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"]
+
+[[vendor-narrowings]]
+name = "set_response_power_index_low_bits"
+field = "WIFI_MAC.IMMEDIATE_RESPONSE%s.POWER_INDEX"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_power_0_low_bits"
+field = "WIFI_MAC.TB_POWER%s.POWER_0"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_power_1_low_bits"
+field = "WIFI_MAC.TB_POWER%s.POWER_1"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_power_2_low_bits"
+field = "WIFI_MAC.TB_POWER%s.POWER_2"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_power_3_low_bits"
+field = "WIFI_MAC.TB_POWER%s.POWER_3"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tail_power_index_low_bits"
+field = "WIFI_MAC.TB_RU_POWER_TAIL.POWER_INDEX"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_ru_power_0_low_bits"
+field = "WIFI_MAC.TB_RU_POWER%s.POWER_0"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_ru_power_1_low_bits"
+field = "WIFI_MAC.TB_RU_POWER%s.POWER_1"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_ru_power_2_low_bits"
+field = "WIFI_MAC.TB_RU_POWER%s.POWER_2"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_ru_power_3_low_bits"
+field = "WIFI_MAC.TB_RU_POWER%s.POWER_3"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tb_ru_power_4_low_bits"
+field = "WIFI_MAC.TB_RU_POWER%s.POWER_4"
+value = "u8"
+arithmetic = "low-bits"
+description = "The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64)."
+sources = ["BLOB_LIBPP_HAL_TX_POWER_INIT"]
+
+[[vendor-narrowings]]
+name = "set_tx_iq_gain_coefficient_saturated"
+field = "FE.IQ_CORRECTION_AUX.TX_IQ_GAIN_COEFFICIENT"
+value = "i8"
+arithmetic = "symmetric-saturation"
+description = "phy_txiq_set_reg clamps the signed coefficient to ±31, the most negative two's-complement endpoint excluded, before it stores the field."
+sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS"]
+
+[[vendor-narrowings]]
+name = "set_tx_iq_phase_coefficient_saturated"
+field = "FE.IQ_CORRECTION_AUX.TX_IQ_PHASE_COEFFICIENT"
+value = "i8"
+arithmetic = "symmetric-saturation"
+description = "phy_txiq_set_reg clamps the signed coefficient to ±63, the most negative two's-complement endpoint excluded, before it stores the field."
+sources = ["ROM_REV0_PHY_IQ_COEFFICIENTS"]

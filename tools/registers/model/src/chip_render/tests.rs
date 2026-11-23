@@ -90,16 +90,19 @@ fn refused(rendered: &str, main: &str) -> String {
 fn cargo(directory: &Path, rendered: &str, main: &str, command: &str) -> std::process::Output {
     let mmio = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../portable/mmio");
     let memory = mmio.with_file_name("memory");
+    let bounded = mmio.with_file_name("bounded");
     std::fs::write(
         directory.join("Cargo.toml"),
         format!(
             "[package]\nname = \"rendered\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\
              [dependencies]\noer-portable-mmio = {{ path = {:?} }}\n\
+             oer-portable-bounded = {{ path = {:?} }}\n\
              oer-portable-memory = {{ path = {:?} }}\n\
              oer-portable-riscv = {{ path = {:?}, features = [\"host-hart\"] }}\n\
              bytemuck = {{ version = \"1.25.2\", default-features = false, features = [\"derive\", \"min_const_generics\"] }}\n\
              [workspace]\n",
             mmio.display().to_string(),
+            bounded.display().to_string(),
             memory.display().to_string(),
             mmio.with_file_name("riscv").display().to_string()
         ),
@@ -304,8 +307,8 @@ fn names_lose_the_block_prefix() {
     for item in [
         "pub fn modify_config(&mut self, change: impl FnOnce(&mut config::W))",
         "pub fn set_enable(&mut self, value: bool)",
-        "pub fn read_slot(&self, index: oer_portable_mmio::Index<4>) -> slot::R",
-        "pub fn read_ch_conf(&self, index: oer_portable_mmio::Index<2>) -> ch_conf::R",
+        "pub fn read_slot(&self, index: oer_portable_bounded::Index<4>) -> slot::R",
+        "pub fn read_ch_conf(&self, index: oer_portable_bounded::Index<2>) -> ch_conf::R",
         "pub fn read_ch1_cnt(&self) -> ch_cnt::R",
         "pub fn modify_word_0060_opaque(",
     ] {
@@ -436,7 +439,9 @@ fn a_template_beside_its_single_register_keeps_its_index_place() {
         "{rust}"
     );
     assert!(
-        rust.contains("pub fn read_slot_n(&self, index: oer_portable_mmio::Index<4>) -> slot_n::R"),
+        rust.contains(
+            "pub fn read_slot_n(&self, index: oer_portable_bounded::Index<4>) -> slot_n::R"
+        ),
         "{rust}"
     );
 }
@@ -618,10 +623,10 @@ fn main() {
         println!("pop {:x}", task.pop_fifo());
         task.push_fifo(0x12);
         task.write_port(0xdead_beef);
-        task.modify_slot(oer_portable_mmio::Index::constant::<2>(), |w| {
+        task.modify_slot(oer_portable_bounded::Index::constant::<2>(), |w| {
             w.set_value(0x1234);
         });
-        task.modify_ch_conf(oer_portable_mmio::Index::new(1).expect("index 1"), |w| {
+        task.modify_ch_conf(oer_portable_bounded::Index::new(1).expect("index 1"), |w| {
             w.set_en(true);
         });
         println!("ch1 cnt {:x}", task.read_ch1_cnt().n());
@@ -973,7 +978,7 @@ fn main() {
             w.set_on(true).set_key(0x5a);
         });
         // The FIFO of a repeated group, by index.
-        println!("fifo {:x} {:x}", task.pop_ch_cnt(oer_portable_mmio::Index::constant::<0>()), task.pop_ch_cnt(oer_portable_mmio::Index::constant::<1>()));
+        println!("fifo {:x} {:x}", task.pop_ch_cnt(oer_portable_bounded::Index::constant::<0>()), task.pop_ch_cnt(oer_portable_bounded::Index::constant::<1>()));
         // The whole-word image masks its sources first.
         irq.mask_and_clear_events();
     }
@@ -1959,9 +1964,9 @@ fn indexed_fields_follow_the_block_prefix_rule() {
         r#"fn main() {
         let mut memory = [0_u32; 0x40];
         let (mut task, _) = radio::radio0_host(&mut memory).unwrap();
-        task.modify_config(|w| { w.set_hart_enable(oer_portable_mmio::Index::constant::<1>(), true); });
-        assert!(task.read_config().hart_enable(oer_portable_mmio::Index::constant::<1>()));
-        assert!(!task.read_config().hart_enable(oer_portable_mmio::Index::constant::<0>()));
+        task.modify_config(|w| { w.set_hart_enable(oer_portable_bounded::Index::constant::<1>(), true); });
+        assert!(task.read_config().hart_enable(oer_portable_bounded::Index::constant::<1>()));
+        assert!(!task.read_config().hart_enable(oer_portable_bounded::Index::constant::<0>()));
     }"#,
     );
 }
@@ -2078,8 +2083,8 @@ fn a_shared_part_on_a_hart_local_instance_stores_its_images_with_its_hart_s_proo
     // One type a hart; its stores take that hart's proof, through `&self`.
     for item in [
         "pub struct Pending<const H: u8, P: oer_portable_mmio::Placement",
-        "pub fn pend(&self, index: oer_portable_mmio::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
-        "pub fn unpend(&self, index: oer_portable_mmio::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
+        "pub fn pend(&self, index: oer_portable_bounded::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
+        "pub fn unpend(&self, index: oer_portable_bounded::Index<2>, _hart: &oer_portable_riscv::OnHart<H>)",
         "write_byte_shared_indexed::<0x70, 0x1, 2>(index, PEND_IMAGE)",
         "pub pending: (super::radio::Pending<0>, super::radio::Pending<1>,),",
         "type Sharing = oer_portable_mmio::sharing::Shared;",
@@ -2102,7 +2107,7 @@ fn a_shared_part_on_a_hart_local_instance_stores_its_images_with_its_hart_s_proo
     run(
         &rust,
         r#"fn main() {
-        use oer_portable_mmio::Index;
+        use oer_portable_bounded::Index;
         use oer_portable_riscv::OnHart;
         let mut memory = [0_u32; 0x40];
         memory[0x70 / 4] = 0xffff_0000;
@@ -2143,7 +2148,7 @@ fn a_shared_part_on_a_hart_local_instance_stores_its_images_with_its_hart_s_proo
         let refusal = refused(
             &rust,
             &format!(
-                "fn main() {{\nuse oer_portable_mmio::Index;\nuse oer_portable_riscv::OnHart;\nlet mut memory = [0_u32; 0x40];\n{body}\n}}"
+                "fn main() {{\nuse oer_portable_bounded::Index;\nuse oer_portable_riscv::OnHart;\nlet mut memory = [0_u32; 0x40];\n{body}\n}}"
             ),
         );
         assert!(refusal.contains(error), "{error}: {refusal}");
@@ -2460,6 +2465,80 @@ fn main() {
         output.trim(),
         "10 11\n20 21\n40 41\ntrue\ntrue\n[a0, 11, 20, 21, a2, 31, a3, 41]"
     );
+}
+
+/// `RAD_CONFIG` with `WINDOW` (15:12), bits 10.. of a `u64`, and `TRIM`
+/// (3:1) and `LOW` (11:8, where `RAD_MODE` is narrowed to 9:8 first) the
+/// policy's narrowings.
+fn with_window_and_narrowings() -> String {
+    rendered_with(&[
+        (
+            "types/radio.toml",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"\n\n\
+             [[registers.fields]]\nname = \"WINDOW\"\nbits = \"15:12\"\nclass = \"plain\"\n\
+             window = { quantity = \"u64\", from = 10, sources = [\"SRC_HEADER\"] }\n\n\
+             [[registers.fields]]\nname = \"TRIM\"\nbits = \"3:1\"\nclass = \"plain\"",
+        ),
+        (
+            "policy.toml",
+            "[[partitions]]\nname = \"SecondPeripherals\"",
+            "[[vendor-narrowings]]\nname = \"set_trim_of_byte\"\nfield = \"RADIO0.RAD_CONFIG.TRIM\"\n\
+             value = \"u8\"\nfrom = 1\narithmetic = \"low-bits\"\n\
+             description = \"The vendor stores bits 3:1 of its byte.\"\nsources = [\"SRC_DRIVER\"]\n\n\
+             [[vendor-narrowings]]\nname = \"set_trim_saturated\"\nfield = \"RADIO0.RAD_CONFIG.TRIM\"\n\
+             value = \"i8\"\narithmetic = \"symmetric-saturation\"\n\
+             description = \"The vendor clamps its signed trim to the field.\"\nsources = [\"SRC_DRIVER\"]\n\n\
+             [[partitions]]\nname = \"SecondPeripherals\"",
+        ),
+    ])
+}
+
+#[test]
+fn a_window_and_the_policy_s_narrowings_are_setters_of_their_field_alone() {
+    let rust = with_window_and_narrowings();
+    assert!(
+        rust.contains("pub fn set_window_window(&mut self, value: u64) -> &mut Self {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub fn set_trim_of_byte(&mut self, value: u8) -> &mut Self {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub fn set_trim_saturated(&mut self, value: i8) -> &mut Self {"),
+        "{rust}"
+    );
+    assert!(rust.contains("/// SOURCE: SRC_DRIVER."), "{rust}");
+    // A field with neither has none.
+    assert!(!rust.contains("set_trim_window"), "{rust}");
+    let output = run(
+        &rust,
+        r#"
+fn main() {
+    let mut memory = [0_u32; 128];
+    {
+        let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+        task.modify_config(|w| {
+            w.set_window_window(0xffff_ffff_0000_f400).set_trim_of_byte(0xfa);
+        });
+    }
+    println!("{:x}", memory[0] & 0xf00e);
+    for trim in [-1_i8, 3, 4, -4, i8::MIN, i8::MAX] {
+        {
+            let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+            task.modify_config(|w| {
+                w.set_trim_saturated(trim);
+            });
+        }
+        print!("{:x} ", (memory[0] >> 1) & 7);
+    }
+}
+"#,
+    );
+    // Bits 13:10 of the quantity (0xd) and bits 3:1 of the byte (0b101);
+    // then the trim clamped to ±3 in three bits: -1, 3, 3, -3, -3, 3.
+    assert_eq!(output.trim(), "d00a\n7 3 3 5 5 3");
 }
 
 #[test]

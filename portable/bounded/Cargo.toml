@@ -1,0 +1,18 @@
+[package]
+name = "oer-portable-bounded"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bounded numbers: a number below a bound, made only by a checked constructor"
+
+[dev-dependencies]
+oer-tools-test-ui-cases = { path = "../../tools/test/ui-cases" }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+layer = "contract"
+platform = "portable"

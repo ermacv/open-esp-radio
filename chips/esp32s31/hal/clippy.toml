@@ -1,5 +1,5 @@
-# Removed by R2, which cleans the HAL by area (tasks/323): its
-# `Bits::truncate` calls and five run-time `debug_assert!`s
+# Removed by R2, which cleans the HAL by area (tasks/323): its five
+# run-time `debug_assert!`s
 # (power/clock/executor.rs 2, dma/tx_ampdu_storage.rs, modem/platform.rs,
 # phy/restore.rs). The root's configuration without what the HAL still calls.
 disallowed-methods = [
@@ -20,6 +20,9 @@ disallowed-methods = [
     # Typed register blocks are claimed once, by the chip PAC's root from
     # the single reset root (docs/unsafe.md, Generated access).
     { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
+    # `Bits::truncate` keeps the low bits of any value; only the PAC's
+    # generated getters cut a field out of a word with it (docs/unsafe.md).
+    { path = "oer_portable_mmio::Bits::truncate", reason = "keeps the low bits of any value: Bits::new, Bits::constant, a field's range type or a name's From instead" },
     # `Bits::truncate` keeps the low bits of any value; only the PAC's
     # generated getters cut a field out of a word with it (docs/unsafe.md).
     # The catalogue of methods that panic or read past a bound: what a

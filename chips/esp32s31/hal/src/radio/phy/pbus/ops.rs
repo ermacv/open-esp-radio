@@ -6,7 +6,7 @@
 #![forbid(unsafe_code)]
 
 use oer_chips_esp32s31_pac::fe::{PhyPbus, status_clock_force};
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 /// Publish one of the four reviewed force-TX/RX transition phases.
 ///
@@ -67,15 +67,17 @@ pub(crate) fn publish_force_test<P: Placement>(
     path: u8,
     test_value: u16,
 ) {
+    // Each field takes its own value and what the field below spills over
+    // its width, as the ROM's composition lays them; each narrowing keeps
+    // its field's low bits.
+    use oer_chips_esp32s31_pac::fe::pbus_command::{SELECTOR_WIDTH, TEST_VALUE_WIDTH};
     let selector = u32::from(selector);
     let test_value = u32::from(test_value);
-    let test_field = test_value | (selector >> 4);
-    let path_field = u32::from(path) | (test_value >> 9);
     pbus.modify_pbus_command(|w| {
         w.set_transaction_start(true)
-            .set_selector(Bits::truncate(selector))
-            .set_test_value(Bits::truncate(test_field))
-            .set_path(Bits::truncate(path_field));
+            .set_selector_of_command(selector)
+            .set_test_value_of_command(test_value | (selector >> SELECTOR_WIDTH))
+            .set_path_of_command(u32::from(path) | (test_value >> TEST_VALUE_WIDTH));
     });
 }
 
@@ -93,7 +95,7 @@ pub(crate) fn clear_transaction<P: Placement>(pbus: &mut PhyPbus<P>) {
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u16 {
     let path_one = path == 1;
-    let bits: Bits<9> = match selector {
+    let bits: oer_portable_mmio::Bits<9> = match selector {
         0 if path_one => pbus.read_read_result_3().bits_18_26_opaque(),
         0 => pbus.read_read_result_3().bits_9_17_opaque(),
         1 if path_one => pbus.read_read_result_0().bits_9_17_opaque(),

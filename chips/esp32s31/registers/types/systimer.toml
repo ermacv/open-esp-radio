@@ -303,6 +303,7 @@ name = "HI"
 bits = "19:0"
 class = "plain"
 description = "Configures the alarm value to be loaded to COMP0, high 20 bits."
+window = { quantity = "u64", from = 32, sources = ["ESP_IDF_4D80C1B2_S31_SYSTIMER_LL_H_L153"] }
 
 [[registers]]
 name = "TARGET%s_LO"
@@ -316,6 +317,7 @@ name = "LO"
 bits = "31:0"
 class = "plain"
 description = "Configures the alarm value to be loaded to COMP0, low 32 bits."
+window = { quantity = "u64", sources = ["ESP_IDF_4D80C1B2_S31_SYSTIMER_LL_H_L153"] }
 
 [[registers]]
 name = "TARGET%s_CONF"

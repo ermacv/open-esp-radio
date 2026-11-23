@@ -89,41 +89,6 @@ impl TxIqToneControlFields {
     }
 }
 
-const fn saturate_tx_iq_gain(coefficient: i8) -> i8 {
-    // Complete ROM `phy_txiq_set_reg` deliberately excludes the most
-    // negative two's-complement endpoint before publishing the six-bit
-    // field. This differs from merely retaining the low bits of an `i8`.
-    if coefficient < -31 {
-        -31
-    } else if coefficient > 31 {
-        31
-    } else {
-        coefficient
-    }
-}
-
-const fn saturate_tx_iq_phase(coefficient: i8) -> i8 {
-    // The seven-bit phase field has the analogous symmetric ROM range.
-    if coefficient < -63 {
-        -63
-    } else if coefficient > 63 {
-        63
-    } else {
-        coefficient
-    }
-}
-
-/// The low bits of one signed coefficient's two's-complement byte, as the
-/// vendor's field store keeps them.
-const fn coefficient_bits<const WIDTH: u32>(coefficient: i8) -> Bits<WIDTH> {
-    Bits::truncate(coefficient as u8 as u32)
-}
-
-/// A ten-bit tone selector's two low bits.
-const fn tone_selector_low(selector: u16) -> Bits<2> {
-    Bits::truncate(selector as u32)
-}
-
 /// A ten-bit tone selector's upper eight bits.
 const fn tone_selector_high(selector: u16) -> u8 {
     (selector >> 2) as u8
@@ -647,10 +612,10 @@ fn configure_tone_selectors<P: PhyPlacement>(
     path_1: u16,
 ) {
     bb.fe.modify_tone_selector_control(|w| {
-        w.set_path_0_selector_low(tone_selector_low(path_0));
+        w.set_path_0_selector_low(crate::radio::phy::residue_of_four(path_0));
     });
     bb.fe.modify_tone_selector_control(|w| {
-        w.set_path_1_selector_low(tone_selector_low(path_1));
+        w.set_path_1_selector_low(crate::radio::phy::residue_of_four(path_1));
     });
 }
 
@@ -788,7 +753,7 @@ pub fn configure_txiq_mismatch_power_first<P: PhyPlacement>(
         },
     );
     bb.fe.modify_tone_selector_control(|w| {
-        w.set_path_0_selector_low(tone_selector_low(selector));
+        w.set_path_0_selector_low(crate::radio::phy::residue_of_four(selector));
     });
 }
 
@@ -887,9 +852,8 @@ pub fn configure_rx_iq_calibration_mode<P: PhyPlacement>(bb: &mut BasebandRegist
 
 /// Publish one signed TX-IQ gain coefficient using the ROM saturation.
 pub fn set_tx_iq_gain_coefficient<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, coefficient: i8) {
-    let value = coefficient_bits(saturate_tx_iq_gain(coefficient));
     bb.fe.modify_iq_correction_aux(|w| {
-        w.set_tx_iq_gain_coefficient(value);
+        w.set_tx_iq_gain_coefficient_saturated(coefficient);
     });
 }
 
@@ -898,16 +862,15 @@ pub fn set_tx_iq_phase_coefficient<P: PhyPlacement>(
     bb: &mut BasebandRegisters<P>,
     coefficient: i8,
 ) {
-    let value = coefficient_bits(saturate_tx_iq_phase(coefficient));
     bb.fe.modify_iq_correction_aux(|w| {
-        w.set_tx_iq_phase_coefficient(value);
+        w.set_tx_iq_phase_coefficient_saturated(coefficient);
     });
 }
 
 /// Publish one signed RX-IQ gain coefficient using the ROM truncation.
 pub fn set_rx_iq_gain_coefficient<P: PhyPlacement>(bb: &mut BasebandRegisters<P>, coefficient: i8) {
     bb.fe.modify_iq_correction_control(|w| {
-        w.set_rx_iq_gain_coefficient(coefficient_bits(coefficient));
+        w.set_rx_iq_gain_coefficient_low_bits(coefficient);
     });
 }
 
@@ -917,7 +880,7 @@ pub fn set_rx_iq_phase_coefficient<P: PhyPlacement>(
     coefficient: i8,
 ) {
     bb.fe.modify_iq_correction_control(|w| {
-        w.set_rx_iq_phase_coefficient(coefficient_bits(coefficient));
+        w.set_rx_iq_phase_coefficient_low_bits(coefficient);
     });
 }
 

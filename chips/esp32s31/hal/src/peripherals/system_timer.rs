@@ -12,7 +12,8 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_chips_family_drivers_system_timer::CounterLatch;
 use oer_chips_family_platform_port::{AlarmPart, Comparator, Comparators};
-use oer_portable_mmio::{Bits, Fixed, Index, InterruptSource, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 
 #[cfg(test)]
 mod tests;
@@ -269,14 +270,12 @@ impl<P: Placement> Comparators for SystimerComparators<P> {
         );
         let Some(ticks) = ticks else { return };
         let index = index(comparator);
-        // Both supported targets are little-endian; split the counter value
-        // into words without raw register masks or shifts.
-        let [low, high]: [u32; 2] = bytemuck::cast(ticks);
+        // The vendor's stores: each word takes its bits of the target.
         self.0.modify_target_hi(index, |target| {
-            target.set_hi(Bits::truncate(high));
+            target.set_hi_window(ticks);
         });
         self.0.modify_target_lo(index, |target| {
-            target.set_lo(low);
+            target.set_lo_window(ticks);
         });
         self.0.trigger_comp_load_load(index);
         self.set_work(

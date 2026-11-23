@@ -82,8 +82,13 @@ pub trait FlashCommandRegisters {
     /// Set the command, address and dummy phases of `mode`'s read command,
     /// which the chip's port holds, with an input phase and no output phase.
     fn configure_read(&mut self, access: Access<'_>, mode: FlashReadMode);
-    /// Set the next command's address and input length in bytes.
-    fn set_transfer(&mut self, access: Access<'_>, address: u32, bytes: u32);
+    /// Set the next command's address and its input of `last + 1` words.
+    fn set_transfer(
+        &mut self,
+        access: Access<'_>,
+        address: u32,
+        last: oer_portable_bounded::Index<CHUNK_WORDS>,
+    );
     /// Start the user command, or [`Busy`] while one runs.
     fn start(&mut self, access: Access<'_>) -> Result<(), Busy>;
     /// Whether any command of the command word still runs: the user
@@ -175,12 +180,14 @@ where
     registers.configure_read(Access::new(), mode);
     let mut chunk_address = address;
     let mut words = destination.iter_mut();
-    while words.len() != 0 {
-        let chunk_bytes = u32::try_from(words.len().min(CHUNK_WORDS))
-            .ok()
-            .and_then(|words| words.checked_mul(4))
-            .ok_or(FlashFailure::OutsideFlash)?;
-        registers.set_transfer(Access::new(), chunk_address, chunk_bytes);
+    // The loop runs while the chunk's last word is a word of a chunk: with
+    // no word left the number wraps past every index, and the read ends.
+    while let Ok(last) = oer_portable_bounded::Index::<CHUNK_WORDS>::new(
+        words.len().min(CHUNK_WORDS).wrapping_sub(1),
+    ) {
+        // `last + 1` words of four bytes, at most `4 · CHUNK_WORDS`.
+        let chunk_bytes = last.to_u32().wrapping_add(1).wrapping_mul(4);
+        registers.set_transfer(Access::new(), chunk_address, last);
         deadline.poll(wait, || registers.start(Access::new()).ok())?;
         deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
         let data = registers.data(Access::new());

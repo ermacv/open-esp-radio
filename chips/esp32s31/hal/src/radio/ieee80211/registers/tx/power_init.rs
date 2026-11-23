@@ -1,6 +1,6 @@
 //! Generated-PAC ownership for the complete cold MAC TX-power publication.
 
-use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, bits, element};
+use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, element};
 
 /// Number of two-byte rate entries produced by complete `hal_init_tx_pwr`.
 pub const MAC_TX_POWER_RATE_COUNT: usize = 43;
@@ -116,14 +116,12 @@ impl MacTxPowerTable {
         };
         self.entries[table_rate as usize].primary as u8
     }
-
-    const fn primary_index(&self, rate: u8) -> u8 {
-        self.primary_byte(rate) & 0x3f
-    }
 }
 
+/// The RU delta of `base` above `floor`, clamped at zero, as the vendor's
+/// byte; the field's vendor cut keeps its low six bits.
 fn relative_index(base: u8, floor: u8) -> u8 {
-    base.max(floor).wrapping_sub(floor) & 0x3f
+    base.max(floor).wrapping_sub(floor)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -192,41 +190,41 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// fresh-read RMW edges and their original child-call order.
     pub fn initialize_mac_tx_power(&mut self, table: &MacTxPowerTable) {
         let init = &mut self.mac.wifi_mac_tx_power_init;
-        let index = |rate: u8| bits::<6>(u32::from(table.primary_index(rate)));
+        let index = |rate: u8| table.primary_byte(rate);
 
         // Complete hal_init_tb_power: rates 16..=25, one six-bit field per RMW.
         let tb0 = element::<3>(0);
         init.modify_tb_power(tb0, |w| {
-            w.set_power_0(index(16));
+            w.set_tb_power_0_low_bits(index(16));
         });
         init.modify_tb_power(tb0, |w| {
-            w.set_power_1(index(17));
+            w.set_tb_power_1_low_bits(index(17));
         });
         init.modify_tb_power(tb0, |w| {
-            w.set_power_2(index(18));
+            w.set_tb_power_2_low_bits(index(18));
         });
         init.modify_tb_power(tb0, |w| {
-            w.set_power_3(index(19));
+            w.set_tb_power_3_low_bits(index(19));
         });
         let tb1 = element::<3>(1);
         init.modify_tb_power(tb1, |w| {
-            w.set_power_0(index(20));
+            w.set_tb_power_0_low_bits(index(20));
         });
         init.modify_tb_power(tb1, |w| {
-            w.set_power_1(index(21));
+            w.set_tb_power_1_low_bits(index(21));
         });
         init.modify_tb_power(tb1, |w| {
-            w.set_power_2(index(22));
+            w.set_tb_power_2_low_bits(index(22));
         });
         init.modify_tb_power(tb1, |w| {
-            w.set_power_3(index(23));
+            w.set_tb_power_3_low_bits(index(23));
         });
         let tb2 = element::<3>(2);
         init.modify_tb_power(tb2, |w| {
-            w.set_power_0(index(24));
+            w.set_tb_power_0_low_bits(index(24));
         });
         init.modify_tb_power(tb2, |w| {
-            w.set_power_1(index(25));
+            w.set_tb_power_1_low_bits(index(25));
         });
 
         // Complete hal_init_imrsp_power. Each tuple is
@@ -297,75 +295,75 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
                 w.set_rate_index(encoded_rate.into());
             });
             init.modify_immediate_response(response, |w| {
-                w.set_power_index(index(lookup_rate));
+                w.set_response_power_index_low_bits(index(lookup_rate));
             });
         }
 
         // Complete hal_init_tb_ru_power and the complete setter jump tables.
         // The complete leaf zero-extends the signed table byte before each
-        // unsigned clamp. Do not truncate to the six-bit destination field
-        // until after subtraction: negative i8 values therefore retain the
-        // blob's modulo-256 then modulo-64 behavior.
+        // unsigned clamp. The six-bit cut is the fields' vendor cut, after
+        // the subtraction: negative i8 values therefore retain the blob's
+        // modulo-256 then modulo-64 behavior.
         let base = table.primary_byte(16);
-        let delta_10 = bits::<6>(u32::from(relative_index(base, 10)));
-        let delta_7 = bits::<6>(u32::from(relative_index(base, 7)));
-        let delta_4 = bits::<6>(u32::from(relative_index(base, 4)));
+        let delta_10 = relative_index(base, 10);
+        let delta_7 = relative_index(base, 7);
+        let delta_4 = relative_index(base, 4);
 
         // Selectors 0..=8.
         let ru0 = element::<3>(0);
         init.modify_tb_ru_power(ru0, |w| {
-            w.set_power_0(delta_10);
+            w.set_tb_ru_power_0_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru0, |w| {
-            w.set_power_1(delta_10);
+            w.set_tb_ru_power_1_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru0, |w| {
-            w.set_power_2(delta_10);
+            w.set_tb_ru_power_2_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru0, |w| {
-            w.set_power_3(delta_10);
+            w.set_tb_ru_power_3_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru0, |w| {
-            w.set_power_4(delta_10);
+            w.set_tb_ru_power_4_low_bits(delta_10);
         });
         let ru1 = element::<3>(1);
         init.modify_tb_ru_power(ru1, |w| {
-            w.set_power_0(delta_10);
+            w.set_tb_ru_power_0_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru1, |w| {
-            w.set_power_1(delta_10);
+            w.set_tb_ru_power_1_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru1, |w| {
-            w.set_power_2(delta_10);
+            w.set_tb_ru_power_2_low_bits(delta_10);
         });
         init.modify_tb_ru_power(ru1, |w| {
-            w.set_power_3(delta_10);
+            w.set_tb_ru_power_3_low_bits(delta_10);
         });
 
         // Selectors 37..=40.
         init.modify_tb_ru_power(ru1, |w| {
-            w.set_power_4(delta_7);
+            w.set_tb_ru_power_4_low_bits(delta_7);
         });
         let ru2 = element::<3>(2);
         init.modify_tb_ru_power(ru2, |w| {
-            w.set_power_0(delta_7);
+            w.set_tb_ru_power_0_low_bits(delta_7);
         });
         init.modify_tb_ru_power(ru2, |w| {
-            w.set_power_1(delta_7);
+            w.set_tb_ru_power_1_low_bits(delta_7);
         });
         init.modify_tb_ru_power(ru2, |w| {
-            w.set_power_2(delta_7);
+            w.set_tb_ru_power_2_low_bits(delta_7);
         });
 
         // Selectors 53, 54 and 61.
         init.modify_tb_ru_power(ru2, |w| {
-            w.set_power_3(delta_4);
+            w.set_tb_ru_power_3_low_bits(delta_4);
         });
         init.modify_tb_ru_power(ru2, |w| {
-            w.set_power_4(delta_4);
+            w.set_tb_ru_power_4_low_bits(delta_4);
         });
         init.modify_tb_ru_power_tail(|w| {
-            w.set_power_index(bits(u32::from(base & 0x3f)));
+            w.set_tail_power_index_low_bits(base);
         });
     }
 }

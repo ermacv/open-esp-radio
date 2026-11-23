@@ -1,7 +1,8 @@
 //! The finite Wi-Fi CCMP key-table transactions.
 
 use oer_chips_esp32s31_pac::wifi_mac::{WifiMacCryptoControl, WifiMacKeyTable};
-use oer_portable_mmio::{Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::Placement;
 
 use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, element};
 use oer_portable_mmio::Bits;

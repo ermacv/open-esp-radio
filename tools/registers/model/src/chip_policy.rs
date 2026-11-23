@@ -30,9 +30,10 @@ mod transactions;
 
 pub use error::{Error, ErrorKind};
 pub use source::{
-    Elements, FieldOrModify, FixedRegisterImage, FixedRegisterSequence, InterruptSnapshot,
-    POLICY_SCHEMA, Part, Partition, PartitionImageRead, PolicyFile, RecordWord, SequenceStep,
-    Triggers, Unclaimed, WholeWordBits, ZeroBasedFieldWrite, ZeroRegisterWrite,
+    Arithmetic, Elements, FieldOrModify, FixedRegisterImage, FixedRegisterSequence,
+    InterruptSnapshot, POLICY_SCHEMA, Part, Partition, PartitionImageRead, PolicyFile, RecordWord,
+    SequenceStep, Triggers, Unclaimed, VendorNarrowing, WholeWordBits, ZeroBasedFieldWrite,
+    ZeroRegisterWrite,
 };
 
 /// One part: its partition's position in the file and its own in the

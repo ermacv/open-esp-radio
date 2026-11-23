@@ -32,10 +32,9 @@ fn admitted_divisors_preserve_the_vendor_field_encoding_at_wrap_boundaries() {
             let config = TimerClockConfig::new(selector, divisor)
                 .ok()
                 .expect("admitted divisor");
-            assert_eq!(
-                config.divider.get(),
-                divisor.wrapping_sub(1) & CoexTimerClockDividerMinusOne::MAX
-            );
+            // The vendor's number whole; the field's cut keeps its low bits
+            // (`set_coex_timer_clock_divider_wraps_to_its_field`).
+            assert_eq!(config.divider.get(), divisor.wrapping_sub(1));
         }
     }
 }

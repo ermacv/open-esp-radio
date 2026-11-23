@@ -199,7 +199,7 @@ fn render_proven_images(
         );
         let _ = writeln!(
             body,
-            "#[inline(always)]\npub fn {}(&self, index: oer_portable_mmio::Index<{count}>, _hart: &{proof}<H>) {{\n\
+            "#[inline(always)]\npub fn {}(&self, index: oer_portable_bounded::Index<{count}>, _hart: &{proof}<H>) {{\n\
              self.0.write_byte_shared_indexed::<0x{offset:x}, 0x{stride:x}, {count}>(index, {constant});\n}}\n",
             names::ident(name)
         );
@@ -285,7 +285,7 @@ fn render_element_range(
     );
     let _ = writeln!(
         body,
-        "#[inline]\npub fn {}(&mut self) {{\nfor element in 0..{count} {{\nif let Ok(index) = oer_portable_mmio::Index::<{count}>::new(element) {{\nself.0.write_indexed::<0x{base:x}, 0x{stride:x}, {count}>(index, 0x{:08x});\n}}\n}}\n}}\n",
+        "#[inline]\npub fn {}(&mut self) {{\nfor element in 0..{count} {{\nif let Ok(index) = oer_portable_bounded::Index::<{count}>::new(element) {{\nself.0.write_indexed::<0x{base:x}, 0x{stride:x}, {count}>(index, 0x{:08x});\n}}\n}}\n}}\n",
         names::ident(entity),
         step.value
     );

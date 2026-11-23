@@ -22,8 +22,9 @@ use oer_chips_family_boot::drivers::cores::{
     self as driver, BootWordKept, CoreState, STALL_POLLS, Unconfirmed,
 };
 use oer_chips_family_platform_port::SecondaryEntry;
+use oer_portable_bounded::Index;
 use oer_portable_memory::ClaimCell;
-use oer_portable_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{

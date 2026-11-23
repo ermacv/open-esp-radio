@@ -94,7 +94,8 @@ use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
 use oer_portable_riscv::clic::{Control, LevelBits};
 
 use crate::system::cores::{StopTheWorld, key};
-use oer_portable_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 /// Controller geometry generated from the chip facts, shared with runtime
 /// vector generation. Lines below `LINES.first` are reserved core-local inputs.
@@ -698,9 +699,7 @@ impl<B: RouteBank, const H: u8, C: Placement, P: PendingBytes<H>> Controller
 
     fn silence(&mut self, source: Source) {
         RouteBank::modify_route(&mut self.matrix, source.0, |route| {
-            route.set_map(Bits::truncate(
-                interrupt_core::route::Map::Disconnected.bits(),
-            ));
+            route.set_map(interrupt_core::route::Map::Disconnected.into());
         });
     }
 

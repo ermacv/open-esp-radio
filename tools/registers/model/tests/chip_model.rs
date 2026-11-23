@@ -2030,6 +2030,61 @@ fn a_definitions_file_of_another_schema_or_a_name_twice_is_refused() -> TestResu
     Ok(())
 }
 
+/// `BITS_0_7_OPAQUE` with `window` as its window and `extra` after it.
+fn window(window: &str, extra: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"",
+        &format!(
+            "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"\nwindow = {window}{extra}"
+        ),
+    )?;
+    Ok(fixture)
+}
+
+#[test]
+fn a_window_states_its_quantity_and_where_the_field_starts() -> TestResult {
+    let model = window(
+        "{ quantity = \"u64\", from = 10, sources = [\"SRC_HEADER\"] }",
+        "",
+    )?
+    .load()?;
+    let window = field(&model, "BITS_0_7_OPAQUE")?
+        .window
+        .as_ref()
+        .ok_or("no window")?;
+    assert_eq!((window.quantity.width(), window.from), (64, 10));
+    Ok(())
+}
+
+#[test]
+fn a_window_that_is_the_whole_quantity_reaches_past_it_or_is_signed_is_refused() -> TestResult {
+    for quantity in [
+        "{ quantity = \"u8\", sources = [\"SRC_HEADER\"] }",
+        "{ quantity = \"u16\", from = 9, sources = [\"SRC_HEADER\"] }",
+        "{ quantity = \"i32\", sources = [\"SRC_HEADER\"] }",
+    ] {
+        let error = window(quantity, "")?.rejection()?;
+        assert!(
+            matches!(error.kind, ErrorKind::Values(_)),
+            "{quantity} {error}"
+        );
+        assert!(error.entity.ends_with("BITS_0_7_OPAQUE"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_window_on_a_field_with_values_or_without_its_source_is_refused() -> TestResult {
+    let quantity = "{ quantity = \"u32\", sources = [\"SRC_HEADER\"] }";
+    let error = window(quantity, "\nvalues = [{ name = \"ONE\", value = 1 }]")?.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    let error = window(&quantity.replace("SRC_HEADER", "SRC_NONE"), "")?.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::UnknownSource(_)), "{error}");
+    Ok(())
+}
+
 #[test]
 fn a_dictionary_value_wider_than_the_dictionary_is_refused() -> TestResult {
     let fixture = Fixture::new()?;

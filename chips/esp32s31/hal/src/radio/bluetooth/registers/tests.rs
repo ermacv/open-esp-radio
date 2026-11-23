@@ -10,7 +10,7 @@
 use std::vec::Vec;
 
 use oer_chips_esp32s31_pac::{bt_bb::BtV32Baseband, instances};
-use oer_portable_mmio::Index;
+use oer_portable_bounded::Index;
 
 use super::host::{HostMemory, changed};
 use super::{

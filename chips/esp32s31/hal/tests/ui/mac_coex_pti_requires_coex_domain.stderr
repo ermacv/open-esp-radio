@@ -21,5 +21,5 @@ error[E0423]: cannot initialize a tuple struct which contains private fields
 note: constructor is not visible here due to private fields
   --> $WORKSPACE/chips/family/radio/coex/src/pti.rs
    |
-   | pub struct CoexPti(u8);
-   |                    ^^ private field
+   | pub struct CoexPti(oer_portable_bounded::Index<16>);
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ private field

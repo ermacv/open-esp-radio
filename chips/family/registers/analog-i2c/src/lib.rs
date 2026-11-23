@@ -192,13 +192,13 @@ impl Route {
     pub const fn address(self, index: u8) -> ByteAddress {
         ByteAddress::new(self.command_code, index)
     }
-    pub const fn complemented_read_select(self) -> u32 {
-        let mask = if self.read_mask_bits == 32 {
-            u32::MAX
-        } else {
-            0x00ff_ffff
-        };
-        mask & !(self.read_select as u32)
+    /// The read mask field's three octets, least significant first: the
+    /// complement of the sixteen-bit selection with `0xff` above it. The
+    /// route's width decides the published word's top octet, which is not
+    /// this field.
+    pub const fn read_mask_octets(self) -> [u8; 3] {
+        let [low, high] = (!self.read_select).to_le_bytes();
+        [low, high, 0xff]
     }
 }
 

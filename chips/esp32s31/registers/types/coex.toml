@@ -97,7 +97,6 @@ name = "PRIMARY_TICK_IMAGE"
 bits = "23:0"
 class = "plain"
 description = "Low 24 bits returned by coex_hw_timer_tick_get for the first timer value. The exact counter epoch and units remain part of the reviewed timer conversion rather than the register geometry."
-write-range = { min = 0x0, max = 0xffffff }
 
 [[registers.fields]]
 name = "PARAMETER_2"
@@ -130,7 +129,7 @@ description = "Secondary timer word. libcoexist[coexist_hw.o]::coex_hw_timer_set
 name = "SECONDARY_TICK_IMAGE"
 bits = "23:0"
 class = "plain"
-write-range = { min = 0x0, max = 0xffffff }
+description = "Low 24 bits returned by coex_hw_timer_tick_get for the second timer value."
 
 [[registers.fields]]
 name = "BITS_24_31_OPAQUE"

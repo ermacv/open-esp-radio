@@ -14,14 +14,14 @@ use crate::radio::bluetooth::registers::{
     BluetoothPlacements, BluetoothTaskRegisters, device_fence,
 };
 
-const PUBLIC_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> =
-    oer_portable_mmio::Index::constant::<0>();
-const RANDOM_DEVICE_ADDRESS_SLOT: oer_portable_mmio::Index<3> =
-    oer_portable_mmio::Index::constant::<1>();
+const PUBLIC_DEVICE_ADDRESS_SLOT: oer_portable_bounded::Index<3> =
+    oer_portable_bounded::Index::constant::<0>();
+const RANDOM_DEVICE_ADDRESS_SLOT: oer_portable_bounded::Index<3> =
+    oer_portable_bounded::Index::constant::<1>();
 
 fn program_controller_address_slot<P: Placement>(
     registers: &mut BleControllerAddressSlots<P>,
-    slot: oer_portable_mmio::Index<3>,
+    slot: oer_portable_bounded::Index<3>,
     wire_octets: [u8; 6],
 ) {
     let [octet_0, octet_1, octet_2, octet_3, octet_4, octet_5] = wire_octets;

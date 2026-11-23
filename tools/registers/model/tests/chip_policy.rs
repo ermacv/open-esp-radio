@@ -2421,3 +2421,76 @@ fn a_write_from_zero_checks_zero_only_outside_its_fields() -> TestResult {
     fixture.load()?;
     Ok(())
 }
+
+/// A vendor narrowing of `TIMER0.CONFIG.DIV` (16 bits) from the vendor's
+/// `u32`.
+const NARROWING: &str = r#"
+[[vendor-narrowings]]
+name = "set_div_of_word"
+field = "TIMER0.CONFIG.DIV"
+value = "u32"
+arithmetic = "low-bits"
+description = "The vendor stores the low half of its word."
+sources = ["SRC_DRIVER"]
+"#;
+
+#[test]
+fn a_vendor_narrowing_of_a_modified_field_loads() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(NARROWING)?;
+    let policy = fixture.load()?;
+    assert_eq!(policy.file().vendor_narrowings.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn a_narrowing_that_does_not_narrow_or_saturates_an_unsigned_number_is_refused() -> TestResult {
+    for (from, to) in [
+        ("value = \"u32\"", "value = \"u16\""),
+        (
+            "arithmetic = \"low-bits\"",
+            "arithmetic = \"symmetric-saturation\"",
+        ),
+        ("value = \"u32\"\n", "value = \"u32\"\nfrom = 20\n"),
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.append(&NARROWING.replace(from, to))?;
+        let error = fixture.rejection()?;
+        assert!(
+            matches!(error.kind, ErrorKind::Transaction(_)),
+            "{to} {error}"
+        );
+        assert_eq!(error.entity, "set_div_of_word", "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_narrowing_without_its_reason_source_field_or_a_name_of_its_own_is_refused() -> TestResult {
+    for (from, to, expected) in [
+        (
+            "description = \"The vendor stores the low half of its word.\"",
+            "description = \" \"",
+            "missing description",
+        ),
+        (
+            "sources = [\"SRC_DRIVER\"]",
+            "sources = [\"SRC_NONE\"]",
+            "unknown source",
+        ),
+        ("TIMER0.CONFIG.DIV", "TIMER0.CONFIG.NONE", "unknown field"),
+        ("set_div_of_word", "point_timer0_descriptor", "duplicate"),
+    ] {
+        let fixture = Fixture::new()?;
+        fixture.append(&NARROWING.replace(from, to))?;
+        let error = fixture.rejection()?;
+        let matched = match expected {
+            "missing description" => matches!(error.kind, ErrorKind::MissingDescription),
+            "unknown source" => matches!(error.kind, ErrorKind::UnknownSource(_)),
+            "unknown field" => matches!(error.kind, ErrorKind::UnknownField(_)),
+            _ => matches!(error.kind, ErrorKind::Duplicate(_)),
+        };
+        assert!(matched, "{expected}: {error}");
+    }
+    Ok(())
+}

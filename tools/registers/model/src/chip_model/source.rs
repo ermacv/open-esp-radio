@@ -315,6 +315,66 @@ pub struct Field {
     /// getter beside the field's own.
     #[serde(default)]
     pub carries: Vec<String>,
+    /// The field is a window of a wider quantity, whose other bits the
+    /// hardware does not take: the field gets a setter of the quantity.
+    #[serde(default)]
+    pub window: Option<Window>,
+}
+
+/// The quantity a field is a window of, as its sources state: its integer
+/// type and the bit of it at the field's bit 0. The setter
+/// `set_<field>_window` takes the quantity whole and writes its bits
+/// `from..from + width`; the hardware takes no other bit of it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Window {
+    pub quantity: Integer,
+    #[serde(default)]
+    pub from: u32,
+    pub sources: Vec<String>,
+}
+
+/// An integer type a window's quantity or a vendor's number has.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Integer {
+    U8,
+    U16,
+    U32,
+    U64,
+    I8,
+    I16,
+    I32,
+}
+
+impl Integer {
+    /// Its width in bits.
+    pub const fn width(self) -> u32 {
+        match self {
+            Self::U8 | Self::I8 => 8,
+            Self::U16 | Self::I16 => 16,
+            Self::U32 | Self::I32 => 32,
+            Self::U64 => 64,
+        }
+    }
+
+    /// Whether it is signed.
+    pub const fn signed(self) -> bool {
+        matches!(self, Self::I8 | Self::I16 | Self::I32)
+    }
+
+    /// Its Rust name.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

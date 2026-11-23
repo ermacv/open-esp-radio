@@ -320,6 +320,29 @@ not `plain`, `write-only` or `read-only`, or is a pointer or an indexed
 field. The key states what the field holds; it does not narrow the field's
 own setter or getter.
 
+A field that is a window of a wider quantity, whose other bits the
+hardware does not take (a comparison over bits 35:10 of a TSF, the high
+word of a 52-bit counter), says so in `window`, as its encoding: the
+quantity's unsigned integer type (`quantity`: `u16`, `u32` or `u64`), the
+bit of it at the field's bit 0 (`from`, 0 by default) and the sources that
+state the hardware's width.
+
+```toml
+[[registers.fields]]
+name = "TSF_BITS_35_10"
+bits = "25:0"
+class = "plain"
+window = { quantity = "u64", from = 10, sources = ["SRC"] }
+```
+
+The field gets `set_<field>_window(quantity)`, which takes the quantity
+whole and writes its bits `from..from + width`: no site shifts, casts or
+drops bytes on the way. Loading refuses a window that is the whole
+quantity, reaches past it or is signed, and a window on a field with
+values, a range, a pointer, a family or flags, or that is not written. A
+cut the vendor's code makes and the hardware does not ask for is not a
+window: it is the policy's (`vendor-narrowings`).
+
 Every field has one `class` from a closed set. The class fixes the admitted access and replay behavior; there is no
 separate access key. `read-observed` records a limited CPU access contract,
 without claiming hardware read-only behavior or arbitrary writable storage.
@@ -813,6 +836,7 @@ record of it. The kinds:
 | `fixed-register-images` | a `whole-word` image, an acknowledgement with its proof (`masks` or `consumed-event`), or a configuration of a readable hardware-updated word without a modify accessor |
 | `fixed-register-sequences` | each step's whole-word image, one method a step; the HAL orders them |
 | `field-or-modifies` (`field`) | the vendor's OR of a typed reference's image into a fresh read of one pointer field |
+| `vendor-narrowings` (`field`, `value`, `from`, `arithmetic`, `description`) | the vendor's fitting of a number of its own into one field: a setter `name` on the field's register writer |
 
 A record that would render nothing is refused, so none enters the file: a
 `zero-register-write` of a word that is not `read-observed` and a
@@ -822,6 +846,39 @@ step that is not a whole-word image cannot be written; a fixed image of
 none of the forms above fails to render, which `cargo registers validate`
 runs. Names are unique `lower_snake_case` across all transactions; the
 fields of one transaction lie in one register.
+
+A vendor narrowing is how the vendor's code fits a number of its own into
+a field the hardware does not ask it to fit: a table's byte masked, an
+index taken modulo, overlapping fields, a bit dropped, a signed
+coefficient clamped. Its entries are the places the vendor guards no
+overflow, the candidates for a refusal in the steps that own those
+values.
+
+```toml
+[[vendor-narrowings]]
+name = "set_power_0_of_table_byte"
+field = "WIFI_MAC.TB_POWER%s.POWER_0"
+value = "u8"
+arithmetic = "low-bits"
+description = "hal_init_tb_power stores the low six bits of the table byte."
+sources = ["SRC"]
+```
+
+`field` is `INSTANCE.TEMPLATE.FIELD`. `value` is the vendor's integer type
+(`u8` … `u64`, `i8`, `i16`, `i32`). `arithmetic` is one of:
+- `low-bits`: the number's bits `from..from + width`; the field lies inside
+  the number and is not all of it;
+- `symmetric-saturation`: a signed number, `from` 0, clamped to
+  `±(2^(width − 1) − 1)`, then its two's complement; the field is 2 bits
+  up to the number's width.
+
+The setter `name(value)` is rendered for that entry alone, on the writer `W`
+of the field's register, and is called inside the part's `modify_`. Several
+fields of one vendor store keep one read-modify-write. Loading refuses an
+entry whose arithmetic does not fit its field, a field that its part does
+not read, modify and write back or that admits fewer values than its width,
+a field without a native setter, a name used twice, and an entry without a
+description or sources.
 
 A fixed-sequence step that names a template with `first` and `count`
 (`{ register = "WIFI_MAC.HE_SCRATCH%s", first = 0, count = 120, value = 0 }`,

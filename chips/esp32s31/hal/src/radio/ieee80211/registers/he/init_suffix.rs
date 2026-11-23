@@ -51,7 +51,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// Sample one of the 120 linked TX MPDU-length entries.
     pub fn he_tx_mpdu_length_link(&self, index: u8) -> Option<MacHeTxMpduLengthLink> {
         let index =
-            oer_portable_mmio::Index::<MPDU_LENGTH_LINK_COUNT>::new(usize::from(index)).ok()?;
+            oer_portable_bounded::Index::<MPDU_LENGTH_LINK_COUNT>::new(usize::from(index)).ok()?;
         let value = self.mac.wifi_mac_he_init_suffix.read_he_scratch(index);
         Some(MacHeTxMpduLengthLink {
             mpdu_length: halfword(value.mpdu_length()),

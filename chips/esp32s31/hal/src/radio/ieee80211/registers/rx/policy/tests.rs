@@ -294,7 +294,7 @@ fn sta_receive_policy_snapshot<M: MacPlacement>(
 /// The six BSSID bytes of one bank.
 fn bssid<P: oer_portable_mmio::Placement>(
     bssids: &oer_chips_esp32s31_pac::wifi_mac::WifiMacBssidPolicy<P>,
-    bank: oer_portable_mmio::Index<4>,
+    bank: oer_portable_bounded::Index<4>,
 ) -> [u8; 6] {
     let [b0, b1, b2, b3] = bssids.read_bssid_low(bank).bytes_0_3().to_le_bytes();
     let [b4, b5] = bssids.read_bssid_high(bank).bssid_high().to_le_bytes();

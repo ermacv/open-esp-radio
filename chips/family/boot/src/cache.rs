@@ -99,8 +99,15 @@ pub enum SyncCommand {
 pub trait CacheSyncRegisters {
     /// The chip's selection of caches a command acts on.
     type Map: Copy;
-    /// Select the caches and the line-aligned range of the next command.
-    fn set_range(&mut self, access: Access<'_>, map: Self::Map, range: LineRange);
+    /// Select the caches and the line-aligned range of the next command,
+    /// or refuse, before any write, a range the size field cannot hold
+    /// ([`CacheFailure::RangeTooLarge`]): the chip's field is the one limit.
+    fn set_range(
+        &mut self,
+        access: Access<'_>,
+        map: Self::Map,
+        range: LineRange,
+    ) -> Result<(), CacheFailure>;
     /// Start `command` alone, every other command bit zero, or [`Busy`]
     /// while a command runs.
     fn start(&mut self, access: Access<'_>, command: SyncCommand) -> Result<(), Busy>;
@@ -113,8 +120,6 @@ pub trait CacheSyncRegisters {
 pub struct CacheGeometry<Map> {
     /// The cache line, a power of two.
     pub line_bytes: u32,
-    /// The largest range the sync engine's size field holds.
-    pub max_range_bytes: u32,
     /// The data cache the code was written through.
     pub data: Map,
     /// How often the data cache is written back.
@@ -133,14 +138,9 @@ pub struct LineRange {
 
 impl LineRange {
     /// `start..start + len` widened outward to `line_bytes` (a power of
-    /// two): refused when empty, when its end overflows and when it exceeds
-    /// `max_bytes`.
-    pub const fn cover(
-        start: u32,
-        len: u32,
-        line_bytes: u32,
-        max_bytes: u32,
-    ) -> Result<Self, CacheFailure> {
+    /// two): refused when empty and when its end overflows. Its size is
+    /// the port's to admit ([`CacheSyncRegisters::set_range`]).
+    pub const fn cover(start: u32, len: u32, line_bytes: u32) -> Result<Self, CacheFailure> {
         if len == 0 {
             return Err(CacheFailure::EmptyRange);
         }
@@ -160,9 +160,6 @@ impl LineRange {
         let Some(size) = (end & !mask).checked_sub(start) else {
             return Err(CacheFailure::RangeOverflow);
         };
-        if size > max_bytes {
-            return Err(CacheFailure::RangeTooLarge);
-        }
         Ok(Self { start, size })
     }
 
@@ -228,13 +225,13 @@ where
     R: CacheSyncRegisters,
     C: Clock + ?Sized,
 {
-    let range = LineRange::cover(start, len, geometry.line_bytes, geometry.max_range_bytes)?;
-    registers.set_range(Access::new(), geometry.data, range);
+    let range = LineRange::cover(start, len, geometry.line_bytes)?;
+    registers.set_range(Access::new(), geometry.data, range)?;
     for _ in 0..geometry.writeback_passes {
         run(registers, SyncCommand::Writeback, wait, deadline)?;
     }
     if let Some(instruction) = geometry.instruction {
-        registers.set_range(Access::new(), instruction, range);
+        registers.set_range(Access::new(), instruction, range)?;
         run(registers, SyncCommand::Invalidate, wait, deadline)?;
     }
     Ok(PublishedCode { range })
@@ -276,8 +273,8 @@ where
     R: CacheSyncRegisters,
     C: Clock + ?Sized,
 {
-    let range = LineRange::cover(start, len, geometry.line_bytes, geometry.max_range_bytes)?;
-    registers.set_range(Access::new(), geometry.data, range);
+    let range = LineRange::cover(start, len, geometry.line_bytes)?;
+    registers.set_range(Access::new(), geometry.data, range)?;
     run(registers, SyncCommand::Invalidate, wait, deadline)?;
     Ok(range)
 }

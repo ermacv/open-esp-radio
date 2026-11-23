@@ -5,7 +5,7 @@ use oer_chips_esp32s31_pac::{
     coex::{self, CoexPolicyTimers, PhyGrantProtectTimer},
     instances,
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 pub const COEX_TIMER_COUNT: u8 = oer_chips_esp32s31_pac::coex::configuration::COUNT as u8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,12 +135,12 @@ impl<'a, P: Placement> CoexTimerBankRegisters<'a, P> {
     // SOURCE: BLOB_LIBCOEX_HW_TIMER. The vendor narrows both targets to 24 bits.
     pub fn set_primary_target(&mut self, timer: CoexTimerRegister, tick_image: u32) {
         self.modify_configuration(timer, |w| {
-            w.set_primary_tick_image(Bits::truncate(tick_image));
+            w.set_primary_tick_image_low_bits(tick_image);
         });
     }
     pub fn set_secondary_target(&mut self, timer: CoexTimerRegister, tick_image: u32) {
         self.modify_secondary_target(timer, |w| {
-            w.set_secondary_tick_image(Bits::truncate(tick_image));
+            w.set_secondary_tick_image_low_bits(tick_image);
         });
     }
 }

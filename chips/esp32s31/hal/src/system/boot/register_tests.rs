@@ -13,7 +13,7 @@ use oer_chips_family_boot::{
     clock::{ActivePllPower, ClockRates, ClockWaits, CpuClockProfile, bring_up},
     flash::{FlashGeometry, FlashReadMode, read},
     mmu::{self, MmuTarget, MmuWindow},
-    psram::{self, CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramOwners, PsramWaits},
+    psram::{self, OctalPsramProfile, PsramOwners, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
 use oer_portable_mmio::Bits;
@@ -224,11 +224,35 @@ fn a_cpll_that_never_calibrates_stops_the_boot_before_the_root_moves() {
 
 const GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
     line_bytes: 64,
-    max_range_bytes: (1 << 28) - 64,
     data: CacheMap::Data,
     writeback_passes: 2,
     instruction: Some(CacheMap::BothInstructionCaches),
 };
+
+#[test]
+fn a_range_the_size_field_cannot_hold_is_refused_before_any_write() {
+    let mut words = memory(instances::cache::SIZE, 0);
+    let before = words.clone();
+    let virtual_clock = VirtualClock::new();
+    let ticking = Ticking(&virtual_clock);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut owner = CacheRegisters::host(&mut words).expect("host memory holds it");
+    let sync = const {
+        match BootWait::new("cache-sync", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
+    // 2^28 bytes: one past the 28-bit size field.
+    assert_eq!(
+        publish_code(&mut owner, GEOMETRY, 0, 1 << 28, sync, &deadline),
+        Err(BootFailure::Cache(
+            oer_chips_family_boot::cache::CacheFailure::RangeTooLarge
+        ))
+    );
+    drop(owner);
+    assert_eq!(words, before, "no word written");
+}
 
 #[test]
 fn a_publication_starts_one_writeback_of_the_data_caches_whole_lines() {
@@ -623,16 +647,6 @@ const PSRAM_PROFILE: OctalPsramProfile<PsramSupplyLevel> = OctalPsramProfile {
     divider: 2,
     read_latency: 6,
     write_latency: 3,
-    register_dummy_bits: 16,
-    chip_select: ChipSelectTiming {
-        setup: 4,
-        hold: 4,
-        hold_delay: 3,
-    },
-    cache: CacheAccess {
-        read_dummy_cyclelen: 33,
-        write_dummy_cyclelen: 15,
-    },
     size: 16 * 1024 * 1024,
 };
 

@@ -8,7 +8,9 @@ use crate::layouts::{
     PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
 };
 use crate::radio::phy::registers::{FrequencyRegisters, PhyPlacement};
-use oer_portable_mmio::{Bits, Index};
+use crate::radio::phy::residue_of_four;
+use oer_portable_bounded::Index;
+use oer_portable_mmio::Bits;
 #[cfg(target_arch = "riscv32")]
 use {oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam, oer_portable_mmio::Placement};
 
@@ -160,17 +162,6 @@ pub(crate) struct ChannelCbwFields {
     pub(crate) control_1_low: Bits<2>,
 }
 
-/// `value` modulo four, the two-bit field's value: every residue is one
-/// of its four constants.
-const fn residue_of_four(value: u8) -> Bits<2> {
-    match value % 4 {
-        0 => Bits::constant::<0>(),
-        1 => Bits::constant::<1>(),
-        2 => Bits::constant::<2>(),
-        _ => Bits::constant::<3>(),
-    }
-}
-
 /// `value` modulo eight, the three-bit field's value.
 const fn residue_of_eight(value: u8) -> Bits<3> {
     match value % 8 {
@@ -217,16 +208,16 @@ pub(crate) const fn bss_tx_offset(cbw: u8) -> Bits<4> {
     }
 }
 
-pub(crate) const fn channel_cbw_fields(cbw: u32) -> ChannelCbwFields {
+pub(crate) fn channel_cbw_fields(cbw: u32) -> ChannelCbwFields {
     let high = cbw / 16;
     if high != 0 {
         let normalized = high.wrapping_sub(1) as u8;
         let low = (cbw % 16) as u8;
         ChannelCbwFields {
             tx_offset: residue_of_sixteen(low),
-            control_0: residue_of_four(low),
+            control_0: residue_of_four(u16::from(low)),
             control_1_high: residue_of_eight(normalized),
-            control_1_low: residue_of_four(normalized),
+            control_1_low: residue_of_four(u16::from(normalized)),
         }
     } else {
         let low = (cbw % 16) as u8;
@@ -235,7 +226,7 @@ pub(crate) const fn channel_cbw_fields(cbw: u32) -> ChannelCbwFields {
         // itself.
         ChannelCbwFields {
             tx_offset: residue_of_sixteen(normalized),
-            control_0: residue_of_four(normalized),
+            control_0: residue_of_four(u16::from(normalized)),
             control_1_high: if low != 0 {
                 Bits::constant::<1>()
             } else {
@@ -260,13 +251,13 @@ pub(crate) const fn rv32_signed_div(dividend: i32, divisor: i32) -> i32 {
     }
 }
 
-/// Complete rev0 ROM `phy_nrx_freq_set`'s quotient, below 2^24.
+/// Complete rev0 ROM `phy_nrx_freq_set`'s signed quotient, as its word:
+/// the field's vendor cut keeps its low 24 bits.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
-pub(crate) fn nrx_frequency_quotient(shift: u32, frequency: u32) -> Bits<24> {
+pub(crate) fn nrx_frequency_quotient(shift: u32, frequency: u32) -> u32 {
     let numerator = 0x50_u32.wrapping_mul(2_u32.wrapping_pow(shift % 32)) as i32;
-    let quotient = rv32_signed_div(numerator, frequency as i32) as u32;
-    Bits::truncate(quotient)
+    rv32_signed_div(numerator, frequency as i32) as u32
 }
 
 /// One address of frequency memory: eleven bits, of which the low ten and
@@ -286,21 +277,13 @@ impl FrequencyMemoryAddress {
         }
     }
 
-    /// `base + index * STRIDE + OFFSET`, the form of every address the
-    /// tables compute. The argument types bound the sum and the const check
-    /// proves its largest value in the domain, so no run-time value can
-    /// leave it.
-    pub const fn scaled<const STRIDE: u16, const OFFSET: u16>(base: u8, index: u8) -> Self {
-        const {
-            let largest = u8::MAX as u32 * (1 + STRIDE as u32) + OFFSET as u32;
-            if largest > Self::LAST as u32 {
-                panic!("a scaled frequency-memory address can leave the memory");
-            }
-        }
-        Self(Bits::truncate(
-            (base as u32)
-                .wrapping_add((index as u32).wrapping_mul(STRIDE as u32))
-                .wrapping_add(OFFSET as u32),
+    /// `index * STRIDE + BIAS`, the form of every address the tables
+    /// compute (a table's base is part of its bias). The field holds the
+    /// largest value, checked where it is monomorphized, so no run-time
+    /// value can leave the memory.
+    pub const fn scaled<const STRIDE: u32, const BIAS: u32>(index: u8) -> Self {
+        Self(Bits::affine::<STRIDE, BIAS, 256>(
+            oer_portable_bounded::Index::from_byte(index),
         ))
     }
 
@@ -309,12 +292,11 @@ impl FrequencyMemoryAddress {
         self.0.get() as u16
     }
 
-    const fn low(self) -> Bits<10> {
-        Bits::truncate(self.0.get())
-    }
-
-    const fn high(self) -> bool {
-        self.0.get() & 0x400 != 0
+    /// The address's low ten bits and its top bit, the register's two
+    /// fields.
+    const fn fields(self) -> (Bits<10>, bool) {
+        let (low, high) = self.0.split::<10, 1>();
+        (low, high.get() != 0)
     }
 }
 
@@ -421,8 +403,8 @@ pub fn write_memory<P: PhyPlacement>(
     mode: u8,
 ) {
     frequency.fe.modify_frequency_control(|w| {
-        w.set_memory_address_low(address.low())
-            .set_memory_address_high(address.high());
+        let (low, high) = address.fields();
+        w.set_memory_address_low(low).set_memory_address_high(high);
     });
     frequency.fe.write_frequency_memory_data(|w| {
         match payload {
@@ -450,8 +432,8 @@ pub fn read_memory<P: PhyPlacement>(
     address: FrequencyMemoryAddress,
 ) -> PhyFrequencyMemoryRecordCapAndSdm {
     frequency.fe.modify_frequency_control(|w| {
-        w.set_memory_address_low(address.low())
-            .set_memory_address_high(address.high());
+        let (low, high) = address.fields();
+        w.set_memory_address_low(low).set_memory_address_high(high);
     });
     frequency.fe.modify_i2c_number_control(|w| {
         w.set_memory_read_mode(RF_MEMORY_READ_MODE);
@@ -480,8 +462,8 @@ pub fn read_memory_mode0<P: PhyPlacement>(
     address: FrequencyMemoryAddress,
 ) -> u32 {
     frequency.fe.modify_frequency_control(|w| {
-        w.set_memory_address_low(address.low())
-            .set_memory_address_high(address.high());
+        let (low, high) = address.fields();
+        w.set_memory_address_low(low).set_memory_address_high(high);
     });
     frequency.fe.modify_i2c_number_control(|w| {
         w.set_memory_read_mode(DIAGNOSTIC_MEMORY_READ_MODE);
@@ -591,7 +573,7 @@ pub(crate) fn configure_nrx_frequency_between_samples<P: PhyPlacement>(
     frequency_registers
         .wifi_bb
         .modify_nrx_frequency_control(|w| {
-            w.set_bits_0_23_opaque(quotient);
+            w.set_nrx_quotient_low_bits(quotient);
         });
 }
 

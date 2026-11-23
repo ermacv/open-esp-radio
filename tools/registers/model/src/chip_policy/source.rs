@@ -33,6 +33,8 @@ pub struct PolicyFile {
     pub fixed_register_sequences: Vec<FixedRegisterSequence>,
     #[serde(default)]
     pub field_or_modifies: Vec<FieldOrModify>,
+    #[serde(default)]
+    pub vendor_narrowings: Vec<VendorNarrowing>,
 }
 
 /// One owner: a generated owner type holding parts of several instances.
@@ -274,6 +276,38 @@ pub struct SequenceStep {
     /// The number of elements of a template step, from `first`.
     #[serde(default)]
     pub count: Option<u32>,
+}
+
+/// How the vendor's code fits a number of its own into one field the
+/// hardware does not ask it to fit: a transaction of the vendor's, whose
+/// setter on the field's register writer is rendered for this entry alone.
+/// The entries are the places the vendor guards no overflow.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct VendorNarrowing {
+    /// The writer's method, `lower_snake_case`.
+    pub name: String,
+    /// `INSTANCE.REGISTER.FIELD` or a template key.
+    pub field: String,
+    /// The vendor's integer type.
+    pub value: crate::chip_model::Integer,
+    /// The bit of the number at the field's bit 0 (`low-bits` only).
+    #[serde(default)]
+    pub from: u32,
+    pub arithmetic: Arithmetic,
+    pub description: String,
+    pub sources: Vec<String>,
+}
+
+/// The vendor's arithmetic that fits its number into the field.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Arithmetic {
+    /// The number's bits `from..from + width`; the others are dropped.
+    LowBits,
+    /// A signed number clamped to `±(2^(width − 1) − 1)`, then its
+    /// two's complement.
+    SymmetricSaturation,
 }
 
 /// The vendor's OR of a typed DMA reference's image into a fresh read of
