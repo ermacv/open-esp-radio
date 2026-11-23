@@ -510,6 +510,69 @@ fn a_refused_read_ends_the_run_with_a_fault_retaining_the_transport_and_reads_no
 }
 
 #[test]
+fn a_read_refused_while_a_command_works_ends_the_run_with_a_fault_and_reads_no_more() {
+    /// Delivers one command's frame, then refuses every read.
+    struct FailsAfterOne {
+        command: Vec<u8>,
+        reads: Rc<Cell<u32>>,
+    }
+    impl embedded_io_async::ErrorType for FailsAfterOne {
+        type Error = embedded_io_async::ErrorKind;
+    }
+    impl Read for FailsAfterOne {
+        async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
+            self.reads.set(self.reads.get() + 1);
+            assert!(self.reads.get() <= 2, "read again after the refusal");
+            if self.command.is_empty() {
+                return Err(embedded_io_async::ErrorKind::Other);
+            }
+            let length = self.command.len();
+            buffer[..length].copy_from_slice(&self.command);
+            self.command.clear();
+            Ok(length)
+        }
+    }
+    impl Write for FailsAfterOne {
+        async fn write(&mut self, bytes: &[u8]) -> Result<usize, Self::Error> {
+            Ok(bytes.len())
+        }
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+    let reads = Rc::new(Cell::new(0));
+    // A command that never comes back.
+    let (gate, started) = (Cell::new(false), Cell::new(0));
+    let mut commanding = Commanding {
+        gate: &gate,
+        started: &started,
+    };
+    let mut writer = Writer::new();
+    let intake = Intake::new(BOOT, ImageKeySet::new(&SERVED).unwrap(), 0, 0);
+    let ended = block_on(run::<Captured, Probes, _, _, _>(
+        &mut writer,
+        &mut Observing::default(),
+        &mut commanding,
+        BOOT,
+        FailsAfterOne {
+            command: frame(1, Probe(ProbeMode::Stall)),
+            reads: reads.clone(),
+        },
+        &intake,
+        &Chip,
+    ));
+    let Ended::Fault(failure) = ended;
+    assert_eq!(failure.cause, ConsoleFault::Read);
+    assert_eq!(started.get(), 1, "the command was in work");
+    assert_eq!(
+        reads.get(),
+        2,
+        "the command's read, then one refusal, no more"
+    );
+    drop(failure.endpoint);
+}
+
+#[test]
 fn a_rejection_names_the_request() {
     let host = Host::default();
     host.send(3, 4, Probe(ProbeMode::Complete));

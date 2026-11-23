@@ -38,7 +38,6 @@ pub use key::{Endpoint, Key, Message};
 
 // The modules: each is a path prefix and a directory.
 pub mod base;
-pub mod capture;
 pub mod system;
 #[doc(hidden)]
 pub use postcard_schema as __postcard_schema;

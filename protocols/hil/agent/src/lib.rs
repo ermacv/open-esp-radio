@@ -2,10 +2,6 @@
     clippy::cast_possible_truncation,
     reason = "R3 cleans the cores and the contracts (tasks/312)"
 )]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "R3 cleans the cores and the contracts (tasks/312)"
-)]
 #![forbid(unsafe_code)]
 //! Chip-independent HIL target logic.
 //!
@@ -23,7 +19,6 @@
 )]
 
 pub mod base;
-pub mod capture;
 pub mod console;
 pub mod postmortem;
 pub mod serve;

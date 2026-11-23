@@ -8245,14 +8245,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "protocols/hil/agent/src/capture/collector.rs::State.failure",
-        BY_NONE,
-    ),
-    (
-        "protocols/hil/agent/src/capture/collector.rs::State.identity",
-        BY_NONE,
-    ),
-    (
         "protocols/hil/protocol/src/base/image_keys.rs::ImageKeysCheck.previous",
         BY_NONE,
     ),
@@ -10622,12 +10614,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "protocols/hil/agent/src/lib.rs",
         "clippy::cast_possible_truncation",
-        1,
-        "R3 cleans the cores and the contracts (tasks/312)",
-    ),
-    (
-        "protocols/hil/agent/src/lib.rs",
-        "clippy::let_underscore_must_use",
         1,
         "R3 cleans the cores and the contracts (tasks/312)",
     ),
