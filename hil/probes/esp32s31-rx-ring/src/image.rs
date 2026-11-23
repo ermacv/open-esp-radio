@@ -54,6 +54,7 @@ use oer_hil_services_radio_pair::{self as service, ReceiverCommand, ReceiverRequ
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_memory::arena::{Arena, Handle};
+use oer_portable_time::settle::SettleCounter as _;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 
@@ -102,7 +103,7 @@ oer_chips_family_platform_interrupt_table::interrupt_table! {
 
 oer_chips_family_platform_executor::tasks! {
     pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
-        session(parts: SessionParts, work: crate::radio::Work<ReceiverCommand, Answer>, reset: u32) = session_task;
+        session(parts: SessionParts, work: crate::radio::Work<ReceiverCommand, Outcome>, reset: u32) = session_task;
     }
 }
 oer_chips_family_platform_executor::tasks! {
@@ -255,6 +256,14 @@ fn main(
     // The pads stay held by `main`, which never returns, so that nothing
     // switches them off.
     let _pads = pads;
+    // The adopted rate's cycles of one microsecond, for the hand-over's
+    // answer.
+    let Some(micro) =
+        oer_portable_time::settle::SettleLimit::new(oer_portable_time::Duration::from_micros(1))
+    else {
+        fail(name!("settle-limit"; 32));
+    };
+    let cycles_per_micro = runtime_cycles.cycles(micro);
     // The owner's cold snapshot, read before the radio's parts go to the
     // radio level's task.
     let observing = Observing {
@@ -277,7 +286,11 @@ fn main(
         },
         writer,
         observing,
-        owner: Owner { commands },
+        owner: Owner {
+            commands,
+            cycles: runtime_cycles,
+            cycles_per_micro,
+        },
     };
     if RadioTasks::session(&radio_executor, parts, work, u32::from(reset_cause.code())).is_err() {
         fail(name!("session-task"; 32));
@@ -681,6 +694,7 @@ pub(crate) enum Answer {
     Windowed(service::Windowed),
     Stood(service::Stood),
     Turned(service::Turned),
+    HandedOver(service::HandedOver),
 }
 
 impl From<service::SnapshotPage> for Answer {
@@ -731,6 +745,31 @@ impl From<service::Turned> for Answer {
     }
 }
 
+impl From<service::HandedOver> for Answer {
+    fn from(answer: service::HandedOver) -> Self {
+        Self::HandedOver(answer)
+    }
+}
+
+/// What the radio level's task gives back for a command: its answer, or, for
+/// the hand-over, its two readings of the cycle counter, which its owner
+/// turns into the answer with its own two.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "the hand-over's place holds one outcome by value; its size is the largest answer's, the marks' variant rides in it"
+)]
+pub(crate) enum Outcome {
+    Answer(Answer),
+    Marks(Marks),
+}
+
+/// The radio level's task's readings of the hart's cycle counter for one
+/// hand-over: when it had taken the command, and when it answered.
+pub(crate) struct Marks {
+    taken: u32,
+    answering: u32,
+}
+
 impl oer_hil_agent::serve::Answer for Answer {
     fn write<'f>(
         &self,
@@ -745,6 +784,7 @@ impl oer_hil_agent::serve::Answer for Answer {
             Self::Windowed(answer) => frame.write(answer),
             Self::Stood(answer) => frame.write(answer),
             Self::Turned(answer) => frame.write(answer),
+            Self::HandedOver(answer) => frame.write(answer),
         }
     }
 }
@@ -753,7 +793,12 @@ impl oer_hil_agent::serve::Answer for Answer {
 /// it for each command, and it commands the radio level's task through the
 /// radio's hand-over, whose asking end it holds alone.
 pub(crate) struct Owner {
-    commands: crate::radio::Commands<ReceiverCommand, Answer>,
+    commands: crate::radio::Commands<ReceiverCommand, Outcome>,
+    /// The hart's cycle counter, a copy as the drivers have theirs: the
+    /// hand-over's two ends are on this hart.
+    cycles: oer_chips_esp32s31_hal::system::cycles::CycleCounter,
+    /// The adopted rate's cycles of one microsecond, rounded up.
+    cycles_per_micro: u32,
 }
 
 impl oer_hil_agent::serve::Run<Owner> for ReceiverCommand {
@@ -763,9 +808,25 @@ impl oer_hil_agent::serve::Run<Owner> for ReceiverCommand {
         use oer_hil_agent::serve::{After, Unanswered};
         // One command is in work at a time by the console's borrow of the
         // owner, so the command's place is free.
+        // Asked: before the hand.
+        let asked = owner.cycles.sample();
         owner.commands.hand(self).map_err(|_| Unanswered)?;
-        match owner.commands.answered().await {
-            oer_portable_memory::Answered::Given(answer) => Ok((answer, After::Nothing)),
+        let given = owner.commands.answered().await;
+        // Answered: the answer is the owner's.
+        let answered = owner.cycles.sample();
+        match given {
+            oer_portable_memory::Answered::Given(Outcome::Answer(answer)) => {
+                Ok((answer, After::Nothing))
+            }
+            oer_portable_memory::Answered::Given(Outcome::Marks(Marks { taken, answering })) => {
+                let spans = service::HandedOver::Spans {
+                    down: taken.wrapping_sub(asked),
+                    held: answering.wrapping_sub(taken),
+                    up: answered.wrapping_sub(answering),
+                    cycles_per_micro: owner.cycles_per_micro,
+                };
+                Ok((Answer::HandedOver(spans), After::Nothing))
+            }
             // The radio level's task dropped its permit.
             oer_portable_memory::Answered::Unanswered => Err(Unanswered),
         }
@@ -785,7 +846,7 @@ impl service::ReceiverObserver for Observing {
 }
 
 /// The radio's hand-over between its owner and the radio level's task.
-static RADIO: static_cell::ConstStaticCell<crate::radio::Handover<ReceiverCommand, Answer>> =
+static RADIO: static_cell::ConstStaticCell<crate::radio::Handover<ReceiverCommand, Outcome>> =
     static_cell::ConstStaticCell::new(crate::radio::handover());
 
 /// What the host's link takes at boot: the console, this boot's identity,
@@ -845,7 +906,7 @@ static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<Se
 #[define_opaque(SessionRun)]
 fn session_future(
     parts: SessionParts,
-    inbox: crate::radio::Work<ReceiverCommand, Answer>,
+    inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
 ) -> SessionRun {
     async move {
@@ -858,7 +919,7 @@ fn session_future(
 
 async fn session_task(
     parts: SessionParts,
-    inbox: crate::radio::Work<ReceiverCommand, Answer>,
+    inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
 ) {
     let Some(place) = SESSION.try_take() else {
@@ -891,14 +952,14 @@ struct Turns<'a> {
 /// The permit of one command's result: the radio level's task names no
 /// part of the HIL agent, only the service's request and answer types as
 /// data.
-type Reply<'a> = crate::radio::Done<'a, Answer>;
+type Reply<'a> = crate::radio::Done<'a, Outcome>;
 
 /// Gives a command's result through its permit. A function of its own, so
 /// that the waker call of the hand-over keeps its inline scope and the image's
 /// stack analysis resolves it to the executor's vtable (`Fact::WakerVtables`).
 #[inline(never)]
 fn answer(done: Reply<'_>, body: impl Into<Answer>) {
-    done.answer(body.into());
+    done.answer(Outcome::Answer(body.into()));
 }
 
 /// Answer `request` with its endpoint's refusal.
@@ -916,13 +977,14 @@ fn refuse(identity: Reply<'_>, request: ReceiverCommand, refusal: Refusal) {
         ReceiverCommand::Window(_) => answer(identity, service::Windowed::Refused(refusal)),
         ReceiverCommand::Stall(_) => answer(identity, service::Stood::Refused(refusal)),
         ReceiverCommand::Turn(_) => answer(identity, service::Turned::Refused(refusal)),
+        ReceiverCommand::HandOver(_) => answer(identity, service::HandedOver::Refused(refusal)),
     }
 }
 
 /// After the bring-up's failure or the stop: every step is refused, until
 /// the next boot; the cold snapshot is the owner's and still answers.
 async fn down(
-    mut inbox: crate::radio::Work<ReceiverCommand, Answer>,
+    mut inbox: crate::radio::Work<ReceiverCommand, Outcome>,
 ) -> Result<core::convert::Infallible, Ended> {
     loop {
         let (request, identity) = inbox.next().await;
@@ -933,7 +995,7 @@ async fn down(
 /// The receiver's worker: each step the host asks for, in its order.
 async fn worker(
     parts: SessionParts,
-    mut inbox: crate::radio::Work<ReceiverCommand, Answer>,
+    mut inbox: crate::radio::Work<ReceiverCommand, Outcome>,
     reset: u32,
 ) -> Result<core::convert::Infallible, Ended> {
     let cold = pair::cold(reset, &parts.radio, &parts.clocks);
@@ -1062,7 +1124,14 @@ async fn worker(
     };
     loop {
         let (request, id) = inbox.next().await;
+        // Taken: the command is this task's.
+        let taken = cycles.sample();
         match request {
+            ReceiverCommand::HandOver(_) => {
+                // A command that does no work: its answer is the two marks.
+                let answering = cycles.sample();
+                id.answer(Outcome::Marks(Marks { taken, answering }));
+            }
             ReceiverCommand::SnapshotUp(request) => answer(id, pair::page(&up, request.page)),
             ReceiverCommand::BringUp(_) => {
                 answer(id, service::BroughtUp::Refused(Refusal::AlreadyUp));
@@ -1378,7 +1447,8 @@ async fn worker(
                     | ReceiverCommand::BringUp(_)
                     | ReceiverCommand::ReceiveCounters(_)
                     | ReceiverCommand::Stop(_)
-                    | ReceiverCommand::Turn(_) => {}
+                    | ReceiverCommand::Turn(_)
+                    | ReceiverCommand::HandOver(_) => {}
                 }
             }
         }

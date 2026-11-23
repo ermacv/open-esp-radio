@@ -61,6 +61,8 @@ oer_protocols_hil_protocol::messages! {
     topic Stood = "radio-pair/stood";
     endpoint Turn = "radio-pair/turn" => Turned;
     topic Turned = "radio-pair/turned";
+    endpoint HandOver = "radio-pair/hand-over" => HandedOver;
+    topic HandedOver = "radio-pair/handed-over";
 }
 
 /// Why an endpoint answered without acting: the step it needs is not the
@@ -498,6 +500,27 @@ pub struct CaseEnds {
     pub other: u32,
 }
 
+/// A command that does no work: its answer is what crossing the radio's
+/// hand-over cost, there and back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct HandOver;
+
+/// The answer to [`HandOver`]: three spans of the hart's cycle counter, each
+/// by wrapping subtraction. `down` from the owner's hand to the radio task's
+/// taking it, `held` from that taking to the radio task's answer, `up` from
+/// that answer to the owner's having it; `cycles_per_micro` is the adopted
+/// rate's cycles of one microsecond, rounded up.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum HandedOver {
+    Spans {
+        down: u32,
+        held: u32,
+        up: u32,
+        cycles_per_micro: u32,
+    },
+    Refused(Refusal),
+}
+
 /// Count the frames from `sender`: the sender's station address the host
 /// names.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -650,6 +673,7 @@ oer_protocols_hil_agent::service! {
         Window(Window) => command window,
         Stall(Stall) => command stall,
         Turn(Turn) => command turn,
+        HandOver(HandOver) => command hand_over,
     }
 }
 

@@ -10192,6 +10192,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the receive ring's probe stops; the sender holds its ring / the receive ring's probe's phase",
     ),
     (
+        "hil/probes/esp32s31-rx-ring/src/image.rs",
+        "clippy::large_enum_variant",
+        1,
+        "the hand-over's outcome is one answer by value or the hand-over's two cycle marks; its place is sized for the answer",
+    ),
+    (
         "hil/probes/esp32s31-rx-ring/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
