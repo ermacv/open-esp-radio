@@ -816,3 +816,18 @@ fn the_retained_calibration_snapshot_reads_committed_state() {
         snapshot.common.rfpll_reference_temperature
     );
 }
+
+#[test]
+fn the_bluetooth_channel_base_selects_the_frequency_registers_mode() {
+    use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
+    let mut state = PhyState::default();
+    assert_eq!(
+        state.channel_frequency_control().frequency_register_mode,
+        FrequencyRegisterMode::Default
+    );
+    state.set_ble_channel_base(3);
+    assert_eq!(
+        state.channel_frequency_control().frequency_register_mode,
+        FrequencyRegisterMode::ParameterOverride
+    );
+}

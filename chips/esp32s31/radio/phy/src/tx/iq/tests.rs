@@ -675,3 +675,24 @@ fn the_gain_path_measures_the_inverted_polarity_and_the_phase_path_the_normal() 
         );
     }
 }
+
+#[test]
+fn the_loopback_s_clock_steps_follow_its_enable() {
+    use oer_chips_esp32s31_hal::types::PhyClockPair;
+    for (enabled, state) in [
+        (true, PhyClockPair::Enabled),
+        (false, PhyClockPair::Disabled),
+    ] {
+        let mut transition = PhyTxIqLoopbackTransition::new(enabled);
+        transition.step = LoopbackStep::TxClock;
+        assert_eq!(
+            transition.action(),
+            PhyTxIqLoopbackAction::ConfigureTxClock { state }
+        );
+        transition.step = LoopbackStep::RxClock;
+        assert_eq!(
+            transition.action(),
+            PhyTxIqLoopbackAction::ConfigureRxClock { state }
+        );
+    }
+}

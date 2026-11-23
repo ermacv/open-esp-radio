@@ -241,6 +241,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_wake_sequence_names_the_vendor_s_register_values() {
+        // The operations of `phy_wakeup_init` that carry a HAL name, in their
+        // order, each with the name the vendor writes.
+        let named: std::vec::Vec<_> = PHY_RF_WAKE_OPERATIONS
+            .iter()
+            .copied()
+            .filter(|operation| {
+                matches!(
+                    operation,
+                    PhyRfWakeOperation::SetBasebandMode { .. }
+                        | PhyRfWakeOperation::SetHardwareFrequencyControl { .. }
+                        | PhyRfWakeOperation::SetBbpllCalibration { .. }
+                )
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [
+                PhyRfWakeOperation::SetBasebandMode {
+                    mode: BasebandMode::Calibration,
+                },
+                PhyRfWakeOperation::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Software,
+                },
+                PhyRfWakeOperation::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Enabled,
+                },
+                PhyRfWakeOperation::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                },
+                PhyRfWakeOperation::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled,
+                },
+                PhyRfWakeOperation::SetBasebandMode {
+                    mode: BasebandMode::Idle,
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn retained_wake_parent_has_a_safe_envelope_and_terminal_completion() {
         let mut transition = PhyRfWakeTransition::new();
         let mut trace = std::vec::Vec::new();
