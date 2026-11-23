@@ -1,8 +1,8 @@
 //! Register-local modem operations over the physical generated parts.
 #![forbid(unsafe_code)]
 use super::values::*;
-use oer_chips_esp32s31_pac::modem_lpcon::dictionaries::IcgStateMap as LpconIcgStateMap;
-use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, IcgStateMap, Reset};
+use oer_chips_esp32s31_pac::dictionaries::{IcgState, Reset};
+use oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate;
 use oer_portable_mmio::{Bits, Placement};
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
@@ -160,26 +160,23 @@ pub(crate) fn prepare_modem_syscon_clock_map<P: Placement>(
     registers: &mut oer_chips_esp32s31_pac::modem_syscon::ModemSysconClockReset<P>,
 ) {
     registers.modify_clk_conf_power_st(|w| {
-        w.set_clk_zb_st_map(w.clk_zb_st_map().or(IcgStateMap::NogatingActive.into()));
+        w.set_clk_zb_st_map(w.clk_zb_st_map().with(IcgState::NogatingActive));
         w.set_clk_fe_st_map(
             w.clk_fe_st_map()
-                .or(IcgStateMap::NogatingModem.into())
-                .or(IcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
-        w.set_clk_bt_st_map(w.clk_bt_st_map().or(IcgStateMap::NogatingActive.into()));
+        w.set_clk_bt_st_map(w.clk_bt_st_map().with(IcgState::NogatingActive));
         w.set_clk_wifi_st_map(
             w.clk_wifi_st_map()
-                .or(IcgStateMap::NogatingModem.into())
-                .or(IcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
-        w.set_clk_modem_peri_st_map(
-            w.clk_modem_peri_st_map()
-                .or(IcgStateMap::NogatingActive.into()),
-        );
+        w.set_clk_modem_peri_st_map(w.clk_modem_peri_st_map().with(IcgState::NogatingActive));
         w.set_clk_modem_apb_st_map(
             w.clk_modem_apb_st_map()
-                .or(IcgStateMap::NogatingModem.into())
-                .or(IcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
     });
 }
@@ -577,23 +574,23 @@ pub(crate) fn initialize_shared_modem_power_state_map<P: Placement>(
     registers.modify_clk_conf_power_st(|w| {
         w.set_clk_wifipwr_st_map(
             w.clk_wifipwr_st_map()
-                .or(LpconIcgStateMap::NogatingModem.into())
-                .or(LpconIcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
         w.set_clk_coex_st_map(
             w.clk_coex_st_map()
-                .or(LpconIcgStateMap::NogatingModem.into())
-                .or(LpconIcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
         w.set_clk_i2c_mst_st_map(
             w.clk_i2c_mst_st_map()
-                .or(LpconIcgStateMap::NogatingModem.into())
-                .or(LpconIcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
         w.set_clk_lp_apb_st_map(
             w.clk_lp_apb_st_map()
-                .or(LpconIcgStateMap::NogatingModem.into())
-                .or(LpconIcgStateMap::NogatingActive.into()),
+                .with(IcgState::NogatingModem)
+                .with(IcgState::NogatingActive),
         );
     });
 }

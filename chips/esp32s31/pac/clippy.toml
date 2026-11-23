@@ -1,7 +1,6 @@
 # Removed by the step after R2, in which the PAC builds its field values
-# itself and `Bits::truncate` is no longer public; with it the generated
-# byte arrays' `chunks_exact`. The root's configuration without what the
-# PAC still calls.
+# itself and `Bits::truncate` is no longer public. The root's configuration
+# without what the PAC still calls.
 disallowed-methods = [
     # Only the interrupt table's once gate constructs entry tokens. Binding
     # independently checks table membership and refuses claimed storage.
@@ -37,6 +36,8 @@ disallowed-methods = [
     "slice::rotate_right",
     "slice::chunks",
     "slice::chunks_mut",
+    "slice::chunks_exact",
+    "slice::chunks_exact_mut",
     "slice::rchunks",
     "slice::rchunks_mut",
     "slice::rchunks_exact",

@@ -49,8 +49,10 @@ impl TemperaturePort for Port<'_> {
     fn sensor_clock(&mut self, clock: LpTsensClkEn) {
         self.record(Edge::SensorClock(clock == LpTsensClkEn::Enabled));
     }
-    fn sensor_reset(&mut self, reset: LpTsensRstEn) {
-        self.record(Edge::SensorReset(reset == LpTsensRstEn::Asserted));
+    fn sensor_reset(&mut self, reset: oer_chips_esp32s31_pac::dictionaries::Reset) {
+        self.record(Edge::SensorReset(
+            reset == oer_chips_esp32s31_pac::dictionaries::Reset::Asserted,
+        ));
     }
     fn sensor_power(&mut self, power: PowerUp) {
         self.record(Edge::SensorPower(power == PowerUp::Enabled));

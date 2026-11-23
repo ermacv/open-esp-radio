@@ -6,10 +6,11 @@
 
 #![forbid(unsafe_code)]
 
+use oer_chips_esp32s31_pac::dictionaries::{IcgState, Reset};
 use oer_chips_esp32s31_pac::modem_syscon::{
     ModemSysconClockReset,
     clk_conf::ClkI2cMstSel160m,
-    dictionaries::{ClockGate, Reset},
+    dictionaries::ClockGate,
     wifi_bb_cfg::{Bit28Opaque, WifiEnable},
 };
 use oer_portable_mmio::Placement;
@@ -311,15 +312,33 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             modem_apb_map_bit_one,
             modem_apb_map_bit_two,
         ) = (
-            super::map_has(clk_conf_power_st.clk_zb_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_fe_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_fe_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_bt_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_wifi_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_wifi_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_modem_peri_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_modem_apb_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_modem_apb_st_map(), 4),
+            clk_conf_power_st
+                .clk_zb_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_fe_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_fe_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_bt_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_wifi_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_wifi_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_modem_peri_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_modem_apb_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_modem_apb_st_map()
+                .contains(IcgState::NogatingActive),
         );
         zb_map_bit_two
             && frontend_map_bit_one
@@ -406,10 +425,10 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         ModemSysconPowerObservation {
             wifi_reset_released: matches!(
                 wifi_baseband_reset,
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+                oer_chips_esp32s31_pac::dictionaries::Reset::Released
             ) && matches!(
                 wifi_mac_reset,
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+                oer_chips_esp32s31_pac::dictionaries::Reset::Released
             ),
             active_clock_map_configured: self.modem_syscon_clock_map_configured(),
             phy_calibration_clocks_enabled: matches!(
@@ -522,11 +541,11 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         ModemSysconIeee802154ResetObservation {
             mac_reset_released: matches!(
                 mac_reset,
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+                oer_chips_esp32s31_pac::dictionaries::Reset::Released
             ),
             apb_reset_released: matches!(
                 apb_reset,
-                oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+                oer_chips_esp32s31_pac::dictionaries::Reset::Released
             ),
         }
     }
@@ -780,25 +799,25 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
         );
         matches!(
             bluetooth_mac_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             bluetooth_mac_apb_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             bluetooth_timer_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             modem_ecb_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             modem_ccm_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             modem_bah_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         ) && matches!(
             modem_security_reset,
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released
         )
     }
 }

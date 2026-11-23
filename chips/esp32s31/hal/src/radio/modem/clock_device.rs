@@ -41,7 +41,7 @@ pub enum ModemClockDevice {
     Ieee802154Mac,
 }
 
-use oer_chips_esp32s31_pac::modem_syscon::dictionaries::{ClockGate, Reset};
+use oer_chips_esp32s31_pac::{dictionaries::Reset, modem_syscon::dictionaries::ClockGate};
 
 impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
     /// Apply one vendor modem clock device's enabling action, in the vendor's

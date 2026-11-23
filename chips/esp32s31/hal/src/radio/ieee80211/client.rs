@@ -46,12 +46,8 @@ pub(crate) trait WifiPowerPort: ClockPort {
 
 impl WifiPowerPort for crate::radio::phy::RadioPhyRegisters {
     fn pulse_wifi_baseband_and_mac_reset(&mut self) {
-        self.set_wifi_baseband_and_mac_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted,
-        );
-        self.set_wifi_baseband_and_mac_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released,
-        );
+        self.set_wifi_baseband_and_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted);
+        self.set_wifi_baseband_and_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released);
     }
 }
 

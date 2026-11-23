@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+use oer_chips_esp32s31_pac::dictionaries::IcgState;
 use oer_chips_family_radio_power::clocks::{RtcSlowClockSource, WifiLowPowerClockSource};
 
 use crate::{radio::modem::values::ModemLowPowerClockDivider, radio::phy::RadioPhyRegisters};
@@ -111,14 +112,30 @@ impl<P: crate::radio::phy::registers::RadioPlacement> RadioPhyRegisters<P> {
             low_power_apb_map_bit_one,
             low_power_apb_map_bit_two,
         ) = (
-            super::map_has(clk_conf_power_st.clk_wifipwr_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_wifipwr_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_coex_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_coex_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_i2c_mst_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_i2c_mst_st_map(), 4),
-            super::map_has(clk_conf_power_st.clk_lp_apb_st_map(), 2),
-            super::map_has(clk_conf_power_st.clk_lp_apb_st_map(), 4),
+            clk_conf_power_st
+                .clk_wifipwr_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_wifipwr_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_coex_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_coex_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_i2c_mst_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_i2c_mst_st_map()
+                .contains(IcgState::NogatingActive),
+            clk_conf_power_st
+                .clk_lp_apb_st_map()
+                .contains(IcgState::NogatingModem),
+            clk_conf_power_st
+                .clk_lp_apb_st_map()
+                .contains(IcgState::NogatingActive),
         );
         SharedModemClockObservation {
             power_state_map_configured: wifi_power_map_bit_one

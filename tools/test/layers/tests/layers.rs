@@ -4713,7 +4713,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/phy/i2c.rs", 706, PHY_DRIVER),
     ("radio/phy/i2c/commands.rs", 574, PHY_DRIVER),
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
-    ("radio/phy/temperature.rs", 172, PHY_DRIVER),
+    ("radio/phy/temperature.rs", 171, PHY_DRIVER),
     ("radio/phy/temperature/", 79, PHY_DRIVER),
     ("radio/domain/transaction.rs", 532, PHY_DRIVER),
     ("radio/domain/transaction/", 321, PHY_DRIVER),
