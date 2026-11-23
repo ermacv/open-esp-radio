@@ -227,7 +227,6 @@ pub enum RfpllFrequencyAction {
         frequency_mhz: u16,
     },
     WriteMasked {
-        field: Field,
         value: Placed,
     },
     WriteByte {
@@ -429,37 +428,27 @@ impl RfpllFrequencyTransition {
     }
 
     const fn initial_write(index: u8) -> RfpllFrequencyAction {
-        let (field, value) = match index {
-            0 => (
+        let value = match index {
+            0 => placed!(
                 analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                placed!(
-                    analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                    0
-                ),
+                0
             ),
-            1 => (
+            1 => placed!(
                 analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
-                placed!(
-                    analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
-                    1
-                ),
+                1
             ),
-            _ => (
+            _ => placed!(
                 analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
-                placed!(
-                    analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
-                    0x3f
-                ),
+                0x3f
             ),
         };
-        RfpllFrequencyAction::WriteMasked { field, value }
+        RfpllFrequencyAction::WriteMasked { value }
     }
 
     const fn sdm_write(index: u8, sdm: RfpllSdmImage) -> RfpllFrequencyAction {
         let bytes = sdm.bytes;
         match index {
             0 => RfpllFrequencyAction::WriteMasked {
-                field: analog_i2c::sdm::update_enable::UPDATE_ENABLE,
                 value: placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 0),
             },
             1 => RfpllFrequencyAction::WriteByte {
@@ -474,37 +463,21 @@ impl RfpllFrequencyTransition {
                 address: analog_i2c::sdm::lower_middle_byte::ADDRESS,
                 value: bytes[1],
             },
-            4 => RfpllFrequencyAction::WriteMasked {
-                field: analog_i2c::sdm::low::LOW,
-                value: sdm.low(),
-            },
+            4 => RfpllFrequencyAction::WriteMasked { value: sdm.low() },
             _ => RfpllFrequencyAction::WriteMasked {
-                field: analog_i2c::sdm::update_enable::UPDATE_ENABLE,
                 value: placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 1),
             },
         }
     }
 
     const fn restart_write(index: u8) -> RfpllFrequencyAction {
-        let (field, value) = match index {
-            0 => (
-                analog_i2c::rfpll::restart_high::RESTART_HIGH,
-                placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 0),
-            ),
-            1 => (
-                analog_i2c::rfpll::restart_high::RESTART_LOW,
-                placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 0),
-            ),
-            2 => (
-                analog_i2c::rfpll::restart_high::RESTART_LOW,
-                placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 1),
-            ),
-            _ => (
-                analog_i2c::rfpll::restart_high::RESTART_HIGH,
-                placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 1),
-            ),
+        let value = match index {
+            0 => placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 0),
+            1 => placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 0),
+            2 => placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 1),
+            _ => placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 1),
         };
-        RfpllFrequencyAction::WriteMasked { field, value }
+        RfpllFrequencyAction::WriteMasked { value }
     }
 
     pub const fn action(self) -> RfpllFrequencyAction {
@@ -536,7 +509,6 @@ impl RfpllFrequencyTransition {
                 field: analog_i2c::rfpll::lock_status::CALIBRATED_CAPACITOR_HIGH,
             },
             RfpllFrequencyStep::EnableCapSearch { .. } => RfpllFrequencyAction::WriteMasked {
-                field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                 value: placed!(
                     analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                     1
@@ -547,7 +519,6 @@ impl RfpllFrequencyTransition {
                 value: continuation.programmed_value().low_byte(),
             },
             RfpllFrequencyStep::CapWriteHigh(continuation) => RfpllFrequencyAction::WriteMasked {
-                field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
                 value: continuation.programmed_value().high_field(),
             },
             RfpllFrequencyStep::CapDelay(_) => RfpllFrequencyAction::DelayMicros(5),
@@ -562,9 +533,9 @@ impl RfpllFrequencyTransition {
     fn matches_write(action: RfpllFrequencyAction, completion: RfpllFrequencyCompletion) -> bool {
         match (action, completion) {
             (
-                RfpllFrequencyAction::WriteMasked { field, .. },
+                RfpllFrequencyAction::WriteMasked { value },
                 RfpllFrequencyCompletion::MaskedWrite { field: completed },
-            ) => field == completed,
+            ) => value.field() == completed,
             (
                 RfpllFrequencyAction::WriteByte { address, .. },
                 RfpllFrequencyCompletion::ByteWrite { address: completed },
@@ -845,8 +816,8 @@ pub struct RfpllFrequencyI2cBinding {
 impl RfpllFrequencyI2cBinding {
     pub fn new(action: RfpllFrequencyAction) -> Result<Self, RfpllFrequencyBindingError> {
         let request = match action {
-            RfpllFrequencyAction::WriteMasked { field, value } => {
-                crate::calibration::cold::PhyColdI2cRequest::write_field(field, value)
+            RfpllFrequencyAction::WriteMasked { value } => {
+                crate::calibration::cold::PhyColdI2cRequest::write_field(value)
             }
             RfpllFrequencyAction::WriteByte { address, value } => {
                 crate::calibration::cold::PhyColdI2cRequest::write_byte(address, value)
@@ -919,11 +890,11 @@ impl RfpllFrequencyI2cBinding {
         };
         match (self.outer_action, outcome) {
             (
-                RfpllFrequencyAction::WriteMasked { field, .. },
+                RfpllFrequencyAction::WriteMasked { value, .. },
                 crate::calibration::cold::PhyColdI2cOutcome::Written { address: completed },
-            ) if completed == field.address() => {
-                Ok(RfpllFrequencyCompletion::MaskedWrite { field })
-            }
+            ) if completed == value.address() => Ok(RfpllFrequencyCompletion::MaskedWrite {
+                field: value.field(),
+            }),
             (
                 RfpllFrequencyAction::WriteByte { address, .. },
                 crate::calibration::cold::PhyColdI2cOutcome::Written { address: completed },

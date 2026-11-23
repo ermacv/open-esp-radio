@@ -6534,7 +6534,7 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        4,
+        3,
         BY_R2,
     ),
     ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_R2),
@@ -6617,6 +6617,11 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         1,
         BY_RADIO_SYSTEM,
     ),
+    (
+        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
+        2,
+        "the ROM's capacitor update, exact; typed in D2 with the owner's decision",
+    ),
     ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
     (
         "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
@@ -6633,11 +6638,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         4,
         BY_NONE,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
-        15,
-        BY_PHY,
     ),
     ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
     (

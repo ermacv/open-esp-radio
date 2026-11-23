@@ -197,7 +197,6 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
             ..Io::default()
         };
         let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
             analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET
                 .place(1)
                 .unwrap(),

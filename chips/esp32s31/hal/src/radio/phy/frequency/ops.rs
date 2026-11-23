@@ -3,7 +3,10 @@
 
 #![forbid(unsafe_code)]
 
-use crate::layouts::PhyFrequencyMemoryWordWord;
+use crate::layouts::{
+    PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
+    PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
+};
 use crate::radio::phy::registers::{FrequencyRegisters, PhyPlacement};
 use oer_portable_mmio::{Bits, Index};
 #[cfg(target_arch = "riscv32")]
@@ -86,14 +89,40 @@ pub fn observe<P: PhyPlacement>(frequency: &FrequencyRegisters<P>) -> Option<sup
     })
 }
 
-/// Corrected capacitor word, retaining the ROM's signed spill into the mode.
+/// The payload of one frequency-memory write: one of the words
+/// `FREQUENCY_MEMORY_DATA.DATA` carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrequencyMemoryPayload {
+    /// A record's capacitor and SDM low word.
+    CapAndSdm(PhyFrequencyMemoryRecordCapAndSdm),
+    /// A record's SDM high word.
+    SdmHigh(PhyFrequencyMemoryRecordSdmHigh),
+    /// A record's crystal-duty word.
+    XtalDuty(PhyFrequencyMemoryRecordXtalDuty),
+    /// A frequency-I2C command.
+    I2cCommand(PhyFrequencyI2cCommandCommand),
+}
+
+/// The corrected capacitor word of `phy_pll_cap_mem_update`, exact: `read`
+/// with its capacitor replaced by `adjusted`, and the bits the ROM's signed
+/// spill sets above the payload, which the write ORs into the mode.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_PACKING. The word keeps bits 15 and 13:8
-/// of `raw`, takes the adjusted code's low byte, and places the adjusted
-/// code sign-extended and shifted right by eight at bit 14 and up.
-pub const fn frequency_cap_correction_word(raw: u32, adjusted: u16) -> u32 {
+/// of the read word, takes the adjusted code's low byte, and places the
+/// adjusted code sign-extended and shifted right by eight at bit 14 and up.
+/// The ROM's capacitor update stays exact on the whole word here; its typed
+/// form waits for the owner's decision on a code outside nine bits (D2).
+pub const fn frequency_cap_correction(
+    read: PhyFrequencyMemoryRecordCapAndSdm,
+    adjusted: u16,
+) -> (PhyFrequencyMemoryRecordCapAndSdm, u8) {
     let signed_code = adjusted as i16 as i32 as u32;
-    (raw & 0x0000_bf00) | (adjusted as u8 as u32) | ((signed_code >> 8) << 14)
+    let word = (read.bits() & 0x0000_bf00) | (adjusted as u8 as u32) | ((signed_code >> 8) << 14);
+    let [low, middle, high, spill] = word.to_le_bytes();
+    (
+        PhyFrequencyMemoryRecordCapAndSdm::from_bits(u32::from_le_bytes([low, middle, high, 0])),
+        spill,
+    )
 }
 
 /// Semantic PHY-I2C number-address sequence consumed by
@@ -388,17 +417,21 @@ pub fn initialize_registers<P: PhyPlacement>(
 pub fn write_memory<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
     address: FrequencyMemoryAddress,
-    word: PhyFrequencyMemoryWordWord,
+    payload: FrequencyMemoryPayload,
     mode: u8,
 ) {
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address.low())
             .set_memory_address_high(address.high());
     });
-    // Lossless: the layout's 24-bit payload into the 24-bit data field; the
-    // layout's getter returns it as a number.
     frequency.fe.write_frequency_memory_data(|w| {
-        w.set_data(Bits::truncate(word.payload())).set_mode(mode);
+        match payload {
+            FrequencyMemoryPayload::CapAndSdm(word) => w.set_data_cap_and_sdm(word),
+            FrequencyMemoryPayload::SdmHigh(word) => w.set_data_sdm_high(word),
+            FrequencyMemoryPayload::XtalDuty(word) => w.set_data_xtal_duty(word),
+            FrequencyMemoryPayload::I2cCommand(word) => w.set_data_command(word),
+        }
+        .set_mode(mode);
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
     frequency.fe.modify_frequency_control(|w| {
@@ -410,11 +443,12 @@ pub fn write_memory<P: PhyPlacement>(
     });
 }
 
-/// Apply complete rev0 ROM `phy_read_rf_freq_mem`.
+/// Apply complete rev0 ROM `phy_read_rf_freq_mem`: the read word as the
+/// record's capacitor and SDM low word, the one its caller reads back.
 pub fn read_memory<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
     address: FrequencyMemoryAddress,
-) -> u32 {
+) -> PhyFrequencyMemoryRecordCapAndSdm {
     frequency.fe.modify_frequency_control(|w| {
         w.set_memory_address_low(address.low())
             .set_memory_address_high(address.high());
@@ -430,7 +464,10 @@ pub fn read_memory<P: PhyPlacement>(
     frequency.fe.modify_frequency_memory_read_control(|w| {
         w.set_read_pulse(false);
     });
-    frequency.fe.read_frequency_memory_read_result().value()
+    frequency
+        .fe
+        .read_frequency_memory_read_result()
+        .value_cap_and_sdm()
 }
 
 /// The held mode-0 read used by the P-FREQ diagnostic sheet.

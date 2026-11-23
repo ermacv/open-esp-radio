@@ -42,8 +42,8 @@ fn temperature_completion(action: PhyTemperatureAction) -> PhyTemperatureComplet
             PhyTemperatureCompletion::MaskedRead { field, value: 15 }
         }
         PhyTemperatureAction::SampleCode => PhyTemperatureCompletion::CodeSampled { value: 128 },
-        PhyTemperatureAction::WriteMasked { field, value } => {
-            PhyTemperatureCompletion::MaskedWrite { field, value }
+        PhyTemperatureAction::WriteMasked { value } => {
+            PhyTemperatureCompletion::MaskedWrite { value }
         }
         action => panic!("unexpected terminal temperature action: {action:?}"),
     }

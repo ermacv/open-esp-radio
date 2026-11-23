@@ -836,14 +836,8 @@ pub enum XtalDutyFailure {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyPassAction {
-    WriteMasked {
-        field: crate::analog::i2c::Field,
-        value: Placed,
-    },
-    WriteByte {
-        address: Address,
-        value: u8,
-    },
+    WriteMasked { value: Placed },
+    WriteByte { address: Address, value: u8 },
     Prepare(XtalDutyPrepareAction),
     Search(XtalDutySearchAction),
     Restore(XtalDutyRestoreAction),
@@ -909,7 +903,6 @@ impl XtalDutyPassTransition {
     pub const fn action(self) -> XtalDutyPassAction {
         match self.step {
             XtalDutyPassStep::DisablePath => XtalDutyPassAction::WriteMasked {
-                field: crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                 value: placed!(crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE, 0),
             },
             XtalDutyPassStep::WriteInitialDuty => XtalDutyPassAction::WriteByte {
@@ -1034,13 +1027,8 @@ pub struct XtalDutyCalibrationOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum XtalDutyCalibrationAction {
-    ReadInitialDuty {
-        field: crate::analog::i2c::Field,
-    },
-    DisableCalibrationPath {
-        field: crate::analog::i2c::Field,
-        value: Placed,
-    },
+    ReadInitialDuty { field: crate::analog::i2c::Field },
+    DisableCalibrationPath { value: Placed },
     Pass(XtalDutyPassAction),
     Complete(XtalDutyCalibrationOutcome),
     Failed(XtalDutyFailure),
@@ -1104,7 +1092,6 @@ impl XtalDutyCalibrationTransition {
             }
             XtalDutyCalibrationStep::DisableCalibrationPath { .. } => {
                 XtalDutyCalibrationAction::DisableCalibrationPath {
-                    field: crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
                     value: placed!(crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE, 0),
                 }
             }

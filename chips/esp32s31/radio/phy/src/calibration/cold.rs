@@ -52,7 +52,7 @@ pub enum PhyColdI2cRequest {
     ReadByte { address: Address },
     ReadField { field: Field },
     WriteByte { address: Address, value: u8 },
-    WriteField { field: Field, value: Placed },
+    WriteField { value: Placed },
 }
 
 impl PhyColdI2cRequest {
@@ -68,14 +68,15 @@ impl PhyColdI2cRequest {
         Self::WriteByte { address, value }
     }
 
-    pub const fn write_field(field: Field, value: Placed) -> Self {
-        Self::WriteField { field, value }
+    pub const fn write_field(value: Placed) -> Self {
+        Self::WriteField { value }
     }
 
     pub const fn address(self) -> Address {
         match self {
             Self::ReadByte { address } | Self::WriteByte { address, .. } => address,
-            Self::ReadField { field } | Self::WriteField { field, .. } => field.address(),
+            Self::ReadField { field } => field.address(),
+            Self::WriteField { value } => value.address(),
         }
     }
 }
@@ -199,9 +200,9 @@ impl PhyColdI2cTransaction {
                     value: field.extract(value),
                 })
             }
-            PhyColdI2cRequest::WriteField {
-                value: field_value, ..
-            } => PhyColdI2cPhase::StartWrite(field_value.apply(value)),
+            PhyColdI2cRequest::WriteField { value: field_value } => {
+                PhyColdI2cPhase::StartWrite(field_value.apply(value))
+            }
             PhyColdI2cRequest::WriteByte { .. } => return Err(PhyColdI2cError::WrongEdge),
         };
         Ok(PhyColdI2cObservation::EdgeConsumed)
@@ -523,34 +524,29 @@ fn lower_prefix_i2c_request(action: PhyRfInitPrefixAction) -> Option<PhyColdI2cR
                 RfpllFrequencyAction::ReadByte { address },
             )),
         )) => Some(PhyColdI2cRequest::read_byte(address)),
-        PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked { field, value })
-        | PhyRfInitPrefixAction::RfpllChargePump(RfpllChargePumpAction::WriteMasked {
-            field,
-            value,
-        })
+        PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked { value })
+        | PhyRfInitPrefixAction::RfpllChargePump(RfpllChargePumpAction::WriteMasked { value })
         | PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteMasked {
-            field,
             value,
         })
         | PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(
-            PhyFrequencyI2cAction::WriteMasked { field, value },
+            PhyFrequencyI2cAction::WriteMasked { value },
         ))
         | PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::DisableCalibrationPath {
-            field,
             value,
         })
         | PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-            XtalDutyPassAction::WriteMasked { field, value },
+            XtalDutyPassAction::WriteMasked { value },
         ))
         | PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::Rfpll {
-            action: RfpllFrequencyAction::WriteMasked { field, value },
+            action: RfpllFrequencyAction::WriteMasked { value },
             ..
         })
         | PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
             XtalDutyPassAction::Prepare(XtalDutyPrepareAction::Rfpll(
-                RfpllFrequencyAction::WriteMasked { field, value },
+                RfpllFrequencyAction::WriteMasked { value },
             )),
-        )) => Some(PhyColdI2cRequest::write_field(field, value)),
+        )) => Some(PhyColdI2cRequest::write_field(value)),
         PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::ReadMasked { field })
         | PhyRfInitPrefixAction::RfpllChargePump(RfpllChargePumpAction::ReadMasked { field })
         | PhyRfInitPrefixAction::ReadMasked69 { field }
@@ -629,12 +625,13 @@ fn lower_prefix_i2c_completion(
         }
         (
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteMasked {
-                field,
-                ..
+                value,
             }),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
-            PhyChannelFrequencyInitCompletion::MaskedWrite { field },
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
+            PhyChannelFrequencyInitCompletion::MaskedWrite {
+                field: value.field(),
+            },
         )),
         (
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteByte {
@@ -658,13 +655,13 @@ fn lower_prefix_i2c_completion(
         )),
         (
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::Rfpll {
-                action: RfpllFrequencyAction::WriteMasked { field, .. },
+                action: RfpllFrequencyAction::WriteMasked { value, .. },
                 ..
             }),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
             PhyChannelFrequencyInitCompletion::Rfpll(RfpllFrequencyCompletion::MaskedWrite {
-                field,
+                field: value.field(),
             }),
         )),
         (
@@ -710,12 +707,12 @@ fn lower_prefix_i2c_completion(
         )),
         (
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(
-                PhyFrequencyI2cAction::WriteMasked { field, .. },
+                PhyFrequencyI2cAction::WriteMasked { value, .. },
             )),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
             PhyChannelFrequencyInitCompletion::I2c(PhyFrequencyI2cCompletion::MaskedWrite {
-                field,
+                field: value.field(),
             }),
         )),
         (
@@ -743,20 +740,23 @@ fn lower_prefix_i2c_completion(
         )),
         (
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::DisableCalibrationPath {
-                field,
-                ..
+                value,
             }),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
-            XtalDutyCalibrationCompletion::CalibrationPathDisabled { field },
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
+            XtalDutyCalibrationCompletion::CalibrationPathDisabled {
+                field: value.field(),
+            },
         )),
         (
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::WriteMasked { field, .. },
+                XtalDutyPassAction::WriteMasked { value, .. },
             )),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
-            XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::MaskedWrite { field }),
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
+            XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::MaskedWrite {
+                field: value.field(),
+            }),
         )),
         (
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -769,13 +769,15 @@ fn lower_prefix_i2c_completion(
         (
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::Rfpll(
-                    RfpllFrequencyAction::WriteMasked { field, .. },
+                    RfpllFrequencyAction::WriteMasked { value, .. },
                 )),
             )),
             PhyColdI2cOutcome::Written { address: completed },
-        ) if field.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
+        ) if value.address() == completed => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Prepare(
-                XtalDutyPrepareCompletion::Rfpll(RfpllFrequencyCompletion::MaskedWrite { field }),
+                XtalDutyPrepareCompletion::Rfpll(RfpllFrequencyCompletion::MaskedWrite {
+                    field: value.field(),
+                }),
             )),
         )),
         (

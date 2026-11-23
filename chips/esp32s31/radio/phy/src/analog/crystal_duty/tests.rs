@@ -180,9 +180,9 @@ fn complete_rfpll_action(
     cap_status_reads: &mut u8,
 ) -> RfpllFrequencyCompletion {
     match action {
-        RfpllFrequencyAction::WriteMasked { field, .. } => {
-            RfpllFrequencyCompletion::MaskedWrite { field }
-        }
+        RfpllFrequencyAction::WriteMasked { value, .. } => RfpllFrequencyCompletion::MaskedWrite {
+            field: value.field(),
+        },
         RfpllFrequencyAction::WriteByte { address, .. } => {
             RfpllFrequencyCompletion::ByteWrite { address }
         }
@@ -299,12 +299,14 @@ fn drive_pass(
     let mut rfpll_cap_status_reads = 0;
     loop {
         match transition.action() {
-            XtalDutyCalibrationAction::Pass(XtalDutyPassAction::WriteMasked { field, value })
-                if value == field.place(0).unwrap() =>
+            XtalDutyCalibrationAction::Pass(XtalDutyPassAction::WriteMasked { value })
+                if value.value() == 0 =>
             {
                 transition
                     .advance(XtalDutyCalibrationCompletion::Pass(
-                        XtalDutyPassCompletion::MaskedWrite { field },
+                        XtalDutyPassCompletion::MaskedWrite {
+                            field: value.field(),
+                        },
                     ))
                     .unwrap();
             }
@@ -685,7 +687,7 @@ fn pass_rejects_wrong_field_and_stale_parameter_completion() {
         pbus_rx_path_value: 0x42,
     };
     let mut transition = XtalDutyPassTransition::new(0x988, 0x2a, parameter);
-    let XtalDutyPassAction::WriteMasked { field, .. } = transition.action() else {
+    let XtalDutyPassAction::WriteMasked { value } = transition.action() else {
         panic!("expected path-disable write");
     };
     assert_eq!(
@@ -695,7 +697,9 @@ fn pass_rejects_wrong_field_and_stale_parameter_completion() {
         Err(XtalDutyPassTransitionError::WrongCompletion)
     );
     transition
-        .advance(XtalDutyPassCompletion::MaskedWrite { field })
+        .advance(XtalDutyPassCompletion::MaskedWrite {
+            field: value.field(),
+        })
         .unwrap();
 
     let XtalDutyPassAction::WriteByte { address, .. } = transition.action() else {
@@ -737,13 +741,19 @@ fn wrapper_orders_both_frequency_passes_without_hidden_progress() {
         })
         .unwrap();
 
-    let XtalDutyCalibrationAction::DisableCalibrationPath { field, value } = transition.action()
-    else {
+    let XtalDutyCalibrationAction::DisableCalibrationPath { value } = transition.action() else {
         panic!("expected the calibration-path write");
     };
-    assert_eq!(value, field.place(0).unwrap());
+    assert_eq!(
+        value,
+        crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE
+            .place(0)
+            .unwrap()
+    );
     transition
-        .advance(XtalDutyCalibrationCompletion::CalibrationPathDisabled { field })
+        .advance(XtalDutyCalibrationCompletion::CalibrationPathDisabled {
+            field: value.field(),
+        })
         .unwrap();
 
     drive_pass(&mut transition, 0x988, initial_duty, 0);

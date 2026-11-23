@@ -83,7 +83,7 @@ pub enum PhyTemperatureFailure {
 pub enum PhyTemperatureAction {
     ReadMasked { field: Field },
     SampleCode,
-    WriteMasked { field: Field, value: Placed },
+    WriteMasked { value: Placed },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),
 }
@@ -92,7 +92,7 @@ pub enum PhyTemperatureAction {
 pub enum PhyTemperatureCompletion {
     MaskedRead { field: Field, value: u8 },
     CodeSampled { value: u8 },
-    MaskedWrite { field: Field, value: Placed },
+    MaskedWrite { value: Placed },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -187,17 +187,15 @@ impl PhyTemperatureTransition {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
             },
             PhyTemperatureStep::PrimeDefaultDac => PhyTemperatureAction::WriteMasked {
-                field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
                 value: placed!(
                     analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
                     DEFAULT_DAC
                 ),
             },
             PhyTemperatureStep::SampleCode { .. } => PhyTemperatureAction::SampleCode,
-            PhyTemperatureStep::WriteDac { value, .. } => PhyTemperatureAction::WriteMasked {
-                field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value,
-            },
+            PhyTemperatureStep::WriteDac { value, .. } => {
+                PhyTemperatureAction::WriteMasked { value }
+            }
             PhyTemperatureStep::Complete(outcome) => PhyTemperatureAction::Complete(outcome),
             PhyTemperatureStep::Failed(failure) => PhyTemperatureAction::Failed(failure),
         }
@@ -236,10 +234,7 @@ impl PhyTemperatureTransition {
             }
             (
                 PhyTemperatureStep::PrimeDefaultDac,
-                PhyTemperatureCompletion::MaskedWrite {
-                    field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                    value,
-                },
+                PhyTemperatureCompletion::MaskedWrite { value },
             ) if value
                 == placed!(
                     analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
@@ -280,10 +275,7 @@ impl PhyTemperatureTransition {
             }
             (
                 PhyTemperatureStep::WriteDac { outcome, value },
-                PhyTemperatureCompletion::MaskedWrite {
-                    field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                    value: written,
-                },
+                PhyTemperatureCompletion::MaskedWrite { value: written },
             ) if written == value => PhyTemperatureStep::Complete(outcome),
             (PhyTemperatureStep::Complete(_), _) | (PhyTemperatureStep::Failed(_), _) => {
                 return Err(PhyTemperatureTransitionError::AlreadyComplete);
@@ -330,8 +322,8 @@ impl PhyTemperatureI2cBinding {
             PhyTemperatureAction::ReadMasked { field } => Some(
                 crate::calibration::cold::PhyColdI2cRequest::read_field(field),
             ),
-            PhyTemperatureAction::WriteMasked { field, value } => Some(
-                crate::calibration::cold::PhyColdI2cRequest::write_field(field, value),
+            PhyTemperatureAction::WriteMasked { value } => Some(
+                crate::calibration::cold::PhyColdI2cRequest::write_field(value),
             ),
             _ => None,
         }
@@ -419,12 +411,12 @@ impl PhyTemperatureI2cBinding {
                 Ok(PhyTemperatureCompletion::MaskedRead { field, value })
             }
             (
-                PhyTemperatureAction::WriteMasked { field, value },
+                PhyTemperatureAction::WriteMasked { value },
                 crate::calibration::cold::PhyColdI2cOutcome::Written {
                     address: completed_address,
                 },
-            ) if completed_address == field.address() => {
-                Ok(PhyTemperatureCompletion::MaskedWrite { field, value })
+            ) if completed_address == value.address() => {
+                Ok(PhyTemperatureCompletion::MaskedWrite { value })
             }
             _ => Err(PhyTemperatureBindingError::UnexpectedOutcome),
         }

@@ -8,9 +8,9 @@ use crate::analog::i2c::analog_i2c;
 
 fn complete_write(action: RfpllFrequencyAction) -> RfpllFrequencyCompletion {
     match action {
-        RfpllFrequencyAction::WriteMasked { field, .. } => {
-            RfpllFrequencyCompletion::MaskedWrite { field }
-        }
+        RfpllFrequencyAction::WriteMasked { value, .. } => RfpllFrequencyCompletion::MaskedWrite {
+            field: value.field(),
+        },
         RfpllFrequencyAction::WriteByte { address, .. } => {
             RfpllFrequencyCompletion::ByteWrite { address }
         }
@@ -405,10 +405,13 @@ fn upward_cap_search_ends_at_the_nine_bit_bound_without_touching_bit_seven() {
             panic!("expected cap low write");
         };
         advance_writes(&mut transition, 1);
-        let RfpllFrequencyAction::WriteMasked { field, value } = transition.action() else {
+        let RfpllFrequencyAction::WriteMasked { value } = transition.action() else {
             panic!("expected cap high write");
         };
-        assert_eq!(field, analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH);
+        assert_eq!(
+            value.field(),
+            analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH
+        );
         assert!(
             value.value() <= 1,
             "the high write never reaches the neighboring bit"

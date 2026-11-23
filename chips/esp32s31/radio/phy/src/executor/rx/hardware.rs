@@ -18,8 +18,8 @@ impl<R: oer_chips_esp32s31_hal::system::owner::SharedPhyContext> Hardware for R 
             ControlCommand::RestoreRoot | ControlCommand::RestoreCalibration => {
                 rx_dco::restore_control(self).map_err(|_| RxError::Hardware)?
             }
-            ControlCommand::Registers(enabled) => {
-                crate::hardware::configure_phy_rx_gain_dc_registers(self, enabled)
+            ControlCommand::Registers(calibration) => {
+                crate::hardware::configure_phy_rx_gain_dc_registers(self, calibration)
             }
             ControlCommand::Debug => oer_chips_family_radio_phy::pbus::configure_debug_mode(
                 &mut oer_chips_esp32s31_hal::radio::phy::pbus::port(self),

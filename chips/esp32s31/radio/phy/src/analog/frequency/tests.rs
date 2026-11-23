@@ -13,8 +13,8 @@ use super::{
     PhyFrequencyI2cRequest, PhyFrequencyI2cTransition, PhyFrequencyI2cTransitionError,
     PhyFrequencyTableAction, PhyFrequencyTableCompletion, PhyFrequencyTableParameters,
     PhyFrequencyTableRequest, PhyFrequencyTableTransition, PhyFrequencyTableTransitionError,
-    phy_frequency_cap_adjusted_word, phy_frequency_channel_index, phy_frequency_memory_record,
-    phy_frequency_xtal_duty,
+    payload_bits, phy_frequency_cap_adjusted_word, phy_frequency_channel_index,
+    phy_frequency_memory_record, phy_frequency_xtal_duty, read_word,
 };
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
 
@@ -68,12 +68,18 @@ fn record_addresses_match_the_rom_arithmetic() {
 #[test]
 fn cap_adjustment_preserves_the_rom_mask_and_reencodes_bit_eight() {
     assert_eq!(
-        phy_frequency_cap_adjusted_word(0x00aa_bffe, PhyFrequencyCapCorrection::from_delta(2),),
-        0x0000_ff00
+        phy_frequency_cap_adjusted_word(
+            read_word(0x00aa_bffe),
+            PhyFrequencyCapCorrection::from_delta(2),
+        ),
+        (read_word(0x0000_ff00), 3)
     );
     assert_eq!(
-        phy_frequency_cap_adjusted_word(0x00aa_ff01, PhyFrequencyCapCorrection::from_delta(-2),),
-        0x0000_bfff
+        phy_frequency_cap_adjusted_word(
+            read_word(0x00aa_ff01),
+            PhyFrequencyCapCorrection::from_delta(-2),
+        ),
+        (read_word(0x0000_bfff), 3)
     );
     assert_eq!(phy_frequency_channel_index(11), 62);
     assert_eq!(phy_frequency_channel_index(2_462), 62);
@@ -96,13 +102,13 @@ fn cap_memory_underflow_retains_signed_mode_and_requires_its_completion() {
         .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index,
             address,
-            value: 0x00aa_bf00,
+            value: read_word(0x00aa_bf00),
         })
         .unwrap();
     let PhyFrequencyCapMemoryAction::WriteMemory { value, mode, .. } = transition.action() else {
         panic!("must publish the adjusted entry");
     };
-    assert_eq!(value.payload(), 0x00ff_fffb);
+    assert_eq!(payload_bits(value), 0x00ff_fffb);
     assert_eq!(mode, 0xff);
     assert_eq!(
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
@@ -147,7 +153,7 @@ fn cap_memory_transition_reads_and_writes_all_entries_before_restore() {
                     .advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
                         entry_index,
                         address,
-                        value: 0x00aa_bf20,
+                        value: read_word(0x00aa_bf20),
                     })
                     .unwrap();
                 reads += 1;
@@ -160,7 +166,7 @@ fn cap_memory_transition_reads_and_writes_all_entries_before_restore() {
             } => {
                 assert_eq!(entry_index, writes);
                 assert_eq!(address.get(), 0x20 + u16::from(entry_index) * 7);
-                assert_eq!(value.payload(), 0x0000_bf22);
+                assert_eq!(payload_bits(value), 0x0000_bf22);
                 assert_eq!(mode, 3);
                 transition
                     .advance(PhyFrequencyCapMemoryCompletion::MemoryWritten {
@@ -208,7 +214,7 @@ fn cap_memory_transition_and_binding_reject_foreign_or_terminal_edges() {
         transition.advance(PhyFrequencyCapMemoryCompletion::MemoryRead {
             entry_index: 1,
             address: FrequencyMemoryAddress::new(0x27).unwrap(),
-            value: 0x0000_ff80,
+            value: read_word(0x0000_ff80),
         }),
         Err(PhyFrequencyCapMemoryTransitionError::WrongCompletion)
     );
@@ -241,15 +247,21 @@ fn crystal_duty_preserves_both_unsigned_vendor_boundaries() {
 #[test]
 fn record_packs_cap_sdm_and_duty_without_a_backing_table() {
     assert_eq!(
-        phy_frequency_memory_record(REQUEST, 0).words(),
+        phy_frequency_memory_record(REQUEST, 0)
+            .payloads()
+            .map(payload_bits),
         [0x00a8_bfc8, 0x0030_0000, 0x35]
     );
     assert_eq!(
-        phy_frequency_memory_record(REQUEST, 64).words(),
+        phy_frequency_memory_record(REQUEST, 64)
+            .payloads()
+            .map(payload_bits),
         [0x00a9_ff18, 0x0032_2222, 0x35]
     );
     assert_eq!(
-        phy_frequency_memory_record(REQUEST, 84).words(),
+        phy_frequency_memory_record(REQUEST, 84)
+            .payloads()
+            .map(payload_bits),
         [0x00ae_ff31, 0x0032_cccc, 0x35]
     );
 }
@@ -320,7 +332,6 @@ fn complete_i2c_snapshot(
     assert_eq!(
         transition.action(),
         PhyFrequencyI2cAction::WriteMasked {
-            field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
             value: placed!(
                 analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                 1
@@ -373,7 +384,7 @@ fn collect_i2c_memory_writes(
             descriptor_index,
             copy_index,
             address.get(),
-            value.bits(),
+            payload_bits(value),
             mode,
         ));
         transition
@@ -508,9 +519,9 @@ fn rfpll_completion(
     status_reads: &mut [u8; 3],
 ) -> RfpllFrequencyCompletion {
     match action {
-        RfpllFrequencyAction::WriteMasked { field, .. } => {
-            RfpllFrequencyCompletion::MaskedWrite { field }
-        }
+        RfpllFrequencyAction::WriteMasked { value, .. } => RfpllFrequencyCompletion::MaskedWrite {
+            field: value.field(),
+        },
         RfpllFrequencyAction::WriteByte { address, .. } => {
             RfpllFrequencyCompletion::ByteWrite { address }
         }
@@ -551,8 +562,10 @@ fn rfpll_completion(
 
 fn i2c_completion(action: PhyFrequencyI2cAction) -> PhyFrequencyI2cCompletion {
     match action {
-        PhyFrequencyI2cAction::WriteMasked { field, .. } => {
-            PhyFrequencyI2cCompletion::MaskedWrite { field }
+        PhyFrequencyI2cAction::WriteMasked { value, .. } => {
+            PhyFrequencyI2cCompletion::MaskedWrite {
+                field: value.field(),
+            }
         }
         PhyFrequencyI2cAction::ReadByte { address } => {
             let value = if address
@@ -598,8 +611,10 @@ fn channel_frequency_init_composes_the_complete_cold_graph() {
             PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode } => {
                 PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode }
             }
-            PhyChannelFrequencyInitAction::WriteMasked { field, .. } => {
-                PhyChannelFrequencyInitCompletion::MaskedWrite { field }
+            PhyChannelFrequencyInitAction::WriteMasked { value, .. } => {
+                PhyChannelFrequencyInitCompletion::MaskedWrite {
+                    field: value.field(),
+                }
             }
             PhyChannelFrequencyInitAction::WriteByte { address, .. } => {
                 PhyChannelFrequencyInitCompletion::ByteWrite { address }
@@ -728,7 +743,12 @@ fn modeled_frequency_records_match_the_old_packing() {
                         request.parameters.outer_xtal_duty,
                     )),
                 ];
-                assert_eq!(phy_frequency_memory_record(request, index).words(), old);
+                assert_eq!(
+                    phy_frequency_memory_record(request, index)
+                        .payloads()
+                        .map(payload_bits),
+                    old
+                );
             }
         }
     }
@@ -744,13 +764,10 @@ fn modeled_cap_correction_preserves_signed_spill_and_publication_mode() {
             let old = (raw & 0xbf00)
                 | u32::from(adjusted as u8)
                 | (((adjusted as i16 as i32) >> 8) as u32).wrapping_shl(14);
-            let word = phy_frequency_cap_adjusted_word(raw, correction);
-            assert_eq!(word, old);
-            assert_eq!(super::cap_memory_write_mode(word), 3 | (old >> 24) as u8);
-            assert_eq!(
-                super::PhyFrequencyMemoryWordWord::from_bits(word).payload(),
-                old & 0xff_ffff
-            );
+            let (word, mode) = phy_frequency_cap_adjusted_word(read_word(raw), correction);
+            // The payload is the word's 24 bits; its bits above go into the mode.
+            assert_eq!(word.bits(), old & 0xff_ffff);
+            assert_eq!(mode, 3 | (old >> 24) as u8);
         }
     }
 }
@@ -782,7 +799,7 @@ fn modeled_frequency_i2c_commands_match_old_bytes_and_field_updates() {
                     } else {
                         register_block | (u32::from(old_data[usize::from(copy)]) << 16)
                     };
-                    assert_eq!(word.bits(), old);
+                    assert_eq!(payload_bits(word), old);
                 }
             }
         }

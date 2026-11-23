@@ -255,7 +255,9 @@ impl Io {
                 } => Done::MemoryRead {
                     entry_index,
                     address,
-                    value: 0xa500_0000 | u32::from(entry_index),
+                    value: crate::analog::frequency::read_word(
+                        0xa500_0000 | u32::from(entry_index),
+                    ),
                 },
                 Memory::WriteMemory {
                     entry_index,
@@ -420,7 +422,6 @@ fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
     let mut io = Io::default();
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-        analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
         analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
             .place(15)
             .unwrap(),
@@ -1033,7 +1034,6 @@ fn a_voluntary_yield_between_rmw_commands_is_not_a_hardware_timeout() {
     let mut io = Io::default();
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
-        analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
         analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
             .place(15)
             .unwrap(),
@@ -1703,7 +1703,6 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
     use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyI2cBinding};
     let clock = VirtualClock::<1>::new();
     let action = RfpllFrequencyAction::WriteMasked {
-        field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
         value: placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 1),
     };
     let mut direct = Io {

@@ -190,16 +190,12 @@ const fn bluetooth_tx_gain_seed(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn configure_phy_rx_gain_dc_registers(
     registers: &mut impl SharedPhyAccess,
-    enabled: bool,
+    calibration: oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration,
 ) {
-    if enabled {
+    if calibration == oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration::Enabled {
         registers.enable_phy_calibration_clock();
     }
-    registers.set_rx_gain_dc_calibration(if enabled {
-        oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration::Enabled
-    } else {
-        oer_chips_esp32s31_hal::types::PhyRxGainDcCalibration::Disabled
-    });
+    registers.set_rx_gain_dc_calibration(calibration);
 }
 
 /// Program the complete crystal-duty calibration tone without `g_phyFuns`.

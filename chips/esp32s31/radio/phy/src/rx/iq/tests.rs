@@ -103,9 +103,9 @@ fn rfpll_completion(
     cap_status_reads: &mut u8,
 ) -> RfpllFrequencyCompletion {
     match action {
-        RfpllFrequencyAction::WriteMasked { field, .. } => {
-            RfpllFrequencyCompletion::MaskedWrite { field }
-        }
+        RfpllFrequencyAction::WriteMasked { value, .. } => RfpllFrequencyCompletion::MaskedWrite {
+            field: value.field(),
+        },
         RfpllFrequencyAction::WriteByte { address, .. } => {
             RfpllFrequencyCompletion::ByteWrite { address }
         }

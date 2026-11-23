@@ -64,9 +64,7 @@ fn channel_visits_update_nrx_once_before_each_measured_pair() {
                 }
                 _ => panic!("D-code must use channel-table switching, not a full PLL search"),
             }),
-            PhyDcodeAction::WriteMasked { field, value } => {
-                PhyDcodeCompletion::MaskedWrite { field, value }
-            }
+            PhyDcodeAction::WriteMasked { value } => PhyDcodeCompletion::MaskedWrite { value },
             PhyDcodeAction::ReadMasked { field } => {
                 assert_eq!(frequencies.len(), values / 2 + 1);
                 let value = values as u8;
@@ -127,11 +125,11 @@ fn ckgen_and_two_reads_commit_the_final_owned_pair() {
     };
 
     for _ in 0..4 {
-        let PhyDcodeAction::WriteMasked { field, value } = transition.action() else {
+        let PhyDcodeAction::WriteMasked { value } = transition.action() else {
             panic!("expected CKGEN write");
         };
         transition
-            .advance(PhyDcodeCompletion::MaskedWrite { field, value })
+            .advance(PhyDcodeCompletion::MaskedWrite { value })
             .unwrap();
     }
 
@@ -180,7 +178,6 @@ fn external_lowering_covers_every_dcode_operation_class() {
     ));
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::WriteMasked {
-            field: analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
             value: placed!(
                 analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
                 0

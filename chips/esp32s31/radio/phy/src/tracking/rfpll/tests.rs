@@ -214,7 +214,7 @@ fn correction_updates_memory_only_for_nonzero_delta_and_waits_for_restore() {
                 }) => Completion::Memory(MemoryCompletion::MemoryRead {
                     entry_index,
                     address,
-                    value: 100,
+                    value: crate::analog::frequency::read_word(100),
                 }),
                 Action::Memory(MemoryAction::WriteMemory {
                     entry_index,
@@ -225,7 +225,7 @@ fn correction_updates_memory_only_for_nonzero_delta_and_waits_for_restore() {
                     assert!(measured);
                     let upward = (101..).take(DIRECTION).collect::<std::vec::Vec<i16>>();
                     assert_eq!(
-                        value.payload() as i16,
+                        crate::analog::frequency::payload_bits(value) as i16,
                         mean(&upward),
                         "every entry receives the full measured correction"
                     );
