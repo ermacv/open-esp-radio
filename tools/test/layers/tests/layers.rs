@@ -10618,12 +10618,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R3 cleans the cores and the contracts (tasks/312)",
     ),
     (
-        "protocols/hil/agent/src/lib.rs",
-        "clippy::let_underscore_must_use",
-        1,
-        "R3 cleans the cores and the contracts (tasks/312)",
-    ),
-    (
         "protocols/hil/protocol/src/key.rs",
         "unused_doc_comments",
         1,
