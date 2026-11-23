@@ -2810,7 +2810,6 @@ dependencies = [
  "postcard-schema",
  "serde",
  "serde_json",
- "tempfile",
  "toml",
 ]
 

@@ -76,9 +76,6 @@ is gone both fail, so every list only shrinks:
   - `CLAIMS`: places claimed at run time in the entry and the facade
     (`try_take`, `try_init`, `try_uninit`, an option's `take()` answered by
     a refusal);
-  - `VIOLATION_VARIANTS`: the variants of `ActorViolation`,
-    `LifecycleViolation` and `ApContract`, each with the sites that make or
-    match it;
   - `ERROR_STATES`: error types with a variant that names the caller's
     state (`Already…`, `Not…` of a state, `Running`, `Stopped`, `Closed`,
     `Open`, `Active`);
