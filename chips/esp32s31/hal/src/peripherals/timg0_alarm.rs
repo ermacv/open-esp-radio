@@ -16,9 +16,10 @@
 //! on S31 hart0 at P2, with TIMG0/FROM_CPU2 assigned both ways. Other line
 //! pairs and levels are not measured by that observation.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{instances, ownership::TimerGroup0Peripherals, timg};
 use oer_chips_family_platform_interrupt_table::EventAuthority;
-use oer_portable_mmio::{Bits, Fixed, InterruptSource, Placement};
+use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 use oer_portable_time::Duration;
 
 #[cfg(test)]

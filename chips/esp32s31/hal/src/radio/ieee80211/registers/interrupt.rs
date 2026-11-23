@@ -8,10 +8,11 @@
 //! word is written by the bank's owner alone: no task-side owner of either
 //! bank exists.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     modem_pwr, modem_pwr::WifiMacPowerInterrupt, wifi_mac, wifi_mac::WifiMacInterrupt,
 };
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 use crate::set::{Set, members};
 

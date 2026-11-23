@@ -37,13 +37,14 @@ impl MacRxNextDescriptorObservation {
 /// the descriptor base. Its units and hardware function are not established.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_C68_INIT_IMAGE: oer_portable_mmio::Bits<20> =
-    oer_portable_mmio::Bits::constant::<0x000f_ffff>();
+const RX_C68_INIT_IMAGE: oer_chips_esp32s31_pac::Bits<20> =
+    oer_chips_esp32s31_pac::Bits::constant::<0x000f_ffff>();
 
 /// The opaque twenty-bit value `mac_rxbuf_init` publishes to `0x0c6c`.
 ///
 /// SOURCE: complete pinned `libpp.a[hal_mac.o]::mac_rxbuf_init`.
-const RX_C6C_INIT_IMAGE: oer_portable_mmio::Bits<20> = oer_portable_mmio::Bits::constant::<4>();
+const RX_C6C_INIT_IMAGE: oer_chips_esp32s31_pac::Bits<20> =
+    oer_chips_esp32s31_pac::Bits::constant::<4>();
 
 impl<M: MacPlacement> WifiRxDmaRegisters<M> {
     /// Initialize the RX walker configuration without publishing a descriptor.

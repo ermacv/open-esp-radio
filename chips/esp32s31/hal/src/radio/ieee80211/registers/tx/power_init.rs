@@ -11,14 +11,14 @@ pub const MAC_TX_POWER_RATE_COUNT: usize = 43;
 /// truncating an arbitrary byte into a six-bit MMIO field.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacTxPowerIndex(
-    oer_portable_mmio::Bits<
+    oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::wifi_mac::tb_ru_power_tail::POWER_INDEX_WIDTH },
     >,
 );
 
 impl MacTxPowerIndex {
     pub const fn new(value: u8) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value as u32) {
+        match oer_chips_esp32s31_pac::Bits::new(value as u32) {
             Ok(bits) => Some(Self(bits)),
             Err(_) => None,
         }
@@ -31,7 +31,7 @@ impl MacTxPowerIndex {
     /// The index as the six-bit RU power fields hold it.
     const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<
+    ) -> oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::wifi_mac::tb_ru_power_tail::POWER_INDEX_WIDTH },
     > {
         self.0

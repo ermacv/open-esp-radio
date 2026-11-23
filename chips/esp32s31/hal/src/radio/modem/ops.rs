@@ -1,9 +1,10 @@
 //! Register-local modem operations over the physical generated parts.
 #![forbid(unsafe_code)]
 use super::values::*;
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::dictionaries::{IcgState, Reset};
 use oer_chips_esp32s31_pac::modem_syscon::dictionaries::ClockGate;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 // SOURCE: ESP_RADIO_7F914782_S31_WIFI_CLOCKS, S31_MODEM_SYSCON_STRUCT.
 pub(crate) fn set_wifi_baseband_and_mac_reset<P: Placement>(

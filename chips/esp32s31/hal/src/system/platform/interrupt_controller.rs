@@ -94,8 +94,9 @@ use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
 use oer_portable_riscv::clic::{Control, LevelBits};
 
 use crate::system::cores::{StopTheWorld, key};
+use oer_chips_esp32s31_pac::Bits;
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 /// Controller geometry generated from the chip facts, shared with runtime
 /// vector generation. Lines below `LINES.first` are reserved core-local inputs.

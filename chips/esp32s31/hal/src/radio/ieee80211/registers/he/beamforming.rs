@@ -1,6 +1,6 @@
 //! Typed HE beamforming report-rate configuration.
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters};
 

@@ -7,7 +7,7 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{AgcRegisters, PhyPlacement};
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 /// Complete rev0 ROM `phy_reg_update_new` saturation-gain image.
 ///

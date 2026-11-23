@@ -8,10 +8,10 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{BasebandRegisters, ClockRegisters, PhyPlacement};
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::fe;
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_pac::fe::PhyPbus;
-use oer_portable_mmio::Bits;
 #[cfg(any(test, target_arch = "riscv32"))]
 use {oer_chips_esp32s31_pac::fe::PhyFedataRecovered, oer_portable_mmio::Placement};
 

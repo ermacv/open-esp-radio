@@ -6,8 +6,8 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{ClockRegisters, PhyPlacement};
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{fe, wifi_bb};
-use oer_portable_mmio::Bits;
 #[cfg(target_arch = "riscv32")]
 use {oer_chips_esp32s31_pac::modem_syscon::ModemSysconRadio, oer_portable_mmio::Placement};
 

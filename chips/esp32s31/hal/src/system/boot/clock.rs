@@ -4,13 +4,14 @@
 mod lp_fast;
 pub use lp_fast::{LpFastClock, LpFastSource};
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_boot::{
     Access, Busy,
     clock::{ClockUpdate, CpuClockRegisters, PllPower, PllRegisters},
     flash::FlashClockRegisters,
     psram::MemoryClockRegisters,
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{
     hp_alive_sys::HpAliveSysPllClock,

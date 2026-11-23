@@ -30,14 +30,9 @@ it:
   naming in its first line the step that removes it; the tools read
   `tools/clippy.toml`. Every `clippy.toml` in the tree retains all common
   method bans; `every_clippy_config_retains_all_common_method_bans` checks
-  this. One ban has exceptions: `oer_portable_mmio::Bits::truncate`, which
-  keeps the low bits of any value. The PAC's `clippy.toml` leaves it out
-  until the step after R2, in which the PAC builds its field values itself
-  and the method is no longer public; the HAL's
-  leaves it out until the steps that remove its calls (R2's area PRs).
-  `TRUNCATE_BAN_LEFT_OUT` in the layer tests names the two, and
-  `a_package_without_the_truncate_ban_still_calls_it` fails once a
-  package with a temporary exception has no call left. The four lints
+  this. A field's value is cut only inside the PAC: its `Bits` is the
+  generated root's, its cut `pub(crate)`, so no ban is needed for it (the
+  PAC root's compile-fail examples show the refusal). The four lints
   `cast_possible_truncation`, `cast_sign_loss`, `cast_possible_wrap` and
   `let_underscore_must_use` are denied in the workspace. A crate root with
   existing sites expects each lint once, naming the step that cleans it
@@ -445,7 +440,7 @@ and rejects inline operations even there. Host compiler fixtures are test
 inputs, not firmware instruction owners.
 
 A generated register writer takes typed field values only: `bool`, a value
-enum, an exact-width integer or `oer_portable_mmio::Bits<WIDTH>`; a reader returns
+enum, an exact-width integer or the PAC's `Bits<WIDTH>`; a reader returns
 the same type, so a value read back is written again without a
 conversion. A read-modify-write keeps every other bit, reserved and
 undeclared ones included; a write-one-to-clear register, or the clear

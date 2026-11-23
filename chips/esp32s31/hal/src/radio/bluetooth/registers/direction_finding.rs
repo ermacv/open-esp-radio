@@ -47,7 +47,7 @@ impl<P: BluetoothPlacements> BluetoothTaskRegisters<P> {
 
         device_fence();
         ring.modify_ring_control(|w| {
-            w.set_max_buffer_number(oer_portable_mmio::Bits::constant::<0x6>());
+            w.set_max_buffer_number(oer_chips_esp32s31_pac::Bits::constant::<0x6>());
         });
         ring.modify_buffer_pointer(slot, |w| {
             w.set_compressed_descriptor_pointer(descriptor);

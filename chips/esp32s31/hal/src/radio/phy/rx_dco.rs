@@ -11,7 +11,7 @@ use crate::{
     system::owner::{SharedPhyAccess, phy_parts_mut},
 };
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 #[cfg(target_arch = "riscv32")]
 use {oer_chips_esp32s31_pac::fe::PhyRxDcoOracle, oer_portable_mmio::Placement};
 
@@ -30,7 +30,10 @@ impl RxDcoControlField {
     /// Construct one distinguishable capture for a host test.
     #[cfg(test)]
     pub(crate) const fn for_host_test(value: u32) -> Self {
-        Self(Bits::truncate(value))
+        match Bits::new(value) {
+            Ok(field) => Self(field),
+            Err(_) => panic!("a host test's capture fits the two-bit field"),
+        }
     }
 }
 

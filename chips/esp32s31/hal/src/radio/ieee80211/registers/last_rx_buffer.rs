@@ -18,7 +18,7 @@ enum EntryParameterB {
     /// The vendor's whole-word image (entries zero to four).
     WholeWord,
     /// The described twelve-bit field, stored from zero.
-    Field(oer_portable_mmio::Bits<12>),
+    Field(oer_chips_esp32s31_pac::Bits<12>),
 }
 
 /// The six entries `mac_last_rxbuf_init` stores, in order.
@@ -56,7 +56,7 @@ const LAST_RX_BUFFER_ENTRIES: [LastRxBufferEntry; 6] = [
     LastRxBufferEntry {
         control: 0x0002_3011,
         parameter_a: 0x0000_0001,
-        parameter_b: EntryParameterB::Field(oer_portable_mmio::Bits::constant::<0x0000_00ff>()),
+        parameter_b: EntryParameterB::Field(oer_chips_esp32s31_pac::Bits::constant::<0x0000_00ff>()),
     },
 ];
 
@@ -97,10 +97,10 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
 
         // Preserve the two distinct fresh-read edges from the complete leaf.
         table.modify_last_rx_buffer_control(|w| {
-            w.set_bits_8_13_opaque(oer_portable_mmio::Bits::constant::<0x3f>());
+            w.set_bits_8_13_opaque(oer_chips_esp32s31_pac::Bits::constant::<0x3f>());
         });
         table.modify_last_rx_buffer_control(|w| {
-            w.set_bits_1_6_opaque(oer_portable_mmio::Bits::constant::<0x3f>());
+            w.set_bits_1_6_opaque(oer_chips_esp32s31_pac::Bits::constant::<0x3f>());
         });
         self.mac.wifi_mac_rx_csi_control.modify_rx_csi_control(|w| {
             w.set_bit_27_opaque(true);

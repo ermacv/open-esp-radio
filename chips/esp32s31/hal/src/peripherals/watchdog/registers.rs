@@ -25,11 +25,12 @@
 //! }
 //! ```
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_drivers_watchdog::{
     Access, MainConfig, MainStageAction, MainWatchdogEnable, MainWatchdogRegisters, ResetLength,
     RtcStageAction, RtcWatchdogArm, RtcWatchdogRegisters, SuperWatchdogRegisters, WriteProtected,
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{
     hp_sys_clkrst::{HpSysClkrstTimg0, HpSysClkrstTimg1},

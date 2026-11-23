@@ -16,6 +16,7 @@
 //! (`pmu_sleep_start`: wake and reject enables, acknowledgements, request
 //! and outcome).
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     ownership::SleepPeripherals,
     pmu::{
@@ -28,7 +29,7 @@ use oer_chips_family_drivers_pmu::{
     Access,
     sleep::{RawOutcome, Registers, RtcTicks, SleepClocks},
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 #[cfg(test)]
 mod tests;

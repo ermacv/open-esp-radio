@@ -9,8 +9,8 @@ use crate::layouts::{
 };
 use crate::radio::phy::registers::{FrequencyRegisters, PhyPlacement};
 use crate::radio::phy::residue_of_four;
+use oer_chips_esp32s31_pac::Bits;
 use oer_portable_bounded::Index;
-use oer_portable_mmio::Bits;
 #[cfg(target_arch = "riscv32")]
 use {oer_chips_esp32s31_pac::i2c_ana_mst_mem::PhyI2cCommandRam, oer_portable_mmio::Placement};
 

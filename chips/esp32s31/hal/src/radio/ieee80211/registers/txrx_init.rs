@@ -1,7 +1,7 @@
 //! The direct `mac_txrx_init` transactions.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_portable_bounded::Index;
-use oer_portable_mmio::Bits;
 
 use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters, element};
 

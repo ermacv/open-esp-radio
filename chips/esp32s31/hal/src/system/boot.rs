@@ -37,8 +37,8 @@ pub use oer_chips_family_boot::{
 pub use psram::PsramRegisters;
 pub use soc::Soc;
 
+pub use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{lp_ana::LpAnaBrownout, ownership::AnalogBusPeripherals};
-pub use oer_portable_mmio::Bits;
 use oer_portable_time::Duration;
 
 #[cfg(test)]

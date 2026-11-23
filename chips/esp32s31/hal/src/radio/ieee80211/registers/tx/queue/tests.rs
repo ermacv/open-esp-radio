@@ -93,8 +93,8 @@ fn edca_publishes_three_fields_of_the_reversed_bank() {
         configure_edca(
             &mut owners.registers.mac.wifi_mac_tx_queue_control,
             MacTxQueueIndex::constant::<1>(),
-            oer_portable_mmio::Bits::constant::<0x7>(),
-            oer_portable_mmio::Bits::constant::<0x3ff>(),
+            oer_chips_esp32s31_pac::Bits::constant::<0x7>(),
+            oer_chips_esp32s31_pac::Bits::constant::<0x3ff>(),
             MacInterface::AccessPoint,
         );
     }

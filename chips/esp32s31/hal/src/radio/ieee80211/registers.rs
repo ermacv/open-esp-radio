@@ -6,6 +6,7 @@
 //! owners are generic over where the parts live ([`MacPlacement`]): the chip
 //! by default, or host memory in a test, which runs the same operations.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     instances,
     modem_pwr::{
@@ -36,7 +37,7 @@ use oer_chips_esp32s31_pac::{
     },
 };
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 pub use values::*;
 

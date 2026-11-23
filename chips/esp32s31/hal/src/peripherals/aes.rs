@@ -25,7 +25,7 @@ pub use oer_chips_esp32s31_pac::aes::block_mode::BlockMode as DmaBlockMode;
 /// the driver accepts.
 pub use oer_chips_esp32s31_pac::aes::state::State as AesState;
 /// The `STATE` field as read: a code of [`AesState`] or an unnamed one.
-pub type AesStateField = oer_portable_mmio::Bits<2>;
+pub type AesStateField = oer_chips_esp32s31_pac::Bits<2>;
 
 /// One CPU block, with geometry checked against the generated register model.
 pub type BlockWords = [u32; aes::text_in::COUNT];

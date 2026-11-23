@@ -5,7 +5,7 @@
 /// Twelve-bit divider accepted by the canonical MODEM_LPCON low-power timer selector.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ModemLowPowerClockDivider(
-    oer_portable_mmio::Bits<
+    oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::modem_lpcon::lp_timer_conf::CLK_LP_TIMER_DIV_NUM_WIDTH },
     >,
 );
@@ -16,7 +16,7 @@ impl ModemLowPowerClockDivider {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -30,7 +30,7 @@ impl ModemLowPowerClockDivider {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<
+    ) -> oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::modem_lpcon::lp_timer_conf::CLK_LP_TIMER_DIV_NUM_WIDTH },
     > {
         self.0
@@ -93,7 +93,9 @@ impl CoexTimerClockSource {
 /// Two-bit coexistence client selector published by complete coex_hw_timer_set.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CoexTimerClientValue(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::configuration::PARAMETER_1_WIDTH }>,
+    oer_chips_esp32s31_pac::Bits<
+        { oer_chips_esp32s31_pac::coex::configuration::PARAMETER_1_WIDTH },
+    >,
 );
 impl From<oer_chips_esp32s31_pac::coex::configuration::Parameter1> for CoexTimerClientValue {
     /// A named client of the timer bank's configuration.
@@ -107,7 +109,7 @@ impl CoexTimerClientValue {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -121,8 +123,9 @@ impl CoexTimerClientValue {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::configuration::PARAMETER_1_WIDTH }>
-    {
+    ) -> oer_chips_esp32s31_pac::Bits<
+        { oer_chips_esp32s31_pac::coex::configuration::PARAMETER_1_WIDTH },
+    > {
         self.0
     }
 }
@@ -131,7 +134,9 @@ impl CoexTimerClientValue {
 /// Four-bit coexistence priority value published by complete coex_hw_timer_set.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CoexTimerPtiValue(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::configuration::PARAMETER_2_WIDTH }>,
+    oer_chips_esp32s31_pac::Bits<
+        { oer_chips_esp32s31_pac::coex::configuration::PARAMETER_2_WIDTH },
+    >,
 );
 impl CoexTimerPtiValue {
     pub const MIN: u32 = 0x00000000;
@@ -139,7 +144,7 @@ impl CoexTimerPtiValue {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -153,8 +158,9 @@ impl CoexTimerPtiValue {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::configuration::PARAMETER_2_WIDTH }>
-    {
+    ) -> oer_chips_esp32s31_pac::Bits<
+        { oer_chips_esp32s31_pac::coex::configuration::PARAMETER_2_WIDTH },
+    > {
         self.0
     }
 }
@@ -163,7 +169,7 @@ impl CoexTimerPtiValue {
 /// The grant delay in microseconds: the upper nibble of the byte hal_set_extern_coex_delay publishes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexGrantDelay(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::control::GRANT_DELAY_WIDTH }>,
+    oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::control::GRANT_DELAY_WIDTH }>,
 );
 impl ExternalCoexGrantDelay {
     pub const MIN: u32 = 0x00000000;
@@ -171,7 +177,7 @@ impl ExternalCoexGrantDelay {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -185,7 +191,8 @@ impl ExternalCoexGrantDelay {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::control::GRANT_DELAY_WIDTH }> {
+    ) -> oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::control::GRANT_DELAY_WIDTH }>
+    {
         self.0
     }
 }
@@ -194,7 +201,7 @@ impl ExternalCoexGrantDelay {
 /// One four-bit external coexistence priority or grant field image.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexNibble(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::pti::PRIORITY_0_WIDTH }>,
+    oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::pti::PRIORITY_0_WIDTH }>,
 );
 impl ExternalCoexNibble {
     pub const MIN: u32 = 0x00000000;
@@ -202,7 +209,7 @@ impl ExternalCoexNibble {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -216,7 +223,7 @@ impl ExternalCoexNibble {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::pti::PRIORITY_0_WIDTH }> {
+    ) -> oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::pti::PRIORITY_0_WIDTH }> {
         self.0
     }
 }
@@ -225,7 +232,7 @@ impl ExternalCoexNibble {
 /// The two-bit external coexistence work mode hal_set_extern_coex_mode publishes.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ExternalCoexWorkMode(
-    oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::pti::WORK_MODE_WIDTH }>,
+    oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::pti::WORK_MODE_WIDTH }>,
 );
 impl ExternalCoexWorkMode {
     pub const MIN: u32 = 0x00000000;
@@ -233,7 +240,7 @@ impl ExternalCoexWorkMode {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -247,7 +254,7 @@ impl ExternalCoexWorkMode {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<{ oer_chips_esp32s31_pac::coex::pti::WORK_MODE_WIDTH }> {
+    ) -> oer_chips_esp32s31_pac::Bits<{ oer_chips_esp32s31_pac::coex::pti::WORK_MODE_WIDTH }> {
         self.0
     }
 }
@@ -256,7 +263,7 @@ impl ExternalCoexWorkMode {
 /// Six-bit transmit-power table index accepted by complete rev0 ROM phy_force_pwr_index.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PhyForcedPowerIndex(
-    oer_portable_mmio::Bits<
+    oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::fe::table_memory_index_source::FORCED_POWER_INDEX_WIDTH },
     >,
 );
@@ -267,7 +274,7 @@ impl PhyForcedPowerIndex {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
+        match oer_chips_esp32s31_pac::Bits::new(value) {
             Ok(field) => Some(Self(field)),
             Err(_) => None,
         }
@@ -281,7 +288,7 @@ impl PhyForcedPowerIndex {
     /// The value's field.
     pub const fn field(
         self,
-    ) -> oer_portable_mmio::Bits<
+    ) -> oer_chips_esp32s31_pac::Bits<
         { oer_chips_esp32s31_pac::fe::table_memory_index_source::FORCED_POWER_INDEX_WIDTH },
     > {
         self.0
@@ -290,32 +297,42 @@ impl PhyForcedPowerIndex {
 
 // The HAL domains fit the generated accessor argument widths without narrowing.
 const _: () = {
-    if !(ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX) {
+    if !(ModemLowPowerClockDivider::MAX == oer_chips_esp32s31_pac::Bits::<12>::MAX) {
         panic!(
-            "build-time check: ModemLowPowerClockDivider::MAX == oer_portable_mmio::Bits::<12>::MAX"
+            "build-time check: ModemLowPowerClockDivider::MAX == oer_chips_esp32s31_pac::Bits::<12>::MAX"
         )
     };
-    if !(CoexTimerClockDividerMinusOne::MAX == oer_portable_mmio::Bits::<12>::MAX) {
+    if !(CoexTimerClockDividerMinusOne::MAX == oer_chips_esp32s31_pac::Bits::<12>::MAX) {
         panic!(
-            "build-time check: CoexTimerClockDividerMinusOne::MAX == oer_portable_mmio::Bits::<12>::MAX"
+            "build-time check: CoexTimerClockDividerMinusOne::MAX == oer_chips_esp32s31_pac::Bits::<12>::MAX"
         )
     };
-    if !(CoexTimerClientValue::MAX == oer_portable_mmio::Bits::<2>::MAX) {
-        panic!("build-time check: CoexTimerClientValue::MAX == oer_portable_mmio::Bits::<2>::MAX")
+    if !(CoexTimerClientValue::MAX == oer_chips_esp32s31_pac::Bits::<2>::MAX) {
+        panic!(
+            "build-time check: CoexTimerClientValue::MAX == oer_chips_esp32s31_pac::Bits::<2>::MAX"
+        )
     };
-    if !(CoexTimerPtiValue::MAX == oer_portable_mmio::Bits::<4>::MAX) {
-        panic!("build-time check: CoexTimerPtiValue::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    if !(CoexTimerPtiValue::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX) {
+        panic!("build-time check: CoexTimerPtiValue::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX")
     };
-    if !(ExternalCoexGrantDelay::MAX == oer_portable_mmio::Bits::<4>::MAX) {
-        panic!("build-time check: ExternalCoexGrantDelay::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    if !(ExternalCoexGrantDelay::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX) {
+        panic!(
+            "build-time check: ExternalCoexGrantDelay::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX"
+        )
     };
-    if !(ExternalCoexNibble::MAX == oer_portable_mmio::Bits::<4>::MAX) {
-        panic!("build-time check: ExternalCoexNibble::MAX == oer_portable_mmio::Bits::<4>::MAX")
+    if !(ExternalCoexNibble::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX) {
+        panic!(
+            "build-time check: ExternalCoexNibble::MAX == oer_chips_esp32s31_pac::Bits::<4>::MAX"
+        )
     };
-    if !(ExternalCoexWorkMode::MAX == oer_portable_mmio::Bits::<2>::MAX) {
-        panic!("build-time check: ExternalCoexWorkMode::MAX == oer_portable_mmio::Bits::<2>::MAX")
+    if !(ExternalCoexWorkMode::MAX == oer_chips_esp32s31_pac::Bits::<2>::MAX) {
+        panic!(
+            "build-time check: ExternalCoexWorkMode::MAX == oer_chips_esp32s31_pac::Bits::<2>::MAX"
+        )
     };
-    if !(PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX) {
-        panic!("build-time check: PhyForcedPowerIndex::MAX == oer_portable_mmio::Bits::<6>::MAX")
+    if !(PhyForcedPowerIndex::MAX == oer_chips_esp32s31_pac::Bits::<6>::MAX) {
+        panic!(
+            "build-time check: PhyForcedPowerIndex::MAX == oer_chips_esp32s31_pac::Bits::<6>::MAX"
+        )
     };
 };

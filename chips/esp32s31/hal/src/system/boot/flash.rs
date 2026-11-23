@@ -1,12 +1,13 @@
 //! The flash owner: the SPI1 user command port, the controllers' input
 //! timing words and the flash MMU (`FLASH_SPI0`).
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_boot::{
     Access, Busy,
     flash::{CHUNK_WORDS, FlashCommandRegisters, FlashReadMode, FlashTimingRegisters},
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{
     instances,

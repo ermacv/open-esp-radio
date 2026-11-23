@@ -1,8 +1,8 @@
 //! The interface-zero HE20 association: its BSS before authentication, its
 //! installation after a successful Association Response and its removal.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_portable_bounded::Index;
-use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacAssociationId, MacHeBssColor, MacHeDefaultPacketExtensionDuration,

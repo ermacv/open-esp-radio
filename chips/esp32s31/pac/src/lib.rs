@@ -12,6 +12,59 @@
 //! memory layouts and the analog-I2C dictionary. It has no logic: every
 //! sequence, poll and policy over it is the HAL's.
 //!
+//! A field's value is cut only inside the PAC: `Bits::cut` is not reachable
+//! from outside it,
+//!
+//! ```compile_fail,E0624
+//! let field = oer_chips_esp32s31_pac::Bits::<4>::cut(0x1f);
+//! # let _ = field;
+//! ```
+//!
+//! and `oer-portable-mmio` has no value type of its own:
+//!
+//! ```compile_fail,E0412
+//! let field: oer_portable_mmio::Bits<4>;
+//! ```
+//!
+//! A conversion that loses nothing refuses to build where the field does not
+//! hold every value: a byte into four bits, a halfword into twelve, an index
+//! of five into two bits, a scaled index past the field, two parts that are
+//! not the whole value and two bytes into twelve bits.
+//!
+//! ```compile_fail,E0080
+//! let field: oer_chips_esp32s31_pac::Bits<4> = oer_chips_esp32s31_pac::Bits::from(0xff_u8);
+//! # let _ = field;
+//! ```
+//!
+//! ```compile_fail,E0080
+//! let field: oer_chips_esp32s31_pac::Bits<12> = oer_chips_esp32s31_pac::Bits::from(0xffff_u16);
+//! # let _ = field;
+//! ```
+//!
+//! ```compile_fail,E0080
+//! use oer_portable_bounded::Index;
+//! let field: oer_chips_esp32s31_pac::Bits<2> =
+//!     oer_chips_esp32s31_pac::Bits::from(Index::<5>::constant::<4>());
+//! # let _ = field;
+//! ```
+//!
+//! ```compile_fail,E0080
+//! use oer_portable_bounded::Index;
+//! let field: oer_chips_esp32s31_pac::Bits<4> =
+//!     oer_chips_esp32s31_pac::Bits::affine::<3, 1, 8>(Index::constant::<7>());
+//! # let _ = field;
+//! ```
+//!
+//! ```compile_fail,E0080
+//! let (low, high) = oer_chips_esp32s31_pac::Bits::<11>::constant::<5>().split::<8, 2>();
+//! # let _ = (low, high);
+//! ```
+//!
+//! ```compile_fail,E0080
+//! let field: oer_chips_esp32s31_pac::Bits<12> = oer_chips_esp32s31_pac::Bits::from_le_bytes([1, 2]);
+//! # let _ = field;
+//! ```
+//!
 //! T0's movable program part cannot acknowledge the permanent IRQ owner's cause:
 //!
 //! ```compile_fail,E0599

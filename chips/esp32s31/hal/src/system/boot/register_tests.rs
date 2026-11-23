@@ -7,6 +7,7 @@
 
 use std::{vec, vec::Vec};
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_boot::{
     Access, BootFailure, FlashFailure, MmuFailure, WaitFailure,
     cache::{CacheGeometry, SuspendWaits, publish_code, with_fetch_suspended},
@@ -16,7 +17,6 @@ use oer_chips_family_boot::{
     psram::{self, OctalPsramProfile, PsramOwners, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
-use oer_portable_mmio::Bits;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 

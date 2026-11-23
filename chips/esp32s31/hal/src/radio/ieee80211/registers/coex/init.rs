@@ -1,6 +1,6 @@
 //! The complete cold COEX/PTI transaction.
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use super::super::{MacPlacement, MacPti, WifiRadioRegisters, byte};
 

@@ -10,11 +10,11 @@ use core::marker::PhantomData;
 
 use crate::radio::ieee80211::dma::tx_storage::CommitTxDma;
 use crate::types::{MacPlcpRate as PlcpRate, MacRtsRate as RtsRate};
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::wifi_mac::{
     control_n::PlcpFormat, length_control::TxopListSelect, plcp1::VectorFormat,
 };
 use oer_portable_memory::{HardwareOwnedTxDma, PreparedTxDma};
-use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacInterface, MacPlacement, MacPti, MacTxPtiCount, MacTxQueueIndex, WifiDescriptorAddressLow,

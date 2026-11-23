@@ -24,9 +24,10 @@ use super::timg0_alarm::{
     InterruptRegisters, InvalidDelay, MAX_DELAY_MICROS, Observation, ProgramRegisters, acknowledge,
     arm_after, disarm,
 };
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{instances, ownership::TimerGroup1Peripherals, timg};
 use oer_chips_family_platform_interrupt_table::EventAuthority;
-use oer_portable_mmio::{Bits, Fixed, InterruptSource, Placement};
+use oer_portable_mmio::{Fixed, InterruptSource, Placement};
 use oer_portable_time::Duration;
 
 /// Where timer group one lies.

@@ -10,7 +10,7 @@ use oer_chips_family_radio_ieee802154_values::{
     Ieee802154TxAbortReason, Ieee802154TxAbortReasonObservation, Ieee802154TxSecurityError,
     Ieee802154TxSecurityErrorObservation,
 };
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use super::task::byte;
 

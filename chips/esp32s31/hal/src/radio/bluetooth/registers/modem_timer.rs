@@ -14,7 +14,7 @@
 #![deny(unsafe_code)]
 
 use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque;
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use crate::radio::bluetooth::registers::{
     BluetoothModemLpTimerRegisters, BluetoothPlacements, device_fence,

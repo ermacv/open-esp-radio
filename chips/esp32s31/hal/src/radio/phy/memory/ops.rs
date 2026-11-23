@@ -4,11 +4,12 @@
 #![forbid(unsafe_code)]
 
 use crate::radio::phy::registers::{ClockRegisters, PhyPlacement};
+use oer_chips_esp32s31_pac::Bits;
 #[cfg(any(test, target_arch = "riscv32"))]
 use oer_chips_esp32s31_pac::fe::PhyMemory;
 use oer_portable_bounded::Index;
 #[cfg(any(test, target_arch = "riscv32"))]
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 /// Parameter-dependent first PBUS table word (`phy_set_pbus_mem`).
 ///

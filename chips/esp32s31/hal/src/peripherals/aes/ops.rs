@@ -2,9 +2,10 @@
 //! placement: the owners call them, and host tests run them on memory.
 #![forbid(unsafe_code)]
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{aes, hp_sys_clkrst};
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 use super::{BlockWords, DmaBlockMode, KeyWords};
 
