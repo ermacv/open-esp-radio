@@ -22,6 +22,10 @@ fn evidence() -> RegisterEvidenceSet {
     let mut catalogs = std::fs::read_dir(registers().join("evidence"))
         .expect("the evidence directory reads")
         .map(|entry| entry.expect("an evidence entry reads").path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "toml")
+        })
         .collect::<Vec<_>>();
     catalogs.sort();
     RegisterEvidenceSet::load_all(&catalogs).expect("the evidence catalogs load")
