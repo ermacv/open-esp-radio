@@ -2399,3 +2399,108 @@ fn a_complete_dictionary_has_no_conversion_into_a_number() {
     assert!(rust.contains("pub enum Lane {"), "{rust}");
     assert!(!rust.contains("impl From<Lane> for"), "{rust}");
 }
+
+/// The model's load error of the fixture with `edits`.
+fn model_rejection(edits: &[(&str, &str, &str)]) -> String {
+    let directory = edited(edits);
+    let evidence = RegisterEvidenceSet::load_all(&[directory.path().join("evidence.toml")])
+        .expect("the fixture evidence loads");
+    match ChipModel::load(&directory.path().join("chip.toml"), &evidence) {
+        Ok(_) => panic!("the edited fixture loads"),
+        Err(error) => error.to_string(),
+    }
+}
+
+const LATCH_VALUE: &str = "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"";
+const COUNT_COUNT: &str = "name = \"COUNT\"\nbits = \"31:0\"\nclass = \"read-only\"";
+
+#[test]
+fn a_carried_layout_gets_a_typed_setter_and_getter_beside_the_field_s_own() {
+    let rendered = rendered_with(&[
+        (
+            "types/counter.toml",
+            LATCH_VALUE,
+            "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+        (
+            "types/counter.toml",
+            COUNT_COUNT,
+            "name = \"COUNT\"\nbits = \"31:0\"\nclass = \"read-only\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+    ]);
+    assert!(rendered.contains(
+        "pub fn set_value_control(&mut self, value: super::super::layouts::RxDescriptorControl) -> &mut Self"
+    ));
+    assert!(rendered.contains(
+        "pub const fn value_control(self) -> super::super::layouts::RxDescriptorControl"
+    ));
+    // A read-only field reads as the layout and has no setter.
+    assert!(rendered.contains(
+        "pub const fn count_control(self) -> super::super::layouts::RxDescriptorControl"
+    ));
+    assert!(!rendered.contains("pub fn set_count_control("));
+    // The field's own accessors stay.
+    assert!(rendered.contains("pub fn set_value(&mut self, value: u32) -> &mut Self"));
+    // Layout ranges start from their generated zero.
+    assert!(rendered.contains("pub const ZERO: Self = Self(0);"));
+}
+
+#[test]
+fn a_carried_layout_wider_than_its_field_or_unknown_is_refused() {
+    let wide = model_rejection(&[(
+        "types/radio.toml",
+        "name = \"LOW\"\nbits = \"23:0\"\nclass = \"plain\"",
+        "name = \"LOW\"\nbits = \"23:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(
+        wide.contains("reaches bit 31, past the field's 24 bits"),
+        "{wide}"
+    );
+    let unknown = model_rejection(&[(
+        "types/counter.toml",
+        LATCH_VALUE,
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.STATUS\"]",
+    )]);
+    assert!(unknown.contains("names no layout range"), "{unknown}");
+    let twice = model_rejection(&[(
+        "types/counter.toml",
+        LATCH_VALUE,
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\", \"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(twice.contains("carried twice"), "{twice}");
+    let trigger = model_rejection(&[(
+        "types/counter.toml",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(
+        trigger.contains("only a plain, write-only or read-only field"),
+        "{trigger}"
+    );
+}
+
+#[test]
+fn a_carried_word_is_cut_to_its_field_and_read_back_to_its_range_s_bits() {
+    let rendered = rendered_with(&[
+        (
+            "layouts/rx-descriptor.toml",
+            "name = \"OWNER\"\nbits = \"31\"",
+            "name = \"OWNER\"\nbits = \"3\"",
+        ),
+        (
+            "types/counter.toml",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"",
+            "name = \"STEP\"\nbits = \"7:4\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+    ]);
+    // The setter writes the word's four low bits alone into bits 7:4.
+    assert!(
+        rendered
+            .contains("self.0 = (self.0 & 0xffffff0f) | ((u32::from(value.bits()) & 0xf) << 4);"),
+        "{rendered}"
+    );
+    // The getter hands the range only the bit its field reaches.
+    assert!(rendered.contains(
+        "super::super::layouts::RxDescriptorControl::from_bits(((self.0 >> 4) & 0x8) as _)"
+    ));
+}

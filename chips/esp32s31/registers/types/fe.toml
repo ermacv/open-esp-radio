@@ -1274,6 +1274,12 @@ name = "DATA"
 bits = "23:0"
 class = "write-only"
 write-range = { min = 0x0, max = 0xffffff }
+carries = [
+    "PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM",
+    "PHY_FREQUENCY_MEMORY_RECORD.SDM_HIGH",
+    "PHY_FREQUENCY_MEMORY_RECORD.XTAL_DUTY",
+    "PHY_FREQUENCY_I2C_COMMAND.COMMAND",
+]
 
 [[registers.fields]]
 name = "MODE"
@@ -1365,6 +1371,7 @@ name = "VALUE"
 bits = "31:0"
 class = "read-only"
 description = "Complete phy_read_rf_freq_mem returns this full read-only result to its caller."
+carries = ["PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM"]
 
 [[registers]]
 name = "WORD_0400_OPAQUE"

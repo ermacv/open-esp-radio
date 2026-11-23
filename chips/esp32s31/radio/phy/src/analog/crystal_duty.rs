@@ -4,7 +4,7 @@
 //! The cold caller passes `debug = 0`, so both vendor
 //! `phy_printf` branches are dead and are intentionally absent here.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 use oer_chips_esp32s31_hal::types::PhyClockPair;
 
@@ -838,7 +838,7 @@ pub enum XtalDutyFailure {
 pub enum XtalDutyPassAction {
     WriteMasked {
         field: crate::analog::i2c::Field,
-        value: FieldValue,
+        value: Placed,
     },
     WriteByte {
         address: Address,
@@ -1039,7 +1039,7 @@ pub enum XtalDutyCalibrationAction {
     },
     DisableCalibrationPath {
         field: crate::analog::i2c::Field,
-        value: FieldValue,
+        value: Placed,
     },
     Pass(XtalDutyPassAction),
     Complete(XtalDutyCalibrationOutcome),

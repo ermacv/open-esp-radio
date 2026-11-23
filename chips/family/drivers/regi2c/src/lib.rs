@@ -214,9 +214,8 @@ pub struct ValueTooWide;
 /// the byte back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FieldWriteTransition<Address> {
-    field: AnalogField<Address>,
-    /// The value in the field's place.
-    value: FieldValue,
+    /// The value in its field's place.
+    value: FieldValue<Address>,
     step: FieldWriteStep,
 }
 
@@ -231,7 +230,6 @@ impl<Address: Copy> FieldWriteTransition<Address> {
             return Err(ValueTooWide);
         };
         Ok(Self {
-            field,
             value,
             step: FieldWriteStep::Read,
         })
@@ -239,12 +237,12 @@ impl<Address: Copy> FieldWriteTransition<Address> {
 
     /// The written field.
     pub const fn field(&self) -> AnalogField<Address> {
-        self.field
+        self.value.field()
     }
 
     /// The next byte transaction, or completion.
     pub const fn action(&self) -> Action<Address, ()> {
-        let address = self.field.address();
+        let address = self.value.address();
         match self.step {
             FieldWriteStep::Read => Action::Read { address },
             FieldWriteStep::Write(value) => Action::Write { address, value },
@@ -261,7 +259,7 @@ impl<Address: Copy + Eq> FieldWriteTransition<Address> {
     /// The completion does not answer the pending action; the transition is
     /// unchanged.
     pub fn advance(&mut self, completion: Completion<Address>) -> Result<(), TransitionError> {
-        let address = self.field.address();
+        let address = self.value.address();
         self.step = match (self.step, completion) {
             (
                 FieldWriteStep::Read,
@@ -336,7 +334,7 @@ where
 enum ConfigurationStep<Address> {
     Reading(usize, Address),
     Writing(usize, Address, u8),
-    Modifying(usize, AnalogField<Address>, FieldValue),
+    Modifying(usize, FieldValue<Address>),
     Invalid(usize),
     Complete,
 }
@@ -370,7 +368,7 @@ where
                 ConfigurationStep::Writing(index, address, value)
             }
             Some(ConfigurationCommand::Modify(field, value)) => match field.place(value) {
-                Some(placed) => ConfigurationStep::Modifying(index, field, placed),
+                Some(placed) => ConfigurationStep::Modifying(index, placed),
                 None => ConfigurationStep::Invalid(index),
             },
         }
@@ -404,8 +402,8 @@ where
         match self.step {
             ConfigurationStep::Reading(_, address) => Action::Read { address },
             ConfigurationStep::Writing(_, address, value) => Action::Write { address, value },
-            ConfigurationStep::Modifying(_, field, _) => Action::Read {
-                address: field.address(),
+            ConfigurationStep::Modifying(_, placed) => Action::Read {
+                address: placed.address(),
             },
             ConfigurationStep::Invalid(index) => Action::Complete(Err(InvalidCommand { index })),
             ConfigurationStep::Complete => Action::Complete(Ok(())),
@@ -422,10 +420,9 @@ where
                 ConfigurationStep::Writing(index, address, _),
                 Completion::Written { address: written },
             ) if written == address => self.next(index)?,
-            (
-                ConfigurationStep::Modifying(index, field, placed),
-                Completion::Read { address, value },
-            ) if address == field.address() => {
+            (ConfigurationStep::Modifying(index, placed), Completion::Read { address, value })
+                if address == placed.address() =>
+            {
                 ConfigurationStep::Writing(index, address, placed.apply(value))
             }
             (ConfigurationStep::Complete | ConfigurationStep::Invalid(_), _) => {

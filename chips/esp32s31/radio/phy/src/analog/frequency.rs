@@ -11,7 +11,7 @@
 //! SRAM. Every hardware-memory publication is an identity-bound finite MMIO
 //! action completed by the caller.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 use crate::analog::{
     i2c::{Address, Field, analog_i2c},
@@ -27,7 +27,7 @@ use oer_chips_esp32s31_hal::{
     layouts::{
         PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
         PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
-        PhyFrequencyMemoryWordWord, PhyRfpllCapacitorCodeCode,
+        PhyFrequencyMemoryWordWord,
     },
     radio::phy::frequency::{
         FrequencyMemoryAddress, PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word,
@@ -44,37 +44,6 @@ const PHY_RF_FREQUENCY_MEMORY_BASE: u8 = 0x20;
 const PHY_FREQUENCY_MEMORY_ENTRY_STRIDE: u16 = 7;
 const PHY_FREQUENCY_MEMORY_WORD_STRIDE: u16 = 3;
 const PHY_FREQUENCY_MEMORY_MODE: u8 = 7;
-
-// The memory takes a 24-bit payload: each word the tables build fits it with
-// every field at its largest.
-const _: () = {
-    let cap = PhyFrequencyMemoryRecordCapAndSdm::from_bits(0)
-        .with_cap_low(u8::MAX)
-        .with_cap_high_byte(u8::MAX)
-        .with_sdm_low_byte(u8::MAX)
-        .bits();
-    let sdm = PhyFrequencyMemoryRecordSdmHigh::from_bits(0)
-        .with_lower_middle(u8::MAX)
-        .with_upper_middle(u8::MAX)
-        .with_most_significant(u8::MAX)
-        .bits();
-    let duty = PhyFrequencyMemoryRecordXtalDuty::from_bits(0)
-        .with_value(u8::MAX)
-        .bits();
-    let command = PhyFrequencyI2cCommandCommand::from_bits(0)
-        .with_register(u8::MAX)
-        .with_block(u8::MAX)
-        .with_data(u8::MAX)
-        .bits();
-    let word = PhyFrequencyMemoryWordWord::from_bits(0);
-    if word.with_payload(cap).is_none()
-        || word.with_payload(sdm).is_none()
-        || word.with_payload(duty).is_none()
-        || word.with_payload(command).is_none()
-    {
-        panic!("a table word exceeds the frequency-memory payload");
-    }
-};
 
 /// One entry of the frequency table, below the table's count by construction.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -260,7 +229,7 @@ pub const fn phy_frequency_memory_record(
         .apply(0),
     );
     // The code's high bit is one bit: either image of the one-bit field.
-    let cap_high = if PhyRfpllCapacitorCodeCode::from_bits(cap).high() == 0 {
+    let cap_high = if cap.to_le_bytes()[1] == 0 {
         placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0).apply(CAP_CONFIGURATION)
     } else {
         placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 1).apply(CAP_CONFIGURATION)
@@ -749,7 +718,7 @@ pub struct PhyFrequencyI2cOutcome {
 pub enum PhyFrequencyI2cAction {
     WriteMasked {
         field: Field,
-        value: FieldValue,
+        value: Placed,
     },
     ReadByte {
         address: Address,
@@ -1275,7 +1244,7 @@ pub enum PhyChannelFrequencyInitAction {
     },
     WriteMasked {
         field: Field,
-        value: FieldValue,
+        value: Placed,
     },
     WriteByte {
         address: Address,

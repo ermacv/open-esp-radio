@@ -1539,6 +1539,8 @@ fn render_bytes(output: &mut String, layout: &MemoryLayout) {
             "#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\n\
              pub struct {value}({unit_type});\n\n\
              impl {value} {{\n\
+             /// The all-zero value, the word a range is built from.\n\
+             pub const ZERO: Self = Self(0);\n\n\
              /// The range's little-endian value.\n\
              pub const fn bits(self) -> {unit_type} {{ self.0 }}\n"
         );

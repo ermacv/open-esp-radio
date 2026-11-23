@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::VecDeque, vec::Vec};
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use crate::radio::phy::i2c::Placed;
 
 use super::{
     Address, BluetoothTxPowerControlAction, BluetoothTxPowerControlCompletion,
@@ -20,7 +20,7 @@ enum Operation {
 }
 
 struct FakeI2c {
-    restore: Option<(u8, FieldValue)>,
+    restore: Option<(u8, Placed)>,
     reads: RefCell<VecDeque<u8>>,
     operations: Vec<Operation>,
     busy_starts: u8,
@@ -64,10 +64,7 @@ impl BluetoothTxPowerControlI2cAccess for FakeI2c {
         Ok(())
     }
 
-    fn capture_high(
-        &mut self,
-        value: FieldValue,
-    ) -> Result<(), BluetoothTxPowerControlRestoreError> {
+    fn capture_high(&mut self, value: Placed) -> Result<(), BluetoothTxPowerControlRestoreError> {
         let Some((low, _)) = self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
         };
@@ -75,7 +72,7 @@ impl BluetoothTxPowerControlI2cAccess for FakeI2c {
         Ok(())
     }
 
-    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
+    fn restore_values(&self) -> Result<(u8, Placed), BluetoothTxPowerControlRestoreError> {
         self.restore
             .ok_or(BluetoothTxPowerControlRestoreError::RestoreNotPending)
     }

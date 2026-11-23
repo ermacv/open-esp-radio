@@ -263,6 +263,25 @@ A pointer's `high-field` takes the fixed high bits of its placement
 `write-range` or `write-values-only`, and every pointer naming it agrees on
 the prefix. The PAC sets it only to that prefix.
 
+A field whose bits hold the word of a byte layout's range names the range
+in `carries`:
+
+```toml
+[[registers.fields]]
+name = "DATA"
+bits = "23:0"
+class = "write-only"
+carries = ["PHY_FREQUENCY_MEMORY_RECORD.CAP_AND_SDM", "PHY_FREQUENCY_I2C_COMMAND.COMMAND"]
+```
+
+Each entry is `LAYOUT.RANGE`, a range of a root-included layout. The
+range's value lies in the field with its bit 0 at the field's lowest bit.
+Loading refuses an entry that names no range, one named twice, a range
+with a field at or above the field's width, and a key on a field that is
+not `plain`, `write-only` or `read-only`, or is a pointer or an indexed
+field. The key states what the field holds; it does not narrow the field's
+own setter or getter.
+
 Every field has one `class` from a closed set. The class fixes the admitted access and replay behavior; there is no
 separate access key. `read-observed` records a limited CPU access contract,
 without claiming hardware read-only behavior or arbitrary writable storage.
@@ -933,6 +952,11 @@ encoding (`member-offset` added, shifted, its width kept), and
 `set_<field>_prefix()` alone and a write from zero starts from its prefix. A
 register a read changes has no accessor, and a field whose class gives no
 setter has none.
+A field that `carries` a range has, beside its own accessors,
+`set_<field>_<range>(value: Range)` on a writer and `<field>_<range>()`
+returning `Range` on a reader, so the range's word reaches the field
+without passing through a number. A layout range has `ZERO`, the value a
+word is built from.
 
 What a write does with the lanes it does not set:
 
@@ -1072,7 +1096,9 @@ no access: `blocks` (each code), `Profile`, `route(profile, code)`,
 a module per instance with a module per register holding its `ADDRESS` and
 a `Field` per field and view, `READ_SAFE` (the bytes a finite reviewed
 epoch admits to a read) and `CAPTURE` (those with an explicit comparison
-mask). The value types are the analog register space's vocabulary,
+mask), and `Placed`, a value placed in one field: it names its field and
+so the byte register it is written to. The value types are the analog
+register space's vocabulary,
 `chips/family/registers/analog-i2c`, a crate below the PAC.
 `AnalogAddress { block, index }` is a transport identity, never a CPU
 address.

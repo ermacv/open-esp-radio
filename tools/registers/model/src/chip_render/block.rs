@@ -47,6 +47,50 @@ pub(super) enum Setter {
     Pointer,
 }
 
+/// A layout range a field carries.
+pub(super) struct Carried {
+    /// The accessors' stem after the field's: the range's name.
+    stem: String,
+    /// The range's Rust type, as the register module sees `layouts`.
+    ty: String,
+    /// The bits the range's fields reach, unshifted.
+    reach: u32,
+}
+
+/// The ranges `field` carries, each with the bits its fields reach.
+fn carried(field: &Field, layouts: &[crate::layouts::MemoryLayout]) -> Vec<Carried> {
+    field
+        .carries
+        .iter()
+        .filter_map(|carried| {
+            let (layout, unit) = carried.split_once('.')?;
+            let range = layouts
+                .iter()
+                .find(|candidate| candidate.name == layout)?
+                .units
+                .iter()
+                .find(|candidate| candidate.name == unit)?;
+            let reach = range.fields.iter().fold(0_u32, |reach, carried_field| {
+                reach
+                    | u32::MAX
+                        .checked_shr(32_u32.saturating_sub(carried_field.width))
+                        .unwrap_or(0)
+                        .checked_shl(carried_field.low)
+                        .unwrap_or(0)
+            });
+            Some(Carried {
+                stem: names::snake(unit),
+                ty: format!(
+                    "{}{}",
+                    crate::layouts::camel(layout),
+                    crate::layouts::camel(unit)
+                ),
+                reach,
+            })
+        })
+        .collect()
+}
+
 /// What the hardware reads in an address field (`pointer` facts): the
 /// layout it points to, the member offset and the encoding.
 pub(super) struct PointerPlan {
@@ -91,6 +135,8 @@ pub(super) struct FieldPlan<'m> {
     /// A write range narrower than the field's width.
     pub(super) range: Option<(u32, u32)>,
     pub(super) setter: Setter,
+    /// The layout ranges the field carries.
+    pub(super) carries: Vec<Carried>,
 }
 
 impl FieldPlan<'_> {
@@ -557,8 +603,13 @@ pub(super) struct TypePlan<'m> {
 
 impl<'m> TypePlan<'m> {
     /// Plan the type `block`; `regions` are the root's RAM regions, which
-    /// give a pointer's high field its prefix.
-    pub(super) fn new(block: &'m BlockType, regions: &[RamRegion]) -> Result<Self, Error> {
+    /// give a pointer's high field its prefix, and `layouts` its layouts,
+    /// which give a carried range its reach.
+    pub(super) fn new(
+        block: &'m BlockType,
+        regions: &[RamRegion],
+        layouts: &[crate::layouts::MemoryLayout],
+    ) -> Result<Self, Error> {
         let name = block.name();
         let prefix = names::block_prefix(block);
         // The fixed value of each high field: its pointers' placement
@@ -657,6 +708,7 @@ impl<'m> TypePlan<'m> {
                     commands.get(&(key.as_str(), field.name.as_str())).copied(),
                 )?;
                 plan.prefix = prefixes.get(&format!("{key}.{}", field.name)).copied();
+                plan.carries = carried(field, layouts);
                 plan.doorbell = block
                     .file
                     .doorbells
@@ -921,6 +973,7 @@ fn field_plan<'m>(
         values,
         range,
         setter,
+        carries: Vec::new(),
     })
 }
 
@@ -1039,6 +1092,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         );
         for field in template.fields.iter().filter(|field| field.getter()) {
             render_getter(output, field, "self");
+            render_carried_getters(output, field);
         }
         if template.record {
             output.push_str(
@@ -1137,6 +1191,24 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 field.stem,
                 field.write_type(None),
             );
+            for Carried { stem, ty, .. } in &field.carries {
+                let cut = format!("(u32::from(value.bits()) & 0x{:x})", field.ones());
+                let positioned = if field.low == 0 {
+                    cut
+                } else {
+                    format!("({cut} << {})", field.low)
+                };
+                let _ = writeln!(
+                    output,
+                    "/// Set `{}` to a `{ty}` word cut to the field's width: the\n\
+                     /// word's bits above it are not written, and every other lane is kept.\n\
+                     #[inline]\npub fn set_{}_{stem}(&mut self, value: super::super::layouts::{ty}) -> &mut Self {{\n\
+                     self.0 = (self.0 & 0x{:08x}) | {positioned};\nself\n}}\n",
+                    field.field.name,
+                    field.stem,
+                    !field.mask(),
+                );
+            }
             // A pointer takes a typed reference or the zero image, the null
             // reference; never an integer.
             if field.setter == Setter::Pointer {
@@ -1181,6 +1253,25 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         output.push_str("}\n\n");
     }
     output.push_str("}\n\n");
+}
+
+/// The field read as each layout range it carries.
+fn render_carried_getters(output: &mut String, field: &FieldPlan<'_>) {
+    for Carried { stem, ty, reach } in &field.carries {
+        let shifted = if field.low == 0 {
+            "self.0".to_owned()
+        } else {
+            format!("(self.0 >> {})", field.low)
+        };
+        let _ = writeln!(
+            output,
+            "/// `{}` read as a `{ty}` word: only the bits the range's fields\n\
+             /// reach, so a wider field's other bits stay out of it.\n#[inline]\n\
+             pub const fn {}_{stem}(self) -> super::super::layouts::{ty} {{\n\
+             super::super::layouts::{ty}::from_bits(({shifted} & 0x{reach:x}) as _)\n}}\n",
+            field.field.name, field.stem,
+        );
+    }
 }
 
 fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {

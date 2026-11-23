@@ -152,7 +152,7 @@ pub(crate) fn write_i2c_field_direct<
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     field: oer_chips_esp32s31_hal::radio::phy::i2c::Field,
-    value: oer_chips_family_registers_analog_i2c::FieldValue,
+    value: oer_chips_esp32s31_hal::radio::phy::i2c::Placed,
 ) -> Result<(), PhyTargetPortError> {
     let current = read_i2c_direct(clock, registers, field.address())?;
     write_i2c_direct(clock, registers, field.address(), value.apply(current))

@@ -17,7 +17,7 @@
 //! vendor-oracle handoff primes the same field to the first ROM range (DAC 5)
 //! before entering the open channel graph.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 use crate::analog::i2c::{Field, analog_i2c};
 
@@ -83,7 +83,7 @@ pub enum PhyTemperatureFailure {
 pub enum PhyTemperatureAction {
     ReadMasked { field: Field },
     SampleCode,
-    WriteMasked { field: Field, value: FieldValue },
+    WriteMasked { field: Field, value: Placed },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),
 }
@@ -92,7 +92,7 @@ pub enum PhyTemperatureAction {
 pub enum PhyTemperatureCompletion {
     MaskedRead { field: Field, value: u8 },
     CodeSampled { value: u8 },
-    MaskedWrite { field: Field, value: FieldValue },
+    MaskedWrite { field: Field, value: Placed },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,7 +111,7 @@ enum PhyTemperatureStep {
     /// The DAC the outcome selects, placed in its field.
     WriteDac {
         outcome: PhyTemperatureOutcome,
-        value: FieldValue,
+        value: Placed,
     },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),

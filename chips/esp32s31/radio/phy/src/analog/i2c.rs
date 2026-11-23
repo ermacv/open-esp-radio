@@ -13,7 +13,7 @@
 //! installed around those ROM leaves. Neither oracle is linked into the
 //! firmware.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 use crate::analog::{
     crystal_duty::{
@@ -694,7 +694,7 @@ pub struct RfpllChargePumpOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RfpllChargePumpAction {
-    WriteMasked { field: Field, value: FieldValue },
+    WriteMasked { field: Field, value: Placed },
     DelayMicros(u32),
     ReadMasked { field: Field },
     ReadByte { address: Address },
@@ -718,26 +718,12 @@ pub enum RfpllChargePumpTransitionError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RfpllChargePumpStep {
     InitialWrite(u8),
-    Delay {
-        attempt: u8,
-    },
-    LockRead {
-        attempt: u8,
-    },
-    CapRead {
-        lock_observed: bool,
-    },
-    EnableAdjustedValue {
-        value: FieldValue,
-        lock_observed: bool,
-    },
-    WriteAdjustedValue {
-        value: FieldValue,
-        lock_observed: bool,
-    },
-    FinalRead {
-        lock_observed: bool,
-    },
+    Delay { attempt: u8 },
+    LockRead { attempt: u8 },
+    CapRead { lock_observed: bool },
+    EnableAdjustedValue { value: Placed, lock_observed: bool },
+    WriteAdjustedValue { value: Placed, lock_observed: bool },
+    FinalRead { lock_observed: bool },
     Complete(RfpllChargePumpOutcome),
 }
 
@@ -1599,7 +1585,7 @@ impl Default for PhyRfInitPrefixTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RcCalibrationAction {
-    WriteMasked { field: Field, value: FieldValue },
+    WriteMasked { field: Field, value: Placed },
     DelayMicros(u32),
     ReadMasked { field: Field },
     ApplyResult(u8),

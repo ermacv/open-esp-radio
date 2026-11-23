@@ -8,7 +8,7 @@
 //! Bluetooth restore obligation; parallel-host waits belong to the family PHY.
 
 pub use oer_chips_esp32s31_pac::analog_i2c::{
-    self as analog_i2c, Address, CAPTURE, Field, Host, Profile, Route, route,
+    self as analog_i2c, Address, CAPTURE, Field, Host, Placed, Profile, Route, route,
 };
 
 pub mod commands;
@@ -21,7 +21,6 @@ pub use commands::{
 use master::{ConfigurationBus, MasterPort};
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::AnalogBus;
-use oer_chips_family_registers_analog_i2c::FieldValue;
 
 pub use crate::radio::phy::restore::{
     BluetoothTxPowerControlPrepareError, BluetoothTxPowerControlRestoreError,
@@ -234,14 +233,14 @@ enum BluetoothTxPowerControlPhase {
 }
 
 /// The Bluetooth TX-power high field's value the calibration writes.
-const CALIBRATION_HIGH: FieldValue =
+const CALIBRATION_HIGH: Placed =
     match analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0.place(2) {
         Some(value) => value,
         None => panic!("two fits the six-bit field"),
     };
 
 /// The high field's value before a capture.
-pub(crate) const UNCAPTURED_HIGH: FieldValue =
+pub(crate) const UNCAPTURED_HIGH: Placed =
     analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POWER_HIGH_0.value_in(0);
 
 // The value captured from the first high register restores both: they lie
@@ -255,11 +254,8 @@ const _: () = if !analog_i2c::bbtop::bluetooth_tx_power_high_0::BLUETOOTH_TX_POW
 trait BluetoothTxPowerControlI2cAccess {
     fn reserve_restore(&mut self) -> Result<(), BluetoothTxPowerControlPrepareError>;
     fn capture_low(&mut self, value: u8) -> Result<(), BluetoothTxPowerControlRestoreError>;
-    fn capture_high(
-        &mut self,
-        value: FieldValue,
-    ) -> Result<(), BluetoothTxPowerControlRestoreError>;
-    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError>;
+    fn capture_high(&mut self, value: Placed) -> Result<(), BluetoothTxPowerControlRestoreError>;
+    fn restore_values(&self) -> Result<(u8, Placed), BluetoothTxPowerControlRestoreError>;
     fn finish_restore(&mut self) -> Result<(), BluetoothTxPowerControlRestoreError>;
     fn start_read(&mut self, register: BluetoothTxPowerControlRegister) -> Result<(), ()>;
     fn start_write(
@@ -502,7 +498,7 @@ impl BluetoothTxPowerControlTransaction {
     fn high_value(
         &self,
         access: &impl BluetoothTxPowerControlI2cAccess,
-    ) -> Result<FieldValue, BluetoothTxPowerControlError> {
+    ) -> Result<Placed, BluetoothTxPowerControlError> {
         match self.operation {
             BluetoothTxPowerControlOperation::ConfigureCalibration => {
                 self.require_restore(access)?;
@@ -584,14 +580,11 @@ impl<P: Placement> BluetoothTxPowerControlI2cAccess for BluetoothTxPowerPort<'_,
         self.restore.capture_bluetooth_tx_power_control_low(value)
     }
 
-    fn capture_high(
-        &mut self,
-        value: FieldValue,
-    ) -> Result<(), BluetoothTxPowerControlRestoreError> {
+    fn capture_high(&mut self, value: Placed) -> Result<(), BluetoothTxPowerControlRestoreError> {
         self.restore.capture_bluetooth_tx_power_control_high(value)
     }
 
-    fn restore_values(&self) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
+    fn restore_values(&self) -> Result<(u8, Placed), BluetoothTxPowerControlRestoreError> {
         self.restore.bluetooth_tx_power_control_values()
     }
 

@@ -523,6 +523,44 @@ fn a_configuration_field_write_refuses_the_read_of_another_byte() {
 }
 
 #[test]
+fn a_configuration_field_write_refuses_the_write_answer_of_another_byte() {
+    let commands = |index: usize| {
+        (index == 0).then(|| {
+            ConfigurationCommand::Modify(AnalogField::new(1_u8, 3, 0).expect("field"), 0x9)
+        })
+    };
+    let mut transition = ConfigurationTransition::new(commands);
+    transition
+        .advance(Completion::Read {
+            address: 1,
+            value: 0xf0,
+        })
+        .expect("the read of the field's byte");
+    assert_eq!(
+        transition.action(),
+        Action::Write {
+            address: 1,
+            value: 0xf9
+        }
+    );
+    assert_eq!(
+        transition.advance(Completion::Written { address: 2 }),
+        Err(TransitionError::WrongCompletion)
+    );
+    assert_eq!(
+        transition.action(),
+        Action::Write {
+            address: 1,
+            value: 0xf9
+        }
+    );
+    transition
+        .advance(Completion::Written { address: 1 })
+        .expect("the write of the field's byte");
+    assert_eq!(transition.action(), Action::Complete(Ok(())));
+}
+
+#[test]
 fn a_parallel_pair_waits_for_host_0_then_host_1_before_the_next_pair() {
     let mut transition = ParallelTransition::new(|index: usize| (index < 2).then_some(index));
     let mut actions = Vec::new();

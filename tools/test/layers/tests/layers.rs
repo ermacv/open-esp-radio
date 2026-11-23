@@ -4719,7 +4719,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/space.rs", 97, WIFI_DMA),
     ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
     ("radio/ieee80211/dma/tx_storage.rs", 556, WIFI_DMA),
-    ("radio/phy/i2c.rs", 713, PHY_DRIVER),
+    ("radio/phy/i2c.rs", 706, PHY_DRIVER),
     ("radio/phy/i2c/commands.rs", 574, PHY_DRIVER),
     ("radio/phy/restore.rs", 371, PHY_DRIVER),
     ("radio/phy/temperature.rs", 172, PHY_DRIVER),
@@ -6643,10 +6643,10 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/frequency.rs",
-        25,
+        15,
         BY_PHY,
     ),
-    ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 3, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
         1,

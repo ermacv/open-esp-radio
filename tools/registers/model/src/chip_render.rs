@@ -93,7 +93,7 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
         if block.space() != Space::Mmio {
             continue;
         }
-        let plan = TypePlan::new(block, model.ram_regions())?;
+        let plan = TypePlan::new(block, model.ram_regions(), model.layouts())?;
         if RESERVED_MODULES.contains(&plan.module.as_str()) {
             return Err(Error::new(name, "its module name is one the renderer uses"));
         }
