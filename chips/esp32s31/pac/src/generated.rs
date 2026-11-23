@@ -71894,43 +71894,47 @@ pub mod fe {
                 self
             }
 
-            /// Set `DATA` to a `PhyFrequencyMemoryRecordCapAndSdm` word, which the model proves fits it.
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordCapAndSdm` word cut to the field's width: the
+            /// word's bits above it are not written, and every other lane is kept.
             #[inline]
             pub fn set_data_cap_and_sdm(
                 &mut self,
                 value: super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self.0 = (self.0 & 0xff000000) | (u32::from(value.bits()) & 0xffffff);
                 self
             }
 
-            /// Set `DATA` to a `PhyFrequencyMemoryRecordSdmHigh` word, which the model proves fits it.
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordSdmHigh` word cut to the field's width: the
+            /// word's bits above it are not written, and every other lane is kept.
             #[inline]
             pub fn set_data_sdm_high(
                 &mut self,
                 value: super::super::layouts::PhyFrequencyMemoryRecordSdmHigh,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self.0 = (self.0 & 0xff000000) | (u32::from(value.bits()) & 0xffffff);
                 self
             }
 
-            /// Set `DATA` to a `PhyFrequencyMemoryRecordXtalDuty` word, which the model proves fits it.
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordXtalDuty` word cut to the field's width: the
+            /// word's bits above it are not written, and every other lane is kept.
             #[inline]
             pub fn set_data_xtal_duty(
                 &mut self,
                 value: super::super::layouts::PhyFrequencyMemoryRecordXtalDuty,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self.0 = (self.0 & 0xff000000) | (u32::from(value.bits()) & 0xffffff);
                 self
             }
 
-            /// Set `DATA` to a `PhyFrequencyI2cCommandCommand` word, which the model proves fits it.
+            /// Set `DATA` to a `PhyFrequencyI2cCommandCommand` word cut to the field's width: the
+            /// word's bits above it are not written, and every other lane is kept.
             #[inline]
             pub fn set_data_command(
                 &mut self,
                 value: super::super::layouts::PhyFrequencyI2cCommandCommand,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self.0 = (self.0 & 0xff000000) | (u32::from(value.bits()) & 0xffffff);
                 self
             }
 
@@ -72213,13 +72217,14 @@ pub mod fe {
                 self.0
             }
 
-            /// `VALUE` read as a `PhyFrequencyMemoryRecordCapAndSdm` word.
+            /// `VALUE` read as a `PhyFrequencyMemoryRecordCapAndSdm` word: only the bits the range's fields
+            /// reach, so a wider field's other bits stay out of it.
             #[inline]
             pub const fn value_cap_and_sdm(
                 self,
             ) -> super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm {
                 super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm::from_bits(
-                    (self.0 & 0xffffffff) as _,
+                    (self.0 & 0xffffff) as _,
                 )
             }
         }

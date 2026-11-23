@@ -2478,3 +2478,29 @@ fn a_carried_layout_wider_than_its_field_or_unknown_is_refused() {
         "{trigger}"
     );
 }
+
+#[test]
+fn a_carried_word_is_cut_to_its_field_and_read_back_to_its_range_s_bits() {
+    let rendered = rendered_with(&[
+        (
+            "layouts/rx-descriptor.toml",
+            "name = \"OWNER\"\nbits = \"31\"",
+            "name = \"OWNER\"\nbits = \"3\"",
+        ),
+        (
+            "types/counter.toml",
+            "name = \"STEP\"\nbits = \"3:0\"\nclass = \"plain\"",
+            "name = \"STEP\"\nbits = \"7:4\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+    ]);
+    // The setter writes the word's four low bits alone into bits 7:4.
+    assert!(
+        rendered
+            .contains("self.0 = (self.0 & 0xffffff0f) | ((u32::from(value.bits()) & 0xf) << 4);"),
+        "{rendered}"
+    );
+    // The getter hands the range only the bit its field reaches.
+    assert!(rendered.contains(
+        "super::super::layouts::RxDescriptorControl::from_bits(((self.0 >> 4) & 0x8) as _)"
+    ));
+}
