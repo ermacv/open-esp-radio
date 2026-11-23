@@ -1,6 +1,7 @@
 //! Typed HE trigger/OFDMA control and best-effort hardware diagnostics.
 
-use oer_portable_mmio::{Bits, Index};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacPlacement, ORDINARY_QUEUE_COUNT, WifiRadioRegisters, byte, element, halfword,

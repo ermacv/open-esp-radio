@@ -1170,6 +1170,22 @@ golden!(
 );
 
 golden!(
+    set_coex_timer_clock_divider_wraps_to_its_field,
+    CoexLpClock,
+    modem_lpcon,
+    |b| {
+        ops::set_coex_timer_clock_divider(
+            &mut b,
+            CoexTimerClockDividerMinusOne::from_divisor(0x1000 + 0xa6),
+        );
+    },
+    [
+        (0, &[(0x0008, 0x00000a50)]),
+        (u32::MAX, &[(0x0008, 0xffff0a5f)])
+    ]
+);
+
+golden!(
     set_coex_timer_clock_divider_a5,
     CoexLpClock,
     modem_lpcon,

@@ -1734,13 +1734,13 @@ description = "Shared RX-IQ coefficient and correction-mode word."
 name = "RX_IQ_GAIN_COEFFICIENT"
 bits = "21:16"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Signed RX-IQ gain coefficient, two's complement."
 
 [[registers.fields]]
 name = "RX_IQ_PHASE_COEFFICIENT"
 bits = "28:22"
 class = "plain"
-write-range = { min = 0x0, max = 0x7f }
+description = "Signed RX-IQ phase coefficient, two's complement."
 
 [[registers.fields]]
 name = "RX_IQ_CORRECTION_MODE_LOW"
@@ -1859,7 +1859,6 @@ name = "BITS_2_16_OPAQUE"
 bits = "16:2"
 class = "plain"
 description = "Fifteen-bit caller value shifted left by two."
-write-range = { min = 0x0, max = 0x7fff }
 
 [[registers.fields]]
 name = "BITS_19_20_OPAQUE"
@@ -2792,13 +2791,11 @@ description = "Shared TX-IQ coefficient and correction-mode word."
 name = "TX_IQ_GAIN_COEFFICIENT"
 bits = "5:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "TX_IQ_PHASE_COEFFICIENT"
 bits = "12:6"
 class = "plain"
-write-range = { min = 0x0, max = 0x7f }
 
 [[registers.fields]]
 name = "TX_IQ_CORRECTION_MODE_LOW"

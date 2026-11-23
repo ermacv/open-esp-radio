@@ -71,13 +71,15 @@ impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> 
 
     fn configure_read(&mut self, _: Access<'_>, mode: FlashReadMode) {
         let command = read_command(mode);
-        let address = command.address_bits > 0;
-        let dummy = command.dummy_cycles > 0;
+        let (dummy, dummy_cyclelen) = match command.dummy {
+            DummyPhase::None => (false, Bits::constant::<0>()),
+            DummyPhase::Cycles(length) => (true, length),
+        };
         self.spi1.modify_user(|w| {
             w.set_usr_mosi(false)
                 .set_usr_miso(true)
                 .set_usr_command(true)
-                .set_usr_addr(address)
+                .set_usr_addr(true)
                 .set_usr_dummy(dummy);
         });
         self.spi1.modify_user2(|w| {
@@ -85,18 +87,25 @@ impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> 
                 .set_usr_command_value(command.opcode);
         });
         self.spi1.modify_user1(|w| {
-            w.set_usr_addr_bitlen(Bits::truncate(u32::from(command.address_bits.max(1)) - 1))
-                .set_usr_dummy_cyclelen(Bits::truncate(u32::from(command.dummy_cycles.max(1)) - 1));
+            w.set_usr_addr_bitlen(command.address_bitlen)
+                .set_usr_dummy_cyclelen(dummy_cyclelen);
         });
     }
 
-    fn set_transfer(&mut self, _: Access<'_>, address: u32, bytes: u32) {
+    fn set_transfer(
+        &mut self,
+        _: Access<'_>,
+        address: u32,
+        last: oer_portable_bounded::Index<CHUNK_WORDS>,
+    ) {
         self.spi1.modify_addr(|w| {
             w.set_usr_addr_value(address);
         });
-        // A transfer holds at most sixty-four bytes: 511 bits fit the field.
+        // `last + 1` words, as the length in bits less one:
+        // `32 · (last + 1) − 1 = 32 · last + 31`, which the field holds by
+        // `affine`'s build check.
         self.spi1.modify_miso_dlen(|w| {
-            w.set_usr_miso_dbitlen(Bits::truncate(bytes.max(1) * 8 - 1));
+            w.set_usr_miso_dbitlen(Bits::affine::<32, 31, CHUNK_WORDS>(last));
         });
     }
 
@@ -367,13 +376,21 @@ impl<'a, 'b> FlashRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host
     }
 }
 
-/// One read command: its opcode, the bits of its address phase (the
-/// address and any continuous-mode bits sent with it) and its dummy cycles.
+/// One read command: its opcode, the length less one of its address phase
+/// (the address and any continuous-mode bits sent with it) and its dummy
+/// phase.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct FlashReadCommand {
     pub(crate) opcode: spi1::user2::UsrCommandValue,
-    pub(crate) address_bits: u8,
-    pub(crate) dummy_cycles: u8,
+    pub(crate) address_bitlen: Bits<{ spi1::user1::USR_ADDR_BITLEN_WIDTH }>,
+    pub(crate) dummy: DummyPhase,
+}
+
+/// A read command's dummy phase: none, or its cycles less one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DummyPhase {
+    None,
+    Cycles(Bits<{ spi1::user1::USR_DUMMY_CYCLELEN_WIDTH }>),
 }
 
 /// The read command of `mode`, as the ROM's flash read sends it:
@@ -394,17 +411,42 @@ pub(crate) struct FlashReadCommand {
 /// (the S31 bootloader sets no `dummy_len_plus`).
 pub(crate) const fn read_command(mode: FlashReadMode) -> FlashReadCommand {
     use spi1::user2::UsrCommandValue as Opcode;
-    let (opcode, address_bits, dummy_cycles) = match mode {
-        FlashReadMode::Qio => (Opcode::QioRead, 24 + 8, 4),
-        FlashReadMode::Dio => (Opcode::DioRead, 24 + 4, 2),
-        FlashReadMode::Qout => (Opcode::QoutRead, 24, 8),
-        FlashReadMode::Dout => (Opcode::DoutRead, 24, 8),
-        FlashReadMode::FastRead => (Opcode::FastRead, 24, 8),
-        FlashReadMode::SlowRead => (Opcode::SlowRead, 24, 0),
+    // Each length less one is built at compile time, checked to fit.
+    let (opcode, address_bitlen, dummy) = match mode {
+        FlashReadMode::Qio => (
+            Opcode::QioRead,
+            Bits::constant::<{ 24 + 8 - 1 }>(),
+            DummyPhase::Cycles(Bits::constant::<{ 4 - 1 }>()),
+        ),
+        FlashReadMode::Dio => (
+            Opcode::DioRead,
+            Bits::constant::<{ 24 + 4 - 1 }>(),
+            DummyPhase::Cycles(Bits::constant::<{ 2 - 1 }>()),
+        ),
+        FlashReadMode::Qout => (
+            Opcode::QoutRead,
+            Bits::constant::<{ 24 - 1 }>(),
+            DummyPhase::Cycles(Bits::constant::<{ 8 - 1 }>()),
+        ),
+        FlashReadMode::Dout => (
+            Opcode::DoutRead,
+            Bits::constant::<{ 24 - 1 }>(),
+            DummyPhase::Cycles(Bits::constant::<{ 8 - 1 }>()),
+        ),
+        FlashReadMode::FastRead => (
+            Opcode::FastRead,
+            Bits::constant::<{ 24 - 1 }>(),
+            DummyPhase::Cycles(Bits::constant::<{ 8 - 1 }>()),
+        ),
+        FlashReadMode::SlowRead => (
+            Opcode::SlowRead,
+            Bits::constant::<{ 24 - 1 }>(),
+            DummyPhase::None,
+        ),
     };
     FlashReadCommand {
         opcode,
-        address_bits,
-        dummy_cycles,
+        address_bitlen,
+        dummy,
     }
 }

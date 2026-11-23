@@ -11,9 +11,8 @@ use crate::{
     clock::ActivePllPower,
     mmu::{MappedRange, MmuEntry, MmuRegisters, MmuTarget, MmuWindow},
     psram::{
-        CacheAccess, ChipSelectTiming, MappedPsram, MemoryClockRegisters, OctalPsramProfile,
-        PsramCommand, PsramCommandRegisters, PsramControllerRegisters, PsramError, PsramOwners,
-        PsramWaits, bring_up, density_bytes,
+        MappedPsram, MemoryClockRegisters, OctalPsramProfile, PsramCommand, PsramCommandRegisters,
+        PsramControllerRegisters, PsramError, PsramOwners, PsramWaits, bring_up, density_bytes,
     },
     wait::{BootBudget, BootDeadline, BootWait},
 };
@@ -30,7 +29,6 @@ const WINDOW: MmuWindow = MmuWindow {
 
 const CACHE: CacheGeometry<()> = CacheGeometry {
     line_bytes: 64,
-    max_range_bytes: (1 << 28) - 64,
     data: (),
     writeback_passes: 2,
     instruction: Some(()),
@@ -62,16 +60,6 @@ const PROFILE: OctalPsramProfile<u8> = OctalPsramProfile {
     divider: 2,
     read_latency: 6,
     write_latency: 3,
-    register_dummy_bits: 16,
-    chip_select: ChipSelectTiming {
-        setup: 4,
-        hold: 4,
-        hold_delay: 3,
-    },
-    cache: CacheAccess {
-        read_dummy_cyclelen: 33,
-        write_dummy_cyclelen: 15,
-    },
     size: 16 * MIB,
 };
 
@@ -92,13 +80,13 @@ enum Op {
     Divider(u8),
     Dll,
     Pads,
-    ChipSelect(ChipSelectTiming),
+    ChipSelect,
     OctalMode,
     Configure(PsramCommand),
     Output(u32),
     SelectPsram,
     Start,
-    CacheAccess(CacheAccess),
+    CacheAccess,
     MmuWrite(u16, MmuEntry),
     SyncRange(u32, u32),
     SyncStart(SyncCommand),
@@ -208,11 +196,11 @@ impl PsramControllerRegisters for Owner {
     fn configure_pads(&mut self, _: Access<'_>) {
         self.record(Op::Pads);
     }
-    fn set_chip_select_timing(&mut self, _: Access<'_>, timing: ChipSelectTiming) {
-        self.record(Op::ChipSelect(timing));
+    fn set_chip_select_timing(&mut self, _: Access<'_>) {
+        self.record(Op::ChipSelect);
     }
-    fn configure_cache_access(&mut self, _: Access<'_>, cache: CacheAccess) {
-        self.record(Op::CacheAccess(cache));
+    fn configure_cache_access(&mut self, _: Access<'_>) {
+        self.record(Op::CacheAccess);
     }
 }
 
@@ -243,20 +231,20 @@ impl PsramCommandRegisters for Owner {
             now.saturating_add(takes)
         }));
         let command = model.configured.expect("configured before it starts");
-        let at = command.address as usize;
-        match command.command {
-            0x4040 => {
+        match command {
+            PsramCommand::RegisterRead { address } => {
+                let at = address as usize;
                 model.input = u32::from(u16::from_le_bytes([
                     model.registers[at],
                     model.registers[at + 1],
                 ]));
             }
-            0xc0c0 => {
+            PsramCommand::RegisterWrite { address } => {
+                let at = address as usize;
                 let [low, high, ..] = model.output.to_le_bytes();
                 model.registers[at] = low;
                 model.registers[at + 1] = high;
             }
-            other => panic!("unknown command {other:#x}"),
         }
         Ok(())
     }
@@ -285,8 +273,14 @@ impl MmuRegisters for Owner {
 
 impl CacheSyncRegisters for Owner {
     type Map = ();
-    fn set_range(&mut self, _: Access<'_>, (): (), range: LineRange) {
+    fn set_range(
+        &mut self,
+        _: Access<'_>,
+        (): (),
+        range: LineRange,
+    ) -> Result<(), crate::cache::CacheFailure> {
         self.record(Op::SyncRange(range.start(), range.size()));
+        Ok(())
     }
     fn start(&mut self, _: Access<'_>, command: SyncCommand) -> Result<(), Busy> {
         self.record(Op::SyncStart(command));
@@ -390,27 +384,11 @@ fn ops(model: &Shared) -> Vec<Op> {
 }
 
 fn read_command(address: u32) -> PsramCommand {
-    PsramCommand {
-        command: 0x4040,
-        command_bits: 16,
-        address,
-        address_bits: 32,
-        output_bits: 0,
-        input_bits: 16,
-        dummy_bits: 16,
-    }
+    PsramCommand::RegisterRead { address }
 }
 
 fn write_command(address: u32) -> PsramCommand {
-    PsramCommand {
-        command: 0xc0c0,
-        command_bits: 16,
-        address,
-        address_bits: 32,
-        output_bits: 16,
-        input_bits: 0,
-        dummy_bits: 0,
-    }
+    PsramCommand::RegisterWrite { address }
 }
 
 #[test]
@@ -455,7 +433,7 @@ fn a_cold_psram_is_powered_clocked_configured_and_mapped_in_order() {
             Op::Divider(2),
             Op::Dll,
             Op::Pads,
-            Op::ChipSelect(PROFILE.chip_select),
+            Op::ChipSelect,
         ]
     );
     // Each command: octal mode, phases, (output), chip select, start.
@@ -492,9 +470,9 @@ fn a_cold_psram_is_powered_clocked_configured_and_mapped_in_order() {
     let tail: Vec<Op> = ops
         .iter()
         .copied()
-        .skip_while(|op| !matches!(op, Op::CacheAccess(_)))
+        .skip_while(|op| !matches!(op, Op::CacheAccess))
         .collect();
-    assert_eq!(tail[0], Op::CacheAccess(PROFILE.cache));
+    assert_eq!(tail[0], Op::CacheAccess);
     assert_eq!(tail.len(), 1 + 256 + 2);
     assert_eq!(
         tail[1],
@@ -527,7 +505,7 @@ fn a_density_the_boot_does_not_know_maps_nothing() {
         assert!(
             !ops(&model)
                 .iter()
-                .any(|op| matches!(op, Op::CacheAccess(_) | Op::MmuWrite(..))),
+                .any(|op| matches!(op, Op::CacheAccess | Op::MmuWrite(..))),
         );
     }
 }

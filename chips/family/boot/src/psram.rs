@@ -75,22 +75,6 @@ pub trait MemoryClockRegisters {
     fn open_function_clock(&mut self, access: Access<'_>);
 }
 
-/// The chip select's timing, in cycles of the PSRAM's clock.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ChipSelectTiming {
-    pub setup: u8,
-    pub hold: u8,
-    pub hold_delay: u8,
-}
-
-/// The cache's octal DDR access to the PSRAM: its dummy cycle lengths as
-/// the controller holds them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CacheAccess {
-    pub read_dummy_cyclelen: u8,
-    pub write_dummy_cyclelen: u8,
-}
-
 /// The PSRAM controllers' clock, DLL, pads, chip select and cache access.
 pub trait PsramControllerRegisters {
     /// Divide both controllers' source clock by `divider` (at least one).
@@ -99,22 +83,21 @@ pub trait PsramControllerRegisters {
     fn enable_dll(&mut self, access: Access<'_>);
     /// Set the pads' drive and power the data strobe's pad.
     fn configure_pads(&mut self, access: Access<'_>);
-    /// Set the chip select's timing.
-    fn set_chip_select_timing(&mut self, access: Access<'_>, timing: ChipSelectTiming);
-    /// Configure the cache's octal DDR access and allow AXI accesses.
-    fn configure_cache_access(&mut self, access: Access<'_>, cache: CacheAccess);
+    /// Set the chip select's timing, the chip's for its PSRAM.
+    fn set_chip_select_timing(&mut self, access: Access<'_>);
+    /// Configure the cache's octal DDR access, its dummy lengths the
+    /// chip's for its PSRAM, and allow AXI accesses.
+    fn configure_cache_access(&mut self, access: Access<'_>);
 }
 
-/// One command through the PSRAM command port.
+/// One command through the PSRAM command port: which, and at which mode
+/// register. Its opcode and phases are the chip's port's.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PsramCommand {
-    pub command: u16,
-    pub command_bits: u8,
-    pub address: u32,
-    pub address_bits: u8,
-    pub output_bits: u16,
-    pub input_bits: u16,
-    pub dummy_bits: u8,
+pub enum PsramCommand {
+    /// Read the mode register pair at `address`.
+    RegisterRead { address: u32 },
+    /// Write the mode register pair at `address`.
+    RegisterWrite { address: u32 },
 }
 
 /// The PSRAM command port.
@@ -146,10 +129,6 @@ pub struct OctalPsramProfile<Level> {
     pub read_latency: u8,
     /// MR4's write latency code.
     pub write_latency: u8,
-    /// The dummy bits of a mode register read.
-    pub register_dummy_bits: u8,
-    pub chip_select: ChipSelectTiming,
-    pub cache: CacheAccess,
     /// The board's PSRAM, in bytes: the density must name it.
     pub size: u32,
 }
@@ -252,15 +231,6 @@ const MR0_MR1: u32 = 0x0;
 const MR2_MR3: u32 = 0x2;
 const MR4_MR5: u32 = 0x4;
 const MR8_MR9: u32 = 0x8;
-
-/// The command port's mode register commands: 16-bit command, 32-bit
-/// address, 16 data bits.
-///
-/// SOURCE: ESP-IDF 4d80c1b2
-/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:27-31,156-174,189-206`
-/// (0x4040 read, 0xc0c0 write, 16-bit command/data and 32-bit address).
-const REGISTER_READ: u16 = 0x4040;
-const REGISTER_WRITE: u16 = 0xc0c0;
 
 /// MR0: drive strength [1:0], read latency [4:2], latency type [5] (1
 /// fixed); MR4: write latency [7:5]; MR8: burst length [1:0], burst type
@@ -387,21 +357,20 @@ where
     psram.set_bus_divider(Access::new(), profile.divider);
     psram.enable_dll(Access::new());
     psram.configure_pads(Access::new());
-    psram.set_chip_select_timing(Access::new(), profile.chip_select);
+    psram.set_chip_select_timing(Access::new());
 
     let command = waits.command;
-    let dummy = profile.register_dummy_bits;
-    let (mr0, mr1) = read_pair(psram, MR0_MR1, dummy, command, deadline)?;
+    let (mr0, mr1) = read_pair(psram, MR0_MR1, command, deadline)?;
     let mr0 = (mr0
         & !(mode::MR0_DRIVE_STRENGTH | mode::MR0_READ_LATENCY | mode::MR0_FIXED_LATENCY))
         | ((profile.read_latency << mode::MR0_READ_LATENCY_SHIFT) & mode::MR0_READ_LATENCY)
         | mode::MR0_FIXED_LATENCY;
     write_pair(psram, MR0_MR1, mr0, mr1, command, deadline)?;
-    let (mr4, mr5) = read_pair(psram, MR4_MR5, dummy, command, deadline)?;
+    let (mr4, mr5) = read_pair(psram, MR4_MR5, command, deadline)?;
     let mr4 = (mr4 & !mode::MR4_WRITE_LATENCY)
         | ((profile.write_latency << mode::MR4_WRITE_LATENCY_SHIFT) & mode::MR4_WRITE_LATENCY);
     write_pair(psram, MR4_MR5, mr4, mr5, command, deadline)?;
-    let (mr8, mr9) = read_pair(psram, MR8_MR9, dummy, command, deadline)?;
+    let (mr8, mr9) = read_pair(psram, MR8_MR9, command, deadline)?;
     let mr8 = (mr8
         & !(mode::MR8_BURST_LENGTH
             | mode::MR8_BURST_TYPE
@@ -411,14 +380,14 @@ where
         | mode::MR8_ROW_BOUNDARY_CROSSING;
     write_pair(psram, MR8_MR9, mr8, mr9, command, deadline)?;
 
-    let (mr2, _) = read_pair(psram, MR2_MR3, dummy, command, deadline)?;
+    let (mr2, _) = read_pair(psram, MR2_MR3, command, deadline)?;
     let code = mr2 & mode::MR2_DENSITY;
     let found = density_bytes(code).ok_or(PsramFailure::UnsupportedDensity(code))?;
     if found != profile.size {
         return Err(PsramFailure::DensityMismatch { found }.into());
     }
 
-    psram.configure_cache_access(Access::new(), profile.cache);
+    psram.configure_cache_access(Access::new());
     let mapped = mmu::map(
         psram,
         window,
@@ -442,7 +411,6 @@ where
 fn read_pair<P, C>(
     port: &mut P,
     address: u32,
-    dummy_bits: u8,
     wait: BootWait,
     deadline: &BootDeadline<'_, C>,
 ) -> Result<(u8, u8), BootFailure>
@@ -450,16 +418,13 @@ where
     P: PsramCommandRegisters,
     C: Clock + ?Sized,
 {
-    let command = PsramCommand {
-        command: REGISTER_READ,
-        command_bits: 16,
-        address,
-        address_bits: 32,
-        output_bits: 0,
-        input_bits: 16,
-        dummy_bits,
-    };
-    transact(port, command, None, wait, deadline)?;
+    transact(
+        port,
+        PsramCommand::RegisterRead { address },
+        None,
+        wait,
+        deadline,
+    )?;
     let [low, high, ..] = port.input(Access::new()).to_le_bytes();
     Ok((low, high))
 }
@@ -477,17 +442,14 @@ where
     P: PsramCommandRegisters,
     C: Clock + ?Sized,
 {
-    let command = PsramCommand {
-        command: REGISTER_WRITE,
-        command_bits: 16,
-        address,
-        address_bits: 32,
-        output_bits: 16,
-        input_bits: 0,
-        dummy_bits: 0,
-    };
     let word = u32::from(u16::from_le_bytes([low, high]));
-    transact(port, command, Some(word), wait, deadline)
+    transact(
+        port,
+        PsramCommand::RegisterWrite { address },
+        Some(word),
+        wait,
+        deadline,
+    )
 }
 
 fn transact<P, C>(

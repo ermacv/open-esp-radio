@@ -17,6 +17,7 @@ bytemuck = { version = "1.25.2", default-features = false }
 static_cell = { workspace = true }
 heapless = "0.9.3"
 oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-bounded = { path = "../../../portable/bounded" }
 oer-portable-mmio = { path = "../../../portable/mmio" }
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 oer-portable-embassy-time = { path = "../../../portable/embassy/time" }

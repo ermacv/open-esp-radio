@@ -9,6 +9,7 @@ description = "Coexistence priority table, timer policy and time-slice schedule 
 readme = "README.md"
 
 [dependencies]
+oer-portable-bounded = { path = "../../../../portable/bounded" }
 oer-protocols-radio-coex = { path = "../../../../protocols/radio/coex" }
 
 [lints]

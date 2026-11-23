@@ -8,7 +8,8 @@ use oer_chips_esp32s31_pac::wifi_mac::{
     AcknowledgeMacTxCompletionConsumed, WifiMacTxCommon, WifiMacTxQueueControl,
     WifiMacTxQueueVector,
 };
-use oer_portable_mmio::{Bits, Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Placement};
 
 use super::MacTxProtection;
 use crate::radio::ieee80211::registers::MacInterface;

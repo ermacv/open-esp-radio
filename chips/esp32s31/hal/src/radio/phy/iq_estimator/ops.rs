@@ -55,9 +55,8 @@ pub(crate) fn configure<P: Placement>(estimator: &mut PhyIqEstimatorOracle<P>, c
     estimator.modify_estimator_control(|w| {
         w.set_bits_19_20_opaque(Bits::constant::<0x2>());
     });
-    let window = Bits::<15>::truncate(u32::from(control));
     estimator.modify_estimator_control(|w| {
-        w.set_bits_2_16_opaque(window);
+        w.set_estimator_control_low_bits(control);
     });
 }
 

@@ -30,7 +30,6 @@ enum Map {
 
 const SPLIT: CacheGeometry<Map> = CacheGeometry {
     line_bytes: 64,
-    max_range_bytes: 1 << 27,
     data: Map::Data,
     writeback_passes: 2,
     instruction: Some(Map::Instruction),
@@ -38,7 +37,6 @@ const SPLIT: CacheGeometry<Map> = CacheGeometry {
 
 const SHARED: CacheGeometry<Map> = CacheGeometry {
     line_bytes: 32,
-    max_range_bytes: 1 << 27,
     data: Map::Data,
     writeback_passes: 2,
     instruction: None,
@@ -52,30 +50,23 @@ fn deadline<'a>(clock: &'a Ticking<'a>) -> BootDeadline<'a, Ticking<'a>> {
 
 #[test]
 fn a_range_widens_outward_to_whole_lines() {
-    let range = LineRange::cover(0x1001, 2, 64, 1 << 27).expect("covered");
+    let range = LineRange::cover(0x1001, 2, 64).expect("covered");
     assert_eq!((range.start(), range.size()), (0x1000, 64));
-    let range = LineRange::cover(0x103f, 2, 64, 1 << 27).expect("covered");
+    let range = LineRange::cover(0x103f, 2, 64).expect("covered");
     assert_eq!((range.start(), range.size()), (0x1000, 128));
 }
 
 #[test]
-fn an_empty_overflowing_or_oversized_range_is_refused() {
+fn an_empty_or_overflowing_range_or_a_bad_line_is_refused() {
     assert_eq!(
-        LineRange::cover(0x1000, 0, 64, 1 << 27),
+        LineRange::cover(0x1000, 0, 64),
         Err(CacheFailure::EmptyRange)
     );
     assert_eq!(
-        LineRange::cover(0xffff_ffc8, 0x20, 64, 1 << 27),
+        LineRange::cover(0xffff_ffc8, 0x20, 64),
         Err(CacheFailure::RangeOverflow)
     );
-    assert_eq!(
-        LineRange::cover(0, 0x1000, 64, 0x800),
-        Err(CacheFailure::RangeTooLarge)
-    );
-    assert_eq!(
-        LineRange::cover(0, 4, 48, 1 << 27),
-        Err(CacheFailure::LineSize)
-    );
+    assert_eq!(LineRange::cover(0, 4, 48), Err(CacheFailure::LineSize));
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,7 +96,7 @@ impl<'a> Engine<'a> {
 
 impl CacheSyncRegisters for Engine<'_> {
     type Map = Map;
-    fn set_range(&mut self, _: Access<'_>, map: Map, range: LineRange) {
+    fn set_range(&mut self, _: Access<'_>, map: Map, range: LineRange) -> Result<(), CacheFailure> {
         assert!(
             self.running.is_none(),
             "the range changes only between commands"
@@ -113,6 +104,7 @@ impl CacheSyncRegisters for Engine<'_> {
         self.log
             .borrow_mut()
             .push(SyncOp::Range(map, range.start(), range.size()));
+        Ok(())
     }
     fn start(&mut self, _: Access<'_>, command: SyncCommand) -> Result<(), Busy> {
         // A command that has not finished refuses the next: commands start
@@ -155,9 +147,14 @@ struct Retiring<'a>(Engine<'a>);
 
 impl CacheSyncRegisters for Retiring<'_> {
     type Map = Map;
-    fn set_range(&mut self, access: Access<'_>, map: Map, range: LineRange) {
+    fn set_range(
+        &mut self,
+        access: Access<'_>,
+        map: Map,
+        range: LineRange,
+    ) -> Result<(), CacheFailure> {
         self.0.retire();
-        self.0.set_range(access, map, range);
+        self.0.set_range(access, map, range)
     }
     fn start(&mut self, access: Access<'_>, command: SyncCommand) -> Result<(), Busy> {
         self.0.retire();

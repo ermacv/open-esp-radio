@@ -1,21 +1,39 @@
 //! The direct `mac_txrx_init` transactions.
 
+use oer_portable_bounded::Index;
 use oer_portable_mmio::Bits;
 
-use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters, bits, element};
+use super::{MacPlacement, WifiRadioRegisters, WifiRxDmaRegisters, element};
 
 /// Vendor MAC-delay jitter in the hardware's complete representable range.
 /// This value survives the driver/HAL boundary without erasing its proof.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacDelaySlot(u8);
+pub struct MacDelaySlot(Index<11>);
 
 impl MacDelaySlot {
+    /// The vendor's `_random() % 11`.
     pub const fn from_random(random: u32) -> Self {
-        Self((random % 11) as u8)
+        // Every residue is one of the eleven slots.
+        Self(match random % 11 {
+            0 => Index::constant::<0>(),
+            1 => Index::constant::<1>(),
+            2 => Index::constant::<2>(),
+            3 => Index::constant::<3>(),
+            4 => Index::constant::<4>(),
+            5 => Index::constant::<5>(),
+            6 => Index::constant::<6>(),
+            7 => Index::constant::<7>(),
+            8 => Index::constant::<8>(),
+            9 => Index::constant::<9>(),
+            _ => Index::constant::<10>(),
+        })
     }
 
+    /// The slot as its number.
     pub const fn value(self) -> u8 {
-        self.0
+        // The slot is below eleven: its low byte is the whole slot.
+        let [slot, ..] = self.0.get().to_le_bytes();
+        slot
     }
 }
 
@@ -113,20 +131,20 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     ///
     /// The typed slot proves the complete vendor range `0..=10`.
     pub fn initialize_mac_txrx_callbacks(&mut self, delay_slot: MacDelaySlot) {
-        let delay_slot = u32::from(delay_slot.value());
+        let delay_slot = delay_slot.0;
 
         let callbacks = &mut self.mac.wifi_mac_txrx_callbacks;
         callbacks.modify_delay_primary(|w| {
             w.set_rx_cck_delay(Bits::constant::<0x3b9>());
         });
         callbacks.modify_delay_primary(|w| {
-            w.set_rx_ofdm_delay(bits(0xf5 + delay_slot));
+            w.set_rx_ofdm_delay(Bits::affine::<1, 0xf5, 11>(delay_slot));
         });
         callbacks.modify_delay_primary(|w| {
             w.set_tx_ofdm_delay(Bits::constant::<0x5e>());
         });
         callbacks.modify_delay_secondary(|w| {
-            w.set_rx_11g_ofdm_delay(bits(0xfa + delay_slot));
+            w.set_rx_11g_ofdm_delay(Bits::affine::<1, 0xfa, 11>(delay_slot));
         });
         callbacks.modify_delay_secondary(|w| {
             w.set_tx_cck_delay(Bits::constant::<0x276>());

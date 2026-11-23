@@ -174,7 +174,13 @@ impl FlashCommandRegisters for Port {
         );
         model.log.push(Op::Configure(mode));
     }
-    fn set_transfer(&mut self, _: Access<'_>, address: u32, bytes: u32) {
+    fn set_transfer(
+        &mut self,
+        _: Access<'_>,
+        address: u32,
+        last: oer_portable_bounded::Index<{ crate::flash::CHUNK_WORDS }>,
+    ) {
+        let bytes = u32::try_from((last.get() + 1) * 4).expect("a chunk's bytes");
         let mut model = self.0.borrow_mut();
         assert!(
             !model.running(),

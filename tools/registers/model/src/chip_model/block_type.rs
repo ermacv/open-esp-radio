@@ -12,7 +12,7 @@ use super::{
     Error, ErrorKind,
     source::{
         Command, DeclaredValues, Definitions, Dictionary, Field, FieldClass, FlagSet, Group,
-        Register, ReviewOverride, Space, TYPE_SCHEMA, TypeFile,
+        Register, ReviewOverride, Space, TYPE_SCHEMA, TypeFile, Window,
     },
 };
 use crate::{Position, ReviewAnnotation, opaque_position_name};
@@ -547,6 +547,10 @@ fn check_register(
         }
         taken.push((field_mask, field.name.as_str()));
         check_values(field, field_width).map_err(fail)?;
+        if let Some(window) = &field.window {
+            check_window(field, field_width, window).map_err(fail)?;
+            context.sources(&field_entity, &window.sources)?;
+        }
         for value in &field.values {
             if !value.sources.is_empty() {
                 context.sources(&field_entity, &value.sources)?;
@@ -675,6 +679,38 @@ fn check_register(
             ))));
         }
         context.sources(&view_entity, &view.sources)?;
+    }
+    Ok(())
+}
+
+/// A window is a slice of an unsigned quantity: the field lies inside the
+/// quantity and is not all of it, and is written by a plain setter of its
+/// own (no values, range, pointer, family or flags).
+fn check_window(field: &Field, width: u32, window: &Window) -> Result<(), ErrorKind> {
+    let fits = window
+        .from
+        .checked_add(width)
+        .is_some_and(|top| top <= window.quantity.width());
+    let slice = window.from > 0 || width < window.quantity.width();
+    if !fits || !slice || window.quantity.signed() || window.quantity.width() < 16 {
+        return Err(ErrorKind::Values(format!(
+            "a window from bit {} of a {} is a slice of an unsigned quantity of 16 to 64 bits holding the {width}-bit field",
+            window.from,
+            window.quantity.name()
+        )));
+    }
+    if !field.values.is_empty()
+        || field.write_range.is_some()
+        || field.write_values_only
+        || field.pointer.is_some()
+        || field.family.is_some()
+        || field.declared_flags.is_some()
+        || !field.class.written()
+    {
+        return Err(ErrorKind::Values(
+            "a window is on a written field with no values, range, pointer, family or flags"
+                .to_owned(),
+        ));
     }
     Ok(())
 }

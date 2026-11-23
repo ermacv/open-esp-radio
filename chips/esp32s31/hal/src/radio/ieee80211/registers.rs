@@ -35,7 +35,8 @@ use oer_chips_esp32s31_pac::{
         WifiMacTxrxPrefix, WifiMacTxrxSuffix,
     },
 };
-use oer_portable_mmio::{Bits, Fixed, Index, Placement};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Fixed, Placement};
 
 pub use values::*;
 
@@ -455,11 +456,6 @@ pub(crate) const fn element<const N: usize>(position: usize) -> Index<N> {
         Ok(index) => index,
         Err(_) => panic!("a position below the count is an index"),
     }
-}
-
-/// The low `WIDTH` bits of `value`, for a value already bounded to them.
-pub(crate) const fn bits<const WIDTH: u32>(value: u32) -> Bits<WIDTH> {
-    Bits::truncate(value)
 }
 
 /// A field of at most eight bits, as the byte it holds.

@@ -31,7 +31,7 @@ pub use oer_chips_family_boot::{
     clock::{ClockRates, ClockWaits, CpuClockProfile},
     flash::{FlashGeometry, TuningWaits},
     mmu::MmuWindow,
-    psram::{CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramWaits},
+    psram::{OctalPsramProfile, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
 };
 pub use psram::PsramRegisters;
@@ -278,8 +278,6 @@ pub const CLOCK_WAITS: ClockWaits = ClockWaits {
 /// (`SYNC_MAP`; `SYNC_SIZE` 28 bits).
 pub const CACHE_GEOMETRY: CacheGeometry<CacheMap> = CacheGeometry {
     line_bytes: oer_chips_esp32s31_pac::cache::LINE_BYTES,
-    max_range_bytes: oer_chips_esp32s31_pac::cache::sync_size::SYNC_SIZE_MAX
-        & !(oer_chips_esp32s31_pac::cache::LINE_BYTES - 1),
     data: CacheMap::Data,
     writeback_passes: 2,
     instruction: Some(CacheMap::BothInstructionCaches),
@@ -360,11 +358,13 @@ pub const fn flash_geometry(capacity: u32) -> FlashGeometry {
     FlashGeometry { capacity }
 }
 
-const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTimingCandidate {
+/// The candidate of the constants, each checked at build to fit its field.
+const fn candidate<const DIN_MODE: u32, const DIN_NUM: u32, const EXTRA_DUMMY: u32>()
+-> FlashTimingCandidate {
     FlashTimingCandidate {
-        din_mode: Bits::truncate(din_mode),
-        din_num: Bits::truncate(din_num),
-        extra_dummy: Bits::truncate(extra_dummy),
+        din_mode: Bits::constant::<DIN_MODE>(),
+        din_num: Bits::constant::<DIN_NUM>(),
+        extra_dummy: Bits::constant::<EXTRA_DUMMY>(),
     }
 }
 
@@ -376,18 +376,18 @@ const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTiming
 /// (`MSPI_TIMING_FLASH_CONFIG_TABLE_CORE_CLK_120M_MODULE_CLK_120M_STR_MODE`).
 /// This is the related P4 block's table selected for this sweep.
 pub const FLASH_TIMING_CANDIDATES: [FlashTimingCandidate; 12] = [
-    candidate(2, 0, 1),
-    candidate(0, 0, 0),
-    candidate(2, 2, 2),
-    candidate(2, 1, 2),
-    candidate(2, 0, 2),
-    candidate(0, 0, 1),
-    candidate(2, 2, 3),
-    candidate(2, 1, 3),
-    candidate(2, 0, 3),
-    candidate(0, 0, 2),
-    candidate(2, 2, 4),
-    candidate(2, 1, 4),
+    candidate::<2, 0, 1>(),
+    candidate::<0, 0, 0>(),
+    candidate::<2, 2, 2>(),
+    candidate::<2, 1, 2>(),
+    candidate::<2, 0, 2>(),
+    candidate::<0, 0, 1>(),
+    candidate::<2, 2, 3>(),
+    candidate::<2, 1, 3>(),
+    candidate::<2, 0, 3>(),
+    candidate::<0, 0, 2>(),
+    candidate::<2, 2, 4>(),
+    candidate::<2, 1, 4>(),
 ];
 
 /// The PSRAM PHY supply's level, in millivolts.
@@ -405,30 +405,33 @@ pub const PSRAM_SUPPLY_MV: u32 = 1800;
 /// `components/esp_hal_pmu/esp32s31/include/hal/ldo_ll.h:61-94`
 /// (`ldo_ll_voltage_to_dref_mul`, without eFuse calibration).
 pub const fn psram_supply_level(millivolts: u32) -> PsramSupplyLevel {
+    use oer_portable_bounded::Index;
     let mut best = u32::MAX;
-    let mut level = (0, 0);
-    let mut dref = 0;
-    while dref < 16 {
-        let vref_20 = if dref < 9 {
-            10 + dref
+    let mut level = (Index::<16>::constant::<0>(), Index::<8>::constant::<0>());
+    // Each loop runs while its counter is a code of its field: the bound is
+    // the loop's own condition.
+    let mut code: u32 = 0;
+    while let Ok(dref) = Index::<16>::new(code as usize) {
+        let vref_20 = if code < 9 {
+            10 + code
         } else {
-            20 + (dref - 9) * 2
+            20 + (code - 9) * 2
         };
-        let mut mul = 0;
-        while mul < 8 {
-            let vout = vref_20 * 1000 * (4000 + mul * 1000);
+        let mut step: u32 = 0;
+        while let Ok(mul) = Index::<8>::new(step as usize) {
+            let vout = vref_20 * 1000 * (4000 + step * 1000);
             let diff = (millivolts * 80_000).abs_diff(vout);
             if diff < best {
                 best = diff;
                 level = (dref, mul);
             }
-            mul += 1;
+            step += 1;
         }
-        dref += 1;
+        code += 1;
     }
     PsramSupplyLevel {
-        dref: Bits::truncate(level.0),
-        mul: Bits::truncate(level.1),
+        dref: Bits::affine::<1, 0, 16>(level.0),
+        mul: Bits::affine::<1, 0, 8>(level.1),
     }
 }
 
@@ -445,27 +448,16 @@ pub const PSRAM_HZ: u32 = 250_000_000;
 /// The board's octal PSRAM at 250 MHz, of `size` bytes (the module's).
 ///
 /// SOURCE: ESP-IDF 4d80c1b2
-/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:33-38,55-58`
-/// (250 MHz: read latency 6, write latency 3, dummy bits 34/16, register
-/// dummy 16; chip-select setup/hold 4, hold delay 3) and
-/// `components/esp_hal_mspi/esp32s31/include/hal/psram_ctrlr_ll.h:130-150`
-/// (cache dummy fields hold the bit count minus one: 33 and 15).
+/// `components/esp_psram/device/esp_psram_impl_ap_oct.c:33-38` (250 MHz:
+/// read latency 6, write latency 3). The chip select's timing, the cache's
+/// and the mode registers' dummy lengths are the port's
+/// (`boot/psram.rs`).
 pub const fn octal_psram(size: u32) -> OctalPsramProfile<PsramSupplyLevel> {
     OctalPsramProfile {
         supply: psram_supply_level(PSRAM_SUPPLY_MV),
         divider: (MPLL_HZ / PSRAM_HZ) as u8,
         read_latency: 6,
         write_latency: 3,
-        register_dummy_bits: 16,
-        chip_select: ChipSelectTiming {
-            setup: 4,
-            hold: 4,
-            hold_delay: 3,
-        },
-        cache: CacheAccess {
-            read_dummy_cyclelen: 33,
-            write_dummy_cyclelen: 15,
-        },
         size,
     }
 }

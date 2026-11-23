@@ -524,6 +524,22 @@ golden!(
 );
 
 golden!(
+    bb_rx_iq_coefficients_keep_their_low_bits,
+    BasebandRegisters,
+    7989,
+    |b| {
+        bb::set_rx_iq_gain_coefficient(&mut b, -1);
+        bb::set_rx_iq_phase_coefficient(&mut b, -100);
+    },
+    // The two's-complement bytes 0xff and 0x9c keep their low six and
+    // seven bits: 0x3f at 21:16 and 0x1c at 28:22.
+    [
+        (0x00000000, &[(0x0438, 0x073f0000)]),
+        (0xffffffff, &[(0x0438, 0xe73fffff)])
+    ]
+);
+
+golden!(
     bb_front_end_suffix,
     BasebandRegisters,
     7989,
@@ -1188,7 +1204,7 @@ fn a_frequency_memory_address_past_the_memory_does_not_exist() {
         Some(0x7ff)
     );
     assert_eq!(
-        fr::FrequencyMemoryAddress::scaled::<7, 6>(u8::MAX, u8::MAX).get(),
+        fr::FrequencyMemoryAddress::scaled::<7, { 255 + 6 }>(u8::MAX).get(),
         255 + 255 * 7 + 6
     );
 }

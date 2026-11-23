@@ -99,13 +99,17 @@ const fn record_address(entry: TableEntry, word: RecordWord) -> FrequencyMemoryA
     const WORD: u16 = PHY_FREQUENCY_MEMORY_WORD_STRIDE;
     const BASE: u8 = PHY_RF_FREQUENCY_MEMORY_BASE;
     match word {
-        RecordWord::CapAndSdm => FrequencyMemoryAddress::scaled::<STRIDE, 0>(BASE, entry.index()),
-        RecordWord::SdmHigh => {
-            FrequencyMemoryAddress::scaled::<STRIDE, { WORD }>(BASE, entry.index())
+        RecordWord::CapAndSdm => {
+            FrequencyMemoryAddress::scaled::<{ STRIDE as u32 }, { BASE as u32 }>(entry.index())
         }
-        RecordWord::XtalDuty => {
-            FrequencyMemoryAddress::scaled::<STRIDE, { 2 * WORD }>(BASE, entry.index())
-        }
+        RecordWord::SdmHigh => FrequencyMemoryAddress::scaled::<
+            { STRIDE as u32 },
+            { BASE as u32 + WORD as u32 },
+        >(entry.index()),
+        RecordWord::XtalDuty => FrequencyMemoryAddress::scaled::<
+            { STRIDE as u32 },
+            { BASE as u32 + 2 * WORD as u32 },
+        >(entry.index()),
     }
 }
 
@@ -831,20 +835,22 @@ impl PhyFrequencyI2cDescriptor {
         let (address, word, mode) = match self.kind() {
             0 => (
                 match copy_index {
-                    0 => FrequencyMemoryAddress::scaled::<3, 0>(0, index),
-                    1 => FrequencyMemoryAddress::scaled::<3, 3>(0, index),
-                    _ => FrequencyMemoryAddress::scaled::<3, 6>(0, index),
+                    0 => FrequencyMemoryAddress::scaled::<3, 0>(index),
+                    1 => FrequencyMemoryAddress::scaled::<3, 3>(index),
+                    _ => FrequencyMemoryAddress::scaled::<3, 6>(index),
                 },
                 data_word,
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             1 => (
-                FrequencyMemoryAddress::scaled::<3, 9>(0, index),
+                FrequencyMemoryAddress::scaled::<3, 9>(index),
                 register_block.with_data(first),
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             _ => (
-                FrequencyMemoryAddress::scaled::<2, 0>(PHY_FREQUENCY_I2C_MEMORY_BASE, index),
+                FrequencyMemoryAddress::scaled::<2, { PHY_FREQUENCY_I2C_MEMORY_BASE as u32 }>(
+                    index,
+                ),
                 register_block,
                 3,
             ),

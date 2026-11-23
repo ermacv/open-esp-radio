@@ -158,6 +158,7 @@ pub(super) fn check(
     checker.stores()?;
     checker.images()?;
     checker.modifies()?;
+    checker.narrowings()?;
     Ok(checker.owners)
 }
 
@@ -1159,6 +1160,14 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
     /// A read-modify-write of `target` replacing `bits`, none of a field
     /// with a write constraint.
     fn modify(&mut self, entity: &str, target: Target, bits: u32) -> Result<(), Error> {
+        self.modifiable(entity, target, bits)?;
+        let owner = self.owner(entity, target, Some(bits))?;
+        self.take(entity, &[owner], true)
+    }
+
+    /// `bits` lie in fields of `target` a read-modify-write may write, each
+    /// admitting every value of its width.
+    fn modifiable(&self, entity: &str, target: Target, bits: u32) -> Result<(), Error> {
         let word = self.word(entity, target)?;
         if !word.modifiable() || self.on_clear(target) {
             return Err(self.error(
@@ -1191,8 +1200,55 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                 ErrorKind::Register("modifies no bits or bits no field declares".to_owned()),
             ));
         }
-        let owner = self.owner(entity, target, Some(bits))?;
-        self.take(entity, &[owner], true)
+        Ok(())
+    }
+
+    /// A vendor narrowing fits the vendor's number into one field by its
+    /// arithmetic: the low bits drop some of the number's bits (the field
+    /// lies inside it and is not all of it), the symmetric saturation
+    /// clamps a signed number into a field of 2 bits up to its width. Its
+    /// field is read, modified and written back, and admits every value of
+    /// its width.
+    fn narrowings(&mut self) -> Result<(), Error> {
+        let file = self.file;
+        for narrowing in &file.vendor_narrowings {
+            let entity = narrowing.name.as_str();
+            self.begin(entity, &narrowing.sources)?;
+            if narrowing.description.trim().is_empty() {
+                return Err(self.error(entity, ErrorKind::MissingDescription));
+            }
+            let (target, field) = self.field(entity, &narrowing.field)?;
+            let (width, number) = (field.width, narrowing.value.width());
+            let fits = match narrowing.arithmetic {
+                crate::chip_policy::Arithmetic::LowBits => {
+                    narrowing
+                        .from
+                        .checked_add(width)
+                        .is_some_and(|top| top <= number)
+                        && (narrowing.from > 0 || width < number)
+                }
+                crate::chip_policy::Arithmetic::SymmetricSaturation => {
+                    narrowing.value.signed() && narrowing.from == 0 && (2..=number).contains(&width)
+                }
+            };
+            if !fits {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction(format!(
+                        "a {:?} narrowing of a {} from bit {} does not fit the {width}-bit {}",
+                        narrowing.arithmetic,
+                        narrowing.value.name(),
+                        narrowing.from,
+                        narrowing.field
+                    )),
+                ));
+            }
+            // A setter of the register's writer, called inside the modify of
+            // whichever part holds the word: each element's own.
+            let mask = field_mask(field);
+            self.modifiable(entity, target, mask)?;
+        }
+        Ok(())
     }
 
     /// A field-or-modify ORs a typed reference's image into a fresh read

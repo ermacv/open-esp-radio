@@ -9,7 +9,7 @@ fn event(value: u8) -> CoexEventId {
 #[test]
 fn the_vendor_table_holds_the_cold_mac_and_grant_protect_priorities() {
     let table = CoexPtiTable::VENDOR;
-    assert!(table.as_bytes().iter().all(|value| *value <= 0x0f));
+    assert!(table.priorities().iter().all(|pti| pti.value() <= 0x0f));
     for (value, pti) in [(1, 5), (3, 7), (10, 3), (15, 1), (48, 15)] {
         assert_eq!(table.pti(event(value)).value(), pti);
     }
@@ -51,9 +51,9 @@ fn every_event_projects_to_its_own_priority_entry() {
             table.set(event(value), CoexPti::new(priority).unwrap());
             assert_eq!(table.pti(event(value)).value(), priority);
             for (other, (&before, &after)) in CoexPtiTable::VENDOR
-                .as_bytes()
+                .priorities()
                 .iter()
-                .zip(table.as_bytes())
+                .zip(table.priorities())
                 .enumerate()
             {
                 if other != usize::from(value) {

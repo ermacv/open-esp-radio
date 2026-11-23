@@ -9,7 +9,8 @@ use oer_chips_esp32s31_pac::{
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer},
 };
 use oer_chips_family_platform_interrupt_table::{Controller, Error, NoBindings, Router};
-use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
+use oer_portable_bounded::Index;
+use oer_portable_mmio::{Bits, Host, InterruptSource};
 
 use oer_portable_riscv::OnHart;
 

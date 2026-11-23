@@ -548,13 +548,13 @@ pub const fn constant<const ID: usize>() -> Self {
     }
 }
 pub const fn get(self) -> usize { self as usize }
-pub const fn index(self) -> oer_portable_mmio::Index<HARTS> { match self {
+pub const fn index(self) -> oer_portable_bounded::Index<HARTS> { match self {
 "#,
     );
     for hart in 0..harts {
         let _ = writeln!(
             rust,
-            "Self::H{hart} => oer_portable_mmio::Index::constant::<{hart}>(),"
+            "Self::H{hart} => oer_portable_bounded::Index::constant::<{hart}>(),"
         );
     }
     rust.push_str("} }\n/// Select a hart's value without a runtime bounds check.\npub const fn at<T>(self, values: &[T; HARTS]) -> &T { match self {\n");
@@ -584,12 +584,12 @@ pub const fn index(self) -> oer_portable_mmio::Index<HARTS> { match self {
         let _ = writeln!(rust, "Self::H{hart} => Hart::H{hart},");
     }
     rust.push_str(
-        "} }\npub const fn index(self) -> oer_portable_mmio::Index<{ HARTS - 1 }> { match self {\n",
+        "} }\npub const fn index(self) -> oer_portable_bounded::Index<{ HARTS - 1 }> { match self {\n",
     );
     for (index, hart) in (0..harts).filter(|h| *h != boot_hart).enumerate() {
         let _ = writeln!(
             rust,
-            "Self::H{hart} => oer_portable_mmio::Index::constant::<{index}>(),"
+            "Self::H{hart} => oer_portable_bounded::Index::constant::<{index}>(),"
         );
     }
     rust.push_str("} }\n}\n");

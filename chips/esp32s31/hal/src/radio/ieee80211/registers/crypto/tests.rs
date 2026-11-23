@@ -6,7 +6,7 @@ use oer_chips_esp32s31_pac::wifi_mac::{
     entry_peer_control, entry_peer_low, interface_control, key_valid_bitmap, policy_control,
     word_080c_opaque,
 };
-use oer_portable_mmio::Index;
+use oer_portable_bounded::Index;
 
 use super::{MacCcmpKeyIdentity, MacCryptoInterface, MacKeyInstallOutcome, MacSppMode};
 use crate::radio::ieee80211::registers::{HostWords, MacInterface, MacKeyEntryIndex};

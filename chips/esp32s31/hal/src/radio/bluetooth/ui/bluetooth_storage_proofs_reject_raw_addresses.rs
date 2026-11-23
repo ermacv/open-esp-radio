@@ -13,7 +13,7 @@ pub fn forge_from_address(address: u32) {
     let _ = oer_chips_esp32s31_hal::radio::bluetooth::RxChainHead::new( // ui-error: E0603
         BluetoothMemoryListSelector::One, address, false); // ui-error: E0308
     let _ = oer_chips_esp32s31_hal::radio::bluetooth::DeviceTablePublication::new( // ui-error: E0603
-        address, oer_portable_mmio::Index::constant::<0>()); // ui-error: E0308
+        address, oer_portable_bounded::Index::constant::<0>()); // ui-error: E0308
     let _ = oer_chips_esp32s31_hal::radio::bluetooth::DirectionFindingDescriptor::bind(address); // ui-error: E0603
     // ui-error@-1: E0308
     let _ = oer_chips_esp32s31_hal::radio::bluetooth::BlePhyHardwareObjects::bind(address); // ui-error: E0603

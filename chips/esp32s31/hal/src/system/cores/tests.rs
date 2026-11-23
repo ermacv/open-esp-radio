@@ -410,7 +410,8 @@ mod launch {
     use crate::system::cores::{SecondaryEntry, SecondaryHart, StartError};
     use core::cell::Cell;
     use oer_chips_esp32s31_pac::{instances, interrupt_core::InterruptCore1};
-    use oer_portable_mmio::{Bits, Index};
+    use oer_portable_bounded::Index;
+    use oer_portable_mmio::Bits;
 
     const HART: SecondaryHart = Hart::SECONDARIES[0];
     const ENTRY: u32 = 0x2f00_1000;

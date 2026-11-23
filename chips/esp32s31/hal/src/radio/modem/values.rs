@@ -38,13 +38,11 @@ impl ModemLowPowerClockDivider {
 }
 
 // SOURCE: BLOB_LIBCOEX_HW_TIMER.
-/// Twelve-bit coexistence timer clock divider image, the divisor minus one, that complete coex_hw_timer_freq_set publishes.
+/// The coexistence timer clock's divisor minus one, whole, that complete
+/// coex_hw_timer_freq_set publishes: the twelve-bit field's vendor cut
+/// keeps its low bits.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct CoexTimerClockDividerMinusOne(
-    oer_portable_mmio::Bits<
-        { oer_chips_esp32s31_pac::modem_lpcon::coex_lp_clk_conf::CLK_COEX_LP_DIV_NUM_WIDTH },
-    >,
-);
+pub struct CoexTimerClockDividerMinusOne(u32);
 impl CoexTimerClockDividerMinusOne {
     pub const MIN: u32 = 0x00000000;
     pub const MAX: u32 =
@@ -52,32 +50,20 @@ impl CoexTimerClockDividerMinusOne {
 
     /// Construct a value only when it lies in the reviewed inclusive range.
     pub const fn new(value: u32) -> Option<Self> {
-        match oer_portable_mmio::Bits::new(value) {
-            Ok(field) => Some(Self(field)),
-            Err(_) => None,
+        if value <= Self::MAX {
+            Some(Self(value))
+        } else {
+            None
         }
     }
 
-    /// The value of a 12-bit field, which the range holds whole.
-    pub const fn from_bits(
-        bits: oer_portable_mmio::Bits<
-            { oer_chips_esp32s31_pac::modem_lpcon::coex_lp_clk_conf::CLK_COEX_LP_DIV_NUM_WIDTH },
-        >,
-    ) -> Self {
-        Self(bits)
+    /// `divisor` minus one, wrapping, as the vendor computes it.
+    pub const fn from_divisor(divisor: u32) -> Self {
+        Self(divisor.wrapping_sub(1))
     }
 
-    /// Return the checked numeric value.
+    /// The vendor's number.
     pub const fn get(self) -> u32 {
-        self.0.get()
-    }
-
-    /// The value's field.
-    pub const fn field(
-        self,
-    ) -> oer_portable_mmio::Bits<
-        { oer_chips_esp32s31_pac::modem_lpcon::coex_lp_clk_conf::CLK_COEX_LP_DIV_NUM_WIDTH },
-    > {
         self.0
     }
 }

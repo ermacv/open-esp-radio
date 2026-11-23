@@ -8621,7 +8621,6 @@ name = "POWER_INDEX"
 bits = "13:8"
 class = "plain"
 description = "PHY gain-table index selected for the response rate; not dBm."
-write-range = { min = 0x0, max = 0x3f }
 
 [[registers.fields]]
 name = "RATE_INDEX"
@@ -8666,25 +8665,25 @@ description = "Three trigger-based power words populated from rates 16 through 2
 name = "POWER_0"
 bits = "5:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_1"
 bits = "13:8"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_2"
 bits = "21:16"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_3"
 bits = "29:24"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers]]
 name = "TB_RU_POWER_TAIL"
@@ -8695,7 +8694,7 @@ description = "Complete hal_init_tb_ru_power publishes the unadjusted rate-16 po
 name = "POWER_INDEX"
 bits = "29:24"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "BITS_0_23_OPAQUE"
@@ -8719,31 +8718,31 @@ description = "Packed trigger-based resource-unit power deltas selected by raw T
 name = "POWER_0"
 bits = "5:0"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_1"
 bits = "11:6"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_2"
 bits = "17:12"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_3"
 bits = "23:18"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "POWER_4"
 bits = "29:24"
 class = "plain"
-write-range = { min = 0x0, max = 0x3f }
+description = "Six-bit PHY gain-table index of its rate; not dBm."
 
 [[registers.fields]]
 name = "BITS_30_31_OPAQUE"

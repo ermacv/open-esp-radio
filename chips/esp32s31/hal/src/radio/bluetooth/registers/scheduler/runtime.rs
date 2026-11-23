@@ -234,8 +234,8 @@ impl BluetoothSchedulerHardwareListIndex {
     }
 
     /// The index of the list's scheduler-table entry.
-    pub(crate) const fn register_index(self) -> oer_portable_mmio::Index<16> {
-        match oer_portable_mmio::Index::new(self.0 as usize) {
+    pub(crate) const fn register_index(self) -> oer_portable_bounded::Index<16> {
+        match oer_portable_bounded::Index::new(self.0 as usize) {
             Ok(index) => index,
             Err(_) => panic!("a hardware-list index is below sixteen by construction"),
         }

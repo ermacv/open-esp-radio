@@ -87,13 +87,57 @@ pub fn render(model: &ChipModel, policy: &ChipPolicy) -> Result<String, Error> {
 }
 
 /// The register blocks and ownership, and the `layouts` module apart.
+/// The policy's vendor narrowings of fields of the type `type_name`, each
+/// as its template key, its field and its entry. An entry names its field
+/// as `INSTANCE.TEMPLATE.FIELD`.
+fn narrowings_of<'m>(
+    model: &ChipModel,
+    policy: &'m ChipPolicy,
+    type_name: &str,
+) -> Result<Vec<(&'m str, &'m str, &'m crate::chip_policy::VendorNarrowing)>, Error> {
+    let mut found = Vec::new();
+    for narrowing in &policy.file().vendor_narrowings {
+        let entity = narrowing.name.as_str();
+        let parts = narrowing
+            .field
+            .split_once('.')
+            .and_then(|(instance, rest)| {
+                rest.rsplit_once('.')
+                    .map(|(key, field)| (instance, key, field))
+            });
+        let Some((instance, key, field)) = parts else {
+            return Err(Error::new(entity, "it names no INSTANCE.TEMPLATE.FIELD"));
+        };
+        let Some(of) = model.instances().iter().find(|of| of.name == instance) else {
+            return Err(Error::new(entity, "it names no instance"));
+        };
+        if of.block_type != type_name {
+            continue;
+        }
+        let known = model
+            .types()
+            .get(type_name)
+            .is_some_and(|block| block.templates.contains_key(key));
+        if !known {
+            return Err(Error::new(entity, "it names no template key of its type"));
+        }
+        found.push((key, field, narrowing));
+    }
+    Ok(found)
+}
+
 fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, String), Error> {
     let mut plans = BTreeMap::new();
     for (name, block) in model.types() {
         if block.space() != Space::Mmio {
             continue;
         }
-        let plan = TypePlan::new(block, model.ram_regions(), model.layouts())?;
+        let plan = TypePlan::new(
+            block,
+            model.ram_regions(),
+            model.layouts(),
+            &narrowings_of(model, policy, name)?,
+        )?;
         if RESERVED_MODULES.contains(&plan.module.as_str()) {
             return Err(Error::new(name, "its module name is one the renderer uses"));
         }

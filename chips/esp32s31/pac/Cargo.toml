@@ -11,6 +11,7 @@ description = "The ESP32-S31 PAC: the exact hardware model generated from the ch
 oer-chips-family-registers-analog-i2c = { path = "../../family/registers/analog-i2c" }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics"] }
 oer-portable-memory = { path = "../../../portable/memory" }
+oer-portable-bounded = { path = "../../../portable/bounded" }
 oer-portable-mmio = { path = "../../../portable/mmio" }
 oer-portable-riscv = { path = "../../../portable/riscv" }
 

@@ -176,6 +176,7 @@ name = "T_ALARM_LO"
 bits = "31:0"
 class = "plain"
 description = "Configures the low 32 bits of timer 0 alarm trigger time-base counter value. Valid only when TIMG_T0_ALARM_EN is 1. \\\\ Measurement unit: T0_clk \\\\"
+window = { quantity = "u64", sources = ["ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279"] }
 
 [[registers]]
 name = "T0ALARMHI"
@@ -189,6 +190,7 @@ name = "T_ALARM_HI"
 bits = "21:0"
 class = "plain"
 description = "Configures the high 22 bits of timer 0 alarm trigger time-base counter value. Valid only when TIMG_T0_ALARM_EN is 1. \\\\ Measurement unit: T0_clk \\\\"
+window = { quantity = "u64", from = 32, sources = ["ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279"] }
 
 [[registers]]
 name = "T0LOADLO"
@@ -319,6 +321,7 @@ name = "T_ALARM_LO"
 bits = "31:0"
 class = "plain"
 description = "Configures the low 32 bits of timer 1 alarm trigger time-base counter value. Valid only when TIMG_T1_ALARM_EN is 1. \\\\ Measurement unit: T1_clk \\\\"
+window = { quantity = "u64", sources = ["ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279"] }
 
 [[registers]]
 name = "T1ALARMHI"
@@ -332,6 +335,7 @@ name = "T_ALARM_HI"
 bits = "21:0"
 class = "plain"
 description = "Configures the high 22 bits of timer 1 alarm trigger time-base counter value. Valid only when TIMG_T1_ALARM_EN is 1. \\\\ Measurement unit: T1_clk \\\\"
+window = { quantity = "u64", from = 32, sources = ["ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279"] }
 
 [[registers]]
 name = "T1LOADLO"

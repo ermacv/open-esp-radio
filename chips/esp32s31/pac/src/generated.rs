@@ -41,10 +41,10 @@ impl Hart {
     pub const fn get(self) -> usize {
         self as usize
     }
-    pub const fn index(self) -> oer_portable_mmio::Index<HARTS> {
+    pub const fn index(self) -> oer_portable_bounded::Index<HARTS> {
         match self {
-            Self::H0 => oer_portable_mmio::Index::constant::<0>(),
-            Self::H1 => oer_portable_mmio::Index::constant::<1>(),
+            Self::H0 => oer_portable_bounded::Index::constant::<0>(),
+            Self::H1 => oer_portable_bounded::Index::constant::<1>(),
         }
     }
     /// Select a hart's value without a runtime bounds check.
@@ -74,9 +74,9 @@ impl SecondaryHart {
             Self::H1 => Hart::H1,
         }
     }
-    pub const fn index(self) -> oer_portable_mmio::Index<{ HARTS - 1 }> {
+    pub const fn index(self) -> oer_portable_bounded::Index<{ HARTS - 1 }> {
         match self {
-            Self::H1 => oer_portable_mmio::Index::constant::<0>(),
+            Self::H1 => oer_portable_bounded::Index::constant::<0>(),
         }
     }
 }
@@ -2836,7 +2836,7 @@ pub mod aes {
     impl<P: oer_portable_mmio::Placement> AesProgram<P> {
         /// Read `KEY%s`.
         #[inline]
-        pub fn read_key(&self, index: oer_portable_mmio::Index<8>) -> key::R {
+        pub fn read_key(&self, index: oer_portable_bounded::Index<8>) -> key::R {
             key::R(self.0.read_indexed::<0x0, 0x4, 8>(index))
         }
 
@@ -2845,7 +2845,7 @@ pub mod aes {
         #[inline]
         pub fn modify_key(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut key::W),
         ) {
             let mut value = key::W(self.0.read_indexed::<0x0, 0x4, 8>(index));
@@ -2855,7 +2855,7 @@ pub mod aes {
 
         /// Read `TEXT_IN%s`.
         #[inline]
-        pub fn read_text_in(&self, index: oer_portable_mmio::Index<4>) -> text_in::R {
+        pub fn read_text_in(&self, index: oer_portable_bounded::Index<4>) -> text_in::R {
             text_in::R(self.0.read_indexed::<0x20, 0x4, 4>(index))
         }
 
@@ -2864,7 +2864,7 @@ pub mod aes {
         #[inline]
         pub fn modify_text_in(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut text_in::W),
         ) {
             let mut value = text_in::W(self.0.read_indexed::<0x20, 0x4, 4>(index));
@@ -2874,7 +2874,7 @@ pub mod aes {
 
         /// Read `TEXT_OUT%s`.
         #[inline]
-        pub fn read_text_out(&self, index: oer_portable_mmio::Index<4>) -> text_out::R {
+        pub fn read_text_out(&self, index: oer_portable_bounded::Index<4>) -> text_out::R {
             text_out::R(self.0.read_indexed::<0x30, 0x4, 4>(index))
         }
 
@@ -2908,7 +2908,7 @@ pub mod aes {
 
         /// Read `IV%s`.
         #[inline]
-        pub fn read_iv(&self, index: oer_portable_mmio::Index<4>) -> iv::R {
+        pub fn read_iv(&self, index: oer_portable_bounded::Index<4>) -> iv::R {
             iv::R(self.0.read_indexed::<0x50, 0x4, 4>(index))
         }
 
@@ -2917,7 +2917,7 @@ pub mod aes {
         #[inline]
         pub fn modify_iv(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut iv::W),
         ) {
             let mut value = iv::W(self.0.read_indexed::<0x50, 0x4, 4>(index));
@@ -12755,7 +12755,7 @@ pub mod btdm {
     impl<P: oer_portable_mmio::Placement> BtdmSchedulerTable<P> {
         /// Read `ENTRY%s`.
         #[inline]
-        pub fn read_entry(&self, index: oer_portable_mmio::Index<16>) -> entry::R {
+        pub fn read_entry(&self, index: oer_portable_bounded::Index<16>) -> entry::R {
             entry::R(self.0.read_indexed::<0x1000, 0x10, 16>(index))
         }
 
@@ -12764,7 +12764,7 @@ pub mod btdm {
         #[inline]
         pub fn modify_entry(
             &mut self,
-            index: oer_portable_mmio::Index<16>,
+            index: oer_portable_bounded::Index<16>,
             change: impl FnOnce(&mut entry::W),
         ) {
             let mut value = entry::W(self.0.read_indexed::<0x1000, 0x10, 16>(index));
@@ -38524,7 +38524,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_slot_low(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut slot_low::W),
         ) {
             let mut value = slot_low::W(0x00000000);
@@ -38538,7 +38538,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_slot_high(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut slot_high::W),
         ) {
             let mut value = slot_high::W(0x00000000);
@@ -38609,7 +38609,10 @@ pub mod bt_mac {
 
         /// Read `BUFFER_POINTER%s`.
         #[inline]
-        pub fn read_buffer_pointer(&self, index: oer_portable_mmio::Index<6>) -> buffer_pointer::R {
+        pub fn read_buffer_pointer(
+            &self,
+            index: oer_portable_bounded::Index<6>,
+        ) -> buffer_pointer::R {
             buffer_pointer::R(self.0.read_indexed::<0x9a0, 0x8, 6>(index))
         }
 
@@ -38618,7 +38621,7 @@ pub mod bt_mac {
         #[inline]
         pub fn modify_buffer_pointer(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut buffer_pointer::W),
         ) {
             let mut value = buffer_pointer::W(self.0.read_indexed::<0x9a0, 0x8, 6>(index));
@@ -38628,7 +38631,7 @@ pub mod bt_mac {
 
         /// Read `BUFFER_STATE%s`.
         #[inline]
-        pub fn read_buffer_state(&self, index: oer_portable_mmio::Index<6>) -> buffer_state::R {
+        pub fn read_buffer_state(&self, index: oer_portable_bounded::Index<6>) -> buffer_state::R {
             buffer_state::R(self.0.read_indexed::<0x9a4, 0x8, 6>(index))
         }
 
@@ -38637,7 +38640,7 @@ pub mod bt_mac {
         #[inline]
         pub fn modify_buffer_state(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut buffer_state::W),
         ) {
             let mut value = buffer_state::W(self.0.read_indexed::<0x9a4, 0x8, 6>(index));
@@ -38748,7 +38751,7 @@ pub mod bt_mac {
     impl<P: oer_portable_mmio::Placement> BleHwRuntimeControl<P> {
         /// Read `STATUS%s`.
         #[inline]
-        pub fn read_status_n(&self, index: oer_portable_mmio::Index<8>) -> status_n::R {
+        pub fn read_status_n(&self, index: oer_portable_bounded::Index<8>) -> status_n::R {
             status_n::R(self.0.read_indexed::<0xb30, 0x4, 8>(index))
         }
 
@@ -38758,7 +38761,7 @@ pub mod bt_mac {
         #[inline]
         pub fn write_clear(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut clear::W),
         ) {
             let mut value = clear::W(0x00000000);
@@ -39872,7 +39875,7 @@ pub mod bt_mac {
         #[inline]
         pub fn read_hal_init_slot_map(
             &self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) -> hal_init_slot_map::R {
             hal_init_slot_map::R(self.0.read_indexed::<0x34c, 0x4, 2>(index))
         }
@@ -39882,7 +39885,7 @@ pub mod bt_mac {
         #[inline]
         pub fn modify_hal_init_slot_map(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut hal_init_slot_map::W),
         ) {
             let mut value = hal_init_slot_map::W(self.0.read_indexed::<0x34c, 0x4, 2>(index));
@@ -41748,7 +41751,7 @@ pub mod bus_monitor {
     impl<P: oer_portable_mmio::Placement> DebugModeStatus<P> {
         /// Read `CORE_%s_DEBUG_MODE`.
         #[inline]
-        pub fn read_debug_mode(&self, index: oer_portable_mmio::Index<2>) -> debug_mode::R {
+        pub fn read_debug_mode(&self, index: oer_portable_bounded::Index<2>) -> debug_mode::R {
             debug_mode::R(self.0.read_indexed::<0x64, 0x88, 2>(index))
         }
     }
@@ -58453,13 +58456,13 @@ pub mod clic {
 
         /// Read `IP%s`.
         #[inline]
-        pub fn read_ip(&self, index: oer_portable_mmio::Index<48>) -> ip::R {
+        pub fn read_ip(&self, index: oer_portable_bounded::Index<48>) -> ip::R {
             ip::R(self.0.read_byte_indexed::<0x1000, 0x4, 48>(index))
         }
 
         /// Read `IE%s`.
         #[inline]
-        pub fn read_ie(&self, index: oer_portable_mmio::Index<48>) -> ie::R {
+        pub fn read_ie(&self, index: oer_portable_bounded::Index<48>) -> ie::R {
             ie::R(self.0.read_byte_indexed::<0x1001, 0x4, 48>(index))
         }
 
@@ -58468,7 +58471,7 @@ pub mod clic {
         #[inline]
         pub fn modify_ie(
             &mut self,
-            index: oer_portable_mmio::Index<48>,
+            index: oer_portable_bounded::Index<48>,
             change: impl FnOnce(&mut ie::W),
         ) {
             let mut value = ie::W(self.0.read_byte_indexed::<0x1001, 0x4, 48>(index));
@@ -58478,7 +58481,7 @@ pub mod clic {
 
         /// Read `ATTR%s`.
         #[inline]
-        pub fn read_attr(&self, index: oer_portable_mmio::Index<48>) -> attr::R {
+        pub fn read_attr(&self, index: oer_portable_bounded::Index<48>) -> attr::R {
             attr::R(self.0.read_byte_indexed::<0x1002, 0x4, 48>(index))
         }
 
@@ -58487,7 +58490,7 @@ pub mod clic {
         #[inline]
         pub fn modify_attr(
             &mut self,
-            index: oer_portable_mmio::Index<48>,
+            index: oer_portable_bounded::Index<48>,
             change: impl FnOnce(&mut attr::W),
         ) {
             let mut value = attr::W(self.0.read_byte_indexed::<0x1002, 0x4, 48>(index));
@@ -58497,7 +58500,7 @@ pub mod clic {
 
         /// Read `CTL%s`.
         #[inline]
-        pub fn read_ctl(&self, index: oer_portable_mmio::Index<48>) -> ctl::R {
+        pub fn read_ctl(&self, index: oer_portable_bounded::Index<48>) -> ctl::R {
             ctl::R(self.0.read_byte_indexed::<0x1003, 0x4, 48>(index))
         }
 
@@ -58506,7 +58509,7 @@ pub mod clic {
         #[inline]
         pub fn modify_ctl(
             &mut self,
-            index: oer_portable_mmio::Index<48>,
+            index: oer_portable_bounded::Index<48>,
             change: impl FnOnce(&mut ctl::W),
         ) {
             let mut value = ctl::W(self.0.read_byte_indexed::<0x1003, 0x4, 48>(index));
@@ -58593,7 +58596,7 @@ pub mod clic {
         #[inline(always)]
         pub fn pend_line(
             &self,
-            index: oer_portable_mmio::Index<48>,
+            index: oer_portable_bounded::Index<48>,
             _hart: &oer_portable_riscv::OnHart<H>,
         ) {
             self.0
@@ -58606,7 +58609,7 @@ pub mod clic {
         #[inline(always)]
         pub fn clear_line(
             &self,
-            index: oer_portable_mmio::Index<48>,
+            index: oer_portable_bounded::Index<48>,
             _hart: &oer_portable_riscv::OnHart<H>,
         ) {
             self.0
@@ -58688,25 +58691,25 @@ pub mod clic {
 
         /// Read `IP%s`.
         #[inline]
-        pub fn read_ip(&self, index: oer_portable_mmio::Index<48>) -> ip::R {
+        pub fn read_ip(&self, index: oer_portable_bounded::Index<48>) -> ip::R {
             ip::R(self.0.read_byte_indexed::<0x1000, 0x4, 48>(index))
         }
 
         /// Read `IE%s`.
         #[inline]
-        pub fn read_ie(&self, index: oer_portable_mmio::Index<48>) -> ie::R {
+        pub fn read_ie(&self, index: oer_portable_bounded::Index<48>) -> ie::R {
             ie::R(self.0.read_byte_indexed::<0x1001, 0x4, 48>(index))
         }
 
         /// Read `ATTR%s`.
         #[inline]
-        pub fn read_attr(&self, index: oer_portable_mmio::Index<48>) -> attr::R {
+        pub fn read_attr(&self, index: oer_portable_bounded::Index<48>) -> attr::R {
             attr::R(self.0.read_byte_indexed::<0x1002, 0x4, 48>(index))
         }
 
         /// Read `CTL%s`.
         #[inline]
-        pub fn read_ctl(&self, index: oer_portable_mmio::Index<48>) -> ctl::R {
+        pub fn read_ctl(&self, index: oer_portable_bounded::Index<48>) -> ctl::R {
             ctl::R(self.0.read_byte_indexed::<0x1003, 0x4, 48>(index))
         }
     }
@@ -58980,6 +58983,15 @@ pub mod coex {
                 self
             }
 
+            /// Set `PRIMARY_TICK_IMAGE` to bits 0..24 of the `u32`: coex_hw_timer_set narrows the target tick to its low 24 bits before the store: the tick counter wraps at the field.
+            ///
+            /// SOURCE: BLOB_LIBCOEX_HW_TIMER.
+            #[inline]
+            pub fn set_primary_tick_image_low_bits(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | (value & 0xffffff);
+                self
+            }
+
             /// Set `PARAMETER_2`.
             #[inline]
             pub fn set_parameter_2(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
@@ -59041,7 +59053,7 @@ pub mod coex {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `SECONDARY_TICK_IMAGE` field.
+            /// Low 24 bits returned by coex_hw_timer_tick_get for the second timer value.
             #[inline]
             pub const fn secondary_tick_image(self) -> oer_portable_mmio::Bits<24> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -59058,7 +59070,7 @@ pub mod coex {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `SECONDARY_TICK_IMAGE` field.
+            /// Low 24 bits returned by coex_hw_timer_tick_get for the second timer value.
             #[inline]
             pub const fn secondary_tick_image(&self) -> oer_portable_mmio::Bits<24> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -59077,6 +59089,15 @@ pub mod coex {
                 value: oer_portable_mmio::Bits<24>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xff000000) | value.get();
+                self
+            }
+
+            /// Set `SECONDARY_TICK_IMAGE` to bits 0..24 of the `u32`: coex_hw_timer_set narrows the target tick to its low 24 bits before the store: the tick counter wraps at the field.
+            ///
+            /// SOURCE: BLOB_LIBCOEX_HW_TIMER.
+            #[inline]
+            pub fn set_secondary_tick_image_low_bits(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | (value & 0xffffff);
                 self
             }
 
@@ -74217,13 +74238,13 @@ pub mod fe {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `RX_IQ_GAIN_COEFFICIENT` field.
+            /// Signed RX-IQ gain coefficient, two's complement.
             #[inline]
             pub const fn rx_iq_gain_coefficient(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// The `RX_IQ_PHASE_COEFFICIENT` field.
+            /// Signed RX-IQ phase coefficient, two's complement.
             #[inline]
             pub const fn rx_iq_phase_coefficient(self) -> oer_portable_mmio::Bits<7> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 22)
@@ -74258,13 +74279,13 @@ pub mod fe {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `RX_IQ_GAIN_COEFFICIENT` field.
+            /// Signed RX-IQ gain coefficient, two's complement.
             #[inline]
             pub const fn rx_iq_gain_coefficient(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// The `RX_IQ_PHASE_COEFFICIENT` field.
+            /// Signed RX-IQ phase coefficient, two's complement.
             #[inline]
             pub const fn rx_iq_phase_coefficient(&self) -> oer_portable_mmio::Bits<7> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 22)
@@ -74304,6 +74325,15 @@ pub mod fe {
                 self
             }
 
+            /// Set `RX_IQ_GAIN_COEFFICIENT` to bits 0..6 of the `i8`: phy_rxiq_set_reg stores the low bits of the signed coefficient's byte, without the saturation phy_txiq_set_reg makes.
+            ///
+            /// SOURCE: ROM_REV0_PHY_IQ_COEFFICIENTS.
+            #[inline]
+            pub fn set_rx_iq_gain_coefficient_low_bits(&mut self, value: i8) -> &mut Self {
+                self.0 = (self.0 & 0xffc0ffff) | ((u32::from(value.cast_unsigned()) & 0x3f) << 16);
+                self
+            }
+
             /// Set `RX_IQ_PHASE_COEFFICIENT`.
             #[inline]
             pub fn set_rx_iq_phase_coefficient(
@@ -74311,6 +74341,15 @@ pub mod fe {
                 value: oer_portable_mmio::Bits<7>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xe03fffff) | (value.get() << 22);
+                self
+            }
+
+            /// Set `RX_IQ_PHASE_COEFFICIENT` to bits 0..7 of the `i8`: phy_rxiq_set_reg stores the low bits of the signed coefficient's byte, without the saturation phy_txiq_set_reg makes.
+            ///
+            /// SOURCE: ROM_REV0_PHY_IQ_COEFFICIENTS.
+            #[inline]
+            pub fn set_rx_iq_phase_coefficient_low_bits(&mut self, value: i8) -> &mut Self {
+                self.0 = (self.0 & 0xe03fffff) | ((u32::from(value.cast_unsigned()) & 0x7f) << 22);
                 self
             }
 
@@ -74921,6 +74960,15 @@ pub mod fe {
                 value: oer_portable_mmio::Bits<15>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfffe0003) | (value.get() << 2);
+                self
+            }
+
+            /// Set `BITS_2_16_OPAQUE` to bits 0..15 of the `u16`: phy_iq_est_enable shifts its 16-bit control left by two and masks it to the field: bit 15 is discarded.
+            ///
+            /// SOURCE: ROM_REV0_PHY_IQ_ESTIMATOR.
+            #[inline]
+            pub fn set_estimator_control_low_bits(&mut self, value: u16) -> &mut Self {
+                self.0 = (self.0 & 0xfffe0003) | ((u32::from(value) & 0x7fff) << 2);
                 self
             }
 
@@ -77253,6 +77301,15 @@ pub mod fe {
                 self
             }
 
+            /// Set `SELECTOR` to bits 2..6 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            ///
+            /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
+            #[inline]
+            pub fn set_selector_of_command(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc3) | (((value >> 2) & 0xf) << 2);
+                self
+            }
+
             /// Set `TEST_VALUE`.
             #[inline]
             pub fn set_test_value(&mut self, value: oer_portable_mmio::Bits<9>) -> &mut Self {
@@ -77260,10 +77317,28 @@ pub mod fe {
                 self
             }
 
+            /// Set `TEST_VALUE` to bits 6..15 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            ///
+            /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
+            #[inline]
+            pub fn set_test_value_of_command(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xffff803f) | (((value >> 6) & 0x1ff) << 6);
+                self
+            }
+
             /// Set `PATH`.
             #[inline]
             pub fn set_path(&mut self, value: oer_portable_mmio::Bits<2>) -> &mut Self {
                 self.0 = (self.0 & 0xfffe7fff) | (value.get() << 15);
+                self
+            }
+
+            /// Set `PATH` to bits 15..17 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            ///
+            /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
+            #[inline]
+            pub fn set_path_of_command(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xfffe7fff) | (((value >> 15) & 0x3) << 15);
                 self
             }
         }
@@ -78852,6 +78927,16 @@ pub mod fe {
                 self
             }
 
+            /// Set `TX_IQ_GAIN_COEFFICIENT` to the `i8` clamped to ±31, in two's complement: phy_txiq_set_reg clamps the signed coefficient to ±31, the most negative two's-complement endpoint excluded, before it stores the field.
+            ///
+            /// SOURCE: ROM_REV0_PHY_IQ_COEFFICIENTS.
+            #[inline]
+            pub fn set_tx_iq_gain_coefficient_saturated(&mut self, value: i8) -> &mut Self {
+                let value = value.max(-31_i8).min(31_i8);
+                self.0 = (self.0 & 0xffffffc0) | (u32::from(value.cast_unsigned()) & 0x3f);
+                self
+            }
+
             /// Set `TX_IQ_PHASE_COEFFICIENT`.
             #[inline]
             pub fn set_tx_iq_phase_coefficient(
@@ -78859,6 +78944,16 @@ pub mod fe {
                 value: oer_portable_mmio::Bits<7>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xffffe03f) | (value.get() << 6);
+                self
+            }
+
+            /// Set `TX_IQ_PHASE_COEFFICIENT` to the `i8` clamped to ±63, in two's complement: phy_txiq_set_reg clamps the signed coefficient to ±63, the most negative two's-complement endpoint excluded, before it stores the field.
+            ///
+            /// SOURCE: ROM_REV0_PHY_IQ_COEFFICIENTS.
+            #[inline]
+            pub fn set_tx_iq_phase_coefficient_saturated(&mut self, value: i8) -> &mut Self {
+                let value = value.max(-63_i8).min(63_i8);
+                self.0 = (self.0 & 0xffffe03f) | ((u32::from(value.cast_unsigned()) & 0x7f) << 6);
                 self
             }
 
@@ -80346,7 +80441,7 @@ pub mod fe {
         #[inline]
         pub fn write_i2c_number_word(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut i2c_number_word::W),
         ) {
             let mut value = i2c_number_word::W(0x00000000);
@@ -80666,7 +80761,10 @@ pub mod fe {
 
         /// Read `GROUP_BOUNDARY%s`.
         #[inline]
-        pub fn read_group_boundary(&self, index: oer_portable_mmio::Index<6>) -> group_boundary::R {
+        pub fn read_group_boundary(
+            &self,
+            index: oer_portable_bounded::Index<6>,
+        ) -> group_boundary::R {
             group_boundary::R(self.0.read_indexed::<0x854, 0x4, 6>(index))
         }
 
@@ -80675,7 +80773,7 @@ pub mod fe {
         #[inline]
         pub fn modify_group_boundary(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut group_boundary::W),
         ) {
             let mut value = group_boundary::W(self.0.read_indexed::<0x854, 0x4, 6>(index));
@@ -85187,7 +85285,7 @@ pub mod hp_system {
             #[inline]
             pub const fn hp_reg_core_corestalled_st(
                 self,
-                index: oer_portable_mmio::Index<2>,
+                index: oer_portable_bounded::Index<2>,
             ) -> bool {
                 let shift =
                     0u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul(1u32));
@@ -110908,7 +111006,7 @@ pub mod hp_sys_clkrst {
     impl<P: oer_portable_mmio::Placement> HpSysClkrstCore<P> {
         /// Read `HPCORE%s_CTRL0`.
         #[inline]
-        pub fn read_hpcore_ctrl0(&self, index: oer_portable_mmio::Index<2>) -> hpcore_ctrl0::R {
+        pub fn read_hpcore_ctrl0(&self, index: oer_portable_bounded::Index<2>) -> hpcore_ctrl0::R {
             hpcore_ctrl0::R(self.0.read_indexed::<0x1c, 0x4, 2>(index))
         }
 
@@ -110917,7 +111015,7 @@ pub mod hp_sys_clkrst {
         #[inline]
         pub fn modify_hpcore_ctrl0(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut hpcore_ctrl0::W),
         ) {
             let mut value = hpcore_ctrl0::W(self.0.read_indexed::<0x1c, 0x4, 2>(index));
@@ -114363,7 +114461,7 @@ pub mod i2c_ana_mst_mem {
         #[inline]
         pub fn write_command_memory(
             &mut self,
-            index: oer_portable_mmio::Index<45>,
+            index: oer_portable_bounded::Index<45>,
             change: impl FnOnce(&mut command_memory::W),
         ) {
             let mut value = command_memory::W(0x00000000);
@@ -120532,7 +120630,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn read_multipan_short_address(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> multipan_short_address::R {
             multipan_short_address::R(self.0.read_indexed::<0x8, 0x10, 4>(index))
         }
@@ -120542,7 +120640,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn modify_multipan_short_address(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut multipan_short_address::W),
         ) {
             let mut value = multipan_short_address::W(self.0.read_indexed::<0x8, 0x10, 4>(index));
@@ -120554,7 +120652,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn read_multipan_pan_id(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> multipan_pan_id::R {
             multipan_pan_id::R(self.0.read_indexed::<0xc, 0x10, 4>(index))
         }
@@ -120564,7 +120662,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn modify_multipan_pan_id(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut multipan_pan_id::W),
         ) {
             let mut value = multipan_pan_id::W(self.0.read_indexed::<0xc, 0x10, 4>(index));
@@ -120576,7 +120674,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn read_multipan_extended_address_low(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> multipan_extended_address_low::R {
             multipan_extended_address_low::R(self.0.read_indexed::<0x10, 0x10, 4>(index))
         }
@@ -120586,7 +120684,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn modify_multipan_extended_address_low(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut multipan_extended_address_low::W),
         ) {
             let mut value =
@@ -120599,7 +120697,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn read_multipan_extended_address_high(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> multipan_extended_address_high::R {
             multipan_extended_address_high::R(self.0.read_indexed::<0x14, 0x10, 4>(index))
         }
@@ -120609,7 +120707,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn modify_multipan_extended_address_high(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut multipan_extended_address_high::W),
         ) {
             let mut value =
@@ -121044,7 +121142,7 @@ pub mod ieee802154 {
         #[inline]
         pub fn write_security_key(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut security_key::W),
         ) {
             let mut value = security_key::W(0x00000000);
@@ -122222,7 +122320,7 @@ pub mod interrupt_core {
     impl<P: oer_portable_mmio::Placement> InterruptCore0<P> {
         /// Read `ROUTE%s`.
         #[inline]
-        pub fn read_route(&self, index: oer_portable_mmio::Index<169>) -> route::R {
+        pub fn read_route(&self, index: oer_portable_bounded::Index<169>) -> route::R {
             route::R(self.0.read_indexed::<0x0, 0x4, 169>(index))
         }
 
@@ -122231,7 +122329,7 @@ pub mod interrupt_core {
         #[inline]
         pub fn modify_route(
             &mut self,
-            index: oer_portable_mmio::Index<169>,
+            index: oer_portable_bounded::Index<169>,
             change: impl FnOnce(&mut route::W),
         ) {
             let mut value = route::W(self.0.read_indexed::<0x0, 0x4, 169>(index));
@@ -122276,7 +122374,7 @@ pub mod interrupt_core {
     impl<P: oer_portable_mmio::Placement> InterruptCore0Observer<P> {
         /// Read `ROUTE%s`.
         #[inline]
-        pub fn read_route(&self, index: oer_portable_mmio::Index<169>) -> route::R {
+        pub fn read_route(&self, index: oer_portable_bounded::Index<169>) -> route::R {
             route::R(self.0.read_indexed::<0x0, 0x4, 169>(index))
         }
 
@@ -122526,7 +122624,7 @@ pub mod interrupt_core {
     impl<P: oer_portable_mmio::Placement> InterruptCore1<P> {
         /// Read `ROUTE%s`.
         #[inline]
-        pub fn read_route(&self, index: oer_portable_mmio::Index<169>) -> route::R {
+        pub fn read_route(&self, index: oer_portable_bounded::Index<169>) -> route::R {
             route::R(self.0.read_indexed::<0x0, 0x4, 169>(index))
         }
 
@@ -122535,7 +122633,7 @@ pub mod interrupt_core {
         #[inline]
         pub fn modify_route(
             &mut self,
-            index: oer_portable_mmio::Index<169>,
+            index: oer_portable_bounded::Index<169>,
             change: impl FnOnce(&mut route::W),
         ) {
             let mut value = route::W(self.0.read_indexed::<0x0, 0x4, 169>(index));
@@ -128907,7 +129005,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn read_hpcore_reset_ctrl(
             &self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) -> hpcore_reset_ctrl::R {
             hpcore_reset_ctrl::R(self.0.read_indexed::<0x3c, 0x4, 2>(index))
         }
@@ -128917,7 +129015,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn trigger_hpcore_reset_ctrl_hpcore_sw_reset(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) {
             self.0.write_indexed::<0x3c, 0x4, 2>(
                 index,
@@ -128930,7 +129028,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn modify_hpcore_reset_ctrl(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut hpcore_reset_ctrl::W),
         ) {
             let mut value =
@@ -128983,7 +129081,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn read_hpcore_reset_cause(
             &self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) -> hpcore_reset_cause::R {
             hpcore_reset_cause::R(self.0.read_indexed::<0x30, 0x4, 2>(index))
         }
@@ -128991,7 +129089,7 @@ pub mod lp_aonclkrst {
         /// Write to the write-trigger field `CLR` of `LP_AONCLKRST_HPCORE%s_RESET_CAUSE`, starting its
         /// hardware action once; every other field keeps the value read, every other trigger is zero.
         #[inline]
-        pub fn trigger_hpcore_reset_cause_clr(&mut self, index: oer_portable_mmio::Index<2>) {
+        pub fn trigger_hpcore_reset_cause_clr(&mut self, index: oer_portable_bounded::Index<2>) {
             self.0.write_indexed::<0x30, 0x4, 2>(
                 index,
                 self.0.read_indexed::<0x30, 0x4, 2>(index) & 0x3fffffff | 0x40000000,
@@ -129003,7 +129101,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn trigger_hpcore_reset_cause_hpcore_reset_flag_clr(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) {
             self.0.write_indexed::<0x30, 0x4, 2>(
                 index,
@@ -129017,7 +129115,7 @@ pub mod lp_aonclkrst {
         #[inline]
         pub fn trigger_hpcore_reset_cause(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut hpcore_reset_cause::T),
         ) {
             let mut triggers = hpcore_reset_cause::T(0);
@@ -131758,7 +131856,7 @@ pub mod lp_system_reg {
         #[inline]
         pub fn read_boot_addr_hp_core(
             &self,
-            index: oer_portable_mmio::Index<1>,
+            index: oer_portable_bounded::Index<1>,
         ) -> boot_addr_hp_core::R {
             boot_addr_hp_core::R(self.0.read_indexed::<0x164, 0x4, 1>(index))
         }
@@ -131768,7 +131866,7 @@ pub mod lp_system_reg {
         #[inline]
         pub fn modify_boot_addr_hp_core(
             &mut self,
-            index: oer_portable_mmio::Index<1>,
+            index: oer_portable_bounded::Index<1>,
             change: impl FnOnce(&mut boot_addr_hp_core::W),
         ) {
             let mut value = boot_addr_hp_core::W(self.0.read_indexed::<0x164, 0x4, 1>(index));
@@ -134174,6 +134272,15 @@ pub mod modem_lpcon {
                 value: oer_portable_mmio::Bits<12>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xffff000f) | (value.get() << 4);
+                self
+            }
+
+            /// Set `CLK_COEX_LP_DIV_NUM` to bits 0..12 of the `u32`: coex_hw_timer_freq_set stores the low twelve bits of its divisor minus one.
+            ///
+            /// SOURCE: BLOB_LIBCOEX_HW_TIMER.
+            #[inline]
+            pub fn set_clk_coex_lp_div_num_low_bits(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xffff000f) | ((value & 0xfff) << 4);
                 self
             }
 
@@ -139158,7 +139265,7 @@ pub mod modem_pwr {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `TSF_BITS_35_10` field.
+            /// TSF bits 35:10 of the station's first TBTT: the target word compares only these.
             #[inline]
             pub const fn tsf_bits_35_10(self) -> oer_portable_mmio::Bits<26> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -139175,7 +139282,7 @@ pub mod modem_pwr {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `TSF_BITS_35_10` field.
+            /// TSF bits 35:10 of the station's first TBTT: the target word compares only these.
             #[inline]
             pub const fn tsf_bits_35_10(&self) -> oer_portable_mmio::Bits<26> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -139191,6 +139298,19 @@ pub mod modem_pwr {
             #[inline]
             pub fn set_tsf_bits_35_10(&mut self, value: oer_portable_mmio::Bits<26>) -> &mut Self {
                 self.0 = (self.0 & 0xfc000000) | value.get();
+                self
+            }
+
+            /// Set `TSF_BITS_35_10` to bits 10..36 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TSF.
+            #[inline]
+            pub fn set_tsf_bits_35_10_window(&mut self, value: u64) -> &mut Self {
+                self.0 = (self.0 & 0xfc000000)
+                    | ({
+                        let [b0, b1, b2, b3, _, _, _, _] = (value >> 10).to_le_bytes();
+                        u32::from_le_bytes([b0, b1, b2, b3])
+                    } & 0x3ffffff);
                 self
             }
 
@@ -142278,6 +142398,15 @@ pub mod modem_pwr {
                 self
             }
 
+            /// Set `VALUE` to bits 0..18 of the `u32`: hal_timer_update_by_rtc stores the low eighteen bits of the value g_wifi_osi_funcs._slowclk_cal_get returns.
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_INIT_TAIL.
+            #[inline]
+            pub fn set_slow_clock_calibration_low_bits(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xfffc0000) | (value & 0x3ffff);
+                self
+            }
+
             /// Set `BITS_18_31_OPAQUE`.
             #[inline]
             pub fn set_bits_18_31_opaque(
@@ -144962,7 +145091,7 @@ pub mod modem_pwr {
     impl<P: oer_portable_mmio::Placement> WifiMacTsfTimer<P> {
         /// Read `CONTROL%s`.
         #[inline]
-        pub fn read_control(&self, index: oer_portable_mmio::Index<4>) -> control::R {
+        pub fn read_control(&self, index: oer_portable_bounded::Index<4>) -> control::R {
             control::R(self.0.read_indexed::<0x87c, 0x8, 4>(index))
         }
 
@@ -144971,7 +145100,7 @@ pub mod modem_pwr {
         #[inline]
         pub fn modify_control(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut control::W),
         ) {
             let mut value = control::W(self.0.read_indexed::<0x87c, 0x8, 4>(index));
@@ -144981,7 +145110,7 @@ pub mod modem_pwr {
 
         /// Read `TARGET%s`.
         #[inline]
-        pub fn read_target_n(&self, index: oer_portable_mmio::Index<4>) -> target_n::R {
+        pub fn read_target_n(&self, index: oer_portable_bounded::Index<4>) -> target_n::R {
             target_n::R(self.0.read_indexed::<0x880, 0x8, 4>(index))
         }
 
@@ -144990,7 +145119,7 @@ pub mod modem_pwr {
         #[inline]
         pub fn modify_target_n(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut target_n::W),
         ) {
             let mut value = target_n::W(self.0.read_indexed::<0x880, 0x8, 4>(index));
@@ -164709,7 +164838,7 @@ pub mod pmu {
         impl R {
             /// Read one indexed field.
             #[inline]
-            pub const fn hpcore_sw_stall_code(self, index: oer_portable_mmio::Index<2>) -> u8 {
+            pub const fn hpcore_sw_stall_code(self, index: oer_portable_bounded::Index<2>) -> u8 {
                 let shift = 24u32.wrapping_add(
                     (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
                 );
@@ -164724,7 +164853,7 @@ pub mod pmu {
         impl W {
             /// Read one indexed field.
             #[inline]
-            pub const fn hpcore_sw_stall_code(&self, index: oer_portable_mmio::Index<2>) -> u8 {
+            pub const fn hpcore_sw_stall_code(&self, index: oer_portable_bounded::Index<2>) -> u8 {
                 let shift = 24u32.wrapping_add(
                     (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
                 );
@@ -164735,7 +164864,7 @@ pub mod pmu {
             #[inline]
             pub fn set_hpcore_sw_stall_code(
                 &mut self,
-                index: oer_portable_mmio::Index<2>,
+                index: oer_portable_bounded::Index<2>,
                 value: u8,
             ) -> &mut Self {
                 let shift = 24u32.wrapping_add(
@@ -214917,14 +215046,14 @@ pub mod spi1_mem_s {
 
         /// Read `W%s`.
         #[inline]
-        pub fn read_w(&self, index: oer_portable_mmio::Index<16>) -> w::R {
+        pub fn read_w(&self, index: oer_portable_bounded::Index<16>) -> w::R {
             w::R(self.0.read_indexed::<0x58, 0x4, 16>(index))
         }
 
         /// Store the data word `W%s` whole: its one field `BUF`, zero in every
         /// other bit; the hardware also writes it, so it is never modified.
         #[inline]
-        pub fn write_w(&mut self, index: oer_portable_mmio::Index<16>, value: u32) {
+        pub fn write_w(&mut self, index: oer_portable_bounded::Index<16>, value: u32) {
             self.0.write_indexed::<0x58, 0x4, 16>(index, value);
         }
 
@@ -246936,6 +247065,19 @@ pub mod systimer {
                 self.0 = (self.0 & 0xfff00000) | value.get();
                 self
             }
+
+            /// Set `HI` to bits 32..52 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_SYSTIMER_LL_H_L153.
+            #[inline]
+            pub fn set_hi_window(&mut self, value: u64) -> &mut Self {
+                self.0 = (self.0 & 0xfff00000)
+                    | ({
+                        let [b0, b1, b2, b3, _, _, _, _] = (value >> 32).to_le_bytes();
+                        u32::from_le_bytes([b0, b1, b2, b3])
+                    } & 0xfffff);
+                self
+            }
         }
     }
 
@@ -246988,6 +247130,18 @@ pub mod systimer {
             #[inline]
             pub fn set_lo(&mut self, value: u32) -> &mut Self {
                 self.0 = value;
+                self
+            }
+
+            /// Set `LO` to bits 0..32 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_SYSTIMER_LL_H_L153.
+            #[inline]
+            pub fn set_lo_window(&mut self, value: u64) -> &mut Self {
+                self.0 = {
+                    let [b0, b1, b2, b3, _, _, _, _] = value.to_le_bytes();
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
                 self
             }
         }
@@ -248042,7 +248196,7 @@ pub mod systimer {
 
         /// Read `TARGET%s_HI`.
         #[inline]
-        pub fn read_target_hi(&self, index: oer_portable_mmio::Index<3>) -> target_hi::R {
+        pub fn read_target_hi(&self, index: oer_portable_bounded::Index<3>) -> target_hi::R {
             target_hi::R(self.0.read_indexed::<0x1c, 0x8, 3>(index))
         }
 
@@ -248051,7 +248205,7 @@ pub mod systimer {
         #[inline]
         pub fn modify_target_hi(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut target_hi::W),
         ) {
             let mut value = target_hi::W(self.0.read_indexed::<0x1c, 0x8, 3>(index));
@@ -248061,7 +248215,7 @@ pub mod systimer {
 
         /// Read `TARGET%s_LO`.
         #[inline]
-        pub fn read_target_lo(&self, index: oer_portable_mmio::Index<3>) -> target_lo::R {
+        pub fn read_target_lo(&self, index: oer_portable_bounded::Index<3>) -> target_lo::R {
             target_lo::R(self.0.read_indexed::<0x20, 0x8, 3>(index))
         }
 
@@ -248070,7 +248224,7 @@ pub mod systimer {
         #[inline]
         pub fn modify_target_lo(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut target_lo::W),
         ) {
             let mut value = target_lo::W(self.0.read_indexed::<0x20, 0x8, 3>(index));
@@ -248080,7 +248234,7 @@ pub mod systimer {
 
         /// Read `TARGET%s_CONF`.
         #[inline]
-        pub fn read_target_conf(&self, index: oer_portable_mmio::Index<3>) -> target_conf::R {
+        pub fn read_target_conf(&self, index: oer_portable_bounded::Index<3>) -> target_conf::R {
             target_conf::R(self.0.read_indexed::<0x34, 0x4, 3>(index))
         }
 
@@ -248089,7 +248243,7 @@ pub mod systimer {
         #[inline]
         pub fn modify_target_conf(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut target_conf::W),
         ) {
             let mut value = target_conf::W(self.0.read_indexed::<0x34, 0x4, 3>(index));
@@ -248100,7 +248254,7 @@ pub mod systimer {
         /// Write to the write-trigger field `LOAD` of `COMP%s_LOAD`, starting its
         /// hardware action once; every other bit is zero or its fixed value.
         #[inline]
-        pub fn trigger_comp_load_load(&mut self, index: oer_portable_mmio::Index<3>) {
+        pub fn trigger_comp_load_load(&mut self, index: oer_portable_bounded::Index<3>) {
             self.0.write_indexed::<0x50, 0x4, 3>(index, 0x00000001);
         }
 
@@ -248626,6 +248780,18 @@ pub mod timg {
                 self.0 = value;
                 self
             }
+
+            /// Set `T_ALARM_LO` to bits 0..32 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279.
+            #[inline]
+            pub fn set_t_alarm_lo_window(&mut self, value: u64) -> &mut Self {
+                self.0 = {
+                    let [b0, b1, b2, b3, _, _, _, _] = value.to_le_bytes();
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                self
+            }
         }
     }
 
@@ -248678,6 +248844,19 @@ pub mod timg {
             #[inline]
             pub fn set_t_alarm_hi(&mut self, value: oer_portable_mmio::Bits<22>) -> &mut Self {
                 self.0 = (self.0 & 0xffc00000) | value.get();
+                self
+            }
+
+            /// Set `T_ALARM_HI` to bits 32..54 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279.
+            #[inline]
+            pub fn set_t_alarm_hi_window(&mut self, value: u64) -> &mut Self {
+                self.0 = (self.0 & 0xffc00000)
+                    | ({
+                        let [b0, b1, b2, b3, _, _, _, _] = (value >> 32).to_le_bytes();
+                        u32::from_le_bytes([b0, b1, b2, b3])
+                    } & 0x3fffff);
                 self
             }
         }
@@ -249061,6 +249240,18 @@ pub mod timg {
                 self.0 = value;
                 self
             }
+
+            /// Set `T_ALARM_LO` to bits 0..32 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279.
+            #[inline]
+            pub fn set_t_alarm_lo_window(&mut self, value: u64) -> &mut Self {
+                self.0 = {
+                    let [b0, b1, b2, b3, _, _, _, _] = value.to_le_bytes();
+                    u32::from_le_bytes([b0, b1, b2, b3])
+                };
+                self
+            }
         }
     }
 
@@ -249113,6 +249304,19 @@ pub mod timg {
             #[inline]
             pub fn set_t_alarm_hi(&mut self, value: oer_portable_mmio::Bits<22>) -> &mut Self {
                 self.0 = (self.0 & 0xffc00000) | value.get();
+                self
+            }
+
+            /// Set `T_ALARM_HI` to bits 32..54 of the `u64`: The hardware takes no other bit of the quantity.
+            ///
+            /// SOURCE: ESP_IDF_4D80C1B2_S31_TIMER_LL_H_L279.
+            #[inline]
+            pub fn set_t_alarm_hi_window(&mut self, value: u64) -> &mut Self {
+                self.0 = (self.0 & 0xffc00000)
+                    | ({
+                        let [b0, b1, b2, b3, _, _, _, _] = (value >> 32).to_le_bytes();
+                        u32::from_le_bytes([b0, b1, b2, b3])
+                    } & 0x3fffff);
                 self
             }
         }
@@ -263868,6 +264072,15 @@ pub mod wifi_bb {
                 self
             }
 
+            /// Set `WIFI_MAX_GAIN_INDEX` to bits 0..7 of the `u8`: phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`).
+            ///
+            /// SOURCE: ROM_REV0_PHY_AGC, BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE.
+            #[inline]
+            pub fn set_wifi_max_gain_index_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffff80ff) | ((u32::from(value) & 0x7f) << 8);
+                self
+            }
+
             /// Set `FORCED_GAIN_ENABLE`.
             #[inline]
             pub fn set_forced_gain_enable(&mut self, value: ForcedGainEnable) -> &mut Self {
@@ -264840,6 +265053,15 @@ pub mod wifi_bb {
                 value: oer_portable_mmio::Bits<7>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffe03) | (value.get() << 2);
+                self
+            }
+
+            /// Set `INITIAL_GAIN_INDEX` to bits 0..7 of the `u8`: phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`).
+            ///
+            /// SOURCE: ROM_REV0_PHY_AGC, BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE.
+            #[inline]
+            pub fn set_agc_initial_gain_index_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfffffe03) | ((u32::from(value) & 0x7f) << 2);
                 self
             }
 
@@ -265844,6 +266066,15 @@ pub mod wifi_bb {
                 value: oer_portable_mmio::Bits<7>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xfe03ffff) | (value.get() << 18);
+                self
+            }
+
+            /// Set `INITIAL_GAIN_INDEX` to bits 0..7 of the `u8`: phy_agc_reg_init and phy_set_rx_gain_table store the low seven bits of the parameter byte (`& 0x7f`).
+            ///
+            /// SOURCE: ROM_REV0_PHY_AGC, BLOB_LIBPHY_PHY_SET_RX_GAIN_TABLE.
+            #[inline]
+            pub fn set_rx_initial_gain_index_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfe03ffff) | ((u32::from(value) & 0x7f) << 18);
                 self
             }
 
@@ -268021,7 +268252,7 @@ pub mod wifi_bb {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified. SOURCE: VENDOR_NRX_QUOTIENT_SHIFT.
+            /// phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified.
             #[inline]
             pub const fn bits_0_23_opaque(self) -> oer_portable_mmio::Bits<24> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -268044,7 +268275,7 @@ pub mod wifi_bb {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified. SOURCE: VENDOR_NRX_QUOTIENT_SHIFT.
+            /// phy_nrx_freq_set stores the masked low 24 bits of the signed quotient (80 << FREQUENCY_NUMERATOR_SHIFT) / frequency, preserving the second sample of the high byte. The numerical use is direct; NRX hardware units remain unqualified.
             #[inline]
             pub const fn bits_0_23_opaque(&self) -> oer_portable_mmio::Bits<24> {
                 oer_portable_mmio::Bits::truncate(self.0)
@@ -268069,6 +268300,15 @@ pub mod wifi_bb {
                 value: oer_portable_mmio::Bits<24>,
             ) -> &mut Self {
                 self.0 = (self.0 & 0xff000000) | value.get();
+                self
+            }
+
+            /// Set `BITS_0_23_OPAQUE` to bits 0..24 of the `u32`: phy_nrx_freq_set masks its signed quotient to the low 24 bits before the store.
+            ///
+            /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
+            #[inline]
+            pub fn set_nrx_quotient_low_bits(&mut self, value: u32) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | (value & 0xffffff);
                 self
             }
 
@@ -282787,6 +283027,15 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_INDEX` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_response_power_index_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffffc0ff) | ((u32::from(value) & 0x3f) << 8);
+                self
+            }
+
             /// Set `RATE_INDEX`.
             #[inline]
             pub fn set_rate_index(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
@@ -282876,25 +283125,25 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `POWER_0` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_0(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// The `POWER_1` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_1(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// The `POWER_2` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_2(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// The `POWER_3` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_3(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -282905,25 +283154,25 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `POWER_0` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_0(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// The `POWER_1` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_1(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 8)
             }
 
-            /// The `POWER_2` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_2(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 16)
             }
 
-            /// The `POWER_3` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_3(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -282936,10 +283185,28 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_0` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_power_0_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc0) | (u32::from(value) & 0x3f);
+                self
+            }
+
             /// Set `POWER_1`.
             #[inline]
             pub fn set_power_1(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
                 self.0 = (self.0 & 0xffffc0ff) | (value.get() << 8);
+                self
+            }
+
+            /// Set `POWER_1` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_power_1_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffffc0ff) | ((u32::from(value) & 0x3f) << 8);
                 self
             }
 
@@ -282950,10 +283217,28 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_2` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_power_2_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffc0ffff) | ((u32::from(value) & 0x3f) << 16);
+                self
+            }
+
             /// Set `POWER_3`.
             #[inline]
             pub fn set_power_3(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
                 self.0 = (self.0 & 0xc0ffffff) | (value.get() << 24);
+                self
+            }
+
+            /// Set `POWER_3` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_power_3_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xc0ffffff) | ((u32::from(value) & 0x3f) << 24);
                 self
             }
         }
@@ -282997,7 +283282,7 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `POWER_INDEX` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_index(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -283020,7 +283305,7 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `POWER_INDEX` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_index(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -283042,6 +283327,15 @@ pub mod wifi_mac {
             #[inline]
             pub fn set_power_index(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
                 self.0 = (self.0 & 0xc0ffffff) | (value.get() << 24);
+                self
+            }
+
+            /// Set `POWER_INDEX` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tail_power_index_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xc0ffffff) | ((u32::from(value) & 0x3f) << 24);
                 self
             }
 
@@ -283130,31 +283424,31 @@ pub mod wifi_mac {
         pub struct R(pub(super) u32);
 
         impl R {
-            /// The `POWER_0` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_0(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// The `POWER_1` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_1(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 6)
             }
 
-            /// The `POWER_2` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_2(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// The `POWER_3` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_3(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
-            /// The `POWER_4` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_4(self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -283171,31 +283465,31 @@ pub mod wifi_mac {
         pub struct W(pub(super) u32);
 
         impl W {
-            /// The `POWER_0` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_0(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0)
             }
 
-            /// The `POWER_1` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_1(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 6)
             }
 
-            /// The `POWER_2` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_2(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 12)
             }
 
-            /// The `POWER_3` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_3(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 18)
             }
 
-            /// The `POWER_4` field.
+            /// Six-bit PHY gain-table index of its rate; not dBm.
             #[inline]
             pub const fn power_4(&self) -> oer_portable_mmio::Bits<6> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 24)
@@ -283214,10 +283508,28 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_0` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_ru_power_0_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xffffffc0) | (u32::from(value) & 0x3f);
+                self
+            }
+
             /// Set `POWER_1`.
             #[inline]
             pub fn set_power_1(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
                 self.0 = (self.0 & 0xfffff03f) | (value.get() << 6);
+                self
+            }
+
+            /// Set `POWER_1` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_ru_power_1_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfffff03f) | ((u32::from(value) & 0x3f) << 6);
                 self
             }
 
@@ -283228,6 +283540,15 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_2` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_ru_power_2_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xfffc0fff) | ((u32::from(value) & 0x3f) << 12);
+                self
+            }
+
             /// Set `POWER_3`.
             #[inline]
             pub fn set_power_3(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
@@ -283235,10 +283556,28 @@ pub mod wifi_mac {
                 self
             }
 
+            /// Set `POWER_3` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_ru_power_3_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xff03ffff) | ((u32::from(value) & 0x3f) << 18);
+                self
+            }
+
             /// Set `POWER_4`.
             #[inline]
             pub fn set_power_4(&mut self, value: oer_portable_mmio::Bits<6>) -> &mut Self {
                 self.0 = (self.0 & 0xc0ffffff) | (value.get() << 24);
+                self
+            }
+
+            /// Set `POWER_4` to bits 0..6 of the `u8`: The vendor stores the low six bits of its power-table byte (hal_init_tb_power, hal_init_imrsp_power, hal_init_tb_ru_power: `& 0x3f`, the RU deltas modulo 256 then 64).
+            ///
+            /// SOURCE: BLOB_LIBPP_HAL_TX_POWER_INIT.
+            #[inline]
+            pub fn set_tb_ru_power_4_low_bits(&mut self, value: u8) -> &mut Self {
+                self.0 = (self.0 & 0xc0ffffff) | ((u32::from(value) & 0x3f) << 24);
                 self
             }
 
@@ -309407,7 +309746,7 @@ pub mod wifi_mac {
 
         /// Read `BANK_CONTROL%s`.
         #[inline]
-        pub fn read_bank_control(&self, index: oer_portable_mmio::Index<4>) -> bank_control::R {
+        pub fn read_bank_control(&self, index: oer_portable_bounded::Index<4>) -> bank_control::R {
             bank_control::R(self.0.read_indexed::<0x11ac, 0x7c, 4>(index))
         }
 
@@ -309416,7 +309755,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_bank_control(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut bank_control::W),
         ) {
             let mut value = bank_control::W(self.0.read_indexed::<0x11ac, 0x7c, 4>(index));
@@ -309643,7 +309982,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_control(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_control::R {
             rx_block_ack_entry_control::R(self.0.read_indexed::<0x178, 0x24, 8>(index))
         }
@@ -309653,7 +309992,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_control(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_control::W),
         ) {
             let mut value =
@@ -309666,7 +310005,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_peer_tail_and_policy(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_peer_tail_and_policy::R {
             rx_block_ack_entry_peer_tail_and_policy::R(self.0.read_indexed::<0x17c, 0x24, 8>(index))
         }
@@ -309676,7 +310015,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_peer_tail_and_policy(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_peer_tail_and_policy::W),
         ) {
             let mut value = rx_block_ack_entry_peer_tail_and_policy::W(
@@ -309690,7 +310029,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_peer_head(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_peer_head::R {
             rx_block_ack_entry_peer_head::R(self.0.read_indexed::<0x180, 0x24, 8>(index))
         }
@@ -309700,7 +310039,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_peer_head(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_peer_head::W),
         ) {
             let mut value =
@@ -309713,7 +310052,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_current_sequence(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_current_sequence::R {
             rx_block_ack_entry_current_sequence::R(self.0.read_indexed::<0x184, 0x24, 8>(index))
         }
@@ -309722,7 +310061,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_start_sequence_load(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_start_sequence_load::R {
             rx_block_ack_entry_start_sequence_load::R(self.0.read_indexed::<0x188, 0x24, 8>(index))
         }
@@ -309732,7 +310071,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_start_sequence_load(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_start_sequence_load::W),
         ) {
             let mut value = rx_block_ack_entry_start_sequence_load::W(
@@ -309746,7 +310085,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_bitmap_low_status(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_bitmap_low_status::R {
             rx_block_ack_entry_bitmap_low_status::R(self.0.read_indexed::<0x18c, 0x24, 8>(index))
         }
@@ -309755,7 +310094,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_bitmap_low_load(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_bitmap_low_load::R {
             rx_block_ack_entry_bitmap_low_load::R(self.0.read_indexed::<0x190, 0x24, 8>(index))
         }
@@ -309765,7 +310104,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_bitmap_low_load(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_bitmap_low_load::W),
         ) {
             let mut value =
@@ -309778,7 +310117,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_bitmap_high_status(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_bitmap_high_status::R {
             rx_block_ack_entry_bitmap_high_status::R(self.0.read_indexed::<0x194, 0x24, 8>(index))
         }
@@ -309787,7 +310126,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_block_ack_entry_bitmap_high_load(
             &self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
         ) -> rx_block_ack_entry_bitmap_high_load::R {
             rx_block_ack_entry_bitmap_high_load::R(self.0.read_indexed::<0x198, 0x24, 8>(index))
         }
@@ -309797,7 +310136,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_block_ack_entry_bitmap_high_load(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut rx_block_ack_entry_bitmap_high_load::W),
         ) {
             let mut value = rx_block_ack_entry_bitmap_high_load::W(
@@ -310308,7 +310647,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacBssidPolicy<P> {
         /// Read `BSSID_LOW%s`.
         #[inline]
-        pub fn read_bssid_low(&self, index: oer_portable_mmio::Index<4>) -> bssid_low::R {
+        pub fn read_bssid_low(&self, index: oer_portable_bounded::Index<4>) -> bssid_low::R {
             bssid_low::R(self.0.read_indexed::<0x0, 0x8, 4>(index))
         }
 
@@ -310317,7 +310656,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_bssid_low(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut bssid_low::W),
         ) {
             let mut value = bssid_low::W(self.0.read_indexed::<0x0, 0x8, 4>(index));
@@ -310327,7 +310666,7 @@ pub mod wifi_mac {
 
         /// Read `BSSID_HIGH%s`.
         #[inline]
-        pub fn read_bssid_high(&self, index: oer_portable_mmio::Index<4>) -> bssid_high::R {
+        pub fn read_bssid_high(&self, index: oer_portable_bounded::Index<4>) -> bssid_high::R {
             bssid_high::R(self.0.read_indexed::<0x4, 0x8, 4>(index))
         }
 
@@ -310336,7 +310675,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_bssid_high(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut bssid_high::W),
         ) {
             let mut value = bssid_high::W(self.0.read_indexed::<0x4, 0x8, 4>(index));
@@ -310724,7 +311063,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_interface_control(
             &self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
         ) -> interface_control::R {
             interface_control::R(self.0.read_indexed::<0x800, 0x4, 2>(index))
         }
@@ -310734,7 +311073,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_interface_control(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut interface_control::W),
         ) {
             let mut value = interface_control::W(self.0.read_indexed::<0x800, 0x4, 2>(index));
@@ -311034,13 +311373,13 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacHeBufferStatus<P> {
         /// Read `HARDWARE_BSR%s`.
         #[inline]
-        pub fn read_hardware_bsr(&self, index: oer_portable_mmio::Index<8>) -> hardware_bsr::R {
+        pub fn read_hardware_bsr(&self, index: oer_portable_bounded::Index<8>) -> hardware_bsr::R {
             hardware_bsr::R(self.0.read_indexed::<0xd74, 0x8, 8>(index))
         }
 
         /// Read `SOFTWARE_BSR%s`.
         #[inline]
-        pub fn read_software_bsr(&self, index: oer_portable_mmio::Index<8>) -> software_bsr::R {
+        pub fn read_software_bsr(&self, index: oer_portable_bounded::Index<8>) -> software_bsr::R {
             software_bsr::R(self.0.read_indexed::<0xd78, 0x8, 8>(index))
         }
 
@@ -311049,7 +311388,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_software_bsr(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut software_bsr::W),
         ) {
             let mut value = software_bsr::W(self.0.read_indexed::<0xd78, 0x8, 8>(index));
@@ -311646,7 +311985,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_qos_null_translation_control(
             &self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
         ) -> qos_null_translation_control::R {
             qos_null_translation_control::R(self.0.read_indexed::<0xcc8, 0x10, 3>(index))
         }
@@ -311656,7 +311995,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_qos_null_translation_control(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut qos_null_translation_control::W),
         ) {
             let mut value =
@@ -311667,7 +312006,10 @@ pub mod wifi_mac {
 
         /// Read `QUEUE_CONTROL%s`.
         #[inline]
-        pub fn read_queue_control(&self, index: oer_portable_mmio::Index<8>) -> queue_control::R {
+        pub fn read_queue_control(
+            &self,
+            index: oer_portable_bounded::Index<8>,
+        ) -> queue_control::R {
             queue_control::R(self.0.read_indexed::<0xcf8, 0x10, 8>(index))
         }
 
@@ -311676,7 +312018,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_queue_control(
             &mut self,
-            index: oer_portable_mmio::Index<8>,
+            index: oer_portable_bounded::Index<8>,
             change: impl FnOnce(&mut queue_control::W),
         ) {
             let mut value = queue_control::W(self.0.read_indexed::<0xcf8, 0x10, 8>(index));
@@ -311686,7 +312028,7 @@ pub mod wifi_mac {
 
         /// Read `HE_SCRATCH%s`.
         #[inline]
-        pub fn read_he_scratch(&self, index: oer_portable_mmio::Index<120>) -> he_scratch::R {
+        pub fn read_he_scratch(&self, index: oer_portable_bounded::Index<120>) -> he_scratch::R {
             he_scratch::R(self.0.read_indexed::<0x15f0, 0x4, 120>(index))
         }
 
@@ -311695,7 +312037,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_scratch(
             &mut self,
-            index: oer_portable_mmio::Index<120>,
+            index: oer_portable_bounded::Index<120>,
             change: impl FnOnce(&mut he_scratch::W),
         ) {
             let mut value = he_scratch::W(self.0.read_indexed::<0x15f0, 0x4, 120>(index));
@@ -311709,7 +312051,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn clear_he_mpdu_length_links(&mut self) {
             for element in 0..120 {
-                if let Ok(index) = oer_portable_mmio::Index::<120>::new(element) {
+                if let Ok(index) = oer_portable_bounded::Index::<120>::new(element) {
                     self.0.write_indexed::<0x15f0, 0x4, 120>(index, 0x00000000);
                 }
             }
@@ -311757,7 +312099,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacHeMuEdcaTimer<P> {
         /// Read `TIMER%s`.
         #[inline]
-        pub fn read_timer(&self, index: oer_portable_mmio::Index<4>) -> timer::R {
+        pub fn read_timer(&self, index: oer_portable_bounded::Index<4>) -> timer::R {
             timer::R(self.0.read_indexed::<0xdbc, 0x4, 4>(index))
         }
 
@@ -311766,7 +312108,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_timer(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut timer::W),
         ) {
             let mut value = timer::W(self.0.read_indexed::<0xdbc, 0x4, 4>(index));
@@ -312235,7 +312577,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_peer_low(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_peer_low::R {
             entry_peer_low::R(self.0.read_indexed::<0x1800, 0x28, 25>(index))
         }
@@ -312245,7 +312587,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_peer_low(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_peer_low::W),
         ) {
             let mut value = entry_peer_low::W(self.0.read_indexed::<0x1800, 0x28, 25>(index));
@@ -312257,7 +312599,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_peer_control(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_peer_control::R {
             entry_peer_control::R(self.0.read_indexed::<0x1804, 0x28, 25>(index))
         }
@@ -312267,7 +312609,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_peer_control(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_peer_control::W),
         ) {
             let mut value = entry_peer_control::W(self.0.read_indexed::<0x1804, 0x28, 25>(index));
@@ -312279,7 +312621,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_0(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_0::R {
             entry_key_word_0::R(self.0.read_indexed::<0x1808, 0x28, 25>(index))
         }
@@ -312289,7 +312631,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_0(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_0::W),
         ) {
             let mut value = entry_key_word_0::W(self.0.read_indexed::<0x1808, 0x28, 25>(index));
@@ -312301,7 +312643,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_1(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_1::R {
             entry_key_word_1::R(self.0.read_indexed::<0x180c, 0x28, 25>(index))
         }
@@ -312311,7 +312653,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_1(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_1::W),
         ) {
             let mut value = entry_key_word_1::W(self.0.read_indexed::<0x180c, 0x28, 25>(index));
@@ -312323,7 +312665,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_2(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_2::R {
             entry_key_word_2::R(self.0.read_indexed::<0x1810, 0x28, 25>(index))
         }
@@ -312333,7 +312675,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_2(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_2::W),
         ) {
             let mut value = entry_key_word_2::W(self.0.read_indexed::<0x1810, 0x28, 25>(index));
@@ -312345,7 +312687,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_3(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_3::R {
             entry_key_word_3::R(self.0.read_indexed::<0x1814, 0x28, 25>(index))
         }
@@ -312355,7 +312697,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_3(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_3::W),
         ) {
             let mut value = entry_key_word_3::W(self.0.read_indexed::<0x1814, 0x28, 25>(index));
@@ -312367,7 +312709,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_4(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_4::R {
             entry_key_word_4::R(self.0.read_indexed::<0x1818, 0x28, 25>(index))
         }
@@ -312377,7 +312719,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_4(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_4::W),
         ) {
             let mut value = entry_key_word_4::W(self.0.read_indexed::<0x1818, 0x28, 25>(index));
@@ -312389,7 +312731,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_5(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_5::R {
             entry_key_word_5::R(self.0.read_indexed::<0x181c, 0x28, 25>(index))
         }
@@ -312399,7 +312741,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_5(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_5::W),
         ) {
             let mut value = entry_key_word_5::W(self.0.read_indexed::<0x181c, 0x28, 25>(index));
@@ -312411,7 +312753,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_6(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_6::R {
             entry_key_word_6::R(self.0.read_indexed::<0x1820, 0x28, 25>(index))
         }
@@ -312421,7 +312763,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_6(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_6::W),
         ) {
             let mut value = entry_key_word_6::W(self.0.read_indexed::<0x1820, 0x28, 25>(index));
@@ -312433,7 +312775,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_entry_key_word_7(
             &self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
         ) -> entry_key_word_7::R {
             entry_key_word_7::R(self.0.read_indexed::<0x1824, 0x28, 25>(index))
         }
@@ -312443,7 +312785,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_entry_key_word_7(
             &mut self,
-            index: oer_portable_mmio::Index<25>,
+            index: oer_portable_bounded::Index<25>,
             change: impl FnOnce(&mut entry_key_word_7::W),
         ) {
             let mut value = entry_key_word_7::W(self.0.read_indexed::<0x1824, 0x28, 25>(index));
@@ -312521,7 +312863,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn write_entry_control(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut entry_control::W),
         ) {
             let mut value = entry_control::W(0x00000000);
@@ -312535,7 +312877,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn write_entry_parameter_a(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut entry_parameter_a::W),
         ) {
             let mut value = entry_parameter_a::W(0x00000000);
@@ -312549,7 +312891,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn write_entry_parameter_b(
             &mut self,
-            index: oer_portable_mmio::Index<6>,
+            index: oer_portable_bounded::Index<6>,
             change: impl FnOnce(&mut entry_parameter_b::W),
         ) {
             let mut value = entry_parameter_b::W(0x00000000);
@@ -312856,7 +313198,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacRxFilter<P> {
         /// Read `POLICY%s`.
         #[inline]
-        pub fn read_policy(&self, index: oer_portable_mmio::Index<4>) -> policy::R {
+        pub fn read_policy(&self, index: oer_portable_bounded::Index<4>) -> policy::R {
             policy::R(self.0.read_indexed::<0xd8, 0x4, 4>(index))
         }
 
@@ -312865,7 +313207,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_policy(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut policy::W),
         ) {
             let mut value = policy::W(self.0.read_indexed::<0xd8, 0x4, 4>(index));
@@ -312875,7 +313217,10 @@ pub mod wifi_mac {
 
         /// Read `RX_ERROR_DUMP%s`.
         #[inline]
-        pub fn read_rx_error_dump(&self, index: oer_portable_mmio::Index<2>) -> rx_error_dump::R {
+        pub fn read_rx_error_dump(
+            &self,
+            index: oer_portable_bounded::Index<2>,
+        ) -> rx_error_dump::R {
             rx_error_dump::R(self.0.read_indexed::<0xe8, 0x4, 2>(index))
         }
 
@@ -312884,7 +313229,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_error_dump(
             &mut self,
-            index: oer_portable_mmio::Index<2>,
+            index: oer_portable_bounded::Index<2>,
             change: impl FnOnce(&mut rx_error_dump::W),
         ) {
             let mut value = rx_error_dump::W(self.0.read_indexed::<0xe8, 0x4, 2>(index));
@@ -313668,7 +314013,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_rx_control_frame_dump(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> rx_control_frame_dump::R {
             rx_control_frame_dump::R(self.0.read_indexed::<0xfc, 0x4, 4>(index))
         }
@@ -313678,7 +314023,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_rx_control_frame_dump(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut rx_control_frame_dump::W),
         ) {
             let mut value = rx_control_frame_dump::W(self.0.read_indexed::<0xfc, 0x4, 4>(index));
@@ -314226,19 +314571,19 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacTxCompletion<P> {
         /// Read `PRIMARY%s`.
         #[inline]
-        pub fn read_primary(&self, index: oer_portable_mmio::Index<4>) -> primary::R {
+        pub fn read_primary(&self, index: oer_portable_bounded::Index<4>) -> primary::R {
             primary::R(self.0.read_indexed::<0x13c8, 0x7c, 4>(index))
         }
 
         /// Read `ALTERNATE%s`.
         #[inline]
-        pub fn read_alternate(&self, index: oer_portable_mmio::Index<4>) -> alternate::R {
+        pub fn read_alternate(&self, index: oer_portable_bounded::Index<4>) -> alternate::R {
             alternate::R(self.0.read_indexed::<0x13cc, 0x7c, 4>(index))
         }
 
         /// Read `AUX_C%s`.
         #[inline]
-        pub fn read_aux_c(&self, index: oer_portable_mmio::Index<4>) -> aux_c::R {
+        pub fn read_aux_c(&self, index: oer_portable_bounded::Index<4>) -> aux_c::R {
             aux_c::R(self.0.read_indexed::<0x13d8, 0x7c, 4>(index))
         }
     }
@@ -314292,7 +314637,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_immediate_response(
             &self,
-            index: oer_portable_mmio::Index<10>,
+            index: oer_portable_bounded::Index<10>,
         ) -> immediate_response::R {
             immediate_response::R(self.0.read_indexed::<0x408, 0x4, 10>(index))
         }
@@ -314302,7 +314647,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_immediate_response(
             &mut self,
-            index: oer_portable_mmio::Index<10>,
+            index: oer_portable_bounded::Index<10>,
             change: impl FnOnce(&mut immediate_response::W),
         ) {
             let mut value = immediate_response::W(self.0.read_indexed::<0x408, 0x4, 10>(index));
@@ -314312,7 +314657,7 @@ pub mod wifi_mac {
 
         /// Read `TB_POWER%s`.
         #[inline]
-        pub fn read_tb_power(&self, index: oer_portable_mmio::Index<3>) -> tb_power::R {
+        pub fn read_tb_power(&self, index: oer_portable_bounded::Index<3>) -> tb_power::R {
             tb_power::R(self.0.read_indexed::<0x430, 0x4, 3>(index))
         }
 
@@ -314321,7 +314666,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_tb_power(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut tb_power::W),
         ) {
             let mut value = tb_power::W(self.0.read_indexed::<0x430, 0x4, 3>(index));
@@ -314346,7 +314691,7 @@ pub mod wifi_mac {
 
         /// Read `TB_RU_POWER%s`.
         #[inline]
-        pub fn read_tb_ru_power(&self, index: oer_portable_mmio::Index<3>) -> tb_ru_power::R {
+        pub fn read_tb_ru_power(&self, index: oer_portable_bounded::Index<3>) -> tb_ru_power::R {
             tb_ru_power::R(self.0.read_indexed::<0x440, 0x4, 3>(index))
         }
 
@@ -314355,7 +314700,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_tb_ru_power(
             &mut self,
-            index: oer_portable_mmio::Index<3>,
+            index: oer_portable_bounded::Index<3>,
             change: impl FnOnce(&mut tb_ru_power::W),
         ) {
             let mut value = tb_ru_power::W(self.0.read_indexed::<0x440, 0x4, 3>(index));
@@ -314409,7 +314754,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacTxQueueControl<P> {
         /// Read `PROTECTION%s`.
         #[inline]
-        pub fn read_protection(&self, index: oer_portable_mmio::Index<4>) -> protection::R {
+        pub fn read_protection(&self, index: oer_portable_bounded::Index<4>) -> protection::R {
             protection::R(self.0.read_indexed::<0xd34, 0x10, 4>(index))
         }
 
@@ -314418,7 +314763,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_protection(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut protection::W),
         ) {
             let mut value = protection::W(self.0.read_indexed::<0xd34, 0x10, 4>(index));
@@ -314428,7 +314773,7 @@ pub mod wifi_mac {
 
         /// Read `CONFIG%s`.
         #[inline]
-        pub fn read_config(&self, index: oer_portable_mmio::Index<4>) -> config::R {
+        pub fn read_config(&self, index: oer_portable_bounded::Index<4>) -> config::R {
             config::R(self.0.read_indexed::<0xd3c, 0x10, 4>(index))
         }
 
@@ -314437,7 +314782,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_config(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut config::W),
         ) {
             let mut value = config::W(self.0.read_indexed::<0xd3c, 0x10, 4>(index));
@@ -314447,7 +314792,7 @@ pub mod wifi_mac {
 
         /// Read `CONTROL%s`.
         #[inline]
-        pub fn read_control_n(&self, index: oer_portable_mmio::Index<4>) -> control_n::R {
+        pub fn read_control_n(&self, index: oer_portable_bounded::Index<4>) -> control_n::R {
             control_n::R(self.0.read_indexed::<0xd40, 0x10, 4>(index))
         }
 
@@ -314456,7 +314801,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_control_n(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut control_n::W),
         ) {
             let mut value = control_n::W(self.0.read_indexed::<0xd40, 0x10, 4>(index));
@@ -314520,7 +314865,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacTxQueueVector<P> {
         /// Read `PLCP1%s`.
         #[inline]
-        pub fn read_plcp1(&self, index: oer_portable_mmio::Index<4>) -> plcp1::R {
+        pub fn read_plcp1(&self, index: oer_portable_bounded::Index<4>) -> plcp1::R {
             plcp1::R(self.0.read_indexed::<0x1364, 0x7c, 4>(index))
         }
 
@@ -314529,7 +314874,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_plcp1(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut plcp1::W),
         ) {
             let mut value = plcp1::W(self.0.read_indexed::<0x1364, 0x7c, 4>(index));
@@ -314539,7 +314884,10 @@ pub mod wifi_mac {
 
         /// Read `HE_RTS_CONTROL%s`.
         #[inline]
-        pub fn read_he_rts_control(&self, index: oer_portable_mmio::Index<4>) -> he_rts_control::R {
+        pub fn read_he_rts_control(
+            &self,
+            index: oer_portable_bounded::Index<4>,
+        ) -> he_rts_control::R {
             he_rts_control::R(self.0.read_indexed::<0x1368, 0x7c, 4>(index))
         }
 
@@ -314548,7 +314896,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_rts_control(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_rts_control::W),
         ) {
             let mut value = he_rts_control::W(self.0.read_indexed::<0x1368, 0x7c, 4>(index));
@@ -314558,7 +314906,7 @@ pub mod wifi_mac {
 
         /// Read `PTI%s`.
         #[inline]
-        pub fn read_pti(&self, index: oer_portable_mmio::Index<4>) -> pti::R {
+        pub fn read_pti(&self, index: oer_portable_bounded::Index<4>) -> pti::R {
             pti::R(self.0.read_indexed::<0x136c, 0x7c, 4>(index))
         }
 
@@ -314567,7 +314915,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_pti(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut pti::W),
         ) {
             let mut value = pti::W(self.0.read_indexed::<0x136c, 0x7c, 4>(index));
@@ -314577,7 +314925,7 @@ pub mod wifi_mac {
 
         /// Read `HE_CONTROL%s`.
         #[inline]
-        pub fn read_he_control(&self, index: oer_portable_mmio::Index<4>) -> he_control::R {
+        pub fn read_he_control(&self, index: oer_portable_bounded::Index<4>) -> he_control::R {
             he_control::R(self.0.read_indexed::<0x1370, 0x7c, 4>(index))
         }
 
@@ -314586,7 +314934,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_control(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_control::W),
         ) {
             let mut value = he_control::W(self.0.read_indexed::<0x1370, 0x7c, 4>(index));
@@ -314596,7 +314944,7 @@ pub mod wifi_mac {
 
         /// Read `HT_SIGNAL%s`.
         #[inline]
-        pub fn read_ht_signal(&self, index: oer_portable_mmio::Index<4>) -> ht_signal::R {
+        pub fn read_ht_signal(&self, index: oer_portable_bounded::Index<4>) -> ht_signal::R {
             ht_signal::R(self.0.read_indexed::<0x1374, 0x7c, 4>(index))
         }
 
@@ -314605,7 +314953,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_ht_signal(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut ht_signal::W),
         ) {
             let mut value = ht_signal::W(self.0.read_indexed::<0x1374, 0x7c, 4>(index));
@@ -314615,7 +314963,7 @@ pub mod wifi_mac {
 
         /// Read `VHT_SIGNAL_1%s`.
         #[inline]
-        pub fn read_vht_signal_1(&self, index: oer_portable_mmio::Index<4>) -> vht_signal_1::R {
+        pub fn read_vht_signal_1(&self, index: oer_portable_bounded::Index<4>) -> vht_signal_1::R {
             vht_signal_1::R(self.0.read_indexed::<0x1378, 0x7c, 4>(index))
         }
 
@@ -314624,7 +314972,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_vht_signal_1(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut vht_signal_1::W),
         ) {
             let mut value = vht_signal_1::W(self.0.read_indexed::<0x1378, 0x7c, 4>(index));
@@ -314634,7 +314982,7 @@ pub mod wifi_mac {
 
         /// Read `VHT_MODE%s`.
         #[inline]
-        pub fn read_vht_mode(&self, index: oer_portable_mmio::Index<4>) -> vht_mode::R {
+        pub fn read_vht_mode(&self, index: oer_portable_bounded::Index<4>) -> vht_mode::R {
             vht_mode::R(self.0.read_indexed::<0x137c, 0x7c, 4>(index))
         }
 
@@ -314643,7 +314991,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_vht_mode(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut vht_mode::W),
         ) {
             let mut value = vht_mode::W(self.0.read_indexed::<0x137c, 0x7c, 4>(index));
@@ -314655,7 +315003,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_he_su_signal_a1(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> he_su_signal_a1::R {
             he_su_signal_a1::R(self.0.read_indexed::<0x1380, 0x7c, 4>(index))
         }
@@ -314665,7 +315013,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_su_signal_a1(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_su_signal_a1::W),
         ) {
             let mut value = he_su_signal_a1::W(self.0.read_indexed::<0x1380, 0x7c, 4>(index));
@@ -314677,7 +315025,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_he_su_signal_a2_length(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> he_su_signal_a2_length::R {
             he_su_signal_a2_length::R(self.0.read_indexed::<0x1384, 0x7c, 4>(index))
         }
@@ -314687,7 +315035,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_su_signal_a2_length(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_su_signal_a2_length::W),
         ) {
             let mut value =
@@ -314700,7 +315048,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_he_mpdu_length_tail(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> he_mpdu_length_tail::R {
             he_mpdu_length_tail::R(self.0.read_indexed::<0x1388, 0x7c, 4>(index))
         }
@@ -314710,7 +315058,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_mpdu_length_tail(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_mpdu_length_tail::W),
         ) {
             let mut value = he_mpdu_length_tail::W(self.0.read_indexed::<0x1388, 0x7c, 4>(index));
@@ -314720,7 +315068,7 @@ pub mod wifi_mac {
 
         /// Read `POWER%s`.
         #[inline]
-        pub fn read_power(&self, index: oer_portable_mmio::Index<4>) -> power::R {
+        pub fn read_power(&self, index: oer_portable_bounded::Index<4>) -> power::R {
             power::R(self.0.read_indexed::<0x138c, 0x7c, 4>(index))
         }
 
@@ -314729,7 +315077,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_power(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut power::W),
         ) {
             let mut value = power::W(self.0.read_indexed::<0x138c, 0x7c, 4>(index));
@@ -314741,7 +315089,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_ht_descriptor_counts(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> ht_descriptor_counts::R {
             ht_descriptor_counts::R(self.0.read_indexed::<0x1390, 0x7c, 4>(index))
         }
@@ -314751,7 +315099,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_ht_descriptor_counts(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut ht_descriptor_counts::W),
         ) {
             let mut value = ht_descriptor_counts::W(self.0.read_indexed::<0x1390, 0x7c, 4>(index));
@@ -314761,7 +315109,7 @@ pub mod wifi_mac {
 
         /// Read `DATA_LENGTH%s`.
         #[inline]
-        pub fn read_data_length(&self, index: oer_portable_mmio::Index<4>) -> data_length::R {
+        pub fn read_data_length(&self, index: oer_portable_bounded::Index<4>) -> data_length::R {
             data_length::R(self.0.read_indexed::<0x1398, 0x7c, 4>(index))
         }
 
@@ -314770,7 +315118,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_data_length(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut data_length::W),
         ) {
             let mut value = data_length::W(self.0.read_indexed::<0x1398, 0x7c, 4>(index));
@@ -314780,7 +315128,10 @@ pub mod wifi_mac {
 
         /// Read `LENGTH_CONTROL%s`.
         #[inline]
-        pub fn read_length_control(&self, index: oer_portable_mmio::Index<4>) -> length_control::R {
+        pub fn read_length_control(
+            &self,
+            index: oer_portable_bounded::Index<4>,
+        ) -> length_control::R {
             length_control::R(self.0.read_indexed::<0x139c, 0x7c, 4>(index))
         }
 
@@ -314789,7 +315140,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_length_control(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut length_control::W),
         ) {
             let mut value = length_control::W(self.0.read_indexed::<0x139c, 0x7c, 4>(index));
@@ -314801,7 +315152,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn read_he_control_config(
             &self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
         ) -> he_control_config::R {
             he_control_config::R(self.0.read_indexed::<0x13a4, 0x7c, 4>(index))
         }
@@ -314811,7 +315162,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_he_control_config(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut he_control_config::W),
         ) {
             let mut value = he_control_config::W(self.0.read_indexed::<0x13a4, 0x7c, 4>(index));
@@ -314927,7 +315278,7 @@ pub mod wifi_mac {
     impl<P: oer_portable_mmio::Placement> WifiMacInterfaceAddress<P> {
         /// Read `ADDRESS_LOW%s`.
         #[inline]
-        pub fn read_address_low(&self, index: oer_portable_mmio::Index<4>) -> address_low::R {
+        pub fn read_address_low(&self, index: oer_portable_bounded::Index<4>) -> address_low::R {
             address_low::R(self.0.read_indexed::<0x5c, 0x8, 4>(index))
         }
 
@@ -314936,7 +315287,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_address_low(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut address_low::W),
         ) {
             let mut value = address_low::W(self.0.read_indexed::<0x5c, 0x8, 4>(index));
@@ -314946,7 +315297,7 @@ pub mod wifi_mac {
 
         /// Read `ADDRESS_HIGH%s`.
         #[inline]
-        pub fn read_address_high(&self, index: oer_portable_mmio::Index<4>) -> address_high::R {
+        pub fn read_address_high(&self, index: oer_portable_bounded::Index<4>) -> address_high::R {
             address_high::R(self.0.read_indexed::<0x60, 0x8, 4>(index))
         }
 
@@ -314955,7 +315306,7 @@ pub mod wifi_mac {
         #[inline]
         pub fn modify_address_high(
             &mut self,
-            index: oer_portable_mmio::Index<4>,
+            index: oer_portable_bounded::Index<4>,
             change: impl FnOnce(&mut address_high::W),
         ) {
             let mut value = address_high::W(self.0.read_indexed::<0x60, 0x8, 4>(index));

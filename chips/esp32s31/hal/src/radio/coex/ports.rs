@@ -72,11 +72,9 @@ impl TimerClockConfig {
             CoexClockSelector::Selector4 => CoexTimerClockSource::Selector4,
             CoexClockSelector::Selector8 => CoexTimerClockSource::Selector8,
         };
-        // SOURCE: complete pinned coex_hw_timer_freq_set keeps the field's low bits.
-        // The selector check above rejects zero; wrapping_sub names this encoding arithmetic.
-        let divider = CoexTimerClockDividerMinusOne::from_bits(oer_portable_mmio::Bits::truncate(
-            divisor.wrapping_sub(1),
-        ));
+        // SOURCE: complete pinned coex_hw_timer_freq_set keeps the field's low
+        // bits: the field's vendor cut. The selector check above rejects zero.
+        let divider = CoexTimerClockDividerMinusOne::from_divisor(divisor);
         Ok(Self { source, divider })
     }
 }

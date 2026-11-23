@@ -643,21 +643,16 @@ fn clippy_configs(directory: &Path, found: &mut Vec<PathBuf>) {
 const TRUNCATE_BAN: &str = "oer_portable_mmio::Bits::truncate";
 
 /// The packages whose `clippy.toml` leaves the ban of `Bits::truncate`
-/// out, each with its reason: the PAC for good (its generated getters cut
-/// a field out of a word they read), the others until the step that
-/// removes their calls; `TRUNCATIONS` keeps their counts from growing.
-const TRUNCATE_BAN_LEFT_OUT: &[(&str, TruncateBan)] = &[
-    ("chips/esp32s31/pac", TruncateBan::Generated),
-    ("chips/esp32s31/hal", TruncateBan::Until("R2's area PRs")),
-];
+/// out, each with its reason: the PAC, whose generated getters cut a field
+/// out of a word they read.
+const TRUNCATE_BAN_LEFT_OUT: &[(&str, TruncateBan)] =
+    &[("chips/esp32s31/pac", TruncateBan::Generated)];
 
 /// Why a package's `clippy.toml` leaves the ban of `Bits::truncate` out.
 #[derive(Clone, Copy)]
 enum TruncateBan {
     /// Generated code calls it: the PAC's getters.
     Generated,
-    /// Calls the named step removes.
-    Until(&'static str),
 }
 
 /// The common method bans: the root's entries that carry their reason. The
@@ -723,13 +718,12 @@ fn a_package_without_the_truncate_ban_still_calls_it() {
             &truncate_call_at,
             NO_ATTRIBUTE,
         );
-        let step = match why {
-            TruncateBan::Generated => "the generated getters",
-            TruncateBan::Until(step) => step,
-        };
+        // The generated getters are outside the scan; a package left out
+        // for another reason would need its calls here.
+        let TruncateBan::Generated = why;
         assert!(
-            !calls.is_empty() || matches!(why, TruncateBan::Generated),
-            "{package} calls Bits::truncate no more ({step} is done): drop its exception and ban it in its clippy.toml"
+            calls.is_empty() || package.ends_with("/pac"),
+            "{package} calls Bits::truncate outside its generated getters"
         );
     }
 }
@@ -6467,73 +6461,7 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
 /// S8c: the values cut to a field's width (`Bits::truncate` and the HAL's
 /// `bits` helper) in the HAL, the radio crates and the platform, by file
 /// with their count. The list only shrinks.
-const TRUNCATIONS: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/peripherals/system_timer.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/peripherals/timg0_alarm.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/peripherals/timg1_alarm.rs",
-        2,
-        BY_R2,
-    ),
-    ("chips/esp32s31/hal/src/radio/coex/ports.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/coex/timer_bank.rs", 2, BY_R2),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
-        1,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
-        5,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/txrx_init.rs",
-        2,
-        BY_R2,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        2,
-        BY_R2,
-    ),
-    ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
-    (
-        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        3,
-        BY_R2,
-    ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_R2),
-    (
-        "chips/esp32s31/hal/src/radio/phy/iq_estimator/ops.rs",
-        1,
-        BY_R2,
-    ),
-    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 3, BY_R2),
-    ("chips/esp32s31/hal/src/system/boot.rs", 5, BY_R2),
-    ("chips/esp32s31/hal/src/system/boot/cache.rs", 1, BY_R2),
-    ("chips/esp32s31/hal/src/system/boot/flash.rs", 3, BY_R2),
-    ("chips/esp32s31/hal/src/system/boot/psram.rs", 10, BY_R2),
-    (
-        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
-        1,
-        BY_PLATFORM,
-    ),
-];
+const TRUNCATIONS: &[(&str, usize, &str)] = &[];
 
 /// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
@@ -6541,11 +6469,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
 /// a policy `whole-word` image or a hardware-consumed layout says so. The
 /// list only shrinks.
 const RAW_REGISTERS: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/radio/coex/ports.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/descriptor.rs",
         2,
@@ -6573,13 +6496,8 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
-        15,
+        14,
         BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/modem/values.rs",
-        1,
-        BY_RADIO_SYSTEM,
     ),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
@@ -6588,7 +6506,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
-        4,
+        3,
         BY_PLATFORM,
     ),
     ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
