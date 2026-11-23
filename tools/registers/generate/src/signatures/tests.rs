@@ -26,21 +26,88 @@ fn fixture(header: &str) -> (tempfile::TempDir, Options) {
         idf: root.path().to_owned(),
         sdkconfig: root.path().join("sdkconfig.h"),
         libc_include: None,
-        clang: "clang".into(),
+        // No test runs the compiler: an inspection reads its dumps.
+        clang: "/nonexistent/clang".into(),
         check: false,
         output: None,
     };
     (root, options)
 }
 
+/// The inspection of the fixture's headers, each compiler stage answered by
+/// the case's reduced dump (`fixtures/<test>/<header>.<stage>.json`) or its
+/// refusal (`….stderr`), with the dumps' `/idf` at the fixture's root.
 fn inspect(options: &Options, names: &[&str], output: &Path) -> headers::Findings {
-    headers::inspect(
-        options,
-        &names.iter().map(|s| (*s).to_owned()).collect(),
+    let case = std::thread::current()
+        .name()
+        .and_then(|name| name.rsplit("::").next())
+        .expect("a test thread names its test")
+        .to_owned();
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/signatures/fixtures")
+        .join(&case);
+    let names: BTreeSet<String> = names.iter().map(|s| (*s).to_owned()).collect();
+    let (root, headers) = headers::selection(options).unwrap();
+    let mut inspection = headers::Inspection::new(
+        &options.chip,
+        root.clone(),
+        headers,
+        &names,
         "synthetic-pin",
         output,
+    );
+    while let Some(request) = inspection.request().unwrap() {
+        let base = fixtures.join(format!(
+            "{}.{}",
+            request
+                .header
+                .strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('/', "__"),
+            request.stage
+        ));
+        let tree = match fs::read_to_string(base.with_extension(format!("{}.json", request.stage)))
+        {
+            Ok(dump) => {
+                Ok(ast::parse(dump.replace("/idf", &root.to_string_lossy()).as_bytes()).unwrap())
+            }
+            Err(_) => Err(headers::refusal(
+                &fs::read(base.with_extension(format!("{}.stderr", request.stage)))
+                    .unwrap_or_else(|_| panic!("{case}: no dump of {}", base.display())),
+            )),
+        };
+        inspection.advance(tree).unwrap();
+    }
+    inspection.finish()
+}
+
+#[test]
+fn a_refusal_gives_the_compiler_s_first_error() {
+    assert_eq!(
+        headers::refusal(
+            b"note: in file\n/idf/a.h:1:1: error: unknown type name 'x'\nerror: second\n"
+        ),
+        "unknown type name 'x'"
+    );
+    assert_eq!(
+        headers::refusal(b"warning only\n"),
+        "compiler rejected the header context"
+    );
+}
+
+#[test]
+fn a_location_without_a_file_takes_the_last_one_named() {
+    let tree = ast::parse(
+        br#"{"inner":[{"loc":{"offset":1,"col":2,"file":"/a.h"}},{"loc":{"offset":3,"col":4}},{"loc":{"offset":5,"col":6,"includedFrom":{"file":"/b.h"}}}]}"#,
     )
-    .unwrap()
+    .unwrap();
+    let files: Vec<_> = ast::children(&tree)
+        .iter()
+        .map(|node| node["loc"]["actualFile"].as_str().unwrap())
+        .collect();
+    // includedFrom names the include parent: the cursor stays on /a.h.
+    assert_eq!(files, ["/a.h", "/a.h", "/a.h"]);
 }
 
 #[test]
