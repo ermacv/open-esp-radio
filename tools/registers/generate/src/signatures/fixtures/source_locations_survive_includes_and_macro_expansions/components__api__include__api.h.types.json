@@ -1,0 +1,353 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, types stage; the nodes the stage decides on",
+  "header_sha256": "1932b342be1138b9669249561969c12c14ae3aaf64855ebfe292c590f3e49535",
+  "extra": "typedef __typeof__(after) __oer_signature_0;\ntypedef __typeof__(dependency) __oer_signature_1;\ntypedef __typeof__(expanded) __oer_signature_2;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 5
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 5
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "after",
+                      "type": {
+                        "qualType": "void (void)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (void)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 348,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 354,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (void)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (void)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (after)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 27,
+          "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+          "line": 11,
+          "offset": 356,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 330,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 356,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (void)",
+          "qualType": "typeof (after)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 394,
+                        "tokLen": 10
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 394,
+                        "tokLen": 10
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "dependency",
+                      "type": {
+                        "qualType": "void (small)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (small)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 393,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 30,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 404,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (small)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "decl": {
+                      "kind": "TypedefDecl",
+                      "name": "small"
+                    },
+                    "inner": [
+                      {
+                        "kind": "BuiltinType",
+                        "type": {
+                          "qualType": "unsigned short"
+                        }
+                      }
+                    ],
+                    "kind": "TypedefType",
+                    "type": {
+                      "qualType": "small"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (small)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (dependency)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 32,
+          "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+          "line": 12,
+          "offset": 406,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_1",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 375,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 32,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 406,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (small)",
+          "qualType": "typeof (dependency)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 444,
+                        "tokLen": 8
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 444,
+                        "tokLen": 8
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "expanded",
+                      "type": {
+                        "qualType": "void (unsigned int)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (unsigned int)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 443,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 28,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 452,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (unsigned int)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "unsigned int"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (unsigned int)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (expanded)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 30,
+          "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+          "line": 13,
+          "offset": 454,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_2",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 425,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 30,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 454,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (unsigned int)",
+          "qualType": "typeof (expanded)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

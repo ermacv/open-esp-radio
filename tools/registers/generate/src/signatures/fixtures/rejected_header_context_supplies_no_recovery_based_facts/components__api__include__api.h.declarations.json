@@ -1,0 +1,7 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "f6ac8859cd96d7d1565879f9fd800e4757af55be3fd33ae5441f2ae2922edfbd",
+  "extra": "",
+  "tree": null,
+  "refusal": "unknown type name 'missing_type'"
+}

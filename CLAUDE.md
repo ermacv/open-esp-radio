@@ -285,10 +285,14 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   constants; time comes from `oer-portable-time-virtual`. A test is hermetic
   and safe in parallel: its own memory and its own temporary directory
   (`tempfile`); no external program, process-wide state, fixed path, network
-  port or real time. The exceptions are the pinned toolchain (`cargo`,
-  `rustc`, `lld`) run into the test's own build directory for compile-fail
-  and compiler-driven cases, and the vendor UDP receiver's link host test,
-  which builds with a host C11 compiler as
+  port or real time. A test starts only a program of the pinned toolchain
+  (`rust-toolchain.toml`), into its own build directory, and only
+  where that program's behavior on our code is what is checked: a
+  compile failure, a link, a reference disassembly. The package's own
+  built binary is not an external program. What any other program
+  prints is given to a test as data; the call that obtains it stays a
+  thin line without a test. The one exception is the vendor UDP
+  receiver's link host test, which builds with a host C11 compiler as
   [hil/scenarios/wifi-load/README.md](hil/scenarios/wifi-load/README.md)
   describes.
 - **Generated files.** `chips/*/pac/src/generated.rs` and

@@ -1,0 +1,135 @@
+{
+  "//": "clang version 23.1.4: components/api/include/dependency.h, types stage; the nodes the stage decides on",
+  "header_sha256": "46625d1216991baeacfd3094216fa19ae7e9041436a9b02a4e04bbe6442157d0",
+  "extra": "typedef __typeof__(dependency) __oer_signature_0;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                        "offset": 356,
+                        "tokLen": 10
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                        "offset": 356,
+                        "tokLen": 10
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "dependency",
+                      "type": {
+                        "qualType": "void (small)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (small)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                    "offset": 355,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 30,
+                    "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                    "offset": 366,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (small)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "decl": {
+                      "kind": "TypedefDecl",
+                      "name": "small"
+                    },
+                    "inner": [
+                      {
+                        "kind": "BuiltinType",
+                        "type": {
+                          "qualType": "unsigned short"
+                        }
+                      }
+                    ],
+                    "kind": "TypedefType",
+                    "type": {
+                      "qualType": "small"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (small)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (dependency)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 32,
+          "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+          "line": 11,
+          "offset": 368,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+            "offset": 337,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 32,
+            "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+            "offset": 368,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (small)",
+          "qualType": "typeof (dependency)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

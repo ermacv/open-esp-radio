@@ -1,0 +1,112 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, sizes stage; the nodes the stage decides on",
+  "header_sha256": "b967f64209d67c4d60822f8b17d4df662d13c899e9a91a93d8f0233f6f9be314",
+  "extra": "typedef __typeof__(conflicting) __oer_signature_0;\nenum { __oer_size_0_0 = 0 };\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 405,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 405,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 405,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 405,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 388,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 388,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 405,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 12,
+          "offset": 381,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 381,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 407,
+            "tokLen": 1
+          }
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

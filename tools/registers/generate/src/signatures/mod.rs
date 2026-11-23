@@ -3,6 +3,7 @@
 //! function format follows #303; per-header hashes and the complete corpus
 //! stay in the companion provenance document.
 mod ast;
+mod cases;
 mod corpus;
 mod headers;
 mod source;
@@ -52,6 +53,16 @@ fn write(path: &std::path::Path, content: &str, check: bool) -> Result<()> {
         fs::write(path, content)?;
     }
     Ok(())
+}
+
+/// Record the signature tests' compiler trees again with `clang` into
+/// `src/signatures/fixtures/` of this crate (`cargo registers
+/// signature-fixtures`).
+pub fn record_fixtures(clang: &std::ffi::OsStr) -> Result<()> {
+    headers::record_cases(
+        clang,
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/signatures/fixtures"),
+    )
 }
 
 /// Capture all externally linked named call targets in every pinned binary,

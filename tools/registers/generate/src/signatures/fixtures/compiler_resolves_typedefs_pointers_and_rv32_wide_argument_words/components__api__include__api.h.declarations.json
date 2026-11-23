@@ -1,0 +1,753 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "9c5fb15502c0e428c6d77ace97c7688e3f4ce41099068a64a30bfdeab42eef0b",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 2,
+          "offset": 40,
+          "tokLen": 5
+        },
+        "mangledName": "empty",
+        "name": "empty",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 35,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 16,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 50,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (void)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 32,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 84,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 18,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 70,
+                "tokLen": 8
+              },
+              "end": {
+                "col": 32,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 84,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "unsigned char"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 51,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 103,
+              "tokLen": 7
+            },
+            "name": "address",
+            "range": {
+              "begin": {
+                "col": 39,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 91,
+                "tokLen": 5
+              },
+              "end": {
+                "col": 51,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 103,
+                "tokLen": 7
+              }
+            },
+            "type": {
+              "qualType": "const void *"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 11,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 3,
+          "offset": 63,
+          "tokLen": 6
+        },
+        "mangledName": "scalar",
+        "name": "scalar",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 53,
+            "tokLen": 9
+          },
+          "end": {
+            "col": 58,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 110,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "esp_err_t (unsigned char, const void *)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 19,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 131,
+              "tokLen": 1
+            },
+            "name": "p",
+            "range": {
+              "begin": {
+                "col": 13,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 125,
+                "tokLen": 4
+              },
+              "end": {
+                "col": 19,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 131,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "void *"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 29,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 141,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 22,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 134,
+                "tokLen": 6
+              },
+              "end": {
+                "col": 29,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 141,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "desugaredQualType": "unsigned long long",
+              "qualType": "wide_t"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 8,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 4,
+          "offset": 120,
+          "tokLen": 4
+        },
+        "mangledName": "wide",
+        "name": "wide",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 113,
+            "tokLen": 6
+          },
+          "end": {
+            "col": 34,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 146,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "wide_t (void *, wide_t)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 15,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 163,
+              "tokLen": 1
+            },
+            "name": "a",
+            "range": {
+              "begin": {
+                "col": 11,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 159,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 15,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 163,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 21,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 169,
+              "tokLen": 1
+            },
+            "name": "b",
+            "range": {
+              "begin": {
+                "col": 17,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 165,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 21,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 169,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 27,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 175,
+              "tokLen": 1
+            },
+            "name": "c",
+            "range": {
+              "begin": {
+                "col": 23,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 171,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 27,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 175,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 33,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 181,
+              "tokLen": 1
+            },
+            "name": "d",
+            "range": {
+              "begin": {
+                "col": 29,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 177,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 33,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 181,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 39,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 187,
+              "tokLen": 1
+            },
+            "name": "e",
+            "range": {
+              "begin": {
+                "col": 35,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 183,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 39,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 187,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 45,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 193,
+              "tokLen": 1
+            },
+            "name": "f",
+            "range": {
+              "begin": {
+                "col": 41,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 189,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 45,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 193,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 51,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 199,
+              "tokLen": 1
+            },
+            "name": "g",
+            "range": {
+              "begin": {
+                "col": 47,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 195,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 51,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 199,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 60,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 208,
+              "tokLen": 1
+            },
+            "name": "h",
+            "range": {
+              "begin": {
+                "col": 53,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 201,
+                "tokLen": 6
+              },
+              "end": {
+                "col": 60,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 208,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "desugaredQualType": "unsigned long long",
+              "qualType": "wide_t"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 5,
+          "offset": 154,
+          "tokLen": 4
+        },
+        "mangledName": "many",
+        "name": "many",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 149,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 61,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 209,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (int, int, int, int, int, int, int, wide_t)"
+        }
+      },
+      {
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 8,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 6,
+          "offset": 219,
+          "tokLen": 8
+        },
+        "mangledName": "callback",
+        "name": "callback",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 212,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 238,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (*(void))(int)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 29,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 269,
+              "tokLen": 5
+            },
+            "name": "bytes",
+            "range": {
+              "begin": {
+                "col": 15,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 255,
+                "tokLen": 8
+              },
+              "end": {
+                "col": 36,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 276,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "unsigned char *"
+            }
+          },
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 43,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 283,
+              "tokLen": 8
+            },
+            "name": "callback",
+            "range": {
+              "begin": {
+                "col": 39,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 279,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 55,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 295,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int (*)(int)"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 7,
+          "offset": 246,
+          "tokLen": 8
+        },
+        "mangledName": "adjusted",
+        "name": "adjusted",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 241,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 56,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 296,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (unsigned char *, int (*)(int))"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

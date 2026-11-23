@@ -1,0 +1,2164 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, sizes stage; the nodes the stage decides on",
+  "header_sha256": "9c5fb15502c0e428c6d77ace97c7688e3f4ce41099068a64a30bfdeab42eef0b",
+  "extra": "typedef __typeof__(adjusted) __oer_signature_0;\ntypedef __typeof__(callback) __oer_signature_1;\ntypedef __typeof__(empty) __oer_signature_2;\ntypedef __typeof__(many) __oer_signature_3;\ntypedef __typeof__(scalar) __oer_signature_4;\ntypedef __typeof__(wide) __oer_signature_5;\nenum { __oer_size_0_0 = 0, __oer_size_0_1 = sizeof(void *), __oer_size_0_2 = sizeof(void *) };\nenum { __oer_size_1_0 = sizeof(void *) };\nenum { __oer_size_2_0 = 0 };\nenum { __oer_size_3_0 = 0, __oer_size_3_1 = sizeof(int), __oer_size_3_2 = sizeof(int), __oer_size_3_3 = sizeof(int), __oer_size_3_4 = sizeof(int), __oer_size_3_5 = sizeof(int), __oer_size_3_6 = sizeof(int), __oer_size_3_7 = sizeof(int), __oer_size_3_8 = sizeof(wide_t) };\nenum { __oer_size_4_0 = sizeof(esp_err_t), __oer_size_4_1 = sizeof(unsigned char), __oer_size_4_2 = sizeof(void *) };\nenum { __oer_size_5_0 = sizeof(wide_t), __oer_size_5_1 = sizeof(void *), __oer_size_5_2 = sizeof(wide_t) };\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 629,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 629,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 629,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 629,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 612,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 612,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 629,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 45,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 649,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 58,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 662,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 45,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 649,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 58,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 662,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 45,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 649,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 58,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 662,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 28,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 632,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_1",
+            "range": {
+              "begin": {
+                "col": 28,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 632,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 58,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 662,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 78,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 682,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 91,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 695,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 78,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 682,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 91,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 695,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 78,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 682,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 91,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 695,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 61,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 665,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_2",
+            "range": {
+              "begin": {
+                "col": 61,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 665,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 91,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 695,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 17,
+          "offset": 605,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 605,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 93,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 697,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 724,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 38,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 737,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 724,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 38,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 737,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 724,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 38,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 737,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 707,
+              "tokLen": 14
+            },
+            "name": "__oer_size_1_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 707,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 38,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 737,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 18,
+          "offset": 700,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 700,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 40,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 739,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 766,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 766,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 766,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 766,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 749,
+              "tokLen": 14
+            },
+            "name": "__oer_size_2_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 749,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 766,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 19,
+          "offset": 742,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 742,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 768,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 795,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 795,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 795,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 795,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 778,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 778,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 795,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 45,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 815,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 55,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 825,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 45,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 815,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 55,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 825,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 45,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 815,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 55,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 825,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 28,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 798,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_1",
+            "range": {
+              "begin": {
+                "col": 28,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 798,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 55,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 825,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 75,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 845,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 85,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 855,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 75,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 845,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 85,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 855,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 75,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 845,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 85,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 855,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 58,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 828,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_2",
+            "range": {
+              "begin": {
+                "col": 58,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 828,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 85,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 855,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 105,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 875,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 115,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 885,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 105,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 875,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 115,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 885,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 105,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 875,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 115,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 885,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 88,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 858,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_3",
+            "range": {
+              "begin": {
+                "col": 88,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 858,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 115,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 885,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 135,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 905,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 145,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 915,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 135,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 905,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 145,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 915,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 135,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 905,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 145,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 915,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 118,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 888,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_4",
+            "range": {
+              "begin": {
+                "col": 118,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 888,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 145,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 915,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 165,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 935,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 175,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 945,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 165,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 935,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 175,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 945,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 165,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 935,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 175,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 945,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 148,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 918,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_5",
+            "range": {
+              "begin": {
+                "col": 148,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 918,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 175,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 945,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 195,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 965,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 205,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 975,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 195,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 965,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 205,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 975,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 195,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 965,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 205,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 975,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 178,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 948,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_6",
+            "range": {
+              "begin": {
+                "col": 178,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 948,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 205,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 975,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 225,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 995,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 235,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1005,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 225,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 995,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 235,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1005,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 225,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 995,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 235,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1005,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 208,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 978,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_7",
+            "range": {
+              "begin": {
+                "col": 208,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 978,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 235,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1005,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 255,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1025,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 268,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1038,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 255,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1025,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 268,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1038,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 255,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1025,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 268,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1038,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 238,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1008,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_8",
+            "range": {
+              "begin": {
+                "col": 238,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1008,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 268,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1038,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 20,
+          "offset": 771,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 771,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 270,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1040,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "int",
+                          "qualType": "esp_err_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1067,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 41,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1083,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1067,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 41,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1083,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1067,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 41,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1083,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1050,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1050,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 41,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1083,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "unsigned char"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 61,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1103,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 81,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1123,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 61,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1103,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 81,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1123,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "1",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 61,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1103,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 81,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1123,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 44,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1086,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_1",
+            "range": {
+              "begin": {
+                "col": 44,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1086,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 81,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1123,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 101,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1143,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 114,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1156,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 101,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1143,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 114,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1156,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 101,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1143,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 114,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1156,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 84,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1126,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_2",
+            "range": {
+              "begin": {
+                "col": 84,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1126,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 114,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1156,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 21,
+          "offset": 1043,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1043,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 116,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1158,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1185,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 38,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1198,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1185,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 38,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1198,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1185,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 38,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1198,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1168,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1168,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 38,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1198,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 58,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1218,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 71,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1231,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 58,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1218,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 71,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1231,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 58,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1218,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 71,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1231,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 41,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1201,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_1",
+            "range": {
+              "begin": {
+                "col": 41,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1201,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 71,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1231,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 91,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1251,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 104,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1264,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 91,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1251,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 104,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1264,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 91,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1251,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 104,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1264,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 74,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1234,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_2",
+            "range": {
+              "begin": {
+                "col": 74,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1234,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 104,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1264,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 22,
+          "offset": 1161,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1161,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 106,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1266,
+            "tokLen": 1
+          }
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

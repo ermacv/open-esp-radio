@@ -227,15 +227,26 @@ _Static_assert(sizeof(void *) == 4 && sizeof(int) == 4 && sizeof(long) == 4, \"R
             .output()?;
         fs::write(directory.join(format!("{stage}.stderr")), &output.stderr)?;
         if !output.status.success() {
-            let diagnostic = String::from_utf8_lossy(&output.stderr);
-            let reason = diagnostic
-                .lines()
-                .find_map(|l| l.split_once("error:").map(|(_, e)| e.trim()))
-                .unwrap_or("compiler rejected the header context");
-            return Ok(Err(reason.to_owned()));
+            return Ok(Err(refusal(&output.stderr)));
         }
         Ok(Ok(ast::parse(&fs::read(ast_path)?)?))
     }
+}
+
+/// The reason a refused header context gives: the compiler's first error.
+pub(super) fn refusal(stderr: &[u8]) -> String {
+    String::from_utf8_lossy(stderr)
+        .lines()
+        .find_map(|l| l.split_once("error:").map(|(_, e)| e.trim().to_owned()))
+        .unwrap_or_else(|| "compiler rejected the header context".to_owned())
+}
+
+/// The pinned tree's root and its headers eligible for `options`' chip,
+/// as the compiler would be given them.
+#[cfg(test)]
+pub(super) fn selection(options: &Options) -> Result<(PathBuf, Vec<PathBuf>)> {
+    let (compiler, headers) = Compiler::new(options)?;
+    Ok((compiler.root, headers))
 }
 
 struct Declaration {
@@ -327,86 +338,188 @@ fn constants(root: &Value) -> BTreeMap<String, u64> {
         .collect()
 }
 
-pub(super) fn inspect(
-    options: &Options,
-    names: &BTreeSet<String>,
-    revision: &str,
-    output: &Path,
-) -> Result<Findings> {
-    let (compiler, headers) = Compiler::new(options)?;
-    let mut findings = Findings::default();
-    let mut selected_headers = 0;
-    for header in headers {
-        let text = fs::read_to_string(&header)?;
-        let hits: BTreeSet<_> = identifiers(&text)
-            .filter(|n| names.contains(*n))
-            .map(str::to_owned)
-            .collect();
-        if hits.is_empty() {
-            continue;
+/// A compiler stage one header's inspection needs next: the header, where
+/// its outputs go and the declarations appended to its translation unit.
+pub(super) struct Request {
+    pub header: PathBuf,
+    pub directory: PathBuf,
+    pub stage: &'static str,
+    pub extra: String,
+}
+
+/// The declarations whose prototypes the types stage accepted, each with
+/// its alias index.
+type Accepted = Vec<(usize, Declaration, Prototype)>;
+
+/// What one header's inspection waits for.
+enum Stage {
+    /// The declarations of the names the header mentions.
+    Declarations,
+    /// The resolved type of each declaration found, by its alias.
+    Types(Vec<Declaration>),
+    /// The size of each accepted prototype's result and parameters, after
+    /// the types stage's aliases.
+    Sizes(String, Accepted),
+}
+
+struct Current {
+    header: PathBuf,
+    relative: String,
+    directory: PathBuf,
+    hits: BTreeSet<String>,
+    stage: Stage,
+}
+
+/// The inspection of every eligible header, one compiler stage at a time:
+/// [`Inspection::request`] names the stage to run, [`Inspection::advance`]
+/// takes its tree (or the compiler's refusal) and decides. Only
+/// [`inspect`] runs the compiler.
+pub(super) struct Inspection<'a> {
+    names: &'a BTreeSet<String>,
+    revision: &'a str,
+    output: PathBuf,
+    root: PathBuf,
+    headers: std::vec::IntoIter<PathBuf>,
+    selected_headers: usize,
+    chip: &'a str,
+    current: Option<Current>,
+    findings: Findings,
+}
+
+impl<'a> Inspection<'a> {
+    /// The inspection of `headers` below the pinned tree `root`.
+    pub(super) fn new(
+        chip: &'a str,
+        root: PathBuf,
+        headers: Vec<PathBuf>,
+        names: &'a BTreeSet<String>,
+        revision: &'a str,
+        output: &Path,
+    ) -> Self {
+        Self {
+            names,
+            revision,
+            output: output.to_owned(),
+            root,
+            headers: headers.into_iter(),
+            selected_headers: 0,
+            chip,
+            current: None,
+            findings: Findings::default(),
         }
-        selected_headers += 1;
-        if selected_headers % 100 == 0 {
-            eprintln!(
-                "signatures: {selected_headers} header contexts checked for {}",
-                options.chip
-            );
+    }
+
+    /// The next compiler stage to run, or `None` once every header is done.
+    pub(super) fn request(&mut self) -> Result<Option<Request>> {
+        if self.current.is_none() {
+            loop {
+                let Some(header) = self.headers.next() else {
+                    return Ok(None);
+                };
+                let text = fs::read_to_string(&header)?;
+                let hits: BTreeSet<_> = identifiers(&text)
+                    .filter(|n| self.names.contains(*n))
+                    .map(str::to_owned)
+                    .collect();
+                if hits.is_empty() {
+                    continue;
+                }
+                self.selected_headers += 1;
+                if self.selected_headers.is_multiple_of(100) {
+                    eprintln!(
+                        "signatures: {} header contexts checked for {}",
+                        self.selected_headers, self.chip
+                    );
+                }
+                self.findings.mentioned.extend(hits.iter().cloned());
+                let relative = header
+                    .strip_prefix(&self.root)?
+                    .to_string_lossy()
+                    .to_string();
+                let id = oer_tools_os_durable::sha256_bytes(relative.as_bytes());
+                let directory = self.output.join("headers").join(&id[..16]);
+                self.current = Some(Current {
+                    header,
+                    relative,
+                    directory,
+                    hits,
+                    stage: Stage::Declarations,
+                });
+                break;
+            }
         }
-        findings.mentioned.extend(hits.iter().cloned());
-        let relative = header
-            .strip_prefix(&compiler.root)?
-            .to_string_lossy()
-            .to_string();
-        let id = oer_tools_os_durable::sha256_bytes(relative.as_bytes());
-        let directory = output.join("headers").join(&id[..16]);
-        let root = match compiler.run(&directory, &header, "declarations", "")? {
-            Ok(v) => v,
-            Err(e) => {
-                for name in &hits {
-                    findings
+        let Some(current) = &self.current else {
+            return Ok(None);
+        };
+        let (stage, extra) = match &current.stage {
+            Stage::Declarations => ("declarations", String::new()),
+            Stage::Types(declared) => ("types", aliases(declared)),
+            Stage::Sizes(aliases, accepted) => ("sizes", size_queries(aliases, accepted)),
+        };
+        Ok(Some(Request {
+            header: current.header.clone(),
+            directory: current.directory.clone(),
+            stage,
+            extra,
+        }))
+    }
+
+    /// Take the tree of the stage [`Self::request`] named, or the
+    /// compiler's refusal of the header's context.
+    pub(super) fn advance(&mut self, tree: std::result::Result<Value, String>) -> Result<()> {
+        let Some(current) = self.current.take() else {
+            return Err("no compiler stage is pending".into());
+        };
+        let root = match tree {
+            Ok(root) => root,
+            Err(reason) => {
+                for name in &current.hits {
+                    self.findings
                         .failed_candidates
                         .entry(name.clone())
                         .or_default()
-                        .insert(relative.clone());
+                        .insert(current.relative.clone());
                 }
-                findings.failed_contexts.insert(relative, e);
-                continue;
+                self.findings
+                    .failed_contexts
+                    .insert(current.relative, reason);
+                return Ok(());
             }
         };
-        let declared = declarations(&root, names, &compiler.root)?;
-        if declared.is_empty() {
-            continue;
-        }
-        let mut aliases = String::new();
-        for (i, d) in declared.values().enumerate() {
-            aliases.push_str(&format!(
-                "typedef __typeof__({}) __oer_signature_{i};\n",
-                d.c_name
-            ));
-        }
-        let root = match compiler.run(&directory, &header, "types", &aliases)? {
-            Ok(v) => v,
-            Err(e) => {
-                for name in &hits {
-                    findings
-                        .failed_candidates
-                        .entry(name.clone())
-                        .or_default()
-                        .insert(relative.clone());
-                }
-                findings.failed_contexts.insert(relative, e);
-                continue;
+        let next = match current.stage {
+            Stage::Declarations => {
+                let declared: Vec<_> = declarations(&root, self.names, &self.root)?
+                    .into_values()
+                    .collect();
+                (!declared.is_empty()).then_some(Stage::Types(declared))
+            }
+            Stage::Types(declared) => {
+                let aliases = aliases(&declared);
+                let accepted = self.prototypes(&root, declared);
+                (!accepted.is_empty()).then_some(Stage::Sizes(aliases, accepted))
+            }
+            Stage::Sizes(_, accepted) => {
+                self.contracts(&root, accepted)?;
+                None
             }
         };
+        if let Some(stage) = next {
+            self.current = Some(Current { stage, ..current });
+        }
+        Ok(())
+    }
+
+    /// Each declaration's prototype from the types stage; one the ABI does
+    /// not support is recorded and left out.
+    fn prototypes(&mut self, root: &Value, declared: Vec<Declaration>) -> Accepted {
         let mut nodes = Vec::new();
-        ast::nodes(&root, "TypedefDecl", &mut nodes);
+        ast::nodes(root, "TypedefDecl", &mut nodes);
         let aliases_by_name: BTreeMap<_, _> = nodes
             .into_iter()
             .filter_map(|n| Some((n["name"].as_str()?, n)))
             .collect();
-        let mut queries = aliases.clone();
-        let mut accepted: Vec<(usize, &Declaration, Prototype)> = Vec::new();
-        for (i, d) in declared.values().enumerate() {
+        let mut accepted = Vec::new();
+        for (i, d) in declared.into_iter().enumerate() {
             let alias_name = format!("__oer_signature_{i}");
             let prototype = aliases_by_name
                 .get(alias_name.as_str())
@@ -415,51 +528,21 @@ pub(super) fn inspect(
                 .and_then(|n| types::prototype(n));
             match prototype {
                 Err(reason) => {
-                    findings
+                    self.findings
                         .unsupported
                         .entry(d.name.clone())
                         .or_default()
                         .insert(reason);
                 }
-                Ok(p) => {
-                    queries.push_str(&format!(
-                        "enum {{ __oer_size_{i}_0 = {}",
-                        if p.result.class == Class::Void {
-                            "0".into()
-                        } else {
-                            p.result.size_expression()
-                        }
-                    ));
-                    for (j, parameter) in p.parameters.iter().enumerate() {
-                        queries.push_str(&format!(
-                            ", __oer_size_{i}_{} = {}",
-                            j + 1,
-                            parameter.size_expression()
-                        ));
-                    }
-                    queries.push_str(" };\n");
-                    accepted.push((i, d, p));
-                }
+                Ok(p) => accepted.push((i, d, p)),
             }
         }
-        if accepted.is_empty() {
-            continue;
-        }
-        let root = match compiler.run(&directory, &header, "sizes", &queries)? {
-            Ok(v) => v,
-            Err(e) => {
-                for name in &hits {
-                    findings
-                        .failed_candidates
-                        .entry(name.clone())
-                        .or_default()
-                        .insert(relative.clone());
-                }
-                findings.failed_contexts.insert(relative, e);
-                continue;
-            }
-        };
-        let sizes = constants(&root);
+        accepted
+    }
+
+    /// Each accepted prototype's contract from the sizes stage.
+    fn contracts(&mut self, root: &Value, accepted: Accepted) -> Result<()> {
+        let sizes = constants(root);
         for (i, d, p) in accepted {
             let sizes = (0..=p.parameters.len())
                 .map(|j| {
@@ -471,7 +554,7 @@ pub(super) fn inspect(
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             match types::contract(&p, &sizes) {
                 Err(reason) => {
-                    findings
+                    self.findings
                         .unsupported
                         .entry(d.name.clone())
                         .or_default()
@@ -482,41 +565,258 @@ pub(super) fn inspect(
                         name: d.name.clone(),
                         arguments,
                         result: result.into(),
-                        source: format!("esp-idf@{revision}/{}:{}", d.header, d.line),
+                        source: format!("esp-idf@{}/{}:{}", self.revision, d.header, d.line),
                         header: d.header.clone(),
                         sha256: d.sha256.clone(),
                     };
-                    if let Some(previous) = findings.signatures.get(&d.name) {
+                    if let Some(previous) = self.findings.signatures.get(&d.name) {
                         if previous.arguments != arguments || previous.result != result {
-                            findings
+                            self.findings
                                 .conflicts
                                 .entry(d.name.clone())
                                 .or_default()
                                 .extend([previous.source.clone(), signature.source.clone()]);
                         }
                     } else {
-                        findings.signatures.insert(d.name.clone(), signature);
+                        self.findings.signatures.insert(d.name.clone(), signature);
                     }
-                    findings.headers.insert(d.header.clone(), d.sha256.clone());
+                    self.findings
+                        .headers
+                        .insert(d.header.clone(), d.sha256.clone());
                 }
             }
         }
+        Ok(())
     }
-    for (name, reasons) in &findings.unsupported {
-        if let Some(signature) = findings.signatures.get(name) {
-            findings
-                .conflicts
-                .entry(name.clone())
-                .or_default()
-                .insert(signature.source.clone());
-            findings.conflicts.entry(name.clone()).or_default().extend(
-                reasons
-                    .iter()
-                    .map(|r| format!("unsupported declaration: {r}")),
-            );
+
+    /// The findings, a name both contracted and unsupported in conflict.
+    pub(super) fn finish(mut self) -> Findings {
+        let findings = &mut self.findings;
+        for (name, reasons) in &findings.unsupported {
+            if let Some(signature) = findings.signatures.get(name) {
+                findings
+                    .conflicts
+                    .entry(name.clone())
+                    .or_default()
+                    .insert(signature.source.clone());
+                findings.conflicts.entry(name.clone()).or_default().extend(
+                    reasons
+                        .iter()
+                        .map(|r| format!("unsupported declaration: {r}")),
+                );
+            }
         }
+        self.findings
+    }
+}
+
+/// The typeof alias of each declaration, in order.
+fn aliases(declared: &[Declaration]) -> String {
+    let mut aliases = String::new();
+    for (i, d) in declared.iter().enumerate() {
+        aliases.push_str(&format!(
+            "typedef __typeof__({}) __oer_signature_{i};\n",
+            d.c_name
+        ));
+    }
+    aliases
+}
+
+/// The types stage's aliases, then an enum of each accepted prototype's
+/// sizes.
+fn size_queries(aliases: &str, accepted: &[(usize, Declaration, Prototype)]) -> String {
+    let mut queries = aliases.to_owned();
+    for (i, _, p) in accepted {
+        queries.push_str(&format!(
+            "enum {{ __oer_size_{i}_0 = {}",
+            if p.result.class == Class::Void {
+                "0".into()
+            } else {
+                p.result.size_expression()
+            }
+        ));
+        for (j, parameter) in p.parameters.iter().enumerate() {
+            queries.push_str(&format!(
+                ", __oer_size_{i}_{} = {}",
+                j + 1,
+                parameter.size_expression()
+            ));
+        }
+        queries.push_str(" };\n");
+    }
+    queries
+}
+
+/// Inspect every header naming one of `names` with the compiler: the one
+/// place the compiler runs.
+pub(super) fn inspect(
+    options: &Options,
+    names: &BTreeSet<String>,
+    revision: &str,
+    output: &Path,
+) -> Result<Findings> {
+    let (compiler, headers) = Compiler::new(options)?;
+    let mut inspection = Inspection::new(
+        &options.chip,
+        compiler.root.clone(),
+        headers,
+        names,
+        revision,
+        output,
+    );
+    while let Some(request) = inspection.request()? {
+        let tree = compiler.run(
+            &request.directory,
+            &request.header,
+            request.stage,
+            &request.extra,
+        )?;
+        inspection.advance(tree)?;
     }
     // Keep the profile alive until all compiler subprocesses finish.
     drop(compiler.profile);
-    Ok(findings)
+    Ok(inspection.finish())
+}
+
+/// One recorded compiler stage of a case: the text appended to the unit,
+/// the hash of the header it compiled, and its reduced tree or refusal.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct RecordedStage {
+    #[serde(rename = "//")]
+    pub note: String,
+    pub header_sha256: String,
+    pub extra: String,
+    #[serde(default)]
+    pub tree: Option<Value>,
+    #[serde(default)]
+    pub refusal: Option<String>,
+}
+
+/// The file of `relative`'s `stage` in a case's fixture directory.
+pub(super) fn recorded_path(directory: &Path, relative: &str, stage: &str) -> PathBuf {
+    directory.join(format!("{}.{stage}.json", relative.replace('/', "__")))
+}
+
+/// The nodes of `tree` the `stage` decides on, each location carrying its
+/// file (no cursor across removed nodes) and the tree's `root` as `/idf`.
+fn reduce(tree: &Value, stage: &str, names: &BTreeSet<String>, root: &Path) -> Result<Value> {
+    fn locate(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                if let Some(file) = map.remove("actualFile") {
+                    map.insert("file".into(), file);
+                }
+                // Node identities are the compiler's addresses, new at each
+                // run; nothing decides on them.
+                map.retain(|key, _| key != "id" && !key.ends_with("Id") && key != "previousDecl");
+                for child in map.values_mut() {
+                    locate(child);
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(locate),
+            _ => {}
+        }
+    }
+    let kept: Vec<Value> = ast::children(tree)
+        .iter()
+        .filter(|node| match stage {
+            "declarations" => {
+                node["kind"] == "FunctionDecl"
+                    && node["name"].as_str().is_some_and(|n| names.contains(n))
+            }
+            "types" => {
+                node["kind"] == "TypedefDecl"
+                    && node["name"]
+                        .as_str()
+                        .is_some_and(|n| n.starts_with("__oer_signature_"))
+            }
+            _ => {
+                node["kind"] == "EnumDecl"
+                    && ast::children(node).iter().any(|c| {
+                        c["name"]
+                            .as_str()
+                            .is_some_and(|n| n.starts_with("__oer_size_"))
+                    })
+            }
+        })
+        .cloned()
+        .map(|mut node| {
+            locate(&mut node);
+            node
+        })
+        .collect();
+    let text = serde_json::to_string(
+        &serde_json::json!({ "kind": "TranslationUnitDecl", "inner": kept }),
+    )?
+    .replace(&*root.to_string_lossy(), "/idf");
+    Ok(serde_json::from_str(&text)?)
+}
+
+/// Record every case's compiler stages with `clang` under `directory`
+/// (`<case>/<header>.<stage>.json`): the one place a case meets a compiler.
+pub(super) fn record_cases(clang: &std::ffi::OsStr, directory: &Path) -> Result<()> {
+    let version = String::from_utf8_lossy(
+        &oer_tools_os_process::command(clang)
+            .arg("--version")
+            .output()?
+            .stdout,
+    )
+    .lines()
+    .next()
+    .unwrap_or("clang")
+    .to_owned();
+    for case in &super::cases::CASES {
+        let scratch = tempfile::tempdir()?;
+        let options = super::cases::materialize(case, scratch.path(), clang)?;
+        let names: BTreeSet<String> = case.names.iter().map(|s| (*s).to_owned()).collect();
+        let (compiler, headers) = Compiler::new(&options)?;
+        let output = scratch.path().join("output");
+        let mut inspection = Inspection::new(
+            &options.chip,
+            compiler.root.clone(),
+            headers,
+            &names,
+            "synthetic-pin",
+            &output,
+        );
+        let fixtures = directory.join(case.name);
+        match fs::remove_dir_all(&fixtures) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        fs::create_dir_all(&fixtures)?;
+        while let Some(request) = inspection.request()? {
+            let relative = request
+                .header
+                .strip_prefix(&compiler.root)?
+                .to_string_lossy()
+                .into_owned();
+            let tree = compiler.run(
+                &request.directory,
+                &request.header,
+                request.stage,
+                &request.extra,
+            )?;
+            let recorded = RecordedStage {
+                note: format!(
+                    "{version}: {relative}, {} stage; the nodes the stage decides on",
+                    request.stage
+                ),
+                header_sha256: oer_tools_os_durable::sha256_file(&request.header)?,
+                extra: request.extra.clone(),
+                tree: match &tree {
+                    Ok(tree) => Some(reduce(tree, request.stage, &names, &compiler.root)?),
+                    Err(_) => None,
+                },
+                refusal: tree.as_ref().err().cloned(),
+            };
+            fs::write(
+                recorded_path(&fixtures, &relative, request.stage),
+                serde_json::to_string_pretty(&recorded)? + "\n",
+            )?;
+            inspection.advance(tree)?;
+        }
+    }
+    Ok(())
 }

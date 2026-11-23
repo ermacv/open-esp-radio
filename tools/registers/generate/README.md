@@ -86,6 +86,21 @@ The MMIO corpus does not cover RAM layouts. No model is edited by this check.
 at the chip's current pin, with its pinned header submodules initialized.
 `--check` repeats generation and requires byte-for-byte equal facts.
 
+The tests of this generation run no compiler. Each case
+(`src/signatures/cases.rs`: its synthetic headers and the names it asks for)
+is answered by its recorded stages in `src/signatures/fixtures/<case>/`, one
+file per header and stage. A file holds:
+- the text the stage appends to the unit (`extra`);
+- the hash of the header it compiled;
+- the compiler's tree, reduced to the nodes the stage decides on and with
+  each location's file written out, or its refusal.
+
+A test fails when the request's text or the header differs from the
+record's. After changing a case, the stage texts the inspection asks for, or
+the compiler, record them again with
+`cargo registers signature-fixtures [--clang <clang>]`. It writes every
+case's directory anew; review the diff of `fixtures/` with the change.
+
 The SDK configuration is an explicit input. The checked-in facts use the
 generated configuration of `tools/vendor/references/esp32s31/ble-scan-reference`,
 configured for `IDF_TARGET=esp32s31` with the pinned ESP-IDF and the project's

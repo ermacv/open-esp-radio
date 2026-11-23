@@ -1,0 +1,354 @@
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "a14aca57824bd95754cb55eee0a536ca56fd5e5c1e6794a1848523cba286e935",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 35,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 60,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 23,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 48,
+                "tokLen": 6
+              },
+              "end": {
+                "col": 35,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 60,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "struct pair"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 13,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 2,
+          "offset": 38,
+          "tokLen": 9
+        },
+        "mangledName": "aggregate",
+        "name": "aggregate",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 26,
+            "tokLen": 6
+          },
+          "end": {
+            "col": 40,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 65,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "struct pair (struct pair)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 23,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 90,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 16,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 83,
+                "tokLen": 6
+              },
+              "end": {
+                "col": 23,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 90,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "double"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 7,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 3,
+          "offset": 74,
+          "tokLen": 8
+        },
+        "mangledName": "floating",
+        "name": "floating",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 68,
+            "tokLen": 5
+          },
+          "end": {
+            "col": 28,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 95,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "float (double)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 19,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 116,
+              "tokLen": 5
+            },
+            "name": "first",
+            "range": {
+              "begin": {
+                "col": 15,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 112,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 19,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 116,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 4,
+          "offset": 103,
+          "tokLen": 8
+        },
+        "mangledName": "variadic",
+        "name": "variadic",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 98,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 28,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 125,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (int, ...)"
+        },
+        "variadic": true
+      },
+      {
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 5,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 5,
+          "offset": 132,
+          "tokLen": 9
+        },
+        "mangledName": "old_style",
+        "name": "old_style",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 128,
+            "tokLen": 3
+          },
+          "end": {
+            "col": 15,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 142,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "int ()"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 20,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "offset": 164,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 16,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 160,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 20,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "offset": 164,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 6,
+          "offset": 150,
+          "tokLen": 9
+        },
+        "mangledName": "supported",
+        "name": "supported",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 145,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 25,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 169,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (int)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

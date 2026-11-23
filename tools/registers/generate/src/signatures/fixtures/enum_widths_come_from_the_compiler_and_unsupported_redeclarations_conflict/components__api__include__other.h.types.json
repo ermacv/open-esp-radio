@@ -1,0 +1,123 @@
+{
+  "//": "clang version 23.1.4: components/api/include/other.h, types stage; the nodes the stage decides on",
+  "header_sha256": "21692e13b65b9b8232508f76ec68b6f808a28ce529c4c369ca3d46b586239438",
+  "extra": "typedef __typeof__(conflicting) __oer_signature_0;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+                        "offset": 351,
+                        "tokLen": 11
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+                        "offset": 351,
+                        "tokLen": 11
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "conflicting",
+                      "type": {
+                        "qualType": "void (float)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (float)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+                    "offset": 350,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 31,
+                    "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+                    "offset": 362,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (float)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "float"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (float)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (conflicting)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 33,
+          "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+          "line": 11,
+          "offset": 364,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+            "offset": 332,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 33,
+            "file": "/idf/output/headers/9abf3daa96215fec/types.c",
+            "offset": 364,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (float)",
+          "qualType": "typeof (conflicting)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

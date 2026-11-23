@@ -1,0 +1,88 @@
+{
+  "//": "clang version 23.1.4: components/api/include/dependency.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "46625d1216991baeacfd3094216fa19ae7e9041436a9b02a4e04bbe6442157d0",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 23,
+              "file": "/idf/components/api/include/dependency.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+              },
+              "offset": 52,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 17,
+                "file": "/idf/components/api/include/dependency.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+                },
+                "offset": 46,
+                "tokLen": 5
+              },
+              "end": {
+                "col": 23,
+                "file": "/idf/components/api/include/dependency.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+                },
+                "offset": 52,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "desugaredQualType": "unsigned short",
+              "qualType": "small"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/dependency.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+          },
+          "line": 2,
+          "offset": 35,
+          "tokLen": 10
+        },
+        "mangledName": "dependency",
+        "name": "dependency",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/dependency.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+            },
+            "offset": 30,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 28,
+            "file": "/idf/components/api/include/dependency.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/d4139d5c087ee8c2/declarations.c"
+            },
+            "offset": 57,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (small)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}
