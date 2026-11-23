@@ -4,6 +4,8 @@
 //! The cold caller passes `debug = 0`, so both vendor
 //! `phy_printf` branches are dead and are intentionally absent here.
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 use crate::{
@@ -836,7 +838,7 @@ pub enum XtalDutyFailure {
 pub enum XtalDutyPassAction {
     WriteMasked {
         field: crate::analog::i2c::Field,
-        value: u8,
+        value: FieldValue,
     },
     WriteByte {
         address: Address,
@@ -908,7 +910,7 @@ impl XtalDutyPassTransition {
         match self.step {
             XtalDutyPassStep::DisablePath => XtalDutyPassAction::WriteMasked {
                 field: crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
-                value: 0,
+                value: placed!(crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE, 0),
             },
             XtalDutyPassStep::WriteInitialDuty => XtalDutyPassAction::WriteByte {
                 address: Self::DUTY_ADDRESS,
@@ -1037,7 +1039,7 @@ pub enum XtalDutyCalibrationAction {
     },
     DisableCalibrationPath {
         field: crate::analog::i2c::Field,
-        value: u8,
+        value: FieldValue,
     },
     Pass(XtalDutyPassAction),
     Complete(XtalDutyCalibrationOutcome),
@@ -1103,7 +1105,7 @@ impl XtalDutyCalibrationTransition {
             XtalDutyCalibrationStep::DisableCalibrationPath { .. } => {
                 XtalDutyCalibrationAction::DisableCalibrationPath {
                     field: crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE,
-                    value: 0,
+                    value: placed!(crate::analog::i2c::analog_i2c::ulp_bod::xtal_duty_calibration_path_enable::XTAL_DUTY_CALIBRATION_PATH_ENABLE, 0),
                 }
             }
             XtalDutyCalibrationStep::LowFrequencyPass(transition)

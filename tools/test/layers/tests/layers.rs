@@ -6560,26 +6560,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         1,
         BY_R2,
     ),
-    (
-        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
-        9,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/analog/i2c/profile.rs",
-        1,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/calibration/cold.rs",
-        1,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_executor.rs",
-        1,
-        BY_R2_PHY,
-    ),
 ];
 
 /// S8a: the PAC's raw conversions outside the PAC, in

@@ -421,7 +421,9 @@ fn every_hardware_atom_yields_even_when_the_timer_is_already_ready() {
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
         analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-        15,
+        analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+            .place(15)
+            .unwrap(),
     ));
     let mut job =
         Job::i2c(&mut transaction, clock.now(), I2cTiming::Direct).expect("deadline fits");
@@ -1032,7 +1034,9 @@ fn a_voluntary_yield_between_rmw_commands_is_not_a_hardware_timeout() {
     let atoms = io.atoms.clone();
     let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
         analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-        15,
+        analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+            .place(15)
+            .unwrap(),
     ));
     let mut job =
         Job::i2c(&mut transaction, clock.now(), I2cTiming::Temperature).expect("deadline fits");
@@ -1700,7 +1704,7 @@ fn cold_and_direct_rfpll_share_the_same_rmw_atoms_and_preserve_identity() {
     let clock = VirtualClock::<1>::new();
     let action = RfpllFrequencyAction::WriteMasked {
         field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
-        value: 1,
+        value: placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 1),
     };
     let mut direct = Io {
         byte: 0xa5,

@@ -198,7 +198,9 @@ fn a_ready_rmw_write_is_observed_even_when_publication_crosses_the_deadline() {
         };
         let mut transaction = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
             analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
-            1,
+            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET
+                .place(1)
+                .unwrap(),
         ));
         let result = super::super::rfpll::direct_i2c(
             &mut super::super::io::Io::Test(&mut io),

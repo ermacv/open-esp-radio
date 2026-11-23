@@ -707,7 +707,10 @@ fn complete_rfpll_initial_writes(transition: &mut RfpllChargePumpTransition) {
     ] {
         assert_eq!(
             transition.action(),
-            RfpllChargePumpAction::WriteMasked { field, value }
+            RfpllChargePumpAction::WriteMasked {
+                field,
+                value: field.place(value).unwrap()
+            }
         );
         transition
             .advance(RfpllChargePumpCompletion::Write)
@@ -746,7 +749,10 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
         RfpllChargePumpAction::WriteMasked {
             field:
                 analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
-            value: 1,
+            value:
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE
+                    .place(1)
+                    .unwrap(),
         }
     );
     transition
@@ -756,7 +762,10 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
             field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
-            value: 23,
+            value: placed!(
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
+                23
+            ),
         }
     );
     transition
@@ -1044,19 +1053,19 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     for expected in [
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
-            value: 1,
+            value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-            value: 1,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
-            value: 0,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 0),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
-            value: 1,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 1),
         },
     ] {
         assert_eq!(
@@ -1092,11 +1101,11 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     for expected in [
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
-            value: 0,
+            value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 0),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-            value: 0,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 0),
         },
     ] {
         assert_eq!(

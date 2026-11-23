@@ -181,7 +181,10 @@ fn external_lowering_covers_every_dcode_operation_class() {
     assert!(matches!(
         PhyDcodeExternalBinding::lower(PhyDcodeAction::WriteMasked {
             field: analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-            value: 0,
+            value: placed!(
+                analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
+                0
+            ),
         }),
         Ok(PhyDcodeExternalBinding::I2c(_))
     ));

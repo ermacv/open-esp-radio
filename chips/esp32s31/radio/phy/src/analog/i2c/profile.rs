@@ -114,8 +114,11 @@ impl PhyRfInitParameterSnapshot {
             4 => self.filter_dcap.parameter_ed,
             5 | 6 => auxiliary,
             7 | 8 | 10 => self.filter_dcap.parameter_f0,
-            9 => analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE
-                .insert_truncated(self.filter_dcap.parameter_f0, 1),
+            9 => placed!(
+                analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE,
+                1
+            )
+            .apply(self.filter_dcap.parameter_f0),
             11 | 12 | 15 | 16 => self.filter_dcap.parameter_e9,
             13 | 14 | 17 | 18 => self.filter_dcap.parameter_ea,
             19..=21 => 0,

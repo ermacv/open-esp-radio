@@ -17,6 +17,8 @@
 //! vendor-oracle handoff primes the same field to the first ROM range (DAC 5)
 //! before entering the open channel graph.
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 use crate::analog::i2c::{Field, analog_i2c};
 
 const RESET_DAC: u8 = 0;
@@ -81,7 +83,7 @@ pub enum PhyTemperatureFailure {
 pub enum PhyTemperatureAction {
     ReadMasked { field: Field },
     SampleCode,
-    WriteMasked { field: Field, value: u8 },
+    WriteMasked { field: Field, value: FieldValue },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),
 }
@@ -90,7 +92,7 @@ pub enum PhyTemperatureAction {
 pub enum PhyTemperatureCompletion {
     MaskedRead { field: Field, value: u8 },
     CodeSampled { value: u8 },
-    MaskedWrite { field: Field, value: u8 },
+    MaskedWrite { field: Field, value: FieldValue },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -103,8 +105,14 @@ pub enum PhyTemperatureTransitionError {
 enum PhyTemperatureStep {
     ReadDac,
     PrimeDefaultDac,
-    SampleCode { sensor_index: u8 },
-    WriteDac { outcome: PhyTemperatureOutcome },
+    SampleCode {
+        sensor_index: u8,
+    },
+    /// The DAC the outcome selects, placed in its field.
+    WriteDac {
+        outcome: PhyTemperatureOutcome,
+        value: FieldValue,
+    },
     Complete(PhyTemperatureOutcome),
     Failed(PhyTemperatureFailure),
 }
@@ -180,12 +188,15 @@ impl PhyTemperatureTransition {
             },
             PhyTemperatureStep::PrimeDefaultDac => PhyTemperatureAction::WriteMasked {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value: DEFAULT_DAC,
+                value: placed!(
+                    analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                    DEFAULT_DAC
+                ),
             },
             PhyTemperatureStep::SampleCode { .. } => PhyTemperatureAction::SampleCode,
-            PhyTemperatureStep::WriteDac { outcome } => PhyTemperatureAction::WriteMasked {
+            PhyTemperatureStep::WriteDac { value, .. } => PhyTemperatureAction::WriteMasked {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value: outcome.next_dac,
+                value,
             },
             PhyTemperatureStep::Complete(outcome) => PhyTemperatureAction::Complete(outcome),
             PhyTemperatureStep::Failed(failure) => PhyTemperatureAction::Failed(failure),
@@ -227,11 +238,18 @@ impl PhyTemperatureTransition {
                 PhyTemperatureStep::PrimeDefaultDac,
                 PhyTemperatureCompletion::MaskedWrite {
                     field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                    value: DEFAULT_DAC,
+                    value,
                 },
-            ) => PhyTemperatureStep::SampleCode {
-                sensor_index: DEFAULT_SENSOR_INDEX,
-            },
+            ) if value
+                == placed!(
+                    analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                    DEFAULT_DAC
+                ) =>
+            {
+                PhyTemperatureStep::SampleCode {
+                    sensor_index: DEFAULT_SENSOR_INDEX,
+                }
+            }
             (
                 PhyTemperatureStep::SampleCode { sensor_index },
                 PhyTemperatureCompletion::CodeSampled { value },
@@ -250,16 +268,23 @@ impl PhyTemperatureTransition {
                 if temperature >= current.low && temperature <= current.high {
                     PhyTemperatureStep::Complete(outcome)
                 } else {
-                    PhyTemperatureStep::WriteDac { outcome }
+                    match analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+                        .place(next_dac)
+                    {
+                        Some(value) => PhyTemperatureStep::WriteDac { outcome, value },
+                        None => {
+                            PhyTemperatureStep::Failed(PhyTemperatureFailure::InvalidDac(next_dac))
+                        }
+                    }
                 }
             }
             (
-                PhyTemperatureStep::WriteDac { outcome },
+                PhyTemperatureStep::WriteDac { outcome, value },
                 PhyTemperatureCompletion::MaskedWrite {
                     field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                    value,
+                    value: written,
                 },
-            ) if value == outcome.next_dac => PhyTemperatureStep::Complete(outcome),
+            ) if written == value => PhyTemperatureStep::Complete(outcome),
             (PhyTemperatureStep::Complete(_), _) | (PhyTemperatureStep::Failed(_), _) => {
                 return Err(PhyTemperatureTransitionError::AlreadyComplete);
             }

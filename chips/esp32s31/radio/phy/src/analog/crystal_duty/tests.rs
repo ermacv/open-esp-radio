@@ -299,10 +299,9 @@ fn drive_pass(
     let mut rfpll_cap_status_reads = 0;
     loop {
         match transition.action() {
-            XtalDutyCalibrationAction::Pass(XtalDutyPassAction::WriteMasked {
-                field,
-                value: 0,
-            }) => {
+            XtalDutyCalibrationAction::Pass(XtalDutyPassAction::WriteMasked { field, value })
+                if value == field.place(0).unwrap() =>
+            {
                 transition
                     .advance(XtalDutyCalibrationCompletion::Pass(
                         XtalDutyPassCompletion::MaskedWrite { field },
@@ -738,10 +737,11 @@ fn wrapper_orders_both_frequency_passes_without_hidden_progress() {
         })
         .unwrap();
 
-    let XtalDutyCalibrationAction::DisableCalibrationPath { field, value: 0 } = transition.action()
+    let XtalDutyCalibrationAction::DisableCalibrationPath { field, value } = transition.action()
     else {
         panic!("expected the calibration-path write");
     };
+    assert_eq!(value, field.place(0).unwrap());
     transition
         .advance(XtalDutyCalibrationCompletion::CalibrationPathDisabled { field })
         .unwrap();

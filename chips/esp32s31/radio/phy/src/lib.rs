@@ -88,6 +88,19 @@
 #[cfg(test)]
 extern crate std;
 
+/// `$value` placed in the analog field `$field`, checked at build: a value
+/// that does not fit the field refuses to compile.
+macro_rules! placed {
+    ($field:expr, $value:expr) => {
+        const {
+            match $field.place($value) {
+                Some(value) => value,
+                None => panic!("the constant fits its analog field"),
+            }
+        }
+    };
+}
+
 pub mod executor;
 pub mod sar_pilot;
 pub mod serial;

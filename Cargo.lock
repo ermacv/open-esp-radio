@@ -1550,6 +1550,7 @@ dependencies = [
  "oer-chips-family-drivers-regi2c",
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-phy",
+ "oer-chips-family-registers-analog-i2c",
  "oer-portable-cooperate",
  "oer-portable-diagnostics",
  "oer-portable-hot",

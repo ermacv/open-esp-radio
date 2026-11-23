@@ -359,7 +359,10 @@ impl Io<'_> {
                         ),
                         search::Action::EnableSearch => Request::write_field(
                             analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                            1,
+                            placed!(
+                                analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                                1
+                            ),
                         ),
                         search::Action::WriteCap(requested) => {
                             let code = RfpllCapacitorCode::from_request(requested)
@@ -372,7 +375,7 @@ impl Io<'_> {
                             } else {
                                 Request::write_field(
                                     analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
-                                    code.high_bit(),
+                                    code.high_field(),
                                 )
                             }
                         }

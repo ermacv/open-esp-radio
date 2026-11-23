@@ -45,13 +45,14 @@ use crate::{
 use oer_chips_esp32s31_hal::system::owner::SharedPhyAccess;
 
 pub use crate::state::{PhyRegisterTemperatureControl, PhyState};
+use oer_chips_family_registers_analog_i2c::FieldValue;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyColdI2cRequest {
     ReadByte { address: Address },
     ReadField { field: Field },
     WriteByte { address: Address, value: u8 },
-    WriteField { field: Field, value: u8 },
+    WriteField { field: Field, value: FieldValue },
 }
 
 impl PhyColdI2cRequest {
@@ -67,7 +68,7 @@ impl PhyColdI2cRequest {
         Self::WriteByte { address, value }
     }
 
-    pub const fn write_field(field: Field, value: u8) -> Self {
+    pub const fn write_field(field: Field, value: FieldValue) -> Self {
         Self::WriteField { field, value }
     }
 
@@ -199,9 +200,8 @@ impl PhyColdI2cTransaction {
                 })
             }
             PhyColdI2cRequest::WriteField {
-                field,
-                value: field_value,
-            } => PhyColdI2cPhase::StartWrite(field.insert_truncated(value, field_value)),
+                value: field_value, ..
+            } => PhyColdI2cPhase::StartWrite(field_value.apply(value)),
             PhyColdI2cRequest::WriteByte { .. } => return Err(PhyColdI2cError::WrongEdge),
         };
         Ok(PhyColdI2cObservation::EdgeConsumed)

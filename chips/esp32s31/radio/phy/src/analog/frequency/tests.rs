@@ -321,7 +321,10 @@ fn complete_i2c_snapshot(
         transition.action(),
         PhyFrequencyI2cAction::WriteMasked {
             field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-            value: 1,
+            value: placed!(
+                analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                1
+            ),
         }
     );
     transition
