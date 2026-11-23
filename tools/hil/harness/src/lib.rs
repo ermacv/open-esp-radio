@@ -54,6 +54,7 @@ mod fakes;
 mod finish;
 mod keys;
 mod run;
+mod source;
 mod stand;
 
 pub use finish::Cleanup;
@@ -588,7 +589,7 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let mut out = std::io::stdout();
-    let mut measured = None;
+    let mut ran = None;
     let choice = stand::Choice {
         features: arguments.features.clone(),
         default_features: !arguments.no_default_features,
@@ -625,14 +626,17 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
                         .collect::<Vec<_>>(),
                 )
             };
-            if !run.measurements.is_empty() {
-                let boards = session
-                    .devices()
-                    .iter()
-                    .map(|device| (device.board_id().to_owned(), device.built().clone()))
-                    .collect::<Vec<_>>();
-                measured = Some((session.root().to_owned(), boards, run.measurements));
-            }
+            let boards = session
+                .devices()
+                .iter()
+                .map(|device| (device.board_id().to_owned(), device.built().clone()))
+                .collect::<Vec<_>>();
+            ran = Some((
+                session.root().to_owned(),
+                session.source().clone(),
+                boards,
+                run.measurements,
+            ));
             let cleanup = session.finish(links, &run.endings);
             let cleanup = cleanup.released(session.release());
             (run.outcomes, Some(cleanup))
@@ -644,18 +648,18 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
         }
     };
     let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
-    if let Some((root, boards, measurements)) = measured {
-        let mut results = run::results(scenario, &boards, &outcomes, &measurements);
-        if let Some(object) = results.as_object_mut() {
-            object.insert(
-                "cleanup".to_owned(),
-                cleanup
-                    .as_ref()
-                    .and_then(Cleanup::problem)
-                    .map_or(serde_json::Value::from("clean"), serde_json::Value::from),
-            );
-            object.insert("verdict".to_owned(), verdict_name(&verdict).into());
-        }
+    if let Some((root, source, boards, measurements)) = ran {
+        let mut results = run::results(&source, scenario, &boards, &outcomes, &measurements);
+        results.rest.insert(
+            "cleanup".to_owned(),
+            cleanup
+                .as_ref()
+                .and_then(Cleanup::problem)
+                .map_or(serde_json::Value::from("clean"), serde_json::Value::from),
+        );
+        results
+            .rest
+            .insert("verdict".to_owned(), verdict_name(&verdict).into());
         write_results(&root, scenario, &results);
     }
     ExitCode::from(verdict.exit_code())
@@ -673,7 +677,7 @@ fn verdict_name(verdict: &Verdict) -> &'static str {
 /// checkout `root` and print where; a file that cannot be written is
 /// reported, never the run's verdict. The time is in nanoseconds: two runs
 /// never share a file.
-fn write_results(root: &std::path::Path, scenario: &Scenario, results: &serde_json::Value) {
+fn write_results(root: &std::path::Path, scenario: &Scenario, results: &run::ResultsFile) {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_nanos());
@@ -686,7 +690,8 @@ fn write_results(root: &std::path::Path, scenario: &Scenario, results: &serde_js
             .open(&path)
             .and_then(|mut file| {
                 use std::io::Write as _;
-                writeln!(file, "{results:#}")
+                serde_json::to_writer_pretty(&mut file, results)?;
+                writeln!(file)
             })
     });
     match written {

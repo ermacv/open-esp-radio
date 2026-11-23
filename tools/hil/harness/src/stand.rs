@@ -97,6 +97,8 @@ pub(crate) struct Session {
     client: std::rc::Rc<Mutex<Client>>,
     /// The checkout the scenario runs in.
     root: PathBuf,
+    /// The checkout's source when the images were built.
+    source: crate::source::Source,
 }
 
 /// The choice a scenario's image was built with: a HIL image is a
@@ -129,6 +131,8 @@ impl Session {
         choice: &Choice,
     ) -> Result<Self> {
         let root = oer_tools_os_process::Checkout::discover("HIL scenario")?.root;
+        // Read before the build: the images are built from this checkout.
+        let source = crate::source::Source::read(&root)?;
         let stand = Stand::load(&oer_tools_lab_model::path()?)?;
         let (boards, owner) = resolve(&stand, scenario, selection, || {
             Ok(oer_tools_lab_arbiter::owner::from_environment()?.to_string())
@@ -191,12 +195,18 @@ impl Session {
             devices,
             client,
             root,
+            source,
         })
     }
 
     /// The checkout the scenario runs in.
     pub(crate) fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The checkout's source the images were built from.
+    pub(crate) fn source(&self) -> &crate::source::Source {
+        &self.source
     }
 
     /// The devices under test, in the scenario's order of roles.
