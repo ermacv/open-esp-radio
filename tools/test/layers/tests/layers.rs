@@ -1078,14 +1078,9 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/radio-pair", Role::HilBinding),
     ("hil/services/timer-facts", Role::HilBinding),
-    ("hil/services/fault", Role::HilBinding),
-    ("hil/services/sdk-station", Role::HilBinding),
-    ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
     ("hil/scenarios/radio-pair", Role::Tool),
     ("hil/scenarios/timer-facts", Role::Tool),
-    ("hil/scenarios/sdk-station", Role::Tool),
-    ("hil/scenarios/wifi-access-point", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the
@@ -6275,7 +6270,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_PHY,
     ),
-    ("chips/family/app/src/observe/connect.rs", 1, BY_NONE),
     ("chips/family/drivers/regi2c/src/lib.rs", 2, BY_NONE),
     (
         "chips/family/platform/executor/src/observation/timer.rs",
@@ -6479,7 +6473,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("chips/family/platform/executor/src/lib.rs", 1, BY_NONE),
     ("chips/family/platform/runtime/src/lib.rs", 4, BY_NONE),
     ("oer/src/print.rs", 1, BY_P2),
-    ("portable/trace-recorder/src/lib.rs", 1, BY_NONE),
     ("protocols/hil/agent/src/lib.rs", 1, BY_NONE),
     ("protocols/hil/protocol/src/base/boot.rs", 3, BY_NONE),
     ("protocols/hil/protocol/src/lib.rs", 2, BY_NONE),
@@ -8141,7 +8134,6 @@ fn k0_print() {
 /// `file::Enum::Variant` with the number of flags. It misses a flag behind
 /// a type alias (`type Flag = bool`). The list only shrinks.
 const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
-    ("chips/family/app/src/observe/link.rs::Rate::Ht", 2, BY_NONE),
     (
         "protocols/ieee80211/contracts/port/src/contract.rs::MacRxMetadata",
         3,
@@ -10223,18 +10215,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R3 cleans the cores and the contracts (tasks/323)",
     ),
     (
-        "hil/scenarios/sdk-station/src/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "R3 cleans the cores and the contracts (tasks/323)",
-    ),
-    (
-        "hil/scenarios/wifi-access-point/src/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "R3 cleans the cores and the contracts (tasks/323)",
-    ),
-    (
         "hil/services/radio-pair/src/lib.rs",
         "clippy::large_enum_variant",
         4,
@@ -10575,18 +10555,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::cast_possible_truncation",
         1,
         "R3 cleans the cores and the contracts (tasks/312)",
-    ),
-    (
-        "portable/trace-recorder/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "R3 cleans the cores and the contracts (tasks/312)",
-    ),
-    (
-        "portable/trace-recorder/src/store.rs",
-        "dead_code",
-        3,
-        "only recording images write",
     ),
     (
         "portable/trace/src/lib.rs",

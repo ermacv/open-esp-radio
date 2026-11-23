@@ -1,7 +1,7 @@
 # oer
 
 The Espressif family's application entry. An image names the capabilities
-it uses (`console`, `group`, `observe`) and no chip: the image pipeline
+it uses (`console`, `group`) and no chip: the image pipeline
 selects the board's chip (`esp32s31`, exactly one). It takes the peripherals
 it needs once and builds drivers and services with defaults. The library
 places their interrupts, executors and service tasks and applies record and
@@ -122,16 +122,12 @@ once (`Error::Channel`). `send` waits for room and `receive` for a value;
 `try_send` and `try_receive` do not wait. An end stays with the future that
 polls it (`!Send`).
 
-## Observation (`observe`)
+## A hart's counters (`oer::cpu`)
 
-`observe` selects the family's observation counters (`oer::observe`): the
-types an executor, a named part or a hart reports to, each with one writer.
-The entry's own readers of them (the executors', the parts', the PC
-samplers on TIMG1) stood on the station's observation and are outside the
-build with it.
-
-What a hart counts of its own work is apart from these, in `oer::cpu`,
-with or without `observe`: it hooks no poll and no frame. The entry hands
+The family's observation counters (`chips/family/app/src/observe`) are
+outside the build with their one reader, `hil-wifi-station`; their files
+stay as sources. What a hart counts of its own work is in `oer::cpu`, in
+every build: it hooks no poll and no frame. The entry hands
 each hart's reader to the code that runs there; each stays on its hart.
 
 | Reader | What |
@@ -161,5 +157,5 @@ cargo test -p oer
 cargo clippy -p oer --all-targets
 cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,console,group
 RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer \
-  cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,console,group,observe
+  cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,console,group
 ```

@@ -21,19 +21,10 @@
 //! - [`channel`]: a typed channel between the application's future and the
 //!   group's;
 //! - `cpu` (`esp32s31`): each hart's cycle, instruction and cache counters
-//!   and idle account, in every build;
-//! - `observe` (`observe` feature): what the library observes of its own
-//!   work, for an image that measures it.
+//!   and idle account, in every build.
 
 pub use oer_chips_family_app::channel;
 pub mod print;
-
-/// What the library observes of its own work, for an image that measures
-/// it: the family's counters.
-#[cfg(feature = "observe")]
-pub mod observe {
-    pub use oer_chips_family_app::observe::*;
-}
 
 #[cfg(all(target_arch = "riscv32", not(feature = "esp32s31")))]
 compile_error!("select the application's chip: the `esp32s31` feature");
