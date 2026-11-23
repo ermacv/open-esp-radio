@@ -342,9 +342,11 @@ fn publish_wake_frequency_i2c<
     ));
     for _ in 0..RF_OPERATION_LIMIT {
         let completion = match transition.action() {
-            PhyFrequencyI2cAction::WriteMasked { field, value } => {
-                crate::target_executor::write_i2c_field_direct(clock, registers, field, value)?;
-                PhyFrequencyI2cCompletion::MaskedWrite { field }
+            PhyFrequencyI2cAction::WriteMasked { value } => {
+                crate::target_executor::write_i2c_field_direct(clock, registers, value)?;
+                PhyFrequencyI2cCompletion::MaskedWrite {
+                    field: value.field(),
+                }
             }
             PhyFrequencyI2cAction::ReadByte { address } => {
                 let value = crate::target_executor::read_i2c_direct(clock, registers, address)?;

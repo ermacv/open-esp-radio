@@ -32,29 +32,17 @@ const CHANNELS: [u8; 4] = [1, 5, 10, 14];
 
 type Channel = Ordinal<{ CHANNELS.len() }>;
 
-const CKGEN_WRITES: [(Field, Placed); 4] = [
-    (
+const CKGEN_WRITES: [Placed; 4] = [
+    placed!(
         analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-        placed!(
-            analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-            0
-        ),
+        0
     ),
-    (
+    placed!(
         analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-        placed!(
-            analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-            0
-        ),
+        0
     ),
-    (
-        analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
-        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
-    ),
-    (
-        analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
-        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
-    ),
+    placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
+    placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,7 +66,7 @@ pub enum PhyDcodeFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeAction {
     Rfpll(RfpllFrequencyAction),
-    WriteMasked { field: Field, value: Placed },
+    WriteMasked { value: Placed },
     ReadMasked { field: Field },
     Complete(PhyDcodeOutcome),
     Failed(PhyDcodeFailure),
@@ -87,7 +75,7 @@ pub enum PhyDcodeAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeCompletion {
     Rfpll(RfpllFrequencyCompletion),
-    MaskedWrite { field: Field, value: Placed },
+    MaskedWrite { value: Placed },
     MaskedRead { field: Field, value: u8 },
 }
 
@@ -151,10 +139,9 @@ impl PhyDcodeTransition {
     pub const fn action(&self) -> PhyDcodeAction {
         match &self.step {
             PhyDcodeStep::Rfpll { transition, .. } => PhyDcodeAction::Rfpll(transition.action()),
-            PhyDcodeStep::ResetCkgen { write_index, .. } => {
-                let (field, value) = write_index.at(&CKGEN_WRITES);
-                PhyDcodeAction::WriteMasked { field, value }
-            }
+            PhyDcodeStep::ResetCkgen { write_index, .. } => PhyDcodeAction::WriteMasked {
+                value: write_index.at(&CKGEN_WRITES),
+            },
             PhyDcodeStep::ReadLow { .. } => PhyDcodeAction::ReadMasked {
                 field: analog_i2c::rfpll::internal_dcode_0::INTERNAL_DCODE_0,
             },
@@ -204,10 +191,9 @@ impl PhyDcodeTransition {
                     calibration_index,
                     write_index,
                 },
-                PhyDcodeCompletion::MaskedWrite { field, value },
+                PhyDcodeCompletion::MaskedWrite { value },
             ) => {
-                let (expected_field, expected_value) = write_index.at(&CKGEN_WRITES);
-                if field != expected_field || value != expected_value {
+                if value != write_index.at(&CKGEN_WRITES) {
                     return Err(PhyDcodeTransitionError::WrongCompletion);
                 }
                 match write_index.next() {
@@ -283,8 +269,8 @@ impl PhyDcodeI2cBinding {
     }
     pub fn new(action: PhyDcodeAction) -> Result<Self, PhyDcodeBindingError> {
         let request = match action {
-            PhyDcodeAction::WriteMasked { field, value } => {
-                crate::calibration::cold::PhyColdI2cRequest::write_field(field, value)
+            PhyDcodeAction::WriteMasked { value } => {
+                crate::calibration::cold::PhyColdI2cRequest::write_field(value)
             }
             PhyDcodeAction::ReadMasked { field } => {
                 crate::calibration::cold::PhyColdI2cRequest::read_field(field)
@@ -356,11 +342,9 @@ impl PhyDcodeI2cBinding {
         };
         match (self.outer_action, outcome) {
             (
-                PhyDcodeAction::WriteMasked { field, value },
+                PhyDcodeAction::WriteMasked { value },
                 crate::calibration::cold::PhyColdI2cOutcome::Written { address: completed },
-            ) if completed == field.address() => {
-                Ok(PhyDcodeCompletion::MaskedWrite { field, value })
-            }
+            ) if completed == value.address() => Ok(PhyDcodeCompletion::MaskedWrite { value }),
             (
                 PhyDcodeAction::ReadMasked { field },
                 crate::calibration::cold::PhyColdI2cOutcome::Read {

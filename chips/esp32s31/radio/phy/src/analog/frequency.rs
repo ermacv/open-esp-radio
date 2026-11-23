@@ -27,10 +27,10 @@ use oer_chips_esp32s31_hal::{
     layouts::{
         PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
         PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
-        PhyFrequencyMemoryWordWord,
     },
     radio::phy::frequency::{
-        FrequencyMemoryAddress, PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word,
+        FrequencyMemoryAddress, FrequencyMemoryPayload, PhyFrequencyI2cNumberAddresses,
+        frequency_cap_correction,
     },
 };
 
@@ -123,22 +123,28 @@ pub struct PhyFrequencyTableParameters {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyFrequencyMemoryRecord {
-    words: [u32; 3],
+    cap_and_sdm: PhyFrequencyMemoryRecordCapAndSdm,
+    sdm_high: PhyFrequencyMemoryRecordSdmHigh,
+    xtal_duty: PhyFrequencyMemoryRecordXtalDuty,
 }
 
 impl PhyFrequencyMemoryRecord {
+    /// The record's three words in their order, as the memory's payloads.
     #[cfg(test)]
-    pub const fn words(self) -> [u32; 3] {
-        self.words
+    pub const fn payloads(self) -> [FrequencyMemoryPayload; 3] {
+        [
+            self.word(RecordWord::CapAndSdm),
+            self.word(RecordWord::SdmHigh),
+            self.word(RecordWord::XtalDuty),
+        ]
     }
 
-    const fn word(self, word: RecordWord) -> PhyFrequencyMemoryWordWord {
-        let [cap_and_sdm, sdm_high, xtal_duty] = self.words;
-        PhyFrequencyMemoryWordWord::from_bits(match word {
-            RecordWord::CapAndSdm => cap_and_sdm,
-            RecordWord::SdmHigh => sdm_high,
-            RecordWord::XtalDuty => xtal_duty,
-        })
+    const fn word(self, word: RecordWord) -> FrequencyMemoryPayload {
+        match word {
+            RecordWord::CapAndSdm => FrequencyMemoryPayload::CapAndSdm(self.cap_and_sdm),
+            RecordWord::SdmHigh => FrequencyMemoryPayload::SdmHigh(self.sdm_high),
+            RecordWord::XtalDuty => FrequencyMemoryPayload::XtalDuty(self.xtal_duty),
+        }
     }
 }
 
@@ -162,7 +168,7 @@ pub enum PhyFrequencyTableAction {
         entry_index: u8,
         word_index: u8,
         address: FrequencyMemoryAddress,
-        value: PhyFrequencyMemoryWordWord,
+        value: FrequencyMemoryPayload,
         mode: u8,
     },
     Complete(PhyFrequencyTableOutcome),
@@ -242,22 +248,34 @@ pub const fn phy_frequency_memory_record(
     );
 
     PhyFrequencyMemoryRecord {
-        words: [
-            PhyFrequencyMemoryRecordCapAndSdm::from_bits(0)
-                .with_cap_low(cap as u8)
-                .with_cap_high_byte(cap_high)
-                .with_sdm_low_byte(sdm_low)
-                .bits(),
-            PhyFrequencyMemoryRecordSdmHigh::from_bits(0)
-                .with_lower_middle(sdm[1])
-                .with_upper_middle(sdm[2])
-                .with_most_significant(sdm[3])
-                .bits(),
-            PhyFrequencyMemoryRecordXtalDuty::from_bits(0)
-                .with_value(xtal_duty)
-                .bits(),
-        ],
+        cap_and_sdm: PhyFrequencyMemoryRecordCapAndSdm::ZERO
+            .with_cap_low(cap.to_le_bytes()[0])
+            .with_cap_high_byte(cap_high)
+            .with_sdm_low_byte(sdm_low),
+        sdm_high: PhyFrequencyMemoryRecordSdmHigh::ZERO
+            .with_lower_middle(sdm[1])
+            .with_upper_middle(sdm[2])
+            .with_most_significant(sdm[3]),
+        xtal_duty: PhyFrequencyMemoryRecordXtalDuty::ZERO.with_value(xtal_duty),
     }
+}
+
+/// A payload's word as a number, for tests that compare it with the
+/// vendor's packed images.
+#[cfg(test)]
+pub(crate) const fn payload_bits(payload: FrequencyMemoryPayload) -> u32 {
+    match payload {
+        FrequencyMemoryPayload::CapAndSdm(word) => word.bits(),
+        FrequencyMemoryPayload::SdmHigh(word) => word.bits(),
+        FrequencyMemoryPayload::XtalDuty(word) => word.bits(),
+        FrequencyMemoryPayload::I2cCommand(word) => word.bits(),
+    }
+}
+
+/// A word read from frequency memory, for tests.
+#[cfg(test)]
+pub(crate) const fn read_word(bits: u32) -> PhyFrequencyMemoryRecordCapAndSdm {
+    PhyFrequencyMemoryRecordCapAndSdm::from_bits(bits)
 }
 
 /// Caller-driven 85-entry frequency-memory publisher.
@@ -371,7 +389,7 @@ pub enum PhyFrequencyCapMemoryAction {
     WriteMemory {
         entry_index: u8,
         address: FrequencyMemoryAddress,
-        value: PhyFrequencyMemoryWordWord,
+        value: FrequencyMemoryPayload,
         mode: u8,
     },
     RestoreChannelIndex {
@@ -385,7 +403,7 @@ pub enum PhyFrequencyCapMemoryCompletion {
     MemoryRead {
         entry_index: u8,
         address: FrequencyMemoryAddress,
-        value: u32,
+        value: PhyFrequencyMemoryRecordCapAndSdm,
     },
     MemoryWritten {
         entry_index: u8,
@@ -405,31 +423,34 @@ pub enum PhyFrequencyCapMemoryTransitionError {
 
 #[derive(Debug, Eq, PartialEq)]
 enum PhyFrequencyCapMemoryStep {
-    Read { entry: TableEntry },
-    Write { entry: TableEntry, value: u32 },
+    Read {
+        entry: TableEntry,
+    },
+    /// The corrected word and the mode it is written with.
+    Write {
+        entry: TableEntry,
+        value: PhyFrequencyMemoryRecordCapAndSdm,
+        mode: u8,
+    },
     RestoreChannelIndex,
     Complete,
 }
 
 /// Exact arithmetic used by complete rev0 ROM `phy_pll_cap_mem_update` for
-/// one RF frequency-memory word.
-/// The full signed result is retained: ROM ORs it with the write-mode byte.
-/// Truncating it to a payload here changes the operation on underflow.
+/// one RF frequency-memory word: the corrected word and its write mode.
+/// The full signed result is retained: ROM ORs its bits above the payload
+/// with the write-mode byte, which changes the operation on underflow.
 pub const fn phy_frequency_cap_adjusted_word(
-    raw: u32,
+    read: PhyFrequencyMemoryRecordCapAndSdm,
     correction: PhyFrequencyCapCorrection,
-) -> u32 {
-    let record = PhyFrequencyMemoryRecordCapAndSdm::from_bits(raw);
+) -> (PhyFrequencyMemoryRecordCapAndSdm, u8) {
     let cap = u16::from_le_bytes([
-        record.cap_low(),
-        analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.extract(record.cap_high_byte()),
+        read.cap_low(),
+        analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.extract(read.cap_high_byte()),
     ]);
     let adjusted = cap.wrapping_add(correction.delta() as u16);
-    frequency_cap_correction_word(raw, adjusted)
-}
-
-const fn cap_memory_write_mode(value: u32) -> u8 {
-    PHY_RF_FREQUENCY_MEMORY_WRITE_MODE | PhyFrequencyMemoryWordWord::from_bits(value).mode()
+    let (word, spill) = frequency_cap_correction(read, adjusted);
+    (word, PHY_RF_FREQUENCY_MEMORY_WRITE_MODE | spill)
 }
 
 /// Exact low-byte channel image restored by `phy_pll_cap_mem_update`.
@@ -461,12 +482,12 @@ impl PhyFrequencyCapMemoryTransition {
                 entry_index: entry.index(),
                 address: record_address(entry, RecordWord::CapAndSdm),
             },
-            PhyFrequencyCapMemoryStep::Write { entry, value } => {
+            PhyFrequencyCapMemoryStep::Write { entry, value, mode } => {
                 PhyFrequencyCapMemoryAction::WriteMemory {
                     entry_index: entry.index(),
                     address: record_address(entry, RecordWord::CapAndSdm),
-                    value: PhyFrequencyMemoryWordWord::from_bits(value),
-                    mode: cap_memory_write_mode(value),
+                    value: FrequencyMemoryPayload::CapAndSdm(value),
+                    mode,
                 }
             }
             PhyFrequencyCapMemoryStep::RestoreChannelIndex => {
@@ -502,13 +523,19 @@ impl PhyFrequencyCapMemoryTransition {
             ) if completed_entry == entry.index()
                 && address == record_address(*entry, RecordWord::CapAndSdm) =>
             {
+                let (value, mode) = phy_frequency_cap_adjusted_word(value, self.request.correction);
                 PhyFrequencyCapMemoryStep::Write {
                     entry: *entry,
-                    value: phy_frequency_cap_adjusted_word(value, self.request.correction),
+                    value,
+                    mode,
                 }
             }
             (
-                PhyFrequencyCapMemoryStep::Write { entry, value },
+                PhyFrequencyCapMemoryStep::Write {
+                    entry,
+                    mode: written_mode,
+                    ..
+                },
                 PhyFrequencyCapMemoryCompletion::MemoryWritten {
                     entry_index: completed_entry,
                     address,
@@ -516,7 +543,7 @@ impl PhyFrequencyCapMemoryTransition {
                 },
             ) if completed_entry == entry.index()
                 && address == record_address(*entry, RecordWord::CapAndSdm)
-                && mode == cap_memory_write_mode(*value) =>
+                && mode == *written_mode =>
             {
                 match entry.next() {
                     Some(entry) => PhyFrequencyCapMemoryStep::Read { entry },
@@ -559,7 +586,7 @@ enum PhyFrequencyCapMemoryMmioAction {
     WriteMemory {
         entry_index: u8,
         address: FrequencyMemoryAddress,
-        value: PhyFrequencyMemoryWordWord,
+        value: FrequencyMemoryPayload,
         mode: u8,
     },
     RestoreChannelIndex {
@@ -717,7 +744,6 @@ pub struct PhyFrequencyI2cOutcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyFrequencyI2cAction {
     WriteMasked {
-        field: Field,
         value: Placed,
     },
     ReadByte {
@@ -727,7 +753,7 @@ pub enum PhyFrequencyI2cAction {
         descriptor_index: u8,
         copy_index: u8,
         address: FrequencyMemoryAddress,
-        value: PhyFrequencyMemoryWordWord,
+        value: FrequencyMemoryPayload,
         mode: u8,
     },
     ConfigureNumberAddresses(PhyFrequencyI2cNumberAddresses),
@@ -788,21 +814,19 @@ impl PhyFrequencyI2cDescriptor {
     const fn memory_write(
         self,
         copy_index: u8,
-    ) -> (FrequencyMemoryAddress, PhyFrequencyMemoryWordWord, u8) {
+    ) -> (FrequencyMemoryAddress, FrequencyMemoryPayload, u8) {
         // `phy_freq_i2c_write_set` stores the register byte before the block
         // byte in frequency command memory: `[block, register, data]` as the
         // little-endian word `data << 16 | register << 8 | block`.
-        let register_block = PhyFrequencyI2cCommandCommand::from_bits(0)
+        let register_block = PhyFrequencyI2cCommandCommand::ZERO
             .with_register(self.address.index())
             .with_block(self.address.block());
         let [first, second, third] = self.data;
-        let data_word = register_block
-            .with_data(match copy_index {
-                0 => first,
-                1 => second,
-                _ => third,
-            })
-            .bits();
+        let data_word = register_block.with_data(match copy_index {
+            0 => first,
+            1 => second,
+            _ => third,
+        });
         let index = self.index();
         let (address, word, mode) = match self.kind() {
             0 => (
@@ -816,16 +840,16 @@ impl PhyFrequencyI2cDescriptor {
             ),
             1 => (
                 FrequencyMemoryAddress::scaled::<3, 9>(0, index),
-                register_block.with_data(first).bits(),
+                register_block.with_data(first),
                 PHY_FREQUENCY_MEMORY_MODE,
             ),
             _ => (
                 FrequencyMemoryAddress::scaled::<2, 0>(PHY_FREQUENCY_I2C_MEMORY_BASE, index),
-                register_block.bits(),
+                register_block,
                 3,
             ),
         };
-        (address, PhyFrequencyMemoryWordWord::from_bits(word), mode)
+        (address, FrequencyMemoryPayload::I2cCommand(word), mode)
     }
 }
 
@@ -993,7 +1017,6 @@ impl PhyFrequencyI2cTransition {
     pub const fn action(self) -> PhyFrequencyI2cAction {
         match self.step {
             PhyFrequencyI2cStep::EnableSnapshot => PhyFrequencyI2cAction::WriteMasked {
-                field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
                 value: placed!(analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE, 1),
             },
             PhyFrequencyI2cStep::ReadRfpll => PhyFrequencyI2cAction::ReadByte {
@@ -1243,7 +1266,6 @@ pub enum PhyChannelFrequencyInitAction {
         mode: FrequencyRegisterMode,
     },
     WriteMasked {
-        field: Field,
         value: Placed,
     },
     WriteByte {
@@ -1374,13 +1396,11 @@ impl PhyChannelFrequencyInitTransition {
             }
             PhyChannelFrequencyInitStep::InitialCapHigh => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
                     value: placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0),
                 }
             }
             PhyChannelFrequencyInitStep::DisableRfpll => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                     value: placed!(
                         analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                         0
@@ -1395,7 +1415,6 @@ impl PhyChannelFrequencyInitTransition {
             }
             PhyChannelFrequencyInitStep::EnableCapRange { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
                     value: placed!(
                         analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
                         0x3f
@@ -1404,7 +1423,6 @@ impl PhyChannelFrequencyInitTransition {
             }
             PhyChannelFrequencyInitStep::EnableRfpll { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
-                    field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                     value: placed!(
                         analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
                         1

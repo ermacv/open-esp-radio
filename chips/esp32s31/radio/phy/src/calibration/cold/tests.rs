@@ -86,7 +86,7 @@ fn busy_observation_preserves_await_state_without_self_progress() {
 fn masked_write_needs_two_distinct_external_edges() {
     let field = crate::analog::i2c::analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE;
     let address = field.address();
-    let request = PhyColdI2cRequest::write_field(field, field.place(1).unwrap());
+    let request = PhyColdI2cRequest::write_field(field.place(1).unwrap());
     let mut transaction = PhyColdI2cTransaction::new(request);
 
     transaction.read_started().unwrap();
@@ -120,7 +120,6 @@ fn masked_outer_write_is_two_edges_but_one_identity_bound_completion() {
     let field = crate::analog::i2c::analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE;
     let address = field.address();
     let outer_action = PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked {
-        field,
         value: field.place(1).unwrap(),
     });
     let mut binding = PhyColdI2cBinding::new(outer_action).unwrap();
@@ -852,7 +851,6 @@ fn channel_frequency_i2c_completion_keeps_its_field_identity() {
     let field = crate::analog::i2c::analog_i2c::sdm::low::LOW;
     let outer_action =
         PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteMasked {
-            field,
             value: field.place(0x2).unwrap(),
         });
     let mut binding = PhyColdI2cBinding::new(outer_action).unwrap();
@@ -893,7 +891,6 @@ fn xtal_and_rfpll_i2c_edges_keep_nested_identity() {
     let rfpll_action = PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
         XtalDutyPassAction::Prepare(XtalDutyPrepareAction::Rfpll(
             RfpllFrequencyAction::WriteMasked {
-                field: rfpll_field,
                 value: rfpll_field.place(0x2).unwrap(),
             },
         )),

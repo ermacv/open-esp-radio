@@ -149,9 +149,9 @@ fn complete_rfpll(
     cap_status_reads: &mut u8,
 ) -> RfpllFrequencyCompletion {
     match action {
-        RfpllFrequencyAction::WriteMasked { field, .. } => {
-            RfpllFrequencyCompletion::MaskedWrite { field }
-        }
+        RfpllFrequencyAction::WriteMasked { value, .. } => RfpllFrequencyCompletion::MaskedWrite {
+            field: value.field(),
+        },
         RfpllFrequencyAction::WriteByte { address, .. } => {
             RfpllFrequencyCompletion::ByteWrite { address }
         }
@@ -295,21 +295,23 @@ fn drive_rf_init_xtal_duty(
                     .unwrap();
             }
             PhyRfInitPrefixAction::XtalDuty(
-                XtalDutyCalibrationAction::DisableCalibrationPath { field, .. },
+                XtalDutyCalibrationAction::DisableCalibrationPath { value, .. },
             ) => {
                 transition
                     .advance(PhyRfInitPrefixCompletion::XtalDuty(
-                        XtalDutyCalibrationCompletion::CalibrationPathDisabled { field },
+                        XtalDutyCalibrationCompletion::CalibrationPathDisabled {
+                            field: value.field(),
+                        },
                     ))
                     .unwrap();
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::WriteMasked { field, .. },
+                XtalDutyPassAction::WriteMasked { value, .. },
             )) => {
                 transition
                     .advance(PhyRfInitPrefixCompletion::XtalDuty(
                         XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::MaskedWrite {
-                            field,
+                            field: value.field(),
                         }),
                     ))
                     .unwrap();
@@ -421,8 +423,10 @@ fn drive_warm_channel_frequency(transition: &mut PhyRfInitPrefixTransition) {
             ) => PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(action)) => {
                 let completion = match action {
-                    PhyFrequencyI2cAction::WriteMasked { field, .. } => {
-                        PhyFrequencyI2cCompletion::MaskedWrite { field }
+                    PhyFrequencyI2cAction::WriteMasked { value, .. } => {
+                        PhyFrequencyI2cCompletion::MaskedWrite {
+                            field: value.field(),
+                        }
                     }
                     PhyFrequencyI2cAction::ReadByte { address } => {
                         let value = if address
@@ -708,7 +712,6 @@ fn complete_rfpll_initial_writes(transition: &mut RfpllChargePumpTransition) {
         assert_eq!(
             transition.action(),
             RfpllChargePumpAction::WriteMasked {
-                field,
                 value: field.place(value).unwrap()
             }
         );
@@ -747,8 +750,6 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
-            field:
-                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
             value:
                 analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE
                     .place(1)
@@ -761,7 +762,6 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
     assert_eq!(
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
-            field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
             value: placed!(
                 analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
                 23
@@ -1052,19 +1052,15 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     for expected in [
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
             value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
             value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
             value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 0),
         },
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
             value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 1),
         },
     ] {
@@ -1100,11 +1096,9 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     for expected in [
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
             value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 0),
         },
         RcCalibrationAction::WriteMasked {
-            field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
             value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 0),
         },
     ] {

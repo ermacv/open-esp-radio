@@ -10,12 +10,15 @@ pub(crate) struct Oracle {
 }
 impl Oracle {
     fn record(&mut self, kind: &str, value: impl core::fmt::Debug) {
-        // The frozen hashes were taken when a clock command carried a
-        // `bool`; it carries the HAL's name now. The old text is written
-        // back so that the hashes still say the sequence is unchanged.
+        // The frozen hashes were taken when a clock command and the
+        // registers' command carried a `bool`; they carry the HAL's names
+        // now. The old text is written back so that the hashes still say the
+        // sequence is unchanged.
         let line = format!("{kind}:{value:?}")
             .replace("Clock(Enabled)", "Clock(true)")
-            .replace("Clock(Disabled)", "Clock(false)");
+            .replace("Clock(Disabled)", "Clock(false)")
+            .replace("Registers(Enabled)", "Registers(true)")
+            .replace("Registers(Disabled)", "Registers(false)");
         self.trace.push(line);
     }
     pub(crate) fn read_pbus(&self) -> u32 {

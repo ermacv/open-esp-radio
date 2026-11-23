@@ -13,8 +13,6 @@ use crate::{
 
 pub mod ops;
 
-#[cfg(target_arch = "riscv32")]
-use crate::layouts::PhyFrequencyMemoryWordWord;
 pub use ops::FrequencyMemoryAddress;
 
 /// Software fields modified by a held frequency-memory read transaction.
@@ -77,7 +75,7 @@ pub fn observe(registers: &mut impl SharedPhyAccess) -> Option<Observation> {
     ops::observe(&phy_blocks_mut(registers).phy_frequency_channel_oracle)
 }
 
-pub use ops::{PhyFrequencyI2cNumberAddresses, frequency_cap_correction_word};
+pub use ops::{FrequencyMemoryPayload, PhyFrequencyI2cNumberAddresses, frequency_cap_correction};
 
 /// Clear the shared Wi-Fi control state at the start of common PHY init.
 ///
@@ -133,20 +131,23 @@ pub fn initialize_registers(
 pub fn write_memory(
     registers: &mut impl SharedPhyAccess,
     address: FrequencyMemoryAddress,
-    word: PhyFrequencyMemoryWordWord,
+    payload: FrequencyMemoryPayload,
     mode: u8,
 ) {
     ops::write_memory(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
         address,
-        word,
+        payload,
         mode,
     );
 }
 
 /// Apply complete rev0 ROM `phy_read_rf_freq_mem`.
 #[cfg(target_arch = "riscv32")]
-pub fn read_memory(registers: &mut impl SharedPhyAccess, address: FrequencyMemoryAddress) -> u32 {
+pub fn read_memory(
+    registers: &mut impl SharedPhyAccess,
+    address: FrequencyMemoryAddress,
+) -> crate::layouts::PhyFrequencyMemoryRecordCapAndSdm {
     ops::read_memory(
         &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
         address,

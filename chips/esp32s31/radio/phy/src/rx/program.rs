@@ -35,7 +35,7 @@ use crate::{
         },
     },
 };
-use oer_chips_esp32s31_hal::types::PhyClockPair;
+use oer_chips_esp32s31_hal::types::{PhyClockPair, PhyRxGainDcCalibration};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RxError {
@@ -202,7 +202,7 @@ pub(crate) enum ControlCommand {
     RestoreRoot,
     PrepareCalibration,
     RestoreCalibration,
-    Registers(bool),
+    Registers(PhyRxGainDcCalibration),
     Debug,
     RxClock(PhyClockPair),
     TxClock(PhyClockPair),
@@ -430,8 +430,8 @@ impl RxProgram {
         let control = match self.cursor.pc {
             Pc::RootPrepare => Some(C::PrepareRoot),
             Pc::RootRestore => Some(C::RestoreRoot),
-            Pc::RegistersOn => Some(C::Registers(true)),
-            Pc::RegistersOff => Some(C::Registers(false)),
+            Pc::RegistersOn => Some(C::Registers(PhyRxGainDcCalibration::Enabled)),
+            Pc::RegistersOff => Some(C::Registers(PhyRxGainDcCalibration::Disabled)),
             Pc::Debug | Pc::PublishDebug => Some(C::Debug),
             Pc::RxClockOn | Pc::PublishRxClockOn => Some(C::RxClock(PhyClockPair::Enabled)),
             Pc::TxClockOn | Pc::PublishTxClockOn => Some(C::TxClock(PhyClockPair::Enabled)),
@@ -1127,7 +1127,9 @@ impl ControlStep<'_> {
         match self.command {
             ControlCommand::PrepareRoot => self.program.restore.root = true,
             ControlCommand::PrepareCalibration => self.program.restore.calibration = true,
-            ControlCommand::Registers(true) => self.program.restore.registers = true,
+            ControlCommand::Registers(PhyRxGainDcCalibration::Enabled) => {
+                self.program.restore.registers = true;
+            }
             _ => {}
         }
     }
@@ -1136,7 +1138,9 @@ impl ControlStep<'_> {
         match self.command {
             ControlCommand::RestoreRoot => self.program.restore.root = false,
             ControlCommand::RestoreCalibration => self.program.restore.calibration = false,
-            ControlCommand::Registers(false) => self.program.restore.registers = false,
+            ControlCommand::Registers(PhyRxGainDcCalibration::Disabled) => {
+                self.program.restore.registers = false;
+            }
             _ => {}
         }
         self.program.control_completed()

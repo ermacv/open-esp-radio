@@ -357,13 +357,10 @@ impl Io<'_> {
                         search::Action::ReadInitialCap => Request::read_field(
                             analog_i2c::rfpll::lock_status::CALIBRATED_CAPACITOR_HIGH,
                         ),
-                        search::Action::EnableSearch => Request::write_field(
+                        search::Action::EnableSearch => Request::write_field(placed!(
                             analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                            placed!(
-                                analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                                1
-                            ),
-                        ),
+                            1
+                        )),
                         search::Action::WriteCap(requested) => {
                             let code = RfpllCapacitorCode::from_request(requested)
                                 .ok_or(Failure::Binding)?;
@@ -373,10 +370,7 @@ impl Io<'_> {
                                     code.low_byte(),
                                 )
                             } else {
-                                Request::write_field(
-                                    analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
-                                    code.high_field(),
-                                )
+                                Request::write_field(code.high_field())
                             }
                         }
                         search::Action::ReadStatus => Request::read_field(

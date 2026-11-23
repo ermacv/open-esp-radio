@@ -151,11 +151,10 @@ pub(crate) fn write_i2c_field_direct<
 >(
     clock: &C,
     registers: &mut impl SharedPhyAccess,
-    field: oer_chips_esp32s31_hal::radio::phy::i2c::Field,
     value: oer_chips_esp32s31_hal::radio::phy::i2c::Placed,
 ) -> Result<(), PhyTargetPortError> {
-    let current = read_i2c_direct(clock, registers, field.address())?;
-    write_i2c_direct(clock, registers, field.address(), value.apply(current))
+    let current = read_i2c_direct(clock, registers, value.address())?;
+    write_i2c_direct(clock, registers, value.address(), value.apply(current))
 }
 
 /// Execute the four masked analog-I²C writes of complete ROM
@@ -169,31 +168,19 @@ pub(crate) fn reset_clock_generator_direct<
 ) -> Result<(), PhyTargetPortError> {
     use oer_chips_esp32s31_hal::radio::phy::i2c::analog_i2c;
 
-    for (field, value) in [
-        (
+    for value in [
+        placed!(
             analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-            placed!(
-                analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-                0
-            ),
+            0
         ),
-        (
+        placed!(
             analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-            placed!(
-                analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-                0
-            ),
+            0
         ),
-        (
-            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
-            placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
-        ),
-        (
-            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
-            placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
-        ),
+        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
+        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
     ] {
-        write_i2c_field_direct(clock, registers, field, value)?;
+        write_i2c_field_direct(clock, registers, value)?;
     }
     Ok(())
 }

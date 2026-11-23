@@ -8,6 +8,7 @@
 //! All retained radio work is represented by owned state plus
 //! one externally completed MMIO, PHY-I2C, timer or observation edge.
 
+use oer_chips_esp32s31_hal::radio::phy::i2c::Host;
 use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
@@ -21,7 +22,7 @@ const PHY_REGISTER_FINAL_I2C_ADDRESS: crate::analog::i2c::Address =
 pub enum PhyRegisterDelayPhase {
     ForceTxRx { enabled: bool, completed_phase: u8 },
     HardwareFrequencyDisabled,
-    I2cMasterReset { index: u8, sample: u16 },
+    I2cMasterReset { host: Host, sample: u16 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,7 +31,7 @@ pub enum PhyRegisterMmioAction {
     ConfigureForceTxRx { phase: PhyForceTxRxPhase },
     ResetFrequencyModule,
     SetHardwareFrequencyControl { control: PhyFrequencyControl },
-    PulseI2cMasterReset { index: u8 },
+    PulseI2cMasterReset { host: Host },
     ConfigureXtal40Mhz,
     SetCalibrationClock { enabled: bool },
     SetBbpllCalibration { calibration: PhyBbpllCalibration },
@@ -49,7 +50,7 @@ pub enum PhyRegisterAction {
         micros: u32,
     },
     SampleI2cMasterReset {
-        index: u8,
+        host: Host,
         sample: u16,
     },
     Rf(crate::analog::i2c::PhyRfInitPrefixAction),
@@ -98,7 +99,7 @@ pub enum PhyRegisterCompletion {
         micros: u32,
     },
     I2cMasterResetSampled {
-        index: u8,
+        host: Host,
         sample: u16,
         busy: bool,
     },
@@ -116,7 +117,7 @@ pub enum PhyRegisterCompletion {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterFailure {
-    I2cMasterResetTimedOut { index: u8, samples: u16 },
+    I2cMasterResetTimedOut { host: Host, samples: u16 },
     Rf(crate::analog::i2c::PhyRfInitPrefixOutcome),
     Baseband(crate::calibration::baseband::PhyBbInitFailure),
     Temperature(crate::analog::temperature::PhyTemperatureFailure),
@@ -190,10 +191,10 @@ enum PreludeStep {
     FrequencyReset,
     DisableHardwareFrequency,
     DisableHardwareFrequencyDelay,
-    I2cInitialSample { index: u8 },
-    I2cResetPulse { index: u8 },
-    I2cResetDelay { index: u8, sample: u16 },
-    I2cResetSample { index: u8, sample: u16 },
+    I2cInitialSample { host: Host },
+    I2cResetPulse { host: Host },
+    I2cResetDelay { host: Host, sample: u16 },
+    I2cResetSample { host: Host, sample: u16 },
     ConfigureXtal,
     CalibrationClockOn,
 }
@@ -691,24 +692,20 @@ impl PhyRegisterTransition {
                         phase: PhyRegisterDelayPhase::HardwareFrequencyDisabled,
                         micros: 2,
                     },
-                    PreludeStep::I2cInitialSample { index }
-                    | PreludeStep::I2cResetSample { index, sample: 0 } => {
-                        PhyRegisterAction::SampleI2cMasterReset { index, sample: 0 }
+                    PreludeStep::I2cInitialSample { host }
+                    | PreludeStep::I2cResetSample { host, sample: 0 } => {
+                        PhyRegisterAction::SampleI2cMasterReset { host, sample: 0 }
                     }
-                    PreludeStep::I2cResetSample { index, sample } => {
-                        PhyRegisterAction::SampleI2cMasterReset { index, sample }
+                    PreludeStep::I2cResetSample { host, sample } => {
+                        PhyRegisterAction::SampleI2cMasterReset { host, sample }
                     }
-                    PreludeStep::I2cResetPulse { index } => {
-                        PhyRegisterAction::Mmio(PhyRegisterMmioAction::PulseI2cMasterReset {
-                            index,
-                        })
+                    PreludeStep::I2cResetPulse { host } => {
+                        PhyRegisterAction::Mmio(PhyRegisterMmioAction::PulseI2cMasterReset { host })
                     }
-                    PreludeStep::I2cResetDelay { index, sample } => {
-                        PhyRegisterAction::DelayMicros {
-                            phase: PhyRegisterDelayPhase::I2cMasterReset { index, sample },
-                            micros: 1,
-                        }
-                    }
+                    PreludeStep::I2cResetDelay { host, sample } => PhyRegisterAction::DelayMicros {
+                        phase: PhyRegisterDelayPhase::I2cMasterReset { host, sample },
+                        micros: 1,
+                    },
                     PreludeStep::ConfigureXtal => {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::ConfigureXtal40Mhz)
                     }
@@ -966,65 +963,69 @@ impl PhyRegisterTransition {
                     phase: PhyRegisterDelayPhase::HardwareFrequencyDisabled,
                     micros: 2,
                 },
-            ) => Phase::Prelude(PreludeStep::I2cInitialSample { index: 0 }),
+            ) => Phase::Prelude(PreludeStep::I2cInitialSample { host: Host::Host0 }),
             (
-                Phase::Prelude(PreludeStep::I2cInitialSample { index }),
+                Phase::Prelude(PreludeStep::I2cInitialSample { host }),
                 PhyRegisterCompletion::I2cMasterResetSampled {
-                    index: completed_index,
+                    host: completed_host,
                     sample: 0,
                     busy,
                 },
-            ) if completed_index == index => {
+            ) if completed_host == host => {
                 if busy {
-                    Phase::Prelude(PreludeStep::I2cResetPulse { index })
-                } else if index == 0 {
-                    Phase::Prelude(PreludeStep::I2cInitialSample { index: 1 })
+                    Phase::Prelude(PreludeStep::I2cResetPulse { host })
                 } else {
-                    Phase::ApplyProfile
+                    match host {
+                        Host::Host0 => {
+                            Phase::Prelude(PreludeStep::I2cInitialSample { host: Host::Host1 })
+                        }
+                        Host::Host1 => Phase::ApplyProfile,
+                    }
                 }
             }
             (
-                Phase::Prelude(PreludeStep::I2cResetPulse { index }),
+                Phase::Prelude(PreludeStep::I2cResetPulse { host }),
                 PhyRegisterCompletion::Mmio(completed),
-            ) if completed.action == PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
-                Phase::Prelude(PreludeStep::I2cResetDelay { index, sample: 0 })
+            ) if completed.action == PhyRegisterMmioAction::PulseI2cMasterReset { host } => {
+                Phase::Prelude(PreludeStep::I2cResetDelay { host, sample: 0 })
             }
             (
-                Phase::Prelude(PreludeStep::I2cResetDelay { index, sample }),
+                Phase::Prelude(PreludeStep::I2cResetDelay { host, sample }),
                 PhyRegisterCompletion::DelayElapsed {
                     phase:
                         PhyRegisterDelayPhase::I2cMasterReset {
-                            index: completed_index,
+                            host: completed_host,
                             sample: completed_sample,
                         },
                     micros: 1,
                 },
-            ) if completed_index == index && completed_sample == sample => {
-                Phase::Prelude(PreludeStep::I2cResetSample { index, sample })
+            ) if completed_host == host && completed_sample == sample => {
+                Phase::Prelude(PreludeStep::I2cResetSample { host, sample })
             }
             (
-                Phase::Prelude(PreludeStep::I2cResetSample { index, sample }),
+                Phase::Prelude(PreludeStep::I2cResetSample { host, sample }),
                 PhyRegisterCompletion::I2cMasterResetSampled {
-                    index: completed_index,
+                    host: completed_host,
                     sample: completed_sample,
                     busy,
                 },
-            ) if completed_index == index && completed_sample == sample => {
+            ) if completed_host == host && completed_sample == sample => {
                 if !busy {
-                    if index == 0 {
-                        Phase::Prelude(PreludeStep::I2cInitialSample { index: 1 })
-                    } else {
-                        Phase::ApplyProfile
+                    match host {
+                        Host::Host0 => {
+                            Phase::Prelude(PreludeStep::I2cInitialSample { host: Host::Host1 })
+                        }
+                        Host::Host1 => Phase::ApplyProfile,
                     }
                 } else if sample + 1 == PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT {
                     self.begin_cleanup(PhyRegisterFailure::I2cMasterResetTimedOut {
-                        index,
+                        host,
                         samples: sample + 1,
                     });
                     return Ok(());
                 } else {
                     Phase::Prelude(PreludeStep::I2cResetDelay {
-                        index,
+                        host,
                         sample: sample + 1,
                     })
                 }
@@ -1353,12 +1354,7 @@ impl PhyRegisterMmioBinding {
                     registers, control,
                 )
             }
-            PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
-                let host = if index == 0 {
-                    oer_chips_esp32s31_hal::radio::phy::i2c::Host::Host0
-                } else {
-                    oer_chips_esp32s31_hal::radio::phy::i2c::Host::Host1
-                };
+            PhyRegisterMmioAction::PulseI2cMasterReset { host } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::pulse_master_reset(registers, host)
             }
             PhyRegisterMmioAction::ConfigureXtal40Mhz => {
@@ -1382,18 +1378,13 @@ impl PhyRegisterMmioBinding {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyRegisterResetSampleBinding {
-    index: u8,
+    host: Host,
     sample: u16,
 }
 
 impl PhyRegisterResetSampleBinding {
-    pub fn new(action: PhyRegisterAction) -> Option<Self> {
-        match action {
-            PhyRegisterAction::SampleI2cMasterReset { index, sample } if index <= 1 => {
-                Some(Self { index, sample })
-            }
-            _ => None,
-        }
+    pub const fn new(host: Host, sample: u16) -> Self {
+        Self { host, sample }
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -1401,16 +1392,11 @@ impl PhyRegisterResetSampleBinding {
         self,
         registers: &mut P,
     ) -> PhyRegisterCompletion {
-        let host = if self.index == 0 {
-            oer_chips_esp32s31_hal::radio::phy::i2c::Host::Host0
-        } else {
-            oer_chips_esp32s31_hal::radio::phy::i2c::Host::Host1
-        };
         PhyRegisterCompletion::I2cMasterResetSampled {
-            index: self.index,
+            host: self.host,
             sample: self.sample,
             busy: oer_chips_esp32s31_hal::radio::phy::i2c::sample_master_reset_busy(
-                registers, host,
+                registers, self.host,
             ),
         }
     }
@@ -1557,11 +1543,9 @@ impl PhyRegisterExternalBinding {
             PhyRegisterAction::DelayMicros { .. } => {
                 PhyRegisterTimerBinding::new(action).map(Self::Timer)
             }
-            PhyRegisterAction::SampleI2cMasterReset { .. } => {
-                PhyRegisterResetSampleBinding::new(action)
-                    .map(Self::ResetSample)
-                    .ok_or(PhyRegisterBindingError::UnsupportedAction)
-            }
+            PhyRegisterAction::SampleI2cMasterReset { host, sample } => Ok(Self::ResetSample(
+                PhyRegisterResetSampleBinding::new(host, sample),
+            )),
             PhyRegisterAction::Rf(action) => {
                 crate::calibration::cold::PhyColdExternalBinding::lower(action)
                     .map(Self::Rf)

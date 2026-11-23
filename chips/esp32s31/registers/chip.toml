@@ -79,7 +79,6 @@ types = [
 layouts = [
     "layouts/wifi-rx-rate-control-flags.toml",
     "layouts/wifi-tx-descriptor-prefix.toml",
-    "layouts/phy-frequency-memory-word.toml",
     "layouts/phy-frequency-i2c-command.toml",
     "layouts/phy-frequency-memory-record.toml",
     "layouts/phy-rfpll-sdm-code.toml",

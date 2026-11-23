@@ -694,7 +694,7 @@ pub struct RfpllChargePumpOutcome {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RfpllChargePumpAction {
-    WriteMasked { field: Field, value: Placed },
+    WriteMasked { value: Placed },
     DelayMicros(u32),
     ReadMasked { field: Field },
     ReadByte { address: Address },
@@ -746,12 +746,21 @@ impl RfpllChargePumpTransition {
     }
 
     const fn initial_write(index: u8) -> RfpllChargePumpAction {
-        let (field, value) = match index {
-            0 => (analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE, placed!(analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE, 0)),
-            1 => (analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE, placed!(analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE, 0)),
-            _ => (analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE, placed!(analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE, 1)),
+        let value = match index {
+            0 => placed!(
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
+                0
+            ),
+            1 => placed!(
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+                0
+            ),
+            _ => placed!(
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_PULSE,
+                1
+            ),
         };
-        RfpllChargePumpAction::WriteMasked { field, value }
+        RfpllChargePumpAction::WriteMasked { value }
     }
 
     pub const fn action(self) -> RfpllChargePumpAction {
@@ -765,12 +774,10 @@ impl RfpllChargePumpTransition {
                 field: analog_i2c::rfpll::charge_pump_lock_status::CHARGE_PUMP_RESULT,
             },
             RfpllChargePumpStep::EnableAdjustedValue { .. } => RfpllChargePumpAction::WriteMasked {
-                field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
                 value: placed!(analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE, 1),
             },
             RfpllChargePumpStep::WriteAdjustedValue { value, .. } => {
                 RfpllChargePumpAction::WriteMasked {
-                    field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
                     value,
                 }
             }
@@ -1585,7 +1592,7 @@ impl Default for PhyRfInitPrefixTransition {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RcCalibrationAction {
-    WriteMasked { field: Field, value: Placed },
+    WriteMasked { value: Placed },
     DelayMicros(u32),
     ReadMasked { field: Field },
     ApplyResult(u8),
@@ -1625,11 +1632,9 @@ impl RcCalibrationTransition {
     pub const fn action(self) -> RcCalibrationAction {
         match self.step {
             0 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 1),
             },
             1 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
                 // ROM `phy_get_rc_dout` asserts the RC-calibration enable
                 // before pulsing bit 1. Leaving this clear makes the result
                 // register stay at zero and poisons every derived RX filter
@@ -1637,11 +1642,9 @@ impl RcCalibrationTransition {
                 value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 1),
             },
             2 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
                 value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 0),
             },
             3 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
                 value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 1),
             },
             4 => RcCalibrationAction::DelayMicros(100),
@@ -1649,11 +1652,9 @@ impl RcCalibrationTransition {
                 field: analog_i2c::txrf::rc_calibration_result::RC_CALIBRATION_RESULT,
             },
             6 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
                 value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 0),
             },
             7 => RcCalibrationAction::WriteMasked {
-                field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
                 value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 0),
             },
             8 => RcCalibrationAction::ApplyResult(self.result),

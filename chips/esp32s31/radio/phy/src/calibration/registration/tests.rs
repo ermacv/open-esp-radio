@@ -5,6 +5,7 @@ use super::{
     PhyRegisterMmioCompletion, PhyRegisterOutcome, PhyRegisterResetSampleBinding,
     PhyRegisterTimerBinding, PhyRegisterTransition,
 };
+use oer_chips_esp32s31_hal::radio::phy::i2c::Host;
 use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
@@ -115,60 +116,6 @@ fn state_owner_cannot_escape_before_a_terminal_parent_outcome() {
         Err(transition) => transition,
     };
     assert!(transition.state().is_some());
-}
-
-#[test]
-fn lowering_failure_identifies_the_pending_action_without_calling_the_port() {
-    use crate::executor::{PhyRegisterPort, PhyRegisterRunError, run_phy_register};
-    use core::{
-        future::Future,
-        task::{Context, Poll, Waker},
-    };
-
-    struct UnreachablePort;
-    impl PhyRegisterPort for UnreachablePort {
-        type Error = ();
-        async fn rx_gain<'a>(
-            &'a mut self,
-            _program: &'a mut crate::rx::gain::RxProgram,
-        ) -> Result<(), Self::Error> {
-            panic!("unsupported action must not reach RX hardware")
-        }
-        async fn complete(
-            &mut self,
-            _binding: super::PhyRegisterExternalBinding,
-        ) -> Result<PhyRegisterCompletion, Self::Error> {
-            panic!("an unsupported action must never reach hardware");
-        }
-    }
-
-    let mut transition = PhyRegisterTransition::with_production_config();
-    transition.phase = Some(super::Phase::Prelude(
-        super::PreludeStep::I2cInitialSample { index: 2 },
-    ));
-    let action = PhyRegisterAction::SampleI2cMasterReset {
-        index: 2,
-        sample: 0,
-    };
-    {
-        let mut port = UnreachablePort;
-        let mut future = std::pin::pin!(run_phy_register(&mut transition, &mut port));
-        assert_eq!(
-            future
-                .as_mut()
-                .poll(&mut Context::from_waker(Waker::noop())),
-            Poll::Ready(Err(PhyRegisterRunError::Lowering {
-                stage: super::PhyRegisterStage::I2cMasterResetSample,
-                error: PhyRegisterBindingError::UnsupportedAction,
-            })),
-        );
-    }
-    assert_eq!(
-        transition.step_local(),
-        Ok(PhyRegisterLocalStep::External(action))
-    );
-    assert!(!transition.state().unwrap().phy_registered());
-    assert!(transition.into_model_parts().is_err());
 }
 
 #[test]
@@ -474,16 +421,19 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     assert_eq!(
         action,
         PhyRegisterLocalStep::External(PhyRegisterAction::SampleI2cMasterReset {
-            index: 0,
+            host: Host::Host0,
             sample: 0,
         })
     );
-    assert!(
-        PhyRegisterResetSampleBinding::new(match action {
-            PhyRegisterLocalStep::External(action) => action,
+    assert_eq!(
+        match action {
+            PhyRegisterLocalStep::External(action) =>
+                super::PhyRegisterExternalBinding::lower(action),
             _ => unreachable!(),
-        })
-        .is_some()
+        },
+        Ok(super::PhyRegisterExternalBinding::ResetSample(
+            PhyRegisterResetSampleBinding::new(Host::Host0, 0)
+        ))
     );
 }
 
@@ -494,12 +444,12 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
         Some(retained_cache(CALIBRATION_IDENTITY)),
     );
     transition.phase = Some(super::Phase::Prelude(super::PreludeStep::I2cResetSample {
-        index: 0,
+        host: Host::Host0,
         sample: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT - 1,
     }));
     transition
         .advance_external(PhyRegisterCompletion::I2cMasterResetSampled {
-            index: 0,
+            host: Host::Host0,
             sample: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT - 1,
             busy: true,
         })
@@ -557,7 +507,7 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
     assert_eq!(
         transition.step_local().unwrap(),
         PhyRegisterLocalStep::Failed(PhyRegisterFailure::I2cMasterResetTimedOut {
-            index: 0,
+            host: Host::Host0,
             samples: PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT,
         })
     );
@@ -935,24 +885,24 @@ fn every_prelude_step_produces_the_vendor_s_action() {
             },
         ),
         (
-            Step::I2cInitialSample { index: 1 },
+            Step::I2cInitialSample { host: Host::Host1 },
             PhyRegisterAction::SampleI2cMasterReset {
-                index: 1,
+                host: Host::Host1,
                 sample: 0,
             },
         ),
         (
-            Step::I2cResetPulse { index: 1 },
-            mmio(PhyRegisterMmioAction::PulseI2cMasterReset { index: 1 }),
+            Step::I2cResetPulse { host: Host::Host1 },
+            mmio(PhyRegisterMmioAction::PulseI2cMasterReset { host: Host::Host1 }),
         ),
         (
             Step::I2cResetDelay {
-                index: 0,
+                host: Host::Host0,
                 sample: 3,
             },
             PhyRegisterAction::DelayMicros {
                 phase: PhyRegisterDelayPhase::I2cMasterReset {
-                    index: 0,
+                    host: Host::Host0,
                     sample: 3,
                 },
                 micros: 1,
@@ -960,11 +910,11 @@ fn every_prelude_step_produces_the_vendor_s_action() {
         ),
         (
             Step::I2cResetSample {
-                index: 0,
+                host: Host::Host0,
                 sample: 2,
             },
             PhyRegisterAction::SampleI2cMasterReset {
-                index: 0,
+                host: Host::Host0,
                 sample: 2,
             },
         ),

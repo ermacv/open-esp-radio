@@ -652,7 +652,9 @@ golden!(
         fr::write_memory(
             &mut b,
             fr::FrequencyMemoryAddress::new(0x5a5).expect("in the memory"),
-            crate::layouts::PhyFrequencyMemoryWordWord::from_bits(0xab_cdef),
+            fr::FrequencyMemoryPayload::CapAndSdm(
+                crate::layouts::PhyFrequencyMemoryRecordCapAndSdm::from_bits(0xab_cdef),
+            ),
             0x12,
         );
     },
@@ -661,6 +663,42 @@ golden!(
         (0xffffffff, &[(0x001c, 0xffeda5ff), (0x002c, 0x12abcdef)]),
     ]
 );
+
+// A carried word with bits above the data field's 24 leaves the mode as
+// written, whichever of the four words it is: the setter cuts the word to
+// its field (tasks/388).
+#[test]
+fn frequency_write_memory_cuts_each_carried_word_to_the_data_field() {
+    use crate::layouts::{
+        PhyFrequencyI2cCommandCommand, PhyFrequencyMemoryRecordCapAndSdm,
+        PhyFrequencyMemoryRecordSdmHigh, PhyFrequencyMemoryRecordXtalDuty,
+    };
+    const WIDE: u32 = 0xff12_3456;
+    for payload in [
+        fr::FrequencyMemoryPayload::CapAndSdm(PhyFrequencyMemoryRecordCapAndSdm::from_bits(WIDE)),
+        fr::FrequencyMemoryPayload::SdmHigh(PhyFrequencyMemoryRecordSdmHigh::from_bits(WIDE)),
+        fr::FrequencyMemoryPayload::XtalDuty(PhyFrequencyMemoryRecordXtalDuty::from_bits(WIDE)),
+        fr::FrequencyMemoryPayload::I2cCommand(PhyFrequencyI2cCommandCommand::from_bits(WIDE)),
+    ] {
+        // The control word as `frequency_write_memory` records it.
+        for (fill, control) in [(0, 0x0005_a500), (u32::MAX, 0xffed_a5ff)] {
+            check(
+                7994,
+                fill,
+                &[(0x001c, control), (0x002c, 0x0712_3456)],
+                |memory| {
+                    let mut b = FrequencyRegisters::host(memory).expect("memory holds the block");
+                    fr::write_memory(
+                        &mut b,
+                        fr::FrequencyMemoryAddress::new(0x5a5).expect("in the memory"),
+                        payload,
+                        0x07,
+                    );
+                },
+            );
+        }
+    }
+}
 
 // Complete images from the published FE register model: address bit 10 is
 // bit 18 of control, the read pulse is bit 16 of word 0x20, mode is 1:0
