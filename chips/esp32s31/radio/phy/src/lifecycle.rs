@@ -6,6 +6,7 @@
 
 use crate::analog::i2c::{Address, analog_i2c};
 use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+use oer_chips_esp32s31_hal::types::{PhyBbpllCalibration, PhyFrequencyControl};
 
 /// One complete child call or finite hardware edge in current-vendor
 /// `phy_wakeup_init`.
@@ -18,10 +19,10 @@ use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
 pub enum PhyRfWakeOperation {
     SetBasebandMode { mode: BasebandMode },
     ForceTxRxOff { enabled: bool },
-    SetHardwareFrequencyControl { enabled: bool },
+    SetHardwareFrequencyControl { control: PhyFrequencyControl },
     ResetI2cMaster,
     OpenFrontendBasebandClocks,
-    SetBbpllCalibration { enabled: bool },
+    SetBbpllCalibration { calibration: PhyBbpllCalibration },
     ConfigureBiasRegisters,
     PowerTemperatureSensor,
     ReadXtalFrequency,
@@ -62,10 +63,14 @@ pub const PHY_RF_WAKE_OPERATIONS: [PhyRfWakeOperation; 36] = [
         mode: BasebandMode::Calibration,
     },
     PhyRfWakeOperation::ForceTxRxOff { enabled: true },
-    PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: false },
+    PhyRfWakeOperation::SetHardwareFrequencyControl {
+        control: PhyFrequencyControl::Software,
+    },
     PhyRfWakeOperation::ResetI2cMaster,
     PhyRfWakeOperation::OpenFrontendBasebandClocks,
-    PhyRfWakeOperation::SetBbpllCalibration { enabled: true },
+    PhyRfWakeOperation::SetBbpllCalibration {
+        calibration: PhyBbpllCalibration::Enabled,
+    },
     PhyRfWakeOperation::ConfigureBiasRegisters,
     PhyRfWakeOperation::PowerTemperatureSensor,
     PhyRfWakeOperation::ReadXtalFrequency,
@@ -92,8 +97,12 @@ pub const PHY_RF_WAKE_OPERATIONS: [PhyRfWakeOperation; 36] = [
     PhyRfWakeOperation::EnableAgc,
     PhyRfWakeOperation::WaitFrequencyReady,
     PhyRfWakeOperation::ResetClockGenerator,
-    PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: true },
-    PhyRfWakeOperation::SetBbpllCalibration { enabled: false },
+    PhyRfWakeOperation::SetHardwareFrequencyControl {
+        control: PhyFrequencyControl::Hardware,
+    },
+    PhyRfWakeOperation::SetBbpllCalibration {
+        calibration: PhyBbpllCalibration::Disabled,
+    },
     PhyRfWakeOperation::ForceTxRxOff { enabled: false },
     PhyRfWakeOperation::SetBasebandMode {
         mode: BasebandMode::Idle,
@@ -249,14 +258,20 @@ mod tests {
                     mode: BasebandMode::Calibration,
                 },
                 PhyRfWakeOperation::ForceTxRxOff { enabled: true },
-                PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: false },
+                PhyRfWakeOperation::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Software
+                },
             ]
         );
         assert_eq!(
             &trace[32..],
             &[
-                PhyRfWakeOperation::SetHardwareFrequencyControl { enabled: true },
-                PhyRfWakeOperation::SetBbpllCalibration { enabled: false },
+                PhyRfWakeOperation::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware
+                },
+                PhyRfWakeOperation::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled
+                },
                 PhyRfWakeOperation::ForceTxRxOff { enabled: false },
                 PhyRfWakeOperation::SetBasebandMode {
                     mode: BasebandMode::Idle,

@@ -902,14 +902,10 @@ impl PhyColdMmioBinding {
                 .map_err(|_| PhyColdLoweringError::HardwareRestoreInvariant)?;
                 return self.into_completion();
             }
-            PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled } => {
+            PhyRfInitPrefixAction::ConfigureBbpllCalibration { calibration } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
                     registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
-                    },
+                    calibration,
                 );
                 return self.into_completion();
             }
@@ -949,15 +945,10 @@ impl PhyColdMmioBinding {
                 crate::hardware::configure_phy_front_end_update(registers)
             }
             PhyRfInitPrefixAction::ChannelFrequency(
-                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
-            ) => oer_chips_esp32s31_hal::radio::phy::frequency::initialize_registers(
-                registers,
-                if parameter_override {
-                    oer_chips_esp32s31_hal::types::FrequencyRegisterMode::ParameterOverride
-                } else {
-                    oer_chips_esp32s31_hal::types::FrequencyRegisterMode::Default
-                },
-            ),
+                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode },
+            ) => {
+                oer_chips_esp32s31_hal::radio::phy::frequency::initialize_registers(registers, mode)
+            }
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::Table(
                 PhyFrequencyTableAction::WriteMemory {
                     address,
@@ -1130,9 +1121,9 @@ fn lower_prefix_mmio_completion(
             Some(PhyRfInitPrefixCompletion::FrontEndRegisterUpdateConfigured)
         }
         PhyRfInitPrefixAction::ChannelFrequency(
-            PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
+            PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode },
         ) => Some(PhyRfInitPrefixCompletion::ChannelFrequency(
-            PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { parameter_override },
+            PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
         )),
         PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::Table(
             PhyFrequencyTableAction::WriteMemory {

@@ -19,6 +19,7 @@ use crate::analog::i2c::{
     RcCalibrationAction, RcCalibrationCompletion, analog_i2c,
 };
 use crate::serial::PhyI2cError;
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 #[test]
@@ -160,7 +161,7 @@ fn non_i2c_outer_action_is_rejected_instead_of_becoming_a_fallback() {
 fn finite_mmio_binding_preserves_dynamic_frequency_identity() {
     let outer_action = PhyRfInitPrefixAction::ChannelFrequency(
         PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters {
-            parameter_override: true,
+            mode: FrequencyRegisterMode::ParameterOverride,
         },
     );
     let binding = PhyColdMmioBinding::new(outer_action).unwrap();
@@ -169,7 +170,7 @@ fn finite_mmio_binding_preserves_dynamic_frequency_identity() {
         binding.into_completion(),
         Ok(PhyRfInitPrefixCompletion::ChannelFrequency(
             PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                parameter_override: true,
+                mode: FrequencyRegisterMode::ParameterOverride,
             }
         ))
     );

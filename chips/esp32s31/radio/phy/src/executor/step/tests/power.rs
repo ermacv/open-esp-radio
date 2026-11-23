@@ -10,6 +10,7 @@ use crate::{
         power::{PhyTxPowerTrackingAction as Action, PhyTxPowerTrackingCompletion as Completion},
     },
 };
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 impl Io {
@@ -48,7 +49,9 @@ impl Io {
         }
         self.power_actions.push(action);
         Ok(match action {
-            Action::SetBbpllCalibration { enabled } => Completion::BbpllCalibrationSet { enabled },
+            Action::SetBbpllCalibration { calibration } => {
+                Completion::BbpllCalibrationSet { calibration }
+            }
             Action::ForceTxRx(action) => Completion::ForceTxRx(match action {
                 Force::Configure { phase } => {
                     crate::analog::pbus::PhyForceTxRxCompletion::Configured { phase }
@@ -191,11 +194,15 @@ fn both_classes_yield_between_atoms_keep_force_settles_and_commit_after_bbpll_of
         );
         assert_eq!(
             io.power_actions.first(),
-            Some(&Action::SetBbpllCalibration { enabled: true })
+            Some(&Action::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Enabled
+            })
         );
         assert_eq!(
             io.power_actions.last(),
-            Some(&Action::SetBbpllCalibration { enabled: false })
+            Some(&Action::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Disabled
+            })
         );
         let force: Vec<_> = io
             .power_actions

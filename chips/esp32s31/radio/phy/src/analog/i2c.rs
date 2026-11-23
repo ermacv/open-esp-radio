@@ -31,6 +31,7 @@ use crate::analog::{
 };
 #[cfg(target_arch = "riscv32")]
 use oer_chips_esp32s31_hal::system::owner::SharedPhyAccess;
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 
 use oer_chips_esp32s31_hal::radio::phy::i2c::PhyAdcRate;
 
@@ -890,7 +891,7 @@ pub enum PhyRfInitPrefixOutcome {
 pub enum PhyRfInitPrefixAction {
     ConfigureFeBbClock,
     ConfigureBbpllCalibration {
-        enabled: bool,
+        calibration: PhyBbpllCalibration,
     },
     ConfigureBiasRegisters,
     OpenI2cXpd(OpenI2cXpdAction),
@@ -1070,7 +1071,7 @@ impl PhyRfInitPrefixTransition {
         match self.step {
             PhyRfInitPrefixStep::FeBbClock => PhyRfInitPrefixAction::ConfigureFeBbClock,
             PhyRfInitPrefixStep::BbpllCalibration => {
-                PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled: true }
+                PhyRfInitPrefixAction::ConfigureBbpllCalibration { calibration: PhyBbpllCalibration::Enabled }
             }
             PhyRfInitPrefixStep::BiasRegisters => PhyRfInitPrefixAction::ConfigureBiasRegisters,
             PhyRfInitPrefixStep::OpenI2cXpd(transition) => match transition.action() {
@@ -1506,8 +1507,7 @@ impl PhyRfInitPrefixTransition {
             ) => PhyRfInitPrefixStep::ChannelFrequency {
                 transition: PhyChannelFrequencyInitTransition::new(
                     PhyChannelFrequencyInitRequest {
-                        frequency_register_parameter_override: control
-                            .frequency_register_parameter_override,
+                        frequency_register_mode: control.frequency_register_mode,
                         frequency_table_initialized: control.frequency_table_initialized,
                         crystal_selector: xtal_parameters.rf_frequency_offset_base,
                         middle_xtal_duty: xtal_duty.low_frequency.best_candidate,

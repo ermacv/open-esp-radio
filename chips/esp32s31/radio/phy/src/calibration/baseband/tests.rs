@@ -5,6 +5,8 @@ use super::{
     PhyTxCfrCompletion, PhyTxCfrEntry, PhyTxCfrMmioBinding, PhyTxCfrOutcome, PhyTxCfrTransition,
     PhyTxCfrTransitionError, generate_phy_rx_gain_table, phy_generated_rx_gain_memory_entry,
 };
+use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
+use oer_chips_esp32s31_hal::types::PhyTxPowerTracking;
 
 #[test]
 fn cold_rx_borrows_one_program_and_rejects_an_external_leaf_completion() {
@@ -181,7 +183,9 @@ fn finite_baseband_mmio_binding_preserves_dynamic_identity() {
         PhyBbMmioAction::UpdatePostInitRegisters,
         PhyBbMmioAction::EnableAgc,
         PhyBbMmioAction::SetWifiEnabled { enabled: false },
-        PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true },
+        PhyBbMmioAction::ConfigureTxPowerTracking {
+            tracking: PhyTxPowerTracking::Enabled,
+        },
         PhyBbMmioAction::ConfigureRfRxSaturation {
             phase: PhyRfRxSaturationPhase::PrepareCheck,
         },
@@ -232,7 +236,9 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     );
     complete_parent_mmio(
         &mut fresh,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: true },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Enabled,
+        },
     );
     assert_eq!(
         fresh.step_local().unwrap(),
@@ -253,7 +259,9 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     );
     complete_parent_mmio(
         &mut retained,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: true },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Enabled,
+        },
     );
     assert_eq!(
         retained.step_local().unwrap(),
@@ -325,7 +333,9 @@ fn complete_parent_tail_preserves_conditional_disable_and_tracking_order() {
     complete_parent_mmio(&mut transition, PhyBbMmioAction::ConfigureI2cTxRate);
     complete_parent_mmio(
         &mut transition,
-        PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true },
+        PhyBbMmioAction::ConfigureTxPowerTracking {
+            tracking: PhyTxPowerTracking::Enabled,
+        },
     );
     assert_eq!(
         transition.step_local().unwrap(),
@@ -356,12 +366,16 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
     assert_eq!(
         transition.step_local().unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
-            PhyBbMmioAction::SetForcedDigitalGain { enabled: false }
+            PhyBbMmioAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Disabled
+            }
         ))
     );
     complete_parent_mmio(
         &mut transition,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: false },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Disabled,
+        },
     );
     assert_eq!(
         transition.step_local().unwrap(),

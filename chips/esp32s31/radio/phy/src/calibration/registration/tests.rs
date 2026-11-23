@@ -5,7 +5,9 @@ use super::{
     PhyRegisterMmioCompletion, PhyRegisterOutcome, PhyRegisterResetSampleBinding,
     PhyRegisterTimerBinding, PhyRegisterTransition,
 };
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
+use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
 
 fn complete_mmio(transition: &mut PhyRegisterTransition, action: PhyRegisterMmioAction) {
     transition
@@ -33,11 +35,15 @@ fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
     );
     complete_mmio(
         transition,
-        PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+        PhyRegisterMmioAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled,
+        },
     );
     complete_mmio(
         transition,
-        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true },
+        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+            control: PhyFrequencyControl::Hardware,
+        },
     );
     complete_mmio(
         transition,
@@ -455,7 +461,9 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     complete_mmio(&mut transition, PhyRegisterMmioAction::ResetFrequencyModule);
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: false },
+        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+            control: PhyFrequencyControl::Software,
+        },
     );
     complete_delay(
         &mut transition,
@@ -508,11 +516,15 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
     );
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+        PhyRegisterMmioAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled,
+        },
     );
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true },
+        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+            control: PhyFrequencyControl::Hardware,
+        },
     );
     complete_mmio(
         &mut transition,
@@ -584,7 +596,9 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     assert!(transition.calibration_cache().is_none());
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+        PhyRegisterMmioAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled,
+        },
     );
     transition
         .advance_external(PhyRegisterCompletion::FinalI2cRead {
@@ -603,7 +617,9 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     };
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true },
+        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+            control: PhyFrequencyControl::Hardware,
+        },
     );
     complete_mmio(
         &mut transition,
@@ -828,7 +844,9 @@ fn final_i2c_failure_returns_only_the_original_retry_cache() {
     assert!(transition.calibration_cache().is_none());
     complete_mmio(
         &mut transition,
-        PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+        PhyRegisterMmioAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled,
+        },
     );
     transition
         .advance_external(PhyRegisterCompletion::FinalI2cDeadlineExceeded {

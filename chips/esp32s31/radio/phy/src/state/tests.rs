@@ -765,7 +765,7 @@ fn rf_prefix_consumes_only_typed_views() {
     assert_eq!(
         state.channel_frequency_control(),
         PhyChannelFrequencyInitControl {
-            frequency_register_parameter_override: false,
+            frequency_register_mode: FrequencyRegisterMode::Default,
             frequency_table_initialized: false,
             front_end_parameter_bit: true,
         }

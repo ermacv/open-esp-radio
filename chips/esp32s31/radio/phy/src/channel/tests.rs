@@ -55,8 +55,8 @@ fn direct_completion(action: PhyChipChannelAction, ready: bool) -> PhyChipChanne
         PhyChipChannelAction::ConfigureForceTxRx { phase } => {
             PhyChipChannelCompletion::ForceTxRxConfigured { phase }
         }
-        PhyChipChannelAction::SetBbpllCalibration { enabled } => {
-            PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
+        PhyChipChannelAction::SetBbpllCalibration { calibration } => {
+            PhyChipChannelCompletion::BbpllCalibrationSet { calibration }
         }
         PhyChipChannelAction::Temperature(action) => {
             PhyChipChannelCompletion::Temperature(temperature_completion(action))
@@ -177,16 +177,16 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         })
     };
     let agc = |enabled| PhyChipChannelAction::SetAgc { enabled };
-    let bbpll = |enabled| PhyChipChannelAction::SetBbpllCalibration { enabled };
+    let bbpll = |calibration| PhyChipChannelAction::SetBbpllCalibration { calibration };
     let depth_one = PhyForceTxRxDepth::OUTERMOST.nested();
     // Outermost: force, re-force when the nested TX-gain pair leaves the
     // count at one, release when the root leaves it at zero.
     let outermost: std::vec::Vec<_> = [agc(false)]
         .into_iter()
         .chain(sequence(true))
-        .chain([bbpll(true)])
+        .chain([bbpll(PhyBbpllCalibration::Enabled)])
         .chain(sequence(true))
-        .chain([bbpll(false)])
+        .chain([bbpll(PhyBbpllCalibration::Disabled)])
         .chain(sequence(false))
         .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
         .collect();
@@ -195,11 +195,15 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         outermost
     );
     // Depth one: only the root's release, which leaves the count at one.
-    let nested: std::vec::Vec<_> = [agc(false), bbpll(true), bbpll(false)]
-        .into_iter()
-        .chain(sequence(true))
-        .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
-        .collect();
+    let nested: std::vec::Vec<_> = [
+        agc(false),
+        bbpll(PhyBbpllCalibration::Enabled),
+        bbpll(PhyBbpllCalibration::Disabled),
+    ]
+    .into_iter()
+    .chain(sequence(true))
+    .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
+    .collect();
     assert_eq!(
         force_edges(PhyChipChannelTransition::at_depth(REQUEST, depth_one)),
         nested
@@ -212,8 +216,8 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         )),
         [
             agc(false),
-            bbpll(true),
-            bbpll(false),
+            bbpll(PhyBbpllCalibration::Enabled),
+            bbpll(PhyBbpllCalibration::Disabled),
             PhyChipChannelAction::ClearDcMemory,
             agc(true),
         ]
@@ -317,10 +321,14 @@ fn frequency_timeout_runs_full_radio_cleanup() {
 
     assert_eq!(
         transition.action(),
-        PhyChipChannelAction::SetBbpllCalibration { enabled: false }
+        PhyChipChannelAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled
+        }
     );
     transition
-        .advance(PhyChipChannelCompletion::BbpllCalibrationSet { enabled: false })
+        .advance(PhyChipChannelCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Disabled,
+        })
         .unwrap();
     // The failed channel still leaves its force-TX/RX level.
     for phase in 0..2 {

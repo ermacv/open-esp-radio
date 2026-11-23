@@ -1,4 +1,5 @@
 use super::*;
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_portable_time_virtual::VirtualClock;
 
 const CLIENTS: [RadioClient; 3] = [
@@ -517,7 +518,9 @@ fn periodic_outer_tracking_commits_power_i2c_and_temperature_children() {
     let wifi = tracking.begin_tx_power_tracking(&mut state).unwrap();
     assert_eq!(
         wifi.action(),
-        crate::tracking::power::PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: true }
+        crate::tracking::power::PhyTxPowerTrackingAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Enabled
+        }
     );
     let completion = complete_power_child(wifi);
     tracking.advance(completion).unwrap();
@@ -549,9 +552,9 @@ fn complete_power_child(
         }
         let completion = match child.action() {
                 crate::tracking::power::PhyTxPowerTrackingAction::SetBbpllCalibration {
-                    enabled,
+                    calibration,
                 } => crate::tracking::power::PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
-                    enabled,
+                    calibration,
                 },
                 crate::tracking::power::PhyTxPowerTrackingAction::RegenerateWifiGain {
                     channel,

@@ -8,7 +8,9 @@
 //! All retained radio work is represented by owned state plus
 //! one externally completed MMIO, PHY-I2C, timer or observation edge.
 
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
+use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
 
 pub const PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT: u16 = 1_000;
 
@@ -27,11 +29,11 @@ pub enum PhyRegisterMmioAction {
     PrepareColdStart,
     ConfigureForceTxRx { phase: PhyForceTxRxPhase },
     ResetFrequencyModule,
-    SetHardwareFrequencyControl { enabled: bool },
+    SetHardwareFrequencyControl { control: PhyFrequencyControl },
     PulseI2cMasterReset { index: u8 },
     ConfigureXtal40Mhz,
     SetCalibrationClock { enabled: bool },
-    SetBbpllCalibration { enabled: bool },
+    SetBbpllCalibration { calibration: PhyBbpllCalibration },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -561,13 +563,17 @@ impl PhyRegisterTransition {
                 PhyRegisterMmioAction::SetCalibrationClock { enabled: false },
             )),
             TailStep::BbpllOff => Some(PhyRegisterAction::Mmio(
-                PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+                PhyRegisterMmioAction::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled,
+                },
             )),
             TailStep::FinalI2cRead => Some(PhyRegisterAction::ReadFinalI2c {
                 address: PHY_REGISTER_FINAL_I2C_ADDRESS,
             }),
             TailStep::EnableHardwareFrequency => Some(PhyRegisterAction::Mmio(
-                PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true },
+                PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                },
             )),
             TailStep::ReleaseFirst => Some(PhyRegisterAction::Mmio(
                 PhyRegisterMmioAction::ConfigureForceTxRx {
@@ -677,7 +683,9 @@ impl PhyRegisterTransition {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::ResetFrequencyModule)
                     }
                     PreludeStep::DisableHardwareFrequency => PhyRegisterAction::Mmio(
-                        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: false },
+                        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                            control: PhyFrequencyControl::Software,
+                        },
                     ),
                     PreludeStep::DisableHardwareFrequencyDelay => PhyRegisterAction::DelayMicros {
                         phase: PhyRegisterDelayPhase::HardwareFrequencyDisabled,
@@ -946,7 +954,9 @@ impl PhyRegisterTransition {
                 Phase::Prelude(PreludeStep::DisableHardwareFrequency),
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: false }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Software,
+                }) =>
             {
                 Phase::Prelude(PreludeStep::DisableHardwareFrequencyDelay)
             }
@@ -1068,7 +1078,9 @@ impl PhyRegisterTransition {
             }
             (Phase::Tail(TailStep::BbpllOff), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
-                    == (PhyRegisterMmioAction::SetBbpllCalibration { enabled: false }) =>
+                    == (PhyRegisterMmioAction::SetBbpllCalibration {
+                        calibration: PhyBbpllCalibration::Disabled,
+                    }) =>
             {
                 Phase::Tail(TailStep::FinalI2cRead)
             }
@@ -1087,7 +1099,9 @@ impl PhyRegisterTransition {
                 Phase::Tail(TailStep::EnableHardwareFrequency),
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                }) =>
             {
                 Phase::Tail(TailStep::ReleaseFirst)
             }
@@ -1170,7 +1184,9 @@ impl PhyRegisterTransition {
                 },
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetBbpllCalibration { enabled: false }) =>
+                == (PhyRegisterMmioAction::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled,
+                }) =>
             {
                 Phase::Cleanup {
                     step: TailStep::EnableHardwareFrequency,
@@ -1184,7 +1200,9 @@ impl PhyRegisterTransition {
                 },
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                }) =>
             {
                 Phase::Cleanup {
                     step: TailStep::ReleaseFirst,
@@ -1330,14 +1348,9 @@ impl PhyRegisterMmioBinding {
             PhyRegisterMmioAction::ResetFrequencyModule => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::reset_module(registers)
             }
-            PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled } => {
+            PhyRegisterMmioAction::SetHardwareFrequencyControl { control } => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Hardware
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software
-                    },
+                    registers, control,
                 )
             }
             PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
@@ -1354,14 +1367,10 @@ impl PhyRegisterMmioBinding {
             PhyRegisterMmioAction::SetCalibrationClock { enabled } => {
                 crate::hardware::set_phy_register_calibration_clock(registers, enabled)
             }
-            PhyRegisterMmioAction::SetBbpllCalibration { enabled } => {
+            PhyRegisterMmioAction::SetBbpllCalibration { calibration } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
                     registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
-                    },
+                    calibration,
                 )
             }
         }

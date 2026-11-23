@@ -1,4 +1,6 @@
 use crate::analog::i2c::analog_i2c;
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 use super::{
@@ -427,10 +429,8 @@ fn drive_warm_channel_frequency(transition: &mut PhyRfInitPrefixTransition) {
     loop {
         let completion = match transition.action() {
             PhyRfInitPrefixAction::ChannelFrequency(
-                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
-            ) => PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                parameter_override,
-            },
+                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode },
+            ) => PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(action)) => {
                 let completion = match action {
                     PhyFrequencyI2cAction::WriteMasked { field, .. } => {
@@ -862,7 +862,9 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     assert_eq!(
         transition.action(),
-        PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled: true }
+        PhyRfInitPrefixAction::ConfigureBbpllCalibration {
+            calibration: PhyBbpllCalibration::Enabled
+        }
     );
     transition
         .advance(PhyRfInitPrefixCompletion::BbpllCalibrationConfigured)
@@ -1293,7 +1295,7 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     transition
         .advance(PhyRfInitPrefixCompletion::ChannelFrequencyControlCaptured(
             PhyChannelFrequencyInitControl {
-                frequency_register_parameter_override: false,
+                frequency_register_mode: FrequencyRegisterMode::Default,
                 frequency_table_initialized: true,
                 front_end_parameter_bit: false,
             },

@@ -19,6 +19,7 @@ use crate::analog::{
         calculate_rfpll_sdm,
     },
 };
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 
 use oer_chips_esp32s31_hal::{
     layouts::{
@@ -1197,7 +1198,7 @@ impl PhyFrequencyI2cTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyChannelFrequencyInitControl {
     /// Explicit replacement for the hidden `phy_param[0x193]` branch.
-    pub frequency_register_parameter_override: bool,
+    pub frequency_register_mode: FrequencyRegisterMode,
     /// Rust-owned replacement for `phy_param[0xa4] & 0x20`.
     pub frequency_table_initialized: bool,
     /// Explicit replacement for the bit read from `phy_param[0x1af]`.
@@ -1207,7 +1208,7 @@ pub struct PhyChannelFrequencyInitControl {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyChannelFrequencyInitRequest {
     /// Explicit replacement for the hidden `phy_param[0x193]` branch.
-    pub frequency_register_parameter_override: bool,
+    pub frequency_register_mode: FrequencyRegisterMode,
     /// Rust-owned replacement for `phy_param[0xa4] & 0x20`.
     pub frequency_table_initialized: bool,
     /// Explicit replacement for `phy_param[0x4f]`.
@@ -1254,7 +1255,7 @@ pub enum PhyChannelFrequencyInitFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyChannelFrequencyInitAction {
     ConfigureFrequencyRegisters {
-        parameter_override: bool,
+        mode: FrequencyRegisterMode,
     },
     WriteMasked {
         field: Field,
@@ -1279,7 +1280,7 @@ pub enum PhyChannelFrequencyInitAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyChannelFrequencyInitCompletion {
-    FrequencyRegistersConfigured { parameter_override: bool },
+    FrequencyRegistersConfigured { mode: FrequencyRegisterMode },
     MaskedWrite { field: Field },
     ByteWrite { address: Address },
     ByteRead { address: Address, value: u8 },
@@ -1377,7 +1378,7 @@ impl PhyChannelFrequencyInitTransition {
         match self.step {
             PhyChannelFrequencyInitStep::ConfigureRegisters => {
                 PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters {
-                    parameter_override: self.request.frequency_register_parameter_override,
+                    mode: self.request.frequency_register_mode,
                 }
             }
             PhyChannelFrequencyInitStep::InitialCapLow => {
@@ -1474,10 +1475,8 @@ impl PhyChannelFrequencyInitTransition {
         self.step = match (self.step, completion) {
             (
                 PhyChannelFrequencyInitStep::ConfigureRegisters,
-                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                    parameter_override,
-                },
-            ) if parameter_override == self.request.frequency_register_parameter_override => {
+                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
+            ) if mode == self.request.frequency_register_mode => {
                 if self.request.frequency_table_initialized {
                     PhyChannelFrequencyInitStep::I2c {
                         calibration: None,

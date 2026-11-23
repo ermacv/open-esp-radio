@@ -8,6 +8,8 @@
 //! priority, and physical admission remains the radio owner's job.
 
 use crate::tracking::parameters::PhyCalibrationTrackClass;
+use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
 
 pub mod decision;
 
@@ -52,11 +54,11 @@ pub enum PhyCalibrationTrackingAction {
         cbw: u8,
     },
     SetHardwareFrequencyControl {
-        enabled: bool,
+        mode: BasebandMode,
     },
     AwaitSoftwareFrequencySettle,
     SetForcedDigitalGain {
-        enabled: bool,
+        gain: PhyForcedDigitalGain,
     },
     ForceTxRxOff {
         enabled: bool,
@@ -90,9 +92,9 @@ pub enum PhyCalibrationTrackingCompletion {
     DcodeCompleted(PhyCalibrationDcodeCompletion),
     RxGainRecalibrated(PhyCalibrationRxGainCompletion),
     ChipChannelRestored(PhyCalibrationChannelCompletion),
-    HardwareFrequencyControlSet { enabled: bool },
+    HardwareFrequencyControlSet { mode: BasebandMode },
     SoftwareFrequencySettled,
-    ForcedDigitalGainSet { enabled: bool },
+    ForcedDigitalGainSet { gain: PhyForcedDigitalGain },
     ForceTxRxCompleted(PhyCalibrationForceTxRxCompletion),
     BasebandChannelConfigured { cbw: u8 },
     TxDcPwdetCalibrated(PhyCalibrationTxDcPwdetCompletion),
@@ -449,17 +451,19 @@ impl PhyCalibrationTrackingTransition {
                 PhyCalibrationTrackingAction::EnableMacBaseband
             }
             Step::TxDisableHardwareFrequency => {
-                PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false }
+                PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+                    mode: BasebandMode::Calibration,
+                }
             }
             Step::TxSoftwareFrequencySettle => {
                 PhyCalibrationTrackingAction::AwaitSoftwareFrequencySettle
             }
-            Step::TxForceDigitalGain => {
-                PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled: true }
-            }
-            Step::TxReleaseDigitalGain => {
-                PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled: false }
-            }
+            Step::TxForceDigitalGain => PhyCalibrationTrackingAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Enabled,
+            },
+            Step::TxReleaseDigitalGain => PhyCalibrationTrackingAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Disabled,
+            },
             Step::CommonForceTxRxOff | Step::TxForceTxRxOff | Step::TxReassertTxRxOff => {
                 PhyCalibrationTrackingAction::ForceTxRxOff { enabled: true }
             }
@@ -484,7 +488,9 @@ impl PhyCalibrationTrackingTransition {
                 PhyCalibrationTrackingAction::ForceTxRxOff { enabled: false }
             }
             Step::TxEnableHardwareFrequency => {
-                PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: true }
+                PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+                    mode: BasebandMode::Idle,
+                }
             }
             Step::CommonRestoreTxGainCompensation | Step::RestoreTxGainCompensation => {
                 PhyCalibrationTrackingAction::RestoreTxGainCompensation
@@ -606,7 +612,9 @@ impl PhyCalibrationTrackingTransition {
             ) => Step::TxDisableHardwareFrequency,
             (
                 Step::TxDisableHardwareFrequency,
-                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled: false },
+                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet {
+                    mode: BasebandMode::Calibration,
+                },
             ) => Step::TxSoftwareFrequencySettle,
             (
                 Step::TxSoftwareFrequencySettle,
@@ -618,11 +626,15 @@ impl PhyCalibrationTrackingTransition {
             ) if completion.enabled => Step::TxForceDigitalGain,
             (
                 Step::TxForceDigitalGain,
-                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled: true },
+                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet {
+                    gain: PhyForcedDigitalGain::Enabled,
+                },
             ) => Step::TxClearPbus,
             (
                 Step::TxReleaseDigitalGain,
-                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled: false },
+                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet {
+                    gain: PhyForcedDigitalGain::Disabled,
+                },
             ) => Step::TxReleaseTxRxOff,
             (
                 Step::TxClearPbus,
@@ -692,7 +704,9 @@ impl PhyCalibrationTrackingTransition {
             ) if !completion.enabled => Step::TxEnableHardwareFrequency,
             (
                 Step::TxEnableHardwareFrequency,
-                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled: true },
+                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet {
+                    mode: BasebandMode::Idle,
+                },
             ) => {
                 self.transmit_updated = self.failure.is_none();
                 Step::RestoreTxGainCompensation
@@ -1338,8 +1352,8 @@ pub enum PhyCalibrationTrackingBindingError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RegisterAction {
-    SetHardwareFrequencyControl { enabled: bool },
-    SetForcedDigitalGain { enabled: bool },
+    SetHardwareFrequencyControl { mode: BasebandMode },
+    SetForcedDigitalGain { gain: PhyForcedDigitalGain },
     ConfigureBasebandChannel { cbw: u8 },
     RestoreTxGainCompensation,
 }
@@ -1355,11 +1369,11 @@ impl PhyCalibrationTrackingRegisterBinding {
         action: PhyCalibrationTrackingAction,
     ) -> Result<Self, PhyCalibrationTrackingBindingError> {
         let action = match action {
-            PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled } => {
-                RegisterAction::SetForcedDigitalGain { enabled }
+            PhyCalibrationTrackingAction::SetForcedDigitalGain { gain } => {
+                RegisterAction::SetForcedDigitalGain { gain }
             }
-            PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled } => {
-                RegisterAction::SetHardwareFrequencyControl { enabled }
+            PhyCalibrationTrackingAction::SetHardwareFrequencyControl { mode } => {
+                RegisterAction::SetHardwareFrequencyControl { mode }
             }
             PhyCalibrationTrackingAction::ConfigureBasebandChannel { cbw } => {
                 RegisterAction::ConfigureBasebandChannel { cbw }
@@ -1375,11 +1389,11 @@ impl PhyCalibrationTrackingRegisterBinding {
     #[cfg(test)]
     pub const fn action(&self) -> PhyCalibrationTrackingAction {
         match self.action {
-            RegisterAction::SetForcedDigitalGain { enabled } => {
-                PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled }
+            RegisterAction::SetForcedDigitalGain { gain } => {
+                PhyCalibrationTrackingAction::SetForcedDigitalGain { gain }
             }
-            RegisterAction::SetHardwareFrequencyControl { enabled } => {
-                PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled }
+            RegisterAction::SetHardwareFrequencyControl { mode } => {
+                PhyCalibrationTrackingAction::SetHardwareFrequencyControl { mode }
             }
             RegisterAction::ConfigureBasebandChannel { cbw } => {
                 PhyCalibrationTrackingAction::ConfigureBasebandChannel { cbw }
@@ -1396,29 +1410,15 @@ impl PhyCalibrationTrackingRegisterBinding {
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyCalibrationTrackingCompletion {
         match self.action {
-            RegisterAction::SetForcedDigitalGain { enabled } => {
+            RegisterAction::SetForcedDigitalGain { gain } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Disabled
-                    },
-                    -120,
-                    -120,
+                    registers, gain, -120, -120,
                 );
-                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled }
+                PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { gain }
             }
-            RegisterAction::SetHardwareFrequencyControl { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::frequency::set_baseband_mode(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode::Idle
-                    } else {
-                        oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode::Calibration
-                    },
-                );
-                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled }
+            RegisterAction::SetHardwareFrequencyControl { mode } => {
+                oer_chips_esp32s31_hal::radio::phy::frequency::set_baseband_mode(registers, mode);
+                PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { mode }
             }
             RegisterAction::ConfigureBasebandChannel { cbw } => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::configure_channel_cbw(
