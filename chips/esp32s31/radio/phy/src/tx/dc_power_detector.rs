@@ -18,6 +18,7 @@ use crate::{
         PhyToneSarTransition,
     },
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 const COMPONENT_COUNT: u8 = 2;
 const SCAN_DIRECTION_COUNT: u8 = 2;
@@ -607,7 +608,7 @@ pub enum PhyTxDcPwdetDelayPhase {
 pub enum PhyTxDcPwdetAction {
     PrepareRegisters,
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePowerDetector,
     ConfigurePbusDebugMode,
@@ -639,7 +640,7 @@ pub enum PhyTxDcPwdetAction {
 pub enum PhyTxDcPwdetCompletion {
     RegistersPrepared,
     TxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     PowerDetectorConfigured,
     PbusDebugModeConfigured,
@@ -991,7 +992,9 @@ impl PhyTxDcPwdetTransition {
     pub const fn action(&self) -> PhyTxDcPwdetAction {
         match self.step {
             RootStep::Prepare => PhyTxDcPwdetAction::PrepareRegisters,
-            RootStep::ClockOn => PhyTxDcPwdetAction::ConfigureTxClock { enabled: true },
+            RootStep::ClockOn => PhyTxDcPwdetAction::ConfigureTxClock {
+                state: PhyClockPair::Enabled,
+            },
             RootStep::PowerDetector => PhyTxDcPwdetAction::ConfigurePowerDetector,
             RootStep::Debug => PhyTxDcPwdetAction::ConfigurePbusDebugMode,
             RootStep::BluetoothReadForcedPath { .. } => PhyTxDcPwdetAction::ReadPbus {
@@ -1055,7 +1058,9 @@ impl PhyTxDcPwdetTransition {
                 }
             }
             RootStep::WorkModePulseClear(_) => PhyTxDcPwdetAction::ClearPbusWorkModePulse,
-            RootStep::ClockOff(_) => PhyTxDcPwdetAction::ConfigureTxClock { enabled: false },
+            RootStep::ClockOff(_) => PhyTxDcPwdetAction::ConfigureTxClock {
+                state: PhyClockPair::Disabled,
+            },
             RootStep::Restore(_) => PhyTxDcPwdetAction::RestoreRegisters,
             RootStep::Complete => PhyTxDcPwdetAction::Complete(self.outcome()),
             RootStep::Failed(failure) => PhyTxDcPwdetAction::Failed(failure),
@@ -1180,9 +1185,12 @@ impl PhyTxDcPwdetTransition {
             (RootStep::Prepare, PhyTxDcPwdetCompletion::RegistersPrepared) => {
                 self.step = RootStep::ClockOn;
             }
-            (RootStep::ClockOn, PhyTxDcPwdetCompletion::TxClockConfigured { enabled: true }) => {
-                self.step = RootStep::PowerDetector
-            }
+            (
+                RootStep::ClockOn,
+                PhyTxDcPwdetCompletion::TxClockConfigured {
+                    state: PhyClockPair::Enabled,
+                },
+            ) => self.step = RootStep::PowerDetector,
             (RootStep::PowerDetector, PhyTxDcPwdetCompletion::PowerDetectorConfigured) => {
                 self.step = RootStep::Debug;
             }
@@ -1284,7 +1292,9 @@ impl PhyTxDcPwdetTransition {
             ) => self.step = RootStep::ClockOff(*terminal),
             (
                 RootStep::ClockOff(terminal),
-                PhyTxDcPwdetCompletion::TxClockConfigured { enabled: false },
+                PhyTxDcPwdetCompletion::TxClockConfigured {
+                    state: PhyClockPair::Disabled,
+                },
             ) => self.step = RootStep::Restore(*terminal),
             (RootStep::Restore(terminal), PhyTxDcPwdetCompletion::RegistersRestored) => {
                 self.step = match *terminal {
@@ -1354,7 +1364,7 @@ fn require_pbus_result(result: Option<u16>) -> Result<u16, PhyTxDcPwdetHardwareI
 enum PhyTxDcPwdetMmioAction {
     PrepareRegisters,
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePowerDetector,
     ConfigurePbusDebugMode,
@@ -1383,8 +1393,8 @@ impl PhyTxDcPwdetMmioBinding {
     pub fn new(action: PhyTxDcPwdetAction) -> Result<Self, PhyTxDcPwdetBindingError> {
         let action = match action {
             PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetMmioAction::PrepareRegisters,
-            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
-                PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled }
+            PhyTxDcPwdetAction::ConfigureTxClock { state } => {
+                PhyTxDcPwdetMmioAction::ConfigureTxClock { state }
             }
             PhyTxDcPwdetAction::ConfigurePowerDetector => {
                 PhyTxDcPwdetMmioAction::ConfigurePowerDetector
@@ -1435,12 +1445,9 @@ impl PhyTxDcPwdetMmioBinding {
                 .map_err(|_| PhyTxDcPwdetHardwareInvariant::RestoreAlreadyPending)?;
                 Ok(PhyTxDcPwdetCompletion::RegistersPrepared)
             }
-            PhyTxDcPwdetMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                    registers,
-                    crate::hardware::clock_pair(enabled),
-                );
-                Ok(PhyTxDcPwdetCompletion::TxClockConfigured { enabled })
+            PhyTxDcPwdetMmioAction::ConfigureTxClock { state } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state);
+                Ok(PhyTxDcPwdetCompletion::TxClockConfigured { state })
             }
             PhyTxDcPwdetMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(registers);

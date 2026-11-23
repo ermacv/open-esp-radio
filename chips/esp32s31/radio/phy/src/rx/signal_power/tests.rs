@@ -10,12 +10,12 @@ fn reach_readiness(transition: &mut PhySignalPowerTransition) {
         PhySignalPowerCompletion::ClockConfigured {
             request: REQUEST,
             clock: PhySignalPowerClock::Tx,
-            enabled: true,
+            state: PhyClockPair::Enabled,
         },
         PhySignalPowerCompletion::ClockConfigured {
             request: REQUEST,
             clock: PhySignalPowerClock::Rx,
-            enabled: true,
+            state: PhyClockPair::Enabled,
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,

@@ -5,6 +5,7 @@ use super::{
     PhyRegisterMmioCompletion, PhyRegisterOutcome, PhyRegisterResetSampleBinding,
     PhyRegisterTimerBinding, PhyRegisterTransition,
 };
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 fn complete_mmio(transition: &mut PhyRegisterTransition, action: PhyRegisterMmioAction) {
     transition
@@ -41,8 +42,7 @@ fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
     complete_mmio(
         transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 0,
+            phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
@@ -57,8 +57,7 @@ fn complete_failure_cleanup(transition: &mut PhyRegisterTransition) {
     complete_mmio(
         transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 1,
+            phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
     );
     assert!(!transition.failure_cleanup_completed());
@@ -418,8 +417,7 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: true,
-            phase: 0,
+            phase: PhyForceTxRxPhase::EnableInitialPhase,
         },
     );
     assert_eq!(
@@ -443,8 +441,7 @@ fn prelude_has_async_delay_and_reset_sample_edges() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: true,
-            phase: 1,
+            phase: PhyForceTxRxPhase::EnableFinalPhase,
         },
     );
     complete_delay(
@@ -520,8 +517,7 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 0,
+            phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
@@ -535,8 +531,7 @@ fn stuck_i2c_reset_fails_only_after_bounded_async_samples_and_cleans_up() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 1,
+            phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
     );
     complete_delay(
@@ -613,8 +608,7 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 0,
+            phase: PhyForceTxRxPhase::DisableInitialPhase,
         },
     );
     complete_delay(
@@ -628,8 +622,7 @@ fn success_tail_marks_owned_state_before_releasing_radio() {
     complete_mmio(
         &mut transition,
         PhyRegisterMmioAction::ConfigureForceTxRx {
-            enabled: false,
-            phase: 1,
+            phase: PhyForceTxRxPhase::DisableFinalPhase,
         },
     );
     complete_delay(

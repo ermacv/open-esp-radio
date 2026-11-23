@@ -160,11 +160,11 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
                 address,
             })
         }
-        PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureTxClock { state } => {
+            PhyTxIqLoopbackCompletion::TxClockConfigured { state }
         }
-        PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureRxClock { state } => {
+            PhyTxIqLoopbackCompletion::RxClockConfigured { state }
         }
         action => panic!("unexpected loopback terminal: {action:?}"),
     }

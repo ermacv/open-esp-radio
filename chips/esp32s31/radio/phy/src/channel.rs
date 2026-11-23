@@ -23,6 +23,7 @@ use crate::analog::{
         PhyTemperatureOutcome, PhyTemperatureTransition,
     },
 };
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 
@@ -225,8 +226,7 @@ pub enum PhyChipChannelAction {
     },
     /// One force-TX/RX write selected by the `phy_force_txrx_off_new` depth.
     ConfigureForceTxRx {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     SetBbpllCalibration {
         enabled: bool,
@@ -279,8 +279,7 @@ pub enum PhyChipChannelCompletion {
         enabled: bool,
     },
     ForceTxRxConfigured {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     BbpllCalibrationSet {
         enabled: bool,
@@ -451,9 +450,7 @@ pub(crate) const fn retained_tx_cap_value(channel: u16, capacitance: [u8; 6]) ->
 
 const fn force_txrx_action(child: PhyForceTxRxRunning) -> PhyChipChannelAction {
     match child.edge() {
-        PhyForceTxRxEdge::Configure { enabled, phase } => {
-            PhyChipChannelAction::ConfigureForceTxRx { enabled, phase }
-        }
+        PhyForceTxRxEdge::Configure { phase } => PhyChipChannelAction::ConfigureForceTxRx { phase },
         PhyForceTxRxEdge::DelayMicros {
             enabled,
             completed_phase,
@@ -474,8 +471,8 @@ fn advance_force_txrx(
     completion: PhyChipChannelCompletion,
 ) -> Result<Option<PhyForceTxRxRunning>, PhyChipChannelTransitionError> {
     let completion = match completion {
-        PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase } => {
-            PhyForceTxRxCompletion::Configured { enabled, phase }
+        PhyChipChannelCompletion::ForceTxRxConfigured { phase } => {
+            PhyForceTxRxCompletion::Configured { phase }
         }
         PhyChipChannelCompletion::DelayElapsed {
             phase:
@@ -894,8 +891,7 @@ enum PhyChipChannelMmioAction {
         enabled: bool,
     },
     ConfigureForceTxRx {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     SetBbpllCalibration {
         enabled: bool,
@@ -944,8 +940,8 @@ impl PhyChipChannelMmioBinding {
             PhyChipChannelAction::SetAgc { enabled } => {
                 PhyChipChannelMmioAction::SetAgc { enabled }
             }
-            PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
-                PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase }
+            PhyChipChannelAction::ConfigureForceTxRx { phase } => {
+                PhyChipChannelMmioAction::ConfigureForceTxRx { phase }
             }
             PhyChipChannelAction::SetBbpllCalibration { enabled } => {
                 PhyChipChannelMmioAction::SetBbpllCalibration { enabled }
@@ -990,8 +986,8 @@ impl PhyChipChannelMmioBinding {
             PhyChipChannelMmioAction::SetAgc { enabled } => {
                 PhyChipChannelAction::SetAgc { enabled }
             }
-            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
-                PhyChipChannelAction::ConfigureForceTxRx { enabled, phase }
+            PhyChipChannelMmioAction::ConfigureForceTxRx { phase } => {
+                PhyChipChannelAction::ConfigureForceTxRx { phase }
             }
             PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 PhyChipChannelAction::SetBbpllCalibration { enabled }
@@ -1043,12 +1039,9 @@ impl PhyChipChannelMmioBinding {
                 }
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
-            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    channel,
-                    crate::hardware::force_txrx_phase(enabled, phase),
-                );
-                PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
+            PhyChipChannelMmioAction::ConfigureForceTxRx { phase } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(channel, phase);
+                PhyChipChannelCompletion::ForceTxRxConfigured { phase }
             }
             PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 channel.set_bbpll_calibration(if enabled {
@@ -1119,12 +1112,9 @@ impl PhyChipChannelMmioBinding {
                 crate::hardware::set_phy_channel_agc(registers, enabled);
                 PhyChipChannelCompletion::AgcSet { enabled }
             }
-            PhyChipChannelMmioAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(enabled, phase),
-                );
-                PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
+            PhyChipChannelMmioAction::ConfigureForceTxRx { phase } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, phase);
+                PhyChipChannelCompletion::ForceTxRxConfigured { phase }
             }
             PhyChipChannelMmioAction::SetBbpllCalibration { enabled } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(

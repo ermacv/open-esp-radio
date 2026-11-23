@@ -200,10 +200,14 @@ fn force_wake_txrx<D: PhyShortDelay, K: oer_portable_time::settle::SettleCounter
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     enabled: bool,
 ) -> Result<(), PhyTargetPortError> {
-    for phase in 0..2 {
+    let sequence = crate::analog::pbus::PhyForceTxRxTransition::new(enabled);
+    for phase in [
+        crate::analog::pbus::ForcePhase::Initial,
+        crate::analog::pbus::ForcePhase::Final,
+    ] {
         oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
             registers,
-            crate::hardware::force_txrx_phase(enabled, phase),
+            sequence.image(phase),
         );
         D::settle(counter, crate::executor::wait::SETTLE_ONE_MICRO);
     }

@@ -12,6 +12,7 @@
 //! issued binding under an outer finite async deadline.
 
 use crate::analog::pbus::PhyPbusForceTest;
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 pub const PHY_TX_DC_GAIN_COUNT: u8 = 5;
 pub const PHY_TX_DC_ITERATION_COUNT: u8 = 12;
@@ -981,7 +982,7 @@ impl PhyTxDcMmioBinding {
             PhyTxDcMmioAction::ConfigureTxClock => {
                 oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
                     registers,
-                    crate::hardware::clock_pair(true),
+                    PhyClockPair::Enabled,
                 );
                 PhyTxDcCompletion::TxClockConfigured
             }

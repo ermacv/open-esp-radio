@@ -4,6 +4,8 @@
 //! The cold caller passes `debug = 0`, so both vendor
 //! `phy_printf` branches are dead and are intentionally absent here.
 
+use oer_chips_esp32s31_hal::types::PhyClockPair;
+
 use crate::{
     analog::i2c::Address,
     analog::pbus::PhyPbusForceTest,
@@ -390,10 +392,10 @@ pub enum XtalDutyPrepareAction {
         step: u8,
     },
     ConfigureRxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePbusDebugMode,
     ForcePbus(PhyPbusForceTest),
@@ -416,10 +418,10 @@ pub enum XtalDutyPrepareCompletion {
         step: u8,
     },
     RxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     TxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     PbusDebugModeConfigured,
     PbusForceCompleted(PhyPbusForceTest),
@@ -488,12 +490,12 @@ impl XtalDutyPrepareTransition {
                 selector: 0x80,
                 step: 0,
             },
-            XtalDutyPrepareStep::EnableRxClock => {
-                XtalDutyPrepareAction::ConfigureRxClock { enabled: true }
-            }
-            XtalDutyPrepareStep::EnableTxClock => {
-                XtalDutyPrepareAction::ConfigureTxClock { enabled: true }
-            }
+            XtalDutyPrepareStep::EnableRxClock => XtalDutyPrepareAction::ConfigureRxClock {
+                state: PhyClockPair::Enabled,
+            },
+            XtalDutyPrepareStep::EnableTxClock => XtalDutyPrepareAction::ConfigureTxClock {
+                state: PhyClockPair::Enabled,
+            },
             XtalDutyPrepareStep::PbusDebugMode => XtalDutyPrepareAction::ConfigurePbusDebugMode,
             XtalDutyPrepareStep::PbusForce(index) => XtalDutyPrepareAction::ForcePbus(
                 prepare_pbus_transaction(index, self.parameter.pbus_rx_path_value),
@@ -543,11 +545,15 @@ impl XtalDutyPrepareTransition {
             ) => XtalDutyPrepareStep::EnableRxClock,
             (
                 XtalDutyPrepareStep::EnableRxClock,
-                XtalDutyPrepareCompletion::RxClockConfigured { enabled: true },
+                XtalDutyPrepareCompletion::RxClockConfigured {
+                    state: PhyClockPair::Enabled,
+                },
             ) => XtalDutyPrepareStep::EnableTxClock,
             (
                 XtalDutyPrepareStep::EnableTxClock,
-                XtalDutyPrepareCompletion::TxClockConfigured { enabled: true },
+                XtalDutyPrepareCompletion::TxClockConfigured {
+                    state: PhyClockPair::Enabled,
+                },
             ) => XtalDutyPrepareStep::PbusDebugMode,
             (
                 XtalDutyPrepareStep::PbusDebugMode,
@@ -626,10 +632,10 @@ pub enum XtalDutyRestoreAction {
         step: u8,
     },
     ConfigureRxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ForcePbus(PhyPbusForceTest),
     ConfigurePbusWorkMode,
@@ -648,10 +654,10 @@ pub enum XtalDutyRestoreCompletion {
         step: u8,
     },
     RxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     TxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     PbusForceCompleted(PhyPbusForceTest),
     PbusForceTimedOut(PhyPbusForceTest),
@@ -706,12 +712,12 @@ impl XtalDutyRestoreTransition {
                 selector: 0x80,
                 step: 0x28,
             },
-            XtalDutyRestoreStep::DisableRxClock => {
-                XtalDutyRestoreAction::ConfigureRxClock { enabled: false }
-            }
-            XtalDutyRestoreStep::DisableTxClock => {
-                XtalDutyRestoreAction::ConfigureTxClock { enabled: false }
-            }
+            XtalDutyRestoreStep::DisableRxClock => XtalDutyRestoreAction::ConfigureRxClock {
+                state: PhyClockPair::Disabled,
+            },
+            XtalDutyRestoreStep::DisableTxClock => XtalDutyRestoreAction::ConfigureTxClock {
+                state: PhyClockPair::Disabled,
+            },
             XtalDutyRestoreStep::PbusForce(index) => {
                 XtalDutyRestoreAction::ForcePbus(restore_pbus_transaction(index))
             }
@@ -742,11 +748,15 @@ impl XtalDutyRestoreTransition {
             ) => XtalDutyRestoreStep::DisableRxClock,
             (
                 XtalDutyRestoreStep::DisableRxClock,
-                XtalDutyRestoreCompletion::RxClockConfigured { enabled: false },
+                XtalDutyRestoreCompletion::RxClockConfigured {
+                    state: PhyClockPair::Disabled,
+                },
             ) => XtalDutyRestoreStep::DisableTxClock,
             (
                 XtalDutyRestoreStep::DisableTxClock,
-                XtalDutyRestoreCompletion::TxClockConfigured { enabled: false },
+                XtalDutyRestoreCompletion::TxClockConfigured {
+                    state: PhyClockPair::Disabled,
+                },
             ) => XtalDutyRestoreStep::PbusForce(0),
             (
                 XtalDutyRestoreStep::PbusForce(index),

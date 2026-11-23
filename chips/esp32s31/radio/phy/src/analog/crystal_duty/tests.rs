@@ -17,6 +17,7 @@ use crate::rx::dc_offset::{PhyRxDcoAction, PhyRxDcoCompletion};
 use crate::rx::signal_power::{
     PhySignalPowerAccumulatorSnapshot, PhySignalPowerAction, PhySignalPowerCompletion,
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 fn signal_components(value: i64) -> (i32, i32) {
     for first in 0..=512_i32 {
@@ -37,11 +38,11 @@ fn complete_signal_power_action(
         PhySignalPowerAction::ConfigureClock {
             request,
             clock,
-            enabled,
+            state,
         } => PhySignalPowerCompletion::ClockConfigured {
             request,
             clock,
-            enabled,
+            state,
         },
         PhySignalPowerAction::SetEstimatorEnable {
             request,
@@ -245,11 +246,11 @@ fn complete_prepare_action(
             selector,
             step,
         },
-        XtalDutyPrepareAction::ConfigureRxClock { enabled } => {
-            XtalDutyPrepareCompletion::RxClockConfigured { enabled }
+        XtalDutyPrepareAction::ConfigureRxClock { state } => {
+            XtalDutyPrepareCompletion::RxClockConfigured { state }
         }
-        XtalDutyPrepareAction::ConfigureTxClock { enabled } => {
-            XtalDutyPrepareCompletion::TxClockConfigured { enabled }
+        XtalDutyPrepareAction::ConfigureTxClock { state } => {
+            XtalDutyPrepareCompletion::TxClockConfigured { state }
         }
         XtalDutyPrepareAction::ConfigurePbusDebugMode => {
             XtalDutyPrepareCompletion::PbusDebugModeConfigured
@@ -281,11 +282,11 @@ fn complete_restore_action(action: XtalDutyRestoreAction) -> XtalDutyRestoreComp
             selector,
             step,
         },
-        XtalDutyRestoreAction::ConfigureRxClock { enabled } => {
-            XtalDutyRestoreCompletion::RxClockConfigured { enabled }
+        XtalDutyRestoreAction::ConfigureRxClock { state } => {
+            XtalDutyRestoreCompletion::RxClockConfigured { state }
         }
-        XtalDutyRestoreAction::ConfigureTxClock { enabled } => {
-            XtalDutyRestoreCompletion::TxClockConfigured { enabled }
+        XtalDutyRestoreAction::ConfigureTxClock { state } => {
+            XtalDutyRestoreCompletion::TxClockConfigured { state }
         }
         XtalDutyRestoreAction::ForcePbus(transaction) => {
             XtalDutyRestoreCompletion::PbusForceCompleted(transaction)
@@ -518,8 +519,12 @@ fn preparation_exposes_all_ten_pbus_commands_and_owned_rx_dco_field() {
             selector: 0x80,
             step: 0,
         },
-        XtalDutyPrepareAction::ConfigureRxClock { enabled: true },
-        XtalDutyPrepareAction::ConfigureTxClock { enabled: true },
+        XtalDutyPrepareAction::ConfigureRxClock {
+            state: PhyClockPair::Enabled,
+        },
+        XtalDutyPrepareAction::ConfigureTxClock {
+            state: PhyClockPair::Enabled,
+        },
         XtalDutyPrepareAction::ConfigurePbusDebugMode,
     ] {
         assert_eq!(transition.action(), expected);
@@ -603,8 +608,12 @@ fn restoration_requires_external_pbus_and_timer_completions() {
             selector: 0x80,
             step: 0x28,
         },
-        XtalDutyRestoreAction::ConfigureRxClock { enabled: false },
-        XtalDutyRestoreAction::ConfigureTxClock { enabled: false },
+        XtalDutyRestoreAction::ConfigureRxClock {
+            state: PhyClockPair::Disabled,
+        },
+        XtalDutyRestoreAction::ConfigureTxClock {
+            state: PhyClockPair::Disabled,
+        },
     ] {
         assert_eq!(transition.action(), expected);
         transition

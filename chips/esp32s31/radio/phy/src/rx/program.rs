@@ -35,6 +35,7 @@ use crate::{
         },
     },
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RxError {
@@ -203,8 +204,8 @@ pub(crate) enum ControlCommand {
     RestoreCalibration,
     Registers(bool),
     Debug,
-    RxClock(bool),
-    TxClock(bool),
+    RxClock(PhyClockPair),
+    TxClock(PhyClockPair),
     WorkMode,
     Limits(u8),
     IqCorrection,
@@ -432,10 +433,10 @@ impl RxProgram {
             Pc::RegistersOn => Some(C::Registers(true)),
             Pc::RegistersOff => Some(C::Registers(false)),
             Pc::Debug | Pc::PublishDebug => Some(C::Debug),
-            Pc::RxClockOn | Pc::PublishRxClockOn => Some(C::RxClock(true)),
-            Pc::TxClockOn | Pc::PublishTxClockOn => Some(C::TxClock(true)),
-            Pc::RxClockOff | Pc::PublishRxClockOff => Some(C::RxClock(false)),
-            Pc::TxClockOff | Pc::PublishTxClockOff => Some(C::TxClock(false)),
+            Pc::RxClockOn | Pc::PublishRxClockOn => Some(C::RxClock(PhyClockPair::Enabled)),
+            Pc::TxClockOn | Pc::PublishTxClockOn => Some(C::TxClock(PhyClockPair::Enabled)),
+            Pc::RxClockOff | Pc::PublishRxClockOff => Some(C::RxClock(PhyClockPair::Disabled)),
+            Pc::TxClockOff | Pc::PublishTxClockOff => Some(C::TxClock(PhyClockPair::Disabled)),
             Pc::WorkMode | Pc::PublishWorkMode => Some(C::WorkMode),
             Pc::CalPrepare => Some(C::PrepareCalibration),
             Pc::CalRestore => Some(C::RestoreCalibration),

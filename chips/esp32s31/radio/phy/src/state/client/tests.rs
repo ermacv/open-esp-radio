@@ -568,8 +568,8 @@ fn complete_power_child(
                 crate::tracking::power::PhyTxPowerTrackingAction::ForceTxRx(action) => {
                     crate::tracking::power::PhyTxPowerTrackingCompletion::ForceTxRx(
                         match action {
-                            crate::analog::pbus::PhyForceTxRxEdge::Configure { enabled, phase } => {
-                                crate::analog::pbus::PhyForceTxRxCompletion::Configured { enabled, phase }
+                            crate::analog::pbus::PhyForceTxRxEdge::Configure { phase } => {
+                                crate::analog::pbus::PhyForceTxRxCompletion::Configured { phase }
                             }
                             crate::analog::pbus::PhyForceTxRxEdge::DelayMicros {
                                 enabled,

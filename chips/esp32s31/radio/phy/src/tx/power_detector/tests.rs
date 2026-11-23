@@ -21,7 +21,9 @@ fn complete_direct_prefix(transition: &mut PhyPwdetTransition) {
             .unwrap();
     }
     transition
-        .advance(PhyPwdetCompletion::TxClockConfigured { enabled: true })
+        .advance(PhyPwdetCompletion::TxClockConfigured {
+            state: PhyClockPair::Enabled,
+        })
         .unwrap();
     transition
         .advance(PhyPwdetCompletion::PowerDetectorConfigured)
@@ -98,7 +100,9 @@ fn complete_sample(
 fn complete_restore(transition: &mut PhyPwdetTransition, expected_terminal: PhyPwdetAction) {
     transition.advance(PhyPwdetCompletion::ToneStopped).unwrap();
     transition
-        .advance(PhyPwdetCompletion::TxClockConfigured { enabled: false })
+        .advance(PhyPwdetCompletion::TxClockConfigured {
+            state: PhyClockPair::Disabled,
+        })
         .unwrap();
     for index in 0..EXIT_PBUS_COUNT {
         let transaction = exit_pbus_transaction(index, PARAMETERS);

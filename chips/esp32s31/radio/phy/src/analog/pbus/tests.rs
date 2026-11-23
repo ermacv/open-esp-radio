@@ -5,6 +5,7 @@ use super::{
     PhyPbusClearTransitionError, PhyPbusForceTest, PhyPbusHardwareAction, PhyPbusHardwareBinding,
     PhyPbusHardwareBindingError, PhyPbusHardwareObservation,
 };
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 fn reach_work_mode(transition: &mut PhyPbusClearTransition) {
     transition
@@ -175,10 +176,10 @@ fn force_txrx_requires_both_writes_and_both_async_delays_for_each_branch() {
             actions.push(action);
             let completion = match PhyForceTxRxExternalBinding::lower(action) {
                 Ok(PhyForceTxRxExternalBinding::Mmio(binding)) => {
-                    let PhyForceTxRxAction::Configure { enabled, phase } = binding.action() else {
+                    let PhyForceTxRxAction::Configure { phase } = binding.action() else {
                         panic!("MMIO binding lost its action identity")
                     };
-                    PhyForceTxRxCompletion::Configured { enabled, phase }
+                    PhyForceTxRxCompletion::Configured { phase }
                 }
                 Ok(PhyForceTxRxExternalBinding::Timer(binding)) => {
                     assert_eq!(binding.micros(), 1);
@@ -191,13 +192,17 @@ fn force_txrx_requires_both_writes_and_both_async_delays_for_each_branch() {
         assert_eq!(
             actions,
             [
-                PhyForceTxRxAction::Configure { enabled, phase: 0 },
+                PhyForceTxRxAction::Configure {
+                    phase: phase_image(enabled, 0),
+                },
                 PhyForceTxRxAction::DelayMicros {
                     enabled,
                     completed_phase: 0,
                     micros: 1,
                 },
-                PhyForceTxRxAction::Configure { enabled, phase: 1 },
+                PhyForceTxRxAction::Configure {
+                    phase: phase_image(enabled, 1),
+                },
                 PhyForceTxRxAction::DelayMicros {
                     enabled,
                     completed_phase: 1,
@@ -223,8 +228,19 @@ fn force_txrx_rejects_a_stale_or_early_timer_edge() {
     assert_eq!(
         transition.action(),
         PhyForceTxRxAction::Configure {
-            enabled: true,
-            phase: 0,
+            phase: PhyForceTxRxPhase::EnableInitialPhase,
         }
     );
+}
+
+/// The force-mode image the vendor writes for a sequence of `enabled`
+/// at its `phase` (0 the initial write, 1 the final), written apart from
+/// the code under test.
+fn phase_image(enabled: bool, phase: u8) -> PhyForceTxRxPhase {
+    match (enabled, phase) {
+        (true, 0) => PhyForceTxRxPhase::EnableInitialPhase,
+        (true, _) => PhyForceTxRxPhase::EnableFinalPhase,
+        (false, 0) => PhyForceTxRxPhase::DisableInitialPhase,
+        (false, _) => PhyForceTxRxPhase::DisableFinalPhase,
+    }
 }

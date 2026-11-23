@@ -82,7 +82,9 @@ fn tx_calibration_exit_uses_the_complete_rom_work_mode_pulse() {
         .advance(PhyTxCalibrationEnvironmentCompletion::ToneStopped)
         .unwrap();
     transition
-        .advance(PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled: false })
+        .advance(PhyTxCalibrationEnvironmentCompletion::TxClockConfigured {
+            state: PhyClockPair::Disabled,
+        })
         .unwrap();
     for index in 0..=6 {
         let transaction = tx_work_pbus(index, parameters);

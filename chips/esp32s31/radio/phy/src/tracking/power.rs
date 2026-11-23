@@ -378,13 +378,9 @@ impl ControlBinding {
                 );
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
             }
-            ControlEdge::ForceTxRx(PhyForceTxRxEdge::Configure { enabled, phase }) => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(enabled, phase),
-                );
+            ControlEdge::ForceTxRx(PhyForceTxRxEdge::Configure { phase }) => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
-                    enabled,
                     phase,
                 })
             }
@@ -511,15 +507,10 @@ impl PhyTxPowerTrackingExternalBinding {
                 PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: *enabled }
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxEdge::Configure {
-                enabled,
                 phase,
             }) => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(*enabled, *phase),
-                );
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, *phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
-                    enabled: *enabled,
                     phase: *phase,
                 })
             }

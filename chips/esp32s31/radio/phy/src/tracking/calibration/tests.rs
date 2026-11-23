@@ -528,12 +528,11 @@ fn force_txrx_parent_proof_requires_both_writes_and_timer_edges() {
     loop {
         let completion = match child.lower_external() {
             Ok(crate::analog::pbus::PhyForceTxRxExternalBinding::Mmio(binding)) => {
-                let crate::analog::pbus::PhyForceTxRxAction::Configure { enabled, phase } =
-                    binding.action()
+                let crate::analog::pbus::PhyForceTxRxAction::Configure { phase } = binding.action()
                 else {
                     panic!("force MMIO binding lost its identity")
                 };
-                crate::analog::pbus::PhyForceTxRxCompletion::Configured { enabled, phase }
+                crate::analog::pbus::PhyForceTxRxCompletion::Configured { phase }
             }
             Ok(crate::analog::pbus::PhyForceTxRxExternalBinding::Timer(binding)) => {
                 assert_eq!(binding.micros(), 1);

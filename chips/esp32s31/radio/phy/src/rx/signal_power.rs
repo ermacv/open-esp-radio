@@ -12,6 +12,7 @@
 use crate::calibration::estimator::{
     PhyDcIqDelayPhase, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot,
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhySignalPowerRequest {
@@ -59,7 +60,7 @@ pub enum PhySignalPowerAction {
     ConfigureClock {
         request: PhySignalPowerRequest,
         clock: PhySignalPowerClock,
-        enabled: bool,
+        state: PhyClockPair,
     },
     SetEstimatorEnable {
         request: PhySignalPowerRequest,
@@ -90,7 +91,7 @@ pub enum PhySignalPowerCompletion {
     ClockConfigured {
         request: PhySignalPowerRequest,
         clock: PhySignalPowerClock,
-        enabled: bool,
+        state: PhyClockPair,
     },
     EstimatorEnableSet {
         request: PhySignalPowerRequest,
@@ -194,12 +195,12 @@ impl PhySignalPowerTransition {
             PhySignalPowerStep::EnableTxClock => PhySignalPowerAction::ConfigureClock {
                 request: self.request,
                 clock: PhySignalPowerClock::Tx,
-                enabled: true,
+                state: PhyClockPair::Enabled,
             },
             PhySignalPowerStep::EnableRxClock => PhySignalPowerAction::ConfigureClock {
                 request: self.request,
                 clock: PhySignalPowerClock::Rx,
-                enabled: true,
+                state: PhyClockPair::Enabled,
             },
             PhySignalPowerStep::DisablePreviousMeasurement
             | PhySignalPowerStep::DisableFailedMeasurement(_) => {
@@ -266,7 +267,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerCompletion::ClockConfigured {
                     request,
                     clock: PhySignalPowerClock::Tx,
-                    enabled: true,
+                    state: PhyClockPair::Enabled,
                 },
             ) if request == self.request => PhySignalPowerStep::EnableRxClock,
             (
@@ -274,7 +275,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerCompletion::ClockConfigured {
                     request,
                     clock: PhySignalPowerClock::Rx,
-                    enabled: true,
+                    state: PhyClockPair::Enabled,
                 },
             ) if request == self.request => PhySignalPowerStep::DisablePreviousMeasurement,
             (

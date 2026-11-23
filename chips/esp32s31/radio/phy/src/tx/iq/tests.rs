@@ -129,8 +129,8 @@ fn environment_completion(
         PhyTxCalibrationEnvironmentAction::ForcePbus(transaction) => {
             PhyTxCalibrationEnvironmentCompletion::PbusCompleted(transaction)
         }
-        PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
-            PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled }
+        PhyTxCalibrationEnvironmentAction::ConfigureTxClock { state } => {
+            PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { state }
         }
         PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
             PhyTxCalibrationEnvironmentCompletion::PowerDetectorConfigured
@@ -175,11 +175,11 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
                 address,
             })
         }
-        PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureTxClock { state } => {
+            PhyTxIqLoopbackCompletion::TxClockConfigured { state }
         }
-        PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureRxClock { state } => {
+            PhyTxIqLoopbackCompletion::RxClockConfigured { state }
         }
         terminal => panic!("unexpected loopback terminal: {terminal:?}"),
     }

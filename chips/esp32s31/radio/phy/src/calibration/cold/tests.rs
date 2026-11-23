@@ -19,6 +19,7 @@ use crate::analog::i2c::{
     RcCalibrationAction, RcCalibrationCompletion, analog_i2c,
 };
 use crate::serial::PhyI2cError;
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 #[test]
 fn an_unrouted_address_is_reported_without_turning_into_a_pending_edge() {
@@ -244,7 +245,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
             PhySignalPowerAction::ConfigureClock {
                 request: signal_request,
                 clock: PhySignalPowerClock::Rx,
-                enabled: false,
+                state: PhyClockPair::Disabled,
             },
         )),
     ));
@@ -257,7 +258,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
                 XtalDutySearchCompletion::SignalPower(PhySignalPowerCompletion::ClockConfigured {
                     request: signal_request,
                     clock: PhySignalPowerClock::Rx,
-                    enabled: false,
+                    state: PhyClockPair::Disabled,
                 })
             ))
         ))

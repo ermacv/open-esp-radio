@@ -991,17 +991,11 @@ impl PhyColdMmioBinding {
                 crate::hardware::configure_phy_calibration_tone(registers, enabled, selector, step)
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
-                registers,
-                crate::hardware::clock_pair(enabled),
-            ),
+                XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { state }),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, state),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                registers,
-                crate::hardware::clock_pair(enabled),
-            ),
+                XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { state }),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigurePbusDebugMode),
             )) => oer_chips_family_radio_phy::pbus::configure_debug_mode(
@@ -1042,20 +1036,14 @@ impl PhyColdMmioBinding {
             )) => crate::calibration::estimator::set_enable_target(registers, phase, enabled),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Search(XtalDutySearchAction::SignalPower(
-                    PhySignalPowerAction::ConfigureClock { clock, enabled, .. },
+                    PhySignalPowerAction::ConfigureClock { clock, state, .. },
                 )),
             )) => match clock {
                 crate::rx::signal_power::PhySignalPowerClock::Tx => {
-                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                        registers,
-                        crate::hardware::clock_pair(enabled),
-                    )
+                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state)
                 }
                 crate::rx::signal_power::PhySignalPowerClock::Rx => {
-                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
-                        registers,
-                        crate::hardware::clock_pair(enabled),
-                    )
+                    oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, state)
                 }
             },
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -1073,17 +1061,11 @@ impl PhyColdMmioBinding {
                 crate::hardware::configure_phy_calibration_tone(registers, enabled, selector, step)
             }
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
-                registers,
-                crate::hardware::clock_pair(enabled),
-            ),
+                XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { state }),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, state),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-                XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { enabled }),
-            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                registers,
-                crate::hardware::clock_pair(enabled),
-            ),
+                XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { state }),
+            )) => oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigurePbusWorkModePulse),
             )) => {
@@ -1203,17 +1185,17 @@ fn lower_prefix_mmio_completion(
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-            XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { enabled }),
+            XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureRxClock { state }),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Prepare(
-                XtalDutyPrepareCompletion::RxClockConfigured { enabled },
+                XtalDutyPrepareCompletion::RxClockConfigured { state },
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-            XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { enabled }),
+            XtalDutyPassAction::Prepare(XtalDutyPrepareAction::ConfigureTxClock { state }),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Prepare(
-                XtalDutyPrepareCompletion::TxClockConfigured { enabled },
+                XtalDutyPrepareCompletion::TxClockConfigured { state },
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
@@ -1290,7 +1272,7 @@ fn lower_prefix_mmio_completion(
                 PhySignalPowerAction::ConfigureClock {
                     request,
                     clock,
-                    enabled,
+                    state,
                 },
             )),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
@@ -1298,7 +1280,7 @@ fn lower_prefix_mmio_completion(
                 XtalDutySearchCompletion::SignalPower(PhySignalPowerCompletion::ClockConfigured {
                     request,
                     clock,
-                    enabled,
+                    state,
                 }),
             )),
         )),
@@ -1348,17 +1330,17 @@ fn lower_prefix_mmio_completion(
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-            XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { enabled }),
+            XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureRxClock { state }),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Restore(
-                XtalDutyRestoreCompletion::RxClockConfigured { enabled },
+                XtalDutyRestoreCompletion::RxClockConfigured { state },
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
-            XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { enabled }),
+            XtalDutyPassAction::Restore(XtalDutyRestoreAction::ConfigureTxClock { state }),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Restore(
-                XtalDutyRestoreCompletion::TxClockConfigured { enabled },
+                XtalDutyRestoreCompletion::TxClockConfigured { state },
             )),
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
