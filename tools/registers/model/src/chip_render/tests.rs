@@ -58,6 +58,10 @@ fn edited(edits: &[(&str, &str, &str)]) -> tempfile::TempDir {
         }
         std::fs::write(target, text).expect("the copy is written");
     }
+    // An edit of a file the fixture lacks, from nothing, writes it.
+    for (path, _, text) in edits.iter().filter(|(_, from, _)| from.is_empty()) {
+        std::fs::write(directory.path().join(path), text).expect("the new file is written");
+    }
     directory
 }
 
@@ -2235,6 +2239,92 @@ fn main() {
 "#,
     );
     assert_eq!(output.trim(), "On");
+}
+
+/// The chip's definitions: a dictionary `GATE` and a flag set `STATE_MAP`
+/// of three flags in four bits, bit 3 named by none.
+const DEFINITIONS: &str = "schema = 1\n\n[[dictionaries]]\nname = \"GATE\"\n\
+    description = \"A gate that is closed or open.\"\nwidth = 1\n\
+    values = [{ name = \"CLOSED\", value = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n\n[[flags]]\nname = \"STATE_MAP\"\nflag = \"STATE\"\n\
+    description = \"The states a clock stays on in.\"\nwidth = 4\n\
+    bits = [{ name = \"SLEEP\", bit = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"MODEM\", bit = 1, sources = [\"SRC_HEADER\"] }, \
+    { name = \"ACTIVE\", bit = 2, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n";
+
+/// The fixture with the chip's definitions, `RAD_CONFIG.STATES` (15:12)
+/// holding the flag set and `RAD_ENABLE` naming the chip's `GATE`.
+fn with_definitions() -> String {
+    rendered_with(&[
+        ("dictionaries.toml", "", DEFINITIONS),
+        (
+            "chip.toml",
+            "schema = 4\n",
+            "schema = 4\ndefinitions = \"dictionaries.toml\"\n",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"\nvalues = { dictionary = \"GATE\" }\n\n\
+             [[registers.fields]]\nname = \"STATES\"\nbits = \"15:12\"\nclass = \"plain\"\nflags = \"STATE_MAP\"",
+        ),
+    ])
+}
+
+#[test]
+fn the_chips_definitions_render_once_in_the_root() {
+    let rust = with_definitions();
+    assert_eq!(rust.matches("pub enum Gate {").count(), 1, "{rust}");
+    assert_eq!(
+        rust.matches("pub struct StateMap(u32);").count(),
+        1,
+        "{rust}"
+    );
+    assert_eq!(rust.matches("pub enum State {").count(), 1, "{rust}");
+    assert!(
+        rust.contains("pub const fn enable(self) -> super::super::dictionaries::Gate {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub const fn states(self) -> super::super::dictionaries::StateMap {"),
+        "{rust}"
+    );
+    // A set has no reader of one value: its flags are asked one by one.
+    assert!(!rust.contains("states_variant"), "{rust}");
+}
+
+#[test]
+fn a_flag_set_adds_its_flags_and_keeps_the_bits_no_flag_names() {
+    let rust = with_definitions();
+    let output = run(
+        &rust,
+        r#"
+use dictionaries::{State, StateMap};
+fn main() {
+    // Bits 13 (MODEM) and 15 (named by no flag) are set.
+    let mut memory = [0x0000_a000_u32; 128];
+    {
+        let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+        let read = task.read_config().states();
+        println!("{} {} {}", read.contains(State::Sleep), read.contains(State::Modem), read.contains(State::Active));
+        task.modify_config(|w| {
+            w.set_states(w.states().with(State::Active));
+        });
+        let read = task.read_config().states();
+        println!("{} {}", read.contains(State::Active), read == StateMap::EMPTY);
+        task.modify_config(|w| {
+            w.set_states(StateMap::EMPTY.with(State::Sleep).union(StateMap::EMPTY));
+        });
+    }
+    println!("{:x}", memory[0] & 0xf000);
+}
+"#,
+    );
+    // ACTIVE joins the read set and bit 15 stays as read; the set written
+    // whole holds only what it names.
+    assert_eq!(output.trim(), "false true false\ntrue false\n1000");
 }
 
 #[test]

@@ -204,10 +204,28 @@ Fields of one meaning share one value list: a type's top-level
 `values` and the `sources` that give its fields that one meaning, and a field
 refers to it with `values = { dictionary = "NAME" }` in place of its own
 list. Membership is the sources' statement, never equal names or numbers. A
-field names only a dictionary of its own type and has the dictionary's width;
-`values` is either a list or a dictionary, never both. The dictionary's enum
-lives in the type module's `dictionaries` and has no `register_bits()`: its
-fields lie at several positions.
+field has its dictionary's width; `values` is either a list or a dictionary,
+never both. The dictionary's enum has no `register_bits()`: its fields lie at
+several positions.
+
+A definition lives in the narrowest place that holds all its fields. One
+type's fields name a dictionary of that type, and its enum lives in the type
+module's `dictionaries`. Fields of several types name a definition of the
+chip: the root's `definitions` names one file (schema 1) of `[[dictionaries]]`
+and `[[flags]]`, rendered once in the PAC root's `dictionaries`. A field looks
+in its type, then in the chip. A name is defined once: in a type or in the
+chip, never both, and a flag set's name and flag name are distinct from every
+other name.
+
+A field whose value is any union of named bits holds a flag set: `flags =
+"NAME"` names a `[[flags]]` entry of the chip, which has a `name` for the set,
+a `flag` for one member, a `description`, a `width`, its `bits` (each a
+`name`, a `bit` below the width and `sources`) and its `sources`. No two flags
+share a bit. The field is `plain`, of the set's width, with no values and no
+write constraint. Its getter returns the set with every bit as read, including
+those no flag names, so a read-modify-write keeps them. The set has `EMPTY`,
+`with(flag)`, `union(set)` and `contains(flag)`, and no single-value reader.
+Its setter takes the set.
 
 ```toml
 [[dictionaries]]
@@ -223,6 +241,26 @@ bits = "9"
 class = "plain"
 values = { dictionary = "RESET" }
 write-values-only = true
+```
+
+```toml
+# dictionaries.toml, named by the root's `definitions`
+schema = 1
+
+[[flags]]
+name = "ICG_STATE_MAP"
+flag = "ICG_STATE"
+description = "The power states in which a clock domain stays ungated."
+width = 4
+bits = [{ name = "NOGATING_SLEEP", bit = 0, sources = ["SRC"] }, { name = "NOGATING_MODEM", bit = 1, sources = ["SRC"] }]
+sources = ["SRC"]
+
+# A type's field:
+[[registers.fields]]
+name = "CLK_FE_ST_MAP"
+bits = "15:12"
+class = "plain"
+flags = "ICG_STATE_MAP"
 ```
 
 Each register module exposes `<FIELD>_WIDTH`, `<FIELD>_MAX` and

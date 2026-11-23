@@ -29,12 +29,12 @@ use block_type::{Context, ExpansionBudget, check_name};
 pub use controls::{ControlKind, ExpandedControl, ExpandedGateGroup, ResolvedField};
 pub use error::{Error, ErrorKind};
 pub use source::{
-    AnalogInstance, AnalogSpace, ClockSource, Command, Control, Dim, Extent, Field, FieldClass,
-    GateGroup, Group, Instance, Interrupt, InterruptOutput, InterruptPair, InterruptSources,
-    LayoutPlacement, Mux, OpaqueReview, Pointer, PointerEncoding, ROOT_SCHEMA, RamRegion, ReadSafe,
-    Register, Reserved, Reset, ReviewOverride, RootFile, SharedControl, Sourced, Space,
-    TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview, UnboundInterrupt, Value, ValueRange, View,
-    WriteRange,
+    AnalogInstance, AnalogSpace, ClockSource, Command, Control, Definitions, Dictionary, Dim,
+    Extent, Field, FieldClass, Flag, FlagSet, GateGroup, Group, Instance, Interrupt,
+    InterruptOutput, InterruptPair, InterruptSources, LayoutPlacement, Mux, OpaqueReview, Pointer,
+    PointerEncoding, ROOT_SCHEMA, RamRegion, ReadSafe, Register, Reserved, Reset, ReviewOverride,
+    RootFile, SharedControl, Sourced, Space, TYPE_SCHEMA, TypeFile, TypeHeader, TypeReview,
+    UnboundInterrupt, Value, ValueRange, View, WriteRange,
 };
 
 /// Where an expanded register is.
@@ -83,6 +83,7 @@ pub struct ChipModel {
     root: RootFile,
     pub hart_geometry: Option<topology::Geometry>,
     types: BTreeMap<String, BlockType>,
+    definitions: Definitions,
     layouts: Vec<MemoryLayout>,
     registers: Vec<ExpandedRegister>,
     controls: Vec<ExpandedControl>,
@@ -140,7 +141,8 @@ impl ChipModel {
         let base = path.parent().unwrap_or(Path::new("."));
 
         topology::instances(&mut root, path)?;
-        let types = load_types(context, base, &root.types, harts)?;
+        let definitions = load_definitions(context, base, root.definitions.as_deref())?;
+        let types = load_types(context, base, &root.types, harts, &definitions)?;
         let mut layouts = load_layouts(context, base, &root.layouts)?;
         let regions = check_ram_regions(context, &root.ram_regions)?;
         let mut names = BTreeSet::new();
@@ -159,6 +161,7 @@ impl ChipModel {
             root,
             hart_geometry: harts,
             types,
+            definitions,
             layouts,
             registers,
             controls: controls.links,
@@ -220,6 +223,11 @@ impl ChipModel {
         &self.root.ram_regions
     }
 
+    /// The chip's shared dictionaries and flag sets.
+    pub fn definitions(&self) -> &Definitions {
+        &self.definitions
+    }
+
     /// The memory layouts, each with the placement the root gives it.
     pub fn layouts(&self) -> &[MemoryLayout] {
         &self.layouts
@@ -262,19 +270,76 @@ fn safe_include(
     Ok(())
 }
 
+/// The chip's shared dictionaries and flag sets, each checked, every name
+/// once.
+fn load_definitions(
+    context: Context<'_>,
+    base: &Path,
+    include: Option<&str>,
+) -> Result<Definitions, Error> {
+    let Some(include) = include else {
+        return Ok(Definitions::default());
+    };
+    safe_include(context, include, &mut BTreeSet::new())?;
+    let path = base.join(include);
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| Error::new(&path, "", ErrorKind::Read(error)))?;
+    let definitions: Definitions = toml_edit::de::from_str(&text)
+        .map_err(|error| Error::new(&path, "", ErrorKind::Parse(error.to_string())))?;
+    let context = Context {
+        path: &path,
+        ..context
+    };
+    if definitions.schema != DEFINITIONS_SCHEMA {
+        return Err(context.error(
+            "",
+            ErrorKind::Schema {
+                expected: DEFINITIONS_SCHEMA,
+                found: definitions.schema,
+            },
+        ));
+    }
+    let mut names = BTreeSet::new();
+    for dictionary in &definitions.dictionaries {
+        block_type::check_dictionary(context, &dictionary.name, dictionary)?;
+        if !names.insert(dictionary.name.clone()) {
+            return Err(context.error(
+                &dictionary.name,
+                ErrorKind::Duplicate(dictionary.name.clone()),
+            ));
+        }
+    }
+    for flags in &definitions.flags {
+        block_type::check_flags(context, &flags.name, flags)?;
+        if !names.insert(flags.name.clone()) || !names.insert(flags.flag.clone()) {
+            return Err(context.error(&flags.name, ErrorKind::Duplicate(flags.name.clone())));
+        }
+    }
+    Ok(definitions)
+}
+
+/// The schema of a chip's definitions file.
+const DEFINITIONS_SCHEMA: u32 = 1;
+
 fn load_types(
     context: Context<'_>,
     base: &Path,
     includes: &[String],
     harts: Option<topology::Geometry>,
+    definitions: &Definitions,
 ) -> Result<BTreeMap<String, BlockType>, Error> {
     let mut seen = BTreeSet::new();
     let mut types = BTreeMap::new();
     let mut budget = ExpansionBudget::default();
     for include in includes {
         safe_include(context, include, &mut seen)?;
-        let block_type =
-            BlockType::load(&base.join(include), context.evidence, &mut budget, harts)?;
+        let block_type = BlockType::load(
+            &base.join(include),
+            context.evidence,
+            &mut budget,
+            harts,
+            definitions,
+        )?;
         let name = block_type.name().to_owned();
         if types.contains_key(&name) {
             return Err(Error::new(

@@ -31,6 +31,8 @@ pub(super) struct Values {
     /// The values are a dictionary of the type's, shared by its fields:
     /// the enum is the type module's, not the field's.
     pub(super) shared: bool,
+    /// The dictionary is the chip's: the enum is the root's `dictionaries`.
+    pub(super) chip: bool,
 }
 
 /// The type a field's writer takes.
@@ -45,6 +47,8 @@ pub(super) enum Setter {
     /// A typed address of the field's placement: `oer_portable_memory::DmaRef` of its
     /// target layout, or the window's `DmaWindowAddress`.
     Pointer,
+    /// The chip's flag set the field holds.
+    Flags,
 }
 
 /// A layout range a field carries.
@@ -247,6 +251,7 @@ impl FieldPlan<'_> {
                 None => format!("{layouts}::DmaWindowAddress"),
             },
             (Setter::Enum, Some(_), _) => self.value_type(module),
+            (Setter::Flags, ..) => self.flags_type(module),
             (Setter::Range, ..) => qualify(&self.range_name()),
             _ => self.native(),
         }
@@ -260,10 +265,27 @@ impl FieldPlan<'_> {
             return self.native();
         };
         match (values.shared, module) {
+            (true, Some(_)) if values.chip => format!("super::dictionaries::{}", values.name),
+            (true, None) if values.chip => format!("super::super::dictionaries::{}", values.name),
             (true, Some(_)) => format!("dictionaries::{}", values.name),
             (true, None) => format!("super::dictionaries::{}", values.name),
             (false, Some(module)) => format!("{module}::{}", values.name),
             (false, None) => values.name.clone(),
+        }
+    }
+
+    /// The chip's flag set the field holds, as seen from the type module
+    /// or from the register module.
+    pub(super) fn flags_type(&self, module: Option<&str>) -> String {
+        let name = self
+            .field
+            .flags
+            .as_ref()
+            .map(|flags| names::camel(&flags.name))
+            .unwrap_or_default();
+        match module {
+            Some(_) => format!("super::dictionaries::{name}"),
+            None => format!("super::super::dictionaries::{name}"),
         }
     }
 
@@ -288,6 +310,7 @@ impl FieldPlan<'_> {
                 }
             }
             (Setter::Enum, _) => format!("{var}.bits()"),
+            (Setter::Flags, _) => format!("{var}.field_bits()"),
             (Setter::Range, _) => format!("{var}.get()"),
             _ => self.native_bits(var),
         }
@@ -918,6 +941,7 @@ fn field_plan<'m>(
             variants,
             complete,
             shared: field.dictionary.is_some(),
+            chip: field.chip_dictionary,
         })
     };
     // A narrower write range wins over a complete enumeration: the
@@ -942,6 +966,8 @@ fn field_plan<'m>(
     });
     let setter = if pointer.is_some() {
         Setter::Pointer
+    } else if field.flags.is_some() {
+        Setter::Flags
     } else if only_values {
         Setter::Enum
     } else if range.is_some() && !zero {
@@ -1308,6 +1334,18 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
     } else {
         format!("(self.0 >> {})", field.low)
     };
+    // A field holding a flag set reads as the set, every bit as read.
+    if field.setter == Setter::Flags {
+        let _ = writeln!(
+            output,
+            "#[inline]\npub const fn {}({receiver}) -> {} {{\n{}::from_field({shifted} & 0x{:x})\n}}\n",
+            field.method(),
+            field.flags_type(None),
+            field.flags_type(None),
+            field.ones(),
+        );
+        return;
+    }
     // A field whose every value is named reads as its name; a field with a
     // few named values reads as its number, and as a name if it is one.
     match &field.values {
@@ -1451,8 +1489,82 @@ pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Res
     output.push_str(
         "/// Value lists fields of one meaning share, each with its sources.\npub mod dictionaries {\n",
     );
+    render_dictionary_enums(output, &block.file.header.name, dictionaries)?;
+    output.push_str("}\n\n");
+    Ok(())
+}
+
+/// The chip's shared dictionaries and flag sets, in the root's
+/// `dictionaries`: the fields of several types name them.
+pub(super) fn render_chip_definitions(
+    output: &mut String,
+    definitions: &crate::chip_model::Definitions,
+) -> Result<(), Error> {
+    if definitions.dictionaries.is_empty() && definitions.flags.is_empty() {
+        return Ok(());
+    }
+    output.push_str(
+        "/// The chip's value lists and flag sets that fields of several types\n/// share, each with its sources.\npub mod dictionaries {\n",
+    );
+    render_dictionary_enums(output, "chip", &definitions.dictionaries)?;
+    for flags in &definitions.flags {
+        let set = names::camel(&flags.name);
+        let flag = names::camel(&flags.flag);
+        push_doc(output, &clean(&flags.description), "");
+        let _ = writeln!(
+            output,
+            "///\n/// One flag of [`{set}`].\n#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub enum {flag} {{"
+        );
+        for bit in &flags.bits {
+            if let Some(description) = &bit.description {
+                push_doc(output, &clean(description), "");
+            }
+            let _ = writeln!(
+                output,
+                "/// SOURCE: {}.\n{},",
+                bit.sources.join(", "),
+                names::camel(&bit.name)
+            );
+        }
+        output.push_str("}\n\n");
+        let _ = writeln!(
+            output,
+            "impl {flag} {{\n/// The flag's bit in the set.\nconst fn mask(self) -> u32 {{\nmatch self {{"
+        );
+        for bit in &flags.bits {
+            let _ = writeln!(
+                output,
+                "Self::{} => 0x{:x},",
+                names::camel(&bit.name),
+                1_u32 << bit.bit
+            );
+        }
+        output.push_str("}\n}\n}\n\n");
+        push_doc(output, &clean(&flags.description), "");
+        let _ = writeln!(
+            output,
+            "///\n/// A set of [`{flag}`]s: a union of flags is its only combination,\n/// and the bits no flag names are kept as read.\n///\n/// SOURCE: {}.\n#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]\npub struct {set}(u32);\n\n\
+             impl {set} {{\n/// No flag.\npub const EMPTY: Self = Self(0);\n\n\
+             /// The set with `flag` too.\n#[must_use]\npub const fn with(self, flag: {flag}) -> Self {{\nSelf(self.0 | flag.mask())\n}}\n\n\
+             /// The flags of either set.\n#[must_use]\npub const fn union(self, other: Self) -> Self {{\nSelf(self.0 | other.0)\n}}\n\n\
+             /// Whether the set holds `flag`.\npub const fn contains(self, flag: {flag}) -> bool {{\nself.0 & flag.mask() != 0\n}}\n\n\
+             /// The set a field's bits read as.\npub(crate) const fn from_field(bits: u32) -> Self {{\nSelf(bits)\n}}\n\n\
+             /// The set's bits, for its field's setter.\npub(crate) const fn field_bits(self) -> u32 {{\nself.0\n}}\n}}\n",
+            flags.sources.join(", ")
+        );
+    }
+    output.push_str("}\n\n");
+    Ok(())
+}
+
+/// One enum per dictionary, with its sources and conversions.
+fn render_dictionary_enums(
+    output: &mut String,
+    owner: &str,
+    dictionaries: &[crate::chip_model::Dictionary],
+) -> Result<(), Error> {
     for dictionary in dictionaries {
-        let entity = format!("{}.{}", block.file.header.name, dictionary.name);
+        let entity = format!("{owner}.{}", dictionary.name);
         let mut variants: Vec<(String, u32, Option<String>)> = Vec::new();
         let mut seen = BTreeSet::new();
         for value in &dictionary.values {
@@ -1475,6 +1587,7 @@ pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Res
             variants,
             complete: width < 32 && seen.len() as u64 == 1_u64 << width,
             shared: true,
+            chip: false,
         };
         push_doc(output, &clean(&dictionary.description), "");
         let _ = writeln!(
@@ -1511,7 +1624,6 @@ pub(super) fn render_dictionaries(output: &mut String, block: &BlockType) -> Res
             );
         }
     }
-    output.push_str("}\n\n");
     Ok(())
 }
 

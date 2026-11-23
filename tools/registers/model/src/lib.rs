@@ -46,7 +46,7 @@ mod layouts;
 mod register_evidence;
 mod review_defaults;
 
-pub use descriptions::{description_directories, descriptions};
+pub use descriptions::{description_paths, descriptions};
 pub use layouts::{
     LayoutAccess, LayoutArray, LayoutField, LayoutKind, LayoutPhase, LayoutUnit, LayoutWriter,
     MemoryLayout, PointerEncoding,
