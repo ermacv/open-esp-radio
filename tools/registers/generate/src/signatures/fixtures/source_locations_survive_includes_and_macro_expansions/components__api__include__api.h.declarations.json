@@ -1,1 +1,279 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/api.h, declarations stage: the nodes the stage decides on","inner":[{"id":"0x5633e4b58590","kind":"FunctionDecl","loc":{"offset":35,"line":2,"col":6,"tokLen":10,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"},"range":{"begin":{"offset":30,"col":1,"tokLen":4,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"},"end":{"offset":57,"col":28,"tokLen":1,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"}},"name":"dependency","mangledName":"dependency","type":{"qualType":"void (small)"},"inner":[{"id":"0x5633e4b58480","kind":"ParmVarDecl","loc":{"offset":52,"col":23,"tokLen":5,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"},"range":{"begin":{"offset":46,"col":17,"tokLen":5,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"},"end":{"offset":52,"col":23,"tokLen":5,"includedFrom":{"file":"/idf/components/api/include/api.h"},"file":"/idf/components/api/include/dependency.h"}},"name":"value","type":{"desugaredQualType":"unsigned short","qualType":"small","typeAliasDeclId":"0x5633e4b583d0"}}]},{"id":"0x5633e4b58770","kind":"FunctionDecl","loc":{"spellingLoc":{"offset":80,"file":"/idf/components/api/include/api.h","line":3,"col":9,"tokLen":8,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"}},"expansionLoc":{"offset":72,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"isMacroArgExpansion":true,"file":"/idf/components/api/include/api.h"}},"range":{"begin":{"spellingLoc":{"offset":46,"line":2,"col":23,"tokLen":4,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"expansionLoc":{"offset":72,"line":3,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}},"end":{"spellingLoc":{"offset":70,"line":2,"col":47,"tokLen":1,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"expansionLoc":{"offset":72,"line":3,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}}},"name":"expanded","mangledName":"expanded","type":{"qualType":"void (unsigned int)"},"inner":[{"id":"0x5633e4b586a0","kind":"ParmVarDecl","loc":{"spellingLoc":{"offset":65,"line":2,"col":42,"tokLen":5,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"expansionLoc":{"offset":72,"line":3,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}},"range":{"begin":{"spellingLoc":{"offset":56,"line":2,"col":33,"tokLen":8,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"expansionLoc":{"offset":72,"line":3,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}},"end":{"spellingLoc":{"offset":65,"line":2,"col":42,"tokLen":5,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"expansionLoc":{"offset":72,"line":3,"col":1,"tokLen":7,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}}},"name":"value","type":{"qualType":"unsigned int"}}]},{"id":"0x5633e4b588f0","kind":"FunctionDecl","loc":{"offset":96,"line":4,"col":6,"tokLen":5,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"range":{"begin":{"offset":91,"col":1,"tokLen":4,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"end":{"offset":106,"col":16,"tokLen":1,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}},"name":"after","mangledName":"after","type":{"qualType":"void (void)"}}]}
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "1932b342be1138b9669249561969c12c14ae3aaf64855ebfe292c590f3e49535",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 23,
+              "file": "/idf/components/api/include/dependency.h",
+              "includedFrom": {
+                "file": "/idf/components/api/include/api.h"
+              },
+              "offset": 52,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 17,
+                "file": "/idf/components/api/include/dependency.h",
+                "includedFrom": {
+                  "file": "/idf/components/api/include/api.h"
+                },
+                "offset": 46,
+                "tokLen": 5
+              },
+              "end": {
+                "col": 23,
+                "file": "/idf/components/api/include/dependency.h",
+                "includedFrom": {
+                  "file": "/idf/components/api/include/api.h"
+                },
+                "offset": 52,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "desugaredQualType": "unsigned short",
+              "qualType": "small"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/dependency.h",
+          "includedFrom": {
+            "file": "/idf/components/api/include/api.h"
+          },
+          "line": 2,
+          "offset": 35,
+          "tokLen": 10
+        },
+        "mangledName": "dependency",
+        "name": "dependency",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/dependency.h",
+            "includedFrom": {
+              "file": "/idf/components/api/include/api.h"
+            },
+            "offset": 30,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 28,
+            "file": "/idf/components/api/include/dependency.h",
+            "includedFrom": {
+              "file": "/idf/components/api/include/api.h"
+            },
+            "offset": 57,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (small)"
+        }
+      },
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "expansionLoc": {
+                "col": 1,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "line": 3,
+                "offset": 72,
+                "tokLen": 7
+              },
+              "spellingLoc": {
+                "col": 42,
+                "file": "/idf/components/api/include/api.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                },
+                "line": 2,
+                "offset": 65,
+                "tokLen": 5
+              }
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "expansionLoc": {
+                  "col": 1,
+                  "file": "/idf/components/api/include/api.h",
+                  "includedFrom": {
+                    "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                  },
+                  "line": 3,
+                  "offset": 72,
+                  "tokLen": 7
+                },
+                "spellingLoc": {
+                  "col": 33,
+                  "file": "/idf/components/api/include/api.h",
+                  "includedFrom": {
+                    "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                  },
+                  "line": 2,
+                  "offset": 56,
+                  "tokLen": 8
+                }
+              },
+              "end": {
+                "expansionLoc": {
+                  "col": 1,
+                  "file": "/idf/components/api/include/api.h",
+                  "includedFrom": {
+                    "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                  },
+                  "line": 3,
+                  "offset": 72,
+                  "tokLen": 7
+                },
+                "spellingLoc": {
+                  "col": 42,
+                  "file": "/idf/components/api/include/api.h",
+                  "includedFrom": {
+                    "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+                  },
+                  "line": 2,
+                  "offset": 65,
+                  "tokLen": 5
+                }
+              }
+            },
+            "type": {
+              "qualType": "unsigned int"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "expansionLoc": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "isMacroArgExpansion": true,
+            "offset": 72,
+            "tokLen": 7
+          },
+          "spellingLoc": {
+            "col": 9,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "line": 3,
+            "offset": 80,
+            "tokLen": 8
+          }
+        },
+        "mangledName": "expanded",
+        "name": "expanded",
+        "range": {
+          "begin": {
+            "expansionLoc": {
+              "col": 1,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "line": 3,
+              "offset": 72,
+              "tokLen": 7
+            },
+            "spellingLoc": {
+              "col": 23,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "line": 2,
+              "offset": 46,
+              "tokLen": 4
+            }
+          },
+          "end": {
+            "expansionLoc": {
+              "col": 1,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "line": 3,
+              "offset": 72,
+              "tokLen": 7
+            },
+            "spellingLoc": {
+              "col": 47,
+              "file": "/idf/components/api/include/api.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+              },
+              "line": 2,
+              "offset": 70,
+              "tokLen": 1
+            }
+          }
+        },
+        "type": {
+          "qualType": "void (unsigned int)"
+        }
+      },
+      {
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 4,
+          "offset": 96,
+          "tokLen": 5
+        },
+        "mangledName": "after",
+        "name": "after",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 91,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 16,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 106,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (void)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

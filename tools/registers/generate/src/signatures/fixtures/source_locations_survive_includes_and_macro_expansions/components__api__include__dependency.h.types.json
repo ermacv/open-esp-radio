@@ -1,1 +1,135 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/dependency.h, types stage: the nodes the stage decides on","inner":[{"id":"0x55729806b9c8","kind":"TypedefDecl","loc":{"offset":368,"line":11,"col":32,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"},"range":{"begin":{"offset":337,"col":1,"tokLen":7,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"},"end":{"offset":368,"col":32,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"}},"name":"__oer_signature_0","type":{"desugaredQualType":"void (small)","qualType":"typeof (dependency)"},"inner":[{"id":"0x55729806b980","kind":"TypeOfExprType","type":{"qualType":"typeof (dependency)"},"inner":[{"id":"0x55729806b960","kind":"ParenExpr","range":{"begin":{"offset":355,"col":19,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"},"end":{"offset":366,"col":30,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"}},"type":{"qualType":"void (small)"},"valueCategory":"prvalue","inner":[{"id":"0x55729806b940","kind":"DeclRefExpr","range":{"begin":{"offset":356,"col":20,"tokLen":10,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"},"end":{"offset":356,"col":20,"tokLen":10,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/source_locations_survive_includes_and_macro_expansions/output/headers/d4139d5c087ee8c2/types.c"}},"type":{"qualType":"void (small)"},"valueCategory":"prvalue","referencedDecl":{"id":"0x55729806b5b0","kind":"FunctionDecl","name":"dependency","type":{"qualType":"void (small)"}},"nonOdrUseReason":"unevaluated"}]},{"id":"0x55729806b550","kind":"FunctionProtoType","type":{"qualType":"void (small)"},"cc":"cdecl","inner":[{"id":"0x557297fca850","kind":"BuiltinType","type":{"qualType":"void"}},{"id":"0x55729806b450","kind":"TypedefType","type":{"qualType":"small"},"decl":{"id":"0x55729806b3f0","kind":"TypedefDecl","name":"small"},"inner":[{"id":"0x557297fca970","kind":"BuiltinType","type":{"qualType":"unsigned short"}}]}]}]}]}]}
+{
+  "//": "clang version 23.1.4: components/api/include/dependency.h, types stage; the nodes the stage decides on",
+  "header_sha256": "46625d1216991baeacfd3094216fa19ae7e9041436a9b02a4e04bbe6442157d0",
+  "extra": "typedef __typeof__(dependency) __oer_signature_0;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                        "offset": 356,
+                        "tokLen": 10
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                        "offset": 356,
+                        "tokLen": 10
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "dependency",
+                      "type": {
+                        "qualType": "void (small)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (small)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                    "offset": 355,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 30,
+                    "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+                    "offset": 366,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (small)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "decl": {
+                      "kind": "TypedefDecl",
+                      "name": "small"
+                    },
+                    "inner": [
+                      {
+                        "kind": "BuiltinType",
+                        "type": {
+                          "qualType": "unsigned short"
+                        }
+                      }
+                    ],
+                    "kind": "TypedefType",
+                    "type": {
+                      "qualType": "small"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (small)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (dependency)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 32,
+          "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+          "line": 11,
+          "offset": 368,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+            "offset": 337,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 32,
+            "file": "/idf/output/headers/d4139d5c087ee8c2/types.c",
+            "offset": 368,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (small)",
+          "qualType": "typeof (dependency)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

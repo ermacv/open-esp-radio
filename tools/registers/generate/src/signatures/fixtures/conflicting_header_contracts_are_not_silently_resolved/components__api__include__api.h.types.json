@@ -1,1 +1,117 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/api.h, types stage: the nodes the stage decides on","inner":[{"id":"0x558ebdc468b8","kind":"TypedefDecl","loc":{"offset":362,"line":11,"col":33,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"},"range":{"begin":{"offset":330,"col":1,"tokLen":7,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":362,"col":33,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"}},"name":"__oer_signature_0","type":{"desugaredQualType":"void (void)","qualType":"typeof (conflicting)"},"inner":[{"id":"0x558ebdc46870","kind":"TypeOfExprType","type":{"qualType":"typeof (conflicting)"},"inner":[{"id":"0x558ebdc46848","kind":"ParenExpr","range":{"begin":{"offset":348,"col":19,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":360,"col":31,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"}},"type":{"qualType":"void (void)"},"valueCategory":"prvalue","inner":[{"id":"0x558ebdc46828","kind":"DeclRefExpr","range":{"begin":{"offset":349,"col":20,"tokLen":11,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":349,"col":20,"tokLen":11,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/types.c"}},"type":{"qualType":"void (void)"},"valueCategory":"prvalue","referencedDecl":{"id":"0x558ebdc464a0","kind":"FunctionDecl","name":"conflicting","type":{"qualType":"void (void)"}},"nonOdrUseReason":"unevaluated"}]},{"id":"0x558ebdc46450","kind":"FunctionProtoType","type":{"qualType":"void (void)"},"cc":"cdecl","inner":[{"id":"0x558ebdba5850","kind":"BuiltinType","type":{"qualType":"void"}}]}]}]}]}
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, types stage; the nodes the stage decides on",
+  "header_sha256": "b967f64209d67c4d60822f8b17d4df662d13c899e9a91a93d8f0233f6f9be314",
+  "extra": "typedef __typeof__(conflicting) __oer_signature_0;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 11
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 11
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "conflicting",
+                      "type": {
+                        "qualType": "void (void)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (void)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 348,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 31,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 360,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (void)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (void)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (conflicting)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 33,
+          "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+          "line": 11,
+          "offset": 362,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 330,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 33,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 362,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (void)",
+          "qualType": "typeof (conflicting)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

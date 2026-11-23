@@ -1,1 +1,2164 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/api.h, sizes stage: the nodes the stage decides on","inner":[{"id":"0x55724192bbb0","kind":"EnumDecl","loc":{"offset":605,"line":17,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":605,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":697,"col":93,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192bc98","kind":"EnumConstantDecl","loc":{"offset":612,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":612,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":629,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_0_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192bc78","kind":"ConstantExpr","range":{"begin":{"offset":629,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":629,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0","inner":[{"id":"0x55724192bc58","kind":"IntegerLiteral","range":{"begin":{"offset":629,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":629,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0"}]}]},{"id":"0x55724192bd60","kind":"EnumConstantDecl","loc":{"offset":632,"col":28,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":632,"col":28,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":662,"col":58,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_0_1","type":{"qualType":"int"},"inner":[{"id":"0x55724192bd48","kind":"ImplicitCastExpr","range":{"begin":{"offset":649,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":662,"col":58,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192bd28","kind":"ConstantExpr","range":{"begin":{"offset":649,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":662,"col":58,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192bd08","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":649,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":662,"col":58,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"void *"}}]}]}]},{"id":"0x55724192be28","kind":"EnumConstantDecl","loc":{"offset":665,"col":61,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":665,"col":61,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":695,"col":91,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_0_2","type":{"qualType":"int"},"inner":[{"id":"0x55724192be10","kind":"ImplicitCastExpr","range":{"begin":{"offset":682,"col":78,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":695,"col":91,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192bdf0","kind":"ConstantExpr","range":{"begin":{"offset":682,"col":78,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":695,"col":91,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192bdd0","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":682,"col":78,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":695,"col":91,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"void *"}}]}]}]}]},{"id":"0x55724192bea0","kind":"EnumDecl","loc":{"offset":700,"line":18,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":700,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":739,"col":40,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192bfb8","kind":"EnumConstantDecl","loc":{"offset":707,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":707,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":737,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_1_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192bfa0","kind":"ImplicitCastExpr","range":{"begin":{"offset":724,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":737,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192bf80","kind":"ConstantExpr","range":{"begin":{"offset":724,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":737,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192bf60","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":724,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":737,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"void *"}}]}]}]}]},{"id":"0x55724192c030","kind":"EnumDecl","loc":{"offset":742,"line":19,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":742,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":768,"col":27,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192c118","kind":"EnumConstantDecl","loc":{"offset":749,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":749,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":766,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_2_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192c0f8","kind":"ConstantExpr","range":{"begin":{"offset":766,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":766,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0","inner":[{"id":"0x55724192c0d8","kind":"IntegerLiteral","range":{"begin":{"offset":766,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":766,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0"}]}]}]},{"id":"0x55724192c190","kind":"EnumDecl","loc":{"offset":771,"line":20,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":771,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1040,"col":270,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192c278","kind":"EnumConstantDecl","loc":{"offset":778,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":778,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":795,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192c258","kind":"ConstantExpr","range":{"begin":{"offset":795,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":795,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0","inner":[{"id":"0x55724192c238","kind":"IntegerLiteral","range":{"begin":{"offset":795,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":795,"col":25,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","value":"0"}]}]},{"id":"0x55724192c340","kind":"EnumConstantDecl","loc":{"offset":798,"col":28,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":798,"col":28,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":825,"col":55,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_1","type":{"qualType":"int"},"inner":[{"id":"0x55724192c328","kind":"ImplicitCastExpr","range":{"begin":{"offset":815,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":825,"col":55,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c308","kind":"ConstantExpr","range":{"begin":{"offset":815,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":825,"col":55,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c2e8","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":815,"col":45,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":825,"col":55,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c408","kind":"EnumConstantDecl","loc":{"offset":828,"col":58,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":828,"col":58,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":855,"col":85,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_2","type":{"qualType":"int"},"inner":[{"id":"0x55724192c3f0","kind":"ImplicitCastExpr","range":{"begin":{"offset":845,"col":75,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":855,"col":85,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c3d0","kind":"ConstantExpr","range":{"begin":{"offset":845,"col":75,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":855,"col":85,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c3b0","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":845,"col":75,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":855,"col":85,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c4d0","kind":"EnumConstantDecl","loc":{"offset":858,"col":88,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":858,"col":88,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":885,"col":115,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_3","type":{"qualType":"int"},"inner":[{"id":"0x55724192c4b8","kind":"ImplicitCastExpr","range":{"begin":{"offset":875,"col":105,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":885,"col":115,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c498","kind":"ConstantExpr","range":{"begin":{"offset":875,"col":105,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":885,"col":115,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c478","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":875,"col":105,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":885,"col":115,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c598","kind":"EnumConstantDecl","loc":{"offset":888,"col":118,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":888,"col":118,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":915,"col":145,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_4","type":{"qualType":"int"},"inner":[{"id":"0x55724192c580","kind":"ImplicitCastExpr","range":{"begin":{"offset":905,"col":135,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":915,"col":145,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c560","kind":"ConstantExpr","range":{"begin":{"offset":905,"col":135,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":915,"col":145,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c540","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":905,"col":135,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":915,"col":145,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c660","kind":"EnumConstantDecl","loc":{"offset":918,"col":148,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":918,"col":148,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":945,"col":175,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_5","type":{"qualType":"int"},"inner":[{"id":"0x55724192c648","kind":"ImplicitCastExpr","range":{"begin":{"offset":935,"col":165,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":945,"col":175,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c628","kind":"ConstantExpr","range":{"begin":{"offset":935,"col":165,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":945,"col":175,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c608","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":935,"col":165,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":945,"col":175,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c728","kind":"EnumConstantDecl","loc":{"offset":948,"col":178,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":948,"col":178,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":975,"col":205,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_6","type":{"qualType":"int"},"inner":[{"id":"0x55724192c710","kind":"ImplicitCastExpr","range":{"begin":{"offset":965,"col":195,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":975,"col":205,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c6f0","kind":"ConstantExpr","range":{"begin":{"offset":965,"col":195,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":975,"col":205,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c6d0","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":965,"col":195,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":975,"col":205,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c7f0","kind":"EnumConstantDecl","loc":{"offset":978,"col":208,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":978,"col":208,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1005,"col":235,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_7","type":{"qualType":"int"},"inner":[{"id":"0x55724192c7d8","kind":"ImplicitCastExpr","range":{"begin":{"offset":995,"col":225,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1005,"col":235,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c7b8","kind":"ConstantExpr","range":{"begin":{"offset":995,"col":225,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1005,"col":235,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192c798","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":995,"col":225,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1005,"col":235,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"int"}}]}]}]},{"id":"0x55724192c8d0","kind":"EnumConstantDecl","loc":{"offset":1008,"col":238,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1008,"col":238,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1038,"col":268,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_3_8","type":{"qualType":"int"},"inner":[{"id":"0x55724192c8b8","kind":"ImplicitCastExpr","range":{"begin":{"offset":1025,"col":255,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1038,"col":268,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192c898","kind":"ConstantExpr","range":{"begin":{"offset":1025,"col":255,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1038,"col":268,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"8","inner":[{"id":"0x55724192c878","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1025,"col":255,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1038,"col":268,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"desugaredQualType":"unsigned long long","qualType":"wide_t","typeAliasDeclId":"0x5572419206b0"}}]}]}]}]},{"id":"0x55724192c950","kind":"EnumDecl","loc":{"offset":1043,"line":21,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1043,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1158,"col":116,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192cae0","kind":"EnumConstantDecl","loc":{"offset":1050,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1050,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1083,"col":41,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_4_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192ca68","kind":"ImplicitCastExpr","range":{"begin":{"offset":1067,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1083,"col":41,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192ca48","kind":"ConstantExpr","range":{"begin":{"offset":1067,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1083,"col":41,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192ca28","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1067,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1083,"col":41,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"desugaredQualType":"int","qualType":"esp_err_t","typeAliasDeclId":"0x557241920640"}}]}]}]},{"id":"0x55724192cba8","kind":"EnumConstantDecl","loc":{"offset":1086,"col":44,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1086,"col":44,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1123,"col":81,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_4_1","type":{"qualType":"int"},"inner":[{"id":"0x55724192cb90","kind":"ImplicitCastExpr","range":{"begin":{"offset":1103,"col":61,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1123,"col":81,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192cb70","kind":"ConstantExpr","range":{"begin":{"offset":1103,"col":61,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1123,"col":81,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"1","inner":[{"id":"0x55724192cb50","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1103,"col":61,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1123,"col":81,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"unsigned char"}}]}]}]},{"id":"0x55724192cc70","kind":"EnumConstantDecl","loc":{"offset":1126,"col":84,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1126,"col":84,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1156,"col":114,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_4_2","type":{"qualType":"int"},"inner":[{"id":"0x55724192cc58","kind":"ImplicitCastExpr","range":{"begin":{"offset":1143,"col":101,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1156,"col":114,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192cc38","kind":"ConstantExpr","range":{"begin":{"offset":1143,"col":101,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1156,"col":114,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192cc18","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1143,"col":101,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1156,"col":114,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"void *"}}]}]}]}]},{"id":"0x55724192ccf0","kind":"EnumDecl","loc":{"offset":1161,"line":22,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1161,"col":1,"tokLen":4,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1266,"col":106,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"inner":[{"id":"0x55724192ce20","kind":"EnumConstantDecl","loc":{"offset":1168,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1168,"col":8,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1198,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_5_0","type":{"qualType":"int"},"inner":[{"id":"0x55724192ce08","kind":"ImplicitCastExpr","range":{"begin":{"offset":1185,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1198,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192cde8","kind":"ConstantExpr","range":{"begin":{"offset":1185,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1198,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"8","inner":[{"id":"0x55724192cdc8","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1185,"col":25,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1198,"col":38,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"desugaredQualType":"unsigned long long","qualType":"wide_t","typeAliasDeclId":"0x5572419206b0"}}]}]}]},{"id":"0x55724192cee8","kind":"EnumConstantDecl","loc":{"offset":1201,"col":41,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1201,"col":41,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1231,"col":71,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_5_1","type":{"qualType":"int"},"inner":[{"id":"0x55724192ced0","kind":"ImplicitCastExpr","range":{"begin":{"offset":1218,"col":58,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1231,"col":71,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192ceb0","kind":"ConstantExpr","range":{"begin":{"offset":1218,"col":58,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1231,"col":71,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"4","inner":[{"id":"0x55724192ce90","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1218,"col":58,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1231,"col":71,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"qualType":"void *"}}]}]}]},{"id":"0x55724192cfc8","kind":"EnumConstantDecl","loc":{"offset":1234,"col":74,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"range":{"begin":{"offset":1234,"col":74,"tokLen":14,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1264,"col":104,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"name":"__oer_size_5_2","type":{"qualType":"int"},"inner":[{"id":"0x55724192cfb0","kind":"ImplicitCastExpr","range":{"begin":{"offset":1251,"col":91,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1264,"col":104,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"qualType":"int"},"valueCategory":"prvalue","castKind":"IntegralCast","inner":[{"id":"0x55724192cf90","kind":"ConstantExpr","range":{"begin":{"offset":1251,"col":91,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1264,"col":104,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","value":"8","inner":[{"id":"0x55724192cf70","kind":"UnaryExprOrTypeTraitExpr","range":{"begin":{"offset":1251,"col":91,"tokLen":6,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"},"end":{"offset":1264,"col":104,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words/output/headers/0a4028c4e93c3962/sizes.c"}},"type":{"desugaredQualType":"unsigned int","qualType":"__size_t"},"valueCategory":"prvalue","name":"sizeof","argType":{"desugaredQualType":"unsigned long long","qualType":"wide_t","typeAliasDeclId":"0x5572419206b0"}}]}]}]}]}]}
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, sizes stage; the nodes the stage decides on",
+  "header_sha256": "9c5fb15502c0e428c6d77ace97c7688e3f4ce41099068a64a30bfdeab42eef0b",
+  "extra": "typedef __typeof__(adjusted) __oer_signature_0;\ntypedef __typeof__(callback) __oer_signature_1;\ntypedef __typeof__(empty) __oer_signature_2;\ntypedef __typeof__(many) __oer_signature_3;\ntypedef __typeof__(scalar) __oer_signature_4;\ntypedef __typeof__(wide) __oer_signature_5;\nenum { __oer_size_0_0 = 0, __oer_size_0_1 = sizeof(void *), __oer_size_0_2 = sizeof(void *) };\nenum { __oer_size_1_0 = sizeof(void *) };\nenum { __oer_size_2_0 = 0 };\nenum { __oer_size_3_0 = 0, __oer_size_3_1 = sizeof(int), __oer_size_3_2 = sizeof(int), __oer_size_3_3 = sizeof(int), __oer_size_3_4 = sizeof(int), __oer_size_3_5 = sizeof(int), __oer_size_3_6 = sizeof(int), __oer_size_3_7 = sizeof(int), __oer_size_3_8 = sizeof(wide_t) };\nenum { __oer_size_4_0 = sizeof(esp_err_t), __oer_size_4_1 = sizeof(unsigned char), __oer_size_4_2 = sizeof(void *) };\nenum { __oer_size_5_0 = sizeof(wide_t), __oer_size_5_1 = sizeof(void *), __oer_size_5_2 = sizeof(wide_t) };\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 629,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 629,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 629,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 629,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 612,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 612,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 629,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 45,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 649,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 58,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 662,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 45,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 649,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 58,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 662,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 45,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 649,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 58,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 662,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 28,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 632,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_1",
+            "range": {
+              "begin": {
+                "col": 28,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 632,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 58,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 662,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 78,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 682,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 91,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 695,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 78,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 682,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 91,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 695,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 78,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 682,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 91,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 695,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 61,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 665,
+              "tokLen": 14
+            },
+            "name": "__oer_size_0_2",
+            "range": {
+              "begin": {
+                "col": 61,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 665,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 91,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 695,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 17,
+          "offset": 605,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 605,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 93,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 697,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 724,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 38,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 737,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 724,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 38,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 737,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 724,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 38,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 737,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 707,
+              "tokLen": 14
+            },
+            "name": "__oer_size_1_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 707,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 38,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 737,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 18,
+          "offset": 700,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 700,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 40,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 739,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 766,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 766,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 766,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 766,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 749,
+              "tokLen": 14
+            },
+            "name": "__oer_size_2_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 749,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 766,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 19,
+          "offset": 742,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 742,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 768,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "IntegerLiteral",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 795,
+                        "tokLen": 1
+                      },
+                      "end": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 795,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "qualType": "int"
+                    },
+                    "value": "0",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ConstantExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 795,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 795,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "value": "0",
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 778,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 778,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 25,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 795,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 45,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 815,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 55,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 825,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 45,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 815,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 55,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 825,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 45,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 815,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 55,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 825,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 28,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 798,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_1",
+            "range": {
+              "begin": {
+                "col": 28,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 798,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 55,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 825,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 75,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 845,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 85,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 855,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 75,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 845,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 85,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 855,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 75,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 845,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 85,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 855,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 58,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 828,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_2",
+            "range": {
+              "begin": {
+                "col": 58,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 828,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 85,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 855,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 105,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 875,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 115,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 885,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 105,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 875,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 115,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 885,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 105,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 875,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 115,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 885,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 88,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 858,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_3",
+            "range": {
+              "begin": {
+                "col": 88,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 858,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 115,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 885,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 135,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 905,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 145,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 915,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 135,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 905,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 145,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 915,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 135,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 905,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 145,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 915,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 118,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 888,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_4",
+            "range": {
+              "begin": {
+                "col": 118,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 888,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 145,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 915,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 165,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 935,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 175,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 945,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 165,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 935,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 175,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 945,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 165,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 935,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 175,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 945,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 148,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 918,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_5",
+            "range": {
+              "begin": {
+                "col": 148,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 918,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 175,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 945,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 195,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 965,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 205,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 975,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 195,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 965,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 205,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 975,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 195,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 965,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 205,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 975,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 178,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 948,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_6",
+            "range": {
+              "begin": {
+                "col": 178,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 948,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 205,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 975,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "int"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 225,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 995,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 235,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1005,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 225,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 995,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 235,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1005,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 225,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 995,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 235,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1005,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 208,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 978,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_7",
+            "range": {
+              "begin": {
+                "col": 208,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 978,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 235,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1005,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 255,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1025,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 268,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1038,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 255,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1025,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 268,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1038,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 255,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1025,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 268,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1038,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 238,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1008,
+              "tokLen": 14
+            },
+            "name": "__oer_size_3_8",
+            "range": {
+              "begin": {
+                "col": 238,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1008,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 268,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1038,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 20,
+          "offset": 771,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 771,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 270,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1040,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "int",
+                          "qualType": "esp_err_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1067,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 41,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1083,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1067,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 41,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1083,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1067,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 41,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1083,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1050,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1050,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 41,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1083,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "unsigned char"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 61,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1103,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 81,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1123,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 61,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1103,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 81,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1123,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "1",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 61,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1103,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 81,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1123,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 44,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1086,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_1",
+            "range": {
+              "begin": {
+                "col": 44,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1086,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 81,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1123,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 101,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1143,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 114,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1156,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 101,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1143,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 114,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1156,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 101,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1143,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 114,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1156,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 84,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1126,
+              "tokLen": 14
+            },
+            "name": "__oer_size_4_2",
+            "range": {
+              "begin": {
+                "col": 84,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1126,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 114,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1156,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 21,
+          "offset": 1043,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1043,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 116,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1158,
+            "tokLen": 1
+          }
+        }
+      },
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 25,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1185,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 38,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1198,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 25,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1185,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 38,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1198,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 25,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1185,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 38,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1198,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 8,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1168,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_0",
+            "range": {
+              "begin": {
+                "col": 8,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1168,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 38,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1198,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "qualType": "void *"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 58,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1218,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 71,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1231,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 58,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1218,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 71,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1231,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "4",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 58,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1218,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 71,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1231,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 41,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1201,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_1",
+            "range": {
+              "begin": {
+                "col": 41,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1201,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 71,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1231,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          },
+          {
+            "inner": [
+              {
+                "castKind": "IntegralCast",
+                "inner": [
+                  {
+                    "inner": [
+                      {
+                        "argType": {
+                          "desugaredQualType": "unsigned long long",
+                          "qualType": "wide_t"
+                        },
+                        "kind": "UnaryExprOrTypeTraitExpr",
+                        "name": "sizeof",
+                        "range": {
+                          "begin": {
+                            "col": 91,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1251,
+                            "tokLen": 6
+                          },
+                          "end": {
+                            "col": 104,
+                            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                            "offset": 1264,
+                            "tokLen": 1
+                          }
+                        },
+                        "type": {
+                          "desugaredQualType": "unsigned int",
+                          "qualType": "__size_t"
+                        },
+                        "valueCategory": "prvalue"
+                      }
+                    ],
+                    "kind": "ConstantExpr",
+                    "range": {
+                      "begin": {
+                        "col": 91,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1251,
+                        "tokLen": 6
+                      },
+                      "end": {
+                        "col": 104,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                        "offset": 1264,
+                        "tokLen": 1
+                      }
+                    },
+                    "type": {
+                      "desugaredQualType": "unsigned int",
+                      "qualType": "__size_t"
+                    },
+                    "value": "8",
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ImplicitCastExpr",
+                "range": {
+                  "begin": {
+                    "col": 91,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1251,
+                    "tokLen": 6
+                  },
+                  "end": {
+                    "col": 104,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                    "offset": 1264,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "int"
+                },
+                "valueCategory": "prvalue"
+              }
+            ],
+            "kind": "EnumConstantDecl",
+            "loc": {
+              "col": 74,
+              "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+              "offset": 1234,
+              "tokLen": 14
+            },
+            "name": "__oer_size_5_2",
+            "range": {
+              "begin": {
+                "col": 74,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1234,
+                "tokLen": 14
+              },
+              "end": {
+                "col": 104,
+                "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+                "offset": 1264,
+                "tokLen": 1
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "EnumDecl",
+        "loc": {
+          "col": 1,
+          "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+          "line": 22,
+          "offset": 1161,
+          "tokLen": 4
+        },
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1161,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 106,
+            "file": "/idf/output/headers/0a4028c4e93c3962/sizes.c",
+            "offset": 1266,
+            "tokLen": 1
+          }
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

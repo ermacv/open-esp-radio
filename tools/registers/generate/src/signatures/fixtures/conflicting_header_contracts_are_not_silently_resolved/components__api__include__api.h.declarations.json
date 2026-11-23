@@ -1,1 +1,49 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/api.h, declarations stage: the nodes the stage decides on","inner":[{"id":"0x5642eab65480","kind":"FunctionDecl","loc":{"offset":5,"file":"/idf/components/api/include/api.h","line":1,"col":6,"tokLen":11,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/declarations.c"}},"range":{"begin":{"offset":0,"col":1,"tokLen":4,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"},"end":{"offset":21,"col":22,"tokLen":1,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/0a4028c4e93c3962/declarations.c"},"file":"/idf/components/api/include/api.h"}},"name":"conflicting","mangledName":"conflicting","type":{"qualType":"void (void)"}}]}
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "b967f64209d67c4d60822f8b17d4df662d13c899e9a91a93d8f0233f6f9be314",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/api.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+          },
+          "line": 1,
+          "offset": 5,
+          "tokLen": 11
+        },
+        "mangledName": "conflicting",
+        "name": "conflicting",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 0,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 22,
+            "file": "/idf/components/api/include/api.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/0a4028c4e93c3962/declarations.c"
+            },
+            "offset": 21,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (void)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

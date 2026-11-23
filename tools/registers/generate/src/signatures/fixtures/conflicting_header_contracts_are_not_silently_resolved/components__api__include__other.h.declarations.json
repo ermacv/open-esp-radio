@@ -1,1 +1,87 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/other.h, declarations stage: the nodes the stage decides on","inner":[{"id":"0x55ea85b084a0","kind":"FunctionDecl","loc":{"offset":5,"file":"/idf/components/api/include/other.h","line":1,"col":6,"tokLen":11,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"}},"range":{"begin":{"offset":0,"col":1,"tokLen":4,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"},"file":"/idf/components/api/include/other.h"},"end":{"offset":26,"col":27,"tokLen":1,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"},"file":"/idf/components/api/include/other.h"}},"name":"conflicting","mangledName":"conflicting","type":{"qualType":"void (int)"},"inner":[{"id":"0x55ea85b083d0","kind":"ParmVarDecl","loc":{"offset":21,"col":22,"tokLen":5,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"},"file":"/idf/components/api/include/other.h"},"range":{"begin":{"offset":17,"col":18,"tokLen":3,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"},"file":"/idf/components/api/include/other.h"},"end":{"offset":21,"col":22,"tokLen":5,"includedFrom":{"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/conflicting_header_contracts_are_not_silently_resolved/output/headers/9abf3daa96215fec/declarations.c"},"file":"/idf/components/api/include/other.h"}},"name":"value","type":{"qualType":"int"}}]}]}
+{
+  "//": "clang version 23.1.4: components/api/include/other.h, declarations stage; the nodes the stage decides on",
+  "header_sha256": "8cdd861b100a112aead36c0406d2c611d6f0fde2fa8ee475733767d9dfcd9fdf",
+  "extra": "",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "kind": "ParmVarDecl",
+            "loc": {
+              "col": 22,
+              "file": "/idf/components/api/include/other.h",
+              "includedFrom": {
+                "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+              },
+              "offset": 21,
+              "tokLen": 5
+            },
+            "name": "value",
+            "range": {
+              "begin": {
+                "col": 18,
+                "file": "/idf/components/api/include/other.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+                },
+                "offset": 17,
+                "tokLen": 3
+              },
+              "end": {
+                "col": 22,
+                "file": "/idf/components/api/include/other.h",
+                "includedFrom": {
+                  "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+                },
+                "offset": 21,
+                "tokLen": 5
+              }
+            },
+            "type": {
+              "qualType": "int"
+            }
+          }
+        ],
+        "kind": "FunctionDecl",
+        "loc": {
+          "col": 6,
+          "file": "/idf/components/api/include/other.h",
+          "includedFrom": {
+            "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+          },
+          "line": 1,
+          "offset": 5,
+          "tokLen": 11
+        },
+        "mangledName": "conflicting",
+        "name": "conflicting",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/components/api/include/other.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+            },
+            "offset": 0,
+            "tokLen": 4
+          },
+          "end": {
+            "col": 27,
+            "file": "/idf/components/api/include/other.h",
+            "includedFrom": {
+              "file": "/idf/output/headers/9abf3daa96215fec/declarations.c"
+            },
+            "offset": 26,
+            "tokLen": 1
+          }
+        },
+        "type": {
+          "qualType": "void (int)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

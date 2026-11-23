@@ -1,1 +1,123 @@
-{"kind":"TranslationUnitDecl","//":"reduced clang version 23.1.4 -ast-dump=json of components/api/include/api.h, types stage: the nodes the stage decides on","inner":[{"id":"0x55ffaede12b8","kind":"TypedefDecl","loc":{"offset":359,"line":11,"col":30,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"},"range":{"begin":{"offset":330,"col":1,"tokLen":7,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":359,"col":30,"tokLen":17,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"}},"name":"__oer_signature_0","type":{"desugaredQualType":"void (int)","qualType":"typeof (selected)"},"inner":[{"id":"0x55ffaede1270","kind":"TypeOfExprType","type":{"qualType":"typeof (selected)"},"inner":[{"id":"0x55ffaede1250","kind":"ParenExpr","range":{"begin":{"offset":348,"col":19,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":357,"col":28,"tokLen":1,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"}},"type":{"qualType":"void (int)"},"valueCategory":"prvalue","inner":[{"id":"0x55ffaede1230","kind":"DeclRefExpr","range":{"begin":{"offset":349,"col":20,"tokLen":8,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"},"end":{"offset":349,"col":20,"tokLen":8,"file":"/home/ermacv/dev/open-esp-radio-wt/15/tools/registers/generate/../../../target/scratch/harvest/chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded/output/headers/0a4028c4e93c3962/types.c"}},"type":{"qualType":"void (int)"},"valueCategory":"prvalue","referencedDecl":{"id":"0x55ffaede0ea0","kind":"FunctionDecl","name":"selected","type":{"qualType":"void (int)"}},"nonOdrUseReason":"unevaluated"}]},{"id":"0x55ffaede0e40","kind":"FunctionProtoType","type":{"qualType":"void (int)"},"cc":"cdecl","inner":[{"id":"0x55ffaed40870","kind":"BuiltinType","type":{"qualType":"void"}},{"id":"0x55ffaed40910","kind":"BuiltinType","type":{"qualType":"int"}}]}]}]}]}
+{
+  "//": "clang version 23.1.4: components/api/include/api.h, types stage; the nodes the stage decides on",
+  "header_sha256": "56b5cb4c621da4b2a6be60aaeeaad73a8614c33290fd833a96ff1b0081761566",
+  "extra": "typedef __typeof__(selected) __oer_signature_0;\n",
+  "tree": {
+    "inner": [
+      {
+        "inner": [
+          {
+            "inner": [
+              {
+                "inner": [
+                  {
+                    "kind": "DeclRefExpr",
+                    "nonOdrUseReason": "unevaluated",
+                    "range": {
+                      "begin": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 8
+                      },
+                      "end": {
+                        "col": 20,
+                        "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                        "offset": 349,
+                        "tokLen": 8
+                      }
+                    },
+                    "referencedDecl": {
+                      "kind": "FunctionDecl",
+                      "name": "selected",
+                      "type": {
+                        "qualType": "void (int)"
+                      }
+                    },
+                    "type": {
+                      "qualType": "void (int)"
+                    },
+                    "valueCategory": "prvalue"
+                  }
+                ],
+                "kind": "ParenExpr",
+                "range": {
+                  "begin": {
+                    "col": 19,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 348,
+                    "tokLen": 1
+                  },
+                  "end": {
+                    "col": 28,
+                    "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+                    "offset": 357,
+                    "tokLen": 1
+                  }
+                },
+                "type": {
+                  "qualType": "void (int)"
+                },
+                "valueCategory": "prvalue"
+              },
+              {
+                "cc": "cdecl",
+                "inner": [
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "void"
+                    }
+                  },
+                  {
+                    "kind": "BuiltinType",
+                    "type": {
+                      "qualType": "int"
+                    }
+                  }
+                ],
+                "kind": "FunctionProtoType",
+                "type": {
+                  "qualType": "void (int)"
+                }
+              }
+            ],
+            "kind": "TypeOfExprType",
+            "type": {
+              "qualType": "typeof (selected)"
+            }
+          }
+        ],
+        "kind": "TypedefDecl",
+        "loc": {
+          "col": 30,
+          "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+          "line": 11,
+          "offset": 359,
+          "tokLen": 17
+        },
+        "name": "__oer_signature_0",
+        "range": {
+          "begin": {
+            "col": 1,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 330,
+            "tokLen": 7
+          },
+          "end": {
+            "col": 30,
+            "file": "/idf/output/headers/0a4028c4e93c3962/types.c",
+            "offset": 359,
+            "tokLen": 17
+          }
+        },
+        "type": {
+          "desugaredQualType": "void (int)",
+          "qualType": "typeof (selected)"
+        }
+      }
+    ],
+    "kind": "TranslationUnitDecl"
+  },
+  "refusal": null
+}

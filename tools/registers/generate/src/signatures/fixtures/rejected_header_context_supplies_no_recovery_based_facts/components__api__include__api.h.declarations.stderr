@@ -1,2 +1,0 @@
-// reduced clang version 23.1.4 diagnostic of components/api/include/api.h, declarations stage
-/idf/components/api/include/api.h:1:1: error: unknown type name 'missing_type'

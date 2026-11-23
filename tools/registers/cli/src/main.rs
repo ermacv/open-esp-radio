@@ -41,6 +41,12 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Record the signature tests' compiler trees again with a real
+    /// compiler (`tools/registers/generate/src/signatures/fixtures/`).
+    SignatureFixtures {
+        #[arg(long, default_value = "clang")]
+        clang: std::ffi::OsString,
+    },
     /// The register checks.
     #[command(subcommand)]
     Check(Check),
@@ -96,6 +102,10 @@ fn run() -> oer_tools_registers_generate::Result<()> {
                     output,
                 },
             )?;
+        }
+        Command::SignatureFixtures { clang } => {
+            oer_tools_registers_generate::signatures::record_fixtures(&clang)?;
+            println!("signature fixtures recorded");
         }
         Command::Check(Check::Inventory { chip, output }) => {
             oer_tools_registers_generate::checks::inventory::run(&ctx, &chip, output)?;

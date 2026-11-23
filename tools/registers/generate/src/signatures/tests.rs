@@ -1,51 +1,34 @@
 use super::*;
 use std::path::Path;
 
-fn put(root: &Path, path: &str, content: &str) {
-    let path = root.join(path);
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, content).unwrap();
-}
-
-fn fixture(header: &str) -> (tempfile::TempDir, Options) {
-    let root = tempfile::tempdir().unwrap();
-    fs::create_dir_all(root.path().join("components/soc/esp32s31")).unwrap();
-    put(
-        root.path(),
-        "components/common/include/esp_err.h",
-        "typedef int esp_err_t;\n",
-    );
-    put(root.path(), "components/api/include/api.h", header);
-    put(
-        root.path(),
-        "sdkconfig.h",
-        "#define CONFIG_IDF_TARGET_ESP32S31 1\n",
-    );
-    let options = Options {
-        chip: "esp32s31".into(),
-        idf: root.path().to_owned(),
-        sdkconfig: root.path().join("sdkconfig.h"),
-        libc_include: None,
-        // No test runs the compiler: an inspection reads its dumps.
-        clang: "/nonexistent/clang".into(),
-        check: false,
-        output: None,
-    };
-    (root, options)
-}
-
-/// The inspection of the fixture's headers, each compiler stage answered by
-/// the case's reduced dump (`fixtures/<test>/<header>.<stage>.json`) or its
-/// refusal (`….stderr`), with the dumps' `/idf` at the fixture's root.
-fn inspect(options: &Options, names: &[&str], output: &Path) -> headers::Findings {
-    let case = std::thread::current()
+/// The test thread's case: the test's own name.
+fn case() -> &'static cases::Case {
+    let name = std::thread::current()
         .name()
         .and_then(|name| name.rsplit("::").next())
         .expect("a test thread names its test")
         .to_owned();
+    cases::case(&name).unwrap_or_else(|| panic!("{name} is no case"))
+}
+
+/// The test's case written under a temporary root. No test runs the
+/// compiler: an inspection reads the case's recorded stages.
+fn fixture() -> (tempfile::TempDir, Options) {
+    let root = tempfile::tempdir().unwrap();
+    let options = cases::materialize(case(), root.path(), "/nonexistent/clang".as_ref()).unwrap();
+    (root, options)
+}
+
+/// The inspection of the case's headers, each compiler stage answered by
+/// its recorded stage (`fixtures/<case>/<header>.<stage>.json`), whose text
+/// and header must be the request's, with the record's `/idf` at the
+/// fixture's root.
+fn inspect(options: &Options, names: &[&str], output: &Path) -> headers::Findings {
+    let case = case();
+    assert_eq!(names, case.names, "the test asks for its case's names");
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src/signatures/fixtures")
-        .join(&case);
+        .join(case.name);
     let names: BTreeSet<String> = names.iter().map(|s| (*s).to_owned()).collect();
     let (root, headers) = headers::selection(options).unwrap();
     let mut inspection = headers::Inspection::new(
@@ -57,25 +40,39 @@ fn inspect(options: &Options, names: &[&str], output: &Path) -> headers::Finding
         output,
     );
     while let Some(request) = inspection.request().unwrap() {
-        let base = fixtures.join(format!(
-            "{}.{}",
-            request
-                .header
-                .strip_prefix(&root)
-                .unwrap()
-                .to_string_lossy()
-                .replace('/', "__"),
-            request.stage
-        ));
-        let tree = match fs::read_to_string(base.with_extension(format!("{}.json", request.stage)))
-        {
-            Ok(dump) => {
-                Ok(ast::parse(dump.replace("/idf", &root.to_string_lossy()).as_bytes()).unwrap())
-            }
-            Err(_) => Err(headers::refusal(
-                &fs::read(base.with_extension(format!("{}.stderr", request.stage)))
-                    .unwrap_or_else(|_| panic!("{case}: no dump of {}", base.display())),
-            )),
+        let relative = request
+            .header
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let path = headers::recorded_path(&fixtures, &relative, request.stage);
+        let recorded: headers::RecordedStage = serde_json::from_str(
+            &fs::read_to_string(&path).unwrap_or_else(|_| panic!("no record {}", path.display())),
+        )
+        .unwrap();
+        // The record answers this request: the same unit, the same header.
+        assert_eq!(
+            recorded.extra, request.extra,
+            "{}: {relative} {}",
+            case.name, request.stage
+        );
+        assert_eq!(
+            recorded.header_sha256,
+            oer_tools_os_durable::sha256_file(&request.header).unwrap(),
+            "{}: {relative} was recorded from another text",
+            case.name
+        );
+        let tree = match (recorded.tree, recorded.refusal) {
+            (Some(tree), None) => Ok(ast::parse(
+                serde_json::to_string(&tree)
+                    .unwrap()
+                    .replace("/idf", &root.to_string_lossy())
+                    .as_bytes(),
+            )
+            .unwrap()),
+            (None, Some(reason)) => Err(reason),
+            _ => panic!("{}: a record holds a tree or a refusal", path.display()),
         };
         inspection.advance(tree).unwrap();
     }
@@ -112,9 +109,7 @@ fn a_location_without_a_file_takes_the_last_one_named() {
 
 #[test]
 fn compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words() {
-    let (root, options) = fixture(
-        "typedef unsigned long long wide_t;\nvoid empty(void);\nesp_err_t scalar(unsigned char value, const void *address);\nwide_t wide(void *p, wide_t value);\nvoid many(int a,int b,int c,int d,int e,int f,int g,wide_t h);\nvoid (*callback(void))(int);\nvoid adjusted(unsigned char bytes[6], int callback(int));\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(
         &options,
         &["empty", "scalar", "wide", "many", "callback", "adjusted"],
@@ -150,9 +145,7 @@ fn compiler_resolves_typedefs_pointers_and_rv32_wide_argument_words() {
 
 #[test]
 fn unsupported_abis_are_reported_and_never_become_contracts() {
-    let (root, options) = fixture(
-        "struct pair { int a,b; };\nstruct pair aggregate(struct pair value);\nfloat floating(double value);\nvoid variadic(int first,...);\nint old_style();\nvoid supported(int value);\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(
         &options,
         &[
@@ -184,14 +177,7 @@ fn unsupported_abis_are_reported_and_never_become_contracts() {
 
 #[test]
 fn source_locations_survive_includes_and_macro_expansions() {
-    let (root, options) = fixture(
-        "#include \"dependency.h\"\n#define DECLARE(name) void name(unsigned value)\nDECLARE(expanded);\nvoid after(void);\n",
-    );
-    put(
-        root.path(),
-        "components/api/include/dependency.h",
-        "typedef unsigned short small;\nvoid dependency(small value);\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(
         &options,
         &["dependency", "expanded", "after"],
@@ -213,14 +199,7 @@ fn source_locations_survive_includes_and_macro_expansions() {
 
 #[test]
 fn chip_configuration_selects_the_declaration_and_other_chip_headers_are_excluded() {
-    let (root, options) = fixture(
-        "#if CONFIG_IDF_TARGET_ESP32S31\nvoid selected(int value);\n#else\nvoid selected(void);\n#endif\n",
-    );
-    put(
-        root.path(),
-        "components/soc/esp32c5/include/other.h",
-        "void selected(void);\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(&options, &["selected"], &root.path().join("output"));
     assert_eq!(r.signatures["selected"].arguments, 1);
     assert!(r.conflicts.is_empty());
@@ -228,20 +207,14 @@ fn chip_configuration_selects_the_declaration_and_other_chip_headers_are_exclude
 
 #[test]
 fn conflicting_header_contracts_are_not_silently_resolved() {
-    let (root, options) = fixture("void conflicting(void);\n");
-    put(
-        root.path(),
-        "components/api/include/other.h",
-        "void conflicting(int value);\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(&options, &["conflicting"], &root.path().join("output"));
     assert_eq!(r.conflicts["conflicting"].len(), 2);
 }
 
 #[test]
 fn rejected_header_context_supplies_no_recovery_based_facts() {
-    let (root, options) =
-        fixture("missing_type invalid(missing_type value);\nvoid apparently_valid(void);\n");
+    let (root, options) = fixture();
     let r = inspect(
         &options,
         &["invalid", "apparently_valid"],
@@ -249,18 +222,18 @@ fn rejected_header_context_supplies_no_recovery_based_facts() {
     );
     assert!(r.signatures.is_empty());
     assert!(!r.failed_candidates["apparently_valid"].is_empty());
+    // The context's refusal is recorded with the compiler's reason.
+    assert_eq!(
+        r.failed_contexts
+            .get("components/api/include/api.h")
+            .map(String::as_str),
+        Some("unknown type name 'missing_type'")
+    );
 }
 
 #[test]
 fn enum_widths_come_from_the_compiler_and_unsupported_redeclarations_conflict() {
-    let (root, options) = fixture(
-        "enum small { SMALL = 1 };\nenum wide { WIDE = 0x100000000ULL };\nenum wide enumeration(enum small a, enum wide b);\nvoid conflicting(int a);\n",
-    );
-    put(
-        root.path(),
-        "components/api/include/other.h",
-        "void conflicting(float a);\n",
-    );
+    let (root, options) = fixture();
     let r = inspect(
         &options,
         &["enumeration", "conflicting"],

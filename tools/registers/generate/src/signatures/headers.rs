@@ -677,3 +677,146 @@ pub(super) fn inspect(
     drop(compiler.profile);
     Ok(inspection.finish())
 }
+
+/// One recorded compiler stage of a case: the text appended to the unit,
+/// the hash of the header it compiled, and its reduced tree or refusal.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(super) struct RecordedStage {
+    #[serde(rename = "//")]
+    pub note: String,
+    pub header_sha256: String,
+    pub extra: String,
+    #[serde(default)]
+    pub tree: Option<Value>,
+    #[serde(default)]
+    pub refusal: Option<String>,
+}
+
+/// The file of `relative`'s `stage` in a case's fixture directory.
+pub(super) fn recorded_path(directory: &Path, relative: &str, stage: &str) -> PathBuf {
+    directory.join(format!("{}.{stage}.json", relative.replace('/', "__")))
+}
+
+/// The nodes of `tree` the `stage` decides on, each location carrying its
+/// file (no cursor across removed nodes) and the tree's `root` as `/idf`.
+fn reduce(tree: &Value, stage: &str, names: &BTreeSet<String>, root: &Path) -> Result<Value> {
+    fn locate(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                if let Some(file) = map.remove("actualFile") {
+                    map.insert("file".into(), file);
+                }
+                // Node identities are the compiler's addresses, new at each
+                // run; nothing decides on them.
+                map.retain(|key, _| key != "id" && !key.ends_with("Id") && key != "previousDecl");
+                for child in map.values_mut() {
+                    locate(child);
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(locate),
+            _ => {}
+        }
+    }
+    let kept: Vec<Value> = ast::children(tree)
+        .iter()
+        .filter(|node| match stage {
+            "declarations" => {
+                node["kind"] == "FunctionDecl"
+                    && node["name"].as_str().is_some_and(|n| names.contains(n))
+            }
+            "types" => {
+                node["kind"] == "TypedefDecl"
+                    && node["name"]
+                        .as_str()
+                        .is_some_and(|n| n.starts_with("__oer_signature_"))
+            }
+            _ => {
+                node["kind"] == "EnumDecl"
+                    && ast::children(node).iter().any(|c| {
+                        c["name"]
+                            .as_str()
+                            .is_some_and(|n| n.starts_with("__oer_size_"))
+                    })
+            }
+        })
+        .cloned()
+        .map(|mut node| {
+            locate(&mut node);
+            node
+        })
+        .collect();
+    let text = serde_json::to_string(
+        &serde_json::json!({ "kind": "TranslationUnitDecl", "inner": kept }),
+    )?
+    .replace(&*root.to_string_lossy(), "/idf");
+    Ok(serde_json::from_str(&text)?)
+}
+
+/// Record every case's compiler stages with `clang` under `directory`
+/// (`<case>/<header>.<stage>.json`): the one place a case meets a compiler.
+pub(super) fn record_cases(clang: &std::ffi::OsStr, directory: &Path) -> Result<()> {
+    let version = String::from_utf8_lossy(
+        &oer_tools_os_process::command(clang)
+            .arg("--version")
+            .output()?
+            .stdout,
+    )
+    .lines()
+    .next()
+    .unwrap_or("clang")
+    .to_owned();
+    for case in &super::cases::CASES {
+        let scratch = tempfile::tempdir()?;
+        let options = super::cases::materialize(case, scratch.path(), clang)?;
+        let names: BTreeSet<String> = case.names.iter().map(|s| (*s).to_owned()).collect();
+        let (compiler, headers) = Compiler::new(&options)?;
+        let output = scratch.path().join("output");
+        let mut inspection = Inspection::new(
+            &options.chip,
+            compiler.root.clone(),
+            headers,
+            &names,
+            "synthetic-pin",
+            &output,
+        );
+        let fixtures = directory.join(case.name);
+        match fs::remove_dir_all(&fixtures) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        fs::create_dir_all(&fixtures)?;
+        while let Some(request) = inspection.request()? {
+            let relative = request
+                .header
+                .strip_prefix(&compiler.root)?
+                .to_string_lossy()
+                .into_owned();
+            let tree = compiler.run(
+                &request.directory,
+                &request.header,
+                request.stage,
+                &request.extra,
+            )?;
+            let recorded = RecordedStage {
+                note: format!(
+                    "{version}: {relative}, {} stage; the nodes the stage decides on",
+                    request.stage
+                ),
+                header_sha256: oer_tools_os_durable::sha256_file(&request.header)?,
+                extra: request.extra.clone(),
+                tree: match &tree {
+                    Ok(tree) => Some(reduce(tree, request.stage, &names, &compiler.root)?),
+                    Err(_) => None,
+                },
+                refusal: tree.as_ref().err().cloned(),
+            };
+            fs::write(
+                recorded_path(&fixtures, &relative, request.stage),
+                serde_json::to_string_pretty(&recorded)? + "\n",
+            )?;
+            inspection.advance(tree)?;
+        }
+    }
+    Ok(())
+}
