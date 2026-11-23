@@ -92,7 +92,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/executor/src/fault.rs:crate::fault::impl Fault::reset:terminal-reference:reset_fault:1" = { owner = "chips/family/platform/executor", classes = ["software-invariant", "configuration-boot", "unexpected-hardware"] }
 "chips/family/platform/executor/src/fault.rs:crate::fault::impl Failure < P , T >::reset:terminal-entry:reset:1" = { owner = "chips/family/platform/executor", classes = ["software-invariant", "configuration-boot", "unexpected-hardware"] }
 
-
 # chips/family/platform/bootstrap/src/runtime.rs
 "chips/family/platform/bootstrap/src/runtime.rs:crate::runtime::hand_off:terminal-entry:hand_off:1" = { owner = "chips/family/platform/bootstrap", classes = ["configuration-boot"] }
 "chips/family/platform/bootstrap/src/runtime.rs:crate::runtime::panic_handler:panic-handler:panic_handler:1" = { owner = "chips/family/platform/bootstrap", classes = ["rust-panic"] }
@@ -197,15 +196,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:1" = { owner = "chips/family/platform/runtime", classes = ["rust-panic"] }
 "chips/family/platform/runtime/src/stacks.rs:crate::stacks::current_hart_interrupt_stack_free_bytes:panic-macro:assert:2" = { owner = "chips/family/platform/runtime", classes = ["rust-panic"] }
 
-# hil/probes/esp32s31-aes-timing/src/entry.rs
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["rust-panic"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::main:terminal-entry:main:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::main:reset-method:reset:2" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::main:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
-"hil/probes/esp32s31-aes-timing/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-aes-timing", classes = ["configuration-boot"] }
-
 # hil/probes/esp32s31-peer-overdue/src/entry.rs
 "hil/probes/esp32s31-peer-overdue/src/entry.rs:crate::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-peer-overdue", classes = ["configuration-boot"] }
 "hil/probes/esp32s31-peer-overdue/src/entry.rs:crate:terminal-binding:entry:1" = { owner = "hil/probes/esp32s31-peer-overdue", classes = ["rust-panic"] }
@@ -285,45 +275,9 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "hil/probes/esp32s31-radio-root/src/entry.rs:crate::main:reset-method:reset:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
 "hil/probes/esp32s31-radio-root/src/entry.rs:crate::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-radio-root", classes = ["configuration-boot"] }
 
-
-
-
-
 # chips/esp32s31/platform/bootstrap/src/entry.rs
 "chips/esp32s31/platform/bootstrap/src/entry.rs:crate::bootstrap_main:terminal-entry:bootstrap_main:1" = { owner = "chips/esp32s31/platform/bootstrap", classes = ["configuration-boot"] }
 "chips/esp32s31/platform/bootstrap/src/entry.rs:crate:terminal-binding:panic_handler:1" = { owner = "chips/esp32s31/platform/bootstrap", classes = ["rust-panic"] }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # hil/probes/esp32s31-radio/src/hardware_image.rs
 "hil/probes/esp32s31-radio/src/hardware_image.rs:crate::hardware_image::main:reset-method:reset:4" = { owner = "hil/probes/esp32s31-radio", classes = ["configuration-boot", "software-invariant", "unexpected-hardware"] }
@@ -384,7 +338,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 # hil/probes/esp32s31-case-c-sender/src/usb.rs
 "hil/probes/esp32s31-case-c-sender/src/usb.rs:crate::usb::open:terminal-reference:reset_binding:1" = { owner = "hil/probes/esp32s31-case-c-sender", classes = ["configuration-boot", "unexpected-hardware", "software-invariant"] }
 
-
 # hil/probes/esp32s31-rx-ring/src/image.rs
 "hil/probes/esp32s31-rx-ring/src/image.rs:crate::image:terminal-binding:phy_fault_reporter:1" = { owner = "hil/probes/esp32s31-rx-ring", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
 "hil/probes/esp32s31-rx-ring/src/image.rs:crate::image:terminal-reference:reset:1" = { owner = "hil/probes/esp32s31-rx-ring", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
@@ -398,8 +351,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "hil/probes/esp32s31-rx-ring/src/image.rs:crate::image::fail:terminal-entry:fail:1" = { owner = "hil/probes/esp32s31-rx-ring", classes = ["configuration-boot"] }
 "hil/probes/esp32s31-rx-ring/src/image.rs:crate::image::fail:terminal-reference:boot_failure:1" = { owner = "hil/probes/esp32s31-rx-ring", classes = ["configuration-boot"] }
 
-
-
 # chips/family/platform/runtime/src/placement.rs
 "chips/family/platform/runtime/src/placement.rs:crate::placement::__exception_handler:terminal-reference:handle:1" = { owner = "chips/family/platform/runtime", classes = ["cpu-exception"] }
 
@@ -408,7 +359,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/runtime/src/trap.rs:crate::trap::handle:terminal-entry:handle:1" = { owner = "chips/family/platform/runtime", classes = ["cpu-exception"] }
 "chips/family/platform/runtime/src/trap.rs:crate::trap::handle:terminal-reference:reset_claimed:1" = { owner = "chips/family/platform/runtime", classes = ["cpu-exception"] }
 "chips/family/platform/runtime/src/trap.rs:crate::trap::handle:terminal-reference:reset_platform_once:1" = { owner = "chips/family/platform/runtime", classes = ["cpu-exception"] }
-
 
 # Facade/platform terminal bindings.
 "chips/esp32s31/platform/runtime/src/phy_fault.rs:crate::phy_fault::impl Failure::reset:terminal-entry:reset:1" = { owner = "chips/esp32s31/platform/runtime", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }
