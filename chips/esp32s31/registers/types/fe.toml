@@ -87,9 +87,8 @@ sources = ["S31_MMIO_AUDIT_20100024", "S31_MMIO_DECLARED_20100024"]
 sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL", "BLOB_LIBPHY_PHY_BB_INIT", "BLOB_BX16_ROM_FREQUENCY_IMAGES_20261027"]
 completeness = "partial"
 
-[review.entity."FREQUENCY_PARAMETER_1_STATUS.BITS_0_1_OPAQUE"]
+[review.entity."FREQUENCY_PARAMETER_1_STATUS.BASEBAND_MODE"]
 sources = ["BLOB_LIBPHY_PHY_BB_INIT", "S31_MMIO_DECLARED_20100028"]
-completeness = "complete"
 
 [review.entity."FREQUENCY_PARAMETER_1_STATUS.FREQUENCY_READY"]
 sources = ["BLOB_LIBPHY_PHY_RFPLL_CHANNEL"]
@@ -1240,11 +1239,12 @@ offset = 0x28
 description = "Complete phy_freq_reg_init writes 0x25824e58; phy_bb_init replaces the low baseband-mode field, and the open channel state machine samples bit 8 for the evidenced ready edge. rom[]::phy_freq_reg_init+0x5c stores 0x25824e58: unassigned bits 7:2 receive 0x16 and bits 22:21 receive zero. The getter at phy_get_freq_mem_param+0x16 excludes both ranges from its consumed mask. Their meaning and reset values remain unknown."
 
 [[registers.fields]]
-name = "BITS_0_1_OPAQUE"
+name = "BASEBAND_MODE"
+write-values-only = true
 bits = "1:0"
 class = "plain"
 description = "Complete phy_bb_init writes encoding two before calibration and zero after the initial channel setup."
-value-range = { min = 0x0, max = 0x3, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }
+values = [{ name = "IDLE", value = 0, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }, { name = "CALIBRATION", value = 2, sources = ["ROM_REV0_PHY_FREQUENCY_CHANNEL"] }]
 
 [[registers.fields]]
 name = "FREQUENCY_READY"

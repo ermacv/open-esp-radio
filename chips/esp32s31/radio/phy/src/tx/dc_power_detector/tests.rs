@@ -164,8 +164,8 @@ fn bluetooth_mode_reads_and_forces_the_bluetooth_tx_path_before_sar_setup() {
     loop {
         let completion = match transition.action() {
             PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetCompletion::RegistersPrepared,
-            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
-                PhyTxDcPwdetCompletion::TxClockConfigured { enabled }
+            PhyTxDcPwdetAction::ConfigureTxClock { state } => {
+                PhyTxDcPwdetCompletion::TxClockConfigured { state }
             }
             PhyTxDcPwdetAction::ConfigurePowerDetector => {
                 PhyTxDcPwdetCompletion::PowerDetectorConfigured
@@ -240,12 +240,12 @@ fn root_cleanup_restores_registers_before_terminal_failure() {
     loop {
         let completion = match transition.action() {
             PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetCompletion::RegistersPrepared,
-            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
-                if !enabled {
+            PhyTxDcPwdetAction::ConfigureTxClock { state } => {
+                if state == PhyClockPair::Disabled {
                     assert!(pulse_cleared);
                     clock_disabled = true;
                 }
-                PhyTxDcPwdetCompletion::TxClockConfigured { enabled }
+                PhyTxDcPwdetCompletion::TxClockConfigured { state }
             }
             PhyTxDcPwdetAction::ConfigurePowerDetector => {
                 PhyTxDcPwdetCompletion::PowerDetectorConfigured
@@ -378,8 +378,8 @@ fn wifi_calibration_forces_tx_path_per_row_and_cleans_it_up() {
     loop {
         let completion = match transition.action() {
             PhyTxDcPwdetAction::PrepareRegisters => PhyTxDcPwdetCompletion::RegistersPrepared,
-            PhyTxDcPwdetAction::ConfigureTxClock { enabled } => {
-                PhyTxDcPwdetCompletion::TxClockConfigured { enabled }
+            PhyTxDcPwdetAction::ConfigureTxClock { state } => {
+                PhyTxDcPwdetCompletion::TxClockConfigured { state }
             }
             PhyTxDcPwdetAction::ConfigurePowerDetector => {
                 PhyTxDcPwdetCompletion::PowerDetectorConfigured

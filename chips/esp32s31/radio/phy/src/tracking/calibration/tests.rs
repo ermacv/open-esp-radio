@@ -84,14 +84,14 @@ fn completion(action: PhyCalibrationTrackingAction) -> PhyCalibrationTrackingCom
                 )),
             })
         }
-        PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled } => {
-            PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled }
+        PhyCalibrationTrackingAction::SetForcedDigitalGain { gain } => {
+            PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { gain }
         }
         PhyCalibrationTrackingAction::AwaitSoftwareFrequencySettle => {
             PhyCalibrationTrackingCompletion::SoftwareFrequencySettled
         }
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled } => {
-            PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled }
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { mode } => {
+            PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { mode }
         }
         PhyCalibrationTrackingAction::ForceTxRxOff { enabled } => {
             PhyCalibrationTrackingCompletion::ForceTxRxCompleted(
@@ -299,7 +299,9 @@ fn bluetooth_class_uses_its_own_reference_and_skips_common_when_below_threshold(
     );
     assert_eq!(
         actions[1],
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false }
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Calibration
+        }
     );
     assert!(!actions.contains(&PhyCalibrationTrackingAction::CalibrateDcode));
     assert!(actions.contains(&PhyCalibrationTrackingAction::PublishBluetoothIeee802154TxGain));
@@ -389,7 +391,9 @@ fn common_calibration_restores_gain_before_admitting_the_class_branch() {
                 );
                 assert_eq!(
                     actions[restored_channel + 6],
-                    PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false }
+                    PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+                        mode: BasebandMode::Calibration
+                    }
                 );
             } else {
                 assert!(matches!(
@@ -440,8 +444,12 @@ fn wrong_completion_preserves_action_and_terminal_rejects_more_work() {
 #[test]
 fn external_lowering_owns_only_complete_direct_hardware_leaves() {
     let direct = [
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false },
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: true },
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Calibration,
+        },
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Idle,
+        },
         PhyCalibrationTrackingAction::ConfigureBasebandChannel { cbw: 0 },
         PhyCalibrationTrackingAction::ConfigureBasebandChannel { cbw: 0x13 },
         PhyCalibrationTrackingAction::DisableWifiBaseband,
@@ -511,7 +519,11 @@ fn force_txrx_parent_proof_requires_both_writes_and_timer_edges() {
         },
     );
     transition
-        .advance(PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled: false })
+        .advance(
+            PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet {
+                mode: BasebandMode::Calibration,
+            },
+        )
         .unwrap();
     assert_eq!(
         transition.action(),
@@ -528,12 +540,11 @@ fn force_txrx_parent_proof_requires_both_writes_and_timer_edges() {
     loop {
         let completion = match child.lower_external() {
             Ok(crate::analog::pbus::PhyForceTxRxExternalBinding::Mmio(binding)) => {
-                let crate::analog::pbus::PhyForceTxRxAction::Configure { enabled, phase } =
-                    binding.action()
+                let crate::analog::pbus::PhyForceTxRxAction::Configure { phase } = binding.action()
                 else {
                     panic!("force MMIO binding lost its identity")
                 };
-                crate::analog::pbus::PhyForceTxRxCompletion::Configured { enabled, phase }
+                crate::analog::pbus::PhyForceTxRxCompletion::Configured { phase }
             }
             Ok(crate::analog::pbus::PhyForceTxRxExternalBinding::Timer(binding)) => {
                 assert_eq!(binding.micros(), 1);
@@ -547,10 +558,14 @@ fn force_txrx_parent_proof_requires_both_writes_and_timer_edges() {
     transition.advance(completion).unwrap();
     assert_eq!(
         transition.action(),
-        PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled: true }
+        PhyCalibrationTrackingAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Enabled
+        }
     );
     transition
-        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled: true })
+        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet {
+            gain: PhyForcedDigitalGain::Enabled,
+        })
         .unwrap();
     assert_eq!(transition.action(), PhyCalibrationTrackingAction::ClearPbus);
 }
@@ -770,7 +785,9 @@ fn restored_channel_temperature_drives_following_class_threshold_and_references(
     grant(&mut transition, true);
     assert_eq!(
         transition.action(),
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false }
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Calibration
+        }
     );
 
     loop {
@@ -975,9 +992,13 @@ fn tx_dc_pwdet_failure_runs_outer_force_frequency_and_gain_cleanup() {
         ))
         .unwrap();
     for expected in [
-        PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled: false },
+        PhyCalibrationTrackingAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Disabled,
+        },
         PhyCalibrationTrackingAction::ForceTxRxOff { enabled: false },
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: true },
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Idle,
+        },
         PhyCalibrationTrackingAction::RestoreTxGainCompensation,
         PhyCalibrationTrackingAction::SetGrantProtect { enabled: false },
     ] {
@@ -1051,7 +1072,11 @@ fn class_pbus_timeout_restores_force_frequency_and_gain_before_failure() {
         },
     );
     transition
-        .advance(PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled: false })
+        .advance(
+            PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet {
+                mode: BasebandMode::Calibration,
+            },
+        )
         .unwrap();
     assert_eq!(
         transition.action(),
@@ -1068,7 +1093,9 @@ fn class_pbus_timeout_restores_force_frequency_and_gain_before_failure() {
         .unwrap();
 
     transition
-        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled: true })
+        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet {
+            gain: PhyForcedDigitalGain::Enabled,
+        })
         .unwrap();
     let child = transition.begin_pbus_clear().unwrap();
     let mut child = child.commit().unwrap_err();
@@ -1098,10 +1125,14 @@ fn class_pbus_timeout_restores_force_frequency_and_gain_before_failure() {
 
     assert_eq!(
         transition.action(),
-        PhyCalibrationTrackingAction::SetForcedDigitalGain { enabled: false }
+        PhyCalibrationTrackingAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Disabled
+        }
     );
     transition
-        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet { enabled: false })
+        .advance(PhyCalibrationTrackingCompletion::ForcedDigitalGainSet {
+            gain: PhyForcedDigitalGain::Disabled,
+        })
         .unwrap();
     assert_eq!(
         transition.action(),
@@ -1114,10 +1145,16 @@ fn class_pbus_timeout_restores_force_frequency_and_gain_before_failure() {
         .unwrap();
     assert_eq!(
         transition.action(),
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: true }
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Idle
+        }
     );
     transition
-        .advance(PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet { enabled: true })
+        .advance(
+            PhyCalibrationTrackingCompletion::HardwareFrequencyControlSet {
+                mode: BasebandMode::Idle,
+            },
+        )
         .unwrap();
     assert_eq!(
         transition.action(),
@@ -1313,12 +1350,12 @@ fn both_clients_share_one_tx_envelope_and_keep_distinct_results() {
             PhyCalibrationTrackClass::BluetoothIeee802154
         ]
     );
-    for enabled in [false, true] {
+    for mode in [BasebandMode::Calibration, BasebandMode::Idle] {
         assert_eq!(
             actions
                 .iter()
                 .filter(|action| **action
-                    == PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled })
+                    == PhyCalibrationTrackingAction::SetHardwareFrequencyControl { mode })
                 .count(),
             1
         );
@@ -1532,7 +1569,9 @@ fn grant_protection_brackets_each_measurement_branch_like_the_vendor() {
     assert_eq!(class_start, common_end + 1);
     assert_eq!(
         actions[class_start + 1],
-        PhyCalibrationTrackingAction::SetHardwareFrequencyControl { enabled: false }
+        PhyCalibrationTrackingAction::SetHardwareFrequencyControl {
+            mode: BasebandMode::Calibration
+        }
     );
     assert_eq!(
         actions[class_end - 1],

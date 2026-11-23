@@ -1,4 +1,5 @@
 use super::*;
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 const PARAMETERS: PhyTxPowerTrackingParameters = PhyTxPowerTrackingParameters {
     current_temperature: 25,
@@ -103,13 +104,15 @@ fn disabled_or_equal_gain_base_commits_nothing() {
 }
 
 /// Complete every pending force-TX/RX edge; returns the configured writes.
-fn complete_force(transition: &mut PhyTxPowerTrackingTransition) -> std::vec::Vec<(bool, u8)> {
+fn complete_force(
+    transition: &mut PhyTxPowerTrackingTransition,
+) -> std::vec::Vec<PhyForceTxRxPhase> {
     let mut writes = std::vec::Vec::new();
     while let PhyTxPowerTrackingAction::ForceTxRx(action) = transition.action() {
         let completion = match action {
-            PhyForceTxRxEdge::Configure { enabled, phase } => {
-                writes.push((enabled, phase));
-                PhyForceTxRxCompletion::Configured { enabled, phase }
+            PhyForceTxRxEdge::Configure { phase } => {
+                writes.push(phase);
+                PhyForceTxRxCompletion::Configured { phase }
             }
             PhyForceTxRxEdge::DelayMicros {
                 enabled,
@@ -140,13 +143,20 @@ fn bluetooth_ieee802154_update_owns_bbpll_and_gain_order() {
     assert_eq!(transition.decision().gain_base, 5);
     assert_eq!(
         transition.action(),
-        PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: true }
+        PhyTxPowerTrackingAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Enabled
+        }
     );
     transition
-        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: true })
+        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Enabled,
+        })
         .unwrap();
     // The gain child runs at nesting level zero and owns the force pair.
-    assert_eq!(complete_force(&mut transition), [(true, 0), (true, 1)]);
+    assert_eq!(
+        complete_force(&mut transition),
+        [phase_image(true, 0), phase_image(true, 1)]
+    );
     assert_eq!(
         transition.action(),
         PhyTxPowerTrackingAction::RegenerateBluetoothIeee802154Gain { gain_base: 5 }
@@ -154,13 +164,20 @@ fn bluetooth_ieee802154_update_owns_bbpll_and_gain_order() {
     transition
         .advance(PhyTxPowerTrackingCompletion::BluetoothIeee802154GainRegenerated { gain_base: 5 })
         .unwrap();
-    assert_eq!(complete_force(&mut transition), [(false, 0), (false, 1)]);
+    assert_eq!(
+        complete_force(&mut transition),
+        [phase_image(false, 0), phase_image(false, 1)]
+    );
     assert_eq!(
         transition.action(),
-        PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: false }
+        PhyTxPowerTrackingAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled
+        }
     );
     transition
-        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: false })
+        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Disabled,
+        })
         .unwrap();
     assert_eq!(
         transition.action(),
@@ -180,7 +197,9 @@ fn wifi_update_binds_channel_and_rejects_foreign_completion() {
     let mut transition =
         PhyTxPowerTrackingTransition::new(request(PhyCalibrationTrackClass::Wifi), PARAMETERS);
     transition
-        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: true })
+        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Enabled,
+        })
         .unwrap();
     complete_force(&mut transition);
     assert_eq!(
@@ -209,7 +228,9 @@ fn skipped_wifi_publication_leaves_force_mode_unchanged() {
         },
     );
     transition
-        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: true })
+        .advance(PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Enabled,
+        })
         .unwrap();
     assert!(complete_force(&mut transition).is_empty());
     transition
@@ -221,7 +242,9 @@ fn skipped_wifi_publication_leaves_force_mode_unchanged() {
     assert!(complete_force(&mut transition).is_empty());
     assert_eq!(
         transition.action(),
-        PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: false }
+        PhyTxPowerTrackingAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled
+        }
     );
 }
 
@@ -269,4 +292,16 @@ fn external_binding_captures_live_typed_gain_images_and_rejects_terminal() {
         ),
         Err(PhyTxPowerTrackingBindingError::UnsupportedAction)
     );
+}
+
+/// The force-mode image the vendor writes for a sequence of `enabled`
+/// at its `phase` (0 the initial write, 1 the final), written apart from
+/// the code under test.
+fn phase_image(enabled: bool, phase: u8) -> PhyForceTxRxPhase {
+    match (enabled, phase) {
+        (true, 0) => PhyForceTxRxPhase::EnableInitialPhase,
+        (true, _) => PhyForceTxRxPhase::EnableFinalPhase,
+        (false, 0) => PhyForceTxRxPhase::DisableInitialPhase,
+        (false, _) => PhyForceTxRxPhase::DisableFinalPhase,
+    }
 }

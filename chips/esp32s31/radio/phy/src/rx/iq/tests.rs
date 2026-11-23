@@ -13,15 +13,9 @@ fn estimator_completion(action: PhyRxIqEstimatorAction) -> PhyRxIqEstimatorCompl
         PhyRxIqEstimatorAction::Configure(request) => {
             PhyRxIqEstimatorCompletion::Configured(request)
         }
-        PhyRxIqEstimatorAction::SetEnable {
-            request,
-            phase,
-            enabled,
-        } => PhyRxIqEstimatorCompletion::EnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhyRxIqEstimatorAction::SetEnable { request, enable } => {
+            PhyRxIqEstimatorCompletion::EnableSet { request, enable }
+        }
         PhyRxIqEstimatorAction::DelayMicros {
             request,
             phase,
@@ -160,11 +154,11 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
                 address,
             })
         }
-        PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureTxClock { state } => {
+            PhyTxIqLoopbackCompletion::TxClockConfigured { state }
         }
-        PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureRxClock { state } => {
+            PhyTxIqLoopbackCompletion::RxClockConfigured { state }
         }
         action => panic!("unexpected loopback terminal: {action:?}"),
     }
@@ -179,15 +173,9 @@ fn dc_iq_completion(
 
     match action {
         PhyDcIqAction::Configure(request) => PhyDcIqCompletion::Configured(request),
-        PhyDcIqAction::SetEnable {
-            request,
-            phase,
-            enabled,
-        } => PhyDcIqCompletion::EnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhyDcIqAction::SetEnable { request, enable } => {
+            PhyDcIqCompletion::EnableSet { request, enable }
+        }
         PhyDcIqAction::DelayMicros {
             request,
             phase,

@@ -7,6 +7,8 @@
 //! retains the exact command order while making all readiness and timer edges
 //! explicit.
 
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
+
 const PHY_PBUS_CLEAR_TRANSACTIONS: [PhyPbusForceTest; 12] = [
     PhyPbusForceTest::new(4, 1, 0),
     PhyPbusForceTest::new(4, 2, 0),
@@ -358,8 +360,7 @@ impl PhyPbusHardwareBinding {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyForceTxRxAction {
     Configure {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     DelayMicros {
         enabled: bool,
@@ -375,8 +376,7 @@ pub enum PhyForceTxRxAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyForceTxRxEdge {
     Configure {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     DelayMicros {
         enabled: bool,
@@ -388,8 +388,7 @@ pub enum PhyForceTxRxEdge {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyForceTxRxCompletion {
     Configured {
-        enabled: bool,
-        phase: u8,
+        phase: PhyForceTxRxPhase,
     },
     DelayElapsed {
         enabled: bool,
@@ -402,6 +401,13 @@ pub enum PhyForceTxRxCompletion {
 pub enum PhyForceTxRxTransitionError {
     WrongCompletion,
     AlreadyComplete,
+}
+
+/// The two force-mode writes of a sequence, each followed by its delay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ForcePhase {
+    Initial,
+    Final,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -472,11 +478,21 @@ impl PhyForceTxRxTransition {
         }
     }
 
+    /// The force-mode image of `phase` of this sequence: the HAL's name for
+    /// the enable the sequence was started with and the phase.
+    pub const fn image(self, phase: ForcePhase) -> PhyForceTxRxPhase {
+        match (self.enabled, phase) {
+            (true, ForcePhase::Initial) => PhyForceTxRxPhase::EnableInitialPhase,
+            (true, ForcePhase::Final) => PhyForceTxRxPhase::EnableFinalPhase,
+            (false, ForcePhase::Initial) => PhyForceTxRxPhase::DisableInitialPhase,
+            (false, ForcePhase::Final) => PhyForceTxRxPhase::DisableFinalPhase,
+        }
+    }
+
     pub const fn action(self) -> PhyForceTxRxAction {
         match self.step {
             PhyForceTxRxStep::ConfigureFirst => PhyForceTxRxAction::Configure {
-                enabled: self.enabled,
-                phase: 0,
+                phase: self.image(ForcePhase::Initial),
             },
             PhyForceTxRxStep::DelayFirst => PhyForceTxRxAction::DelayMicros {
                 enabled: self.enabled,
@@ -484,8 +500,7 @@ impl PhyForceTxRxTransition {
                 micros: 1,
             },
             PhyForceTxRxStep::ConfigureSecond => PhyForceTxRxAction::Configure {
-                enabled: self.enabled,
-                phase: 1,
+                phase: self.image(ForcePhase::Final),
             },
             PhyForceTxRxStep::DelaySecond => PhyForceTxRxAction::DelayMicros {
                 enabled: self.enabled,
@@ -502,36 +517,37 @@ impl PhyForceTxRxTransition {
         &mut self,
         completion: PhyForceTxRxCompletion,
     ) -> Result<(), PhyForceTxRxTransitionError> {
-        self.step = match (self.step, completion) {
-            (
-                PhyForceTxRxStep::ConfigureFirst,
-                PhyForceTxRxCompletion::Configured { enabled, phase: 0 },
-            ) if enabled == self.enabled => PhyForceTxRxStep::DelayFirst,
-            (
-                PhyForceTxRxStep::DelayFirst,
-                PhyForceTxRxCompletion::DelayElapsed {
-                    enabled,
-                    completed_phase: 0,
-                    micros: 1,
-                },
-            ) if enabled == self.enabled => PhyForceTxRxStep::ConfigureSecond,
-            (
-                PhyForceTxRxStep::ConfigureSecond,
-                PhyForceTxRxCompletion::Configured { enabled, phase: 1 },
-            ) if enabled == self.enabled => PhyForceTxRxStep::DelaySecond,
-            (
-                PhyForceTxRxStep::DelaySecond,
-                PhyForceTxRxCompletion::DelayElapsed {
-                    enabled,
-                    completed_phase: 1,
-                    micros: 1,
-                },
-            ) if enabled == self.enabled => PhyForceTxRxStep::Complete,
-            (PhyForceTxRxStep::Complete, _) => {
-                return Err(PhyForceTxRxTransitionError::AlreadyComplete);
-            }
-            _ => return Err(PhyForceTxRxTransitionError::WrongCompletion),
-        };
+        self.step =
+            match (self.step, completion) {
+                (
+                    PhyForceTxRxStep::ConfigureFirst,
+                    PhyForceTxRxCompletion::Configured { phase },
+                ) if phase == self.image(ForcePhase::Initial) => PhyForceTxRxStep::DelayFirst,
+                (
+                    PhyForceTxRxStep::DelayFirst,
+                    PhyForceTxRxCompletion::DelayElapsed {
+                        enabled,
+                        completed_phase: 0,
+                        micros: 1,
+                    },
+                ) if enabled == self.enabled => PhyForceTxRxStep::ConfigureSecond,
+                (
+                    PhyForceTxRxStep::ConfigureSecond,
+                    PhyForceTxRxCompletion::Configured { phase },
+                ) if phase == self.image(ForcePhase::Final) => PhyForceTxRxStep::DelaySecond,
+                (
+                    PhyForceTxRxStep::DelaySecond,
+                    PhyForceTxRxCompletion::DelayElapsed {
+                        enabled,
+                        completed_phase: 1,
+                        micros: 1,
+                    },
+                ) if enabled == self.enabled => PhyForceTxRxStep::Complete,
+                (PhyForceTxRxStep::Complete, _) => {
+                    return Err(PhyForceTxRxTransitionError::AlreadyComplete);
+                }
+                _ => return Err(PhyForceTxRxTransitionError::WrongCompletion),
+            };
         Ok(())
     }
 }
@@ -540,7 +556,7 @@ impl PhyForceTxRxEdge {
     /// The edge as a step of the sequence.
     pub const fn action(self) -> PhyForceTxRxAction {
         match self {
-            Self::Configure { enabled, phase } => PhyForceTxRxAction::Configure { enabled, phase },
+            Self::Configure { phase } => PhyForceTxRxAction::Configure { phase },
             Self::DelayMicros {
                 enabled,
                 completed_phase,
@@ -565,7 +581,9 @@ impl PhyForceTxRxRunning {
     pub const fn start(enabled: bool) -> Self {
         Self {
             transition: PhyForceTxRxTransition::new(enabled),
-            edge: PhyForceTxRxEdge::Configure { enabled, phase: 0 },
+            edge: PhyForceTxRxEdge::Configure {
+                phase: PhyForceTxRxTransition::new(enabled).image(ForcePhase::Initial),
+            },
         }
     }
 
@@ -580,9 +598,7 @@ impl PhyForceTxRxRunning {
     ) -> Result<Option<Self>, PhyForceTxRxTransitionError> {
         self.transition.advance(completion)?;
         self.edge = match self.transition.action() {
-            PhyForceTxRxAction::Configure { enabled, phase } => {
-                PhyForceTxRxEdge::Configure { enabled, phase }
-            }
+            PhyForceTxRxAction::Configure { phase } => PhyForceTxRxEdge::Configure { phase },
             PhyForceTxRxAction::DelayMicros {
                 enabled,
                 completed_phase,
@@ -606,24 +622,20 @@ pub enum PhyForceTxRxBindingError {
 /// Non-cloneable identity for one force-mode register edge.
 #[derive(Debug, Eq, PartialEq)]
 pub struct PhyForceTxRxMmioBinding {
-    enabled: bool,
-    phase: u8,
+    phase: PhyForceTxRxPhase,
 }
 
 impl PhyForceTxRxMmioBinding {
     pub const fn new(action: PhyForceTxRxAction) -> Result<Self, PhyForceTxRxBindingError> {
         match action {
-            PhyForceTxRxAction::Configure { enabled, phase } => Ok(Self { enabled, phase }),
+            PhyForceTxRxAction::Configure { phase } => Ok(Self { phase }),
             _ => Err(PhyForceTxRxBindingError::UnsupportedAction),
         }
     }
 
     #[cfg(test)]
     pub const fn action(&self) -> PhyForceTxRxAction {
-        PhyForceTxRxAction::Configure {
-            enabled: self.enabled,
-            phase: self.phase,
-        }
+        PhyForceTxRxAction::Configure { phase: self.phase }
     }
 
     #[cfg(target_arch = "riscv32")]
@@ -631,14 +643,8 @@ impl PhyForceTxRxMmioBinding {
         self,
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyForceTxRxCompletion {
-        oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-            registers,
-            crate::hardware::force_txrx_phase(self.enabled, self.phase),
-        );
-        PhyForceTxRxCompletion::Configured {
-            enabled: self.enabled,
-            phase: self.phase,
-        }
+        oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, self.phase);
+        PhyForceTxRxCompletion::Configured { phase: self.phase }
     }
 }
 

@@ -1,4 +1,5 @@
 use super::*;
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 #[test]
 fn gain_index_conversion_preserves_only_the_two_rom_encodings() {
@@ -117,7 +118,7 @@ fn bluetooth_power_root_preserves_vendor_prefix_and_bt_child_mode() {
         let completion = match action {
             Action::ConfigurePbusDebugMode => Completion::PbusDebugModeConfigured,
             Action::ForcePbus(transaction) => Completion::PbusCompleted(transaction),
-            Action::ConfigureTxClock { enabled } => Completion::TxClockConfigured { enabled },
+            Action::ConfigureTxClock { state } => Completion::TxClockConfigured { state },
             Action::ConfigurePowerDetector => Completion::PowerDetectorConfigured,
             Action::ConfigureCalibrationMode => Completion::CalibrationModeConfigured,
             terminal => panic!("unexpected prepare action {terminal:?}"),
@@ -300,7 +301,7 @@ fn retained_bluetooth_calibration_skips_only_expensive_children() {
 /// force-TX/RX writes before and after the gain-memory publication.
 fn force_writes_around_publication(
     depth: crate::analog::pbus::PhyForceTxRxDepth,
-) -> [std::vec::Vec<(bool, u8)>; 2] {
+) -> [std::vec::Vec<PhyForceTxRxPhase>; 2] {
     use crate::analog::pbus::{PhyForceTxRxAction, PhyForceTxRxCompletion};
     let state = crate::state::PhyState::default();
     let mut transition = state.bluetooth_tx_gain_init_transition(depth);
@@ -331,12 +332,11 @@ fn force_writes_around_publication(
                     PhyBluetoothTxGainInitCompletion::Published(publication)
                 }
                 PhyBluetoothTxGainInitAction::ForceTxRx(PhyForceTxRxAction::Configure {
-                    enabled,
                     phase,
                 }) => {
-                    writes[usize::from(published)].push((enabled, phase));
+                    writes[usize::from(published)].push(phase);
                     PhyBluetoothTxGainInitCompletion::ForceTxRx(
-                        PhyForceTxRxCompletion::Configured { enabled, phase },
+                        PhyForceTxRxCompletion::Configured { phase },
                     )
                 }
                 PhyBluetoothTxGainInitAction::ForceTxRx(PhyForceTxRxAction::DelayMicros {
@@ -363,17 +363,32 @@ fn gain_child_force_pair_follows_the_vendor_nesting_count() {
     assert_eq!(
         force_writes_around_publication(outermost),
         [
-            std::vec![(true, 0), (true, 1)],
-            std::vec![(false, 0), (false, 1)]
+            std::vec![phase_image(true, 0), phase_image(true, 1)],
+            std::vec![phase_image(false, 0), phase_image(false, 1)]
         ]
     );
     // Inside the registration pair the child's release forces again.
     assert_eq!(
         force_writes_around_publication(outermost.nested()),
-        [std::vec![], std::vec![(true, 0), (true, 1)]]
+        [
+            std::vec![],
+            std::vec![phase_image(true, 0), phase_image(true, 1)]
+        ]
     );
     assert_eq!(
         force_writes_around_publication(outermost.nested().nested()),
         [std::vec![], std::vec![]]
     );
+}
+
+/// The force-mode image the vendor writes for a sequence of `enabled`
+/// at its `phase` (0 the initial write, 1 the final), written apart from
+/// the code under test.
+fn phase_image(enabled: bool, phase: u8) -> PhyForceTxRxPhase {
+    match (enabled, phase) {
+        (true, 0) => PhyForceTxRxPhase::EnableInitialPhase,
+        (true, _) => PhyForceTxRxPhase::EnableFinalPhase,
+        (false, 0) => PhyForceTxRxPhase::DisableInitialPhase,
+        (false, _) => PhyForceTxRxPhase::DisableFinalPhase,
+    }
 }

@@ -152,15 +152,10 @@ pub(crate) fn write_i2c_field_direct<
     clock: &C,
     registers: &mut impl SharedPhyAccess,
     field: oer_chips_esp32s31_hal::radio::phy::i2c::Field,
-    value: u8,
+    value: oer_chips_family_registers_analog_i2c::FieldValue,
 ) -> Result<(), PhyTargetPortError> {
     let current = read_i2c_direct(clock, registers, field.address())?;
-    write_i2c_direct(
-        clock,
-        registers,
-        field.address(),
-        field.insert_truncated(current, value),
-    )
+    write_i2c_direct(clock, registers, field.address(), value.apply(current))
 }
 
 /// Execute the four masked analog-I²C writes of complete ROM
@@ -177,14 +172,26 @@ pub(crate) fn reset_clock_generator_direct<
     for (field, value) in [
         (
             analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-            0,
+            placed!(
+                analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
+                0
+            ),
         ),
         (
             analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-            0,
+            placed!(
+                analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
+                0
+            ),
         ),
-        (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
-        (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
+        (
+            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
+            placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
+        ),
+        (
+            analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
+            placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
+        ),
     ] {
         write_i2c_field_direct(clock, registers, field, value)?;
     }

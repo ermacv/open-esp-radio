@@ -12,6 +12,8 @@
 //! register ordering and arithmetic as caller-driven actions. It can advance
 //! only from externally delivered readiness/timer completions.
 
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
+
 const LINEAR_TO_DB_FRACTION: [u8; 16] =
     [0, 4, 8, 12, 16, 19, 22, 25, 28, 31, 34, 36, 39, 41, 44, 46];
 
@@ -63,10 +65,12 @@ pub enum PhyDcIqFailure {
     },
 }
 
+/// One of the estimator's two enable writes, with the HAL's name of what it
+/// writes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyDcIqEnablePhase {
-    Start,
-    Measurement,
+pub enum PhyDcIqEnable {
+    Start(PhyEstimatorStart),
+    Measurement(PhyEstimatorMeasurement),
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -80,28 +84,16 @@ pub(crate) fn configure_target(
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn set_enable_target(
     registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
-    phase: PhyDcIqEnablePhase,
-    enabled: bool,
+    enable: PhyDcIqEnable,
 ) {
-    match phase {
-        PhyDcIqEnablePhase::Start => {
-            oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_start_enabled(
-                registers,
-                if enabled {
-                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Enabled
-                } else {
-                    oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled
-                },
-            );
+    match enable {
+        PhyDcIqEnable::Start(start) => {
+            oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_start_enabled(registers, start);
         }
-        PhyDcIqEnablePhase::Measurement => {
+        PhyDcIqEnable::Measurement(measurement) => {
             oer_chips_esp32s31_hal::radio::phy::iq_estimator::set_measurement_enabled(
                 registers,
-                if enabled {
-                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Enabled
-                } else {
-                    oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled
-                },
+                measurement,
             );
         }
     }
@@ -152,8 +144,7 @@ pub enum PhyDcIqAction {
     Configure(PhyDcIqEstimateRequest),
     SetEnable {
         request: PhyDcIqEstimateRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayMicros {
         request: PhyDcIqEstimateRequest,
@@ -186,8 +177,7 @@ pub enum PhyDcIqCompletion {
     Configured(PhyDcIqEstimateRequest),
     EnableSet {
         request: PhyDcIqEstimateRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayElapsed {
         request: PhyDcIqEstimateRequest,
@@ -270,15 +260,18 @@ impl PhyDcIqTargetTransaction {
         maximum_samples: u16,
         context: &mut C,
         mut configure: impl FnMut(&mut C, u16),
-        mut set_enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        mut set_enable: impl FnMut(&mut C, PhyDcIqEnable),
         mut settle: impl FnMut(&mut C, u32) -> Result<(), E>,
         mut read: impl FnMut(&mut C) -> PhyDcIqReadinessSnapshot,
         mut read_accumulators: impl FnMut(&mut C) -> PhyDcIqAccumulatorSnapshot,
     ) -> Result<PhyDcIqTargetCompletion, E> {
         configure(context, self.request.control);
-        set_enable(context, PhyDcIqEnablePhase::Start, true);
+        set_enable(context, PhyDcIqEnable::Start(PhyEstimatorStart::Enabled));
         settle(context, 1)?;
-        set_enable(context, PhyDcIqEnablePhase::Measurement, true);
+        set_enable(
+            context,
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
+        );
 
         let mut observations = 0_u16;
         let mut activity_edges = 0_u16;
@@ -304,9 +297,12 @@ impl PhyDcIqTargetTransaction {
             }
         };
 
-        set_enable(context, PhyDcIqEnablePhase::Measurement, false);
+        set_enable(
+            context,
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
+        );
         settle(context, 1)?;
-        set_enable(context, PhyDcIqEnablePhase::Start, false);
+        set_enable(context, PhyDcIqEnable::Start(PhyEstimatorStart::Disabled));
         let accumulator_read = u16::from(matches!(terminal, PhyDcIqTerminal::Complete(_)));
         Ok(PhyDcIqTargetCompletion {
             request: self.request,
@@ -442,8 +438,7 @@ impl PhyDcIqEstimateTransition {
             PhyDcIqStep::Configure => PhyDcIqAction::Configure(self.request),
             PhyDcIqStep::EnableStart => PhyDcIqAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Start,
-                enabled: true,
+                enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
             },
             PhyDcIqStep::StartDelay => PhyDcIqAction::DelayMicros {
                 request: self.request,
@@ -452,8 +447,7 @@ impl PhyDcIqEstimateTransition {
             },
             PhyDcIqStep::EnableMeasurement => PhyDcIqAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: true,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
             },
             PhyDcIqStep::AwaitReadiness => PhyDcIqAction::AwaitReadinessEdge {
                 request: self.request,
@@ -463,8 +457,7 @@ impl PhyDcIqEstimateTransition {
             PhyDcIqStep::ReadAccumulators => PhyDcIqAction::ReadAccumulators(self.request),
             PhyDcIqStep::DisableMeasurement(_) => PhyDcIqAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: false,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
             },
             PhyDcIqStep::StopDelay(_) => PhyDcIqAction::DelayMicros {
                 request: self.request,
@@ -473,8 +466,7 @@ impl PhyDcIqEstimateTransition {
             },
             PhyDcIqStep::DisableStart(_) => PhyDcIqAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Start,
-                enabled: false,
+                enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
             },
             PhyDcIqStep::Complete(outcome) => PhyDcIqAction::Complete(outcome),
             PhyDcIqStep::Failed(failure) => PhyDcIqAction::Failed(failure),
@@ -519,8 +511,7 @@ impl PhyDcIqEstimateTransition {
                 PhyDcIqStep::EnableStart,
                 PhyDcIqCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
                 },
             ) if request == self.request => PhyDcIqStep::StartDelay,
             (
@@ -535,8 +526,7 @@ impl PhyDcIqEstimateTransition {
                 PhyDcIqStep::EnableMeasurement,
                 PhyDcIqCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
                 },
             ) if request == self.request => PhyDcIqStep::AwaitReadiness,
             (
@@ -590,8 +580,7 @@ impl PhyDcIqEstimateTransition {
                 PhyDcIqStep::DisableMeasurement(terminal),
                 PhyDcIqCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
                 },
             ) if request == self.request => PhyDcIqStep::StopDelay(terminal),
             (
@@ -606,8 +595,7 @@ impl PhyDcIqEstimateTransition {
                 PhyDcIqStep::DisableStart(terminal),
                 PhyDcIqCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
                 },
             ) if request == self.request => match terminal {
                 PhyDcIqTerminal::Complete(outcome) => PhyDcIqStep::Complete(outcome),
@@ -633,8 +621,7 @@ enum PhyDcIqMmioAction {
     Configure(PhyDcIqEstimateRequest),
     SetEnable {
         request: PhyDcIqEstimateRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     ReadAccumulators(PhyDcIqEstimateRequest),
 }
@@ -648,15 +635,9 @@ impl PhyDcIqMmioBinding {
     pub fn new(action: PhyDcIqAction) -> Result<Self, PhyDcIqBindingError> {
         let action = match action {
             PhyDcIqAction::Configure(v0) => PhyDcIqMmioAction::Configure(v0),
-            PhyDcIqAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => PhyDcIqMmioAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            },
+            PhyDcIqAction::SetEnable { request, enable } => {
+                PhyDcIqMmioAction::SetEnable { request, enable }
+            }
             PhyDcIqAction::ReadAccumulators(v0) => PhyDcIqMmioAction::ReadAccumulators(v0),
             _ => return Err(PhyDcIqBindingError::UnsupportedAction),
         };
@@ -666,15 +647,9 @@ impl PhyDcIqMmioBinding {
     pub const fn action(&self) -> PhyDcIqAction {
         match self.action {
             PhyDcIqMmioAction::Configure(v0) => PhyDcIqAction::Configure(v0),
-            PhyDcIqMmioAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => PhyDcIqAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            },
+            PhyDcIqMmioAction::SetEnable { request, enable } => {
+                PhyDcIqAction::SetEnable { request, enable }
+            }
             PhyDcIqMmioAction::ReadAccumulators(v0) => PhyDcIqAction::ReadAccumulators(v0),
         }
     }
@@ -686,7 +661,7 @@ impl PhyDcIqMmioBinding {
         self,
         context: &mut C,
         configure: impl FnOnce(&mut C, u16),
-        enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        enable: impl FnMut(&mut C, PhyDcIqEnable),
         settle: impl FnMut(&mut C, u32) -> Result<(), E>,
         read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
         accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
@@ -711,15 +686,18 @@ impl PhyDcIqMmioBinding {
         request: PhyDcIqEstimateRequest,
         context: &mut C,
         configure: impl FnOnce(&mut C, u16),
-        mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        mut enable: impl FnMut(&mut C, PhyDcIqEnable),
         mut settle: impl FnMut(&mut C, u32) -> Result<(), E>,
         read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
         accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
     ) -> Result<PhyDcIqCompletion, E> {
         configure(context, request.control);
-        enable(context, PhyDcIqEnablePhase::Start, true);
+        enable(context, PhyDcIqEnable::Start(PhyEstimatorStart::Enabled));
         settle(context, 1)?;
-        enable(context, PhyDcIqEnablePhase::Measurement, true);
+        enable(
+            context,
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
+        );
         let binding = PhyDcIqReadinessBinding {
             action: PhyDcIqReadinessAction::AwaitReadinessEdge {
                 request,
@@ -782,17 +760,9 @@ impl PhyDcIqMmioBinding {
                 configure_target(registers, request.control);
                 PhyDcIqCompletion::Configured(request)
             }
-            PhyDcIqMmioAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => {
-                set_enable_target(registers, phase, enabled);
-                PhyDcIqCompletion::EnableSet {
-                    request,
-                    phase,
-                    enabled,
-                }
+            PhyDcIqMmioAction::SetEnable { request, enable } => {
+                set_enable_target(registers, enable);
+                PhyDcIqCompletion::EnableSet { request, enable }
             }
             PhyDcIqMmioAction::ReadAccumulators(request) => PhyDcIqCompletion::AccumulatorsRead {
                 request,
@@ -852,7 +822,7 @@ impl PhyDcIqReadinessBinding {
         context: &mut C,
         read: impl FnOnce(&mut C) -> PhyDcIqReadinessSnapshot,
         accumulators: impl FnOnce(&mut C) -> PhyDcIqAccumulatorSnapshot,
-        mut enable: impl FnMut(&mut C, PhyDcIqEnablePhase, bool),
+        mut enable: impl FnMut(&mut C, PhyDcIqEnable),
         settle: impl FnOnce(&mut C, u32) -> Result<(), E>,
     ) -> Result<PhyDcIqCompletion, E> {
         let PhyDcIqReadinessAction::AwaitReadinessEdge { request, .. } = self.action;
@@ -865,9 +835,12 @@ impl PhyDcIqReadinessBinding {
             }
             Some(accumulators(context))
         };
-        enable(context, PhyDcIqEnablePhase::Measurement, false);
+        enable(
+            context,
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
+        );
         settle(context, 1)?;
-        enable(context, PhyDcIqEnablePhase::Start, false);
+        enable(context, PhyDcIqEnable::Start(PhyEstimatorStart::Disabled));
         Ok(PhyDcIqCompletion::CaptureFinished {
             request,
             accumulators,

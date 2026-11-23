@@ -17,6 +17,8 @@
 //! RF and bus ownership remain held across checkpoints, and the parent
 //! commits only after accepting the terminal child completion.
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 use crate::analog::{
     i2c::{Field, analog_i2c},
     rfpll::{
@@ -30,17 +32,29 @@ const CHANNELS: [u8; 4] = [1, 5, 10, 14];
 
 type Channel = Ordinal<{ CHANNELS.len() }>;
 
-const CKGEN_WRITES: [(Field, u8); 4] = [
+const CKGEN_WRITES: [(Field, FieldValue); 4] = [
     (
         analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
-        0,
+        placed!(
+            analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
+            0
+        ),
     ),
     (
         analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
-        0,
+        placed!(
+            analog_i2c::rfpll::dcode_1_source_select::DCODE_1_SOURCE_SELECT,
+            0
+        ),
     ),
-    (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
-    (analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
+    (
+        analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
+        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 0),
+    ),
+    (
+        analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET,
+        placed!(analog_i2c::rfpll::dcode_ckgen_reset::DCODE_CKGEN_RESET, 1),
+    ),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,7 +78,7 @@ pub enum PhyDcodeFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeAction {
     Rfpll(RfpllFrequencyAction),
-    WriteMasked { field: Field, value: u8 },
+    WriteMasked { field: Field, value: FieldValue },
     ReadMasked { field: Field },
     Complete(PhyDcodeOutcome),
     Failed(PhyDcodeFailure),
@@ -73,7 +87,7 @@ pub enum PhyDcodeAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeCompletion {
     Rfpll(RfpllFrequencyCompletion),
-    MaskedWrite { field: Field, value: u8 },
+    MaskedWrite { field: Field, value: FieldValue },
     MaskedRead { field: Field, value: u8 },
 }
 

@@ -53,20 +53,26 @@ fn saturated_range_waits_for_reapplication_even_when_dac_is_unchanged() {
             transition.action(),
             PhyTemperatureAction::WriteMasked {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value: dac,
+                value: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+                    .place(dac)
+                    .unwrap(),
             }
         );
         assert_eq!(
             transition.advance(PhyTemperatureCompletion::MaskedWrite {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value: dac ^ 1,
+                value: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+                    .place(dac ^ 1)
+                    .unwrap(),
             }),
             Err(PhyTemperatureTransitionError::WrongCompletion)
         );
         transition
             .advance(PhyTemperatureCompletion::MaskedWrite {
                 field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-                value: dac,
+                value: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC
+                    .place(dac)
+                    .unwrap(),
             })
             .unwrap();
         assert!(
@@ -87,20 +93,29 @@ fn range_change_requires_an_exact_i2c_write_completion() {
         transition.action(),
         PhyTemperatureAction::WriteMasked {
             field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-            value: 7,
+            value: placed!(
+                analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                7
+            ),
         }
     );
     assert_eq!(
         transition.advance(PhyTemperatureCompletion::MaskedWrite {
             field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-            value: 5,
+            value: placed!(
+                analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                5
+            ),
         }),
         Err(PhyTemperatureTransitionError::WrongCompletion)
     );
     transition
         .advance(PhyTemperatureCompletion::MaskedWrite {
             field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-            value: 7,
+            value: placed!(
+                analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                7
+            ),
         })
         .unwrap();
     assert_eq!(
@@ -121,13 +136,19 @@ fn reset_dac_is_primed_to_the_first_rom_range_before_sampling() {
         transition.action(),
         PhyTemperatureAction::WriteMasked {
             field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-            value: 5,
+            value: placed!(
+                analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                5
+            ),
         }
     );
     transition
         .advance(PhyTemperatureCompletion::MaskedWrite {
             field: analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
-            value: 5,
+            value: placed!(
+                analog_i2c::saradc::i2c_saradc_tsens_dac::I2C_SARADC_TSENS_DAC,
+                5
+            ),
         })
         .unwrap();
     assert_eq!(transition.action(), PhyTemperatureAction::SampleCode);

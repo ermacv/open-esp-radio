@@ -5,6 +5,8 @@ use super::{
     PhyTxCfrCompletion, PhyTxCfrEntry, PhyTxCfrMmioBinding, PhyTxCfrOutcome, PhyTxCfrTransition,
     PhyTxCfrTransitionError, generate_phy_rx_gain_table, phy_generated_rx_gain_memory_entry,
 };
+use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
+use oer_chips_esp32s31_hal::types::PhyTxPowerTracking;
 
 #[test]
 fn cold_rx_borrows_one_program_and_rejects_an_external_leaf_completion() {
@@ -181,7 +183,9 @@ fn finite_baseband_mmio_binding_preserves_dynamic_identity() {
         PhyBbMmioAction::UpdatePostInitRegisters,
         PhyBbMmioAction::EnableAgc,
         PhyBbMmioAction::SetWifiEnabled { enabled: false },
-        PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true },
+        PhyBbMmioAction::ConfigureTxPowerTracking {
+            tracking: PhyTxPowerTracking::Enabled,
+        },
         PhyBbMmioAction::ConfigureRfRxSaturation {
             phase: PhyRfRxSaturationPhase::PrepareCheck,
         },
@@ -232,7 +236,9 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     );
     complete_parent_mmio(
         &mut fresh,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: true },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Enabled,
+        },
     );
     assert_eq!(
         fresh.step_local().unwrap(),
@@ -253,7 +259,9 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     );
     complete_parent_mmio(
         &mut retained,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: true },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Enabled,
+        },
     );
     assert_eq!(
         retained.step_local().unwrap(),
@@ -325,7 +333,9 @@ fn complete_parent_tail_preserves_conditional_disable_and_tracking_order() {
     complete_parent_mmio(&mut transition, PhyBbMmioAction::ConfigureI2cTxRate);
     complete_parent_mmio(
         &mut transition,
-        PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true },
+        PhyBbMmioAction::ConfigureTxPowerTracking {
+            tracking: PhyTxPowerTracking::Enabled,
+        },
     );
     assert_eq!(
         transition.step_local().unwrap(),
@@ -356,12 +366,16 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
     assert_eq!(
         transition.step_local().unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
-            PhyBbMmioAction::SetForcedDigitalGain { enabled: false }
+            PhyBbMmioAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Disabled
+            }
         ))
     );
     complete_parent_mmio(
         &mut transition,
-        PhyBbMmioAction::SetForcedDigitalGain { enabled: false },
+        PhyBbMmioAction::SetForcedDigitalGain {
+            gain: PhyForcedDigitalGain::Disabled,
+        },
     );
     assert_eq!(
         transition.step_local().unwrap(),
@@ -410,5 +424,106 @@ fn every_generated_word_records_the_base_gain_it_came_from() {
             assert_eq!(recorded, base);
             entry = at.next();
         }
+    }
+}
+
+#[test]
+fn every_parent_step_produces_the_vendor_s_register_action() {
+    use super::PhyBbInitStep as Step;
+    let failure = super::PhyBbInitFailure::Temperature {
+        pass: 1,
+        failure: crate::analog::temperature::PhyTemperatureFailure::InvalidDac(0),
+    };
+    let rx_table = PhyRxTableInitParameters {
+        parameter_002: 0xa5,
+        parameter_121: 0x4e,
+    };
+    let registers = PhyRegisterInitParameters {
+        parameter_121: 0x4f,
+        parameter_120: 0x4e,
+    };
+    let idle = PhyBbMmioAction::SetBasebandMode {
+        mode: PhyBbBasebandMode::Idle,
+    };
+    let gain_off = PhyBbMmioAction::SetForcedDigitalGain {
+        gain: PhyForcedDigitalGain::Disabled,
+    };
+    // The names the vendor's parent writes at each of its own steps,
+    // written apart from the code.
+    let table = [
+        (
+            Step::EnableInitialization,
+            PhyBbMmioAction::EnableBasebandInitialization,
+        ),
+        (
+            Step::SetCalibrationMode,
+            PhyBbMmioAction::SetBasebandMode {
+                mode: PhyBbBasebandMode::Calibration,
+            },
+        ),
+        (
+            Step::EnableForcedDigitalGain,
+            PhyBbMmioAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Enabled,
+            },
+        ),
+        (Step::DisableForcedDigitalGain, gain_off),
+        (Step::FailureDisableForcedDigitalGain(failure), gain_off),
+        (
+            Step::RxTable(rx_table),
+            PhyBbMmioAction::ConfigureRxTable {
+                parameters: rx_table,
+            },
+        ),
+        (
+            Step::RxSaturationPrepare,
+            PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::PrepareCheck,
+            },
+        ),
+        (
+            Step::RxSaturationFinalize,
+            PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::Finalize,
+            },
+        ),
+        (
+            Step::RegisterInit(registers),
+            PhyBbMmioAction::ConfigurePhyRegisters {
+                parameters: registers,
+            },
+        ),
+        (Step::UpdateAgc, PhyBbMmioAction::UpdateAgcRegisters),
+        (
+            Step::UpdatePostInit,
+            PhyBbMmioAction::UpdatePostInitRegisters,
+        ),
+        (Step::EnableAgc, PhyBbMmioAction::EnableAgc),
+        (Step::FailureEnableAgc(failure), PhyBbMmioAction::EnableAgc),
+        (Step::SetIdleMode, idle),
+        (Step::FailureSetIdle(failure), idle),
+        (
+            Step::DisableWifi,
+            PhyBbMmioAction::SetWifiEnabled { enabled: false },
+        ),
+        (
+            Step::ConfigureI2cTxRate,
+            PhyBbMmioAction::ConfigureI2cTxRate,
+        ),
+        (
+            Step::ConfigureTxPowerTracking,
+            PhyBbMmioAction::ConfigureTxPowerTracking {
+                tracking: PhyTxPowerTracking::Enabled,
+            },
+        ),
+    ];
+    let mut transition = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    for (row, (step, expected)) in table.into_iter().enumerate() {
+        transition.step = step;
+        assert_eq!(
+            transition.step_local().unwrap(),
+            super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(expected)),
+            "row {row}"
+        );
     }
 }

@@ -295,15 +295,10 @@ pub(crate) fn restore_phy_txiq_tone_control(
 pub(crate) fn configure_phy_txiq_mis_power(
     registers: &mut impl SharedPhyAccess,
     first: bool,
-    polarity: bool,
+    polarity: oer_chips_esp32s31_hal::types::TxIqMismatchPolarity,
     attenuation: u8,
     selector: u16,
 ) {
-    let polarity = if polarity {
-        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Inverted
-    } else {
-        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Normal
-    };
     if first {
         registers.configure_txiq_mismatch_power_first(polarity, attenuation, selector);
     } else {
@@ -583,28 +578,3 @@ pub(crate) fn publish_bluetooth_tx_gain_memory(
 
 #[cfg(test)]
 mod tests;
-
-/// The HAL's name of a recovered clock pair's state, from the PHY's own
-/// `bool` until the PHY's area names its actions.
-pub(crate) const fn clock_pair(enabled: bool) -> oer_chips_esp32s31_hal::types::PhyClockPair {
-    if enabled {
-        oer_chips_esp32s31_hal::types::PhyClockPair::Enabled
-    } else {
-        oer_chips_esp32s31_hal::types::PhyClockPair::Disabled
-    }
-}
-
-/// The force-TX/RX phase image `phy_force_txrx_off` writes, from the PHY's
-/// own enable and phase number until the PHY's area names its actions.
-pub(crate) const fn force_txrx_phase(
-    enabled: bool,
-    phase: u8,
-) -> oer_chips_esp32s31_hal::types::PhyForceTxRxPhase {
-    use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase as Phase;
-    match (enabled, phase == 0) {
-        (true, true) => Phase::EnableInitialPhase,
-        (true, false) => Phase::EnableFinalPhase,
-        (false, true) => Phase::DisableInitialPhase,
-        (false, false) => Phase::DisableFinalPhase,
-    }
-}

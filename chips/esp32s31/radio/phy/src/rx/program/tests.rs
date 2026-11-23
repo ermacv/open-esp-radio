@@ -10,7 +10,13 @@ pub(crate) struct Oracle {
 }
 impl Oracle {
     fn record(&mut self, kind: &str, value: impl core::fmt::Debug) {
-        self.trace.push(format!("{kind}:{value:?}"));
+        // The frozen hashes were taken when a clock command carried a
+        // `bool`; it carries the HAL's name now. The old text is written
+        // back so that the hashes still say the sequence is unchanged.
+        let line = format!("{kind}:{value:?}")
+            .replace("Clock(Enabled)", "Clock(true)")
+            .replace("Clock(Disabled)", "Clock(false)");
+        self.trace.push(line);
     }
     pub(crate) fn read_pbus(&self) -> u32 {
         0b001011

@@ -1,5 +1,6 @@
 use crate::analog::i2c::analog_i2c;
 use oer_chips_esp32s31_hal::radio::phy::frequency::FrequencyMemoryAddress;
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 
 use super::{
     PHY_FREQUENCY_TABLE_ENTRY_COUNT, PhyChannelFrequencyInitAction,
@@ -320,7 +321,10 @@ fn complete_i2c_snapshot(
         transition.action(),
         PhyFrequencyI2cAction::WriteMasked {
             field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-            value: 1,
+            value: placed!(
+                analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                1
+            ),
         }
     );
     transition
@@ -480,7 +484,7 @@ fn i2c_transition_rejects_a_completion_for_another_snapshot_register() {
 }
 
 const CHANNEL_REQUEST: PhyChannelFrequencyInitRequest = PhyChannelFrequencyInitRequest {
-    frequency_register_parameter_override: false,
+    frequency_register_mode: FrequencyRegisterMode::Default,
     frequency_table_initialized: false,
     crystal_selector: 0x31,
     middle_xtal_duty: 0x2a,
@@ -591,10 +595,8 @@ fn channel_frequency_init_composes_the_complete_cold_graph() {
         steps += 1;
         assert!(steps < 1_000);
         let completion = match transition.action() {
-            PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override } => {
-                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                    parameter_override,
-                }
+            PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode } => {
+                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode }
             }
             PhyChannelFrequencyInitAction::WriteMasked { field, .. } => {
                 PhyChannelFrequencyInitCompletion::MaskedWrite { field }
@@ -665,13 +667,13 @@ fn warm_channel_frequency_init_skips_calibration_but_refreshes_i2c_graph() {
     assert_eq!(
         transition.action(),
         PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters {
-            parameter_override: false,
+            mode: FrequencyRegisterMode::Default,
         }
     );
     transition
         .advance(
             PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                parameter_override: false,
+                mode: FrequencyRegisterMode::Default,
             },
         )
         .unwrap();

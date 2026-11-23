@@ -6541,7 +6541,7 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/phy/baseband/ops.rs", 2, BY_R2),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        8,
+        4,
         BY_R2,
     ),
     ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_R2),
@@ -6559,26 +6559,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         1,
         BY_R2,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
-        9,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/analog/i2c/profile.rs",
-        1,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/calibration/cold.rs",
-        1,
-        BY_R2_PHY,
-    ),
-    (
-        "chips/esp32s31/radio/phy/src/target_executor.rs",
-        1,
-        BY_R2_PHY,
     ),
 ];
 
@@ -6643,11 +6623,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         "chips/esp32s31/hal/src/radio/modem/values.rs",
         1,
         BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        1,
-        BY_PHY,
     ),
     ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
     (

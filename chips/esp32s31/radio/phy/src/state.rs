@@ -48,6 +48,7 @@ use crate::{
     },
     tx::power_detector::{PhyPwdetOutcome, PhyPwdetParameters},
 };
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 
 const fn saturate_phy_value(value: i32, upper: u8, lower: u8) -> u8 {
     if value < lower as i32 {
@@ -1912,7 +1913,11 @@ impl PhyState {
 
     pub const fn channel_frequency_control(&self) -> PhyChannelFrequencyInitControl {
         PhyChannelFrequencyInitControl {
-            frequency_register_parameter_override: self.bluetooth.channel_base != 0,
+            frequency_register_mode: if self.bluetooth.channel_base != 0 {
+                FrequencyRegisterMode::ParameterOverride
+            } else {
+                FrequencyRegisterMode::Default
+            },
             frequency_table_initialized: self.common.frequency_table_initialized,
             front_end_parameter_bit: self.common.front_end_parameter,
         }

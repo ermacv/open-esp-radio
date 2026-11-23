@@ -9,9 +9,11 @@
 //! signed accumulator values. This module preserves that order but exposes
 //! both one-microsecond intervals and readiness as external completions.
 
-use crate::calibration::estimator::{
-    PhyDcIqDelayPhase, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot,
-};
+use crate::calibration::estimator::PhyDcIqEnable;
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
+
+use crate::calibration::estimator::{PhyDcIqDelayPhase, PhyDcIqReadinessSnapshot};
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhySignalPowerRequest {
@@ -59,12 +61,11 @@ pub enum PhySignalPowerAction {
     ConfigureClock {
         request: PhySignalPowerRequest,
         clock: PhySignalPowerClock,
-        enabled: bool,
+        state: PhyClockPair,
     },
     SetEstimatorEnable {
         request: PhySignalPowerRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayMicros {
         request: PhySignalPowerRequest,
@@ -90,12 +91,11 @@ pub enum PhySignalPowerCompletion {
     ClockConfigured {
         request: PhySignalPowerRequest,
         clock: PhySignalPowerClock,
-        enabled: bool,
+        state: PhyClockPair,
     },
     EstimatorEnableSet {
         request: PhySignalPowerRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayElapsed {
         request: PhySignalPowerRequest,
@@ -194,19 +194,18 @@ impl PhySignalPowerTransition {
             PhySignalPowerStep::EnableTxClock => PhySignalPowerAction::ConfigureClock {
                 request: self.request,
                 clock: PhySignalPowerClock::Tx,
-                enabled: true,
+                state: PhyClockPair::Enabled,
             },
             PhySignalPowerStep::EnableRxClock => PhySignalPowerAction::ConfigureClock {
                 request: self.request,
                 clock: PhySignalPowerClock::Rx,
-                enabled: true,
+                state: PhyClockPair::Enabled,
             },
             PhySignalPowerStep::DisablePreviousMeasurement
             | PhySignalPowerStep::DisableFailedMeasurement(_) => {
                 PhySignalPowerAction::SetEstimatorEnable {
                     request: self.request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
                 }
             }
             PhySignalPowerStep::PreviousStopDelay | PhySignalPowerStep::FailedStopDelay(_) => {
@@ -220,8 +219,7 @@ impl PhySignalPowerTransition {
             | PhySignalPowerStep::DisableFailedStart(_) => {
                 PhySignalPowerAction::SetEstimatorEnable {
                     request: self.request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
                 }
             }
             PhySignalPowerStep::ConfigureEstimator => PhySignalPowerAction::ConfigureEstimator {
@@ -230,8 +228,7 @@ impl PhySignalPowerTransition {
             },
             PhySignalPowerStep::EnableStart => PhySignalPowerAction::SetEstimatorEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Start,
-                enabled: true,
+                enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
             },
             PhySignalPowerStep::StartDelay => PhySignalPowerAction::DelayMicros {
                 request: self.request,
@@ -240,8 +237,7 @@ impl PhySignalPowerTransition {
             },
             PhySignalPowerStep::EnableMeasurement => PhySignalPowerAction::SetEstimatorEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: true,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
             },
             PhySignalPowerStep::AwaitReadiness => PhySignalPowerAction::AwaitReadinessEdge {
                 request: self.request,
@@ -266,7 +262,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerCompletion::ClockConfigured {
                     request,
                     clock: PhySignalPowerClock::Tx,
-                    enabled: true,
+                    state: PhyClockPair::Enabled,
                 },
             ) if request == self.request => PhySignalPowerStep::EnableRxClock,
             (
@@ -274,15 +270,14 @@ impl PhySignalPowerTransition {
                 PhySignalPowerCompletion::ClockConfigured {
                     request,
                     clock: PhySignalPowerClock::Rx,
-                    enabled: true,
+                    state: PhyClockPair::Enabled,
                 },
             ) if request == self.request => PhySignalPowerStep::DisablePreviousMeasurement,
             (
                 PhySignalPowerStep::DisablePreviousMeasurement,
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
                 },
             ) if request == self.request => PhySignalPowerStep::PreviousStopDelay,
             (
@@ -297,8 +292,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerStep::DisablePreviousStart,
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
                 },
             ) if request == self.request => PhySignalPowerStep::ConfigureEstimator,
             (
@@ -313,8 +307,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerStep::EnableStart,
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
                 },
             ) if request == self.request => PhySignalPowerStep::StartDelay,
             (
@@ -329,8 +322,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerStep::EnableMeasurement,
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
                 },
             ) if request == self.request => PhySignalPowerStep::AwaitReadiness,
             (
@@ -381,8 +373,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerStep::DisableFailedMeasurement(failure),
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
                 },
             ) if request == self.request => PhySignalPowerStep::FailedStopDelay(failure),
             (
@@ -397,8 +388,7 @@ impl PhySignalPowerTransition {
                 PhySignalPowerStep::DisableFailedStart(failure),
                 PhySignalPowerCompletion::EstimatorEnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
                 },
             ) if request == self.request => PhySignalPowerStep::Failed(failure),
             (PhySignalPowerStep::Complete(_), _) | (PhySignalPowerStep::Failed(_), _) => {

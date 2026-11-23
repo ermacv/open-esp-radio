@@ -1,4 +1,6 @@
 use super::*;
+use crate::calibration::estimator::PhyDcIqEnable;
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
 
 const REQUEST: PhySignalPowerRequest = PhySignalPowerRequest {
     measurement: 7,
@@ -10,17 +12,16 @@ fn reach_readiness(transition: &mut PhySignalPowerTransition) {
         PhySignalPowerCompletion::ClockConfigured {
             request: REQUEST,
             clock: PhySignalPowerClock::Tx,
-            enabled: true,
+            state: PhyClockPair::Enabled,
         },
         PhySignalPowerCompletion::ClockConfigured {
             request: REQUEST,
             clock: PhySignalPowerClock::Rx,
-            enabled: true,
+            state: PhyClockPair::Enabled,
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: false,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
         },
         PhySignalPowerCompletion::DelayElapsed {
             request: REQUEST,
@@ -29,8 +30,7 @@ fn reach_readiness(transition: &mut PhySignalPowerTransition) {
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Start,
-            enabled: false,
+            enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
         },
         PhySignalPowerCompletion::EstimatorConfigured {
             request: REQUEST,
@@ -38,8 +38,7 @@ fn reach_readiness(transition: &mut PhySignalPowerTransition) {
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Start,
-            enabled: true,
+            enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
         },
         PhySignalPowerCompletion::DelayElapsed {
             request: REQUEST,
@@ -48,8 +47,7 @@ fn reach_readiness(transition: &mut PhySignalPowerTransition) {
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: true,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
         },
     ] {
         transition.advance(completion).unwrap();
@@ -144,8 +142,7 @@ fn timeout_cleans_up_before_typed_failure() {
     for completion in [
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: false,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
         },
         PhySignalPowerCompletion::DelayElapsed {
             request: REQUEST,
@@ -154,8 +151,7 @@ fn timeout_cleans_up_before_typed_failure() {
         },
         PhySignalPowerCompletion::EstimatorEnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Start,
-            enabled: false,
+            enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
         },
     ] {
         transition.advance(completion).unwrap();

@@ -36,6 +36,8 @@ use crate::{
         power_detector::sar_signal_reference,
     },
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
+use oer_chips_esp32s31_hal::types::TxIqMismatchPolarity;
 
 const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 const D_CODE_0_ADDRESS: Address =
@@ -187,7 +189,7 @@ impl PhyTxIqLinearPowerTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxIqMisPowerRequest {
     pub identity: u8,
-    pub polarity: bool,
+    pub polarity: TxIqMismatchPolarity,
     pub attenuation: u8,
     pub selector: u16,
     pub reference_codes: [i16; 2],
@@ -211,7 +213,7 @@ pub enum PhyTxIqMisPowerAction {
     Configure {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },
@@ -230,7 +232,7 @@ pub enum PhyTxIqMisPowerCompletion {
     Configured {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },
@@ -528,7 +530,13 @@ impl PhyTxIqCoverTransition {
         let gain_path = phase == 0;
         PhyTxIqMisPowerTransition::new(PhyTxIqMisPowerRequest {
             identity: self.mis_identity(phase),
-            polarity: gain_path,
+            // The gain path measures the inverted polarity, the phase path
+            // the normal one (`phy_txiq_get_mis_pwr`'s first argument).
+            polarity: if gain_path {
+                TxIqMismatchPolarity::Inverted
+            } else {
+                TxIqMismatchPolarity::Normal
+            },
             attenuation: if gain_path {
                 self.request.attenuation.saturating_sub(12)
             } else {
@@ -701,16 +709,16 @@ impl PhyTxIqCoverTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackAction {
     I2c(oer_chips_family_drivers_regi2c::Action<crate::analog::i2c::Address, ()>),
-    ConfigureTxClock { enabled: bool },
-    ConfigureRxClock { enabled: bool },
+    ConfigureTxClock { state: PhyClockPair },
+    ConfigureRxClock { state: PhyClockPair },
     Complete { enabled: bool },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxIqLoopbackCompletion {
     I2c(oer_chips_family_drivers_regi2c::Completion<crate::analog::i2c::Address>),
-    TxClockConfigured { enabled: bool },
-    RxClockConfigured { enabled: bool },
+    TxClockConfigured { state: PhyClockPair },
+    RxClockConfigured { state: PhyClockPair },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -748,14 +756,23 @@ impl PhyTxIqLoopbackTransition {
         }
     }
 
+    /// The clock pairs' state the loopback's enable asks for.
+    const fn clocks(&self) -> PhyClockPair {
+        if self.enabled {
+            PhyClockPair::Enabled
+        } else {
+            PhyClockPair::Disabled
+        }
+    }
+
     pub const fn action(&self) -> PhyTxIqLoopbackAction {
         match self.step {
             LoopbackStep::I2c(transition) => PhyTxIqLoopbackAction::I2c(transition.action()),
             LoopbackStep::TxClock => PhyTxIqLoopbackAction::ConfigureTxClock {
-                enabled: self.enabled,
+                state: self.clocks(),
             },
             LoopbackStep::RxClock => PhyTxIqLoopbackAction::ConfigureRxClock {
-                enabled: self.enabled,
+                state: self.clocks(),
             },
             LoopbackStep::Complete => PhyTxIqLoopbackAction::Complete {
                 enabled: self.enabled,
@@ -780,13 +797,13 @@ impl PhyTxIqLoopbackTransition {
                     LoopbackStep::I2c(transition)
                 };
             }
-            (LoopbackStep::TxClock, PhyTxIqLoopbackCompletion::TxClockConfigured { enabled })
-                if enabled == self.enabled =>
+            (LoopbackStep::TxClock, PhyTxIqLoopbackCompletion::TxClockConfigured { state })
+                if state == self.clocks() =>
             {
                 self.step = LoopbackStep::RxClock;
             }
-            (LoopbackStep::RxClock, PhyTxIqLoopbackCompletion::RxClockConfigured { enabled })
-                if enabled == self.enabled =>
+            (LoopbackStep::RxClock, PhyTxIqLoopbackCompletion::RxClockConfigured { state })
+                if state == self.clocks() =>
             {
                 self.step = LoopbackStep::Complete;
             }
@@ -1653,7 +1670,7 @@ enum PhyTxIqMisPowerMmioAction {
     Configure {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },
@@ -1779,8 +1796,8 @@ impl PhyTxIqCoverMmioBinding {
 /// The actions this binding admits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PhyTxIqLoopbackMmioAction {
-    ConfigureTxClock { enabled: bool },
-    ConfigureRxClock { enabled: bool },
+    ConfigureTxClock { state: PhyClockPair },
+    ConfigureRxClock { state: PhyClockPair },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -1791,11 +1808,11 @@ pub struct PhyTxIqLoopbackMmioBinding {
 impl PhyTxIqLoopbackMmioBinding {
     pub fn new(action: PhyTxIqLoopbackAction) -> Result<Self, PhyTxIqBindingError> {
         let action = match action {
-            PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-                PhyTxIqLoopbackMmioAction::ConfigureTxClock { enabled }
+            PhyTxIqLoopbackAction::ConfigureTxClock { state } => {
+                PhyTxIqLoopbackMmioAction::ConfigureTxClock { state }
             }
-            PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-                PhyTxIqLoopbackMmioAction::ConfigureRxClock { enabled }
+            PhyTxIqLoopbackAction::ConfigureRxClock { state } => {
+                PhyTxIqLoopbackMmioAction::ConfigureRxClock { state }
             }
             _ => return Err(PhyTxIqBindingError::NotDirectMmio),
         };
@@ -1808,19 +1825,13 @@ impl PhyTxIqLoopbackMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyTxIqLoopbackCompletion {
         match self.action {
-            PhyTxIqLoopbackMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                    registers,
-                    crate::hardware::clock_pair(enabled),
-                );
-                PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
+            PhyTxIqLoopbackMmioAction::ConfigureTxClock { state } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state);
+                PhyTxIqLoopbackCompletion::TxClockConfigured { state }
             }
-            PhyTxIqLoopbackMmioAction::ConfigureRxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(
-                    registers,
-                    crate::hardware::clock_pair(enabled),
-                );
-                PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
+            PhyTxIqLoopbackMmioAction::ConfigureRxClock { state } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_rx_clock(registers, state);
+                PhyTxIqLoopbackCompletion::RxClockConfigured { state }
             }
         }
     }

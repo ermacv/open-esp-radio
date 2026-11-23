@@ -18,7 +18,11 @@ use crate::analog::i2c::{
     PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
     RcCalibrationAction, RcCalibrationCompletion, analog_i2c,
 };
+use crate::calibration::estimator::PhyDcIqEnable;
 use crate::serial::PhyI2cError;
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
+use oer_chips_esp32s31_hal::types::PhyClockPair;
+use oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement;
 
 #[test]
 fn an_unrouted_address_is_reported_without_turning_into_a_pending_edge() {
@@ -40,7 +44,7 @@ use crate::analog::pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusFor
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
 use crate::calibration::estimator::{
     PhyDcIqAccumulatorSnapshot, PhyDcIqAction, PhyDcIqCompletion, PhyDcIqDelayPhase,
-    PhyDcIqEnablePhase, PhyDcIqEstimateRequest, PhyDcIqReadinessSnapshot,
+    PhyDcIqEstimateRequest, PhyDcIqReadinessSnapshot,
 };
 use crate::rx::dc_offset::{PhyRxDcoAction, PhyRxDcoCompletion};
 use crate::rx::signal_power::{
@@ -82,7 +86,7 @@ fn busy_observation_preserves_await_state_without_self_progress() {
 fn masked_write_needs_two_distinct_external_edges() {
     let field = crate::analog::i2c::analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE;
     let address = field.address();
-    let request = PhyColdI2cRequest::write_field(field, 1);
+    let request = PhyColdI2cRequest::write_field(field, field.place(1).unwrap());
     let mut transaction = PhyColdI2cTransaction::new(request);
 
     transaction.read_started().unwrap();
@@ -115,8 +119,10 @@ fn masked_write_needs_two_distinct_external_edges() {
 fn masked_outer_write_is_two_edges_but_one_identity_bound_completion() {
     let field = crate::analog::i2c::analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE;
     let address = field.address();
-    let outer_action =
-        PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked { field, value: 1 });
+    let outer_action = PhyRfInitPrefixAction::RcCalibration(RcCalibrationAction::WriteMasked {
+        field,
+        value: field.place(1).unwrap(),
+    });
     let mut binding = PhyColdI2cBinding::new(outer_action).unwrap();
 
     binding.read_started().unwrap();
@@ -159,7 +165,7 @@ fn non_i2c_outer_action_is_rejected_instead_of_becoming_a_fallback() {
 fn finite_mmio_binding_preserves_dynamic_frequency_identity() {
     let outer_action = PhyRfInitPrefixAction::ChannelFrequency(
         PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters {
-            parameter_override: true,
+            mode: FrequencyRegisterMode::ParameterOverride,
         },
     );
     let binding = PhyColdMmioBinding::new(outer_action).unwrap();
@@ -168,7 +174,7 @@ fn finite_mmio_binding_preserves_dynamic_frequency_identity() {
         binding.into_completion(),
         Ok(PhyRfInitPrefixCompletion::ChannelFrequency(
             PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                parameter_override: true,
+                mode: FrequencyRegisterMode::ParameterOverride,
             }
         ))
     );
@@ -213,8 +219,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
         XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(PhyRxDcoAction::DcIq(
             PhyDcIqAction::SetEnable {
                 request: dc_iq_request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: true,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
             },
         ))),
     ));
@@ -227,8 +232,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
                 XtalDutyPrepareCompletion::RxDco(PhyRxDcoCompletion::DcIq(
                     PhyDcIqCompletion::EnableSet {
                         request: dc_iq_request,
-                        phase: PhyDcIqEnablePhase::Measurement,
-                        enabled: true,
+                        enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
                     }
                 ))
             ))
@@ -244,7 +248,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
             PhySignalPowerAction::ConfigureClock {
                 request: signal_request,
                 clock: PhySignalPowerClock::Rx,
-                enabled: false,
+                state: PhyClockPair::Disabled,
             },
         )),
     ));
@@ -257,7 +261,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
                 XtalDutySearchCompletion::SignalPower(PhySignalPowerCompletion::ClockConfigured {
                     request: signal_request,
                     clock: PhySignalPowerClock::Rx,
-                    enabled: false,
+                    state: PhyClockPair::Disabled,
                 })
             ))
         ))
@@ -849,7 +853,7 @@ fn channel_frequency_i2c_completion_keeps_its_field_identity() {
     let outer_action =
         PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::WriteMasked {
             field,
-            value: 0x12,
+            value: field.place(0x2).unwrap(),
         });
     let mut binding = PhyColdI2cBinding::new(outer_action).unwrap();
     binding.read_started().unwrap();
@@ -890,7 +894,7 @@ fn xtal_and_rfpll_i2c_edges_keep_nested_identity() {
         XtalDutyPassAction::Prepare(XtalDutyPrepareAction::Rfpll(
             RfpllFrequencyAction::WriteMasked {
                 field: rfpll_field,
-                value: 0x12,
+                value: rfpll_field.place(0x2).unwrap(),
             },
         )),
     ));

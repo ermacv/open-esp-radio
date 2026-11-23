@@ -10,6 +10,8 @@ use crate::{
         power::{PhyTxPowerTrackingAction as Action, PhyTxPowerTrackingCompletion as Completion},
     },
 };
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 impl Io {
     pub(in crate::executor::step) fn power_gain_base(
@@ -47,10 +49,12 @@ impl Io {
         }
         self.power_actions.push(action);
         Ok(match action {
-            Action::SetBbpllCalibration { enabled } => Completion::BbpllCalibrationSet { enabled },
+            Action::SetBbpllCalibration { calibration } => {
+                Completion::BbpllCalibrationSet { calibration }
+            }
             Action::ForceTxRx(action) => Completion::ForceTxRx(match action {
-                Force::Configure { enabled, phase } => {
-                    crate::analog::pbus::PhyForceTxRxCompletion::Configured { enabled, phase }
+                Force::Configure { phase } => {
+                    crate::analog::pbus::PhyForceTxRxCompletion::Configured { phase }
                 }
                 Force::DelayMicros {
                     enabled,
@@ -190,11 +194,15 @@ fn both_classes_yield_between_atoms_keep_force_settles_and_commit_after_bbpll_of
         );
         assert_eq!(
             io.power_actions.first(),
-            Some(&Action::SetBbpllCalibration { enabled: true })
+            Some(&Action::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Enabled
+            })
         );
         assert_eq!(
             io.power_actions.last(),
-            Some(&Action::SetBbpllCalibration { enabled: false })
+            Some(&Action::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Disabled
+            })
         );
         let force: Vec<_> = io
             .power_actions
@@ -209,7 +217,9 @@ fn both_classes_yield_between_atoms_keep_force_settles_and_commit_after_bbpll_of
             .flat_map(|enabled| {
                 (0..2).flat_map(move |phase| {
                     [
-                        Force::Configure { enabled, phase },
+                        Force::Configure {
+                            phase: phase_image(enabled, phase),
+                        },
                         Force::DelayMicros {
                             enabled,
                             completed_phase: phase,
@@ -408,5 +418,17 @@ fn failure_or_drop_between_gain_records_never_commits() {
                 assert_eq!(state.tx_power_tracking_parameters(false), before);
             }
         }
+    }
+}
+
+/// The force-mode image the vendor writes for a sequence of `enabled`
+/// at its `phase` (0 the initial write, 1 the final), written apart from
+/// the code under test.
+fn phase_image(enabled: bool, phase: u8) -> PhyForceTxRxPhase {
+    match (enabled, phase) {
+        (true, 0) => PhyForceTxRxPhase::EnableInitialPhase,
+        (true, _) => PhyForceTxRxPhase::EnableFinalPhase,
+        (false, 0) => PhyForceTxRxPhase::DisableInitialPhase,
+        (false, _) => PhyForceTxRxPhase::DisableFinalPhase,
     }
 }

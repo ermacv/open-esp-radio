@@ -21,7 +21,9 @@ fn complete_direct_prefix(transition: &mut PhyPwdetTransition) {
             .unwrap();
     }
     transition
-        .advance(PhyPwdetCompletion::TxClockConfigured { enabled: true })
+        .advance(PhyPwdetCompletion::TxClockConfigured {
+            state: PhyClockPair::Enabled,
+        })
         .unwrap();
     transition
         .advance(PhyPwdetCompletion::PowerDetectorConfigured)
@@ -98,7 +100,9 @@ fn complete_sample(
 fn complete_restore(transition: &mut PhyPwdetTransition, expected_terminal: PhyPwdetAction) {
     transition.advance(PhyPwdetCompletion::ToneStopped).unwrap();
     transition
-        .advance(PhyPwdetCompletion::TxClockConfigured { enabled: false })
+        .advance(PhyPwdetCompletion::TxClockConfigured {
+            state: PhyClockPair::Disabled,
+        })
         .unwrap();
     for index in 0..EXIT_PBUS_COUNT {
         let transaction = exit_pbus_transaction(index, PARAMETERS);
@@ -356,5 +360,30 @@ fn external_lowering_covers_each_pwdet_operation_class_and_rejects_terminals() {
             measurement_performed: true,
         }))
         .is_err()
+    );
+}
+
+#[test]
+fn the_tx_clock_steps_produce_their_pair_s_state() {
+    use oer_chips_esp32s31_hal::types::PhyClockPair;
+    let mut transition = PhyPwdetTransition::new(PARAMETERS);
+    transition.step = PhyPwdetStep::EnableTxClock;
+    assert_eq!(
+        transition.action(),
+        PhyPwdetAction::ConfigureTxClock {
+            state: PhyClockPair::Enabled
+        }
+    );
+    transition.step = PhyPwdetStep::DisableTxClock(PhyPwdetTerminal::Failed(
+        PhyPwdetFailure::SarReadyDeadlineElapsed {
+            measurement_index: 0,
+            sample_index: 0,
+        },
+    ));
+    assert_eq!(
+        transition.action(),
+        PhyPwdetAction::ConfigureTxClock {
+            state: PhyClockPair::Disabled
+        }
     );
 }

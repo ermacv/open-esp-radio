@@ -765,7 +765,7 @@ fn rf_prefix_consumes_only_typed_views() {
     assert_eq!(
         state.channel_frequency_control(),
         PhyChannelFrequencyInitControl {
-            frequency_register_parameter_override: false,
+            frequency_register_mode: FrequencyRegisterMode::Default,
             frequency_table_initialized: false,
             front_end_parameter_bit: true,
         }
@@ -814,5 +814,20 @@ fn the_retained_calibration_snapshot_reads_committed_state() {
     assert_eq!(
         state.rfpll_reference_temperature(),
         snapshot.common.rfpll_reference_temperature
+    );
+}
+
+#[test]
+fn the_bluetooth_channel_base_selects_the_frequency_registers_mode() {
+    use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
+    let mut state = PhyState::default();
+    assert_eq!(
+        state.channel_frequency_control().frequency_register_mode,
+        FrequencyRegisterMode::Default
+    );
+    state.set_ble_channel_base(3);
+    assert_eq!(
+        state.channel_frequency_control().frequency_register_mode,
+        FrequencyRegisterMode::ParameterOverride
     );
 }

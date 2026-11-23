@@ -11,6 +11,7 @@ use crate::{
     calibration::math::{absolute_temperature, saturate_signed},
     tracking::parameters::{PhyCalibrationTrackClass, temperature_to_tracking_power},
 };
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
 
 /// Caller-owned inputs that the vendor reads from the shared `phy_param` image.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -107,7 +108,7 @@ pub struct PhyTxPowerTrackingOutcome {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxPowerTrackingAction {
     SetBbpllCalibration {
-        enabled: bool,
+        calibration: PhyBbpllCalibration,
     },
     /// One edge of the gain child's outermost force-TX/RX pair.
     ForceTxRx(PhyForceTxRxEdge),
@@ -123,7 +124,7 @@ pub enum PhyTxPowerTrackingAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyTxPowerTrackingCompletion {
-    BbpllCalibrationSet { enabled: bool },
+    BbpllCalibrationSet { calibration: PhyBbpllCalibration },
     ForceTxRx(PhyForceTxRxCompletion),
     WifiGainRegenerated { channel: u16, gain_base: i8 },
     BluetoothIeee802154GainRegenerated { gain_base: i8 },
@@ -209,9 +210,9 @@ impl PhyTxPowerTrackingTransition {
 
     pub const fn action(self) -> PhyTxPowerTrackingAction {
         match self.step {
-            PhyTxPowerTrackingStep::BbpllOn => {
-                PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: true }
-            }
+            PhyTxPowerTrackingStep::BbpllOn => PhyTxPowerTrackingAction::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Enabled,
+            },
             PhyTxPowerTrackingStep::ForceTxRx(child)
             | PhyTxPowerTrackingStep::ReleaseTxRx(child) => {
                 PhyTxPowerTrackingAction::ForceTxRx(child.edge())
@@ -227,9 +228,9 @@ impl PhyTxPowerTrackingTransition {
                     }
                 }
             },
-            PhyTxPowerTrackingStep::BbpllOff => {
-                PhyTxPowerTrackingAction::SetBbpllCalibration { enabled: false }
-            }
+            PhyTxPowerTrackingStep::BbpllOff => PhyTxPowerTrackingAction::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Disabled,
+            },
             PhyTxPowerTrackingStep::Complete => PhyTxPowerTrackingAction::Complete(self.outcome),
         }
     }
@@ -261,7 +262,9 @@ impl PhyTxPowerTrackingTransition {
         self.step = match (self.step, completion) {
             (
                 PhyTxPowerTrackingStep::BbpllOn,
-                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: true },
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+                    calibration: PhyBbpllCalibration::Enabled,
+                },
             ) => {
                 if self.publishes {
                     PhyTxPowerTrackingStep::ForceTxRx(PhyForceTxRxRunning::start(true))
@@ -308,7 +311,9 @@ impl PhyTxPowerTrackingTransition {
             }
             (
                 PhyTxPowerTrackingStep::BbpllOff,
-                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: false },
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+                    calibration: PhyBbpllCalibration::Disabled,
+                },
             ) => PhyTxPowerTrackingStep::Complete,
             (PhyTxPowerTrackingStep::Complete, _) => {
                 return Err(PhyTxPowerTrackingTransitionError::AlreadyComplete);
@@ -332,15 +337,15 @@ pub(crate) struct ControlBinding(ControlEdge);
 #[cfg(any(target_arch = "riscv32", test))]
 #[derive(Clone, Copy)]
 enum ControlEdge {
-    SetBbpllCalibration { enabled: bool },
+    SetBbpllCalibration { calibration: PhyBbpllCalibration },
     ForceTxRx(PhyForceTxRxEdge),
 }
 #[cfg(any(target_arch = "riscv32", test))]
 impl ControlBinding {
     pub fn lower(action: PhyTxPowerTrackingAction) -> Result<Self, PhyTxPowerTrackingBindingError> {
         match action {
-            PhyTxPowerTrackingAction::SetBbpllCalibration { enabled } => {
-                Ok(Self(ControlEdge::SetBbpllCalibration { enabled }))
+            PhyTxPowerTrackingAction::SetBbpllCalibration { calibration } => {
+                Ok(Self(ControlEdge::SetBbpllCalibration { calibration }))
             }
             PhyTxPowerTrackingAction::ForceTxRx(edge) => Ok(Self(ControlEdge::ForceTxRx(edge))),
             _ => Err(PhyTxPowerTrackingBindingError::UnsupportedAction),
@@ -349,8 +354,8 @@ impl ControlBinding {
     #[cfg(test)]
     pub const fn action(&self) -> PhyTxPowerTrackingAction {
         match self.0 {
-            ControlEdge::SetBbpllCalibration { enabled } => {
-                PhyTxPowerTrackingAction::SetBbpllCalibration { enabled }
+            ControlEdge::SetBbpllCalibration { calibration } => {
+                PhyTxPowerTrackingAction::SetBbpllCalibration { calibration }
             }
             ControlEdge::ForceTxRx(edge) => PhyTxPowerTrackingAction::ForceTxRx(edge),
         }
@@ -367,24 +372,16 @@ impl ControlBinding {
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyTxPowerTrackingCompletion {
         match self.0 {
-            ControlEdge::SetBbpllCalibration { enabled } => {
+            ControlEdge::SetBbpllCalibration { calibration } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
                     registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
-                    },
+                    calibration,
                 );
-                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled }
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { calibration }
             }
-            ControlEdge::ForceTxRx(PhyForceTxRxEdge::Configure { enabled, phase }) => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(enabled, phase),
-                );
+            ControlEdge::ForceTxRx(PhyForceTxRxEdge::Configure { phase }) => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
-                    enabled,
                     phase,
                 })
             }
@@ -404,7 +401,7 @@ impl ControlBinding {
 #[derive(Debug, Eq, PartialEq)]
 enum PhyTxPowerTrackingExternalOperation {
     SetBbpllCalibration {
-        enabled: bool,
+        calibration: PhyBbpllCalibration,
     },
     ForceTxRx(PhyForceTxRxEdge),
     RegenerateWifiGain {
@@ -435,8 +432,8 @@ impl PhyTxPowerTrackingExternalBinding {
         state: &crate::state::PhyState,
     ) -> Result<Self, PhyTxPowerTrackingBindingError> {
         let operation = match action {
-            PhyTxPowerTrackingAction::SetBbpllCalibration { enabled } => {
-                PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled }
+            PhyTxPowerTrackingAction::SetBbpllCalibration { calibration } => {
+                PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { calibration }
             }
             PhyTxPowerTrackingAction::ForceTxRx(edge) => {
                 PhyTxPowerTrackingExternalOperation::ForceTxRx(edge)
@@ -464,8 +461,8 @@ impl PhyTxPowerTrackingExternalBinding {
     #[cfg(test)]
     pub const fn action(&self) -> PhyTxPowerTrackingAction {
         match self.operation {
-            PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {
-                PhyTxPowerTrackingAction::SetBbpllCalibration { enabled }
+            PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { calibration } => {
+                PhyTxPowerTrackingAction::SetBbpllCalibration { calibration }
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(action) => {
                 PhyTxPowerTrackingAction::ForceTxRx(action)
@@ -499,27 +496,20 @@ impl PhyTxPowerTrackingExternalBinding {
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::SharedPhyAccess,
     ) -> PhyTxPowerTrackingCompletion {
         match &self.operation {
-            PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { enabled } => {
+            PhyTxPowerTrackingExternalOperation::SetBbpllCalibration { calibration } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
                     registers,
-                    if *enabled {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
-                    },
+                    *calibration,
                 );
-                PhyTxPowerTrackingCompletion::BbpllCalibrationSet { enabled: *enabled }
+                PhyTxPowerTrackingCompletion::BbpllCalibrationSet {
+                    calibration: *calibration,
+                }
             }
             PhyTxPowerTrackingExternalOperation::ForceTxRx(PhyForceTxRxEdge::Configure {
-                enabled,
                 phase,
             }) => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(*enabled, *phase),
-                );
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, *phase);
                 PhyTxPowerTrackingCompletion::ForceTxRx(PhyForceTxRxCompletion::Configured {
-                    enabled: *enabled,
                     phase: *phase,
                 })
             }

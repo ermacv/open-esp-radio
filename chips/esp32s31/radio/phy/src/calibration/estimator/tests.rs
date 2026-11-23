@@ -1,4 +1,6 @@
 use super::*;
+use crate::calibration::estimator::PhyDcIqEnable;
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
 
 const REQUEST: PhyDcIqEstimateRequest = PhyDcIqEstimateRequest {
     iteration: 3,
@@ -14,8 +16,7 @@ fn reach_readiness(transition: &mut PhyDcIqEstimateTransition) {
     transition
         .advance(PhyDcIqCompletion::EnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Start,
-            enabled: true,
+            enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
         })
         .unwrap();
     transition
@@ -28,8 +29,7 @@ fn reach_readiness(transition: &mut PhyDcIqEstimateTransition) {
     transition
         .advance(PhyDcIqCompletion::EnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: true,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
         })
         .unwrap();
 }
@@ -38,8 +38,7 @@ fn finish_disable_tail(transition: &mut PhyDcIqEstimateTransition) {
     transition
         .advance(PhyDcIqCompletion::EnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: false,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
         })
         .unwrap();
     transition
@@ -52,8 +51,7 @@ fn finish_disable_tail(transition: &mut PhyDcIqEstimateTransition) {
     transition
         .advance(PhyDcIqCompletion::EnableSet {
             request: REQUEST,
-            phase: PhyDcIqEnablePhase::Start,
-            enabled: false,
+            enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
         })
         .unwrap();
 }
@@ -153,8 +151,7 @@ fn timeout_runs_complete_disable_tail_before_failure() {
     assert!(matches!(
         transition.action(),
         PhyDcIqAction::SetEnable {
-            phase: PhyDcIqEnablePhase::Measurement,
-            enabled: false,
+            enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
             ..
         }
     ));
@@ -251,7 +248,7 @@ fn exhausted_readiness_does_not_touch_hardware() {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TargetEvent {
     Configure(u16),
-    Enable(PhyDcIqEnablePhase, bool),
+    Enable(PhyDcIqEnable),
     Settle(u32),
     Readiness,
     Accumulators,
@@ -277,8 +274,8 @@ fn execute_target_estimator(
             maximum_samples,
             context,
             |context, control| context.events.push(TargetEvent::Configure(control)),
-            |context, phase, enabled| {
-                context.events.push(TargetEvent::Enable(phase, enabled));
+            |context, enable| {
+                context.events.push(TargetEvent::Enable(enable));
             },
             |context, micros| {
                 context.events.push(TargetEvent::Settle(micros));
@@ -332,16 +329,18 @@ fn target_transaction_preserves_the_complete_rom_estimator_envelope() {
         context.events,
         std::vec![
             TargetEvent::Configure(REQUEST.control),
-            TargetEvent::Enable(PhyDcIqEnablePhase::Start, true),
+            TargetEvent::Enable(PhyDcIqEnable::Start(PhyEstimatorStart::Enabled)),
             TargetEvent::Settle(1),
-            TargetEvent::Enable(PhyDcIqEnablePhase::Measurement, true),
+            TargetEvent::Enable(PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled)),
             TargetEvent::Readiness,
             TargetEvent::Readiness,
             TargetEvent::Readiness,
             TargetEvent::Accumulators,
-            TargetEvent::Enable(PhyDcIqEnablePhase::Measurement, false),
+            TargetEvent::Enable(PhyDcIqEnable::Measurement(
+                PhyEstimatorMeasurement::Disabled
+            )),
             TargetEvent::Settle(1),
-            TargetEvent::Enable(PhyDcIqEnablePhase::Start, false),
+            TargetEvent::Enable(PhyDcIqEnable::Start(PhyEstimatorStart::Disabled)),
         ]
     );
 
@@ -389,9 +388,11 @@ fn target_transaction_timeout_still_executes_the_complete_disable_tail() {
     assert_eq!(
         &context.events[context.events.len() - 3..],
         &[
-            TargetEvent::Enable(PhyDcIqEnablePhase::Measurement, false),
+            TargetEvent::Enable(PhyDcIqEnable::Measurement(
+                PhyEstimatorMeasurement::Disabled
+            )),
             TargetEvent::Settle(1),
-            TargetEvent::Enable(PhyDcIqEnablePhase::Start, false),
+            TargetEvent::Enable(PhyDcIqEnable::Start(PhyEstimatorStart::Disabled)),
         ]
     );
 
@@ -414,12 +415,12 @@ impl CaptureIo {
     fn configure(&mut self, _: u16) {
         self.events.push("configure");
     }
-    fn enable(&mut self, phase: PhyDcIqEnablePhase, enabled: bool) {
-        self.events.push(match (phase, enabled) {
-            (PhyDcIqEnablePhase::Start, true) => "start-on",
-            (PhyDcIqEnablePhase::Start, false) => "start-off",
-            (PhyDcIqEnablePhase::Measurement, true) => "measurement-on",
-            (PhyDcIqEnablePhase::Measurement, false) => "measurement-off",
+    fn enable(&mut self, enable: PhyDcIqEnable) {
+        self.events.push(match enable {
+            PhyDcIqEnable::Start(PhyEstimatorStart::Enabled) => "start-on",
+            PhyDcIqEnable::Start(PhyEstimatorStart::Disabled) => "start-off",
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled) => "measurement-on",
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled) => "measurement-off",
         });
     }
     fn settle(&mut self, micros: u32) -> Result<(), ()> {

@@ -8,6 +8,10 @@
 //! All retained radio work is represented by owned state plus
 //! one externally completed MMIO, PHY-I2C, timer or observation edge.
 
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
+use oer_chips_esp32s31_hal::types::PhyFrequencyControl;
+
 pub const PHY_REGISTER_I2C_RESET_SAMPLE_LIMIT: u16 = 1_000;
 
 const PHY_REGISTER_FINAL_I2C_ADDRESS: crate::analog::i2c::Address =
@@ -23,13 +27,13 @@ pub enum PhyRegisterDelayPhase {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRegisterMmioAction {
     PrepareColdStart,
-    ConfigureForceTxRx { enabled: bool, phase: u8 },
+    ConfigureForceTxRx { phase: PhyForceTxRxPhase },
     ResetFrequencyModule,
-    SetHardwareFrequencyControl { enabled: bool },
+    SetHardwareFrequencyControl { control: PhyFrequencyControl },
     PulseI2cMasterReset { index: u8 },
     ConfigureXtal40Mhz,
     SetCalibrationClock { enabled: bool },
-    SetBbpllCalibration { enabled: bool },
+    SetBbpllCalibration { calibration: PhyBbpllCalibration },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -559,18 +563,21 @@ impl PhyRegisterTransition {
                 PhyRegisterMmioAction::SetCalibrationClock { enabled: false },
             )),
             TailStep::BbpllOff => Some(PhyRegisterAction::Mmio(
-                PhyRegisterMmioAction::SetBbpllCalibration { enabled: false },
+                PhyRegisterMmioAction::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled,
+                },
             )),
             TailStep::FinalI2cRead => Some(PhyRegisterAction::ReadFinalI2c {
                 address: PHY_REGISTER_FINAL_I2C_ADDRESS,
             }),
             TailStep::EnableHardwareFrequency => Some(PhyRegisterAction::Mmio(
-                PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true },
+                PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                },
             )),
             TailStep::ReleaseFirst => Some(PhyRegisterAction::Mmio(
                 PhyRegisterMmioAction::ConfigureForceTxRx {
-                    enabled: false,
-                    phase: 0,
+                    phase: PhyForceTxRxPhase::DisableInitialPhase,
                 },
             )),
             TailStep::ReleaseFirstDelay => Some(PhyRegisterAction::DelayMicros {
@@ -582,8 +589,7 @@ impl PhyRegisterTransition {
             }),
             TailStep::ReleaseSecond => Some(PhyRegisterAction::Mmio(
                 PhyRegisterMmioAction::ConfigureForceTxRx {
-                    enabled: false,
-                    phase: 1,
+                    phase: PhyForceTxRxPhase::DisableFinalPhase,
                 },
             )),
             TailStep::ReleaseSecondDelay => Some(PhyRegisterAction::DelayMicros {
@@ -651,8 +657,7 @@ impl PhyRegisterTransition {
                     }
                     PreludeStep::ForceFirst => {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
-                            enabled: true,
-                            phase: 0,
+                            phase: PhyForceTxRxPhase::EnableInitialPhase,
                         })
                     }
                     PreludeStep::ForceFirstDelay => PhyRegisterAction::DelayMicros {
@@ -664,8 +669,7 @@ impl PhyRegisterTransition {
                     },
                     PreludeStep::ForceSecond => {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
-                            enabled: true,
-                            phase: 1,
+                            phase: PhyForceTxRxPhase::EnableFinalPhase,
                         })
                     }
                     PreludeStep::ForceSecondDelay => PhyRegisterAction::DelayMicros {
@@ -679,7 +683,9 @@ impl PhyRegisterTransition {
                         PhyRegisterAction::Mmio(PhyRegisterMmioAction::ResetFrequencyModule)
                     }
                     PreludeStep::DisableHardwareFrequency => PhyRegisterAction::Mmio(
-                        PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: false },
+                        PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                            control: PhyFrequencyControl::Software,
+                        },
                     ),
                     PreludeStep::DisableHardwareFrequencyDelay => PhyRegisterAction::DelayMicros {
                         phase: PhyRegisterDelayPhase::HardwareFrequencyDisabled,
@@ -903,8 +909,7 @@ impl PhyRegisterTransition {
             (Phase::Prelude(PreludeStep::ForceFirst), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
                     == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                        enabled: true,
-                        phase: 0,
+                        phase: PhyForceTxRxPhase::EnableInitialPhase,
                     }) =>
             {
                 Phase::Prelude(PreludeStep::ForceFirstDelay)
@@ -923,8 +928,7 @@ impl PhyRegisterTransition {
             (Phase::Prelude(PreludeStep::ForceSecond), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
                     == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                        enabled: true,
-                        phase: 1,
+                        phase: PhyForceTxRxPhase::EnableFinalPhase,
                     }) =>
             {
                 Phase::Prelude(PreludeStep::ForceSecondDelay)
@@ -950,7 +954,9 @@ impl PhyRegisterTransition {
                 Phase::Prelude(PreludeStep::DisableHardwareFrequency),
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: false }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Software,
+                }) =>
             {
                 Phase::Prelude(PreludeStep::DisableHardwareFrequencyDelay)
             }
@@ -1072,7 +1078,9 @@ impl PhyRegisterTransition {
             }
             (Phase::Tail(TailStep::BbpllOff), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
-                    == (PhyRegisterMmioAction::SetBbpllCalibration { enabled: false }) =>
+                    == (PhyRegisterMmioAction::SetBbpllCalibration {
+                        calibration: PhyBbpllCalibration::Disabled,
+                    }) =>
             {
                 Phase::Tail(TailStep::FinalI2cRead)
             }
@@ -1091,15 +1099,16 @@ impl PhyRegisterTransition {
                 Phase::Tail(TailStep::EnableHardwareFrequency),
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                }) =>
             {
                 Phase::Tail(TailStep::ReleaseFirst)
             }
             (Phase::Tail(TailStep::ReleaseFirst), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
                     == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                        enabled: false,
-                        phase: 0,
+                        phase: PhyForceTxRxPhase::DisableInitialPhase,
                     }) =>
             {
                 Phase::Tail(TailStep::ReleaseFirstDelay)
@@ -1118,8 +1127,7 @@ impl PhyRegisterTransition {
             (Phase::Tail(TailStep::ReleaseSecond), PhyRegisterCompletion::Mmio(completed))
                 if completed.action
                     == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                        enabled: false,
-                        phase: 1,
+                        phase: PhyForceTxRxPhase::DisableFinalPhase,
                     }) =>
             {
                 Phase::Tail(TailStep::ReleaseSecondDelay)
@@ -1176,7 +1184,9 @@ impl PhyRegisterTransition {
                 },
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetBbpllCalibration { enabled: false }) =>
+                == (PhyRegisterMmioAction::SetBbpllCalibration {
+                    calibration: PhyBbpllCalibration::Disabled,
+                }) =>
             {
                 Phase::Cleanup {
                     step: TailStep::EnableHardwareFrequency,
@@ -1190,7 +1200,9 @@ impl PhyRegisterTransition {
                 },
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
-                == (PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled: true }) =>
+                == (PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                    control: PhyFrequencyControl::Hardware,
+                }) =>
             {
                 Phase::Cleanup {
                     step: TailStep::ReleaseFirst,
@@ -1205,8 +1217,7 @@ impl PhyRegisterTransition {
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
                 == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                    enabled: false,
-                    phase: 0,
+                    phase: PhyForceTxRxPhase::DisableInitialPhase,
                 }) =>
             {
                 Phase::Cleanup {
@@ -1239,8 +1250,7 @@ impl PhyRegisterTransition {
                 PhyRegisterCompletion::Mmio(completed),
             ) if completed.action
                 == (PhyRegisterMmioAction::ConfigureForceTxRx {
-                    enabled: false,
-                    phase: 1,
+                    phase: PhyForceTxRxPhase::DisableFinalPhase,
                 }) =>
             {
                 Phase::Cleanup {
@@ -1332,23 +1342,15 @@ impl PhyRegisterMmioBinding {
             PhyRegisterMmioAction::PrepareColdStart => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::prepare_common_phy_control(registers)
             }
-            PhyRegisterMmioAction::ConfigureForceTxRx { enabled, phase } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(
-                    registers,
-                    crate::hardware::force_txrx_phase(enabled, phase),
-                )
+            PhyRegisterMmioAction::ConfigureForceTxRx { phase } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_force_txrx(registers, phase)
             }
             PhyRegisterMmioAction::ResetFrequencyModule => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::reset_module(registers)
             }
-            PhyRegisterMmioAction::SetHardwareFrequencyControl { enabled } => {
+            PhyRegisterMmioAction::SetHardwareFrequencyControl { control } => {
                 oer_chips_esp32s31_hal::radio::phy::frequency::set_hardware_control(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Hardware
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyFrequencyControl::Software
-                    },
+                    registers, control,
                 )
             }
             PhyRegisterMmioAction::PulseI2cMasterReset { index } => {
@@ -1365,14 +1367,10 @@ impl PhyRegisterMmioBinding {
             PhyRegisterMmioAction::SetCalibrationClock { enabled } => {
                 crate::hardware::set_phy_register_calibration_clock(registers, enabled)
             }
-            PhyRegisterMmioAction::SetBbpllCalibration { enabled } => {
+            PhyRegisterMmioAction::SetBbpllCalibration { calibration } => {
                 oer_chips_esp32s31_hal::radio::phy::i2c::configure_bbpll_calibration(
                     registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyBbpllCalibration::Disabled
-                    },
+                    calibration,
                 )
             }
         }

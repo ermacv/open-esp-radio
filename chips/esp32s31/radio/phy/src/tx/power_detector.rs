@@ -17,6 +17,7 @@
 use crate::analog::pbus::PhyPbusForceTest;
 #[cfg(test)]
 use crate::calibration::estimator::phy_linear_to_db;
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 // Complete rev0 ROM `phy_pwdet_ref_code+0x24` and `+0x50` load `a0 = 4`
 // before calling the runtime-table `phy_get_tone_sar_dout_` leaf. That leaf
@@ -72,7 +73,7 @@ pub enum PhyPwdetAction {
     ConfigurePbusDebugMode,
     ForcePbus(PhyPbusForceTest),
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePowerDetector,
     ConfigureCalibrationMode,
@@ -118,7 +119,7 @@ pub enum PhyPwdetCompletion {
     PbusCompleted(PhyPbusForceTest),
     PbusTimedOut(PhyPbusForceTest),
     TxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     PowerDetectorConfigured,
     CalibrationModeConfigured,
@@ -366,7 +367,9 @@ impl PhyPwdetTransition {
             PhyPwdetStep::EnterPbus { index } => {
                 PhyPwdetAction::ForcePbus(enter_pbus_transaction(index, self.parameters))
             }
-            PhyPwdetStep::EnableTxClock => PhyPwdetAction::ConfigureTxClock { enabled: true },
+            PhyPwdetStep::EnableTxClock => PhyPwdetAction::ConfigureTxClock {
+                state: PhyClockPair::Enabled,
+            },
             PhyPwdetStep::ConfigurePowerDetector => PhyPwdetAction::ConfigurePowerDetector,
             PhyPwdetStep::ConfigureCalibrationMode => PhyPwdetAction::ConfigureCalibrationMode,
             PhyPwdetStep::ConfigureTone => PhyPwdetAction::ConfigureTone,
@@ -435,7 +438,9 @@ impl PhyPwdetTransition {
                 PhyPwdetAction::WriteReferenceControl { value: 0xaaaa }
             }
             PhyPwdetStep::StopTone(_) => PhyPwdetAction::StopTone,
-            PhyPwdetStep::DisableTxClock(_) => PhyPwdetAction::ConfigureTxClock { enabled: false },
+            PhyPwdetStep::DisableTxClock(_) => PhyPwdetAction::ConfigureTxClock {
+                state: PhyClockPair::Disabled,
+            },
             PhyPwdetStep::ExitPbus { index, .. } => {
                 PhyPwdetAction::ForcePbus(exit_pbus_transaction(index, self.parameters))
             }
@@ -483,7 +488,9 @@ impl PhyPwdetTransition {
             }
             (
                 PhyPwdetStep::EnableTxClock,
-                PhyPwdetCompletion::TxClockConfigured { enabled: true },
+                PhyPwdetCompletion::TxClockConfigured {
+                    state: PhyClockPair::Enabled,
+                },
             ) => PhyPwdetStep::ConfigurePowerDetector,
             (PhyPwdetStep::ConfigurePowerDetector, PhyPwdetCompletion::PowerDetectorConfigured) => {
                 PhyPwdetStep::ConfigureCalibrationMode
@@ -683,7 +690,9 @@ impl PhyPwdetTransition {
             }
             (
                 PhyPwdetStep::DisableTxClock(terminal),
-                PhyPwdetCompletion::TxClockConfigured { enabled: false },
+                PhyPwdetCompletion::TxClockConfigured {
+                    state: PhyClockPair::Disabled,
+                },
             ) => PhyPwdetStep::ExitPbus { index: 0, terminal },
             (
                 PhyPwdetStep::ExitPbus { index, terminal },
@@ -813,7 +822,7 @@ impl PhyPwdetReadyBinding {
 enum PhyPwdetMmioAction {
     ConfigurePbusDebugMode,
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePowerDetector,
     ConfigureCalibrationMode,
@@ -853,8 +862,8 @@ impl PhyPwdetMmioBinding {
     pub fn new(action: PhyPwdetAction) -> Result<Self, PhyPwdetBindingError> {
         let action = match action {
             PhyPwdetAction::ConfigurePbusDebugMode => PhyPwdetMmioAction::ConfigurePbusDebugMode,
-            PhyPwdetAction::ConfigureTxClock { enabled } => {
-                PhyPwdetMmioAction::ConfigureTxClock { enabled }
+            PhyPwdetAction::ConfigureTxClock { state } => {
+                PhyPwdetMmioAction::ConfigureTxClock { state }
             }
             PhyPwdetAction::ConfigurePowerDetector => PhyPwdetMmioAction::ConfigurePowerDetector,
             PhyPwdetAction::ConfigureCalibrationMode => {
@@ -915,12 +924,9 @@ impl PhyPwdetMmioBinding {
                 );
                 PhyPwdetCompletion::PbusDebugModeConfigured
             }
-            PhyPwdetMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                    registers,
-                    crate::hardware::clock_pair(enabled),
-                );
-                PhyPwdetCompletion::TxClockConfigured { enabled }
+            PhyPwdetMmioAction::ConfigureTxClock { state } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state);
+                PhyPwdetCompletion::TxClockConfigured { state }
             }
             PhyPwdetMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(registers);

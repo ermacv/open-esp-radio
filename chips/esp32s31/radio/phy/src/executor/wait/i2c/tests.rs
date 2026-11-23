@@ -15,7 +15,9 @@ fn final_read_or_write_edge_succeeds_at_the_settle_boundary() {
         PhyColdI2cRequest::write_byte(address, 13),
         PhyColdI2cRequest::write_field(
             analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-            1,
+            analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE
+                .place(1)
+                .unwrap(),
         ),
     ] {
         let clock: VirtualClock = VirtualClock::default();
@@ -63,7 +65,9 @@ fn a_masked_read_at_the_boundary_gets_one_final_write_attempt_and_claims_no_busy
     let clock: VirtualClock = VirtualClock::default();
     let mut state = PhyColdI2cTransaction::new(PhyColdI2cRequest::write_field(
         analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-        1,
+        analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE
+            .place(1)
+            .unwrap(),
     ));
     state.read_started().unwrap();
     let completed = complete(

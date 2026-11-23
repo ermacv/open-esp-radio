@@ -1,4 +1,7 @@
 use crate::analog::i2c::analog_i2c;
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
+use oer_chips_esp32s31_hal::types::PhyBbpllCalibration;
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 use super::{
     AdcRateAction, AdcRateCompletion, FilterDcapAction, FilterDcapCompletion, FilterDcapParameters,
@@ -37,15 +40,9 @@ use oer_chips_esp32s31_hal::radio::phy::i2c::PhyAdcRate;
 fn complete_dc_iq(action: PhyDcIqAction) -> PhyDcIqCompletion {
     match action {
         PhyDcIqAction::Configure(request) => PhyDcIqCompletion::Configured(request),
-        PhyDcIqAction::SetEnable {
-            request,
-            phase,
-            enabled,
-        } => PhyDcIqCompletion::EnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhyDcIqAction::SetEnable { request, enable } => {
+            PhyDcIqCompletion::EnableSet { request, enable }
+        }
         PhyDcIqAction::DelayMicros {
             request,
             phase,
@@ -79,21 +76,15 @@ fn complete_signal_power(action: PhySignalPowerAction, component: i32) -> PhySig
         PhySignalPowerAction::ConfigureClock {
             request,
             clock,
-            enabled,
+            state,
         } => PhySignalPowerCompletion::ClockConfigured {
             request,
             clock,
-            enabled,
+            state,
         },
-        PhySignalPowerAction::SetEstimatorEnable {
-            request,
-            phase,
-            enabled,
-        } => PhySignalPowerCompletion::EstimatorEnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhySignalPowerAction::SetEstimatorEnable { request, enable } => {
+            PhySignalPowerCompletion::EstimatorEnableSet { request, enable }
+        }
         PhySignalPowerAction::DelayMicros {
             request,
             phase,
@@ -212,11 +203,11 @@ fn complete_xtal_prepare(
             selector,
             step,
         },
-        XtalDutyPrepareAction::ConfigureRxClock { enabled } => {
-            XtalDutyPrepareCompletion::RxClockConfigured { enabled }
+        XtalDutyPrepareAction::ConfigureRxClock { state } => {
+            XtalDutyPrepareCompletion::RxClockConfigured { state }
         }
-        XtalDutyPrepareAction::ConfigureTxClock { enabled } => {
-            XtalDutyPrepareCompletion::TxClockConfigured { enabled }
+        XtalDutyPrepareAction::ConfigureTxClock { state } => {
+            XtalDutyPrepareCompletion::TxClockConfigured { state }
         }
         XtalDutyPrepareAction::ConfigurePbusDebugMode => {
             XtalDutyPrepareCompletion::PbusDebugModeConfigured
@@ -248,11 +239,11 @@ fn complete_xtal_restore(action: XtalDutyRestoreAction) -> XtalDutyRestoreComple
             selector,
             step,
         },
-        XtalDutyRestoreAction::ConfigureRxClock { enabled } => {
-            XtalDutyRestoreCompletion::RxClockConfigured { enabled }
+        XtalDutyRestoreAction::ConfigureRxClock { state } => {
+            XtalDutyRestoreCompletion::RxClockConfigured { state }
         }
-        XtalDutyRestoreAction::ConfigureTxClock { enabled } => {
-            XtalDutyRestoreCompletion::TxClockConfigured { enabled }
+        XtalDutyRestoreAction::ConfigureTxClock { state } => {
+            XtalDutyRestoreCompletion::TxClockConfigured { state }
         }
         XtalDutyRestoreAction::ForcePbus(transaction) => {
             XtalDutyRestoreCompletion::PbusForceCompleted(transaction)
@@ -426,10 +417,8 @@ fn drive_warm_channel_frequency(transition: &mut PhyRfInitPrefixTransition) {
     loop {
         let completion = match transition.action() {
             PhyRfInitPrefixAction::ChannelFrequency(
-                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { parameter_override },
-            ) => PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                parameter_override,
-            },
+                PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters { mode },
+            ) => PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
             PhyRfInitPrefixAction::ChannelFrequency(PhyChannelFrequencyInitAction::I2c(action)) => {
                 let completion = match action {
                     PhyFrequencyI2cAction::WriteMasked { field, .. } => {
@@ -718,7 +707,10 @@ fn complete_rfpll_initial_writes(transition: &mut RfpllChargePumpTransition) {
     ] {
         assert_eq!(
             transition.action(),
-            RfpllChargePumpAction::WriteMasked { field, value }
+            RfpllChargePumpAction::WriteMasked {
+                field,
+                value: field.place(value).unwrap()
+            }
         );
         transition
             .advance(RfpllChargePumpCompletion::Write)
@@ -757,7 +749,10 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
         RfpllChargePumpAction::WriteMasked {
             field:
                 analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE,
-            value: 1,
+            value:
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_CALIBRATION_ENABLE
+                    .place(1)
+                    .unwrap(),
         }
     );
     transition
@@ -767,7 +762,10 @@ fn rfpll_charge_pump_lock_path_uses_async_delay_and_owned_result() {
         transition.action(),
         RfpllChargePumpAction::WriteMasked {
             field: analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
-            value: 23,
+            value: placed!(
+                analog_i2c::rfpll::charge_pump_calibration_enable::CHARGE_PUMP_VALUE,
+                23
+            ),
         }
     );
     transition
@@ -861,7 +859,9 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
         .unwrap();
     assert_eq!(
         transition.action(),
-        PhyRfInitPrefixAction::ConfigureBbpllCalibration { enabled: true }
+        PhyRfInitPrefixAction::ConfigureBbpllCalibration {
+            calibration: PhyBbpllCalibration::Enabled
+        }
     );
     transition
         .advance(PhyRfInitPrefixCompletion::BbpllCalibrationConfigured)
@@ -1053,19 +1053,19 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     for expected in [
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
-            value: 1,
+            value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-            value: 1,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 1),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
-            value: 0,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 0),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE,
-            value: 1,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_PULSE, 1),
         },
     ] {
         assert_eq!(
@@ -1101,11 +1101,11 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     for expected in [
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE,
-            value: 0,
+            value: placed!(analog_i2c::ulp_bod::rc_calibration_dout_path_enable::RC_CALIBRATION_DOUT_PATH_ENABLE, 0),
         },
         RcCalibrationAction::WriteMasked {
             field: analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE,
-            value: 0,
+            value: placed!(analog_i2c::txrf::rc_calibration_enable::RC_CALIBRATION_ENABLE, 0),
         },
     ] {
         assert_eq!(
@@ -1292,7 +1292,7 @@ fn rf_init_prefix_composes_mmio_i2c_and_timer_edges_in_vendor_order() {
     transition
         .advance(PhyRfInitPrefixCompletion::ChannelFrequencyControlCaptured(
             PhyChannelFrequencyInitControl {
-                frequency_register_parameter_override: false,
+                frequency_register_mode: FrequencyRegisterMode::Default,
                 frequency_table_initialized: true,
                 front_end_parameter_bit: false,
             },

@@ -125,10 +125,57 @@ impl PhyFrequencyI2cNumberAddresses {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ChannelCbwFields {
-    pub(crate) tx_offset: u8,
-    pub(crate) control_0: u8,
-    pub(crate) control_1_high: u8,
-    pub(crate) control_1_low: u8,
+    pub(crate) tx_offset: Bits<4>,
+    pub(crate) control_0: Bits<2>,
+    pub(crate) control_1_high: Bits<3>,
+    pub(crate) control_1_low: Bits<2>,
+}
+
+/// `value` modulo four, the two-bit field's value: every residue is one
+/// of its four constants.
+const fn residue_of_four(value: u8) -> Bits<2> {
+    match value % 4 {
+        0 => Bits::constant::<0>(),
+        1 => Bits::constant::<1>(),
+        2 => Bits::constant::<2>(),
+        _ => Bits::constant::<3>(),
+    }
+}
+
+/// `value` modulo eight, the three-bit field's value.
+const fn residue_of_eight(value: u8) -> Bits<3> {
+    match value % 8 {
+        0 => Bits::constant::<0>(),
+        1 => Bits::constant::<1>(),
+        2 => Bits::constant::<2>(),
+        3 => Bits::constant::<3>(),
+        4 => Bits::constant::<4>(),
+        5 => Bits::constant::<5>(),
+        6 => Bits::constant::<6>(),
+        _ => Bits::constant::<7>(),
+    }
+}
+
+/// `value` modulo sixteen, the four-bit field's value.
+const fn residue_of_sixteen(value: u8) -> Bits<4> {
+    match value % 16 {
+        0 => Bits::constant::<0>(),
+        1 => Bits::constant::<1>(),
+        2 => Bits::constant::<2>(),
+        3 => Bits::constant::<3>(),
+        4 => Bits::constant::<4>(),
+        5 => Bits::constant::<5>(),
+        6 => Bits::constant::<6>(),
+        7 => Bits::constant::<7>(),
+        8 => Bits::constant::<8>(),
+        9 => Bits::constant::<9>(),
+        10 => Bits::constant::<10>(),
+        11 => Bits::constant::<11>(),
+        12 => Bits::constant::<12>(),
+        13 => Bits::constant::<13>(),
+        14 => Bits::constant::<14>(),
+        _ => Bits::constant::<15>(),
+    }
 }
 
 pub(crate) const fn bss_tx_offset(cbw: u8) -> Bits<4> {
@@ -147,19 +194,29 @@ pub(crate) const fn channel_cbw_fields(cbw: u32) -> ChannelCbwFields {
         let normalized = high.wrapping_sub(1) as u8;
         let low = (cbw % 16) as u8;
         ChannelCbwFields {
-            tx_offset: low,
-            control_0: low % 4,
-            control_1_high: normalized % 8,
-            control_1_low: normalized % 4,
+            tx_offset: residue_of_sixteen(low),
+            control_0: residue_of_four(low),
+            control_1_high: residue_of_eight(normalized),
+            control_1_low: residue_of_four(normalized),
         }
     } else {
         let low = (cbw % 16) as u8;
         let normalized = low.saturating_sub(2);
+        // `low` is below 16, so `normalized` is below 14: its residue is
+        // itself.
         ChannelCbwFields {
-            tx_offset: normalized,
-            control_0: normalized % 4,
-            control_1_high: if low != 0 { 1 } else { 0 },
-            control_1_low: if low >= 2 { 1 } else { 0 },
+            tx_offset: residue_of_sixteen(normalized),
+            control_0: residue_of_four(normalized),
+            control_1_high: if low != 0 {
+                Bits::constant::<1>()
+            } else {
+                Bits::constant::<0>()
+            },
+            control_1_low: if low >= 2 {
+                Bits::constant::<1>()
+            } else {
+                Bits::constant::<0>()
+            },
         }
     }
 }
@@ -232,22 +289,6 @@ impl FrequencyMemoryAddress {
     }
 }
 
-/// The recovered baseband modes the PHY selects.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BasebandMode {
-    Idle,
-    Calibration,
-}
-
-impl BasebandMode {
-    const fn bits(self) -> Bits<2> {
-        match self {
-            Self::Idle => Bits::constant::<0>(),
-            Self::Calibration => Bits::constant::<2>(),
-        }
-    }
-}
-
 /// The read mode of `phy_read_rf_freq_mem`.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
@@ -261,10 +302,10 @@ const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::constant::<0>();
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
-    mode: BasebandMode,
+    mode: crate::types::BasebandMode,
 ) {
     frequency.fe.modify_frequency_parameter_1_status(|w| {
-        w.set_bits_0_1_opaque(mode.bits());
+        w.set_baseband_mode(mode);
     });
 }
 
@@ -561,10 +602,12 @@ pub fn configure_bss_cbw_suffix<P: PhyPlacement>(frequency: &mut FrequencyRegist
 /// Apply the four fresh-read replacements of complete `phy_bb_cbw_chan_cfg`.
 pub fn configure_channel_cbw<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, cbw: u32) {
     let fields = channel_cbw_fields(cbw);
-    // Lossless: each value is reduced below its field's width.
-    let control_0 = Bits::<2>::truncate(u32::from(fields.control_0));
-    let control_1_high = Bits::<3>::truncate(u32::from(fields.control_1_high));
-    let control_1_low = Bits::<2>::truncate(u32::from(fields.control_1_low));
+    let ChannelCbwFields {
+        control_0,
+        control_1_high,
+        control_1_low,
+        ..
+    } = fields;
     write_channel_tx_offset(&mut frequency.wifi_mac, cbw);
     frequency.wifi_bb.modify_channel_cbw_control_0(|w| {
         w.set_bits_0_1_opaque(control_0);
@@ -586,8 +629,7 @@ pub(crate) fn write_channel_tx_offset<P: oer_portable_mmio::Placement>(
     wifi_mac: &mut oer_chips_esp32s31_pac::wifi_mac::PhyFrequencyChannelOracleWifiMac<P>,
     cbw: u32,
 ) {
-    // Lossless: the offset is reduced below the field's width.
-    let tx_offset = Bits::<4>::truncate(u32::from(channel_cbw_fields(cbw).tx_offset));
+    let tx_offset = channel_cbw_fields(cbw).tx_offset;
     // Channel offset owns only the low nibble. Preserve the adjacent
     // minimum-power setting, as both ROM channel setters do.
     wifi_mac.modify_channel_tx_offset_control(|w| {

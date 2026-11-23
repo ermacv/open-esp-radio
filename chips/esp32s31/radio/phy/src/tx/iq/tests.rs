@@ -129,8 +129,8 @@ fn environment_completion(
         PhyTxCalibrationEnvironmentAction::ForcePbus(transaction) => {
             PhyTxCalibrationEnvironmentCompletion::PbusCompleted(transaction)
         }
-        PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
-            PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled }
+        PhyTxCalibrationEnvironmentAction::ConfigureTxClock { state } => {
+            PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { state }
         }
         PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
             PhyTxCalibrationEnvironmentCompletion::PowerDetectorConfigured
@@ -175,11 +175,11 @@ fn loopback_completion(action: PhyTxIqLoopbackAction) -> PhyTxIqLoopbackCompleti
                 address,
             })
         }
-        PhyTxIqLoopbackAction::ConfigureTxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::TxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureTxClock { state } => {
+            PhyTxIqLoopbackCompletion::TxClockConfigured { state }
         }
-        PhyTxIqLoopbackAction::ConfigureRxClock { enabled } => {
-            PhyTxIqLoopbackCompletion::RxClockConfigured { enabled }
+        PhyTxIqLoopbackAction::ConfigureRxClock { state } => {
+            PhyTxIqLoopbackCompletion::RxClockConfigured { state }
         }
         terminal => panic!("unexpected loopback terminal: {terminal:?}"),
     }
@@ -619,4 +619,80 @@ fn external_lowering_covers_every_txiq_operation_layer() {
         })),
         Err(PhyTxIqExternalBindingError::UnsupportedAction)
     ));
+}
+
+#[test]
+fn the_gain_path_measures_the_inverted_polarity_and_the_phase_path_the_normal() {
+    use oer_chips_esp32s31_hal::types::TxIqMismatchPolarity;
+    let mut transition = PhyTxIqCoverTransition::new(PhyTxIqCoverRequest {
+        identity: 3,
+        attenuation: 80,
+        selector: 0x80,
+        reference_codes: [80, 120],
+        clear_tone_after_ready: false,
+    });
+    let mut configured = std::vec::Vec::new();
+    loop {
+        let completion = match transition.action() {
+            PhyTxIqCoverAction::ConfigureCoefficient {
+                identity,
+                iteration,
+                kind,
+                value,
+            } => PhyTxIqCoverCompletion::CoefficientConfigured {
+                identity,
+                iteration,
+                kind,
+                value,
+            },
+            PhyTxIqCoverAction::MisPower(action) => {
+                if let PhyTxIqMisPowerAction::Configure {
+                    first: true,
+                    polarity,
+                    attenuation,
+                    ..
+                } = action
+                {
+                    configured.push((polarity, attenuation));
+                }
+                PhyTxIqCoverCompletion::MisPower(mis_completion(action, 100))
+            }
+            PhyTxIqCoverAction::Complete(_) => break,
+            PhyTxIqCoverAction::Failed(failure) => panic!("unexpected failure: {failure:?}"),
+        };
+        transition.advance(completion).unwrap();
+    }
+    // Seven iterations of the gain path (attenuation less 12) and the
+    // phase path.
+    assert_eq!(configured.len(), 14);
+    for pair in configured.chunks(2) {
+        assert_eq!(
+            pair,
+            [
+                (TxIqMismatchPolarity::Inverted, 68),
+                (TxIqMismatchPolarity::Normal, 80)
+            ]
+        );
+    }
+}
+
+#[test]
+fn the_loopback_s_clock_steps_follow_its_enable() {
+    use oer_chips_esp32s31_hal::types::PhyClockPair;
+    for (enabled, state) in [
+        (true, PhyClockPair::Enabled),
+        (false, PhyClockPair::Disabled),
+    ] {
+        let mut transition = PhyTxIqLoopbackTransition::new(enabled);
+        transition.step = LoopbackStep::TxClock;
+        assert_eq!(
+            transition.action(),
+            PhyTxIqLoopbackAction::ConfigureTxClock { state }
+        );
+        transition.step = LoopbackStep::RxClock;
+        assert_eq!(
+            transition.action(),
+            PhyTxIqLoopbackAction::ConfigureRxClock { state }
+        );
+    }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use oer_chips_esp32s31_hal::types::PhyForceTxRxPhase;
 
 const PARAMETERS: PhyChipChannelParameters = PhyChipChannelParameters {
     frequency_offset: 0,
@@ -51,11 +52,11 @@ fn temperature_completion(action: PhyTemperatureAction) -> PhyTemperatureComplet
 fn direct_completion(action: PhyChipChannelAction, ready: bool) -> PhyChipChannelCompletion {
     match action {
         PhyChipChannelAction::SetAgc { enabled } => PhyChipChannelCompletion::AgcSet { enabled },
-        PhyChipChannelAction::ConfigureForceTxRx { enabled, phase } => {
-            PhyChipChannelCompletion::ForceTxRxConfigured { enabled, phase }
+        PhyChipChannelAction::ConfigureForceTxRx { phase } => {
+            PhyChipChannelCompletion::ForceTxRxConfigured { phase }
         }
-        PhyChipChannelAction::SetBbpllCalibration { enabled } => {
-            PhyChipChannelCompletion::BbpllCalibrationSet { enabled }
+        PhyChipChannelAction::SetBbpllCalibration { calibration } => {
+            PhyChipChannelCompletion::BbpllCalibrationSet { calibration }
         }
         PhyChipChannelAction::Temperature(action) => {
             PhyChipChannelCompletion::Temperature(temperature_completion(action))
@@ -162,7 +163,9 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
     let sequence = |enabled| {
         (0..2).flat_map(move |phase| {
             [
-                PhyChipChannelAction::ConfigureForceTxRx { enabled, phase },
+                PhyChipChannelAction::ConfigureForceTxRx {
+                    phase: phase_image(enabled, phase),
+                },
                 PhyChipChannelAction::DelayMicros {
                     phase: PhyChipChannelDelay::ForceTxRx {
                         enabled,
@@ -174,16 +177,16 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         })
     };
     let agc = |enabled| PhyChipChannelAction::SetAgc { enabled };
-    let bbpll = |enabled| PhyChipChannelAction::SetBbpllCalibration { enabled };
+    let bbpll = |calibration| PhyChipChannelAction::SetBbpllCalibration { calibration };
     let depth_one = PhyForceTxRxDepth::OUTERMOST.nested();
     // Outermost: force, re-force when the nested TX-gain pair leaves the
     // count at one, release when the root leaves it at zero.
     let outermost: std::vec::Vec<_> = [agc(false)]
         .into_iter()
         .chain(sequence(true))
-        .chain([bbpll(true)])
+        .chain([bbpll(PhyBbpllCalibration::Enabled)])
         .chain(sequence(true))
-        .chain([bbpll(false)])
+        .chain([bbpll(PhyBbpllCalibration::Disabled)])
         .chain(sequence(false))
         .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
         .collect();
@@ -192,11 +195,15 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         outermost
     );
     // Depth one: only the root's release, which leaves the count at one.
-    let nested: std::vec::Vec<_> = [agc(false), bbpll(true), bbpll(false)]
-        .into_iter()
-        .chain(sequence(true))
-        .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
-        .collect();
+    let nested: std::vec::Vec<_> = [
+        agc(false),
+        bbpll(PhyBbpllCalibration::Enabled),
+        bbpll(PhyBbpllCalibration::Disabled),
+    ]
+    .into_iter()
+    .chain(sequence(true))
+    .chain([PhyChipChannelAction::ClearDcMemory, agc(true)])
+    .collect();
     assert_eq!(
         force_edges(PhyChipChannelTransition::at_depth(REQUEST, depth_one)),
         nested
@@ -209,8 +216,8 @@ fn channel_force_pairs_follow_the_vendor_nesting_count() {
         )),
         [
             agc(false),
-            bbpll(true),
-            bbpll(false),
+            bbpll(PhyBbpllCalibration::Enabled),
+            bbpll(PhyBbpllCalibration::Disabled),
             PhyChipChannelAction::ClearDcMemory,
             agc(true),
         ]
@@ -314,18 +321,21 @@ fn frequency_timeout_runs_full_radio_cleanup() {
 
     assert_eq!(
         transition.action(),
-        PhyChipChannelAction::SetBbpllCalibration { enabled: false }
+        PhyChipChannelAction::SetBbpllCalibration {
+            calibration: PhyBbpllCalibration::Disabled
+        }
     );
     transition
-        .advance(PhyChipChannelCompletion::BbpllCalibrationSet { enabled: false })
+        .advance(PhyChipChannelCompletion::BbpllCalibrationSet {
+            calibration: PhyBbpllCalibration::Disabled,
+        })
         .unwrap();
     // The failed channel still leaves its force-TX/RX level.
     for phase in 0..2 {
         assert_eq!(
             transition.action(),
             PhyChipChannelAction::ConfigureForceTxRx {
-                enabled: false,
-                phase
+                phase: phase_image(false, phase)
             }
         );
         let completion = direct_completion(transition.action(), false);
@@ -441,4 +451,16 @@ fn retained_wake_tx_cap_selects_both_channel_group_nibbles() {
     assert_eq!(retained_tx_cap_value(8, capacitance), 0x43);
     assert_eq!(retained_tx_cap_value(9, capacitance), 0x65);
     assert_eq!(retained_tx_cap_value(13, capacitance), 0x65);
+}
+
+/// The force-mode image the vendor writes for a sequence of `enabled`
+/// at its `phase` (0 the initial write, 1 the final), written apart from
+/// the code under test.
+fn phase_image(enabled: bool, phase: u8) -> PhyForceTxRxPhase {
+    match (enabled, phase) {
+        (true, 0) => PhyForceTxRxPhase::EnableInitialPhase,
+        (true, _) => PhyForceTxRxPhase::EnableFinalPhase,
+        (false, 0) => PhyForceTxRxPhase::DisableInitialPhase,
+        (false, _) => PhyForceTxRxPhase::DisableFinalPhase,
+    }
 }

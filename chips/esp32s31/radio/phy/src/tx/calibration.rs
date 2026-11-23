@@ -18,6 +18,7 @@ use crate::{
     calibration::estimator::phy_linear_to_db,
     tx::power_detector::sar_signal_reference,
 };
+use oer_chips_esp32s31_hal::types::PhyClockPair;
 
 pub const PHY_POWER_ATTENUATION_MAX_ITERATIONS: u8 = 6;
 
@@ -50,7 +51,7 @@ pub enum PhyTxCalibrationEnvironmentAction {
     ConfigurePbusDebugMode,
     ForcePbus(PhyPbusForceTest),
     ConfigureTxClock {
-        enabled: bool,
+        state: PhyClockPair,
     },
     ConfigurePowerDetector,
     ConfigureCalibrationMode,
@@ -72,7 +73,7 @@ pub enum PhyTxCalibrationEnvironmentCompletion {
     PbusCompleted(PhyPbusForceTest),
     PbusTimedOut(PhyPbusForceTest),
     TxClockConfigured {
-        enabled: bool,
+        state: PhyClockPair,
     },
     PowerDetectorConfigured,
     CalibrationModeConfigured,
@@ -172,9 +173,9 @@ impl PhyTxCalibrationEnvironmentTransition {
             EnvironmentStep::EnterPbus(index) => {
                 PhyTxCalibrationEnvironmentAction::ForcePbus(tx_debug_pbus(index, self.parameters))
             }
-            EnvironmentStep::EnableClock => {
-                PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled: true }
-            }
+            EnvironmentStep::EnableClock => PhyTxCalibrationEnvironmentAction::ConfigureTxClock {
+                state: PhyClockPair::Enabled,
+            },
             EnvironmentStep::PowerDetector => {
                 PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector
             }
@@ -182,9 +183,9 @@ impl PhyTxCalibrationEnvironmentTransition {
                 PhyTxCalibrationEnvironmentAction::ConfigureCalibrationMode
             }
             EnvironmentStep::StopTone => PhyTxCalibrationEnvironmentAction::StopTone,
-            EnvironmentStep::DisableClock => {
-                PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled: false }
-            }
+            EnvironmentStep::DisableClock => PhyTxCalibrationEnvironmentAction::ConfigureTxClock {
+                state: PhyClockPair::Disabled,
+            },
             EnvironmentStep::ExitPbus(index) => {
                 PhyTxCalibrationEnvironmentAction::ForcePbus(tx_work_pbus(index, self.parameters))
             }
@@ -242,7 +243,9 @@ impl PhyTxCalibrationEnvironmentTransition {
             ),
             (
                 EnvironmentStep::EnableClock,
-                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled: true },
+                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured {
+                    state: PhyClockPair::Enabled,
+                },
             ) => EnvironmentStep::PowerDetector,
             (
                 EnvironmentStep::PowerDetector,
@@ -257,7 +260,9 @@ impl PhyTxCalibrationEnvironmentTransition {
             }
             (
                 EnvironmentStep::DisableClock,
-                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled: false },
+                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured {
+                    state: PhyClockPair::Disabled,
+                },
             ) => EnvironmentStep::ExitPbus(0),
             (
                 EnvironmentStep::ExitPbus(index),
@@ -1569,7 +1574,7 @@ pub enum PhyTxCalibrationBindingError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PhyTxCalibrationEnvironmentMmioAction {
     ConfigurePbusDebugMode,
-    ConfigureTxClock { enabled: bool },
+    ConfigureTxClock { state: PhyClockPair },
     ConfigurePowerDetector,
     ConfigureCalibrationMode,
     StopTone,
@@ -1594,8 +1599,8 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
             PhyTxCalibrationEnvironmentAction::ConfigurePbusDebugMode => {
                 PhyTxCalibrationEnvironmentMmioAction::ConfigurePbusDebugMode
             }
-            PhyTxCalibrationEnvironmentAction::ConfigureTxClock { enabled } => {
-                PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { enabled }
+            PhyTxCalibrationEnvironmentAction::ConfigureTxClock { state } => {
+                PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { state }
             }
             PhyTxCalibrationEnvironmentAction::ConfigurePowerDetector => {
                 PhyTxCalibrationEnvironmentMmioAction::ConfigurePowerDetector
@@ -1632,12 +1637,9 @@ impl PhyTxCalibrationEnvironmentMmioBinding {
                 );
                 PhyTxCalibrationEnvironmentCompletion::PbusDebugModeConfigured
             }
-            PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { enabled } => {
-                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(
-                    registers,
-                    crate::hardware::clock_pair(enabled),
-                );
-                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { enabled }
+            PhyTxCalibrationEnvironmentMmioAction::ConfigureTxClock { state } => {
+                oer_chips_esp32s31_hal::radio::phy::pbus::configure_tx_clock(registers, state);
+                PhyTxCalibrationEnvironmentCompletion::TxClockConfigured { state }
             }
             PhyTxCalibrationEnvironmentMmioAction::ConfigurePowerDetector => {
                 oer_chips_esp32s31_hal::radio::phy::power_detector::configure_enabled(registers);

@@ -11,6 +11,8 @@
 //! SRAM. Every hardware-memory publication is an identity-bound finite MMIO
 //! action completed by the caller.
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 use crate::analog::{
     i2c::{Address, Field, analog_i2c},
     rfpll::{
@@ -19,6 +21,7 @@ use crate::analog::{
         calculate_rfpll_sdm,
     },
 };
+use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 
 use oer_chips_esp32s31_hal::{
     layouts::{
@@ -242,19 +245,27 @@ pub const fn phy_frequency_memory_record(
     index: u8,
 ) -> PhyFrequencyMemoryRecord {
     let frequency_code = PHY_FREQUENCY_TABLE_FIRST_CODE.wrapping_add(index as u16);
-    let sdm = calculate_rfpll_sdm(frequency_code, request.parameters.crystal_selector, 0).bytes();
+    let image = calculate_rfpll_sdm(frequency_code, request.parameters.crystal_selector, 0);
+    let sdm = image.bytes();
     let cap = interpolated_cap(request.low_frequency_cap, request.high_frequency_cap, index);
-    const CAP_CONFIGURATION: u8 = analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH
-        .insert_truncated(
-            analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW.insert_truncated(0, 0x3f),
-            1,
-        );
-    let cap_high = analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH.insert_truncated(
-        CAP_CONFIGURATION,
-        PhyRfpllCapacitorCodeCode::from_bits(cap).high(),
+    const CAP_CONFIGURATION: u8 = placed!(
+        analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
+        1
+    )
+    .apply(
+        placed!(
+            analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
+            0x3f
+        )
+        .apply(0),
     );
-    let sdm_low = analog_i2c::sdm::low::LOW
-        .insert_truncated(request.parameters.sdm_register_six_upper, sdm[0]);
+    // The code's high bit is one bit: either image of the one-bit field.
+    let cap_high = if PhyRfpllCapacitorCodeCode::from_bits(cap).high() == 0 {
+        placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0).apply(CAP_CONFIGURATION)
+    } else {
+        placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 1).apply(CAP_CONFIGURATION)
+    };
+    let sdm_low = image.low().apply(request.parameters.sdm_register_six_upper);
     let xtal_duty = phy_frequency_xtal_duty(
         frequency_code,
         request.parameters.middle_xtal_duty,
@@ -738,7 +749,7 @@ pub struct PhyFrequencyI2cOutcome {
 pub enum PhyFrequencyI2cAction {
     WriteMasked {
         field: Field,
-        value: u8,
+        value: FieldValue,
     },
     ReadByte {
         address: Address,
@@ -871,7 +882,7 @@ const fn frequency_i2c_descriptor(
             address: analog_i2c::sdm::update_enable::ADDRESS,
             encoded_index: 0x10,
             data: [
-                analog_i2c::sdm::update_enable::UPDATE_ENABLE.insert_truncated(sdm_register_0, 0),
+                placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 0).apply(sdm_register_0),
                 0,
                 0,
             ],
@@ -900,7 +911,7 @@ const fn frequency_i2c_descriptor(
             address: analog_i2c::sdm::update_enable::ADDRESS,
             encoded_index: 0x11,
             data: [
-                analog_i2c::sdm::update_enable::UPDATE_ENABLE.insert_truncated(sdm_register_0, 1),
+                placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 1).apply(sdm_register_0),
                 0,
                 0,
             ],
@@ -917,8 +928,11 @@ const fn frequency_i2c_descriptor(
         },
         _ => {
             let selected = if front_end_parameter_bit {
-                analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE
-                    .insert_truncated(front_end_register_3, 1)
+                placed!(
+                    analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+                    1
+                )
+                .apply(front_end_register_3)
             } else {
                 front_end_register_3
             };
@@ -927,8 +941,11 @@ const fn frequency_i2c_descriptor(
                 encoded_index: 0,
                 data: [
                     selected,
-                    analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE
-                        .insert_truncated(front_end_register_3, 0),
+                    placed!(
+                        analog_i2c::bbtop::shared_rx_gain_calibration_enable::SHARED_RX_GAIN_CALIBRATION_ENABLE,
+                        0
+                    )
+                    .apply(front_end_register_3),
                     selected,
                 ],
             }
@@ -1008,7 +1025,7 @@ impl PhyFrequencyI2cTransition {
         match self.step {
             PhyFrequencyI2cStep::EnableSnapshot => PhyFrequencyI2cAction::WriteMasked {
                 field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                value: 1,
+                value: placed!(analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE, 1),
             },
             PhyFrequencyI2cStep::ReadRfpll => PhyFrequencyI2cAction::ReadByte {
                 address: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE.address(),
@@ -1197,7 +1214,7 @@ impl PhyFrequencyI2cTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyChannelFrequencyInitControl {
     /// Explicit replacement for the hidden `phy_param[0x193]` branch.
-    pub frequency_register_parameter_override: bool,
+    pub frequency_register_mode: FrequencyRegisterMode,
     /// Rust-owned replacement for `phy_param[0xa4] & 0x20`.
     pub frequency_table_initialized: bool,
     /// Explicit replacement for the bit read from `phy_param[0x1af]`.
@@ -1207,7 +1224,7 @@ pub struct PhyChannelFrequencyInitControl {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyChannelFrequencyInitRequest {
     /// Explicit replacement for the hidden `phy_param[0x193]` branch.
-    pub frequency_register_parameter_override: bool,
+    pub frequency_register_mode: FrequencyRegisterMode,
     /// Rust-owned replacement for `phy_param[0xa4] & 0x20`.
     pub frequency_table_initialized: bool,
     /// Explicit replacement for `phy_param[0x4f]`.
@@ -1254,11 +1271,11 @@ pub enum PhyChannelFrequencyInitFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyChannelFrequencyInitAction {
     ConfigureFrequencyRegisters {
-        parameter_override: bool,
+        mode: FrequencyRegisterMode,
     },
     WriteMasked {
         field: Field,
-        value: u8,
+        value: FieldValue,
     },
     WriteByte {
         address: Address,
@@ -1279,7 +1296,7 @@ pub enum PhyChannelFrequencyInitAction {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyChannelFrequencyInitCompletion {
-    FrequencyRegistersConfigured { parameter_override: bool },
+    FrequencyRegistersConfigured { mode: FrequencyRegisterMode },
     MaskedWrite { field: Field },
     ByteWrite { address: Address },
     ByteRead { address: Address, value: u8 },
@@ -1377,7 +1394,7 @@ impl PhyChannelFrequencyInitTransition {
         match self.step {
             PhyChannelFrequencyInitStep::ConfigureRegisters => {
                 PhyChannelFrequencyInitAction::ConfigureFrequencyRegisters {
-                    parameter_override: self.request.frequency_register_parameter_override,
+                    mode: self.request.frequency_register_mode,
                 }
             }
             PhyChannelFrequencyInitStep::InitialCapLow => {
@@ -1389,13 +1406,16 @@ impl PhyChannelFrequencyInitTransition {
             PhyChannelFrequencyInitStep::InitialCapHigh => {
                 PhyChannelFrequencyInitAction::WriteMasked {
                     field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
-                    value: 0,
+                    value: placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0),
                 }
             }
             PhyChannelFrequencyInitStep::DisableRfpll => {
                 PhyChannelFrequencyInitAction::WriteMasked {
                     field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
-                    value: 0,
+                    value: placed!(
+                        analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
+                        0
+                    ),
                 }
             }
             PhyChannelFrequencyInitStep::Nominal(transition) => {
@@ -1407,13 +1427,19 @@ impl PhyChannelFrequencyInitTransition {
             PhyChannelFrequencyInitStep::EnableCapRange { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
                     field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
-                    value: 0x3f,
+                    value: placed!(
+                        analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
+                        0x3f
+                    ),
                 }
             }
             PhyChannelFrequencyInitStep::EnableRfpll { .. } => {
                 PhyChannelFrequencyInitAction::WriteMasked {
                     field: analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
-                    value: 1,
+                    value: placed!(
+                        analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
+                        1
+                    ),
                 }
             }
             PhyChannelFrequencyInitStep::Low { transition, .. } => {
@@ -1474,10 +1500,8 @@ impl PhyChannelFrequencyInitTransition {
         self.step = match (self.step, completion) {
             (
                 PhyChannelFrequencyInitStep::ConfigureRegisters,
-                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured {
-                    parameter_override,
-                },
-            ) if parameter_override == self.request.frequency_register_parameter_override => {
+                PhyChannelFrequencyInitCompletion::FrequencyRegistersConfigured { mode },
+            ) if mode == self.request.frequency_register_mode => {
                 if self.request.frequency_table_initialized {
                     PhyChannelFrequencyInitStep::I2c {
                         calibration: None,
@@ -1608,8 +1632,7 @@ impl PhyChannelFrequencyInitTransition {
                         crystal_selector: self.request.crystal_selector,
                         middle_xtal_duty: self.request.middle_xtal_duty,
                         outer_xtal_duty: self.request.outer_xtal_duty,
-                        sdm_register_six_upper: analog_i2c::sdm::low::LOW
-                            .insert_truncated(value, 0),
+                        sdm_register_six_upper: placed!(analog_i2c::sdm::low::LOW, 0).apply(value),
                     },
                     // The pinned archive redundantly reads each cap immediately
                     // after the corresponding complete RFPLL call. The child

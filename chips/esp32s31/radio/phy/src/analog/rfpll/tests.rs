@@ -410,7 +410,7 @@ fn upward_cap_search_ends_at_the_nine_bit_bound_without_touching_bit_seven() {
         };
         assert_eq!(field, analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH);
         assert!(
-            value <= 1,
+            value.value() <= 1,
             "the high write never reaches the neighboring bit"
         );
         let completion = complete_write(transition.action());

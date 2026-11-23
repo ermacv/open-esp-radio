@@ -14,6 +14,8 @@
 //! transaction and timer interval as an identity-bound external completion.
 //! A missed lock remains ordinary outcome data.
 
+use oer_chips_family_registers_analog_i2c::FieldValue;
+
 /// Return the exact RF-calibration data version of the pinned archive's
 /// `phy_get_rf_cal_version`.
 #[inline]
@@ -100,6 +102,16 @@ impl RfpllCapacitorCode {
     pub const fn high_bit(self) -> u8 {
         PhyRfpllCapacitorCodeCode::from_bits(self.0).high()
     }
+
+    /// Bit 8 in `RFPLL_CAPACITOR_HIGH`: one of the one-bit field's two
+    /// values.
+    pub const fn high_field(self) -> oer_chips_family_registers_analog_i2c::FieldValue {
+        if self.high_bit() == 0 {
+            placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0)
+        } else {
+            placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 1)
+        }
+    }
 }
 
 /// SDM bytes `phy_write_rfpll_sdm` programs, least significant first. The ROM
@@ -113,6 +125,22 @@ pub struct RfpllSdmImage {
 impl RfpllSdmImage {
     pub const fn bytes(self) -> [u8; 4] {
         self.bytes
+    }
+
+    /// The low three SDM bits as `SDM.LOW` holds them: the layout's `LOW`
+    /// is bits 2:0 of the code and the analog field bits 2:0 of its byte, so
+    /// the byte is the field's value in place (checked below).
+    pub const fn low(self) -> oer_chips_family_registers_analog_i2c::FieldValue {
+        const {
+            if analog_i2c::sdm::low::LOW.bit_range().1 != 0
+                || analog_i2c::sdm::low::LOW.bit_range().0 + 1
+                    != oer_chips_esp32s31_hal::layouts::PhyRfpllSdmCodeEncoded::LOW_WIDTH as u8
+            {
+                panic!("the layout's low SDM bits are the analog field's lanes");
+            }
+        };
+        let [low, _, _, _] = self.bytes;
+        analog_i2c::sdm::low::LOW.value_in(low)
     }
 }
 
@@ -200,7 +228,7 @@ pub enum RfpllFrequencyAction {
     },
     WriteMasked {
         field: Field,
-        value: u8,
+        value: FieldValue,
     },
     WriteByte {
         address: Address,
@@ -404,15 +432,24 @@ impl RfpllFrequencyTransition {
         let (field, value) = match index {
             0 => (
                 analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                0,
+                placed!(
+                    analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                    0
+                ),
             ),
             1 => (
                 analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
-                1,
+                placed!(
+                    analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_HIGH,
+                    1
+                ),
             ),
             _ => (
                 analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
-                0x3f,
+                placed!(
+                    analog_i2c::rfpll::capacitor_high::INITIAL_CONFIGURATION_LOW,
+                    0x3f
+                ),
             ),
         };
         RfpllFrequencyAction::WriteMasked { field, value }
@@ -423,7 +460,7 @@ impl RfpllFrequencyTransition {
         match index {
             0 => RfpllFrequencyAction::WriteMasked {
                 field: analog_i2c::sdm::update_enable::UPDATE_ENABLE,
-                value: 0,
+                value: placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 0),
             },
             1 => RfpllFrequencyAction::WriteByte {
                 address: analog_i2c::sdm::most_significant_byte::ADDRESS,
@@ -439,21 +476,33 @@ impl RfpllFrequencyTransition {
             },
             4 => RfpllFrequencyAction::WriteMasked {
                 field: analog_i2c::sdm::low::LOW,
-                value: bytes[0],
+                value: sdm.low(),
             },
             _ => RfpllFrequencyAction::WriteMasked {
                 field: analog_i2c::sdm::update_enable::UPDATE_ENABLE,
-                value: 1,
+                value: placed!(analog_i2c::sdm::update_enable::UPDATE_ENABLE, 1),
             },
         }
     }
 
     const fn restart_write(index: u8) -> RfpllFrequencyAction {
         let (field, value) = match index {
-            0 => (analog_i2c::rfpll::restart_high::RESTART_HIGH, 0),
-            1 => (analog_i2c::rfpll::restart_high::RESTART_LOW, 0),
-            2 => (analog_i2c::rfpll::restart_high::RESTART_LOW, 1),
-            _ => (analog_i2c::rfpll::restart_high::RESTART_HIGH, 1),
+            0 => (
+                analog_i2c::rfpll::restart_high::RESTART_HIGH,
+                placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 0),
+            ),
+            1 => (
+                analog_i2c::rfpll::restart_high::RESTART_LOW,
+                placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 0),
+            ),
+            2 => (
+                analog_i2c::rfpll::restart_high::RESTART_LOW,
+                placed!(analog_i2c::rfpll::restart_high::RESTART_LOW, 1),
+            ),
+            _ => (
+                analog_i2c::rfpll::restart_high::RESTART_HIGH,
+                placed!(analog_i2c::rfpll::restart_high::RESTART_HIGH, 1),
+            ),
         };
         RfpllFrequencyAction::WriteMasked { field, value }
     }
@@ -488,7 +537,10 @@ impl RfpllFrequencyTransition {
             },
             RfpllFrequencyStep::EnableCapSearch { .. } => RfpllFrequencyAction::WriteMasked {
                 field: analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
-                value: 1,
+                value: placed!(
+                    analog_i2c::rfpll::capacitor_search_enable::CAPACITOR_SEARCH_ENABLE,
+                    1
+                ),
             },
             RfpllFrequencyStep::CapWriteLow(continuation) => RfpllFrequencyAction::WriteByte {
                 address: analog_i2c::rfpll::capacitor_low::ADDRESS,
@@ -496,7 +548,7 @@ impl RfpllFrequencyTransition {
             },
             RfpllFrequencyStep::CapWriteHigh(continuation) => RfpllFrequencyAction::WriteMasked {
                 field: analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH,
-                value: continuation.programmed_value().high_bit(),
+                value: continuation.programmed_value().high_field(),
             },
             RfpllFrequencyStep::CapDelay(_) => RfpllFrequencyAction::DelayMicros(5),
             RfpllFrequencyStep::CapStatusRead(_) => RfpllFrequencyAction::ReadMasked {

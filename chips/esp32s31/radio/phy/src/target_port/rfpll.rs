@@ -136,7 +136,10 @@ pub(super) fn envelope<D: PhyShortDelay, K: oer_portable_time::settle::SettleCou
                 Completion::GrantProtectSet { enabled }
             }
             Action::SelectSoftwareControl => {
-                frequency::set_baseband_mode(registers, frequency::BasebandMode::Calibration);
+                frequency::set_baseband_mode(
+                    registers,
+                    oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
+                );
                 Completion::SoftwareControlSelected
             }
             Action::Settle => {
@@ -148,7 +151,10 @@ pub(super) fn envelope<D: PhyShortDelay, K: oer_portable_time::settle::SettleCou
                 Completion::BoundaryObserved
             }
             Action::RestoreHardwareControl => {
-                frequency::set_baseband_mode(registers, frequency::BasebandMode::Idle);
+                frequency::set_baseband_mode(
+                    registers,
+                    oer_chips_esp32s31_hal::types::BasebandMode::Idle,
+                );
                 Completion::HardwareControlRestored
             }
         };

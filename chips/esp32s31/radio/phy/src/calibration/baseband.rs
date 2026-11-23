@@ -14,7 +14,9 @@
 //! wait, delay, or hardware-dependent exit.
 
 use crate::ordinal::Ordinal;
+use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
 pub use oer_chips_esp32s31_hal::types::PhyGainMemoryEntry;
+use oer_chips_esp32s31_hal::types::PhyTxPowerTracking;
 
 pub const PHY_TX_CFR_ENTRY_COUNT: u8 = 32;
 const PHY_TX_CFR_DATA_PREFIX_ENTRY_COUNT: u8 = 10;
@@ -461,8 +463,8 @@ pub enum PhyBbBasebandMode {
 
 impl PhyBbBasebandMode {
     #[cfg(target_arch = "riscv32")]
-    const fn hardware(self) -> oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode {
-        use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+    const fn hardware(self) -> oer_chips_esp32s31_hal::types::BasebandMode {
+        use oer_chips_esp32s31_hal::types::BasebandMode;
         match self {
             Self::Idle => BasebandMode::Idle,
             Self::Calibration => BasebandMode::Calibration,
@@ -489,7 +491,7 @@ impl PhyRfRxSaturationPhase {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyBbMmioAction {
     SetForcedDigitalGain {
-        enabled: bool,
+        gain: PhyForcedDigitalGain,
     },
     EnableBasebandInitialization,
     SetBasebandMode {
@@ -502,7 +504,7 @@ pub enum PhyBbMmioAction {
         enabled: bool,
     },
     ConfigureTxPowerTracking {
-        enabled: bool,
+        tracking: PhyTxPowerTracking,
     },
     ConfigureRfRxSaturation {
         phase: PhyRfRxSaturationPhase,
@@ -543,16 +545,9 @@ impl PhyBbMmioBinding {
         registers: &mut impl oer_chips_esp32s31_hal::system::owner::PhyInitializationAccess,
     ) -> PhyBbMmioCompletion {
         match self.action {
-            PhyBbMmioAction::SetForcedDigitalGain { enabled } => {
+            PhyBbMmioAction::SetForcedDigitalGain { gain } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_forced_digital_gain(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyForcedDigitalGain::Disabled
-                    },
-                    -120,
-                    -120,
+                    registers, gain, -120, -120,
                 );
             }
             PhyBbMmioAction::EnableBasebandInitialization => {
@@ -578,14 +573,9 @@ impl PhyBbMmioBinding {
                     oer_chips_esp32s31_hal::radio::phy::frequency::disable_wifi(registers)
                 }
             }
-            PhyBbMmioAction::ConfigureTxPowerTracking { enabled } => {
+            PhyBbMmioAction::ConfigureTxPowerTracking { tracking } => {
                 oer_chips_esp32s31_hal::radio::phy::baseband::configure_tx_power_tracking(
-                    registers,
-                    if enabled {
-                        oer_chips_esp32s31_hal::types::PhyTxPowerTracking::Enabled
-                    } else {
-                        oer_chips_esp32s31_hal::types::PhyTxPowerTracking::Disabled
-                    },
+                    registers, tracking,
                 )
             }
             PhyBbMmioAction::ConfigureRfRxSaturation { phase } => {
@@ -1155,12 +1145,14 @@ impl PhyBbInitTransition {
             PhyBbInitStep::EnableInitialization => {
                 mmio(PhyBbMmioAction::EnableBasebandInitialization)
             }
-            PhyBbInitStep::EnableForcedDigitalGain => {
-                mmio(PhyBbMmioAction::SetForcedDigitalGain { enabled: true })
-            }
+            PhyBbInitStep::EnableForcedDigitalGain => mmio(PhyBbMmioAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Enabled,
+            }),
             PhyBbInitStep::DisableForcedDigitalGain
             | PhyBbInitStep::FailureDisableForcedDigitalGain(_) => {
-                mmio(PhyBbMmioAction::SetForcedDigitalGain { enabled: false })
+                mmio(PhyBbMmioAction::SetForcedDigitalGain {
+                    gain: PhyForcedDigitalGain::Disabled,
+                })
             }
             PhyBbInitStep::SetCalibrationMode => mmio(PhyBbMmioAction::SetBasebandMode {
                 mode: PhyBbBasebandMode::Calibration,
@@ -1192,7 +1184,9 @@ impl PhyBbInitTransition {
             PhyBbInitStep::DisableWifi => mmio(PhyBbMmioAction::SetWifiEnabled { enabled: false }),
             PhyBbInitStep::ConfigureI2cTxRate => mmio(PhyBbMmioAction::ConfigureI2cTxRate),
             PhyBbInitStep::ConfigureTxPowerTracking => {
-                mmio(PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true })
+                mmio(PhyBbMmioAction::ConfigureTxPowerTracking {
+                    tracking: PhyTxPowerTracking::Enabled,
+                })
             }
         };
         Ok(local)
@@ -1219,7 +1213,9 @@ impl PhyBbInitTransition {
             }
             (PhyBbInitStep::EnableForcedDigitalGain, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
-                    == (PhyBbMmioAction::SetForcedDigitalGain { enabled: true }) =>
+                    == (PhyBbMmioAction::SetForcedDigitalGain {
+                        gain: PhyForcedDigitalGain::Enabled,
+                    }) =>
             {
                 if self.state.baseband_calibration_complete() {
                     PhyBbInitStep::TxCfr(PhyTxCfrTransition::new())
@@ -1404,7 +1400,9 @@ impl PhyBbInitTransition {
             }
             (PhyBbInitStep::ConfigureTxPowerTracking, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
-                    == (PhyBbMmioAction::ConfigureTxPowerTracking { enabled: true }) =>
+                    == (PhyBbMmioAction::ConfigureTxPowerTracking {
+                        tracking: PhyTxPowerTracking::Enabled,
+                    }) =>
             {
                 PhyBbInitStep::Complete(PhyBbInitOutcome {
                     calibration_performed: self.calibration_performed,
@@ -1412,7 +1410,9 @@ impl PhyBbInitTransition {
             }
             (PhyBbInitStep::DisableForcedDigitalGain, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
-                    == (PhyBbMmioAction::SetForcedDigitalGain { enabled: false }) =>
+                    == (PhyBbMmioAction::SetForcedDigitalGain {
+                        gain: PhyForcedDigitalGain::Disabled,
+                    }) =>
             {
                 PhyBbInitStep::TemperatureSecond(
                     crate::analog::temperature::PhyTemperatureTransition::new(),
@@ -1421,7 +1421,11 @@ impl PhyBbInitTransition {
             (
                 PhyBbInitStep::FailureDisableForcedDigitalGain(failure),
                 PhyBbInitCompletion::Mmio(completed),
-            ) if completed.action == (PhyBbMmioAction::SetForcedDigitalGain { enabled: false }) => {
+            ) if completed.action
+                == (PhyBbMmioAction::SetForcedDigitalGain {
+                    gain: PhyForcedDigitalGain::Disabled,
+                }) =>
+            {
                 PhyBbInitStep::FailureSetIdle(*failure)
             }
             (PhyBbInitStep::FailureSetIdle(failure), PhyBbInitCompletion::Mmio(completed))
