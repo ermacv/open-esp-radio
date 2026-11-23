@@ -122,6 +122,16 @@ fn audit_roots(
             }
             writeln!(report, "{label}\tproven unreachable")?;
         }
+        // Who holds an entry of the section, out of line or inlined: a
+        // report, whatever the roots' verdicts.
+        report.push_str("caller\taddress\n");
+        if owners.is_empty() {
+            report.push_str("none\n");
+        }
+        for owner in &owners {
+            let name = image.names.get(owner).map_or("unnamed", String::as_str);
+            writeln!(report, "{name}\t{owner:#010x}")?;
+        }
         Ok(report)
     })?;
     Ok(report)
