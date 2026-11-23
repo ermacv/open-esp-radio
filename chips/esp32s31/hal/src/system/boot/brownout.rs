@@ -18,12 +18,13 @@
 //! the same order. The interrupt enables (`LP_ANA.INT_ENA`) are left as
 //! found: no handler is installed.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{analog_i2c, instances, lp_ana::LpAnaBrownout};
 use oer_chips_family_boot::{
     Access,
     drivers::brownout::{Mode0, Registers, Settings},
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 /// The brownout detector's control words.
 #[must_use = "dropping a register owner permanently loses its register authority"]

@@ -186,7 +186,7 @@ impl BluetoothSchedulerHardwareListHead {
         BleSchedulerItemHardwareNext::from_bits(self.0).address_address()
     }
 
-    const fn from_image(image: oer_portable_mmio::Bits<20>) -> Self {
+    const fn from_image(image: oer_chips_esp32s31_pac::Bits<20>) -> Self {
         Self(image.get())
     }
 }

@@ -371,14 +371,14 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
         match operation {
             HalInitOperation::PublishSchedulerSramPrefix => {
                 self.registers.modify_scheduler_sram_pointer_prefix(|w| {
-                    w.set_bits_0_21_opaque(oer_portable_mmio::Bits::constant::<0x0>());
-                    w.set_address_prefix(oer_portable_mmio::Bits::constant::<0xbc>());
+                    w.set_bits_0_21_opaque(oer_chips_esp32s31_pac::Bits::constant::<0x0>());
+                    w.set_address_prefix(oer_chips_esp32s31_pac::Bits::constant::<0xbc>());
                 });
             }
             HalInitOperation::PublishSleepTimerShift(shift) => {
                 // The configuration's input domains give only shifts 2..=5.
                 self.registers.modify_btlc_timer_control(|w| {
-                    w.set_clock_shift(oer_portable_mmio::Bits::truncate(u32::from(shift)));
+                    w.set_clock_shift(oer_chips_esp32s31_pac::Bits::truncate(u32::from(shift)));
                 });
             }
             HalInitOperation::PublishValue0(value) => {
@@ -401,7 +401,7 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
             }
             HalInitOperation::InitializeLow20 => {
                 self.registers.write_hal_init_low_20(|w| {
-                    w.set_config_low_20(oer_portable_mmio::Bits::constant::<0x000f_ffff>());
+                    w.set_config_low_20(oer_chips_esp32s31_pac::Bits::constant::<0x000f_ffff>());
                 });
             }
             HalInitOperation::EnableLatch => {
@@ -412,13 +412,13 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
             HalInitOperation::ConfigureControl1High => {
                 self.registers.modify_wdt_config_1(|w| {
                     w.set_config_15(true);
-                    w.set_config_18_19(oer_portable_mmio::Bits::constant::<0x3>());
+                    w.set_config_18_19(oer_chips_esp32s31_pac::Bits::constant::<0x3>());
                 });
             }
             HalInitOperation::ConfigureControl1Low => {
                 self.registers.modify_wdt_config_1(|w| {
                     w.set_config_3(true);
-                    w.set_config_6_7(oer_portable_mmio::Bits::constant::<0x3>());
+                    w.set_config_6_7(oer_chips_esp32s31_pac::Bits::constant::<0x3>());
                 });
             }
             HalInitOperation::EnableControl0 => {
@@ -428,12 +428,12 @@ impl<C: oer_portable_mmio::Placement> HalInitTransaction for MmioHalInit<'_, C> 
             }
             HalInitOperation::ClearSchedulerConfig16To20 => {
                 self.registers.modify_hal_init_scheduler_control(|w| {
-                    w.set_config_16_20(oer_portable_mmio::Bits::constant::<0x0>());
+                    w.set_config_16_20(oer_chips_esp32s31_pac::Bits::constant::<0x0>());
                 });
             }
             HalInitOperation::PublishSchedulerConfig16To20 => {
                 self.registers.modify_hal_init_scheduler_control(|w| {
-                    w.set_config_16_20(oer_portable_mmio::Bits::constant::<0x10>());
+                    w.set_config_16_20(oer_chips_esp32s31_pac::Bits::constant::<0x10>());
                 });
             }
             HalInitOperation::EnableSchedulerControl => {

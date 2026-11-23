@@ -16,6 +16,7 @@
 //! `oer-notes/research/s31-soc-init.md`.
 
 use crate::system::platform::{Hart, SecondaryHart, core_control::CoreControlRegisters};
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     hp_apm::HpApmFilter, hp_mem_apm::HpMemApmFilter, instances, lp_apm::LpApmFilter,
     lp_peri_clkrst::LpPericlkrstRngInit, trng::TrngInit,
@@ -24,7 +25,7 @@ use oer_chips_family_boot::{
     Access,
     drivers::{access_control, cores, entropy},
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 /// The SoC words the bootstrap initializes: the three APM filters, the LP
 /// TRNG's configuration and clock word, and the core-control words that

@@ -1,6 +1,6 @@
 //! The bounded prefix of complete `hal_he_init`, through `hal_init_tb_tx`.
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters};
 

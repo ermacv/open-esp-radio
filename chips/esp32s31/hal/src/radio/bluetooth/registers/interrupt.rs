@@ -34,7 +34,7 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerRunInterruptControl
     fn enable_scheduler_run_bank_0(&mut self) {
         self.bank.modify_irq_enable_0(|w| {
             w.set_source_21(true);
-            w.set_sources_27_28(oer_portable_mmio::Bits::truncate(
+            w.set_sources_27_28(oer_chips_esp32s31_pac::Bits::truncate(
                 w.sources_27_28().get() | 0x3,
             ));
         });

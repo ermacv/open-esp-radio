@@ -448,7 +448,7 @@ pub(crate) fn device_fence() {
 }
 
 /// A field of at most eight bits read back, as a byte.
-pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_portable_mmio::Bits<WIDTH>) -> u8 {
+pub(crate) const fn field_byte<const WIDTH: u32>(bits: oer_chips_esp32s31_pac::Bits<WIDTH>) -> u8 {
     const { assert!(WIDTH <= 8, "the field fits a byte") };
     bits.get().to_le_bytes()[0]
 }

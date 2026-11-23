@@ -124,7 +124,7 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInsertionExecutionContro
             w.set_status_24(false);
             w.set_bit_25_opaque(false);
             w.set_status_26(false);
-            w.set_execution_lock_result(oer_portable_mmio::Bits::constant::<0>());
+            w.set_execution_lock_result(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
             w.set_start(true);
         });
@@ -138,7 +138,7 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInsertionExecutionContro
             w.set_status_17(false);
             w.set_status_18(false);
             w.set_status_19(false);
-            w.set_payload_high_20_30(oer_portable_mmio::Bits::constant::<0>());
+            w.set_payload_high_20_30(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_start(true);
         });
     }
@@ -155,7 +155,7 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInsertionExecutionContro
             w.set_status_17(false);
             w.set_status_18(false);
             w.set_status_19(false);
-            w.set_payload_high_20_30(oer_portable_mmio::Bits::constant::<0>());
+            w.set_payload_high_20_30(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_start(true);
         });
     }

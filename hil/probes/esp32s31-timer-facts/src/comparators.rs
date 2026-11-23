@@ -11,9 +11,9 @@ use oer_chips_esp32s31_pac::systimer::{
     Systimer, SystimerClaim, SystimerCounter, SystimerCounterClaim,
     dictionaries::{ComparatorInterrupt, ComparatorWork},
 };
+use oer_chips_esp32s31_pac::{Bits, ValueError};
 use oer_chips_family_drivers_system_timer::{CounterLatch, Unverified};
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, ValueError};
 
 /// The counter's range: a target is a value below it.
 const RANGE: u64 = 1 << oer_hil_services_timer_facts::COUNTER_BITS;

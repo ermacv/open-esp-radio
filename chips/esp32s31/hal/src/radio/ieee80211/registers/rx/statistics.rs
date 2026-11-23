@@ -1,6 +1,6 @@
 //! Typed snapshots of hardware RX counters recovered from the blob decoders.
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use crate::radio::ieee80211::registers::{MacPlacement, WifiRadioRegisters, halfword};
 

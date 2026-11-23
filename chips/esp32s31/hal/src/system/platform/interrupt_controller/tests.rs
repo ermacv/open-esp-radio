@@ -3,6 +3,7 @@ use oer_portable_riscv::clic::Control;
 use std::vec;
 use std::vec::Vec;
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     clic::{self, Clic, ClicObserver, ClicPending},
     instances,
@@ -10,7 +11,7 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_chips_family_platform_interrupt_table::{Controller, Error, NoBindings, Router};
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Host, InterruptSource};
+use oer_portable_mmio::{Host, InterruptSource};
 
 use oer_portable_riscv::OnHart;
 

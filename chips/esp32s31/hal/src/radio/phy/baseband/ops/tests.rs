@@ -1,7 +1,7 @@
 use super::{TonePath0, TxIqToneControlFields, configure_tone_path_0, reset_frontend_txrx};
 use crate::radio::phy::registers::BasebandRegisters;
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::fe::PhyFedataRecovered;
-use oer_portable_mmio::Bits;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {

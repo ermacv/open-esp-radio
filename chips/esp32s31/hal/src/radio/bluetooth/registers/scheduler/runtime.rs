@@ -242,8 +242,8 @@ impl BluetoothSchedulerHardwareListIndex {
     }
 
     /// The index as the four-bit request fields take it.
-    pub(crate) const fn field_bits(self) -> oer_portable_mmio::Bits<4> {
-        oer_portable_mmio::Bits::truncate(self.0 as u32)
+    pub(crate) const fn field_bits(self) -> oer_chips_esp32s31_pac::Bits<4> {
+        oer_chips_esp32s31_pac::Bits::truncate(self.0 as u32)
     }
 }
 
@@ -518,7 +518,7 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerInterruptControl
 
     fn clear_scheduler_reference(&mut self) {
         self.registers.modify_scheduler_reference(|w| {
-            w.set_value_low_20(oer_portable_mmio::Bits::constant::<0>());
+            w.set_value_low_20(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
     }
 }

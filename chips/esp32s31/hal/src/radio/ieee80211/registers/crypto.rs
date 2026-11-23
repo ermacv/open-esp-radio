@@ -5,7 +5,7 @@ use oer_portable_bounded::Index;
 use oer_portable_mmio::Placement;
 
 use super::{MacInterface, MacKeyEntryIndex, MacPlacement, WifiRadioRegisters, element};
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 const KEY_ENTRY_COUNT: usize = oer_chips_esp32s31_pac::wifi_mac::entry_peer_control::COUNT;
 

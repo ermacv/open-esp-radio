@@ -639,22 +639,6 @@ fn clippy_configs(directory: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// The ban of `Bits::truncate` (it keeps the low bits of any value).
-const TRUNCATE_BAN: &str = "oer_portable_mmio::Bits::truncate";
-
-/// The packages whose `clippy.toml` leaves the ban of `Bits::truncate`
-/// out, each with its reason: the PAC, whose generated getters cut a field
-/// out of a word they read.
-const TRUNCATE_BAN_LEFT_OUT: &[(&str, TruncateBan)] =
-    &[("chips/esp32s31/pac", TruncateBan::Generated)];
-
-/// Why a package's `clippy.toml` leaves the ban of `Bits::truncate` out.
-#[derive(Clone, Copy)]
-enum TruncateBan {
-    /// Generated code calls it: the PAC's getters.
-    Generated,
-}
-
 /// The common method bans: the root's entries that carry their reason. The
 /// rest of the root's list is the catalogue of methods that panic.
 fn common_method_bans(root: &toml::Value) -> BTreeSet<String> {
@@ -667,65 +651,12 @@ fn common_method_bans(root: &toml::Value) -> BTreeSet<String> {
         .collect()
 }
 
-/// The common method bans a `clippy.toml` lacks, the one it may leave out
-/// aside.
-fn lost_method_bans(
-    root: &Path,
-    file: &Path,
-    config: &toml::Value,
-    common: &toml::Value,
-) -> BTreeSet<String> {
-    let package = file
-        .parent()
-        .and_then(|directory| directory.strip_prefix(root).ok())
-        .map(|directory| directory.display().to_string());
-    let left_out = TRUNCATE_BAN_LEFT_OUT
-        .iter()
-        .any(|(listed, _)| package.as_deref() == Some(*listed));
-    let mut missing = common_method_bans(common)
+/// The common method bans a `clippy.toml` lacks.
+fn lost_method_bans(config: &toml::Value, common: &toml::Value) -> BTreeSet<String> {
+    common_method_bans(common)
         .difference(&lint_paths(config, "disallowed-methods"))
         .cloned()
-        .collect::<BTreeSet<_>>();
-    if left_out {
-        missing.remove(TRUNCATE_BAN);
-    }
-    missing
-}
-
-/// A call of `Bits::truncate` (`truncate` after `::`, called).
-fn truncate_call_at(tokens: &[TokenTree], at: usize) -> Option<String> {
-    (ident_at(tokens, at)? == "truncate"
-        && at
-            .checked_sub(1)
-            .is_some_and(|before| punct_at(tokens, before, ':'))
-        && group_at(tokens, at + 1, Delimiter::Parenthesis).is_some())
-    .then(|| "truncate".to_owned())
-}
-
-/// A package whose `clippy.toml` leaves the ban out until a step still
-/// calls `Bits::truncate`: once its last call goes, its exception goes
-/// and its `clippy.toml` takes the ban.
-#[test]
-fn a_package_without_the_truncate_ban_still_calls_it() {
-    let root = root();
-    assert!(
-        lint_paths(&read_toml(&root.join("clippy.toml")), "disallowed-methods")
-            .contains(TRUNCATE_BAN)
-    );
-    for (package, why) in TRUNCATE_BAN_LEFT_OUT {
-        let calls = scan_hits(
-            &|path: &str| path == *package,
-            &truncate_call_at,
-            NO_ATTRIBUTE,
-        );
-        // The generated getters are outside the scan; a package left out
-        // for another reason would need its calls here.
-        let TruncateBan::Generated = why;
-        assert!(
-            calls.is_empty() || package.ends_with("/pac"),
-            "{package} calls Bits::truncate outside its generated getters"
-        );
-    }
+        .collect::<BTreeSet<_>>()
 }
 
 #[test]
@@ -737,7 +668,7 @@ fn every_clippy_config_retains_all_common_method_bans() {
     let missing = configs
         .into_iter()
         .filter_map(|path| {
-            let missing = lost_method_bans(&root, &path, &read_toml(&path), &common);
+            let missing = lost_method_bans(&read_toml(&path), &common);
             (!missing.is_empty()).then(|| format!("{}: {missing:?}", path.display()))
         })
         .collect::<Vec<_>>();
@@ -5899,36 +5830,6 @@ fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     raw.then_some(word)
 }
 
-/// S8c: a value cut to a field's width: a call of `Bits::truncate`, of
-/// the HAL's `bits` helper, which is one, or of an analog field's
-/// `insert_truncated`. Each is to become a type that
-/// carries the bound, a checked constructor, or a listed boundary.
-fn truncation_at(tokens: &[TokenTree], at: usize) -> Option<String> {
-    let word = ident_at(tokens, at)?;
-    let before_dot = at
-        .checked_sub(1)
-        .is_some_and(|before| punct_at(tokens, before, '.'));
-    let after_fn = at
-        .checked_sub(1)
-        .and_then(|before| ident_at(tokens, before))
-        .is_some_and(|before| before == "fn");
-    // A call, `bits(…)`, or a turbofish, `bits::<N>(…)`; a binding named
-    // `bits: …` is neither.
-    let called = group_at(tokens, at + 1, Delimiter::Parenthesis).is_some()
-        || (punct_at(tokens, at + 1, ':') && punct_at(tokens, at + 2, ':'));
-    let truncate = word == "truncate"
-        && at
-            .checked_sub(1)
-            .is_some_and(|before| punct_at(tokens, before, ':'));
-    let helper = word == "bits" && !before_dot && !after_fn;
-    // The analog vocabulary's field door of the same kind.
-    let after_path = at
-        .checked_sub(1)
-        .is_some_and(|before| punct_at(tokens, before, ':'));
-    let field = word == "insert_truncated" && (before_dot || after_path);
-    ((truncate || helper || field) && called).then_some(word)
-}
-
 /// S8b: the protocol packages, the wire crates among them: the one place a
 /// frame's bytes are reached by hand is `oer-portable-wire`, outside them.
 fn protocol_code(path: &str) -> bool {
@@ -6458,11 +6359,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/core/roles/ap/src/engine.rs", 1, BY_P3),
     ("protocols/network/core/src/lib.rs", 1, BY_PHASE_C),
 ];
-/// S8c: the values cut to a field's width (`Bits::truncate` and the HAL's
-/// `bits` helper) in the HAL, the radio crates and the platform, by file
-/// with their count. The list only shrinks.
-const TRUNCATIONS: &[(&str, usize, &str)] = &[];
-
 /// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
 /// a value reaches a register by hand only through these. An entry that is
@@ -6810,14 +6706,6 @@ fn raw_register_calls_are_listed_and_only_shrink() {
     assert_scan(
         &scan_hits(&register_code, &raw_register_at, NO_ATTRIBUTE),
         RAW_REGISTERS,
-    );
-}
-
-#[test]
-fn truncations_are_listed_and_only_shrink() {
-    assert_scan(
-        &scan_hits(&register_code, &truncation_at, NO_ATTRIBUTE),
-        TRUNCATIONS,
     );
 }
 
@@ -7670,7 +7558,7 @@ fn every_clippy_config_holds_the_rules_thresholds() {
         // The file the package reads keeps every common ban, wherever it
         // stands: one between the root and the package checks for each
         // package below it.
-        let missing = lost_method_bans(&root, &file, &config, &common);
+        let missing = lost_method_bans(&config, &common);
         if !missing.is_empty() {
             problems.push(std::format!(
                 "{path}: {} lost common bans: {missing:?}",
@@ -12173,44 +12061,3 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "unknown, to read",
     ),
 ];
-
-/// S8c's finder over each of its forms: a call of `Bits::truncate` and of
-/// the `bits` helper (plain or turbofish) count; a method `.bits()`, a
-/// definition `fn bits` and a binding `bits: …` do not.
-#[test]
-fn a_truncation_is_found_in_each_of_its_forms() {
-    let count = |source: &str| {
-        fn walk(stream: TokenStream, found: &mut usize) {
-            let tokens = stream.into_iter().collect::<Vec<_>>();
-            for (at, token) in tokens.iter().enumerate() {
-                if truncation_at(&tokens, at).is_some() {
-                    *found += 1;
-                }
-                if let TokenTree::Group(group) = token {
-                    walk(group.stream(), found);
-                }
-            }
-        }
-        let mut found = 0;
-        walk(source.parse().expect("tokens"), &mut found);
-        found
-    };
-    assert_eq!(count("w.set_x(Bits::truncate(value));"), 1);
-    assert_eq!(count("let byte = FIELD.insert_truncated(byte, value);"), 1);
-    assert_eq!(
-        count("let byte = AnalogField::insert_truncated(FIELD, byte, value);"),
-        1
-    );
-    assert_eq!(
-        count("pub const fn insert_truncated(self, byte: u8) -> u8 { 0 }"),
-        0
-    );
-    assert_eq!(count("w.set_x(bits(value));"), 1);
-    assert_eq!(count("let x = bits::<3>(value);"), 1);
-    assert_eq!(count("let x = name.bits();"), 0);
-    assert_eq!(count("pub const fn bits(self) -> u32 { 0 }"), 0);
-    assert_eq!(
-        count("fn from_field(bits: Bits<3>) -> Self { Self(bits) }"),
-        0
-    );
-}

@@ -1,7 +1,7 @@
 //! The complete post-power `hal_he_init` suffix and the HE BSR, ER-SU and
 //! MPDU-length-table leaves beside it.
 
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 
 use crate::radio::ieee80211::registers::{
     MacPlacement, WifiRadioRegisters, byte, element, halfword,

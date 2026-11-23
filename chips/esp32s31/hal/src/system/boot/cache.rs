@@ -1,5 +1,6 @@
 //! The L1 cache owner: core 0's fetch suspension and the sync engine.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_boot::{
     Access, Busy,
     cache::{
@@ -7,7 +8,7 @@ use oer_chips_family_boot::{
         SecondaryFetchRegisters, SyncCommand,
     },
 };
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{cache::CacheBoot, instances};
 

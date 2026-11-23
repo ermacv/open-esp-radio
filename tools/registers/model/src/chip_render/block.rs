@@ -38,7 +38,7 @@ pub(super) struct Values {
 /// The type a field's writer takes.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) enum Setter {
-    /// `bool`, `u8`, `u16`, `u32` or `oer_portable_mmio::Bits<WIDTH>`.
+    /// `bool`, `u8`, `u16`, `u32` or `crate::Bits<WIDTH>`.
     Native,
     /// The field's value enumeration: its only writable values.
     Enum,
@@ -225,7 +225,7 @@ impl FieldPlan<'_> {
             8 => "u8".to_owned(),
             16 => "u16".to_owned(),
             32 => "u32".to_owned(),
-            width => format!("oer_portable_mmio::Bits<{width}>"),
+            width => format!("crate::Bits<{width}>"),
         }
     }
 
@@ -356,7 +356,7 @@ impl FieldPlan<'_> {
             8 => format!("({shifted} & 0xff) as u8"),
             16 => format!("({shifted} & 0xffff) as u16"),
             _ => format!(
-                "oer_portable_mmio::Bits::truncate({})",
+                "crate::Bits::cut({})",
                 shifted.trim_start_matches('(').trim_end_matches(')')
             ),
         }
@@ -1464,7 +1464,7 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
             8 => "(bits & 0xff) as u8".into(),
             16 => "(bits & 0xffff) as u16".into(),
             32 => "bits".into(),
-            _ => "oer_portable_mmio::Bits::truncate(bits)".to_string(),
+            _ => "crate::Bits::cut(bits)".to_string(),
         };
         let _ = writeln!(
             output,
@@ -1767,8 +1767,8 @@ fn render_dictionary_enums(
                 ),
                 32 => ("u32".to_owned(), "value.bits()".to_owned()),
                 _ => (
-                    format!("oer_portable_mmio::Bits<{width}>"),
-                    "oer_portable_mmio::Bits::truncate(value.bits())".to_owned(),
+                    format!("crate::Bits<{width}>"),
+                    "crate::Bits::cut(value.bits())".to_owned(),
                 ),
             };
             let _ = writeln!(
@@ -1799,7 +1799,7 @@ fn render_open_from(output: &mut String, field: &FieldPlan<'_>) {
                 8 => "(value.bits() & 0xff) as u8".to_owned(),
                 16 => "(value.bits() & 0xffff) as u16".to_owned(),
                 32 => "value.bits()".to_owned(),
-                _ => "oer_portable_mmio::Bits::truncate(value.bits())".to_owned(),
+                _ => "crate::Bits::cut(value.bits())".to_owned(),
             };
             (field.native(), body)
         }

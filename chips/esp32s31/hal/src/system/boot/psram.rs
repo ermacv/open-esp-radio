@@ -1,13 +1,14 @@
 //! The PSRAM owner: the cache's controller (`PSRAM_MSPI0`), the command port
 //! (`PSRAM_MSPI1`), the PSRAM pads and the PSRAM MMU.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_family_boot::{
     Access, Busy,
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
     psram::{PsramCommand, PsramCommandRegisters, PsramControllerRegisters},
 };
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use oer_chips_esp32s31_pac::{
     instances, iomux_mspi_pin::IomuxMspiPsramPins, spi_mem_s::Memspi2Psram,

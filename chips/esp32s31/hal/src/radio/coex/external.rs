@@ -70,7 +70,7 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_sync(oer_portable_mmio::Bits::constant::<0>());
+            w.set_sync(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
             w.set_work_mode(match role {
@@ -80,25 +80,25 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
         });
         match role {
             ExternalCoexRole::Leader => block.modify_control(|w| {
-                w.set_sync(oer_portable_mmio::Bits::constant::<0x14>());
+                w.set_sync(oer_chips_esp32s31_pac::Bits::constant::<0x14>());
             }),
             ExternalCoexRole::Follower => {
                 let one_wire = wires == ExternalCoexWires::One;
                 block.modify_pti(|w| {
-                    w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<1>());
+                    w.set_bits_24_27_opaque(oer_chips_esp32s31_pac::Bits::constant::<1>());
                 });
                 block.modify_pti(|w| {
                     w.set_bits_20_23_opaque(if one_wire {
-                        oer_portable_mmio::Bits::constant::<1>()
+                        oer_chips_esp32s31_pac::Bits::constant::<1>()
                     } else {
-                        oer_portable_mmio::Bits::constant::<8>()
+                        oer_chips_esp32s31_pac::Bits::constant::<8>()
                     });
                 });
                 block.modify_pti(|w| {
                     w.set_bits_16_19_opaque(if one_wire {
-                        oer_portable_mmio::Bits::constant::<1>()
+                        oer_chips_esp32s31_pac::Bits::constant::<1>()
                     } else {
-                        oer_portable_mmio::Bits::constant::<0xc>()
+                        oer_chips_esp32s31_pac::Bits::constant::<0xc>()
                     });
                 });
             }
@@ -115,7 +115,7 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     ) {
         let block = &mut *self.block;
         block.modify_control(|w| {
-            w.set_grant_delay_low(oer_portable_mmio::Bits::constant::<0>());
+            w.set_grant_delay_low(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_grant_delay(delay.field());
         });
         block.modify_control(|w| {
@@ -137,25 +137,25 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
                 let full = !matches!(wires, ExternalCoexWires::One | ExternalCoexWires::Four);
                 block.modify_pti(|w| {
                     w.set_advanced_priority(if full {
-                        oer_portable_mmio::Bits::constant::<0xf>()
+                        oer_chips_esp32s31_pac::Bits::constant::<0xf>()
                     } else {
-                        oer_portable_mmio::Bits::constant::<0>()
+                        oer_chips_esp32s31_pac::Bits::constant::<0>()
                     });
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_2(oer_portable_mmio::Bits::constant::<0>());
+                    w.set_priority_2(oer_chips_esp32s31_pac::Bits::constant::<0>());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_1(oer_portable_mmio::Bits::constant::<0xf>());
+                    w.set_priority_1(oer_chips_esp32s31_pac::Bits::constant::<0xf>());
                 });
                 block.modify_pti(|w| {
-                    w.set_priority_0(oer_portable_mmio::Bits::constant::<0>());
+                    w.set_priority_0(oer_chips_esp32s31_pac::Bits::constant::<0>());
                 });
             }
             ExternalCoexRole::Leader => {
                 let [first, second, third] = priorities;
                 block.modify_pti(|w| {
-                    w.set_advanced_priority(oer_portable_mmio::Bits::constant::<0>());
+                    w.set_advanced_priority(oer_chips_esp32s31_pac::Bits::constant::<0>());
                 });
                 block.modify_pti(|w| {
                     w.set_priority_2(first.0.field());
@@ -176,26 +176,26 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
         let block = &mut *self.block;
         if role == ExternalCoexRole::Follower {
             block.modify_pti(|w| {
-                w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0xf>());
+                w.set_bits_24_27_opaque(oer_chips_esp32s31_pac::Bits::constant::<0xf>());
             });
             block.modify_pti(|w| {
-                w.set_bits_20_23_opaque(oer_portable_mmio::Bits::constant::<0xf>());
+                w.set_bits_20_23_opaque(oer_chips_esp32s31_pac::Bits::constant::<0xf>());
             });
             block.modify_pti(|w| {
-                w.set_bits_16_19_opaque(oer_portable_mmio::Bits::constant::<0xf>());
+                w.set_bits_16_19_opaque(oer_chips_esp32s31_pac::Bits::constant::<0xf>());
             });
         }
         block.modify_pti(|w| {
-            w.set_advanced_priority(oer_portable_mmio::Bits::constant::<0>());
+            w.set_advanced_priority(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_2(oer_portable_mmio::Bits::constant::<0>());
+            w.set_priority_2(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_1(oer_portable_mmio::Bits::constant::<0>());
+            w.set_priority_1(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
         block.modify_pti(|w| {
-            w.set_priority_0(oer_portable_mmio::Bits::constant::<0>());
+            w.set_priority_0(oer_chips_esp32s31_pac::Bits::constant::<0>());
         });
     }
 
@@ -203,7 +203,7 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     /// then the control enable.
     pub fn enable_external_coex(&mut self) {
         self.write_external_coex_enable(
-            oer_portable_mmio::Bits::constant::<0xf>(),
+            oer_chips_esp32s31_pac::Bits::constant::<0xf>(),
             oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Enabled,
         );
     }
@@ -211,14 +211,14 @@ impl<'a, P: oer_portable_mmio::Placement> ExternalCoexControl<'a, P> {
     /// `hal_disable_extern_coex`: the same four writes, cleared.
     pub fn disable_external_coex(&mut self) {
         self.write_external_coex_enable(
-            oer_portable_mmio::Bits::constant::<0>(),
+            oer_chips_esp32s31_pac::Bits::constant::<0>(),
             oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable::Disabled,
         );
     }
 
     fn write_external_coex_enable(
         &mut self,
-        mask: oer_portable_mmio::Bits<4>,
+        mask: oer_chips_esp32s31_pac::Bits<4>,
         enable: oer_chips_esp32s31_pac::coex::dictionaries::ExternalCoexEnable,
     ) {
         let block = &mut *self.block;

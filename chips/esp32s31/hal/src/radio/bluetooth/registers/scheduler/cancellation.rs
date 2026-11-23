@@ -174,9 +174,9 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerCancellationControl
         self.registers.modify_scheduler_skip_request(|w| {
             w.set_compressed_sram_pointer(request.address());
             w.set_hardware_list_index(request.hardware_list_index().field_bits());
-            w.set_result(oer_portable_mmio::Bits::constant::<0>());
+            w.set_result(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_start(true);
-            w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_24_27_opaque(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
         });
     }
@@ -194,17 +194,17 @@ impl<B: oer_portable_mmio::Placement> BluetoothSchedulerCancellationControl
         // written zero.
         self.registers.modify_scheduler_skip_request(|w| {
             w.clear_compressed_sram_pointer();
-            w.set_hardware_list_index(oer_portable_mmio::Bits::constant::<0>());
-            w.set_result(oer_portable_mmio::Bits::constant::<0>());
+            w.set_hardware_list_index(oer_chips_esp32s31_pac::Bits::constant::<0>());
+            w.set_result(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_start(false);
-            w.set_bits_24_27_opaque(oer_portable_mmio::Bits::constant::<0>());
+            w.set_bits_24_27_opaque(oer_chips_esp32s31_pac::Bits::constant::<0>());
             w.set_bit_30_opaque(false);
         });
     }
 
     fn clear_list_index(&mut self) {
         self.registers.modify_word_036c_opaque(|w| {
-            w.set_cancellation_hardware_list_index(oer_portable_mmio::Bits::constant::<0x0>());
+            w.set_cancellation_hardware_list_index(oer_chips_esp32s31_pac::Bits::constant::<0x0>());
         });
     }
 

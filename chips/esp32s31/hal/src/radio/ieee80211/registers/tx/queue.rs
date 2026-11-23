@@ -4,12 +4,13 @@
 //! queue-vector arrays; every leaf here takes the logical queue.
 
 use crate::types::MacTxQueueIndex;
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::wifi_mac::{
     AcknowledgeMacTxCompletionConsumed, WifiMacTxCommon, WifiMacTxQueueControl,
     WifiMacTxQueueVector,
 };
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 use super::MacTxProtection;
 use crate::radio::ieee80211::registers::MacInterface;

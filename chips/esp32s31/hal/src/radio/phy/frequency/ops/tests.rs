@@ -5,7 +5,7 @@ use super::{
     residue_of_sixteen, rv32_signed_div,
 };
 use crate::radio::phy::registers::FrequencyRegisters;
-use oer_portable_mmio::Bits;
+use oer_chips_esp32s31_pac::Bits;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
@@ -121,8 +121,8 @@ fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second
     let mut registers = FrequencyRegisters::host(&mut memory).expect("memory holds the block");
     let first_shift = 0x03 + 0x20;
     // The word the second sample reads: high fields 0x05 and 0.
-    let second_low = oer_portable_mmio::Bits::<5>::new(0x05).expect("five bits");
-    let second_high = oer_portable_mmio::Bits::<3>::new(0).expect("three bits");
+    let second_low = oer_chips_esp32s31_pac::Bits::<5>::new(0x05).expect("five bits");
+    let second_high = oer_chips_esp32s31_pac::Bits::<3>::new(0).expect("three bits");
     let second_shift = 0x05;
     assert_ne!(
         nrx_frequency_quotient(first_shift, 2412),
@@ -132,7 +132,7 @@ fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second
     configure_nrx_frequency_between_samples(&mut registers, 2412, |registers| {
         between_samples += 1;
         registers.wifi_bb.modify_nrx_frequency_control(|w| {
-            w.set_bits_0_23_opaque(oer_portable_mmio::Bits::constant::<0>())
+            w.set_bits_0_23_opaque(oer_chips_esp32s31_pac::Bits::constant::<0>())
                 .set_frequency_numerator_shift(second_low)
                 .set_bits_29_31_opaque(second_high);
         });

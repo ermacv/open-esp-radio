@@ -1,7 +1,8 @@
 //! TSF transactions serialized by the single Wi-Fi register owner.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::modem_pwr::{WifiMacTsfLoad, sta_tsf_control::StaTsfMode};
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 use super::{MacPlacement, WifiRadioRegisters};
 

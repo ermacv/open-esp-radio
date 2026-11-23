@@ -95,7 +95,7 @@ pub(crate) fn clear_transaction<P: Placement>(pbus: &mut PhyPbus<P>) {
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn read_result<P: Placement>(pbus: &PhyPbus<P>, selector: u8, path: u8) -> u16 {
     let path_one = path == 1;
-    let bits: oer_portable_mmio::Bits<9> = match selector {
+    let bits: oer_chips_esp32s31_pac::Bits<9> = match selector {
         0 if path_one => pbus.read_read_result_3().bits_18_26_opaque(),
         0 => pbus.read_read_result_3().bits_9_17_opaque(),
         1 if path_one => pbus.read_read_result_0().bits_9_17_opaque(),

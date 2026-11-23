@@ -43,6 +43,7 @@ use crate::{
 use names::push_doc;
 
 mod analog;
+mod bits;
 mod block;
 mod controls;
 mod irreducible;
@@ -194,6 +195,8 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
                 .map_err(|e| Error::new("hart-facts", e.to_string()))?,
         );
     }
+    output.push_str(bits::BITS);
+    output.push_str("\n\n");
     render_interrupts(&mut output, model);
     render_instances(&mut output, model, &plans);
     render_chip_definitions(&mut output, model.definitions())?;

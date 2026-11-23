@@ -2,8 +2,9 @@
 
 #![forbid(unsafe_code)]
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::fe::PhyIqEstimatorOracle;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 /// Capture only the software fields this engine changes.
 pub(crate) fn capture_configuration<P: Placement>(

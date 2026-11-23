@@ -31,7 +31,7 @@ fn program<P: Placement>(
             .set_rx_policy_enable(
                 oer_chips_esp32s31_pac::wifi_mac::address_high::RxPolicyEnable::Disabled,
             )
-            .set_bits_17_31_opaque(oer_portable_mmio::Bits::constant::<0>());
+            .set_bits_17_31_opaque(oer_chips_esp32s31_pac::Bits::constant::<0>());
     });
     block.modify_address_high(index, |w| {
         w.set_rx_policy_enable(

@@ -157,7 +157,7 @@ fn only_the_irreducible_policy_items_render() {
         "pub fn mask_and_clear_events(&mut self)",
         "pub fn sample_radio_events(&self)",
         "pub fn acknowledge_radio_events(",
-        "pub fn publish_low(&mut self, low: oer_portable_mmio::Bits<24>)",
+        "pub fn publish_low(&mut self, low: crate::Bits<24>)",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }
@@ -631,7 +631,7 @@ fn main() {
         });
         println!("ch1 cnt {:x}", task.read_ch1_cnt().n());
         task.store_vendor_word();
-        task.publish_low(oer_portable_mmio::Bits::new(0x00ab_cdef).expect("24 bits"));
+        task.publish_low(crate::Bits::new(0x00ab_cdef).expect("24 bits"));
         println!("mixed on={}", task.read_mixed().on());
         println!("observed version {}", irq.read_config().version());
         let events = irq.sample_radio_events();
@@ -1005,7 +1005,7 @@ fn main() {
     {
         let counter = counter::Counter::host(&mut memory).expect("memory holds the block");
         let shared = &counter;
-        shared.trigger_update_update(oer_portable_mmio::Bits::new(9).expect("4 bits"));
+        shared.trigger_update_update(crate::Bits::new(9).expect("4 bits"));
         shared.store_latch1(5);
     }
     println!("counter {} {}", hex(memory[1]), hex(memory[4]));
@@ -1258,7 +1258,7 @@ fn main() {
         });
         // Two triggers in one write.
         task.trigger_kick(|t| {
-            t.go().level(oer_portable_mmio::Bits::new(5).expect("3 bits"));
+            t.go().level(crate::Bits::new(5).expect("3 bits"));
         });
     }
     println!("low {}", hex(memory[0x68 / 4]));
@@ -1747,7 +1747,7 @@ fn symbolic_hart_fields_preserve_every_other_lane_for_n_one_and_three() {
             let mut words = [u32::MAX; 4];
             let mut mode = counter::Mode::host(&mut words).unwrap();
             for hart in Hart::ALL {
-                mode.modify_mode(|w| { w.set_step(hart.index(), oer_portable_mmio::Bits::constant::<0>()); });
+                mode.modify_mode(|w| { w.set_step(hart.index(), crate::Bits::constant::<0>()); });
                 let r = mode.read_mode();
                 for peer in Hart::ALL {
                     assert_eq!(r.step(peer.index()).get(), if peer.get() <= hart.get() { 0 } else { 15 });
@@ -2225,7 +2225,7 @@ fn a_field_whose_every_value_is_named_reads_as_its_name() {
     assert!(!rust.contains("enable_variant"), "{rust}");
     // Partial: the number, and the name if it is one.
     assert!(
-        rust.contains("pub const fn mode(self) -> oer_portable_mmio::Bits<2> {"),
+        rust.contains("pub const fn mode(self) -> crate::Bits<2> {"),
         "{rust}"
     );
     assert!(

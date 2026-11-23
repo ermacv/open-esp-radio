@@ -6,6 +6,7 @@ use super::commands::{
     PHY_I2C_COMMAND_MEMORY_TEMPLATE, PhyI2cCommandMemoryInputs,
 };
 use super::{Address, Host, Profile, Route};
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     i2c_ana_mst::{I2cAnaMst, dictionaries::ReadWrite},
     i2c_ana_mst_mem::PhyI2cCommandRam,
@@ -13,7 +14,7 @@ use oer_chips_esp32s31_pac::{
 use oer_chips_family_drivers_regi2c::BusRefusal;
 use oer_chips_family_radio_phy::serial::{AnalogBus, PhyI2cAccessError, Port, SamplePort};
 use oer_portable_bounded::Index;
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
 
 /// Exclusive atom loan from the master owner.
 pub struct MasterPort<'a, P: Placement> {

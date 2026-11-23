@@ -134,7 +134,7 @@ fn arming_a_main_watchdog_writes_its_timeout_stages_and_reset_lengths() {
             config.wdt_stg2(),
             config.wdt_stg3()
         ]
-        .map(oer_portable_mmio::Bits::get),
+        .map(oer_chips_esp32s31_pac::Bits::get),
         [3, 0, 0, 0]
     );
     assert_eq!(config.wdt_cpu_reset_length().get(), 7);

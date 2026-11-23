@@ -11,6 +11,7 @@
 //! ([`Released::take_interrupts`]): the staged runtime hands it to the hart,
 //! which alone makes its controller from it.
 
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::{
     cache::CacheBusObserver,
     clic::{Clic, ClicObserver, ClicPending},
@@ -24,7 +25,7 @@ use oer_chips_family_boot::drivers::cores::{
 use oer_chips_family_platform_port::SecondaryEntry;
 use oer_portable_bounded::Index;
 use oer_portable_memory::ClaimCell;
-use oer_portable_mmio::{Bits, Fixed, Placement};
+use oer_portable_mmio::{Fixed, Placement};
 
 use super::{CoresError, Hart, SecondaryHart, operate};
 use crate::{

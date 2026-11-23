@@ -3,8 +3,8 @@
 use super::values::{CoexTimerClientValue, CoexTimerPtiValue};
 use super::{CoexTimerBankRegisters, CoexTimerRegister};
 use crate::radio::phy::RadioPhyRegisters;
+use oer_chips_esp32s31_pac::Bits;
 use oer_chips_esp32s31_pac::ownership::{CoexistencePeripherals, SharedRadioPeripherals};
-use oer_portable_mmio::Bits;
 
 /// The fields of the three words inside the `WIFI_MAC` block that are not
 /// the Wi-Fi MAC's (the PHY's channel offset word, the PHY's I2C TX rate

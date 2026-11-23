@@ -18,7 +18,8 @@ use oer_chips_family_radio_ieee802154_values::{
     Ieee802154MultipanIndex, Ieee802154PanIdentity, Ieee802154RxAbortEnableSet, Ieee802154RxStatus,
     Ieee802154TxAbortEnableSet, Ieee802154TxStateCode, Ieee802154TxStatus,
 };
-use oer_portable_mmio::{Bits, Placement};
+use oer_portable_mmio::Placement;
+use oer_chips_esp32s31_pac::Bits;
 use oer_portable_bounded::Index;
 
 use super::{Ieee802154TaskOwner, codes};
