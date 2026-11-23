@@ -26,9 +26,10 @@ use std::{
 };
 
 use oer_hil_services_radio_pair::{
-    self as service, BringUp, BroughtUp, Counters, Expect, Expecting, ReceiveCounters,
-    ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold, SnapshotPage, SnapshotUp,
-    Stall, Stood, Stop, Stopped, Target, Targeted, Turn, Turned, Window, Windowed,
+    self as service, BringUp, BroughtUp, Counters, Expect, Expecting, HandOver, HandedOver,
+    ReceiveCounters, ReceiverRequest, Record, Round, SenderRequest, Sent, SnapshotCold,
+    SnapshotPage, SnapshotUp, Stall, Stood, Stop, Stopped, Target, Targeted, Turn, Turned, Window,
+    Windowed,
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{Case, Cx, Failure, Role, Scenario, check};
@@ -43,7 +44,7 @@ const ROLES: &[Role] = &[
 
 const SCENARIO: Scenario = Scenario::with_roles("radio-pair", ROLES).using_air_exclusively();
 
-const CASES: [Case; 6] = [
+const CASES: [Case; 7] = [
     Case {
         name: "cold-snapshots",
         run: cold_snapshots,
@@ -55,6 +56,11 @@ const CASES: [Case; 6] = [
     Case {
         name: "peer",
         run: peer,
+    },
+    // The radio up and the sender silent: the hand-over alone.
+    Case {
+        name: "hand-over",
+        run: hand_over,
     },
     Case {
         name: "case-c",
@@ -226,6 +232,51 @@ fn peer(cx: &mut Cx<'_>) -> Result<(), Failure> {
         Expecting::Expecting => Ok(()),
         other => Err(Failure::Fail(format!("receiver: expect: {other:?}"))),
     }
+}
+
+/// The hand-over's rounds.
+const HAND_OVERS: usize = 64;
+
+/// The least, the median and the greatest of `spans`.
+fn spread(spans: &mut [u32]) -> [u32; 3] {
+    spans.sort_unstable();
+    let least = spans.first().copied().unwrap_or_default();
+    let median = spans.get(spans.len() / 2).copied().unwrap_or_default();
+    let greatest = spans.last().copied().unwrap_or_default();
+    [least, median, greatest]
+}
+
+/// The receiver's command that does no work, `HAND_OVERS` times: what one
+/// crossing of the radio's hand-over costs there and back, in the hart's
+/// cycles. Passes when every round is answered with its spans.
+fn hand_over(cx: &mut Cx<'_>) -> Result<(), Failure> {
+    let (mut down, mut held, mut up) = (Vec::new(), Vec::new(), Vec::new());
+    let mut rate = 0;
+    for round in 0..HAND_OVERS {
+        match cx.device(RECEIVER)?.call(HandOver, STEP)? {
+            HandedOver::Spans {
+                down: d,
+                held: h,
+                up: u,
+                cycles_per_micro,
+            } => {
+                down.push(d);
+                held.push(h);
+                up.push(u);
+                rate = cycles_per_micro;
+            }
+            other => {
+                return Err(Failure::Fail(format!(
+                    "receiver: hand-over {round}: {other:?}"
+                )));
+            }
+        }
+    }
+    keep(cx, RECEIVER, "hand-over-down-cycles", &spread(&mut down));
+    keep(cx, RECEIVER, "hand-over-held-cycles", &spread(&mut held));
+    keep(cx, RECEIVER, "hand-over-up-cycles", &spread(&mut up));
+    keep(cx, RECEIVER, "cycles-per-micro", &rate);
+    Ok(())
 }
 
 /// How long a step of `millis` may take to answer.

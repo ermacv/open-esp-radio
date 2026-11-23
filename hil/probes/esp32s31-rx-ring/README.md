@@ -34,6 +34,7 @@ The cases, their thresholds and the verdict are
 | `expect` | the sender's address: a unit is the sender's when it is to the station from that address, never learned from a first frame |
 | `window` | serves the ring for the given time: every single lent for a spare (copied in place when none is held), every chain copied in place, each checked; with chains recorded, each chain's descriptors and continuation words by position |
 | `stall` | leaves the ring unserved for the given time, then reads where the walker stands |
+| `hand-over` | nothing: the radio's owner reads the hart's cycle counter before it hands the command and after it has the answer, the radio level's task when it took the command and when it answers; the answer carries the three spans, `down`, `held` and `up` |
 | `turn` | a window, the stop (the walker's edge, the stop request and its hold, the reset after a stop, the release), the cold start, a window |
 | `stop` | the stop; afterwards every step but the cold snapshot is refused until the next boot |
 
