@@ -426,3 +426,104 @@ fn every_generated_word_records_the_base_gain_it_came_from() {
         }
     }
 }
+
+#[test]
+fn every_parent_step_produces_the_vendor_s_register_action() {
+    use super::PhyBbInitStep as Step;
+    let failure = super::PhyBbInitFailure::Temperature {
+        pass: 1,
+        failure: crate::analog::temperature::PhyTemperatureFailure::InvalidDac(0),
+    };
+    let rx_table = PhyRxTableInitParameters {
+        parameter_002: 0xa5,
+        parameter_121: 0x4e,
+    };
+    let registers = PhyRegisterInitParameters {
+        parameter_121: 0x4f,
+        parameter_120: 0x4e,
+    };
+    let idle = PhyBbMmioAction::SetBasebandMode {
+        mode: PhyBbBasebandMode::Idle,
+    };
+    let gain_off = PhyBbMmioAction::SetForcedDigitalGain {
+        gain: PhyForcedDigitalGain::Disabled,
+    };
+    // The names the vendor's parent writes at each of its own steps,
+    // written apart from the code.
+    let table = [
+        (
+            Step::EnableInitialization,
+            PhyBbMmioAction::EnableBasebandInitialization,
+        ),
+        (
+            Step::SetCalibrationMode,
+            PhyBbMmioAction::SetBasebandMode {
+                mode: PhyBbBasebandMode::Calibration,
+            },
+        ),
+        (
+            Step::EnableForcedDigitalGain,
+            PhyBbMmioAction::SetForcedDigitalGain {
+                gain: PhyForcedDigitalGain::Enabled,
+            },
+        ),
+        (Step::DisableForcedDigitalGain, gain_off),
+        (Step::FailureDisableForcedDigitalGain(failure), gain_off),
+        (
+            Step::RxTable(rx_table),
+            PhyBbMmioAction::ConfigureRxTable {
+                parameters: rx_table,
+            },
+        ),
+        (
+            Step::RxSaturationPrepare,
+            PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::PrepareCheck,
+            },
+        ),
+        (
+            Step::RxSaturationFinalize,
+            PhyBbMmioAction::ConfigureRfRxSaturation {
+                phase: PhyRfRxSaturationPhase::Finalize,
+            },
+        ),
+        (
+            Step::RegisterInit(registers),
+            PhyBbMmioAction::ConfigurePhyRegisters {
+                parameters: registers,
+            },
+        ),
+        (Step::UpdateAgc, PhyBbMmioAction::UpdateAgcRegisters),
+        (
+            Step::UpdatePostInit,
+            PhyBbMmioAction::UpdatePostInitRegisters,
+        ),
+        (Step::EnableAgc, PhyBbMmioAction::EnableAgc),
+        (Step::FailureEnableAgc(failure), PhyBbMmioAction::EnableAgc),
+        (Step::SetIdleMode, idle),
+        (Step::FailureSetIdle(failure), idle),
+        (
+            Step::DisableWifi,
+            PhyBbMmioAction::SetWifiEnabled { enabled: false },
+        ),
+        (
+            Step::ConfigureI2cTxRate,
+            PhyBbMmioAction::ConfigureI2cTxRate,
+        ),
+        (
+            Step::ConfigureTxPowerTracking,
+            PhyBbMmioAction::ConfigureTxPowerTracking {
+                tracking: PhyTxPowerTracking::Enabled,
+            },
+        ),
+    ];
+    let mut transition = super::PhyBbInitTransition::new(crate::state::PhyState::default());
+    for (row, (step, expected)) in table.into_iter().enumerate() {
+        transition.step = step;
+        assert_eq!(
+            transition.step_local().unwrap(),
+            super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(expected)),
+            "row {row}"
+        );
+    }
+}

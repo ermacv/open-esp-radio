@@ -879,3 +879,197 @@ fn final_i2c_failure_returns_only_the_original_retry_cache() {
             .into_snapshot()
     );
 }
+
+/// What the registration's own steps produce, written apart from the code:
+/// the action `step_local` gives at each prelude and tail step.
+fn produced(transition: &mut PhyRegisterTransition, phase: super::Phase) -> PhyRegisterAction {
+    transition.phase = Some(phase);
+    match transition.step_local().unwrap() {
+        PhyRegisterLocalStep::External(action) => action,
+        other => panic!("a step that produces an action gave {other:?}"),
+    }
+}
+
+#[test]
+fn every_prelude_step_produces_the_vendor_s_action() {
+    use super::{Phase, PreludeStep as Step};
+    let mmio = PhyRegisterAction::Mmio;
+    let force_delay = |enabled, completed_phase| PhyRegisterAction::DelayMicros {
+        phase: PhyRegisterDelayPhase::ForceTxRx {
+            enabled,
+            completed_phase,
+        },
+        micros: 1,
+    };
+    let table = [
+        (Step::Prepare, mmio(PhyRegisterMmioAction::PrepareColdStart)),
+        (
+            Step::ForceFirst,
+            mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
+                phase: PhyForceTxRxPhase::EnableInitialPhase,
+            }),
+        ),
+        (Step::ForceFirstDelay, force_delay(true, 0)),
+        (
+            Step::ForceSecond,
+            mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
+                phase: PhyForceTxRxPhase::EnableFinalPhase,
+            }),
+        ),
+        (Step::ForceSecondDelay, force_delay(true, 1)),
+        (
+            Step::FrequencyReset,
+            mmio(PhyRegisterMmioAction::ResetFrequencyModule),
+        ),
+        (
+            Step::DisableHardwareFrequency,
+            mmio(PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                control: PhyFrequencyControl::Software,
+            }),
+        ),
+        (
+            Step::DisableHardwareFrequencyDelay,
+            PhyRegisterAction::DelayMicros {
+                phase: PhyRegisterDelayPhase::HardwareFrequencyDisabled,
+                micros: 2,
+            },
+        ),
+        (
+            Step::I2cInitialSample { index: 1 },
+            PhyRegisterAction::SampleI2cMasterReset {
+                index: 1,
+                sample: 0,
+            },
+        ),
+        (
+            Step::I2cResetPulse { index: 1 },
+            mmio(PhyRegisterMmioAction::PulseI2cMasterReset { index: 1 }),
+        ),
+        (
+            Step::I2cResetDelay {
+                index: 0,
+                sample: 3,
+            },
+            PhyRegisterAction::DelayMicros {
+                phase: PhyRegisterDelayPhase::I2cMasterReset {
+                    index: 0,
+                    sample: 3,
+                },
+                micros: 1,
+            },
+        ),
+        (
+            Step::I2cResetSample {
+                index: 0,
+                sample: 2,
+            },
+            PhyRegisterAction::SampleI2cMasterReset {
+                index: 0,
+                sample: 2,
+            },
+        ),
+        (
+            Step::ConfigureXtal,
+            mmio(PhyRegisterMmioAction::ConfigureXtal40Mhz),
+        ),
+        (
+            Step::CalibrationClockOn,
+            mmio(PhyRegisterMmioAction::SetCalibrationClock { enabled: true }),
+        ),
+    ];
+    let mut transition = PhyRegisterTransition::with_production_config();
+    for (step, expected) in table {
+        assert_eq!(
+            produced(&mut transition, Phase::Prelude(step)),
+            expected,
+            "{step:?}"
+        );
+    }
+}
+
+/// The tail's steps that produce an action, with the action each gives:
+/// the success tail and the failure cleanup share them.
+fn tail_table() -> [(super::TailStep, PhyRegisterAction); 8] {
+    use super::TailStep as Step;
+    let mmio = PhyRegisterAction::Mmio;
+    let release_delay = |completed_phase| PhyRegisterAction::DelayMicros {
+        phase: PhyRegisterDelayPhase::ForceTxRx {
+            enabled: false,
+            completed_phase,
+        },
+        micros: 1,
+    };
+    [
+        (
+            Step::CalibrationClockOff,
+            mmio(PhyRegisterMmioAction::SetCalibrationClock { enabled: false }),
+        ),
+        (
+            Step::BbpllOff,
+            mmio(PhyRegisterMmioAction::SetBbpllCalibration {
+                calibration: PhyBbpllCalibration::Disabled,
+            }),
+        ),
+        (
+            Step::FinalI2cRead,
+            PhyRegisterAction::ReadFinalI2c {
+                address: super::PHY_REGISTER_FINAL_I2C_ADDRESS,
+            },
+        ),
+        (
+            Step::EnableHardwareFrequency,
+            mmio(PhyRegisterMmioAction::SetHardwareFrequencyControl {
+                control: PhyFrequencyControl::Hardware,
+            }),
+        ),
+        (
+            Step::ReleaseFirst,
+            mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
+                phase: PhyForceTxRxPhase::DisableInitialPhase,
+            }),
+        ),
+        (Step::ReleaseFirstDelay, release_delay(0)),
+        (
+            Step::ReleaseSecond,
+            mmio(PhyRegisterMmioAction::ConfigureForceTxRx {
+                phase: PhyForceTxRxPhase::DisableFinalPhase,
+            }),
+        ),
+        (Step::ReleaseSecondDelay, release_delay(1)),
+    ]
+}
+
+#[test]
+fn every_tail_step_produces_the_vendor_s_action() {
+    let mut transition = PhyRegisterTransition::with_production_config();
+    for (step, expected) in tail_table() {
+        assert_eq!(
+            produced(&mut transition, super::Phase::Tail(step)),
+            expected,
+            "{step:?}"
+        );
+    }
+}
+
+#[test]
+fn every_cleanup_step_produces_the_tail_s_action() {
+    let mut transition = PhyRegisterTransition::with_production_config();
+    for (step, expected) in tail_table() {
+        // A cleanup's final I2C read is skipped: it goes straight to the
+        // BBPLL's disable.
+        if step == super::TailStep::FinalI2cRead {
+            continue;
+        }
+        assert_eq!(
+            produced(
+                &mut transition,
+                super::Phase::Cleanup {
+                    step,
+                    failure: PhyRegisterFailure::FinalI2cDeadlineExceeded,
+                },
+            ),
+            expected,
+            "{step:?}"
+        );
+    }
+}
