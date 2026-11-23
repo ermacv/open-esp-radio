@@ -40,15 +40,9 @@ use oer_chips_esp32s31_hal::radio::phy::i2c::PhyAdcRate;
 fn complete_dc_iq(action: PhyDcIqAction) -> PhyDcIqCompletion {
     match action {
         PhyDcIqAction::Configure(request) => PhyDcIqCompletion::Configured(request),
-        PhyDcIqAction::SetEnable {
-            request,
-            phase,
-            enabled,
-        } => PhyDcIqCompletion::EnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhyDcIqAction::SetEnable { request, enable } => {
+            PhyDcIqCompletion::EnableSet { request, enable }
+        }
         PhyDcIqAction::DelayMicros {
             request,
             phase,
@@ -88,15 +82,9 @@ fn complete_signal_power(action: PhySignalPowerAction, component: i32) -> PhySig
             clock,
             state,
         },
-        PhySignalPowerAction::SetEstimatorEnable {
-            request,
-            phase,
-            enabled,
-        } => PhySignalPowerCompletion::EstimatorEnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhySignalPowerAction::SetEstimatorEnable { request, enable } => {
+            PhySignalPowerCompletion::EstimatorEnableSet { request, enable }
+        }
         PhySignalPowerAction::DelayMicros {
             request,
             phase,

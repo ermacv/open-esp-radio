@@ -37,6 +37,7 @@ use crate::{
     },
 };
 use oer_chips_esp32s31_hal::types::PhyClockPair;
+use oer_chips_esp32s31_hal::types::TxIqMismatchPolarity;
 
 const TX_CAP_ADDRESS: Address = analog_i2c::txrf::tx_capacitor_low::ADDRESS;
 const D_CODE_0_ADDRESS: Address =
@@ -188,7 +189,7 @@ impl PhyTxIqLinearPowerTransition {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyTxIqMisPowerRequest {
     pub identity: u8,
-    pub polarity: bool,
+    pub polarity: TxIqMismatchPolarity,
     pub attenuation: u8,
     pub selector: u16,
     pub reference_codes: [i16; 2],
@@ -212,7 +213,7 @@ pub enum PhyTxIqMisPowerAction {
     Configure {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },
@@ -231,7 +232,7 @@ pub enum PhyTxIqMisPowerCompletion {
     Configured {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },
@@ -529,7 +530,13 @@ impl PhyTxIqCoverTransition {
         let gain_path = phase == 0;
         PhyTxIqMisPowerTransition::new(PhyTxIqMisPowerRequest {
             identity: self.mis_identity(phase),
-            polarity: gain_path,
+            // The gain path measures the inverted polarity, the phase path
+            // the normal one (`phy_txiq_get_mis_pwr`'s first argument).
+            polarity: if gain_path {
+                TxIqMismatchPolarity::Inverted
+            } else {
+                TxIqMismatchPolarity::Normal
+            },
             attenuation: if gain_path {
                 self.request.attenuation.saturating_sub(12)
             } else {
@@ -1663,7 +1670,7 @@ enum PhyTxIqMisPowerMmioAction {
     Configure {
         identity: u8,
         first: bool,
-        polarity: bool,
+        polarity: TxIqMismatchPolarity,
         attenuation: u8,
         selector: u16,
     },

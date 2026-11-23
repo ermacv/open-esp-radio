@@ -18,9 +18,11 @@ use crate::analog::i2c::{
     PhyRfInitParameterSnapshot, PhyRfInitPrefixAction, PhyRfInitPrefixCompletion,
     RcCalibrationAction, RcCalibrationCompletion, analog_i2c,
 };
+use crate::calibration::estimator::PhyDcIqEnable;
 use crate::serial::PhyI2cError;
 use oer_chips_esp32s31_hal::types::FrequencyRegisterMode;
 use oer_chips_esp32s31_hal::types::PhyClockPair;
+use oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement;
 
 #[test]
 fn an_unrouted_address_is_reported_without_turning_into_a_pending_edge() {
@@ -42,7 +44,7 @@ use crate::analog::pbus::{PhyPbusClearAction, PhyPbusClearCompletion, PhyPbusFor
 use crate::analog::rfpll::{RfpllFrequencyAction, RfpllFrequencyCompletion};
 use crate::calibration::estimator::{
     PhyDcIqAccumulatorSnapshot, PhyDcIqAction, PhyDcIqCompletion, PhyDcIqDelayPhase,
-    PhyDcIqEnablePhase, PhyDcIqEstimateRequest, PhyDcIqReadinessSnapshot,
+    PhyDcIqEstimateRequest, PhyDcIqReadinessSnapshot,
 };
 use crate::rx::dc_offset::{PhyRxDcoAction, PhyRxDcoCompletion};
 use crate::rx::signal_power::{
@@ -215,8 +217,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
         XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(PhyRxDcoAction::DcIq(
             PhyDcIqAction::SetEnable {
                 request: dc_iq_request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: true,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
             },
         ))),
     ));
@@ -229,8 +230,7 @@ fn nested_calibration_mmio_keeps_every_parent_identity_field() {
                 XtalDutyPrepareCompletion::RxDco(PhyRxDcoCompletion::DcIq(
                     PhyDcIqCompletion::EnableSet {
                         request: dc_iq_request,
-                        phase: PhyDcIqEnablePhase::Measurement,
-                        enabled: true,
+                        enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
                     }
                 ))
             ))

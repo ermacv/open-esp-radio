@@ -81,7 +81,7 @@ impl Io {
         binding: crate::calibration::estimator::PhyDcIqReadinessBinding,
     ) -> Result<crate::calibration::estimator::PhyDcIqCompletion, Failure> {
         use crate::calibration::estimator::{
-            PhyDcIqAccumulatorSnapshot, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot,
+            PhyDcIqAccumulatorSnapshot, PhyDcIqEnable, PhyDcIqReadinessSnapshot,
         };
         self.atom();
         binding.capture_with(
@@ -104,11 +104,15 @@ impl Io {
                     power: 1,
                 }
             },
-            |io, phase, enabled| {
-                assert!(!enabled);
-                io.dc_iq_events.push(match phase {
-                    PhyDcIqEnablePhase::Measurement => "measurement-off",
-                    PhyDcIqEnablePhase::Start => "start-off",
+            |io, enable| {
+                io.dc_iq_events.push(match enable {
+                    PhyDcIqEnable::Measurement(
+                        oer_chips_esp32s31_hal::types::PhyEstimatorMeasurement::Disabled,
+                    ) => "measurement-off",
+                    PhyDcIqEnable::Start(
+                        oer_chips_esp32s31_hal::types::PhyEstimatorStart::Disabled,
+                    ) => "start-off",
+                    other => panic!("an enable in a disabling path: {other:?}"),
                 });
             },
             |io, micros| {

@@ -1,12 +1,14 @@
 use super::*;
+use crate::calibration::estimator::PhyDcIqEnable;
 use crate::executor::test_clock::VirtualClock;
 use crate::{
     calibration::estimator::{
-        PhyDcIqAccumulatorSnapshot, PhyDcIqEnablePhase, PhyDcIqMmioBinding,
-        PhyDcIqReadinessBinding, PhyDcIqReadinessSnapshot,
+        PhyDcIqAccumulatorSnapshot, PhyDcIqMmioBinding, PhyDcIqReadinessBinding,
+        PhyDcIqReadinessSnapshot,
     },
     rx::program::tests::{Oracle, at_estimator, at_field, parameters},
 };
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
 use oer_portable_time::Timer;
 use std::{cell::Cell, rc::Rc, vec::Vec};
 
@@ -65,12 +67,12 @@ impl<'a> Fake<'a> {
             power: 256,
         }
     }
-    fn enable(&mut self, phase: PhyDcIqEnablePhase, enabled: bool) {
-        self.events.push(match (phase, enabled) {
-            (PhyDcIqEnablePhase::Start, true) => "start-on",
-            (PhyDcIqEnablePhase::Measurement, true) => "measurement-on",
-            (PhyDcIqEnablePhase::Measurement, false) => "measurement-off",
-            (PhyDcIqEnablePhase::Start, false) => "start-off",
+    fn enable(&mut self, enable: PhyDcIqEnable) {
+        self.events.push(match enable {
+            PhyDcIqEnable::Start(PhyEstimatorStart::Enabled) => "start-on",
+            PhyDcIqEnable::Start(PhyEstimatorStart::Disabled) => "start-off",
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled) => "measurement-on",
+            PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled) => "measurement-off",
         });
     }
     fn settle(&mut self, micros: u32) -> Result<(), RxError> {

@@ -44,15 +44,9 @@ fn complete_signal_power_action(
             clock,
             state,
         },
-        PhySignalPowerAction::SetEstimatorEnable {
-            request,
-            phase,
-            enabled,
-        } => PhySignalPowerCompletion::EstimatorEnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhySignalPowerAction::SetEstimatorEnable { request, enable } => {
+            PhySignalPowerCompletion::EstimatorEnableSet { request, enable }
+        }
         PhySignalPowerAction::DelayMicros {
             request,
             phase,
@@ -128,15 +122,9 @@ fn complete_search_measurement(transition: &mut XtalDutySearchTransition, value:
 fn complete_dc_iq_action(action: PhyDcIqAction) -> PhyDcIqCompletion {
     match action {
         PhyDcIqAction::Configure(request) => PhyDcIqCompletion::Configured(request),
-        PhyDcIqAction::SetEnable {
-            request,
-            phase,
-            enabled,
-        } => PhyDcIqCompletion::EnableSet {
-            request,
-            phase,
-            enabled,
-        },
+        PhyDcIqAction::SetEnable { request, enable } => {
+            PhyDcIqCompletion::EnableSet { request, enable }
+        }
         PhyDcIqAction::DelayMicros {
             request,
             phase,

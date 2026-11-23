@@ -11,6 +11,9 @@
 //! Each observation is an identity-bound external edge, and an owner-supplied
 //! deadline can enter the complete estimator cleanup path.
 
+use crate::calibration::estimator::PhyDcIqEnable;
+use oer_chips_esp32s31_hal::types::{PhyEstimatorMeasurement, PhyEstimatorStart};
+
 use crate::{
     analog::{
         i2c::{Address, Field, analog_i2c},
@@ -20,7 +23,7 @@ use crate::{
             RfpllFrequencyRequest, RfpllFrequencyTransition,
         },
     },
-    calibration::estimator::{PhyDcIqDelayPhase, PhyDcIqEnablePhase, PhyDcIqReadinessSnapshot},
+    calibration::estimator::{PhyDcIqDelayPhase, PhyDcIqReadinessSnapshot},
     rx::dc_offset::{
         PhyRxDcoAction, PhyRxDcoCompletion, PhyRxDcoFailure, PhyRxDcoRequest, PhyRxDcoTransition,
     },
@@ -90,8 +93,7 @@ pub enum PhyRxIqEstimatorAction {
     Configure(PhyRxIqEstimatorRequest),
     SetEnable {
         request: PhyRxIqEstimatorRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayMicros {
         request: PhyRxIqEstimatorRequest,
@@ -114,8 +116,7 @@ pub enum PhyRxIqEstimatorCompletion {
     Configured(PhyRxIqEstimatorRequest),
     EnableSet {
         request: PhyRxIqEstimatorRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     DelayElapsed {
         request: PhyRxIqEstimatorRequest,
@@ -225,8 +226,7 @@ impl PhyRxIqEstimatorTransition {
             EstimatorStep::Configure => PhyRxIqEstimatorAction::Configure(self.request),
             EstimatorStep::EnableStart => PhyRxIqEstimatorAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Start,
-                enabled: true,
+                enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
             },
             EstimatorStep::StartDelay => PhyRxIqEstimatorAction::DelayMicros {
                 request: self.request,
@@ -235,8 +235,7 @@ impl PhyRxIqEstimatorTransition {
             },
             EstimatorStep::EnableMeasurement => PhyRxIqEstimatorAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: true,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
             },
             EstimatorStep::AwaitReadiness => PhyRxIqEstimatorAction::AwaitReadinessEdge {
                 request: self.request,
@@ -253,8 +252,7 @@ impl PhyRxIqEstimatorTransition {
             },
             EstimatorStep::DisableMeasurement(_) => PhyRxIqEstimatorAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Measurement,
-                enabled: false,
+                enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
             },
             EstimatorStep::StopDelay(_) => PhyRxIqEstimatorAction::DelayMicros {
                 request: self.request,
@@ -263,8 +261,7 @@ impl PhyRxIqEstimatorTransition {
             },
             EstimatorStep::DisableStart(_) => PhyRxIqEstimatorAction::SetEnable {
                 request: self.request,
-                phase: PhyDcIqEnablePhase::Start,
-                enabled: false,
+                enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
             },
             EstimatorStep::Complete(measurement) => {
                 PhyRxIqEstimatorAction::Complete(PhyRxIqEstimatorOutcome {
@@ -294,8 +291,7 @@ impl PhyRxIqEstimatorTransition {
                 EstimatorStep::EnableStart,
                 PhyRxIqEstimatorCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Enabled),
                 },
             ) if request == self.request => EstimatorStep::StartDelay,
             (
@@ -310,8 +306,7 @@ impl PhyRxIqEstimatorTransition {
                 EstimatorStep::EnableMeasurement,
                 PhyRxIqEstimatorCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: true,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Enabled),
                 },
             ) if request == self.request => EstimatorStep::AwaitReadiness,
             (
@@ -374,8 +369,7 @@ impl PhyRxIqEstimatorTransition {
                 EstimatorStep::DisableMeasurement(terminal),
                 PhyRxIqEstimatorCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Measurement,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Measurement(PhyEstimatorMeasurement::Disabled),
                 },
             ) if request == self.request => EstimatorStep::StopDelay(terminal),
             (
@@ -390,8 +384,7 @@ impl PhyRxIqEstimatorTransition {
                 EstimatorStep::DisableStart(terminal),
                 PhyRxIqEstimatorCompletion::EnableSet {
                     request,
-                    phase: PhyDcIqEnablePhase::Start,
-                    enabled: false,
+                    enable: PhyDcIqEnable::Start(PhyEstimatorStart::Disabled),
                 },
             ) if request == self.request => match terminal {
                 EstimatorTerminal::Complete(measurement) => EstimatorStep::Complete(measurement),
@@ -2117,8 +2110,7 @@ enum PhyRxIqEstimatorMmioAction {
     Configure(PhyRxIqEstimatorRequest),
     SetEnable {
         request: PhyRxIqEstimatorRequest,
-        phase: PhyDcIqEnablePhase,
-        enabled: bool,
+        enable: PhyDcIqEnable,
     },
     ReadTotalPower(PhyRxIqEstimatorRequest),
     ReadMismatch(PhyRxIqEstimatorRequest),
@@ -2134,15 +2126,9 @@ impl PhyRxIqEstimatorMmioBinding {
     pub fn new(action: PhyRxIqEstimatorAction) -> Result<Self, PhyRxIqEstimatorBindingError> {
         let action = match action {
             PhyRxIqEstimatorAction::Configure(v0) => PhyRxIqEstimatorMmioAction::Configure(v0),
-            PhyRxIqEstimatorAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => PhyRxIqEstimatorMmioAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            },
+            PhyRxIqEstimatorAction::SetEnable { request, enable } => {
+                PhyRxIqEstimatorMmioAction::SetEnable { request, enable }
+            }
             PhyRxIqEstimatorAction::ReadTotalPower(v0) => {
                 PhyRxIqEstimatorMmioAction::ReadTotalPower(v0)
             }
@@ -2164,17 +2150,9 @@ impl PhyRxIqEstimatorMmioBinding {
                 crate::calibration::estimator::configure_target(registers, request.control);
                 PhyRxIqEstimatorCompletion::Configured(request)
             }
-            PhyRxIqEstimatorMmioAction::SetEnable {
-                request,
-                phase,
-                enabled,
-            } => {
-                crate::calibration::estimator::set_enable_target(registers, phase, enabled);
-                PhyRxIqEstimatorCompletion::EnableSet {
-                    request,
-                    phase,
-                    enabled,
-                }
+            PhyRxIqEstimatorMmioAction::SetEnable { request, enable } => {
+                crate::calibration::estimator::set_enable_target(registers, enable);
+                PhyRxIqEstimatorCompletion::EnableSet { request, enable }
             }
             PhyRxIqEstimatorMmioAction::ReadTotalPower(request) => {
                 PhyRxIqEstimatorCompletion::TotalPowerRead {

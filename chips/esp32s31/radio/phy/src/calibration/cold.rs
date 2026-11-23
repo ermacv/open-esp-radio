@@ -1017,14 +1017,14 @@ impl PhyColdMmioBinding {
             )) => crate::calibration::estimator::configure_target(registers, request.control),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(PhyRxDcoAction::DcIq(
-                    PhyDcIqAction::SetEnable { phase, enabled, .. },
+                    PhyDcIqAction::SetEnable { enable, .. },
                 ))),
             ))
             | PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Search(XtalDutySearchAction::SignalPower(
-                    PhySignalPowerAction::SetEstimatorEnable { phase, enabled, .. },
+                    PhySignalPowerAction::SetEstimatorEnable { enable, .. },
                 )),
-            )) => crate::calibration::estimator::set_enable_target(registers, phase, enabled),
+            )) => crate::calibration::estimator::set_enable_target(registers, enable),
             PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
                 XtalDutyPassAction::Search(XtalDutySearchAction::SignalPower(
                     PhySignalPowerAction::ConfigureClock { clock, state, .. },
@@ -1241,20 +1241,12 @@ fn lower_prefix_mmio_completion(
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
             XtalDutyPassAction::Prepare(XtalDutyPrepareAction::RxDco(PhyRxDcoAction::DcIq(
-                PhyDcIqAction::SetEnable {
-                    request,
-                    phase,
-                    enabled,
-                },
+                PhyDcIqAction::SetEnable { request, enable },
             ))),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Prepare(
                 XtalDutyPrepareCompletion::RxDco(PhyRxDcoCompletion::DcIq(
-                    PhyDcIqCompletion::EnableSet {
-                        request,
-                        phase,
-                        enabled,
-                    },
+                    PhyDcIqCompletion::EnableSet { request, enable },
                 )),
             )),
         )),
@@ -1277,20 +1269,12 @@ fn lower_prefix_mmio_completion(
         )),
         PhyRfInitPrefixAction::XtalDuty(XtalDutyCalibrationAction::Pass(
             XtalDutyPassAction::Search(XtalDutySearchAction::SignalPower(
-                PhySignalPowerAction::SetEstimatorEnable {
-                    request,
-                    phase,
-                    enabled,
-                },
+                PhySignalPowerAction::SetEstimatorEnable { request, enable },
             )),
         )) => Some(PhyRfInitPrefixCompletion::XtalDuty(
             XtalDutyCalibrationCompletion::Pass(XtalDutyPassCompletion::Search(
                 XtalDutySearchCompletion::SignalPower(
-                    PhySignalPowerCompletion::EstimatorEnableSet {
-                        request,
-                        phase,
-                        enabled,
-                    },
+                    PhySignalPowerCompletion::EstimatorEnableSet { request, enable },
                 ),
             )),
         )),

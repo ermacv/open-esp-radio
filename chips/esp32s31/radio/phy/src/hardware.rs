@@ -295,15 +295,10 @@ pub(crate) fn restore_phy_txiq_tone_control(
 pub(crate) fn configure_phy_txiq_mis_power(
     registers: &mut impl SharedPhyAccess,
     first: bool,
-    polarity: bool,
+    polarity: oer_chips_esp32s31_hal::types::TxIqMismatchPolarity,
     attenuation: u8,
     selector: u16,
 ) {
-    let polarity = if polarity {
-        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Inverted
-    } else {
-        oer_chips_esp32s31_hal::types::TxIqMismatchPolarity::Normal
-    };
     if first {
         registers.configure_txiq_mismatch_power_first(polarity, attenuation, selector);
     } else {
