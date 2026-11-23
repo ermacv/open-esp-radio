@@ -7,8 +7,8 @@ schema = 1
 name = "RESET"
 description = "A block's reset bit: the block's reset is released or held asserted."
 width = 1
-values = [{ name = "RELEASED", value = 0x0, description = "The block's reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }, { name = "ASSERTED", value = 0x1, description = "The block's reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"] }]
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H"]
+values = [{ name = "RELEASED", value = 0x0, description = "The block's reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"] }, { name = "ASSERTED", value = 0x1, description = "The block's reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"] }]
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"]
 
 [[flags]]
 name = "ICG_STATE_MAP"

@@ -1298,7 +1298,7 @@ pub mod instances {
 pub mod dictionaries {
     /// A block's reset bit: the block's reset is released or held asserted.
     ///
-    /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD, ESP_IDF_4D59230D_SOC_ESP32S31_REGISTER_SOC_LP_PERI_CLKRST_REG_H.
+    /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD, IDF_S31_TSENS_POWER_LIFECYCLE.
     /// The declared values of the `RESET` dictionary.
     #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     #[allow(
