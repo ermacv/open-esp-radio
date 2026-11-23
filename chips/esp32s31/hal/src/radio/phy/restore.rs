@@ -9,11 +9,11 @@
 //! slot is occupied.
 
 use super::registration::{PhyRegistration, PhyRegistrationEpoch};
+use crate::radio::phy::i2c::Placed;
 use crate::radio::phy::{
     baseband::{TxDcPwdetFields, TxIqToneControlFields},
     rx_dco::RxDcoControlField,
 };
-use oer_chips_family_registers_analog_i2c::FieldValue;
 
 /// Preparing TX-DC PWDET was rejected before any register access.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -101,7 +101,7 @@ pub(super) enum Restore {
     RxDcoControlTwo(RxDcoControlField, RxDcoControlField),
     BluetoothTxPowerControl {
         low: u8,
-        high: FieldValue,
+        high: Placed,
     },
 }
 
@@ -314,7 +314,7 @@ impl PhyRouteState {
 
     pub(crate) fn capture_bluetooth_tx_power_control_high(
         &mut self,
-        value: FieldValue,
+        value: Placed,
     ) -> Result<(), BluetoothTxPowerControlRestoreError> {
         let Restore::BluetoothTxPowerControl { high, .. } = &mut self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
@@ -325,7 +325,7 @@ impl PhyRouteState {
 
     pub(crate) fn bluetooth_tx_power_control_values(
         &self,
-    ) -> Result<(u8, FieldValue), BluetoothTxPowerControlRestoreError> {
+    ) -> Result<(u8, Placed), BluetoothTxPowerControlRestoreError> {
         let Restore::BluetoothTxPowerControl { low, high } = self.restore else {
             return Err(BluetoothTxPowerControlRestoreError::RestoreNotPending);
         };

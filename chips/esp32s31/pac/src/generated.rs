@@ -71894,6 +71894,46 @@ pub mod fe {
                 self
             }
 
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordCapAndSdm` word, which the model proves fits it.
+            #[inline]
+            pub fn set_data_cap_and_sdm(
+                &mut self,
+                value: super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self
+            }
+
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordSdmHigh` word, which the model proves fits it.
+            #[inline]
+            pub fn set_data_sdm_high(
+                &mut self,
+                value: super::super::layouts::PhyFrequencyMemoryRecordSdmHigh,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self
+            }
+
+            /// Set `DATA` to a `PhyFrequencyMemoryRecordXtalDuty` word, which the model proves fits it.
+            #[inline]
+            pub fn set_data_xtal_duty(
+                &mut self,
+                value: super::super::layouts::PhyFrequencyMemoryRecordXtalDuty,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self
+            }
+
+            /// Set `DATA` to a `PhyFrequencyI2cCommandCommand` word, which the model proves fits it.
+            #[inline]
+            pub fn set_data_command(
+                &mut self,
+                value: super::super::layouts::PhyFrequencyI2cCommandCommand,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff000000) | u32::from(value.bits());
+                self
+            }
+
             /// Set `MODE`.
             #[inline]
             pub fn set_mode(&mut self, value: u8) -> &mut Self {
@@ -72171,6 +72211,16 @@ pub mod fe {
             #[inline]
             pub const fn value(self) -> u32 {
                 self.0
+            }
+
+            /// `VALUE` read as a `PhyFrequencyMemoryRecordCapAndSdm` word.
+            #[inline]
+            pub const fn value_cap_and_sdm(
+                self,
+            ) -> super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm {
+                super::super::layouts::PhyFrequencyMemoryRecordCapAndSdm::from_bits(
+                    (self.0 & 0xffffffff) as _,
+                )
             }
         }
     }
@@ -317552,6 +317602,8 @@ pub mod analog_i2c {
     };
     /// One field of an analog-I2C byte.
     pub type Field = oer_chips_family_registers_analog_i2c::AnalogField<Address>;
+    /// A value placed in one field of an analog-I2C byte.
+    pub type Placed = oer_chips_family_registers_analog_i2c::FieldValue<Address>;
 
     /// The block codes.
     pub mod blocks {
@@ -321053,6 +321105,9 @@ pub mod layouts {
     pub struct WifiRxRateControlFlagsFlags(u8);
 
     impl WifiRxRateControlFlagsFlags {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -321153,6 +321208,9 @@ pub mod layouts {
     pub struct WifiTxDescriptorPrefixFlags(u32);
 
     impl WifiTxDescriptorPrefixFlags {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321235,6 +321293,9 @@ pub mod layouts {
     pub struct WifiTxDescriptorPrefixPriority(u8);
 
     impl WifiTxDescriptorPrefixPriority {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -321320,6 +321381,9 @@ pub mod layouts {
     pub struct WifiTxDescriptorPrefixSecurity(u32);
 
     impl WifiTxDescriptorPrefixSecurity {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321486,6 +321550,9 @@ pub mod layouts {
     pub struct PhyFrequencyMemoryWordWord(u32);
 
     impl PhyFrequencyMemoryWordWord {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321623,6 +321690,9 @@ pub mod layouts {
     pub struct PhyFrequencyI2cCommandCommand(u32);
 
     impl PhyFrequencyI2cCommandCommand {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321781,6 +321851,9 @@ pub mod layouts {
     pub struct PhyFrequencyMemoryRecordCapAndSdm(u32);
 
     impl PhyFrequencyMemoryRecordCapAndSdm {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321851,6 +321924,9 @@ pub mod layouts {
     pub struct PhyFrequencyMemoryRecordSdmHigh(u32);
 
     impl PhyFrequencyMemoryRecordSdmHigh {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -321921,6 +321997,9 @@ pub mod layouts {
     pub struct PhyFrequencyMemoryRecordXtalDuty(u32);
 
     impl PhyFrequencyMemoryRecordXtalDuty {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -322010,120 +322089,6 @@ pub mod layouts {
         }
     }
 
-    /// Nine-bit RFPLL capacitor code split between its low byte and the high analog-register bit.
-    ///
-    /// A decoder over the 2 bytes the hardware wrote, read only after the
-    /// handover that gives them to the CPU.
-    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    pub struct PhyRfpllCapacitorCode<'a> {
-        bytes: &'a [u8; 2],
-    }
-
-    impl<'a> PhyRfpllCapacitorCode<'a> {
-        /// The structure's size in bytes.
-        pub const SIZE: usize = 2;
-
-        /// Decode the structure from its bytes.
-        pub const fn new(bytes: &'a [u8; 2]) -> Self {
-            Self { bytes }
-        }
-
-        /// The bytes this decoder reads.
-        pub const fn bytes(self) -> &'a [u8; 2] {
-            self.bytes
-        }
-
-        /// The `CODE` range: bytes 0x0..0x2, little-endian.
-        pub const fn code(self) -> PhyRfpllCapacitorCodeCode {
-            PhyRfpllCapacitorCodeCode(u16::from_le_bytes([self.bytes[0], self.bytes[1]]))
-        }
-    }
-
-    /// Project-assigned name.
-    ///
-    /// The `PHY_RFPLL_CAPACITOR_CODE.CODE` range.
-    /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
-    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-    pub struct PhyRfpllCapacitorCodeCode(u16);
-
-    impl PhyRfpllCapacitorCodeCode {
-        /// The range's little-endian value.
-        pub const fn bits(self) -> u16 {
-            self.0
-        }
-
-        /// The value of a range image; every bit pattern is one.
-        pub const fn from_bits(bits: u16) -> Self {
-            Self(bits)
-        }
-
-        /// Width of `LOW` in bits.
-        pub const LOW_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `LOW`.
-        pub const LOW_MAX: u32 = 0xff;
-        /// Project-assigned name. Low capacitor byte.
-        ///
-        /// `LOW`, bits 7:0; written by the CPU.
-        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
-        pub const fn low(self) -> u8 {
-            (self.0 & 0xff) as u8
-        }
-
-        /// This value with `LOW` set to `value`.
-        pub const fn with_low(self, value: u8) -> Self {
-            Self((self.0 & 0xff00) | value as u16)
-        }
-
-        /// Width of `HIGH` in bits.
-        pub const HIGH_WIDTH: u32 = 8;
-        /// Greatest unsigned image of `HIGH`.
-        pub const HIGH_MAX: u32 = 0xff;
-        /// Project-assigned name. Unmasked high byte of the ROM code carrier; admitted nine-bit codes use only its low bit.
-        ///
-        /// `HIGH`, bits 15:8; written by the CPU.
-        /// SOURCE: ROM_REV0_PHY_RFPLL_VALUE_PACKING.
-        pub const fn high(self) -> u8 {
-            (self.0 >> 8) as u8
-        }
-
-        /// This value with `HIGH` set to `value`.
-        pub const fn with_high(self, value: u8) -> Self {
-            Self((self.0 & 0xff) | (value as u16) << 8)
-        }
-    }
-
-    /// A writer over the 2 bytes the CPU fills in: typed ranges, no raw
-    /// byte access outside this generated code.
-    #[derive(Debug, Eq, PartialEq)]
-    pub struct PhyRfpllCapacitorCodeMut<'a> {
-        bytes: &'a mut [u8; 2],
-    }
-
-    impl<'a> PhyRfpllCapacitorCodeMut<'a> {
-        /// Write through the structure's bytes.
-        pub const fn new(bytes: &'a mut [u8; 2]) -> Self {
-            Self { bytes }
-        }
-
-        /// A read-only decoder over the bytes written so far.
-        pub const fn view(&self) -> PhyRfpllCapacitorCode<'_> {
-            PhyRfpllCapacitorCode::new(self.bytes)
-        }
-
-        /// Store the `CODE` range, little-endian.
-        pub fn set_code(&mut self, value: PhyRfpllCapacitorCodeCode) {
-            let bytes = value.bits().to_le_bytes();
-            self.bytes[0] = bytes[0];
-            self.bytes[1] = bytes[1];
-        }
-
-        /// The `CODE` range as last stored.
-        pub const fn code(&self) -> PhyRfpllCapacitorCodeCode {
-            self.view().code()
-        }
-    }
-
     /// The encoded RFPLL sigma-delta value split into the four analog-register payloads by phy_rfpll_set_freq / phy_write_rfpll_sdm.
     ///
     /// A decoder over the 4 bytes the hardware wrote, read only after the
@@ -322167,6 +322132,9 @@ pub mod layouts {
     pub struct PhyRfpllSdmCodeEncoded(u32);
 
     impl PhyRfpllSdmCodeEncoded {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324083,6 +324051,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixRssi(u8);
 
     impl WifiRxControlPrefixRssi {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324109,6 +324080,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixRate(u8);
 
     impl WifiRxControlPrefixRate {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324150,6 +324124,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeSiga1(u32);
 
     impl WifiRxControlPrefixHeSiga1 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324176,6 +324153,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixRxendState(u8);
 
     impl WifiRxControlPrefixRxendState {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324202,6 +324182,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeSiga2(u16);
 
     impl WifiRxControlPrefixHeSiga2 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -324228,6 +324211,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixTimestamp(u32);
 
     impl WifiRxControlPrefixTimestamp {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324254,6 +324240,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeMuRuSize(u8);
 
     impl WifiRxControlPrefixHeMuRuSize {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324280,6 +324269,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeMuRuPosition(u8);
 
     impl WifiRxControlPrefixHeMuRuPosition {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324306,6 +324298,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixSingleMpdu(u8);
 
     impl WifiRxControlPrefixSingleMpdu {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324332,6 +324327,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixBbFormat(u8);
 
     impl WifiRxControlPrefixBbFormat {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324358,6 +324356,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixChannelEstimate(u16);
 
     impl WifiRxControlPrefixChannelEstimate {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -324396,6 +324397,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeSigB(u32);
 
     impl WifiRxControlPrefixHeSigB {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324458,6 +324462,9 @@ pub mod layouts {
     pub struct WifiRxControlPrefixHeMuCommon(u32);
 
     impl WifiRxControlPrefixHeMuCommon {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324531,6 +324538,9 @@ pub mod layouts {
     pub struct WifiRxControlTailSignalLength(u16);
 
     impl WifiRxControlTailSignalLength {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -324557,6 +324567,9 @@ pub mod layouts {
     pub struct WifiRxControlTailDumpLength(u16);
 
     impl WifiRxControlTailDumpLength {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -324583,6 +324596,9 @@ pub mod layouts {
     pub struct WifiRxControlTailRxState(u8);
 
     impl WifiRxControlTailRxState {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324609,6 +324625,9 @@ pub mod layouts {
     pub struct WifiRxControlTailByte0005Opaque(u8);
 
     impl WifiRxControlTailByte0005Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -324685,6 +324704,9 @@ pub mod layouts {
     pub struct WifiTxMetadataEntryControl(u32);
 
     impl WifiTxMetadataEntryControl {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -324841,6 +324863,9 @@ pub mod layouts {
     pub struct WifiTxMetadataEntryDelimiters(u32);
 
     impl WifiTxMetadataEntryDelimiters {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -325710,6 +325735,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixByte0000Opaque(u32);
 
     impl BleRxPacketPrefixByte0000Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -325724,6 +325752,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixByte0004Opaque(u32);
 
     impl BleRxPacketPrefixByte0004Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -325785,6 +325816,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixByte0008Opaque(u32);
 
     impl BleRxPacketPrefixByte0008Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -325799,6 +325833,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixResult(u32);
 
     impl BleRxPacketPrefixResult {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326048,6 +326085,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixByte0010Opaque(u32);
 
     impl BleRxPacketPrefixByte0010Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326074,6 +326114,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixByte0014Opaque(u32);
 
     impl BleRxPacketPrefixByte0014Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326088,6 +326131,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixAuxiliary(u32);
 
     impl BleRxPacketPrefixAuxiliary {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326124,6 +326170,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixPduHeader(u8);
 
     impl BleRxPacketPrefixPduHeader {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -326150,6 +326199,9 @@ pub mod layouts {
     pub struct BleRxPacketPrefixPayloadLength(u8);
 
     impl BleRxPacketPrefixPayloadLength {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -326312,6 +326364,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixByte0000Opaque(u32);
 
     impl BleTxPacketPrefixByte0000Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326326,6 +326381,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixAllocation(u32);
 
     impl BleTxPacketPrefixAllocation {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326385,6 +326443,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixByte0008Opaque(u32);
 
     impl BleTxPacketPrefixByte0008Opaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326399,6 +326460,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixByte000cOpaque(u32);
 
     impl BleTxPacketPrefixByte000cOpaque {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u32 {
             self.0
@@ -326413,6 +326477,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixPduHeader(u8);
 
     impl BleTxPacketPrefixPduHeader {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -326449,6 +326516,9 @@ pub mod layouts {
     pub struct BleTxPacketPrefixPayloadLength(u8);
 
     impl BleTxPacketPrefixPayloadLength {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -335118,6 +335188,9 @@ pub mod layouts {
     pub struct BlePhyChannelFrequencyOffsetValue(u8);
 
     impl BlePhyChannelFrequencyOffsetValue {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -335279,6 +335352,9 @@ pub mod layouts {
     pub struct BlePhyPacketStartOffsetsLeCodedS2(u16);
 
     impl BlePhyPacketStartOffsetsLeCodedS2 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -335315,6 +335391,9 @@ pub mod layouts {
     pub struct BlePhyPacketStartOffsetsLe1m(u16);
 
     impl BlePhyPacketStartOffsetsLe1m {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -335351,6 +335430,9 @@ pub mod layouts {
     pub struct BlePhyPacketStartOffsetsLe2m(u16);
 
     impl BlePhyPacketStartOffsetsLe2m {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -335387,6 +335469,9 @@ pub mod layouts {
     pub struct BlePhyPacketStartOffsetsLeCodedS8(u16);
 
     impl BlePhyPacketStartOffsetsLeCodedS8 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u16 {
             self.0
@@ -335535,6 +335620,9 @@ pub mod layouts {
     pub struct BlePhyRxAddressDelaysLeCodedS2(u8);
 
     impl BlePhyRxAddressDelaysLeCodedS2 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -335571,6 +335659,9 @@ pub mod layouts {
     pub struct BlePhyRxAddressDelaysLe1m(u8);
 
     impl BlePhyRxAddressDelaysLe1m {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -335607,6 +335698,9 @@ pub mod layouts {
     pub struct BlePhyRxAddressDelaysLe2m(u8);
 
     impl BlePhyRxAddressDelaysLe2m {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0
@@ -335643,6 +335737,9 @@ pub mod layouts {
     pub struct BlePhyRxAddressDelaysLeCodedS8(u8);
 
     impl BlePhyRxAddressDelaysLeCodedS8 {
+        /// The all-zero value, the word a range is built from.
+        pub const ZERO: Self = Self(0);
+
         /// The range's little-endian value.
         pub const fn bits(self) -> u8 {
             self.0

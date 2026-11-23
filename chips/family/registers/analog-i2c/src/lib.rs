@@ -79,22 +79,20 @@ impl<Address: Copy> AnalogField<Address> {
     /// The vendor leaf (`phy_i2c_writeReg_Mask`) ORs `value << lsb` in
     /// unmasked, so a wider value would also set bits above the field; such
     /// values are refused here.
-    pub const fn place(self, value: u8) -> Option<FieldValue> {
+    pub const fn place(self, value: u8) -> Option<FieldValue<Address>> {
         if value & !(self.mask >> self.lsb) != 0 {
             return None;
         }
         Some(FieldValue {
-            mask: self.mask,
-            lsb: self.lsb,
+            field: self,
             bits: value << self.lsb,
         })
     }
 
     /// The field's value as `byte` holds it: it fits by construction.
-    pub const fn value_in(self, byte: u8) -> FieldValue {
+    pub const fn value_in(self, byte: u8) -> FieldValue<Address> {
         FieldValue {
-            mask: self.mask,
-            lsb: self.lsb,
+            field: self,
             bits: byte & self.mask,
         }
     }
@@ -107,26 +105,36 @@ impl<Address: Copy> AnalogField<Address> {
     }
 }
 
-/// A field's value in its place: the bits it holds in the field's lanes of
-/// a byte. Only a field makes one ([`AnalogField::place`],
-/// [`AnalogField::value_in`]), so it always fits its lanes.
+/// A field's value in its place: the field it was placed for (its byte
+/// register's address and its lanes) and the bits it holds there. Only a
+/// field makes one ([`AnalogField::place`], [`AnalogField::value_in`]), so
+/// it always fits its lanes and names the register it is written to.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FieldValue {
-    mask: u8,
-    lsb: u8,
+pub struct FieldValue<Address> {
+    field: AnalogField<Address>,
     bits: u8,
 }
 
-impl FieldValue {
+impl<Address: Copy> FieldValue<Address> {
+    /// The field the value was placed for.
+    pub const fn field(self) -> AnalogField<Address> {
+        self.field
+    }
+
+    /// The byte register the value is written to: its field's.
+    pub const fn address(self) -> Address {
+        self.field.address
+    }
+
     /// `byte` with the field's lanes replaced by this value and every other
     /// lane kept, as `phy_i2c_writeReg_Mask` composes it.
     pub const fn apply(self, byte: u8) -> u8 {
-        (byte & !self.mask) | self.bits
+        (byte & !self.field.mask) | self.bits
     }
 
     /// The value, unshifted.
     pub const fn value(self) -> u8 {
-        self.bits >> self.lsb
+        self.bits >> self.field.lsb
     }
 }
 

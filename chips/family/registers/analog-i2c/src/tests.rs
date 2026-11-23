@@ -38,7 +38,7 @@ fn a_value_read_from_its_field_applies_back_to_the_same_lanes() {
 }
 
 /// A constant is placed in a const item.
-const PLACED: FieldValue = match AnalogField::new((), 3, 3) {
+const PLACED: FieldValue<()> = match AnalogField::new((), 3, 3) {
     Some(field) => match field.place(1) {
         Some(value) => value,
         None => panic!("one fits a bit"),
@@ -99,4 +99,18 @@ fn a_route_complements_its_read_selection_within_its_mask() {
     assert_eq!(route(32).complemented_read_select(), 0xffff_fefd);
     let address = route(24).address(7);
     assert_eq!((address.block(), address.index()), (0x66, 7));
+}
+
+#[test]
+fn a_placed_value_names_its_field_and_its_register() {
+    let field = AnalogField::new(0x2a_u8, 5, 2).expect("field");
+    let placed = field.place(0b1101).expect("fits");
+    assert_eq!(placed.field(), field);
+    assert_eq!(placed.address(), 0x2a);
+    let read = field.value_in(0b1111_0110);
+    assert_eq!(read.field(), field);
+    assert_eq!(read.address(), 0x2a);
+    // A field of the same lanes in another register is another field.
+    let twin = AnalogField::new(0x2b_u8, 5, 2).expect("field");
+    assert_ne!(twin.place(0b1101).expect("fits"), placed);
 }

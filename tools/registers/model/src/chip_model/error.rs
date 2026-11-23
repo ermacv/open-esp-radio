@@ -61,6 +61,8 @@ pub enum ErrorKind {
     Values(String),
     #[error("pointer: {0}")]
     Pointer(String),
+    #[error("carried layout: {0}")]
+    Carries(String),
     #[error("interrupt pair: {0}")]
     InterruptPair(String),
     #[error("dim: {0}")]

@@ -23,9 +23,65 @@ pub(super) fn check(
                 if field.pointer.is_some() {
                     check_pointer(context, block, key, field, layouts, regions, &mut prefixes)?;
                 }
+                if !field.carries.is_empty() {
+                    check_carries(context, block, key, field, layouts)?;
+                }
             }
         }
         check_pairs(context, block)?;
+    }
+    Ok(())
+}
+
+/// A field that carries layout ranges: a plain, write-only or read-only field, each
+/// range named once and existing, and each range's fields below the field's
+/// width.
+fn check_carries(
+    context: Context<'_>,
+    block: &BlockType,
+    key: &str,
+    field: &Field,
+    layouts: &[MemoryLayout],
+) -> Result<(), Error> {
+    let entity = format!("{}.{key}.{}", block.name(), field.name);
+    let fail = |reason: String| context.error(&entity, ErrorKind::Carries(reason));
+    if !matches!(
+        field.class,
+        FieldClass::Plain | FieldClass::WriteOnly | FieldClass::ReadOnly
+    ) || field.pointer.is_some()
+        || field.family.is_some()
+    {
+        return Err(fail(
+            "only a plain, write-only or read-only field, not a pointer or an indexed one, carries a layout"
+                .into(),
+        ));
+    }
+    let (_, width) = parse_bits(&field.bits).map_err(|reason| fail(reason.to_string()))?;
+    let mut seen = BTreeSet::new();
+    for carried in &field.carries {
+        if !seen.insert(carried.as_str()) {
+            return Err(fail(format!("{carried} is carried twice")));
+        }
+        let Some((layout_name, unit_name)) = carried.split_once('.') else {
+            return Err(fail(format!("{carried} is not LAYOUT.RANGE")));
+        };
+        let unit = layouts
+            .iter()
+            .find(|layout| layout.name == layout_name)
+            .and_then(|layout| layout.units.iter().find(|unit| unit.name == unit_name))
+            .ok_or_else(|| fail(format!("{carried} names no layout range")))?;
+        let reach = unit
+            .fields
+            .iter()
+            .map(|carried_field| carried_field.low.saturating_add(carried_field.width))
+            .max()
+            .unwrap_or(0);
+        if reach > width {
+            return Err(fail(format!(
+                "{carried} reaches bit {}, past the field's {width} bits",
+                reach.saturating_sub(1)
+            )));
+        }
     }
     Ok(())
 }

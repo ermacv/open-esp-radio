@@ -2399,3 +2399,82 @@ fn a_complete_dictionary_has_no_conversion_into_a_number() {
     assert!(rust.contains("pub enum Lane {"), "{rust}");
     assert!(!rust.contains("impl From<Lane> for"), "{rust}");
 }
+
+/// The model's load error of the fixture with `edits`.
+fn model_rejection(edits: &[(&str, &str, &str)]) -> String {
+    let directory = edited(edits);
+    let evidence = RegisterEvidenceSet::load_all(&[directory.path().join("evidence.toml")])
+        .expect("the fixture evidence loads");
+    match ChipModel::load(&directory.path().join("chip.toml"), &evidence) {
+        Ok(_) => panic!("the edited fixture loads"),
+        Err(error) => error.to_string(),
+    }
+}
+
+const LATCH_VALUE: &str = "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"";
+const COUNT_COUNT: &str = "name = \"COUNT\"\nbits = \"31:0\"\nclass = \"read-only\"";
+
+#[test]
+fn a_carried_layout_gets_a_typed_setter_and_getter_beside_the_field_s_own() {
+    let rendered = rendered_with(&[
+        (
+            "types/counter.toml",
+            LATCH_VALUE,
+            "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+        (
+            "types/counter.toml",
+            COUNT_COUNT,
+            "name = \"COUNT\"\nbits = \"31:0\"\nclass = \"read-only\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+        ),
+    ]);
+    assert!(rendered.contains(
+        "pub fn set_value_control(&mut self, value: super::super::layouts::RxDescriptorControl) -> &mut Self"
+    ));
+    assert!(rendered.contains(
+        "pub const fn value_control(self) -> super::super::layouts::RxDescriptorControl"
+    ));
+    // A read-only field reads as the layout and has no setter.
+    assert!(rendered.contains(
+        "pub const fn count_control(self) -> super::super::layouts::RxDescriptorControl"
+    ));
+    assert!(!rendered.contains("pub fn set_count_control("));
+    // The field's own accessors stay.
+    assert!(rendered.contains("pub fn set_value(&mut self, value: u32) -> &mut Self"));
+    // Layout ranges start from their generated zero.
+    assert!(rendered.contains("pub const ZERO: Self = Self(0);"));
+}
+
+#[test]
+fn a_carried_layout_wider_than_its_field_or_unknown_is_refused() {
+    let wide = model_rejection(&[(
+        "types/radio.toml",
+        "name = \"LOW\"\nbits = \"23:0\"\nclass = \"plain\"",
+        "name = \"LOW\"\nbits = \"23:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(
+        wide.contains("reaches bit 31, past the field's 24 bits"),
+        "{wide}"
+    );
+    let unknown = model_rejection(&[(
+        "types/counter.toml",
+        LATCH_VALUE,
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.STATUS\"]",
+    )]);
+    assert!(unknown.contains("names no layout range"), "{unknown}");
+    let twice = model_rejection(&[(
+        "types/counter.toml",
+        LATCH_VALUE,
+        "name = \"VALUE\"\nbits = \"31:0\"\nclass = \"plain\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\", \"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(twice.contains("carried twice"), "{twice}");
+    let trigger = model_rejection(&[(
+        "types/counter.toml",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"",
+        "name = \"UPDATE\"\nbits = \"0\"\nclass = \"write-trigger\"\ncarries = [\"RX_DESCRIPTOR.CONTROL\"]",
+    )]);
+    assert!(
+        trigger.contains("only a plain, write-only or read-only field"),
+        "{trigger}"
+    );
+}

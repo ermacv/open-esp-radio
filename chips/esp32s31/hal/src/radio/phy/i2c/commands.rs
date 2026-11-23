@@ -20,7 +20,7 @@ const TXRF_INITIAL_RATE_CLASS: u8 = match analog_i2c::txrf::byte_0a_opaque::PHY_
 };
 
 /// The Bluetooth TX-power high byte's bit 6 set, in place.
-const BIT_6_SET: oer_chips_family_registers_analog_i2c::FieldValue =
+const BIT_6_SET: crate::radio::phy::i2c::Placed =
     match analog_i2c::bbtop::bluetooth_tx_power_high_0::BIT_6_OPAQUE.place(1) {
         Some(value) => value,
         None => panic!("one fits a bit"),

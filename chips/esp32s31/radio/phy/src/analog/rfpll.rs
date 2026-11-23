@@ -14,7 +14,7 @@
 //! transaction and timer interval as an identity-bound external completion.
 //! A missed lock remains ordinary outcome data.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 /// Return the exact RF-calibration data version of the pinned archive's
 /// `phy_get_rf_cal_version`.
@@ -24,7 +24,7 @@ pub const fn phy_get_rf_cal_version() -> u32 {
 }
 
 use crate::analog::i2c::{Address, Field, analog_i2c};
-use oer_chips_esp32s31_hal::layouts::{PhyRfpllCapacitorCodeCode, PhyRfpllSdmCodeEncoded};
+use oer_chips_esp32s31_hal::layouts::PhyRfpllSdmCodeEncoded;
 
 const LOCK_ATTEMPTS: u8 = 100;
 /// Capacitor-status samples one search direction permits.
@@ -95,17 +95,17 @@ impl RfpllCapacitorCode {
 
     /// The low byte, for `RFPLL_CAPACITOR_LOW`.
     pub const fn low_byte(self) -> u8 {
-        PhyRfpllCapacitorCodeCode::from_bits(self.0).low()
+        self.0.to_le_bytes()[0]
     }
 
     /// Bit 8, for the one-bit `RFPLL_CAPACITOR_HIGH`.
     pub const fn high_bit(self) -> u8 {
-        PhyRfpllCapacitorCodeCode::from_bits(self.0).high()
+        self.0.to_le_bytes()[1]
     }
 
     /// Bit 8 in `RFPLL_CAPACITOR_HIGH`: one of the one-bit field's two
     /// values.
-    pub const fn high_field(self) -> oer_chips_family_registers_analog_i2c::FieldValue {
+    pub const fn high_field(self) -> oer_chips_esp32s31_hal::radio::phy::i2c::Placed {
         if self.high_bit() == 0 {
             placed!(analog_i2c::rfpll::capacitor_high::CAPACITOR_HIGH, 0)
         } else {
@@ -130,7 +130,7 @@ impl RfpllSdmImage {
     /// The low three SDM bits as `SDM.LOW` holds them: the layout's `LOW`
     /// is bits 2:0 of the code and the analog field bits 2:0 of its byte, so
     /// the byte is the field's value in place (checked below).
-    pub const fn low(self) -> oer_chips_family_registers_analog_i2c::FieldValue {
+    pub const fn low(self) -> oer_chips_esp32s31_hal::radio::phy::i2c::Placed {
         const {
             if analog_i2c::sdm::low::LOW.bit_range().1 != 0
                 || analog_i2c::sdm::low::LOW.bit_range().0 + 1
@@ -228,7 +228,7 @@ pub enum RfpllFrequencyAction {
     },
     WriteMasked {
         field: Field,
-        value: FieldValue,
+        value: Placed,
     },
     WriteByte {
         address: Address,

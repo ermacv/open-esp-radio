@@ -262,6 +262,11 @@ pub struct Field {
     pub value_range: Option<ValueRange>,
     #[serde(default)]
     pub pointer: Option<Pointer>,
+    /// Layout ranges (`LAYOUT.RANGE`) whose word the field's bits hold, least
+    /// significant bit at the field's bit 0: each gets a typed setter and
+    /// getter beside the field's own.
+    #[serde(default)]
+    pub carries: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

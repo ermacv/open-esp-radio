@@ -91,6 +91,9 @@ pub(super) struct FieldPlan<'m> {
     /// A write range narrower than the field's width.
     pub(super) range: Option<(u32, u32)>,
     pub(super) setter: Setter,
+    /// The layout ranges the field carries: each one's method stem and Rust
+    /// type, as the register module sees `layouts`.
+    pub(super) carries: Vec<(String, String)>,
 }
 
 impl FieldPlan<'_> {
@@ -921,6 +924,21 @@ fn field_plan<'m>(
         values,
         range,
         setter,
+        carries: field
+            .carries
+            .iter()
+            .map(|carried| {
+                let (layout, unit) = carried.split_once('.').unwrap_or((carried, ""));
+                (
+                    names::snake(unit),
+                    format!(
+                        "{}{}",
+                        crate::layouts::camel(layout),
+                        crate::layouts::camel(unit)
+                    ),
+                )
+            })
+            .collect(),
     })
 }
 
@@ -1039,6 +1057,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         );
         for field in template.fields.iter().filter(|field| field.getter()) {
             render_getter(output, field, "self");
+            render_carried_getters(output, field);
         }
         if template.record {
             output.push_str(
@@ -1137,6 +1156,22 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 field.stem,
                 field.write_type(None),
             );
+            for (stem, ty) in &field.carries {
+                let positioned = if field.low == 0 {
+                    "u32::from(value.bits())".to_owned()
+                } else {
+                    format!("(u32::from(value.bits()) << {})", field.low)
+                };
+                let _ = writeln!(
+                    output,
+                    "/// Set `{}` to a `{ty}` word, which the model proves fits it.\n\
+                     #[inline]\npub fn set_{}_{stem}(&mut self, value: super::super::layouts::{ty}) -> &mut Self {{\n\
+                     self.0 = (self.0 & 0x{:08x}) | {positioned};\nself\n}}\n",
+                    field.field.name,
+                    field.stem,
+                    !field.mask(),
+                );
+            }
             // A pointer takes a typed reference or the zero image, the null
             // reference; never an integer.
             if field.setter == Setter::Pointer {
@@ -1181,6 +1216,26 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         output.push_str("}\n\n");
     }
     output.push_str("}\n\n");
+}
+
+/// The field read as each layout range it carries.
+fn render_carried_getters(output: &mut String, field: &FieldPlan<'_>) {
+    for (stem, ty) in &field.carries {
+        let shifted = if field.low == 0 {
+            "self.0".to_owned()
+        } else {
+            format!("(self.0 >> {})", field.low)
+        };
+        let _ = writeln!(
+            output,
+            "/// `{}` read as a `{ty}` word.\n#[inline]\n\
+             pub const fn {}_{stem}(self) -> super::super::layouts::{ty} {{\n\
+             super::super::layouts::{ty}::from_bits(({shifted} & 0x{:x}) as _)\n}}\n",
+            field.field.name,
+            field.stem,
+            field.ones(),
+        );
+    }
 }
 
 fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {

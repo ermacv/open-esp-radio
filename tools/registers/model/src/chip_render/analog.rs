@@ -23,7 +23,9 @@ pub(super) fn render(model: &ChipModel) -> Result<String, Error> {
          pub mod analog_i2c {\n\
          pub use oer_chips_family_registers_analog_i2c::{BlockCode as Block, ByteAddress as Address, CaptureRegister, Host, Route};\n\
          /// One field of an analog-I2C byte.\n\
-         pub type Field = oer_chips_family_registers_analog_i2c::AnalogField<Address>;\n\n\
+         pub type Field = oer_chips_family_registers_analog_i2c::AnalogField<Address>;\n\
+         /// A value placed in one field of an analog-I2C byte.\n\
+         pub type Placed = oer_chips_family_registers_analog_i2c::FieldValue<Address>;\n\n\
          /// The block codes.\npub mod blocks {\nuse super::Block;\n",
     );
     for instance in instances {

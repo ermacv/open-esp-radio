@@ -82,7 +82,6 @@ layouts = [
     "layouts/phy-frequency-memory-word.toml",
     "layouts/phy-frequency-i2c-command.toml",
     "layouts/phy-frequency-memory-record.toml",
-    "layouts/phy-rfpll-capacitor-code.toml",
     "layouts/phy-rfpll-sdm-code.toml",
     "layouts/wifi-rx-dma-descriptor.toml",
     "layouts/wifi-beacon-rx-descriptor.toml",

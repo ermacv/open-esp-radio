@@ -17,7 +17,7 @@
 //! RF and bus ownership remain held across checkpoints, and the parent
 //! commits only after accepting the terminal child completion.
 
-use oer_chips_family_registers_analog_i2c::FieldValue;
+use oer_chips_esp32s31_hal::radio::phy::i2c::Placed;
 
 use crate::analog::{
     i2c::{Field, analog_i2c},
@@ -32,7 +32,7 @@ const CHANNELS: [u8; 4] = [1, 5, 10, 14];
 
 type Channel = Ordinal<{ CHANNELS.len() }>;
 
-const CKGEN_WRITES: [(Field, FieldValue); 4] = [
+const CKGEN_WRITES: [(Field, Placed); 4] = [
     (
         analog_i2c::rfpll::dcode_0_source_select::DCODE_0_SOURCE_SELECT,
         placed!(
@@ -78,7 +78,7 @@ pub enum PhyDcodeFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeAction {
     Rfpll(RfpllFrequencyAction),
-    WriteMasked { field: Field, value: FieldValue },
+    WriteMasked { field: Field, value: Placed },
     ReadMasked { field: Field },
     Complete(PhyDcodeOutcome),
     Failed(PhyDcodeFailure),
@@ -87,7 +87,7 @@ pub enum PhyDcodeAction {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyDcodeCompletion {
     Rfpll(RfpllFrequencyCompletion),
-    MaskedWrite { field: Field, value: FieldValue },
+    MaskedWrite { field: Field, value: Placed },
     MaskedRead { field: Field, value: u8 },
 }
 
