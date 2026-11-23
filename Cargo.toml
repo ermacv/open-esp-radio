@@ -6,7 +6,6 @@ members = [
     "chips/esp32s31/drivers/aes",
     "chips/esp32s31/knowledge",
     "hil/probes/esp32s31-register",
-    "hil/probes/esp32s31-facts",
     "hil/probes/esp32s31-case-c-sender",
     "hil/probes/esp32s31-rx-ring",
     "hil/probes/esp32s31-radio",

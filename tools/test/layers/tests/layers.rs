@@ -649,10 +649,6 @@ const TRUNCATE_BAN: &str = "oer_portable_mmio::Bits::truncate";
 const TRUNCATE_BAN_LEFT_OUT: &[(&str, TruncateBan)] = &[
     ("chips/esp32s31/pac", TruncateBan::Generated),
     ("chips/esp32s31/hal", TruncateBan::Until("R2's area PRs")),
-    (
-        "hil/probes/esp32s31-facts",
-        TruncateBan::Until("the facts probe's own PR after R2"),
-    ),
 ];
 
 /// Why a package's `clippy.toml` leaves the ban of `Bits::truncate` out.
@@ -7527,7 +7523,6 @@ const RECORD_WORD_CALLERS: &[&str] = &[
     "chips/esp32s31/hal/src/power/chip_clocks.rs",
     "chips/esp32s31/hal/src/radio/phy/power_words.rs",
     "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
-    "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
 ];
 
 /// A call of `.record_word()`.
@@ -9934,30 +9929,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "dead_code",
         2,
         "the receive ring's probe stops; the sender holds its ring / the receive ring's probe's phase",
-    ),
-    (
-        "hil/probes/esp32s31-facts/src/image.rs",
-        "unsafe_code",
-        1,
-        "standalone probe entry, handler export and retained SRAM",
-    ),
-    (
-        "hil/probes/esp32s31-facts/src/main.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "R2 cleans a probe with the area it reads (tasks/312)",
-    ),
-    (
-        "hil/probes/esp32s31-facts/src/main.rs",
-        "unsafe_code",
-        1,
-        "the probe owns its trap entry/exit ABI",
-    ),
-    (
-        "hil/probes/esp32s31-facts/src/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "R2 cleans a probe with the area it reads (tasks/323)",
     ),
     (
         "hil/probes/esp32s31-level-wake/src/main.rs",

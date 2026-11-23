@@ -33,10 +33,9 @@ it:
   this. One ban has exceptions: `oer_portable_mmio::Bits::truncate`, which
   keeps the low bits of any value. The PAC's `clippy.toml` leaves it out
   until the step after R2, in which the PAC builds its field values itself
-  and the method is no longer public; the HAL's and the facts probe's
-  leave it out until the steps that remove their calls (R2's area PRs; the
-  probe's own PR after R2).
-  `TRUNCATE_BAN_LEFT_OUT` in the layer tests names the three, and
+  and the method is no longer public; the HAL's
+  leaves it out until the steps that remove its calls (R2's area PRs).
+  `TRUNCATE_BAN_LEFT_OUT` in the layer tests names the two, and
   `a_package_without_the_truncate_ban_still_calls_it` fails once a
   package with a temporary exception has no call left. The four lints
   `cast_possible_truncation`, `cast_sign_loss`, `cast_possible_wrap` and
@@ -1044,21 +1043,6 @@ needs:
   symbols the vendor code calls (`_start`, `ets_delay_us`, the probe
   entries), with that code's C signatures, and keeps its fixtures in statics
   the verifier's serial calls reach one at a time.
-- The PAC-only facts image is entered at `_start` by the ROM RAM loader.
-  Its entry establishes the SRAM stack and clears BSS, owns its trap ABI
-  in `src/trap.rs`/`src/trap.s`, and preserves an atomic LP `.noinit` reason
-  record across system reset. Controlled interrupt-admission entry stubs delimit the
-  threshold-write experiment; the installed trap ABI preserves their registers.
-  Only the masked thread publishes the LP record before the reset fence.
-  In `hil/probes/esp32s31-facts/src/image.rs`, `SAR_CONTEXT` publishes
-  the masked thread's exclusive `Sar` borrow to the isolated P2 handler.
-  Its atomic swap to null admits exactly one handler dereference; the
-  thread accesses no SAR owner until the handler returns and MIE is masked.
-  The stack allocation remains live throughout the dispatch. `SAR_SELECTION`
-  selects the same static `PROBES` registry used by the thread. The handler
-  publishes `SAR_DONE` after the borrow ends; the thread clears the pointer
-  before reusing the session. This is the probe's one SAR raw-pointer site,
-  with no production runtime dependency or independently claimed registers.
 
 The bootstrap and probe crates deny `clippy::undocumented_unsafe_blocks`, and
 each unsafe attribute in them carries its `// SAFETY:` comment as well.
@@ -1066,19 +1050,10 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 ## PAC dependency authority
 
 Direct dependencies on the PAC are restricted independently of unsafe
-syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the
-explicitly admitted PAC-only facts image `hil/probes/esp32s31-facts`, and
-the timer facts probe `hil/probes/esp32s31-timer-facts` for the part types
-of its one second claim (above). Other `hil/probes/*-facts` packages require
-a separate layer-test admission.
-The facts image's trap/vector ABI lives inside its own package: `global_asm!`
-uses offsets from its own Rust frame and a generated CPU-line table. All
-nonzero vectors enter the same register-preserving assembly entry and handler.
-It shares no private runtime source; its only trap-register installer is the
-public architectural API in `oer-portable-riscv`.
-The facts image takes the PAC once, uses typed accessors, and has no HAL or
-production runtime dependency; production never depends on it. All other
-drivers and adapters reach registers through HAL owners. Check the executable
+syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the timer
+facts probe `hil/probes/esp32s31-timer-facts` for the part types of its one
+second claim (above). Any other package requires a separate layer-test
+admission. All other drivers and adapters reach registers through HAL owners. Check the executable
 list when changing this boundary.
 
 Upper layers use opaque, finite capabilities rather than raw pointers,

@@ -1876,16 +1876,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-probes-esp32s31-facts"
-version = "0.1.0"
-dependencies = [
- "oer-chips-esp32s31-pac",
- "oer-portable-mmio",
- "oer-portable-riscv",
- "toml",
-]
-
-[[package]]
 name = "oer-hil-probes-esp32s31-level-wake"
 version = "0.1.0"
 dependencies = [
