@@ -77301,12 +77301,12 @@ pub mod fe {
                 self
             }
 
-            /// Set `SELECTOR` to bits 2..6 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            /// Set `SELECTOR` to bits 0..4 of the `u32`: phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value.
             ///
             /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
             #[inline]
             pub fn set_selector_of_command(&mut self, value: u32) -> &mut Self {
-                self.0 = (self.0 & 0xffffffc3) | (((value >> 2) & 0xf) << 2);
+                self.0 = (self.0 & 0xffffffc3) | ((value & 0xf) << 2);
                 self
             }
 
@@ -77317,12 +77317,12 @@ pub mod fe {
                 self
             }
 
-            /// Set `TEST_VALUE` to bits 6..15 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            /// Set `TEST_VALUE` to bits 0..9 of the `u32`: phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value.
             ///
             /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
             #[inline]
             pub fn set_test_value_of_command(&mut self, value: u32) -> &mut Self {
-                self.0 = (self.0 & 0xffff803f) | (((value >> 6) & 0x1ff) << 6);
+                self.0 = (self.0 & 0xffff803f) | ((value & 0x1ff) << 6);
                 self
             }
 
@@ -77333,12 +77333,12 @@ pub mod fe {
                 self
             }
 
-            /// Set `PATH` to bits 15..17 of the `u32`: phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word.
+            /// Set `PATH` to bits 0..2 of the `u32`: phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value.
             ///
             /// SOURCE: ROM_REV0_PHY_PBUS, ROM_REV0_PHY_RX_DCO.
             #[inline]
             pub fn set_path_of_command(&mut self, value: u32) -> &mut Self {
-                self.0 = (self.0 & 0xfffe7fff) | (((value >> 15) & 0x3) << 15);
+                self.0 = (self.0 & 0xfffe7fff) | ((value & 0x3) << 15);
                 self
             }
         }
@@ -85287,8 +85287,7 @@ pub mod hp_system {
                 self,
                 index: oer_portable_bounded::Index<2>,
             ) -> bool {
-                let shift =
-                    0u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul(1u32));
+                let shift = 0u32.wrapping_add(index.to_u32().wrapping_mul(1u32));
                 let bits = self.0.wrapping_shr(shift);
                 (bits & 1) != 0
             }
@@ -164839,9 +164838,7 @@ pub mod pmu {
             /// Read one indexed field.
             #[inline]
             pub const fn hpcore_sw_stall_code(self, index: oer_portable_bounded::Index<2>) -> u8 {
-                let shift = 24u32.wrapping_add(
-                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
-                );
+                let shift = 24u32.wrapping_add(index.to_u32().wrapping_mul(4294967288u32));
                 let bits = self.0.wrapping_shr(shift);
                 (bits & 0xff) as u8
             }
@@ -164854,9 +164851,7 @@ pub mod pmu {
             /// Read one indexed field.
             #[inline]
             pub const fn hpcore_sw_stall_code(&self, index: oer_portable_bounded::Index<2>) -> u8 {
-                let shift = 24u32.wrapping_add(
-                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
-                );
+                let shift = 24u32.wrapping_add(index.to_u32().wrapping_mul(4294967288u32));
                 let bits = self.0.wrapping_shr(shift);
                 (bits & 0xff) as u8
             }
@@ -164867,9 +164862,7 @@ pub mod pmu {
                 index: oer_portable_bounded::Index<2>,
                 value: u8,
             ) -> &mut Self {
-                let shift = 24u32.wrapping_add(
-                    (index.get().to_le_bytes()[0] as u32).wrapping_mul(4294967288u32),
-                );
+                let shift = 24u32.wrapping_add(index.to_u32().wrapping_mul(4294967288u32));
                 let mask = 255u32.wrapping_shl(shift);
                 self.0 = (self.0 & !mask) | (u32::from(value)).wrapping_shl(shift);
                 self

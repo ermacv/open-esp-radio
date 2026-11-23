@@ -31,9 +31,7 @@ impl MacDelaySlot {
 
     /// The slot as its number.
     pub const fn value(self) -> u8 {
-        // The slot is below eleven: its low byte is the whole slot.
-        let [slot, ..] = self.0.get().to_le_bytes();
-        slot
+        self.0.to_u8()
     }
 }
 

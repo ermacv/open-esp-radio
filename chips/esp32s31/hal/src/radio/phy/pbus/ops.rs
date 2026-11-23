@@ -67,13 +67,17 @@ pub(crate) fn publish_force_test<P: Placement>(
     path: u8,
     test_value: u16,
 ) {
-    // The ROM's own composition: each field takes its bits of this word.
-    let command = u32::from(selector) << 2 | u32::from(test_value) << 6 | u32::from(path) << 15;
+    // Each field takes its own value and what the field below spills over
+    // its width, as the ROM's composition lays them; each narrowing keeps
+    // its field's low bits.
+    use oer_chips_esp32s31_pac::fe::pbus_command::{SELECTOR_WIDTH, TEST_VALUE_WIDTH};
+    let selector = u32::from(selector);
+    let test_value = u32::from(test_value);
     pbus.modify_pbus_command(|w| {
         w.set_transaction_start(true)
-            .set_selector_of_command(command)
-            .set_test_value_of_command(command)
-            .set_path_of_command(command);
+            .set_selector_of_command(selector)
+            .set_test_value_of_command(test_value | (selector >> SELECTOR_WIDTH))
+            .set_path_of_command(u32::from(path) | (test_value >> TEST_VALUE_WIDTH));
     });
 }
 

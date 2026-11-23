@@ -51,6 +51,33 @@ impl<const COUNT: usize> Index<COUNT> {
         self.0
     }
 
+    /// The number as a byte: every number below `COUNT` is one, checked
+    /// where it is monomorphized (`tests/ui/a_byte_of_a_wider_bound.rs`).
+    pub const fn to_u8(self) -> u8 {
+        const {
+            if COUNT > 1 << 8 {
+                panic!("every number below the bound is a byte");
+            }
+        };
+        // Below 256 (checked above): the low byte is the whole number.
+        let [byte, ..] = self.0.to_le_bytes();
+        byte
+    }
+
+    /// The number as a 32-bit word: every number below `COUNT` is one,
+    /// checked where it is monomorphized.
+    pub const fn to_u32(self) -> u32 {
+        const {
+            if COUNT as u64 > 1 << 32 {
+                panic!("every number below the bound is a 32-bit word");
+            }
+        };
+        // Below 2^32 (checked above): the low four bytes are the whole
+        // number, on a 32- or a 64-bit target.
+        let [b0, b1, b2, b3, ..] = self.0.to_le_bytes();
+        u32::from_le_bytes([b0, b1, b2, b3])
+    }
+
     /// The byte `value`, when every byte is below `COUNT`. A smaller bound
     /// refuses to build:
     ///

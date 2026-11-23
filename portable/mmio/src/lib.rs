@@ -1706,14 +1706,8 @@ impl<const WIDTH: u32> Bits<WIDTH> {
                 panic!("the field holds the largest value");
             }
         };
-        // The index is below `COUNT`, at most `2^32`: its low four bytes
-        // are the whole index, and the sum fits by the check above.
-        let [b0, b1, b2, b3, ..] = index.get().to_le_bytes();
-        Self(
-            u32::from_le_bytes([b0, b1, b2, b3])
-                .wrapping_mul(SCALE)
-                .wrapping_add(BIAS),
-        )
+        // The sum fits by the check above.
+        Self(index.to_u32().wrapping_mul(SCALE).wrapping_add(BIAS))
     }
 
     /// The value as its low `LOW` bits and its high `HIGH` bits, the two
@@ -1812,10 +1806,7 @@ impl<const COUNT: usize, const WIDTH: u32> From<Index<COUNT>> for Bits<WIDTH> {
                 panic!("the field holds every index of the array");
             }
         };
-        // The index is below `COUNT`, at most `2^32`: its low four bytes
-        // are the whole index.
-        let [b0, b1, b2, b3, ..] = index.get().to_le_bytes();
-        Self(u32::from_le_bytes([b0, b1, b2, b3]))
+        Self(index.to_u32())
     }
 }
 

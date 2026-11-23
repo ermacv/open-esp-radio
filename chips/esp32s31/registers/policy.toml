@@ -2463,27 +2463,24 @@ sources = ["ROM_REV0_PHY_IQ_ESTIMATOR"]
 name = "set_selector_of_command"
 field = "FE.PBUS_COMMAND.SELECTOR"
 value = "u32"
-from = 2
 arithmetic = "low-bits"
-description = "phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word."
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
 [[vendor-narrowings]]
 name = "set_test_value_of_command"
 field = "FE.PBUS_COMMAND.TEST_VALUE"
 value = "u32"
-from = 6
 arithmetic = "low-bits"
-description = "phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word."
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
 [[vendor-narrowings]]
 name = "set_path_of_command"
 field = "FE.PBUS_COMMAND.PATH"
 value = "u32"
-from = 15
 arithmetic = "low-bits"
-description = "phy_pbus_force_test composes selector << 2 | test_value << 6 | path << 15 and stores it under the mask 0x0001fffc: the field takes its bits of the composed word."
+description = "phy_pbus_force_test composes selector, test value and path, each field taking its own value and what the field below spills over its width, and stores the image under the mask 0x0001fffc: the field keeps the low bits of its value."
 sources = ["ROM_REV0_PHY_PBUS", "ROM_REV0_PHY_RX_DCO"]
 
 [[vendor-narrowings]]

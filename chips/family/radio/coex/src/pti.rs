@@ -183,9 +183,7 @@ impl CoexPti {
 
     /// The priority value.
     pub const fn value(self) -> u8 {
-        // The priority is below sixteen: its low byte is the whole number.
-        let [value, ..] = self.0.get().to_le_bytes();
-        value
+        self.0.to_u8()
     }
 
     /// The priority as a number below sixteen, for a field that holds every

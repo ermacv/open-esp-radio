@@ -1245,7 +1245,7 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
                 let ones = field.ones();
                 let _ = writeln!(
                     output,
-                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_bounded::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
+                    "/// Set one indexed field, preserving every other lane.\n#[inline]\npub fn set_{stem}(&mut self, index: oer_portable_bounded::Index<{}>, value: {}) -> &mut Self {{\nlet shift = {}u32.wrapping_add(index.to_u32().wrapping_mul({}u32));\nlet mask = {ones}u32.wrapping_shl(shift);\nself.0 = (self.0 & !mask) | ({bits}).wrapping_shl(shift);\nself\n}}",
                     family.count,
                     field.write_type(None),
                     field.low,
@@ -1468,7 +1468,7 @@ fn render_getter(output: &mut String, field: &FieldPlan<'_>, receiver: &str) {
         };
         let _ = writeln!(
             output,
-            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_bounded::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add((index.get().to_le_bytes()[0] as u32).wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
+            "/// Read one indexed field.\n#[inline]\npub const fn {}({receiver}, index: oer_portable_bounded::Index<{}>) -> {} {{\nlet shift = {}u32.wrapping_add(index.to_u32().wrapping_mul({}u32));\nlet bits = self.0.wrapping_shr(shift);\n{expression}\n}}",
             field.method(),
             family.count,
             field.native(),
