@@ -1077,11 +1077,13 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/images/aes", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/radio-pair", Role::HilBinding),
+    ("hil/services/timer-facts", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/sdk-station", Role::HilBinding),
     ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
     ("hil/scenarios/radio-pair", Role::Tool),
+    ("hil/scenarios/timer-facts", Role::Tool),
     ("hil/scenarios/sdk-station", Role::Tool),
     ("hil/scenarios/wifi-access-point", Role::Tool),
 ];
@@ -10222,6 +10224,18 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "R2 cleans a probe with the area it reads (tasks/323)",
     ),
     (
+        "hil/probes/esp32s31-timer-facts/src/comparators.rs",
+        "clippy::disallowed_methods",
+        1,
+        "tasks/380: the probe's second claim of the system timer, approved by the architect",
+    ),
+    (
+        "hil/probes/esp32s31-timer-facts/src/comparators.rs",
+        "unsafe_code",
+        1,
+        "tasks/380: the probe's second claim of the system timer, approved by the architect",
+    ),
+    (
         "hil/scenarios/aes/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
@@ -10249,6 +10263,12 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "hil/services/radio-pair/src/lib.rs",
         "clippy::large_enum_variant",
         4,
+        "a message: the image builds its answer once and publishes it",
+    ),
+    (
+        "hil/services/timer-facts/src/lib.rs",
+        "clippy::large_enum_variant",
+        2,
         "a message: the image builds its answer once and publishes it",
     ),
     (

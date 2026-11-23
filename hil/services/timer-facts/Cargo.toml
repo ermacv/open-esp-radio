@@ -1,0 +1,22 @@
+[package]
+name = "oer-hil-services-timer-facts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The HIL timer facts service: targets loaded into a SYSTIMER comparator whose enables were written once, each case's alarms and their times in the hart's cycles"
+
+[dependencies]
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent" }
+oer-protocols-hil-protocol = { path = "../../../protocols/hil/protocol", default-features = false }
+postcard-schema = { version = "0.2.5", default-features = false, features = ["derive", "heapless-v0_9"] }
+heapless = { version = "0.9.3", features = ["serde"] }
+serde = { version = "1.0.219", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+postcard = { version = "1.1.3", default-features = false, features = ["heapless"] }
+
+[lints]
+workspace = true

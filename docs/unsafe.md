@@ -224,7 +224,14 @@ volatile DMA-memory cells live in `oer-portable-memory`):
   used only on hart `h` (a runtime hart check when it becomes a controller,
   which is `!Send`).
   Only the root's owned partitions authorize register access.
-  A probe may reclaim a block only after dropping its previous owner.
+  A probe may reclaim a block only after dropping its previous owner, with
+  one exception: the timer facts probe (`hil/probes/esp32s31-timer-facts`,
+  `src/comparators.rs`) makes one second claim of the system timer's
+  `Systimer` part and counter latch beside the executor's time driver, which
+  holds the root's. It does not keep the letter of this contract; its
+  `// SAFETY:` holds the table of which context writes which word, so that
+  no word has two writers in two contexts, and the claim's blocks do not
+  leave that module.
   Generated const assertions exclude overlapping claims. The HAL's safe
   `cores::fatal` masks its hart before lending `Fatal` and halts if the path
   returns. Keeping interrupts masked is a correctness requirement, not an
@@ -1060,8 +1067,10 @@ each unsafe attribute in them carries its `// SAFETY:` comment as well.
 
 Direct dependencies on the PAC are restricted independently of unsafe
 syntax. The allowed consumers are the chip's `hal` under `esp32s31/` and the
-explicitly admitted PAC-only facts image `hil/probes/esp32s31-facts`.
-Other `hil/probes/*-facts` packages require a separate layer-test admission.
+explicitly admitted PAC-only facts image `hil/probes/esp32s31-facts`, and
+the timer facts probe `hil/probes/esp32s31-timer-facts` for the part types
+of its one second claim (above). Other `hil/probes/*-facts` packages require
+a separate layer-test admission.
 The facts image's trap/vector ABI lives inside its own package: `global_asm!`
 uses offsets from its own Rust frame and a generated CPU-line table. All
 nonzero vectors enter the same register-preserving assembly entry and handler.

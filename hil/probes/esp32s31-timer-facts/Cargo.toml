@@ -1,0 +1,55 @@
+[package]
+name = "oer-hil-probes-esp32s31-timer-facts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish.workspace = true
+description = "SYSTIMER facts on the stand: targets loaded into comparators 1 and 2 whose enables were written once, while the executor's alarm keeps comparator 0; hart 1 loads comparator 2 for the concurrent case"
+build = "build.rs"
+
+[dependencies]
+oer-hil-services-timer-facts = { path = "../../services/timer-facts" }
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+bytemuck = { version = "1.25.2", default-features = false }
+static_cell = { workspace = true }
+heapless = "0.9.3"
+oer-portable-riscv = { path = "../../../portable/riscv" }
+oer-portable-mmio = { path = "../../../portable/mmio" }
+oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
+oer-portable-embassy-time = { path = "../../../portable/embassy/time" }
+oer-portable-time = { path = "../../../portable/time" }
+oer-chips-esp32s31-pac = { path = "../../../chips/esp32s31/pac" }
+oer-chips-esp32s31-hal = { path = "../../../chips/esp32s31/hal" }
+oer-chips-esp32s31-platform-board = { path = "../../../chips/esp32s31/platform/board" }
+oer-chips-esp32s31-platform-runtime = { path = "../../../chips/esp32s31/platform/runtime" }
+oer-chips-family-platform-runtime = { path = "../../../chips/family/platform/runtime" }
+oer-chips-family-platform-executor = { path = "../../../chips/family/platform/executor" }
+oer-chips-family-platform-port = { path = "../../../chips/family/platform/port", features = ["esp32s31"] }
+oer-chips-family-platform-interrupt-table = { path = "../../../chips/family/platform/interrupt-table" }
+oer-chips-family-drivers-system-timer = { path = "../../../chips/family/drivers/system-timer" }
+oer-chips-family-drivers-usb-serial-jtag.workspace = true
+oer-hil-agent = { path = "../../agent" }
+oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
+
+[build-dependencies]
+oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true
+
+[package.metadata.open-radio]
+# The console speaks the HIL protocol: the verdict is `cargo hil run timer-facts`'s.
+console = "hil"
+critical-section-hart = "boot"
+# Hart 1 starts during boot and loads comparator 2 for the concurrent case;
+# it runs no executor.
+harts = ["boot", 1]
+
+[package.metadata.open-radio.panic-budget]
+# Reachable panic sites by layer (the image check's `*-panics.txt`): each a
+# report with a target of 0, never a build gate.
+runtime = {}
+bootstrap = {}
