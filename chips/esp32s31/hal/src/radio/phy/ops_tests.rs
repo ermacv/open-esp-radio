@@ -969,6 +969,24 @@ golden!(
     ]
 );
 
+// The spills land on cleared bits: test value 0x3a4 has bit 0 clear and
+// bit 9 set, path 2 has bit 0 clear. The ROM's composition
+// (0x13 << 2 | 0x3a4 << 6 | 2 << 15) & 0x0001fffc, with the transaction bit,
+// is 0x0001e94e: SELECTOR 0x3, TEST_VALUE 0x1a4 | 1 (the selector's bit 4)
+// = 0x1a5, PATH 2 | 1 (the test value's bit 9) = 3.
+golden!(
+    pbus_force_test_spills_into_cleared_bits,
+    PhyPbus,
+    instances::fe::SIZE / 4,
+    |b| {
+        pb::publish_force_test(&mut b, 0x13, 2, 0x3a4);
+    },
+    [
+        (0x00000000, &[(0x0884, 0x0001e94e)]),
+        (0xffffffff, &[(0x0884, 0xffffe94f)]),
+    ]
+);
+
 golden!(
     pbus_clock_pairs,
     PhyPbus,
