@@ -10268,7 +10268,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     (
         "hil/services/timer-facts/src/lib.rs",
         "clippy::large_enum_variant",
-        1,
+        2,
         "a message: the image builds its answer once and publishes it",
     ),
     (
