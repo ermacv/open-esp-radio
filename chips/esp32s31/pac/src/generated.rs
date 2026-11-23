@@ -71695,12 +71695,47 @@ pub mod fe {
         /// The register's byte offset in its block.
         pub const OFFSET: usize = 0x28;
 
-        /// Width of `BITS_0_1_OPAQUE` in bits.
-        pub const BITS_0_1_OPAQUE_WIDTH: u32 = 2;
-        /// Greatest unsigned image of `BITS_0_1_OPAQUE`.
-        pub const BITS_0_1_OPAQUE_MAX: u32 = 0x3;
-        /// Positioned bits of `BITS_0_1_OPAQUE`.
-        pub const BITS_0_1_OPAQUE_MASK: u32 = 0x3;
+        /// Width of `BASEBAND_MODE` in bits.
+        pub const BASEBAND_MODE_WIDTH: u32 = 2;
+        /// Greatest unsigned image of `BASEBAND_MODE`.
+        pub const BASEBAND_MODE_MAX: u32 = 0x3;
+        /// Positioned bits of `BASEBAND_MODE`.
+        pub const BASEBAND_MODE_MASK: u32 = 0x3;
+
+        /// The declared values of the `BASEBAND_MODE` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum BasebandMode {
+            Idle = 0x0,
+            Calibration = 0x2,
+        }
+
+        impl BasebandMode {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits()
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Idle),
+                    0x2 => Some(Self::Calibration),
+                    _ => None,
+                }
+            }
+        }
 
         /// Width of `FREQUENCY_READY` in bits.
         pub const FREQUENCY_READY_WIDTH: u32 = 1;
@@ -71730,8 +71765,14 @@ pub mod fe {
         impl R {
             /// Complete phy_bb_init writes encoding two before calibration and zero after the initial channel setup.
             #[inline]
-            pub const fn bits_0_1_opaque(self) -> oer_portable_mmio::Bits<2> {
+            pub const fn baseband_mode(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `BASEBAND_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn baseband_mode_variant(self) -> Option<BasebandMode> {
+                BasebandMode::from_bits(self.0 & 0x3)
             }
 
             /// The complete channel parent samples bit 8 after the frequency-switch delay and branches on its asserted edge.
@@ -71759,8 +71800,14 @@ pub mod fe {
         impl W {
             /// Complete phy_bb_init writes encoding two before calibration and zero after the initial channel setup.
             #[inline]
-            pub const fn bits_0_1_opaque(&self) -> oer_portable_mmio::Bits<2> {
+            pub const fn baseband_mode(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0)
+            }
+
+            /// The `BASEBAND_MODE` field as its declared value, if it is one.
+            #[inline]
+            pub const fn baseband_mode_variant(&self) -> Option<BasebandMode> {
+                BasebandMode::from_bits(self.0 & 0x3)
             }
 
             /// The complete channel parent samples bit 8 after the frequency-switch delay and branches on its asserted edge.
@@ -71781,10 +71828,10 @@ pub mod fe {
                 oer_portable_mmio::Bits::truncate(self.0 >> 23)
             }
 
-            /// Set `BITS_0_1_OPAQUE`.
+            /// Set `BASEBAND_MODE`.
             #[inline]
-            pub fn set_bits_0_1_opaque(&mut self, value: oer_portable_mmio::Bits<2>) -> &mut Self {
-                self.0 = (self.0 & 0xfffffffc) | value.get();
+            pub fn set_baseband_mode(&mut self, value: BasebandMode) -> &mut Self {
+                self.0 = (self.0 & 0xfffffffc) | value.bits();
                 self
             }
 
