@@ -2650,6 +2650,7 @@ bits = "4:3"
 class = "plain"
 description = "need_des"
 values = [{ name = "XTAL", value = 0, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }, { name = "RC_FAST", value = 1, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }, { name = "REF_F80M", value = 2, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "REG_TIMERGRP0_T0_CLK_EN"
@@ -2737,6 +2738,7 @@ bits = "4:3"
 class = "plain"
 description = "need_des"
 values = [{ name = "XTAL", value = 0, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }, { name = "RC_FAST", value = 1, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }, { name = "REF_F80M", value = 2, sources = ["ESP_IDF_4D59230D_S31_TIMER0_LL"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_T0_CLK_EN"
@@ -2750,6 +2752,7 @@ bits = "7:6"
 class = "plain"
 description = "need_des"
 values = [{ name = "XTAL", value = 0, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }, { name = "RC_FAST", value = 1, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }, { name = "REF_F80M", value = 2, sources = ["ESP_IDF_4D80C1B2_S31_TIMER1_LL"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_T1_CLK_EN"
@@ -2761,7 +2764,9 @@ description = "need_des"
 name = "REG_TIMERGRP1_WDT_SRC_SEL"
 bits = "10:9"
 class = "plain"
-description = "Watchdog clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M."
+description = "Watchdog clock source. Only XTAL (0, the reset value) is sourced: the vendor's watchdog runs on XTAL and never writes the select."
+values = [{ name = "XTAL", value = 0, sources = ["ESP_IDF_4D80C1B2_S31_MWDT_LL_H_L273"] }]
+write-values-only = true
 
 [[registers.fields]]
 name = "REG_TIMERGRP1_WDT_CLK_EN"

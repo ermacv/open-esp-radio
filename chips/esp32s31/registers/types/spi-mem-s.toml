@@ -977,6 +977,7 @@ reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTE
 [[registers.fields]]
 name = "CACHE_SRAM_USR_RD_CMD_VALUE"
 values = [{ name = "SYNC_READ", value = 0, sources = ["S31_PSRAM_SYNC_COMMAND_CODES"] }]
+write-values-only = true
 bits = "15:0"
 class = "plain"
 description = "For SPI0,When cache mode is enable it is the read command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications."
@@ -997,6 +998,7 @@ reserved = { mask = 0xfff0000, sources = ["ESP_IDF_4D59230D_SOC_ESP32S31_REGISTE
 [[registers.fields]]
 name = "CACHE_SRAM_USR_WR_CMD_VALUE"
 values = [{ name = "SYNC_WRITE", value = 32896, sources = ["S31_PSRAM_SYNC_COMMAND_CODES"] }]
+write-values-only = true
 bits = "15:0"
 class = "plain"
 description = "For SPI0,When cache mode is enable it is the write command value of command phase for sram. This field is only for internal debugging purposes. Do not use it in applications."

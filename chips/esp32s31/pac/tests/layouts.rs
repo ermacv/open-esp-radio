@@ -64,7 +64,7 @@ fn descriptor_cells_hold_what_was_written() {
     rx.next().write(rx.next().read().with_address(Some(next)));
     assert_eq!(rx.control().read(), value);
     assert_eq!(rx.buffer().read().address(), buffer.get());
-    assert_eq!(rx.next().read().address(), next.bits());
+    assert_eq!(rx.next().read().address(), next.address().get());
     // No link is a zero word.
     rx.next().write(rx.next().read().with_address(None));
     assert_eq!(rx.next().read().address(), 0);
@@ -88,7 +88,7 @@ fn a_reference_keeps_its_address() {
         DmaRef::<WifiTxDmaDescriptor>::new_unchecked(DmaWindowAddress::new_unchecked(0x2f00_4000))
     };
     assert_eq!(reference.address().get(), 0x2f00_4000);
-    assert_eq!(reference.bits(), 0x2f00_4000);
+    assert_eq!(reference.address().get(), 0x2f00_4000);
     assert_eq!(reference, reference);
 }
 

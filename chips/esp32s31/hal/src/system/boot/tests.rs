@@ -1,8 +1,8 @@
 use oer_portable_time::Duration;
 
 use super::{
-    BOOT_BUDGET, BOOTLOADER_RTC_WATCHDOG, ClockRates, CpuProfile, CpuRoot, FLASH_READ_COMMANDS,
-    FLASH_TIMING_CANDIDATES, MAX_MEM_HZ, MemDivider, octal_psram, psram_supply_level,
+    BOOT_BUDGET, BOOTLOADER_RTC_WATCHDOG, ClockRates, CpuProfile, CpuRoot, FLASH_TIMING_CANDIDATES,
+    MAX_MEM_HZ, MemDivider, octal_psram, psram_supply_level,
 };
 
 #[test]
@@ -62,17 +62,6 @@ fn the_octal_psram_divides_the_500_mhz_memory_pll_by_two() {
     let profile = octal_psram(16 * 1024 * 1024);
     assert_eq!(profile.divider, 2);
     assert_eq!(profile.size, 16 * 1024 * 1024);
-}
-
-#[test]
-fn qio_reads_send_their_mode_bits_in_the_address_phase() {
-    let qio = FLASH_READ_COMMANDS.qio;
-    assert_eq!(
-        (qio.opcode, qio.address_bits, qio.dummy_cycles),
-        (0xeb, 32, 4)
-    );
-    let slow = FLASH_READ_COMMANDS.slow_read;
-    assert_eq!((slow.opcode, slow.dummy_cycles), (0x03, 0));
 }
 
 #[test]

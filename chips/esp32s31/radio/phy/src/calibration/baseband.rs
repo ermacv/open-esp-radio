@@ -14,6 +14,7 @@
 //! wait, delay, or hardware-dependent exit.
 
 use crate::ordinal::Ordinal;
+use oer_chips_esp32s31_hal::types::BasebandMode;
 use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
 pub use oer_chips_esp32s31_hal::types::PhyGainMemoryEntry;
 use oer_chips_esp32s31_hal::types::PhyTxPowerTracking;
@@ -456,23 +457,6 @@ impl PhyTxCfrMmioBinding {
 /// Adding a variant requires the complete body and all of its callees to have
 /// been recovered.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PhyBbBasebandMode {
-    Idle,
-    Calibration,
-}
-
-impl PhyBbBasebandMode {
-    #[cfg(target_arch = "riscv32")]
-    const fn hardware(self) -> oer_chips_esp32s31_hal::types::BasebandMode {
-        use oer_chips_esp32s31_hal::types::BasebandMode;
-        match self {
-            Self::Idle => BasebandMode::Idle,
-            Self::Calibration => BasebandMode::Calibration,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhyRfRxSaturationPhase {
     PrepareCheck,
     Finalize,
@@ -495,7 +479,7 @@ pub enum PhyBbMmioAction {
     },
     EnableBasebandInitialization,
     SetBasebandMode {
-        mode: PhyBbBasebandMode,
+        mode: BasebandMode,
     },
     UpdateAgcRegisters,
     UpdatePostInitRegisters,
@@ -554,10 +538,7 @@ impl PhyBbMmioBinding {
                 registers.enable_phy_calibration_clock()
             }
             PhyBbMmioAction::SetBasebandMode { mode } => {
-                oer_chips_esp32s31_hal::radio::phy::frequency::set_baseband_mode(
-                    registers,
-                    mode.hardware(),
-                )
+                oer_chips_esp32s31_hal::radio::phy::frequency::set_baseband_mode(registers, mode)
             }
             PhyBbMmioAction::UpdateAgcRegisters => {
                 crate::hardware::configure_phy_bb_agc_register_update(registers)
@@ -1155,7 +1136,7 @@ impl PhyBbInitTransition {
                 })
             }
             PhyBbInitStep::SetCalibrationMode => mmio(PhyBbMmioAction::SetBasebandMode {
-                mode: PhyBbBasebandMode::Calibration,
+                mode: BasebandMode::Calibration,
             }),
             PhyBbInitStep::RxTable(parameters) => mmio(PhyBbMmioAction::ConfigureRxTable {
                 parameters: *parameters,
@@ -1178,7 +1159,7 @@ impl PhyBbInitTransition {
             }
             PhyBbInitStep::SetIdleMode | PhyBbInitStep::FailureSetIdle(_) => {
                 mmio(PhyBbMmioAction::SetBasebandMode {
-                    mode: PhyBbBasebandMode::Idle,
+                    mode: BasebandMode::Idle,
                 })
             }
             PhyBbInitStep::DisableWifi => mmio(PhyBbMmioAction::SetWifiEnabled { enabled: false }),
@@ -1206,7 +1187,7 @@ impl PhyBbInitTransition {
             (PhyBbInitStep::SetCalibrationMode, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
                     == (PhyBbMmioAction::SetBasebandMode {
-                        mode: PhyBbBasebandMode::Calibration,
+                        mode: BasebandMode::Calibration,
                     }) =>
             {
                 PhyBbInitStep::EnableForcedDigitalGain
@@ -1379,7 +1360,7 @@ impl PhyBbInitTransition {
             (PhyBbInitStep::SetIdleMode, PhyBbInitCompletion::Mmio(completed))
                 if completed.action
                     == (PhyBbMmioAction::SetBasebandMode {
-                        mode: PhyBbBasebandMode::Idle,
+                        mode: BasebandMode::Idle,
                     }) =>
             {
                 if self.state.disable_wifi_after_baseband_init() {
@@ -1431,7 +1412,7 @@ impl PhyBbInitTransition {
             (PhyBbInitStep::FailureSetIdle(failure), PhyBbInitCompletion::Mmio(completed))
                 if completed.action
                     == (PhyBbMmioAction::SetBasebandMode {
-                        mode: PhyBbBasebandMode::Idle,
+                        mode: BasebandMode::Idle,
                     }) =>
             {
                 PhyBbInitStep::FailureEnableAgc(*failure)

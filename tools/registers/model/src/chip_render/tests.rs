@@ -1298,7 +1298,7 @@ fn a_pointer_or_renders_on_its_part_and_reads_the_word_fresh() {
     let rust = rendered_with(&with_trigger_word_and_pointer_or());
     for item in [
         "pub fn or_descriptor(&mut self, value: oer_portable_memory::DmaRef<super::layouts::RxDescriptor>)",
-        "self.0.write::<0x5c>(self.0.read::<0x5c>() | value.bits());",
+        "self.0.write::<0x5c>(self.0.read::<0x5c>() | value.address().get());",
     ] {
         assert!(rust.contains(item), "{item}\n{rust}");
     }

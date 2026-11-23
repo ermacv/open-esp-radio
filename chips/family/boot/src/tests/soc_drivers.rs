@@ -1,7 +1,7 @@
 //! Behavioral order, readback and error boundaries of the extracted drivers.
 use super::Ticking;
 use crate::{
-    Access, BootFailure, ClockFailure,
+    Access,
     drivers::{access_control, brownout, clock, cores, entropy, soc},
     wait::{BootBudget, BootDeadline, BootWait, WaitFailure},
 };
@@ -21,70 +21,45 @@ fn budget() -> BootBudget {
 
 struct Lp<'a> {
     time: &'a VirtualClock,
-    observed: u32,
     writes: Vec<(u32, Instant)>,
-    reads: RefCell<Vec<Instant>>,
 }
 impl clock::LpFastRegisters for Lp<'_> {
     type Source = u32;
     fn write_source(&mut self, _: Access<'_>, source: u32) {
         self.writes.push((source, self.time.now()));
     }
-    fn source(&self, _: Access<'_>) -> u32 {
-        self.reads.borrow_mut().push(self.time.now());
-        self.observed
-    }
-    fn source_code(source: u32) -> u32 {
-        source
-    }
 }
 #[test]
-fn lp_fast_writes_once_then_settles_before_readback_including_unnamed_codes() {
-    for observed in [0, 1, 2, 3, u32::MAX] {
-        let time = VirtualClock::new();
-        let ticking = Ticking::new(&time);
-        let deadline = BootDeadline::start(&ticking, budget());
-        let mut registers = Lp {
-            time: &time,
-            observed,
-            writes: vec![],
-            reads: RefCell::new(vec![]),
-        };
-        let profile = clock::LpFastProfile {
-            source: 1,
-            settle: wait("lp-fast-switch", 3),
-        };
-        assert_eq!(
-            clock::select_lp_fast(&mut registers, profile, &deadline),
-            if observed == 1 {
-                Ok(())
-            } else {
-                Err(BootFailure::Clock(ClockFailure::LpFastReadback {
-                    expected: 1,
-                    observed,
-                }))
-            }
-        );
-        assert_eq!(registers.writes.len(), 1);
-        assert_eq!(registers.writes[0].0, 1);
-        let reads = registers.reads.borrow();
-        assert_eq!(reads.len(), 1);
-        assert!(
-            reads[0].saturating_duration_since(registers.writes[0].1) >= Duration::from_micros(3)
-        );
-    }
+fn lp_fast_writes_once_then_settles() {
+    let time = VirtualClock::new();
+    let ticking = Ticking::new(&time);
+    let deadline = BootDeadline::start(&ticking, budget());
+    let mut registers = Lp {
+        time: &time,
+        writes: vec![],
+    };
+    let profile = clock::LpFastProfile {
+        source: 1,
+        settle: wait("lp-fast-switch", 3),
+    };
+    let started = time.now();
+    assert_eq!(
+        clock::select_lp_fast(&mut registers, profile, &deadline),
+        Ok(())
+    );
+    assert_eq!(registers.writes, [(1, started)]);
+    // The settle is held after the write.
+    assert!(time.now().saturating_duration_since(started) >= Duration::from_micros(3));
 }
 #[test]
-fn lp_fast_deadline_refusal_keeps_the_selector_write_and_skips_readback() {
+fn lp_fast_deadline_refusal_keeps_the_selector_write() {
     let time = VirtualClock::new();
     let ticking = Ticking::new(&time);
     let deadline = BootDeadline::start(&ticking, budget());
     time.advance(budget().duration()).expect("exhaust budget");
     let mut registers = Lp {
         time: &time,
-        observed: 1,
         writes: vec![],
-        reads: RefCell::new(vec![]),
     };
     assert_eq!(
         clock::select_lp_fast(
@@ -98,7 +73,6 @@ fn lp_fast_deadline_refusal_keeps_the_selector_write_and_skips_readback() {
         Err(WaitFailure::DeadlineExceeded("lp-fast-switch").into())
     );
     assert_eq!(registers.writes.len(), 1);
-    assert!(registers.reads.borrow().is_empty());
 }
 
 type Log = Rc<RefCell<Vec<&'static str>>>;

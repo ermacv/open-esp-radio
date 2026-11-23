@@ -9,37 +9,16 @@ use crate::{
     Access, BootFailure, Busy, FlashFailure, WaitFailure,
     cache::{FetchSuspendRegisters, SuspendWaits},
     flash::{
-        FlashClockRegisters, FlashCommandRegisters, FlashGeometry, FlashReadCommand,
-        FlashReadCommands, FlashReadMode, FlashTiming, FlashTimingRegisters, TUNING_PAGE_BYTES,
-        TUNING_SCRATCH_WORDS, TuningOwners, TuningRegion, TuningWaits, XipWindow, page_count, read,
-        select_window, tune,
+        FlashClockRegisters, FlashCommandRegisters, FlashGeometry, FlashReadMode, FlashTiming,
+        FlashTimingRegisters, TUNING_PAGE_BYTES, TUNING_SCRATCH_WORDS, TuningOwners, TuningRegion,
+        TuningWaits, XipWindow, page_count, read, select_window, tune,
     },
     wait::{BootBudget, BootDeadline, BootWait},
 };
 
-const fn command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashReadCommand {
-    FlashReadCommand {
-        opcode,
-        address_bits,
-        dummy_cycles,
-    }
-}
-
-const COMMANDS: FlashReadCommands = FlashReadCommands {
-    qio: command(0xeb, 32, 4),
-    dio: command(0xbb, 28, 2),
-    qout: command(0x6b, 24, 8),
-    dout: command(0x3b, 24, 8),
-    fast_read: command(0x0b, 24, 8),
-    slow_read: command(0x03, 24, 0),
-};
-
 const CAPACITY: u32 = 1024 * 1024;
 
-const GEOMETRY: FlashGeometry = FlashGeometry {
-    capacity: CAPACITY,
-    commands: COMMANDS,
-};
+const GEOMETRY: FlashGeometry = FlashGeometry { capacity: CAPACITY };
 
 const COMMAND: BootWait = const {
     match BootWait::new("flash-command", Duration::from_micros(50)) {
@@ -94,7 +73,7 @@ const WAITS: TuningWaits = TuningWaits {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
-    Configure(FlashReadCommand),
+    Configure(FlashReadMode),
     Transfer(u32, u32),
     Start,
     SelectClock,
@@ -187,13 +166,13 @@ impl FlashCommandRegisters for Port {
     fn mode_bits_from_status(&self, _: Access<'_>) -> bool {
         self.0.borrow().status_mode_bits
     }
-    fn configure_read(&mut self, _: Access<'_>, command: FlashReadCommand) {
+    fn configure_read(&mut self, _: Access<'_>, mode: FlashReadMode) {
         let mut model = self.0.borrow_mut();
         assert!(
             !model.running(),
             "the phases change under a running command"
         );
-        model.log.push(Op::Configure(command));
+        model.log.push(Op::Configure(mode));
     }
     fn set_transfer(&mut self, _: Access<'_>, address: u32, bytes: u32) {
         let mut model = self.0.borrow_mut();
@@ -386,7 +365,7 @@ fn a_read_sends_its_modes_command_once_then_one_user_command_per_sixty_four_byte
     assert_eq!(
         ops(&model),
         [
-            Op::Configure(COMMANDS.dio),
+            Op::Configure(FlashReadMode::Dio),
             Op::Transfer(0x100, 64),
             Op::Start,
             Op::Transfer(0x140, 64),

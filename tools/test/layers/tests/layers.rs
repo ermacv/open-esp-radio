@@ -6531,7 +6531,7 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         1,
-        BY_R2,
+        BY_PLATFORM,
     ),
 ];
 
@@ -6541,12 +6541,6 @@ const TRUNCATIONS: &[(&str, usize, &str)] = &[
 /// a policy `whole-word` image or a hardware-consumed layout says so. The
 /// list only shrinks.
 const RAW_REGISTERS: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 4, BY_NONE),
-    (
-        "chips/esp32s31/hal/src/peripherals/watchdog/registers.rs",
-        3,
-        BY_NONE,
-    ),
     (
         "chips/esp32s31/hal/src/radio/coex/ports.rs",
         1,
@@ -6555,16 +6549,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/descriptor.rs",
         2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
-        4,
         BY_P3,
     ),
     (
@@ -6584,7 +6568,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
-        3,
+        2,
         BY_P3,
     ),
     (
@@ -6602,28 +6586,16 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         2,
         "the ROM's capacitor update, exact; typed in D2 with the owner's decision",
     ),
-    ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
-    (
-        "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
-        1,
-        BY_NONE,
-    ),
-    ("chips/esp32s31/hal/src/system/boot/psram.rs", 2, BY_NONE),
-    (
-        "chips/esp32s31/hal/src/system/memory/dma_address.rs",
-        6,
-        BY_NONE,
-    ),
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         4,
-        BY_NONE,
+        BY_PLATFORM,
     ),
     ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
         1,
-        "the family's encoding of a line's expectation: `Control::bits`, a portable value's byte",
+        BY_PLATFORM,
     ),
 ];
 

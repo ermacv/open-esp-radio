@@ -67,11 +67,11 @@ fn layout(capacity: u32) -> crate::radio::ieee80211::tx_frame::TxFrame {
 }
 
 fn prepared_head(authority: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
-    authority.descriptor_head().bits()
+    authority.descriptor_head().address().get()
 }
 
 fn hardware_owned_head(authority: &impl HardwareOwnedTxDma<DmaRef<WifiTxDmaDescriptor>>) -> u32 {
-    authority.descriptor_head().bits()
+    authority.descriptor_head().address().get()
 }
 
 #[test]

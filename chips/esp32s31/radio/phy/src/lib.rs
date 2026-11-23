@@ -1,7 +1,7 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "the PHY's procedures in the one-loop form (the rewrite plan, step 19)"
+    reason = "the PHY's procedures in the one-loop form"
 )]
 #![expect(
     clippy::cast_possible_truncation,

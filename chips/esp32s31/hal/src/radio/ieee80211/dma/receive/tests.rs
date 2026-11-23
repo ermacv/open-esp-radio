@@ -57,7 +57,7 @@ impl Walker for ModelWalker {
         self.window = true;
     }
     fn write_base(&mut self, head: DmaRef<WifiRxDmaDescriptor>) {
-        self.base = Some(head.bits());
+        self.base = Some(head.address().get());
     }
     fn enable(&mut self) {
         self.enabled = true;

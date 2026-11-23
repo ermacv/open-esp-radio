@@ -93,7 +93,7 @@ impl TxDmaStorage {
                     .link::<WifiTxDmaDescriptor>(storage.descriptor.layout())
                     .map_err(|_| TxDmaStorageError::Address)?;
                 let descriptor_range = range
-                    .subrange(head.bits(), DESCRIPTOR_BYTES)
+                    .subrange(head.address().get(), DESCRIPTOR_BYTES)
                     .ok_or(TxDmaStorageError::Address)?;
                 Ok((head, descriptor_range))
             })
@@ -123,7 +123,7 @@ pub struct TxDmaBinding {
 
 impl TxDmaBinding {
     pub const fn descriptor_address(&self) -> u32 {
-        self.descriptor_head.bits()
+        self.descriptor_head.address().get()
     }
 
     pub const fn admits_descriptor(&self, address: u32) -> bool {
@@ -262,7 +262,7 @@ impl<L> PinnedTxDmaStorage<L> {
         &mut self,
         detached: MacTxQueueDetached<'_>,
     ) -> Result<(), TxDmaStorageError> {
-        if !detached.confirms_descriptor_head(self.binding.descriptor_head.bits()) {
+        if !detached.confirms_descriptor_head(self.binding.descriptor_head.address().get()) {
             return Err(TxDmaStorageError::Address);
         }
         self.transition_to_free(TxDmaState::Completed)
@@ -273,7 +273,7 @@ impl<L> PinnedTxDmaStorage<L> {
         detached: impl crate::types::MacTxQueueReleased,
     ) -> Result<(), TxDmaStorageError> {
         detached
-            .releases(self.binding.descriptor_head.bits())
+            .releases(self.binding.descriptor_head.address().get())
             .map_err(|_| TxDmaStorageError::Address)?;
         self.transition_to_free(TxDmaState::HardwareOwned)
     }

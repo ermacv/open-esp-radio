@@ -165,7 +165,7 @@ fn tx_descriptor_head_matches(
     authority_head: DmaRef<WifiTxDmaDescriptor>,
     descriptor_address_low: u32,
 ) -> bool {
-    descriptor_address_low == authority_head.bits() & DESCRIPTOR_ADDRESS_LOW_MASK
+    descriptor_address_low == authority_head.address().get() & DESCRIPTOR_ADDRESS_LOW_MASK
 }
 
 /// The preamble of a DSSS or CCK PPDU, as `oer_protocols_ieee80211_wire`'s

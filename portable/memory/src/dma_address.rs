@@ -102,11 +102,6 @@ impl<L: DmaLayout> DmaRef<L> {
         self.address
     }
 
-    /// The address as the hardware reads it.
-    pub const fn bits(self) -> u32 {
-        self.address.address
-    }
-
     /// A model reference no hardware follows, for this crate's tests.
     #[cfg(test)]
     pub(crate) const fn model(address: u32) -> Self {

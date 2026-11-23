@@ -3890,7 +3890,7 @@ pub mod axi_dma {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::AxiDmaDescriptor>,
             ) -> &mut Self {
-                self.0 = value.bits();
+                self.0 = value.address().get();
                 self
             }
 
@@ -4924,7 +4924,7 @@ pub mod axi_dma {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::AxiDmaDescriptor>,
             ) -> &mut Self {
-                self.0 = value.bits();
+                self.0 = value.address().get();
                 self
             }
 
@@ -12589,7 +12589,7 @@ pub mod btdm {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -29306,7 +29306,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -30497,7 +30497,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -30793,7 +30793,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
-                self.0 = value.bits().wrapping_add(0x51);
+                self.0 = value.address().get().wrapping_add(0x51);
                 self
             }
 
@@ -31088,7 +31088,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleSchedulerItem>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -31736,7 +31736,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -31832,7 +31832,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -31940,7 +31940,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -32036,7 +32036,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -32144,7 +32144,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -32240,7 +32240,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleBufferHeader>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -36405,7 +36405,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleDeviceTable>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -36511,7 +36511,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BleResolvingList>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -36571,7 +36571,7 @@ pub mod bt_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::BlePhyEnvironment>,
             ) -> &mut Self {
-                self.0 = value.bits().wrapping_add(0x2c);
+                self.0 = value.address().get().wrapping_add(0x2c);
                 self
             }
 
@@ -37948,7 +37948,7 @@ pub mod bt_mac {
                     super::super::layouts::BleDirectionFindingDescriptor,
                 >,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | ((value.bits() >> 2) & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | ((value.address().get() >> 2) & 0xfffff);
                 self
             }
 
@@ -38588,7 +38588,8 @@ pub mod bt_mac {
             compressed_sram_pointer: oer_portable_memory::DmaRef<super::layouts::BleResolvingList>,
             change: impl FnOnce(&mut base_pointer::W),
         ) {
-            let mut value = base_pointer::W((compressed_sram_pointer.bits() >> 2) & 0xfffff);
+            let mut value =
+                base_pointer::W((compressed_sram_pointer.address().get() >> 2) & 0xfffff);
             change(&mut value);
             self.0.write::<0x880>(value.0);
         }
@@ -39542,7 +39543,8 @@ pub mod bt_mac {
             address: oer_portable_memory::DmaRef<super::layouts::BlePhyEnvironment>,
             change: impl FnOnce(&mut phy_environment_tail_pointer::W),
         ) {
-            let mut value = phy_environment_tail_pointer::W(address.bits().wrapping_add(0x51));
+            let mut value =
+                phy_environment_tail_pointer::W(address.address().get().wrapping_add(0x51));
             change(&mut value);
             self.0.write::<0x24c>(value.0);
         }
@@ -39807,7 +39809,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x280>(self.0.read::<0x280>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x280>(self.0.read::<0x280>() | ((value.address().get() >> 2) & 0xfffff));
         }
 
         /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
@@ -39820,7 +39822,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x284>(self.0.read::<0x284>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x284>(self.0.read::<0x284>() | ((value.address().get() >> 2) & 0xfffff));
         }
 
         /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
@@ -39833,7 +39835,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x288>(self.0.read::<0x288>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x288>(self.0.read::<0x288>() | ((value.address().get() >> 2) & 0xfffff));
         }
 
         /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
@@ -39846,7 +39848,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x28c>(self.0.read::<0x28c>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x28c>(self.0.read::<0x28c>() | ((value.address().get() >> 2) & 0xfffff));
         }
 
         /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
@@ -39859,7 +39861,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x290>(self.0.read::<0x290>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x290>(self.0.read::<0x290>() | ((value.address().get() >> 2) & 0xfffff));
         }
 
         /// OR the image of `value` into `COMPRESSED_SRAM_POINTER` of a fresh read; every other bit keeps
@@ -39872,7 +39874,7 @@ pub mod bt_mac {
             value: oer_portable_memory::DmaRef<super::layouts::BleBufferHeader>,
         ) {
             self.0
-                .write::<0x294>(self.0.read::<0x294>() | ((value.bits() >> 2) & 0xfffff));
+                .write::<0x294>(self.0.read::<0x294>() | ((value.address().get() >> 2) & 0xfffff));
         }
     }
 
@@ -40310,7 +40312,8 @@ pub mod bt_mac {
             compressed_address: oer_portable_memory::DmaRef<super::layouts::BleDeviceTable>,
             change: impl FnOnce(&mut device_table_first_entry::W),
         ) {
-            let mut value = device_table_first_entry::W((compressed_address.bits() >> 2) & 0xfffff);
+            let mut value =
+                device_table_first_entry::W((compressed_address.address().get() >> 2) & 0xfffff);
             change(&mut value);
             self.0.write::<0x874>(value.0);
         }
@@ -103989,14 +103992,6 @@ pub mod hp_sys_clkrst {
             }
         }
 
-        /// A named value of the `REG_TIMERGRP0_T0_SRC_SEL` field, written as the field's value.
-        impl From<RegTimergrp0T0SrcSel> for oer_portable_mmio::Bits<2> {
-            #[inline]
-            fn from(value: RegTimergrp0T0SrcSel) -> Self {
-                oer_portable_mmio::Bits::truncate(value.bits())
-            }
-        }
-
         /// Width of `REG_TIMERGRP0_T0_CLK_EN` in bits.
         pub const REG_TIMERGRP0_T0_CLK_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `REG_TIMERGRP0_T0_CLK_EN`.
@@ -104187,9 +104182,9 @@ pub mod hp_sys_clkrst {
             #[inline]
             pub fn set_reg_timergrp0_t0_src_sel(
                 &mut self,
-                value: oer_portable_mmio::Bits<2>,
+                value: RegTimergrp0T0SrcSel,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xffffffe7) | (value.get() << 3);
+                self.0 = (self.0 & 0xffffffe7) | (value.bits() << 3);
                 self
             }
 
@@ -104426,14 +104421,6 @@ pub mod hp_sys_clkrst {
             }
         }
 
-        /// A named value of the `REG_TIMERGRP1_T0_SRC_SEL` field, written as the field's value.
-        impl From<RegTimergrp1T0SrcSel> for oer_portable_mmio::Bits<2> {
-            #[inline]
-            fn from(value: RegTimergrp1T0SrcSel) -> Self {
-                oer_portable_mmio::Bits::truncate(value.bits())
-            }
-        }
-
         /// Width of `REG_TIMERGRP1_T0_CLK_EN` in bits.
         pub const REG_TIMERGRP1_T0_CLK_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `REG_TIMERGRP1_T0_CLK_EN`.
@@ -104485,14 +104472,6 @@ pub mod hp_sys_clkrst {
             }
         }
 
-        /// A named value of the `REG_TIMERGRP1_T1_SRC_SEL` field, written as the field's value.
-        impl From<RegTimergrp1T1SrcSel> for oer_portable_mmio::Bits<2> {
-            #[inline]
-            fn from(value: RegTimergrp1T1SrcSel) -> Self {
-                oer_portable_mmio::Bits::truncate(value.bits())
-            }
-        }
-
         /// Width of `REG_TIMERGRP1_T1_CLK_EN` in bits.
         pub const REG_TIMERGRP1_T1_CLK_EN_WIDTH: u32 = 1;
         /// Greatest unsigned image of `REG_TIMERGRP1_T1_CLK_EN`.
@@ -104506,6 +104485,39 @@ pub mod hp_sys_clkrst {
         pub const REG_TIMERGRP1_WDT_SRC_SEL_MAX: u32 = 0x3;
         /// Positioned bits of `REG_TIMERGRP1_WDT_SRC_SEL`.
         pub const REG_TIMERGRP1_WDT_SRC_SEL_MASK: u32 = 0x600;
+
+        /// The declared values of the `REG_TIMERGRP1_WDT_SRC_SEL` field.
+        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+        #[allow(
+            clippy::enum_variant_names,
+            reason = "the variants are the model's value names"
+        )]
+        pub enum RegTimergrp1WdtSrcSel {
+            Xtal = 0x0,
+        }
+
+        impl RegTimergrp1WdtSrcSel {
+            /// The value's field bits.
+            #[inline]
+            pub const fn bits(self) -> u32 {
+                self as u32
+            }
+
+            /// The value positioned in its register.
+            #[inline]
+            pub const fn register_bits(self) -> u32 {
+                self.bits() << 9
+            }
+
+            /// The declared value `bits`, if it is one.
+            #[inline]
+            pub const fn from_bits(bits: u32) -> Option<Self> {
+                match bits {
+                    0x0 => Some(Self::Xtal),
+                    _ => None,
+                }
+            }
+        }
 
         /// Width of `REG_TIMERGRP1_WDT_CLK_EN` in bits.
         pub const REG_TIMERGRP1_WDT_CLK_EN_WIDTH: u32 = 1;
@@ -104573,10 +104585,16 @@ pub mod hp_sys_clkrst {
                 (self.0 & 0x00000100) != 0
             }
 
-            /// Watchdog clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.
+            /// Watchdog clock source. Only XTAL (0, the reset value) is sourced: the vendor's watchdog runs on XTAL and never writes the select.
             #[inline]
             pub const fn reg_timergrp1_wdt_src_sel(self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// The `REG_TIMERGRP1_WDT_SRC_SEL` field as its declared value, if it is one.
+            #[inline]
+            pub const fn reg_timergrp1_wdt_src_sel_variant(self) -> Option<RegTimergrp1WdtSrcSel> {
+                RegTimergrp1WdtSrcSel::from_bits((self.0 >> 9) & 0x3)
             }
 
             /// Watchdog clock enable.
@@ -104644,10 +104662,16 @@ pub mod hp_sys_clkrst {
                 (self.0 & 0x00000100) != 0
             }
 
-            /// Watchdog clock source: 0 XTAL, 1 RC_FAST, 2 PLL_F80M.
+            /// Watchdog clock source. Only XTAL (0, the reset value) is sourced: the vendor's watchdog runs on XTAL and never writes the select.
             #[inline]
             pub const fn reg_timergrp1_wdt_src_sel(&self) -> oer_portable_mmio::Bits<2> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 9)
+            }
+
+            /// The `REG_TIMERGRP1_WDT_SRC_SEL` field as its declared value, if it is one.
+            #[inline]
+            pub const fn reg_timergrp1_wdt_src_sel_variant(&self) -> Option<RegTimergrp1WdtSrcSel> {
+                RegTimergrp1WdtSrcSel::from_bits((self.0 >> 9) & 0x3)
             }
 
             /// Watchdog clock enable.
@@ -104681,9 +104705,9 @@ pub mod hp_sys_clkrst {
             #[inline]
             pub fn set_reg_timergrp1_t0_src_sel(
                 &mut self,
-                value: oer_portable_mmio::Bits<2>,
+                value: RegTimergrp1T0SrcSel,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xffffffe7) | (value.get() << 3);
+                self.0 = (self.0 & 0xffffffe7) | (value.bits() << 3);
                 self
             }
 
@@ -104698,9 +104722,9 @@ pub mod hp_sys_clkrst {
             #[inline]
             pub fn set_reg_timergrp1_t1_src_sel(
                 &mut self,
-                value: oer_portable_mmio::Bits<2>,
+                value: RegTimergrp1T1SrcSel,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xffffff3f) | (value.get() << 6);
+                self.0 = (self.0 & 0xffffff3f) | (value.bits() << 6);
                 self
             }
 
@@ -104715,9 +104739,9 @@ pub mod hp_sys_clkrst {
             #[inline]
             pub fn set_reg_timergrp1_wdt_src_sel(
                 &mut self,
-                value: oer_portable_mmio::Bits<2>,
+                value: RegTimergrp1WdtSrcSel,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfffff9ff) | (value.get() << 9);
+                self.0 = (self.0 & 0xfffff9ff) | (value.bits() << 9);
                 self
             }
 
@@ -207647,14 +207671,6 @@ pub mod spi1_mem_c {
             }
         }
 
-        /// A named value of the `SPI_MEM_USR_COMMAND_VALUE` field, written as the field's value.
-        impl From<UsrCommandValue> for u16 {
-            #[inline]
-            fn from(value: UsrCommandValue) -> Self {
-                (value.bits() & 0xffff) as u16
-            }
-        }
-
         /// Width of `SPI_MEM_USR_COMMAND_BITLEN` in bits.
         pub const USR_COMMAND_BITLEN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `SPI_MEM_USR_COMMAND_BITLEN`.
@@ -207710,8 +207726,8 @@ pub mod spi1_mem_c {
 
             /// Set `SPI_MEM_USR_COMMAND_VALUE`.
             #[inline]
-            pub fn set_usr_command_value(&mut self, value: u16) -> &mut Self {
-                self.0 = (self.0 & 0xffff0000) | u32::from(value);
+            pub fn set_usr_command_value(&mut self, value: UsrCommandValue) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | value.bits();
                 self
             }
 
@@ -236939,14 +236955,6 @@ pub mod spi_mem_s {
             }
         }
 
-        /// A named value of the `CACHE_SRAM_USR_RD_CMD_VALUE` field, written as the field's value.
-        impl From<CacheSramUsrRdCmdValue> for u16 {
-            #[inline]
-            fn from(value: CacheSramUsrRdCmdValue) -> Self {
-                (value.bits() & 0xffff) as u16
-            }
-        }
-
         /// Width of `CACHE_SRAM_USR_RD_CMD_BITLEN` in bits.
         pub const CACHE_SRAM_USR_RD_CMD_BITLEN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `CACHE_SRAM_USR_RD_CMD_BITLEN`.
@@ -237006,8 +237014,11 @@ pub mod spi_mem_s {
 
             /// Set `CACHE_SRAM_USR_RD_CMD_VALUE`.
             #[inline]
-            pub fn set_cache_sram_usr_rd_cmd_value(&mut self, value: u16) -> &mut Self {
-                self.0 = (self.0 & 0xffff0000) | u32::from(value);
+            pub fn set_cache_sram_usr_rd_cmd_value(
+                &mut self,
+                value: CacheSramUsrRdCmdValue,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | value.bits();
                 self
             }
 
@@ -237079,14 +237090,6 @@ pub mod spi_mem_s {
             }
         }
 
-        /// A named value of the `CACHE_SRAM_USR_WR_CMD_VALUE` field, written as the field's value.
-        impl From<CacheSramUsrWrCmdValue> for u16 {
-            #[inline]
-            fn from(value: CacheSramUsrWrCmdValue) -> Self {
-                (value.bits() & 0xffff) as u16
-            }
-        }
-
         /// Width of `CACHE_SRAM_USR_WR_CMD_BITLEN` in bits.
         pub const CACHE_SRAM_USR_WR_CMD_BITLEN_WIDTH: u32 = 4;
         /// Greatest unsigned image of `CACHE_SRAM_USR_WR_CMD_BITLEN`.
@@ -237146,8 +237149,11 @@ pub mod spi_mem_s {
 
             /// Set `CACHE_SRAM_USR_WR_CMD_VALUE`.
             #[inline]
-            pub fn set_cache_sram_usr_wr_cmd_value(&mut self, value: u16) -> &mut Self {
-                self.0 = (self.0 & 0xffff0000) | u32::from(value);
+            pub fn set_cache_sram_usr_wr_cmd_value(
+                &mut self,
+                value: CacheSramUsrWrCmdValue,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffff0000) | value.bits();
                 self
             }
 
@@ -276050,7 +276056,7 @@ pub mod wifi_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::WifiRxDmaDescriptor>,
             ) -> &mut Self {
-                self.0 = value.bits();
+                self.0 = value.address().get();
                 self
             }
 
@@ -295872,7 +295878,7 @@ pub mod wifi_mac {
                 &mut self,
                 value: oer_portable_memory::DmaRef<super::super::layouts::WifiTxDmaDescriptor>,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff00000) | (value.bits() & 0xfffff);
+                self.0 = (self.0 & 0xfff00000) | (value.address().get() & 0xfffff);
                 self
             }
 
@@ -322492,7 +322498,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<WifiRxDmaDescriptor>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -323404,7 +323410,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<WifiTxDmaDescriptor>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -323749,7 +323755,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<AxiDmaDescriptor>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -325007,7 +325013,7 @@ pub mod layouts {
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -325481,7 +325487,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -326769,7 +326775,7 @@ pub mod layouts {
         pub const fn with_address(self, value: Option<DmaRef<BleSchedulerItem>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -326967,7 +326973,7 @@ pub mod layouts {
         ) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -327066,7 +327072,7 @@ pub mod layouts {
         pub const fn with_address(self, value: Option<DmaRef<BleLinkState>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -328725,7 +328731,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleSchedulerItem>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -328786,7 +328792,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleSchedulerItem>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -329283,7 +329289,7 @@ pub mod layouts {
         pub const fn with_header(self, value: Option<DmaRef<BleBufferHeader>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -329420,7 +329426,7 @@ pub mod layouts {
         pub const fn with_header(self, value: Option<DmaRef<BleBufferHeader>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -329564,7 +329570,7 @@ pub mod layouts {
         pub const fn with_header(self, value: Option<DmaRef<BleBufferHeader>>) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -331428,7 +331434,7 @@ pub mod layouts {
         ) -> Option<Self> {
             let index = match value {
                 None => 0,
-                Some(reference) => match ble_word_index(reference.bits()) {
+                Some(reference) => match ble_word_index(reference.address().get()) {
                     Some(index) => index,
                     None => return None,
                 },
@@ -331868,7 +331874,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleSchedulerItem>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -331929,7 +331935,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -331990,7 +331996,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -332051,7 +332057,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -332112,7 +332118,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }
@@ -332173,7 +332179,7 @@ pub mod layouts {
         /// This value with `ADDRESS` set to `value`.
         pub const fn with_address(self, value: Option<DmaRef<BleBufferHeader>>) -> Self {
             Self(match value {
-                Some(reference) => reference.bits(),
+                Some(reference) => reference.address().get(),
                 None => 0,
             })
         }

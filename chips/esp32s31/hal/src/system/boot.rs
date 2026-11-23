@@ -29,7 +29,7 @@ pub use oer_chips_family_boot::{
     BootFailure,
     cache::{CacheGeometry, SuspendWaits},
     clock::{ClockRates, ClockWaits, CpuClockProfile},
-    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, TuningWaits},
+    flash::{FlashGeometry, TuningWaits},
     mmu::MmuWindow,
     psram::{CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
@@ -355,69 +355,9 @@ pub const TUNING_WAITS: TuningWaits = TuningWaits {
     suspend: SUSPEND_WAITS,
 };
 
-const fn read_command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashReadCommand {
-    FlashReadCommand {
-        opcode,
-        address_bits,
-        dummy_cycles,
-    }
-}
-
-/// The read command of each read mode, as the ROM's flash read sends it:
-/// a 24-bit address (the ROM's `rd_addr_bit_len`, ESP-IDF's
-/// `SPI1_R_QIO_ADDR_BITSLEN` 23 + 1), QIO and DIO with their continuous-mode
-/// bits in the address phase, and the ROM's dummy cycles plus its
-/// `dummy_len_plus[1]`, which is zero on this chip.
-///
-/// SOURCE(esp32s31): pinned rev0 ROM (esp-rom-elfs 20260528, SHA-256
-/// a52ad751...ab87), Blobray function records of `_esp_rom_spiflash_read`
-/// @0x2f80f0c2 (QIO 0xEB, 8 more address bits, dummy + 4; DIO 0xBB, 4 more,
-/// dummy + 2; QOUT 0x6B, DOUT 0x3B and fast read 0x0B, dummy + 8; slow read
-/// 0x03, dummy + 0) and `spi_dummy_len_fix` @0x2f80df7e (stores zero to
-/// `dummy_len_plus`); ESP-IDF 4d80c1b2
-/// `components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:54-60`
-/// (24-bit read addresses) and
-/// `components/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32s31.c`
-/// (the S31 bootloader sets no `dummy_len_plus`).
-pub const FLASH_READ_COMMANDS: FlashReadCommands = FlashReadCommands {
-    qio: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QioRead.bits() as u8,
-        24 + 8,
-        4,
-    ),
-    dio: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DioRead.bits() as u8,
-        24 + 4,
-        2,
-    ),
-    qout: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::QoutRead.bits() as u8,
-        24,
-        8,
-    ),
-    dout: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::DoutRead.bits() as u8,
-        24,
-        8,
-    ),
-    fast_read: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::FastRead.bits() as u8,
-        24,
-        8,
-    ),
-    slow_read: read_command(
-        oer_chips_esp32s31_pac::spi1_mem_c::user2::UsrCommandValue::SlowRead.bits() as u8,
-        24,
-        0,
-    ),
-};
-
 /// The flash of `capacity` bytes, the module's.
 pub const fn flash_geometry(capacity: u32) -> FlashGeometry {
-    FlashGeometry {
-        capacity,
-        commands: FLASH_READ_COMMANDS,
-    }
+    FlashGeometry { capacity }
 }
 
 const fn candidate(din_mode: u32, din_num: u32, extra_dummy: u32) -> FlashTimingCandidate {
