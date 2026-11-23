@@ -44,7 +44,11 @@ Equipment a scenario needs besides its boards belongs to the stand
 (`tools/lab`): a scenario that uses the lab router declares it
 (`Scenario::using_router`) and runs its operations through `Cx::router`.
 
-A case records measurements through `Cx::measure`: each is printed, and a
-run with measurements writes them with its outcomes to
-`target/hil/results/<scenario>-<time in ns>.json` after the lease is released,
-with the cleanup and the verdict.
+A case records measurements through `Cx::measure`: each is printed. Every
+run that opened its session writes
+`target/hil/results/<scenario>-<time in ns>.json` after the lease is
+released. The file opens with the source its images were built from: `tree`
+(`git rev-parse HEAD^{tree}` of the checkout) and `dirty` (the paths `git
+status --porcelain` names, empty for a clean checkout), both read before the
+build. Then come its outcomes and measurements, the cleanup and the verdict.
+A dirty run is not refused; its file says so.

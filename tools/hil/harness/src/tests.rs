@@ -508,12 +508,26 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
             value: serde_json::json!({ "mbps": 42.5 }),
         }]
     );
-    let results = run::results(
+    let source = crate::source::Source {
+        tree: "0123abcd".to_owned(),
+        dirty: vec!["chips/x.rs".to_owned()],
+    };
+    let file = run::results(
+        &source,
         &SCENARIO,
         &[("s31-a".to_owned(), built)],
         &ran.outcomes,
         &ran.measurements,
     );
+    // The file opens with the source the images were built from.
+    let text = serde_json::to_string_pretty(&file).expect("the file renders");
+    assert!(
+        text.starts_with(
+            "{\n  \"tree\": \"0123abcd\",\n  \"dirty\": [\n    \"chips/x.rs\"\n  ],\n"
+        ),
+        "{text}"
+    );
+    let results: serde_json::Value = serde_json::from_str(&text).expect("the file parses");
     assert_eq!(results["devices"][0]["role"], "dut");
     assert_eq!(results["devices"][0]["image"], "test-image");
     assert_eq!(results["devices"][0]["board"], "s31-a");

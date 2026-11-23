@@ -290,27 +290,56 @@ fn device_reason(roles: &[Role], role: &Role, reason: String) -> String {
     }
 }
 
-/// The results file of a run: the scenario, each device's role, image,
-/// board and build, every outcome and every measurement.
+/// The results file of a run: first the source its images were built from,
+/// then the scenario, each device's role, image, board and build, every
+/// outcome and every measurement.
+#[derive(serde::Serialize)]
+pub(crate) struct ResultsFile {
+    #[serde(flatten)]
+    pub(crate) source: crate::source::Source,
+    #[serde(flatten)]
+    pub(crate) rest: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The results file of a run of `source`.
 pub(crate) fn results(
+    source: &crate::source::Source,
     scenario: &Scenario,
     boards: &[(String, oer_tools_image_bundle::BuildChoice)],
     outcomes: &[Outcome],
     measurements: &[Measurement],
-) -> serde_json::Value {
+) -> ResultsFile {
+    ResultsFile {
+        source: source.clone(),
+        rest: run_results(scenario, boards, outcomes, measurements),
+    }
+}
+
+fn run_results(
+    scenario: &Scenario,
+    boards: &[(String, oer_tools_image_bundle::BuildChoice)],
+    outcomes: &[Outcome],
+    measurements: &[Measurement],
+) -> serde_json::Map<String, serde_json::Value> {
     let unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs());
-    serde_json::json!({
-        "scenario": scenario.name,
-        "devices": scenario.roles().iter().zip(boards).map(|(role, (board, built))| serde_json::json!({
-            "role": role.name,
-            "image": role.image,
-            "board": board,
-            "build": built,
-        })).collect::<Vec<_>>(),
-        "unix": unix,
-        "outcomes": outcomes.iter().map(|outcome| {
+    let devices = scenario
+        .roles()
+        .iter()
+        .zip(boards)
+        .map(|(role, (board, built))| {
+            serde_json::json!({
+                "role": role.name,
+                "image": role.image,
+                "board": board,
+                "build": built,
+            })
+        })
+        .collect::<Vec<_>>();
+    let outcomes = outcomes
+        .iter()
+        .map(|outcome| {
             let (verdict, reason) = match &outcome.verdict {
                 Verdict::Pass => ("pass", None),
                 Verdict::Fail(reason) => ("fail", Some(reason)),
@@ -321,13 +350,28 @@ pub(crate) fn results(
                 "verdict": verdict,
                 "reason": reason,
             })
-        }).collect::<Vec<_>>(),
-        "measurements": measurements.iter().map(|measurement| serde_json::json!({
-            "case": measurement.case,
-            "name": measurement.name,
-            "value": measurement.value,
-        })).collect::<Vec<_>>(),
-    })
+        })
+        .collect::<Vec<_>>();
+    let measurements = measurements
+        .iter()
+        .map(|measurement| {
+            serde_json::json!({
+                "case": measurement.case,
+                "name": measurement.name,
+                "value": measurement.value,
+            })
+        })
+        .collect::<Vec<_>>();
+    [
+        ("scenario", serde_json::Value::from(scenario.name)),
+        ("devices", devices.into()),
+        ("unix", unix.into()),
+        ("outcomes", outcomes.into()),
+        ("measurements", measurements.into()),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value))
+    .collect()
 }
 
 /// Print the device's diagnostic lines and how many were lost, each named
