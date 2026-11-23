@@ -19,8 +19,6 @@ console = ["oer-chips-esp32s31-app?/console"]
 ## task group runs on the application's executor: both are product
 ## placements.
 group = ["oer-chips-esp32s31-app?/group"]
-## The family library's observation counters (`observe`).
-observe = ["oer-chips-family-app/observe"]
 
 [dependencies]
 oer-chips-family-app = { path = "../chips/family/app" }

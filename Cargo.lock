@@ -1566,7 +1566,6 @@ version = "0.1.0"
 dependencies = [
  "oer-portable-memory",
  "oer-portable-waker",
- "oer-protocols-network-port",
  "static_cell",
 ]
 
@@ -2100,38 +2099,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-scenarios-sdk-station"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
- "oer-hil-services-fault",
- "oer-hil-services-sdk-station",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "oer-tools-hil-harness",
- "oer-tools-lab-model",
- "serde_json",
-]
-
-[[package]]
 name = "oer-hil-scenarios-timer-facts"
 version = "0.1.0"
 dependencies = [
  "oer-hil-services-timer-facts",
  "oer-protocols-hil-agent",
  "oer-tools-hil-harness",
- "serde_json",
-]
-
-[[package]]
-name = "oer-hil-scenarios-wifi-access-point"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
- "oer-hil-services-wifi-access-point",
- "oer-protocols-hil-agent",
- "oer-tools-hil-harness",
- "oer-tools-lab-model",
  "serde_json",
 ]
 
@@ -2143,17 +2116,6 @@ dependencies = [
  "embassy-futures",
  "heapless 0.9.3",
  "oer-portable-crypto",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-hil-services-fault"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
  "oer-protocols-hil-agent",
  "oer-protocols-hil-protocol",
  "postcard-schema",
@@ -2173,31 +2135,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-hil-services-sdk-station"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
 name = "oer-hil-services-timer-facts"
-version = "0.1.0"
-dependencies = [
- "heapless 0.9.3",
- "oer-protocols-hil-agent",
- "oer-protocols-hil-protocol",
- "postcard",
- "postcard-schema",
- "serde",
-]
-
-[[package]]
-name = "oer-hil-services-wifi-access-point"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
@@ -2310,15 +2248,6 @@ dependencies = [
 name = "oer-portable-trace"
 version = "0.1.0"
 dependencies = [
- "tempfile",
-]
-
-[[package]]
-name = "oer-portable-trace-recorder"
-version = "0.1.0"
-dependencies = [
- "oer-portable-memory",
- "oer-portable-trace",
  "tempfile",
 ]
 

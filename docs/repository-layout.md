@@ -41,7 +41,7 @@ tools/test/{layers, ui-cases}/
 tools/vendor/{cli, ieee802154-esp32s31, ieee802154-esp32s31-cli, lineage,
     provenance, scenario, scenario-cli}/
 portable/{cooperate, crypto, diagnostics, events, memory, mmio, riscv, sort,
-    sync, time, time-virtual, trace, trace-recorder, wire}/
+    sync, time, time-virtual, trace, wire}/
 portable/embassy/{net, time}/
 protocols/bluetooth/hci/
 protocols/bluetooth/le/{cipher, controller, ll, model, port, runtime, wire}/
@@ -78,8 +78,8 @@ hil/images/aes/
 hil/probes/{esp32s31-aes-timing, esp32s31-boot-smoke, esp32s31-facts,
     esp32s31-light-sleep, esp32s31-mcycle, esp32s31-peer-overdue, esp32s31-radio, esp32s31-radio-root,
     esp32s31-register, esp32s31-rx-ring, esp32s31-timer-facts}/
-hil/scenarios/{aes, radio-pair, sdk-station, timer-facts, wifi-access-point}/
-hil/services/{aes, fault, radio-pair, sdk-station, timer-facts, wifi-access-point}/
+hil/scenarios/{aes, radio-pair, timer-facts}/
+hil/services/{aes, radio-pair, timer-facts}/
 ```
 
 The workspace's `exclude` names the packages that stay as sources and are
@@ -98,7 +98,11 @@ among them. Inside built packages, files stay as sources outside their
 crate's module tree:
 - the HAL's `radio/{bluetooth, ieee802154}` modules, with their
   compile-fail cases (`ui/` beside each);
-- the PHY crate's `bluetooth_client` and `ieee802154_client`.
+- the PHY crate's `bluetooth_client` and `ieee802154_client`;
+- the family application's observation counters
+  (`chips/family/app/src/observe{.rs,/}`), whose one reader is
+  `hil/images/wifi-station`, and the S31 application's `observed.rs`,
+  `wifi.rs` and `wifi/`.
 
 Awaiting deletion at their successor:
 - the old Wi-Fi path, its backend and station
@@ -107,7 +111,10 @@ Awaiting deletion at their successor:
   (`chips/esp32s31/radio/{system, client}/`);
 - what stands on it: `examples/wifi-station/`,
   `hil/images/{wifi-station, wifi-access-point}/`,
-  `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/{load, wifi-station}/`.
+  `hil/scenarios/{wifi-load, wifi-station}/`, `hil/services/{load, wifi-station}/`;
+- what served only those images: `hil/services/{fault, sdk-station,
+  wifi-access-point}/` and `hil/scenarios/{sdk-station, wifi-access-point}/`;
+- the old backend's retained trace recorder (`portable/trace-recorder/`).
 
 The station's acceptance suite
 (`protocols/network/testing/model/station-suite/`) is kept beside its package

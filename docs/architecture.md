@@ -1529,8 +1529,8 @@ of an image declaring the `trace` class keeps.
 Instrumentation is never a Cargo feature of a library under
 `chips/`, `protocols/` or `portable/`; `oer-tools-test-layers` rejects feature
 names carrying an instrumentation word, and its list of remaining ones only
-shrinks. `oer-portable-trace-recorder` owns the
-retained recorder, commit/clear protocol, global installation and previous-boot
+shrinks. `oer-portable-trace-recorder`, outside the build with the old
+Wi-Fi backend that used it, owns the retained recorder, commit/clear protocol, global installation and previous-boot
 policy. The image places its retained storage and recorder and supplies its
 clock with `trace_clock!`. It preserves OETR layout 1: the six-word
 header, 16-byte entries, three-word snapshot headers and snapshot payload words.
@@ -1577,7 +1577,7 @@ and credits restored; loans out and published but unprocessed returns at a
 `no_credit` refusal; materialised frames; and the time split of the core's
 main stages. The counters, where each is counted and the cost while off are
 in [the runtime's README](../protocols/network/runtime/README.md#diagnostics).
-Only an observing image (`oer::observe`) carries them: its network
+Only an observing image carries them: its network
 service counts through them, the network's task their one writer, and the
 image switches, resets and reads them. No built image carries them: the one
 that did, `hil-wifi-station` for its load service, is outside the build.
