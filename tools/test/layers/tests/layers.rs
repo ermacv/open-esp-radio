@@ -5691,17 +5691,6 @@ fn claim_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     None
 }
 
-/// S2: the runtime's violation enums.
-const VIOLATIONS: [&str; 3] = ["ActorViolation", "LifecycleViolation", "ApContract"];
-
-/// S2: a site that makes or matches a violation: `Enum::Variant`.
-fn violation_site_at(tokens: &[TokenTree], at: usize) -> Option<String> {
-    let owner = path_owner(tokens, at)?;
-    VIOLATIONS
-        .contains(&owner.as_str())
-        .then(|| format!("{owner}::{}", ident_at(tokens, at).unwrap_or_default()))
-}
-
 /// S3: a name of an error type.
 fn error_name(name: &str) -> bool {
     [
@@ -6479,11 +6468,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/core/roles/ap/src/engine.rs", 1, BY_P3),
     ("protocols/network/core/src/lib.rs", 1, BY_PHASE_C),
 ];
-/// S2: the variants of the runtime's violation enums, each with the count of
-/// the production sites that make or match it, and what removes it by what
-/// it guards. The list only shrinks; a variant without an entry fails.
-const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[];
-
 /// S8c: the values cut to a field's width (`Bits::truncate` and the HAL's
 /// `bits` helper) in the HAL, the radio crates and the platform, by file
 /// with their count. The list only shrinks.
@@ -6904,57 +6888,6 @@ fn places_claimed_at_run_time_are_listed_and_only_shrink() {
 }
 
 #[test]
-fn violation_variants_and_their_sites_are_listed_and_only_shrink() {
-    let mut sites = BTreeMap::<String, usize>::new();
-    for (_, site) in scan_hits(&product_code, &violation_site_at, NO_ATTRIBUTE) {
-        *sites.entry(site).or_insert(0) += 1;
-    }
-    // Every variant has an entry, with no site too.
-    for (_, definition) in scan_hits(
-        &|path| path == "protocols/ieee80211/runtime",
-        &|tokens, at| {
-            let (name, variants) = enum_at(tokens, at)?;
-            VIOLATIONS.contains(&name.as_str()).then(|| {
-                variants
-                    .iter()
-                    .map(|variant| format!("{name}::{variant}"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            })
-        },
-        NO_ATTRIBUTE,
-    ) {
-        for variant in definition.split(' ') {
-            sites.entry(variant.to_owned()).or_insert(0);
-        }
-    }
-    let known = VIOLATION_VARIANTS
-        .iter()
-        .map(|(variant, count, _)| ((*variant).to_owned(), *count))
-        .collect::<BTreeMap<_, _>>();
-    let new = sites
-        .keys()
-        .filter(|variant| !known.contains_key(*variant))
-        .collect::<Vec<_>>();
-    let grown = sites
-        .iter()
-        .filter(|(variant, count)| known.get(*variant).is_some_and(|known| *count > known))
-        .collect::<Vec<_>>();
-    let lower = sites
-        .iter()
-        .filter(|(variant, count)| known.get(*variant).is_some_and(|known| *count < known))
-        .collect::<Vec<_>>();
-    let gone = known
-        .keys()
-        .filter(|variant| !sites.contains_key(*variant))
-        .collect::<Vec<_>>();
-    assert!(
-        new.is_empty() && grown.is_empty() && lower.is_empty() && gone.is_empty(),
-        "new {new:?}, grown {grown:?}, lower the entry {lower:?}, gone {gone:?}"
-    );
-}
-
-#[test]
 fn error_types_that_name_the_callers_state_are_listed_and_only_shrink() {
     assert_scan(
         &scan_hits(&product_code, &error_state_at, NO_ATTRIBUTE),
@@ -7024,7 +6957,6 @@ fn compatibility_layers_are_listed_and_only_shrink() {
 fn the_rule_lists_name_their_removers() {
     for list in [
         CLAIMS,
-        VIOLATION_VARIANTS,
         ERROR_STATES,
         STATUS_FAILURES,
         DROPPED_RESULTS,
@@ -7138,9 +7070,8 @@ mod tests {
 #[ignore = "prints the T8c lists from the scans' hits"]
 fn t8c_print() {
     let none: &AttributeFinder = &|_| None;
-    let scans: [Scan<'_>; 9] = [
+    let scans: [Scan<'_>; 8] = [
         ("CLAIMS", &claims_scope, &claim_at, none),
-        ("VIOLATION_SITES", &product_code, &violation_site_at, none),
         ("ERROR_STATES", &product_code, &error_state_at, none),
         ("STATUS_FAILURES", &product_code, &status_failure_at, none),
         ("DROPPED_RESULTS", &product_code, &dropped_result_at, none),
