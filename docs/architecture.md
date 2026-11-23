@@ -1034,8 +1034,7 @@ The current mechanisms have narrower guarantees than the policy:
   watchdog's `ResetRtc`, super watchdog, brownout or power loss. Checksums
   validate stored words, not power-fail atomicity. Every staged image reports
   per-hart raw reset causes through the chip composition at boot, beside the
-  retained diagnostics; output is best effort. Isolated facts probes use their
-  own session diagnostic channel. Bootstrap reporting remains separate.
+  retained diagnostics; output is best effort. Bootstrap reporting remains separate.
 
 [`terminal-sites.toml`](../tools/test/layers/terminal-sites.toml) and its
 [source check](../tools/test/layers/tests/terminal_sites.rs) inventory the
@@ -1555,9 +1554,7 @@ knobs that force paths under `oer_debug_control`, and `fault-injection` a
 one-shot fault on a real path under `oer_fault_injection`, which changes nothing
 else, so an image that measures can carry it; neither is an observer. Only
 `cargo fw` sets these cfgs for an image declaring the corresponding class. Comparison probe images (`cargo fw probe`) are built
-over the production crates' public API alone. The separately admitted
-`hil/probes/esp32s31-facts` image takes the PAC once for short hardware
-facts experiments, without HAL or production runtime dependencies. The HAL may
+over the production crates' public API alone. The HAL may
 expose typed access to registers that production does not use, on the owner
 that already holds them, so a comparison probe reaches them through the public
 API. Such access grants nothing the owner's partition does not hold, and

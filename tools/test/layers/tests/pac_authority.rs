@@ -2,12 +2,10 @@
 //! Direct PAC authority is admitted by exact package path, never by suffix.
 use std::path::Path;
 
-const FACTS: &str = "hil/probes/esp32s31-facts";
 /// The timer facts probe: its one second claim of the system timer
 /// (`tasks/380`) names the PAC's part types.
 const TIMER_FACTS: &str = "hil/probes/esp32s31-timer-facts";
 const PAC: &str = "oer-chips-esp32s31-pac";
-const IMAGE: &str = "oer-hil-probes-esp32s31-facts";
 
 fn inspect(
     owner: &str,
@@ -35,17 +33,8 @@ fn inspect(
                     .get("package")
                     .and_then(toml::Value::as_str)
                     .unwrap_or(alias);
-                if name == PAC && !matches!(owner, "chips/esp32s31/hal" | FACTS | TIMER_FACTS) {
+                if name == PAC && !matches!(owner, "chips/esp32s31/hal" | TIMER_FACTS) {
                     found.push(format!("{owner}: direct PAC dependency"));
-                }
-                if name == IMAGE {
-                    found.push(format!("{owner}: depends on the facts image"));
-                }
-                if owner == FACTS
-                    && key != "build-dependencies"
-                    && !matches!(name, PAC | "oer-portable-mmio" | "oer-portable-riscv")
-                {
-                    found.push(format!("{owner}: runtime dependency {name}"));
                 }
             }
         } else {
@@ -55,7 +44,7 @@ fn inspect(
 }
 
 #[test]
-fn only_the_hal_and_this_facts_image_may_depend_on_the_pac() {
+fn only_the_hal_and_the_timer_facts_probe_may_depend_on_the_pac() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let workspace: toml::Value =
         toml::from_str(&std::fs::read_to_string(root.join("Cargo.toml")).unwrap()).unwrap();
@@ -78,7 +67,7 @@ fn only_the_hal_and_this_facts_image_may_depend_on_the_pac() {
 #[test]
 fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
     let spec: toml::Value = toml::from_str("[target.'cfg(test)'.dependencies]\nrenamed = { package = 'oer-chips-esp32s31-pac', path = 'pac' }\n").unwrap();
-    for owner in [FACTS, TIMER_FACTS, "chips/esp32s31/hal"] {
+    for owner in [TIMER_FACTS, "chips/esp32s31/hal"] {
         let mut found = Vec::new();
         inspect(owner, &spec, None, &mut found);
         assert!(found.is_empty());
@@ -92,14 +81,6 @@ fn aliases_targets_and_other_facts_suffixes_do_not_expand_the_exception() {
         inspect(owner, &spec, None, &mut found);
         assert_eq!(found.len(), 1);
     }
-    let mut found = Vec::new();
-    inspect(
-        FACTS,
-        &toml::from_str("[dependencies]\noer-chips-esp32s31-hal = {}\n").unwrap(),
-        None,
-        &mut found,
-    );
-    assert_eq!(found.len(), 1);
 }
 
 #[test]
