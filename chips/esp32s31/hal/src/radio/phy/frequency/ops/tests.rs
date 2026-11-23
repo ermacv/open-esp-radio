@@ -1,9 +1,11 @@
 use super::{
     ChannelCbwFields, PhyFrequencyI2cNumberAddresses, bss_tx_offset, channel_cbw_fields,
     configure_i2c_number_addresses, configure_nrx_frequency,
-    configure_nrx_frequency_between_samples, nrx_frequency_quotient, rv32_signed_div,
+    configure_nrx_frequency_between_samples, nrx_frequency_quotient, residue_of_eight,
+    residue_of_four, residue_of_sixteen, rv32_signed_div,
 };
 use crate::radio::phy::registers::FrequencyRegisters;
+use oer_portable_mmio::Bits;
 use std::{vec, vec::Vec};
 
 fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
@@ -26,44 +28,12 @@ fn bss_offsets_retain_complete_rom_branches() {
 
 #[test]
 fn channel_cbw_derivation_retains_both_complete_rom_paths() {
-    assert_eq!(
-        channel_cbw_fields(0),
-        ChannelCbwFields {
-            tx_offset: 0,
-            control_0: 0,
-            control_1_high: 0,
-            control_1_low: 0,
-        }
-    );
-    assert_eq!(
-        channel_cbw_fields(2),
-        ChannelCbwFields {
-            tx_offset: 0,
-            control_0: 0,
-            control_1_high: 1,
-            control_1_low: 1,
-        }
-    );
-    assert_eq!(
-        channel_cbw_fields(0x50),
-        ChannelCbwFields {
-            tx_offset: 0,
-            control_0: 0,
-            control_1_high: 4,
-            control_1_low: 0,
-        }
-    );
-    assert_eq!(
-        channel_cbw_fields(0x53),
-        ChannelCbwFields {
-            tx_offset: 3,
-            control_0: 3,
-            control_1_high: 4,
-            control_1_low: 0,
-        }
-    );
+    assert_eq!(channel_cbw_fields(0), cbw_fields(0, 0, 0, 0));
+    assert_eq!(channel_cbw_fields(2), cbw_fields(0, 0, 1, 1));
+    assert_eq!(channel_cbw_fields(0x50), cbw_fields(0, 0, 4, 0));
+    assert_eq!(channel_cbw_fields(0x53), cbw_fields(3, 3, 4, 0));
     assert_eq!(channel_cbw_fields(0x1_010), channel_cbw_fields(0x10));
-    assert_eq!(channel_cbw_fields(0x1_00f).tx_offset, 0x0f);
+    assert_eq!(channel_cbw_fields(0x1_00f).tx_offset.get(), 0x0f);
 }
 
 #[test]
@@ -174,4 +144,28 @@ fn the_nrx_shift_comes_from_the_first_sample_and_the_high_fields_from_the_second
         written.bits_0_23_opaque(),
         nrx_frequency_quotient(first_shift, 2412)
     );
+}
+
+/// The four fields' values, each checked to fit its field.
+fn cbw_fields(
+    tx_offset: u32,
+    control_0: u32,
+    control_1_high: u32,
+    control_1_low: u32,
+) -> ChannelCbwFields {
+    ChannelCbwFields {
+        tx_offset: Bits::new(tx_offset).unwrap(),
+        control_0: Bits::new(control_0).unwrap(),
+        control_1_high: Bits::new(control_1_high).unwrap(),
+        control_1_low: Bits::new(control_1_low).unwrap(),
+    }
+}
+
+#[test]
+fn every_residue_is_the_value_modulo_the_field_s_power_of_two() {
+    for value in 0..=u8::MAX {
+        assert_eq!(residue_of_four(value).get(), u32::from(value % 4));
+        assert_eq!(residue_of_eight(value).get(), u32::from(value % 8));
+        assert_eq!(residue_of_sixteen(value).get(), u32::from(value % 16));
+    }
 }
