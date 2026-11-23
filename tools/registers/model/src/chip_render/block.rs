@@ -272,7 +272,7 @@ impl FieldPlan<'_> {
         match (self.setter, &self.pointer) {
             (Setter::Pointer, Some(pointer)) => {
                 let mut address = match pointer.target {
-                    Some(_) => format!("{var}.bits()"),
+                    Some(_) => format!("{var}.address().get()"),
                     None => format!("{var}.get()"),
                 };
                 if pointer.member_offset != 0 {

@@ -45,7 +45,7 @@ fn the_descriptor_base_takes_the_typed_reference_whole() {
     owners.rx_dma.write_mac_rx_descriptor_base(head);
     assert_eq!(
         owners.rx_dma.dma.read_rx_descriptor_base().address(),
-        head.bits()
+        head.address().get()
     );
 }
 

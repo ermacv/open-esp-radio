@@ -81,8 +81,6 @@ pub struct RwdtRegisters<P: Placement = Fixed<{ instances::lp_wdt::BASE }>>(LpWd
 #[must_use = "dropping a register owner permanently loses its register authority"]
 pub struct SwdRegisters<P: Placement = Fixed<{ instances::lp_wdt::BASE }>>(LpWdtSwd<P>);
 
-/// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:273-301`: the watchdog source XTAL.
-const XTAL_SOURCE: Bits<2> = Bits::constant::<0>();
 /// SOURCE: ESP-IDF 4d80c1b2 `mwdt_ll.h:219-222`: any store feeds, the LL writes one.
 const FEED: u32 = 1;
 
@@ -96,12 +94,9 @@ impl<P: Placement, Q: Placement> Mwdt0Registers<P, Q> {
     /// SOURCE: ESP_IDF_4D59230D_S31_TIMER0_LL in the register model.
     pub(super) fn start_timer0_clock(&mut self) {
         self.clock.modify_timergrp0_ctrl0(|w| {
-            w.set_reg_timergrp0_t0_src_sel(Bits::constant::<
-                {
-                    oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal
-                        .bits()
-                },
-            >())
+            w.set_reg_timergrp0_t0_src_sel(
+                oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp0_ctrl0::RegTimergrp0T0SrcSel::Xtal,
+            )
             .set_reg_timergrp0_t0_clk_en(true);
         });
     }
@@ -136,22 +131,18 @@ impl<P: Placement, Q: Placement> Mwdt1Registers<P, Q> {
             w.set_reg_timergrp1_rst_en(false);
         });
         self.clock.modify_timergrp1_ctrl0(|w| {
-            w.set_reg_timergrp1_wdt_src_sel(XTAL_SOURCE)
-                .set_reg_timergrp1_wdt_clk_en(true)
-                .set_reg_timergrp1_t0_src_sel(Bits::constant::<
-                    {
-                        oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T0SrcSel::Xtal
-                            .bits()
-                    },
-                >())
-                .set_reg_timergrp1_t0_clk_en(true)
-                .set_reg_timergrp1_t1_src_sel(Bits::constant::<
-                    {
-                        oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T1SrcSel::Xtal
-                            .bits()
-                    },
-                >())
-                .set_reg_timergrp1_t1_clk_en(true);
+            w.set_reg_timergrp1_wdt_src_sel(
+                oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1WdtSrcSel::Xtal,
+            )
+            .set_reg_timergrp1_wdt_clk_en(true)
+            .set_reg_timergrp1_t0_src_sel(
+                oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T0SrcSel::Xtal,
+            )
+            .set_reg_timergrp1_t0_clk_en(true)
+            .set_reg_timergrp1_t1_src_sel(
+                oer_chips_esp32s31_pac::hp_sys_clkrst::timergrp1_ctrl0::RegTimergrp1T1SrcSel::Xtal,
+            )
+            .set_reg_timergrp1_t1_clk_en(true);
         });
     }
 }

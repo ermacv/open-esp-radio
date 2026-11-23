@@ -480,7 +480,7 @@ fn a_word_layout_renders_cells_values_and_its_placement() {
         "pub const fn length(self) -> u16",
         "pub const fn with_length(self, value: u16) -> Option<Self>",
         "pub const fn address(self) -> u32 { self.0 }",
-        "pub const fn with_address(self, value: Option<DmaRef<Node>>) -> Self { Self(match value { Some(reference) => reference.bits(), None => 0 }) }",
+        "pub const fn with_address(self, value: Option<DmaRef<Node>>) -> Self { Self(match value { Some(reference) => reference.address().get(), None => 0 }) }",
         "impl oer_portable_memory::DmaWindow for DmaWindow {",
         "pub type DmaWindowAddress = oer_portable_memory::DmaWindowAddress<DmaWindow>;",
         "pub use oer_portable_memory::DmaRef;",

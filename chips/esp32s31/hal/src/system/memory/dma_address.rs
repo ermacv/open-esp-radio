@@ -268,7 +268,7 @@ impl PlacementProjection {
                 .checked_mul(size_of::<L>())
                 .and_then(|n| u32::try_from(n).ok())
                 .ok_or(ProjectionError::AddressWidth)?;
-            if first.bits().checked_add(offset) != Some(address) {
+            if first.address().get().checked_add(offset) != Some(address) {
                 return Err(ProjectionError::NonContiguous);
             }
             len = len.checked_add(1).ok_or(ProjectionError::AddressWidth)?;
@@ -340,7 +340,7 @@ impl<L: DmaLayout> core::fmt::Debug for PlacedTable<L> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_struct("PlacedTable")
-            .field("base", &self.first.bits())
+            .field("base", &self.first.address().get())
             .field("len", &self.len)
             .finish()
     }
@@ -365,7 +365,7 @@ impl<L: DmaLayout> PlacedTable<L> {
         let Some(bytes) = len.checked_mul(Self::STRIDE) else {
             return None;
         };
-        if first.bits().checked_add(bytes).is_none() {
+        if first.address().get().checked_add(bytes).is_none() {
             return None;
         }
         Some(Self { first, len })
@@ -390,7 +390,7 @@ impl<L: DmaLayout> PlacedTable<L> {
 
     /// The first element's address, as the hardware reads it.
     pub const fn base(self) -> u32 {
-        self.first.bits()
+        self.first.address().get()
     }
 
     /// The number of elements.
@@ -409,7 +409,7 @@ impl<L: DmaLayout> PlacedTable<L> {
             return None;
         }
         // In range: `new` checked that the table's end fits the width.
-        Some(self.first.bits() + index as u32 * Self::STRIDE)
+        Some(self.first.address().get() + index as u32 * Self::STRIDE)
     }
 
     /// Element `index`, or `None` past the table.
@@ -427,7 +427,7 @@ impl<L: DmaLayout> PlacedTable<L> {
     /// The element at `address`, or `None` outside the table or between
     /// two elements.
     pub const fn index_of(self, address: u32) -> Option<usize> {
-        let Some(offset) = address.checked_sub(self.first.bits()) else {
+        let Some(offset) = address.checked_sub(self.first.address().get()) else {
             return None;
         };
         if !offset.is_multiple_of(Self::STRIDE) {

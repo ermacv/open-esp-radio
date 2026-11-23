@@ -300,12 +300,12 @@ impl AesDma {
             Pair::Middle => middle,
             Pair::Large => large,
         };
-        let input = AxiDmaDescriptorControl::from_bits(0)
+        let input = AxiDmaDescriptorControl::ZERO
             .with_size(bytes)?
             .with_length(bytes)?
             .with_suc_eof(true)
             .with_owner(true);
-        let output = AxiDmaDescriptorControl::from_bits(0)
+        let output = AxiDmaDescriptorControl::ZERO
             .with_size(bytes)?
             .with_owner(true);
         for (descriptor, buffer) in [
@@ -314,10 +314,10 @@ impl AesDma {
         ] {
             descriptor
                 .buffer()
-                .write(AxiDmaDescriptorBuffer::from_bits(0).with_address(buffer));
+                .write(AxiDmaDescriptorBuffer::ZERO.with_address(buffer));
             descriptor
                 .next()
-                .write(AxiDmaDescriptorNext::from_bits(0).with_address(None));
+                .write(AxiDmaDescriptorNext::ZERO.with_address(None));
         }
         self.storage.input_descriptor.control().write(input);
         self.storage.output_descriptor.control().write(output);

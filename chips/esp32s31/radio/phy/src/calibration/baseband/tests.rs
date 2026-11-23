@@ -1,8 +1,8 @@
 use super::{
-    PHY_TX_CFR_ENTRY_COUNT, PhyBbBasebandMode, PhyBbMmioAction, PhyBbMmioBinding,
-    PhyGainMemoryEntry, PhyRegisterInitParameters, PhyRfRxSaturationPhase, PhyRxGainBank,
-    PhyRxGainMemoryParameters, PhyRxTableInitParameters, PhyTxCfrAction, PhyTxCfrBindingError,
-    PhyTxCfrCompletion, PhyTxCfrEntry, PhyTxCfrMmioBinding, PhyTxCfrOutcome, PhyTxCfrTransition,
+    PHY_TX_CFR_ENTRY_COUNT, PhyBbMmioAction, PhyBbMmioBinding, PhyGainMemoryEntry,
+    PhyRegisterInitParameters, PhyRfRxSaturationPhase, PhyRxGainBank, PhyRxGainMemoryParameters,
+    PhyRxTableInitParameters, PhyTxCfrAction, PhyTxCfrBindingError, PhyTxCfrCompletion,
+    PhyTxCfrEntry, PhyTxCfrMmioBinding, PhyTxCfrOutcome, PhyTxCfrTransition,
     PhyTxCfrTransitionError, generate_phy_rx_gain_table, phy_generated_rx_gain_memory_entry,
 };
 use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
@@ -177,7 +177,7 @@ fn finite_baseband_mmio_binding_preserves_dynamic_identity() {
     for action in [
         PhyBbMmioAction::EnableBasebandInitialization,
         PhyBbMmioAction::SetBasebandMode {
-            mode: PhyBbBasebandMode::Calibration,
+            mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
         },
         PhyBbMmioAction::UpdateAgcRegisters,
         PhyBbMmioAction::UpdatePostInitRegisters,
@@ -231,7 +231,7 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     complete_parent_mmio(
         &mut fresh,
         PhyBbMmioAction::SetBasebandMode {
-            mode: PhyBbBasebandMode::Calibration,
+            mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
         },
     );
     complete_parent_mmio(
@@ -254,7 +254,7 @@ fn complete_parent_enters_or_skips_the_guarded_calibration_prefix() {
     complete_parent_mmio(
         &mut retained,
         PhyBbMmioAction::SetBasebandMode {
-            mode: PhyBbBasebandMode::Calibration,
+            mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
         },
     );
     complete_parent_mmio(
@@ -317,7 +317,7 @@ fn complete_parent_tail_preserves_conditional_disable_and_tracking_order() {
     complete_parent_mmio(
         &mut transition,
         PhyBbMmioAction::SetBasebandMode {
-            mode: PhyBbBasebandMode::Idle,
+            mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
         },
     );
     assert_eq!(
@@ -381,14 +381,14 @@ fn complete_parent_failure_always_restores_idle_mode_and_agc() {
         transition.step_local().unwrap(),
         super::PhyBbInitLocalStep::External(super::PhyBbInitAction::Mmio(
             PhyBbMmioAction::SetBasebandMode {
-                mode: PhyBbBasebandMode::Idle,
+                mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
             }
         ))
     );
     complete_parent_mmio(
         &mut transition,
         PhyBbMmioAction::SetBasebandMode {
-            mode: PhyBbBasebandMode::Idle,
+            mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
         },
     );
     assert_eq!(
@@ -443,7 +443,7 @@ fn every_parent_step_produces_the_vendor_s_register_action() {
         parameter_120: 0x4e,
     };
     let idle = PhyBbMmioAction::SetBasebandMode {
-        mode: PhyBbBasebandMode::Idle,
+        mode: oer_chips_esp32s31_hal::types::BasebandMode::Idle,
     };
     let gain_off = PhyBbMmioAction::SetForcedDigitalGain {
         gain: PhyForcedDigitalGain::Disabled,
@@ -458,7 +458,7 @@ fn every_parent_step_produces_the_vendor_s_register_action() {
         (
             Step::SetCalibrationMode,
             PhyBbMmioAction::SetBasebandMode {
-                mode: PhyBbBasebandMode::Calibration,
+                mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
             },
         ),
         (

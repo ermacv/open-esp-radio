@@ -3,9 +3,7 @@
 
 use oer_chips_family_boot::{
     Access, Busy,
-    flash::{
-        CHUNK_WORDS, FlashCommandRegisters, FlashReadCommand, FlashReadMode, FlashTimingRegisters,
-    },
+    flash::{CHUNK_WORDS, FlashCommandRegisters, FlashReadMode, FlashTimingRegisters},
     mmu::{MmuEntry, MmuRegisters, MmuTarget},
 };
 use oer_portable_mmio::{Bits, Fixed, Placement};
@@ -71,7 +69,8 @@ impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> 
         self.spi1.read_rd_status().wb_mode_en()
     }
 
-    fn configure_read(&mut self, _: Access<'_>, command: FlashReadCommand) {
+    fn configure_read(&mut self, _: Access<'_>, mode: FlashReadMode) {
+        let command = read_command(mode);
         let address = command.address_bits > 0;
         let dummy = command.dummy_cycles > 0;
         self.spi1.modify_user(|w| {
@@ -83,7 +82,7 @@ impl<P: Placement, Q: Placement> FlashCommandRegisters for FlashRegisters<P, Q> 
         });
         self.spi1.modify_user2(|w| {
             w.set_usr_command_bitlen(Bits::constant::<7>())
-                .set_usr_command_value(u16::from(command.opcode));
+                .set_usr_command_value(command.opcode);
         });
         self.spi1.modify_user1(|w| {
             w.set_usr_addr_bitlen(Bits::truncate(u32::from(command.address_bits.max(1)) - 1))
@@ -365,5 +364,47 @@ impl<'a, 'b> FlashRegisters<oer_portable_mmio::Host<'a>, oer_portable_mmio::Host
             spi0: Spi0Flash::host(spi0)?,
             spi1: Spi1Flash::host(spi1)?,
         })
+    }
+}
+
+/// One read command: its opcode, the bits of its address phase (the
+/// address and any continuous-mode bits sent with it) and its dummy cycles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct FlashReadCommand {
+    pub(crate) opcode: spi1::user2::UsrCommandValue,
+    pub(crate) address_bits: u8,
+    pub(crate) dummy_cycles: u8,
+}
+
+/// The read command of `mode`, as the ROM's flash read sends it:
+/// a 24-bit address (the ROM's `rd_addr_bit_len`, ESP-IDF's
+/// `SPI1_R_QIO_ADDR_BITSLEN` 23 + 1), QIO and DIO with their continuous-mode
+/// bits in the address phase, and the ROM's dummy cycles plus its
+/// `dummy_len_plus[1]`, which is zero on this chip.
+///
+/// SOURCE(esp32s31): pinned rev0 ROM (esp-rom-elfs 20260528, SHA-256
+/// a52ad751...ab87), Blobray function records of `_esp_rom_spiflash_read`
+/// @0x2f80f0c2 (QIO 0xEB, 8 more address bits, dummy + 4; DIO 0xBB, 4 more,
+/// dummy + 2; QOUT 0x6B, DOUT 0x3B and fast read 0x0B, dummy + 8; slow read
+/// 0x03, dummy + 0) and `spi_dummy_len_fix` @0x2f80df7e (stores zero to
+/// `dummy_len_plus`); ESP-IDF 4d80c1b2
+/// `components/esp_rom/esp32s31/include/esp32s31/rom/spi_flash.h:54-60`
+/// (24-bit read addresses) and
+/// `components/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32s31.c`
+/// (the S31 bootloader sets no `dummy_len_plus`).
+pub(crate) const fn read_command(mode: FlashReadMode) -> FlashReadCommand {
+    use spi1::user2::UsrCommandValue as Opcode;
+    let (opcode, address_bits, dummy_cycles) = match mode {
+        FlashReadMode::Qio => (Opcode::QioRead, 24 + 8, 4),
+        FlashReadMode::Dio => (Opcode::DioRead, 24 + 4, 2),
+        FlashReadMode::Qout => (Opcode::QoutRead, 24, 8),
+        FlashReadMode::Dout => (Opcode::DoutRead, 24, 8),
+        FlashReadMode::FastRead => (Opcode::FastRead, 24, 8),
+        FlashReadMode::SlowRead => (Opcode::SlowRead, 24, 0),
+    };
+    FlashReadCommand {
+        opcode,
+        address_bits,
+        dummy_cycles,
     }
 }

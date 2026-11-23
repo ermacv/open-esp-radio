@@ -1348,7 +1348,7 @@ fn render_field(
                 let (parameter, index) = match &field.points_to {
                     Some(target) => (
                         format!("Option<DmaRef<{}>>", camel(target)),
-                        "match value { None => 0, Some(reference) => match ble_word_index(reference.bits()) { Some(index) => index, None => return None } }",
+                        "match value { None => 0, Some(reference) => match ble_word_index(reference.address().get()) { Some(index) => index, None => return None } }",
                     ),
                     None => (
                         "DmaWindowAddress".to_owned(),
@@ -1387,7 +1387,7 @@ fn render_field(
         let (parameter, image) = match &field.points_to {
             Some(target) => (
                 format!("Option<DmaRef<{}>>", camel(target)),
-                "match value { Some(reference) => reference.bits(), None => 0 }",
+                "match value { Some(reference) => reference.address().get(), None => 0 }",
             ),
             None => ("DmaWindowAddress".to_owned(), "value.get()"),
         };

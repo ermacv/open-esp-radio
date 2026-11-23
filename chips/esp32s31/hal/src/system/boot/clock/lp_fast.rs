@@ -24,10 +24,4 @@ impl<P: Placement> LpFastRegisters for LpFastClock<P> {
             word.set_fast_clk_sel(source);
         });
     }
-    fn source(&self, _: Access<'_>) -> u32 {
-        self.0.read_root_clk_conf().fast_clk_sel().get()
-    }
-    fn source_code(source: Self::Source) -> u32 {
-        source.bits()
-    }
 }

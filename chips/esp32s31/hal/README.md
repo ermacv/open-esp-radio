@@ -187,9 +187,9 @@ line17-before16 pair; other pairs, levels and sustained fairness are unqualified
 The bootstrap's `boot::LpFastClock` implements the family's LP-fast selector
 port. `oer-chips-esp32s31-platform-bootstrap` generates the selection from `lp-fast-source` in
 tracked chip/profile facts (currently XTAL) and supplies its sourced 3 µs
-settle. `oer-chips-family-boot::drivers::clock` writes the selector, holds under
-the common boot deadline and rejects readback disagreement as
-`ClockFailure::LpFastReadback` with both codes in the terminal boot report.
+settle. `oer-chips-family-boot::drivers::clock` writes the selector and holds
+the settle under the common boot deadline, as the vendor's
+`rtc_clk_fast_src_set` writes and waits; it does not read the selector back.
 Every neighboring field of `ROOT_CLK_CONF` is preserved. The existing
 `LpAonRadioClock` part moves into this bootstrap owner; runtime PHY receives
 its part through the separate runtime root. RC_FAST has no startup profile.

@@ -209,15 +209,13 @@ impl<P: Placement, Q: Placement, R: Placement> PsramControllerRegisters
         spi.modify_sram_drd_cmd(|w| {
             w.set_cache_sram_usr_rd_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_rd_cmd_value(
-                oer_chips_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead
-                    .bits() as u16,
+                oer_chips_esp32s31_pac::spi_mem_s::sram_drd_cmd::CacheSramUsrRdCmdValue::SyncRead,
             );
         });
         spi.modify_sram_dwr_cmd(|w| {
             w.set_cache_sram_usr_wr_cmd_bitlen(COMMAND_BITLEN)
                 .set_cache_sram_usr_wr_cmd_value(
-                oer_chips_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite
-                    .bits() as u16,
+                oer_chips_esp32s31_pac::spi_mem_s::sram_dwr_cmd::CacheSramUsrWrCmdValue::SyncWrite,
             );
         });
         spi.modify_ctrl1(|w| {

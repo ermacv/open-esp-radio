@@ -11,7 +11,7 @@ use oer_chips_family_boot::{
     Access, BootFailure, FlashFailure, MmuFailure, WaitFailure,
     cache::{CacheGeometry, SuspendWaits, publish_code, with_fetch_suspended},
     clock::{ActivePllPower, ClockRates, ClockWaits, CpuClockProfile, bring_up},
-    flash::{FlashGeometry, FlashReadCommand, FlashReadCommands, read},
+    flash::{FlashGeometry, FlashReadMode, read},
     mmu::{self, MmuTarget, MmuWindow},
     psram::{self, CacheAccess, ChipSelectTiming, OctalPsramProfile, PsramOwners, PsramWaits},
     wait::{BootBudget, BootDeadline, BootWait},
@@ -262,24 +262,8 @@ fn a_publication_starts_one_writeback_of_the_data_caches_whole_lines() {
     assert!(!ctrl.invalidate_ena() && !ctrl.clean_ena() && !ctrl.writeback_invalidate_ena());
 }
 
-const fn command(opcode: u8, address_bits: u8, dummy_cycles: u8) -> FlashReadCommand {
-    FlashReadCommand {
-        opcode,
-        address_bits,
-        dummy_cycles,
-    }
-}
-
 const FLASH: FlashGeometry = FlashGeometry {
     capacity: 16 * 1024 * 1024,
-    commands: FlashReadCommands {
-        qio: command(0xeb, 32, 4),
-        dio: command(0xbb, 28, 2),
-        qout: command(0x6b, 24, 8),
-        dout: command(0x3b, 24, 8),
-        fast_read: command(0x0b, 24, 8),
-        slow_read: command(0x03, 24, 0),
-    },
 };
 
 /// SPI1 in QIO mode, idle, its status word sending no mode bits.
@@ -329,6 +313,128 @@ fn a_flash_read_sets_up_the_read_modes_command_then_starts_the_user_command() {
     assert_eq!(view.read_addr().usr_addr_value(), 0x2000);
     assert_eq!(view.read_miso_dlen().usr_miso_dbitlen().get(), 127);
     assert!(view.read_cmd().usr(), "the user command started");
+}
+
+#[test]
+fn each_read_mode_writes_its_rom_opcode_address_bits_and_dummy_cycles() {
+    let wait = const {
+        match BootWait::new("flash-command", Duration::from_micros(50)) {
+            Ok(wait) => wait,
+            Err(_) => panic!("a boot wait has a nonzero bound"),
+        }
+    };
+    // The controller's read-mode bits, then the ROM's flash read: opcode,
+    // address-phase bits, dummy cycles.
+    for (qio, fast, dio, quad, dual, mode, opcode, address_bits, dummy_cycles) in [
+        (
+            true,
+            true,
+            false,
+            false,
+            false,
+            FlashReadMode::Qio,
+            0xeb,
+            32,
+            4,
+        ),
+        (
+            false,
+            true,
+            true,
+            false,
+            false,
+            FlashReadMode::Dio,
+            0xbb,
+            28,
+            2,
+        ),
+        (
+            false,
+            true,
+            false,
+            true,
+            false,
+            FlashReadMode::Qout,
+            0x6b,
+            24,
+            8,
+        ),
+        (
+            false,
+            true,
+            false,
+            false,
+            true,
+            FlashReadMode::Dout,
+            0x3b,
+            24,
+            8,
+        ),
+        (
+            false,
+            true,
+            false,
+            false,
+            false,
+            FlashReadMode::FastRead,
+            0x0b,
+            24,
+            8,
+        ),
+        (
+            false,
+            false,
+            false,
+            false,
+            false,
+            FlashReadMode::SlowRead,
+            0x03,
+            24,
+            0,
+        ),
+    ] {
+        let mut spi0 = memory(instances::spi0::SIZE, 0);
+        let mut spi1 = memory(instances::spi1::SIZE, 0);
+        Spi1::host(&mut spi1)
+            .expect("host memory holds it")
+            .modify_ctrl(|w| {
+                w.set_fread_qio(qio)
+                    .set_fastrd_mode(fast)
+                    .set_fread_dio(dio)
+                    .set_fread_quad(quad)
+                    .set_fread_dual(dual);
+            });
+        let virtual_clock = VirtualClock::new();
+        let ticking = Ticking(&virtual_clock);
+        let deadline = BootDeadline::start(&ticking, budget());
+        let mut owner = FlashRegisters::host(&mut spi0, &mut spi1).expect("host memory holds them");
+        let mut destination = [0_u32; 1];
+        assert_eq!(
+            read(&mut owner, FLASH, 0, &mut destination, wait, &deadline),
+            Err(BootFailure::Wait(WaitFailure::TimedOut("flash-command"))),
+            "{mode:?}"
+        );
+        drop(owner);
+        let view = Spi1::host(&mut spi1).expect("host memory holds it");
+        let user2 = view.read_user2();
+        assert_eq!(user2.usr_command_value(), opcode, "{mode:?}");
+        assert_eq!(user2.usr_command_bitlen().get(), 7, "an eight-bit command");
+        let user1 = view.read_user1();
+        assert_eq!(
+            u32::from(user1.usr_addr_bitlen().get()) + 1,
+            address_bits,
+            "{mode:?}"
+        );
+        let user = view.read_user();
+        assert_eq!(user.usr_dummy(), dummy_cycles > 0, "{mode:?}");
+        if dummy_cycles > 0 {
+            assert_eq!(
+                u32::from(user1.usr_dummy_cyclelen().get()) + 1,
+                dummy_cycles,
+                "{mode:?}"
+            );
+        }
+    }
 }
 
 #[test]

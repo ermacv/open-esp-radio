@@ -65,47 +65,11 @@ pub enum FlashReadMode {
     SlowRead,
 }
 
-/// One read command: its opcode, the bits of its address phase (the
-/// address and any continuous-mode bits sent with it) and its dummy cycles.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FlashReadCommand {
-    pub opcode: u8,
-    pub address_bits: u8,
-    pub dummy_cycles: u8,
-}
-
-/// The read command of every read mode.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FlashReadCommands {
-    pub qio: FlashReadCommand,
-    pub dio: FlashReadCommand,
-    pub qout: FlashReadCommand,
-    pub dout: FlashReadCommand,
-    pub fast_read: FlashReadCommand,
-    pub slow_read: FlashReadCommand,
-}
-
-impl FlashReadCommands {
-    /// The command of `mode`.
-    pub const fn get(&self, mode: FlashReadMode) -> FlashReadCommand {
-        match mode {
-            FlashReadMode::Qio => self.qio,
-            FlashReadMode::Dio => self.dio,
-            FlashReadMode::Qout => self.qout,
-            FlashReadMode::Dout => self.dout,
-            FlashReadMode::FastRead => self.fast_read,
-            FlashReadMode::SlowRead => self.slow_read,
-        }
-    }
-}
-
 /// What the boot knows of its flash.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FlashGeometry {
     /// The flash's bytes.
     pub capacity: u32,
-    /// The read command of each read mode.
-    pub commands: FlashReadCommands,
 }
 
 /// The SPI1 user command port's words a read uses.
@@ -115,9 +79,9 @@ pub trait FlashCommandRegisters {
     /// Whether the controller sends continuous-mode bits from its status
     /// word; the boot's read sends them in the address phase instead.
     fn mode_bits_from_status(&self, access: Access<'_>) -> bool;
-    /// Set the command, address and dummy phases of `command`, with an
-    /// input phase and no output phase.
-    fn configure_read(&mut self, access: Access<'_>, command: FlashReadCommand);
+    /// Set the command, address and dummy phases of `mode`'s read command,
+    /// which the chip's port holds, with an input phase and no output phase.
+    fn configure_read(&mut self, access: Access<'_>, mode: FlashReadMode);
     /// Set the next command's address and input length in bytes.
     fn set_transfer(&mut self, access: Access<'_>, address: u32, bytes: u32);
     /// Start the user command, or [`Busy`] while one runs.
@@ -208,7 +172,7 @@ where
     // No phase of a running command changes: the whole command word is
     // idle before the read configures it.
     deadline.poll(wait, || (!registers.busy(Access::new())).then_some(()))?;
-    registers.configure_read(Access::new(), flash.commands.get(mode));
+    registers.configure_read(Access::new(), mode);
     let mut chunk_address = address;
     let mut words = destination.iter_mut();
     while words.len() != 0 {

@@ -189,7 +189,7 @@ impl AmpduDmaBinding {
     }
 
     pub fn descriptor_address(&self, index: usize) -> Option<u32> {
-        self.descriptor(index).map(DmaRef::bits)
+        Some(self.descriptor(index)?.address().get())
     }
 
     /// Descriptor `index` of the arena, inside its private range.
@@ -199,7 +199,7 @@ impl AmpduDmaBinding {
             .flatten()
             .filter(|element| {
                 self.descriptor_range
-                    .contains(element.bits(), DESCRIPTOR_BYTES)
+                    .contains(element.address().get(), DESCRIPTOR_BYTES)
             })
     }
 

@@ -252,7 +252,7 @@ fn wrong_baseband_completion_preserves_the_exact_child_owner() {
             crate::calibration::baseband::PhyBbInitCompletion::Mmio(
                 crate::calibration::baseband::PhyBbMmioCompletion {
                     action: crate::calibration::baseband::PhyBbMmioAction::SetBasebandMode {
-                        mode: crate::calibration::baseband::PhyBbBasebandMode::Calibration,
+                        mode: oer_chips_esp32s31_hal::types::BasebandMode::Calibration,
                     },
                 }
             ),

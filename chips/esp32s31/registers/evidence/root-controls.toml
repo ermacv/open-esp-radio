@@ -582,6 +582,10 @@ id = "ESP_IDF_4D59230D_S31_MSPI_LL_H_L257"
 description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, esp-idf-clocks:components/esp_hal_mspi/esp32s31/include/hal/mspi_ll.h:308 (mspi_timing_ll_set_flash_core_clock, 80 MHz core enable, divider 3), pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 
 [[sources]]
+id = "ESP_IDF_4D80C1B2_S31_MWDT_LL_H_L273"
+description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:273-282 (mwdt_ll_set_clock_source) with components/soc/esp32s31/register/soc/hp_sys_clkrst_reg.h:2944 (TIMERGRP1_WDT_SRC_SEL, default 0), pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). The vendor's one watchdog source is XTAL (it asserts MWDT_CLK_SRC_XTAL) and it never writes the select, so the watchdog runs on XTAL from the select's reset value 0. The other codes are not established."
+
+[[sources]]
 id = "ESP_IDF_4D59230D_S31_MWDT_LL_H_L295"
 description = "ESP-IDF 4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d, esp-idf-clocks:components/esp_hal_wdt/esp32s31/include/hal/mwdt_ll.h:295, pinned in chips/esp32s31/vendor/artifacts.toml (Apache-2.0). Static clock/reset field or selector encoding."
 

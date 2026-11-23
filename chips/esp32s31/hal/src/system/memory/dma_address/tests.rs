@@ -10,12 +10,12 @@ fn a_descriptor_table_yields_each_element_twelve_bytes_apart() {
     let table = PlacedTable::<WifiRxDmaDescriptor>::for_host_model(BASE, 5).unwrap();
     assert_eq!(table.len(), 5);
     assert_eq!(table.base(), BASE);
-    assert_eq!(table.first().bits(), BASE);
+    assert_eq!(table.first().address().get(), BASE);
     for index in 0..5 {
         let expected = BASE + 12 * index as u32;
         assert_eq!(table.address(index), Some(expected));
         assert_eq!(
-            table.element(index).map(|element| element.bits()),
+            table.element(index).map(|element| element.address().get()),
             Some(expected)
         );
         assert_eq!(table.index_of(expected), Some(index));
