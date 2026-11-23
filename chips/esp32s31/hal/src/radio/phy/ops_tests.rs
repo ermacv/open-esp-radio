@@ -626,7 +626,7 @@ golden!(
     FrequencyRegisters,
     7994,
     |b| {
-        fr::set_baseband_mode(&mut b, fr::BasebandMode::Calibration);
+        fr::set_baseband_mode(&mut b, crate::types::BasebandMode::Calibration);
     },
     [
         (0x00000000, &[(0x0028, 0x00000002)]),
@@ -639,7 +639,7 @@ golden!(
     FrequencyRegisters,
     7994,
     |b| {
-        fr::set_baseband_mode(&mut b, fr::BasebandMode::Idle);
+        fr::set_baseband_mode(&mut b, crate::types::BasebandMode::Idle);
     },
     [(0x00000000, &[]), (0xffffffff, &[(0x0028, 0xfffffffc)]),]
 );

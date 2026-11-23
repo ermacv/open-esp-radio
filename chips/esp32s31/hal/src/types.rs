@@ -41,6 +41,7 @@ pub use oer_chips_esp32s31_pac::{
         MeasurementEnable as PhyEstimatorMeasurement, StartEnable as PhyEstimatorStart,
     },
     fe::frequency_control::HardwareFrequencyDisable as PhyFrequencyControl,
+    fe::frequency_parameter_1_status::BasebandMode,
     fe::rx_gain_dc_control::Bits5_6Opaque as PhyRxGainDcCalibration,
     fe::status_clock_force::Bits8_11Opaque as PhyForceTxRxPhase,
     fe::table_memory_index_source::ForceDigitalGainEnable as PhyForcedDigitalGain,

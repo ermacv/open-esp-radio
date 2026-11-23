@@ -6624,11 +6624,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         1,
         BY_RADIO_SYSTEM,
     ),
-    (
-        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        1,
-        BY_PHY,
-    ),
     ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
     (
         "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",

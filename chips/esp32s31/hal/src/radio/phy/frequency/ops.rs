@@ -232,22 +232,6 @@ impl FrequencyMemoryAddress {
     }
 }
 
-/// The recovered baseband modes the PHY selects.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BasebandMode {
-    Idle,
-    Calibration,
-}
-
-impl BasebandMode {
-    const fn bits(self) -> Bits<2> {
-        match self {
-            Self::Idle => Bits::constant::<0>(),
-            Self::Calibration => Bits::constant::<2>(),
-        }
-    }
-}
-
 /// The read mode of `phy_read_rf_freq_mem`.
 ///
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
@@ -261,10 +245,10 @@ const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::constant::<0>();
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
-    mode: BasebandMode,
+    mode: crate::types::BasebandMode,
 ) {
     frequency.fe.modify_frequency_parameter_1_status(|w| {
-        w.set_bits_0_1_opaque(mode.bits());
+        w.set_baseband_mode(mode);
     });
 }
 

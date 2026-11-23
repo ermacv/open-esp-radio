@@ -5,7 +5,7 @@
 //! protocol hardware engine has crossed its stopped boundary.
 
 use crate::analog::i2c::{Address, analog_i2c};
-use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+use oer_chips_esp32s31_hal::types::BasebandMode;
 use oer_chips_esp32s31_hal::types::{PhyBbpllCalibration, PhyFrequencyControl};
 
 /// One complete child call or finite hardware edge in current-vendor

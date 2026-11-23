@@ -463,8 +463,8 @@ pub enum PhyBbBasebandMode {
 
 impl PhyBbBasebandMode {
     #[cfg(target_arch = "riscv32")]
-    const fn hardware(self) -> oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode {
-        use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+    const fn hardware(self) -> oer_chips_esp32s31_hal::types::BasebandMode {
+        use oer_chips_esp32s31_hal::types::BasebandMode;
         match self {
             Self::Idle => BasebandMode::Idle,
             Self::Calibration => BasebandMode::Calibration,

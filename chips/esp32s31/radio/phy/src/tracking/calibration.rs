@@ -8,7 +8,7 @@
 //! priority, and physical admission remains the radio owner's job.
 
 use crate::tracking::parameters::PhyCalibrationTrackClass;
-use oer_chips_esp32s31_hal::radio::phy::frequency::BasebandMode;
+use oer_chips_esp32s31_hal::types::BasebandMode;
 use oer_chips_esp32s31_hal::types::PhyForcedDigitalGain;
 
 pub mod decision;
