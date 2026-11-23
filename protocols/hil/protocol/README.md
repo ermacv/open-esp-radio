@@ -29,12 +29,3 @@ agent sends `(case, header, trace)`. A run iterator that exceeds the
 representable case index returns `RunHeaderError::CaseIndexOverflow`; the
 final representable index remains a valid case index.
 
-## Instrumentation captures
-
-`capture` transports immutable image-owned observations without a radio
-vocabulary. A description identifies the capture, epoch, record schema,
-retained record and aggregate counts, dropped history and a typed failure.
-Record and counter pages retain that identity and their absolute range.
-`capture/refused` is the typed response to an invalid read. The owning image
-controls arming, freezing and release; the generic service never performs a
-radio operation or retains counters from another boot.

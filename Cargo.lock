@@ -2312,7 +2312,6 @@ dependencies = [
  "heapless 0.9.3",
  "oer-portable-diagnostics",
  "oer-portable-memory",
- "oer-portable-trace",
  "oer-protocols-hil-protocol",
  "postcard",
  "postcard-schema",

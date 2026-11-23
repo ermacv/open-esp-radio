@@ -1626,7 +1626,7 @@ under test; it stores nothing and knows no scenario, service or equipment.
 
 | Part | Where | Knows |
 | --- | --- | --- |
-| Protocol | `protocols/hil/protocol` | Keys, framing (a message serialized once from its reference into the encoder's buffer), the envelope, `base` (Hello, image keys, boot evidence, link health, refusal) and generic capture pages |
+| Protocol | `protocols/hil/protocol` | Keys, framing (a message serialized once from its reference into the encoder's buffer), the envelope, `base` (Hello, image keys, boot evidence, link health, refusal) |
 | Agent | `protocols/hil/agent` | The device's request intake, console, image keys and services: `service!` declares a service and the kind of each endpoint, and `image_keys!` refuses two services of an image serving one request at compile time |
 | Link | `tools/hil/link` | One board's serial line: frames, their boot (`boot_id`), request/response correlation, missing-message counts and the device's diagnostic lines |
 | Harness | `tools/hil/harness` | A scenario program's life cycle: build its image through the image pipeline, lease and write the board, connect, check the image's services, run the cases, release |

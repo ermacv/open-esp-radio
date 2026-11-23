@@ -388,10 +388,10 @@ macro_rules! __requests {
 ///
 /// ```compile_fail
 /// oer_protocols_hil_agent::__requests! {
-///     pub enum First (sessions = false) { Describe(oer_protocols_hil_protocol::capture::Describe) }
+///     pub enum First (sessions = false) { Status(oer_protocols_hil_protocol::base::GetBootStatus) }
 /// }
 /// oer_protocols_hil_agent::image_keys! {
-///     KEYS = [First, oer_protocols_hil_agent::capture::Request]
+///     KEYS = [First, First]
 /// }
 /// ```
 #[macro_export]
@@ -617,8 +617,8 @@ macro_rules! __trap {
 ///
 /// ```ignore
 /// oer_protocols_hil_agent::image_keys! {
-///     /// What the capture image serves.
-///     pub(crate) KEYS = [oer_protocols_hil_agent::capture::Request]
+///     /// What the AES image serves.
+///     pub(crate) KEYS = [oer_hil_services_aes::Request]
 /// }
 /// ```
 #[macro_export]

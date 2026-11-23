@@ -8245,14 +8245,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "protocols/hil/agent/src/capture/collector.rs::State.failure",
-        BY_NONE,
-    ),
-    (
-        "protocols/hil/agent/src/capture/collector.rs::State.identity",
-        BY_NONE,
-    ),
-    (
         "protocols/hil/protocol/src/base/image_keys.rs::ImageKeysCheck.previous",
         BY_NONE,
     ),

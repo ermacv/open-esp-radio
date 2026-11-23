@@ -23,7 +23,6 @@
 )]
 
 pub mod base;
-pub mod capture;
 pub mod console;
 pub mod postmortem;
 pub mod serve;
