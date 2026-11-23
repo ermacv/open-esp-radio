@@ -35,7 +35,8 @@ use zeroize::Zeroize;
 /// The named settle of one Typical block, from its start to `STATE`
 /// reading idle.
 ///
-/// SOURCE: the `esp32s31-aes-timing` probe on s31-c (leases #225 and #227,
+/// SOURCE: the `esp32s31-aes-timing` probe (removed; last built at
+/// 6ef20cfb2) on s31-c (leases #225 and #227,
 /// 2026-11-02, 320.3 MHz CPU): the start to `STATE` reading idle, polled
 /// back to back, took 270–279 cycles (0.87 µs) over 256 blocks. The settle
 /// allows ten times that and stays under [`SettleLimit::MAX`].

@@ -9643,18 +9643,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "retain the planner or poisoned transaction without allocation",
     ),
     (
-        "hil/probes/esp32s31-aes-timing/src/main.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        "R2 cleans a probe with the area it reads (tasks/312)",
-    ),
-    (
-        "hil/probes/esp32s31-aes-timing/src/main.rs",
-        "clippy::arithmetic_side_effects",
-        1,
-        "R2 cleans a probe with the area it reads (tasks/323)",
-    ),
-    (
         "hil/probes/esp32s31-boot-smoke/src/main.rs",
         "clippy::cast_possible_truncation",
         1,

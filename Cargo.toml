@@ -10,7 +10,6 @@ members = [
     "hil/probes/esp32s31-rx-ring",
     "hil/probes/esp32s31-radio",
     "hil/probes/esp32s31-peer-overdue",
-    "hil/probes/esp32s31-aes-timing",
     "hil/probes/esp32s31-mcycle",
     "hil/probes/esp32s31-level-wake",
     "hil/probes/esp32s31-light-sleep",
