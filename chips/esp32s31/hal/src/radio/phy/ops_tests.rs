@@ -1011,7 +1011,7 @@ golden!(
         );
         ts::set_reset(
             &mut b,
-            oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn::Released,
+            oer_chips_esp32s31_pac::dictionaries::Reset::Released,
         );
     },
     [

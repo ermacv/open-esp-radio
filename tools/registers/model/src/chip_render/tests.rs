@@ -58,6 +58,10 @@ fn edited(edits: &[(&str, &str, &str)]) -> tempfile::TempDir {
         }
         std::fs::write(target, text).expect("the copy is written");
     }
+    // An edit of a file the fixture lacks, from nothing, writes it.
+    for (path, _, text) in edits.iter().filter(|(_, from, _)| from.is_empty()) {
+        std::fs::write(directory.path().join(path), text).expect("the new file is written");
+    }
     directory
 }
 
@@ -2235,6 +2239,227 @@ fn main() {
 "#,
     );
     assert_eq!(output.trim(), "On");
+}
+
+/// The chip's definitions: a dictionary `GATE` and a flag set `STATE_MAP`
+/// of three flags in four bits, bit 3 named by none.
+const DEFINITIONS: &str = "schema = 1\n\n[[dictionaries]]\nname = \"GATE\"\n\
+    description = \"A gate that is closed or open.\"\nwidth = 1\n\
+    values = [{ name = \"CLOSED\", value = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n\n[[flags]]\nname = \"STATE_MAP\"\nflag = \"STATE\"\n\
+    description = \"The states a clock stays on in.\"\nwidth = 4\n\
+    bits = [{ name = \"SLEEP\", bit = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"MODEM\", bit = 1, sources = [\"SRC_HEADER\"] }, \
+    { name = \"ACTIVE\", bit = 2, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n";
+
+/// The fixture with the chip's definitions, `RAD_CONFIG.STATES` (15:12)
+/// holding the flag set and `RAD_ENABLE` naming the chip's `GATE`.
+fn with_definitions() -> String {
+    rendered_with(&[
+        ("dictionaries.toml", "", DEFINITIONS),
+        (
+            "chip.toml",
+            "schema = 4\n",
+            "schema = 4\ndefinitions = \"dictionaries.toml\"\n",
+        ),
+        (
+            "types/radio.toml",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"",
+            "name = \"RAD_ENABLE\"\nbits = \"0\"\nclass = \"plain\"\nvalues = { dictionary = \"GATE\" }\n\n\
+             [[registers.fields]]\nname = \"STATES\"\nbits = \"15:12\"\nclass = \"plain\"\nflags = \"STATE_MAP\"",
+        ),
+    ])
+}
+
+#[test]
+fn a_flag_set_read_is_exactly_its_flags_and_carries_to_another_word() {
+    let rust = with_definitions();
+    let output = run(
+        &rust,
+        r#"
+use dictionaries::{State, StateMap};
+fn main() {
+    let mut memory = [0_u32; 128];
+    // CONFIG: STATES (15:12) holds SLEEP and ACTIVE; the fields beside it,
+    // below (RAD_ENABLE, LEVEL) and above (QUIET at 17), are set too.
+    memory[0] = 0x0002_5031;
+    // Radio 1's CONFIG: every field set but STATES.
+    let mut second = [0x0002_0031_u32; 128];
+    {
+        let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+        let read = task.read_config().states();
+        println!("{}", read == StateMap::EMPTY.with(State::Sleep).with(State::Active));
+        let mut radio1 = radio::Second::host(&mut second).expect("host block");
+        radio1.modify_config(|w| {
+            w.set_states(read);
+        });
+    }
+    println!("{:x}", second[0]);
+}
+"#,
+    );
+    // Radio 1's STATES takes SLEEP and ACTIVE; its other fields stay, but
+    // the zero-only QUIET (17), which a modify writes zero.
+    assert_eq!(output.trim(), "true\n5031");
+}
+
+#[test]
+fn the_chips_definitions_render_once_in_the_root() {
+    let rust = with_definitions();
+    assert_eq!(rust.matches("pub enum Gate {").count(), 1, "{rust}");
+    assert_eq!(
+        rust.matches("pub struct StateMap(u32);").count(),
+        1,
+        "{rust}"
+    );
+    assert_eq!(rust.matches("pub enum State {").count(), 1, "{rust}");
+    assert!(
+        rust.contains("pub const fn enable(self) -> super::super::dictionaries::Gate {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("pub const fn states(self) -> super::super::dictionaries::StateMap {"),
+        "{rust}"
+    );
+    // A set has no reader of one value: its flags are asked one by one.
+    assert!(!rust.contains("states_variant"), "{rust}");
+}
+
+#[test]
+fn a_flag_set_adds_its_flags_and_keeps_the_bits_no_flag_names() {
+    let rust = with_definitions();
+    let output = run(
+        &rust,
+        r#"
+use dictionaries::{State, StateMap};
+fn main() {
+    // Bits 13 (MODEM) and 15 (named by no flag) are set.
+    let mut memory = [0x0000_a000_u32; 128];
+    {
+        let (mut task, _) = radio::radio0_host(&mut memory).expect("host block");
+        let read = task.read_config().states();
+        println!("{} {} {}", read.contains(State::Sleep), read.contains(State::Modem), read.contains(State::Active));
+        task.modify_config(|w| {
+            w.set_states(w.states().with(State::Active));
+        });
+        let read = task.read_config().states();
+        println!("{} {}", read.contains(State::Active), read == StateMap::EMPTY);
+        task.modify_config(|w| {
+            w.set_states(StateMap::EMPTY.with(State::Sleep).union(StateMap::EMPTY));
+        });
+    }
+    println!("{:x}", memory[0] & 0xf000);
+}
+"#,
+    );
+    // ACTIVE joins the read set and bit 15 stays as read; the set written
+    // whole holds only what it names.
+    assert_eq!(output.trim(), "false true false\ntrue false\n1000");
+}
+
+/// A two-byte element and an array of four of it.
+const PAIR: &str = r#"schema = 1
+
+[layout]
+name = "PAIR"
+description = "Two bytes."
+size = 2
+align = 1
+
+[layout.review]
+sources = ["SRC_HEADER"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[[layout.bytes]]
+name = "LOW"
+offset = 0
+size = 1
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "LOW_VALUE"
+bits = "7:0"
+writer = "cpu"
+description = "The low byte."
+
+[[layout.bytes]]
+name = "HIGH"
+offset = 1
+size = 1
+access = "owned"
+
+[[layout.bytes.fields]]
+name = "HIGH_VALUE"
+bits = "7:0"
+writer = "cpu"
+description = "The high byte."
+"#;
+const PAIRS: &str = r#"schema = 1
+
+[layout]
+name = "PAIRS"
+description = "Four pairs."
+size = 8
+align = 1
+
+[layout.review]
+sources = ["SRC_HEADER"]
+provenance = "reviewed"
+accuracy = "exact"
+completeness = "complete"
+naming = "descriptive"
+
+[layout.array]
+element = "PAIR"
+count = 4
+"#;
+
+#[test]
+fn a_byte_array_s_entry_is_its_index_s_element_and_none_past_the_end() {
+    let rust = rendered_with(&[
+        ("layouts/pair.toml", "", PAIR),
+        ("layouts/pairs.toml", "", PAIRS),
+        (
+            "chip.toml",
+            "layouts = [\"layouts/rx-descriptor.toml\"]",
+            "layouts = [\"layouts/rx-descriptor.toml\", \"layouts/pair.toml\", \"layouts/pairs.toml\"]",
+        ),
+    ]);
+    let output = run(
+        &rust,
+        r#"
+use layouts::{Pairs, PairsMut, PairLow};
+fn main() {
+    let mut bytes = [0x10_u8, 0x11, 0x20, 0x21, 0x30, 0x31, 0x40, 0x41];
+    let pairs = Pairs::new(&bytes);
+    for index in [0, 1, 3] {
+        let pair = pairs.entry(index).expect("an element");
+        println!("{:x} {:x}", pair.low().low_value(), pair.high().high_value());
+    }
+    println!("{}", pairs.entry(4).is_none());
+    {
+        let mut pairs = PairsMut::new(&mut bytes);
+        for index in [0, 2, 3] {
+            pairs
+                .entry(index)
+                .expect("an element")
+                .set_low(PairLow::from_bits(0xa0 + index as u8));
+        }
+        println!("{}", pairs.entry(4).is_none());
+    }
+    println!("{:x?}", bytes);
+}
+"#,
+    );
+    assert_eq!(
+        output.trim(),
+        "10 11\n20 21\n40 41\ntrue\ntrue\n[a0, 11, 20, 21, a2, 31, a3, 41]"
+    );
 }
 
 #[test]

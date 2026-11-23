@@ -53,7 +53,7 @@ mod owners;
 mod tests;
 mod unique;
 
-use block::{TypePlan, render_dictionaries, render_register_module};
+use block::{TypePlan, render_chip_definitions, render_dictionaries, render_register_module};
 pub use linker::dma_window;
 
 /// Why the renderer refused the model or the policy: the entity and the
@@ -152,6 +152,7 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
     }
     render_interrupts(&mut output, model);
     render_instances(&mut output, model, &plans);
+    render_chip_definitions(&mut output, model.definitions())?;
     for plan in plans.values() {
         let _ = writeln!(output, "/// The `{}` block type.", plan.name);
         output.push_str("///\n");

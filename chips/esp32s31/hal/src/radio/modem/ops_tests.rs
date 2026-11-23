@@ -13,13 +13,11 @@ use super::values::*;
 use crate::radio::coex::external::*;
 use oer_chips_esp32s31_pac::{
     coex::CoexExternal,
+    dictionaries::Reset,
     hp_sys_clkrst::HpSysClkrstRadio,
     instances,
     modem_lpcon::{BluetoothLpTimerClock, CoexLpClock, ModemLpconPower},
-    modem_syscon::{
-        ModemSysconClockReset, ModemSysconRadio,
-        dictionaries::{ClockGate, Reset},
-    },
+    modem_syscon::{ModemSysconClockReset, ModemSysconRadio, dictionaries::ClockGate},
     pmu::PmuRadio,
 };
 use std::{vec, vec::Vec};
@@ -1868,9 +1866,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_baseband_and_mac_reset_released,
     |r| {
-        r.set_wifi_baseband_and_mac_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released,
-        );
+        r.set_wifi_baseband_and_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released);
     },
     [
         (0, &[]),
@@ -1884,9 +1880,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_baseband_and_mac_reset_asserted,
     |r| {
-        r.set_wifi_baseband_and_mac_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted,
-        );
+        r.set_wifi_baseband_and_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0010, 0x00000300)]),
@@ -1897,9 +1891,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_baseband_reset_released,
     |r| {
-        r.set_wifi_baseband_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released,
-        );
+        r.set_wifi_baseband_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released);
     },
     [
         (0, &[]),
@@ -1913,9 +1905,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_baseband_reset_asserted,
     |r| {
-        r.set_wifi_baseband_reset(
-            oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted,
-        );
+        r.set_wifi_baseband_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0010, 0x00000100)]),
@@ -1926,7 +1916,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_mac_reset_released,
     |r| {
-        r.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released);
+        r.set_wifi_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released);
     },
     [
         (0, &[]),
@@ -1940,7 +1930,7 @@ owner_golden!(
 owner_golden!(
     owner_set_wifi_mac_reset_asserted,
     |r| {
-        r.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted);
+        r.set_wifi_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted);
     },
     [
         (0, &[("modem_syscon_clock_reset", 0x0010, 0x00000200)]),

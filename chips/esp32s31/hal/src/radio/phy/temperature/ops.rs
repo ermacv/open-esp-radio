@@ -35,7 +35,7 @@ pub(crate) fn set_clock<P: Placement>(
 /// SOURCE: IDF_S31_TSENS_POWER_LIFECYCLE.
 pub(crate) fn set_reset<P: Placement>(
     periclkrst: &mut LpPericlkrst<P>,
-    reset: oer_chips_esp32s31_pac::lp_peri_clkrst::tsens_ctrl::LpTsensRstEn,
+    reset: oer_chips_esp32s31_pac::dictionaries::Reset,
 ) {
     periclkrst.modify_tsens_ctrl(|w| {
         w.set_lp_tsens_rst_en(reset);

@@ -28,8 +28,8 @@ pub(super) fn render(output: &mut String, layout: &MemoryLayout, element: &Memor
         pub const fn bytes(self) -> &'a [u8; {size}] {{ self.bytes }}\n\
         /// Decode one element, or no element when the index is outside the array.\n\
         pub fn entry(self, index: usize) -> Option<{entry}<'a>> {{\n\
-            let bytes = self.bytes.chunks_exact({entry}::SIZE).nth(index)?;\n\
-            Some({entry}::new(bytes.try_into().ok()?))\n\
+            let start = index.checked_mul({entry}::SIZE)?;\n\
+            Some({entry}::new(self.bytes.get(start..)?.first_chunk()?))\n\
         }}\n\
         }}\n"
     );
@@ -46,8 +46,8 @@ pub(super) fn render(output: &mut String, layout: &MemoryLayout, element: &Memor
             pub const fn view(&self) -> {ty}<'_> {{ {ty}::new(self.bytes) }}\n\
             /// Borrow a typed element writer, or no writer for an outside index.\n\
             pub fn entry(&mut self, index: usize) -> Option<{entry}Mut<'_>> {{\n\
-                let bytes = self.bytes.chunks_exact_mut({entry}::SIZE).nth(index)?;\n\
-                Some({entry}Mut::new(bytes.try_into().ok()?))\n\
+                let start = index.checked_mul({entry}::SIZE)?;\n\
+                Some({entry}Mut::new(self.bytes.get_mut(start..)?.first_chunk_mut()?))\n\
             }}\n\
             }}\n"
         );

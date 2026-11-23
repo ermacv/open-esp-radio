@@ -53,6 +53,45 @@ pub struct Dictionary {
     pub sources: Vec<String>,
 }
 
+/// A chip's shared definitions (`definitions` of the root): the
+/// dictionaries and flag sets that fields of several types name. A
+/// definition lives in the narrowest place that holds all its fields: a
+/// type's own file when they are all of one type.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Definitions {
+    pub schema: u32,
+    #[serde(default)]
+    pub dictionaries: Vec<Dictionary>,
+    #[serde(default)]
+    pub flags: Vec<FlagSet>,
+}
+
+/// A set of named bits: a field whose value is any union of its flags.
+/// `name` names the set, `flag` one of its members.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct FlagSet {
+    pub name: String,
+    pub flag: String,
+    pub description: String,
+    /// The width of every field that holds the set.
+    pub width: u32,
+    pub bits: Vec<Flag>,
+    pub sources: Vec<String>,
+}
+
+/// One flag of a set: its bit in the field.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct Flag {
+    pub name: String,
+    pub bit: u32,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub sources: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TypeHeader {
@@ -253,6 +292,15 @@ pub struct Field {
     /// The dictionary the values are, if they are one.
     #[serde(skip)]
     pub dictionary: Option<String>,
+    /// The dictionary is the chip's, not the type's.
+    #[serde(skip)]
+    pub chip_dictionary: bool,
+    /// The chip's flag set the field holds: `flags = "NAME"`.
+    #[serde(default, rename = "flags")]
+    pub declared_flags: Option<String>,
+    /// The flag set, resolved.
+    #[serde(skip)]
+    pub flags: Option<FlagSet>,
     #[serde(default)]
     pub write_range: Option<WriteRange>,
     #[serde(default)]
@@ -498,6 +546,9 @@ pub struct RootFile {
     pub chip: String,
     #[serde(default)]
     pub hart_facts: Option<String>,
+    /// The chip's shared dictionaries and flag sets, relative to the root.
+    #[serde(default)]
+    pub definitions: Option<String>,
     pub types: Vec<String>,
     #[serde(default)]
     pub layouts: Vec<String>,

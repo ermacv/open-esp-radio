@@ -228,15 +228,12 @@ fn split_coex_ports_borrow_the_actual_domain_priority_table() {
 fn the_mac_block_reset_pulses_before_it_writes_back() {
     #[derive(Debug, PartialEq)]
     enum Write {
-        Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset),
+        Reset(oer_chips_esp32s31_pac::dictionaries::Reset),
         WriteBack(u8),
     }
     struct Port(std::vec::Vec<Write>);
     impl super::MacBlockResetPort for Port {
-        fn set_wifi_mac_reset(
-            &mut self,
-            reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
-        ) {
+        fn set_wifi_mac_reset(&mut self, reset: oer_chips_esp32s31_pac::dictionaries::Reset) {
             self.0.push(Write::Reset(reset));
         }
         fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
@@ -249,8 +246,8 @@ fn the_mac_block_reset_pulses_before_it_writes_back() {
     assert_eq!(
         port.0,
         [
-            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted),
-            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released),
+            Write::Reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted),
+            Write::Reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released),
             Write::WriteBack(3)
         ]
     );
@@ -262,15 +259,12 @@ fn the_mac_block_reset_pulses_before_it_writes_back() {
 fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
     #[derive(Debug, PartialEq)]
     enum Write {
-        Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset),
+        Reset(oer_chips_esp32s31_pac::dictionaries::Reset),
         WriteBack(u8),
     }
     struct Port(std::vec::Vec<Write>);
     impl super::MacBlockResetPort for Port {
-        fn set_wifi_mac_reset(
-            &mut self,
-            reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
-        ) {
+        fn set_wifi_mac_reset(&mut self, reset: oer_chips_esp32s31_pac::dictionaries::Reset) {
             self.0.push(Write::Reset(reset));
         }
         fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
@@ -286,8 +280,8 @@ fn the_reset_after_a_stop_is_the_same_pulse_and_gives_the_release_proof() {
     assert_eq!(
         port.0,
         [
-            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted),
-            Write::Reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released),
+            Write::Reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted),
+            Write::Reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released),
             Write::WriteBack(1)
         ]
     );

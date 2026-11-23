@@ -47,6 +47,3 @@ const fn field_halfword<const WIDTH: u32>(value: oer_portable_mmio::Bits<WIDTH>)
     u16::from_le_bytes([a, b])
 }
 // SOURCE: S31_MODEM_SYSCON_STRUCT, S31_MODEM_LPCON_STRUCT. State-map flags within a four-bit field.
-const fn map_has(value: oer_portable_mmio::Bits<4>, flag: u32) -> bool {
-    value.get() & flag != 0
-}

@@ -6,25 +6,31 @@ use std::path::{Path, PathBuf};
 
 use crate::{Error, Result};
 
-/// The directories of `chip`'s register model whose descriptions cite
-/// vendor code, relative to the repository root: the evidence sources, the
-/// block types and the memory layouts.
-pub fn description_directories(chip: &str) -> [PathBuf; 3] {
+/// The files and directories of `chip`'s register model whose descriptions
+/// cite vendor code, relative to the repository root: the evidence sources,
+/// the block types, the memory layouts and the chip's shared definitions.
+pub fn description_paths(chip: &str) -> [PathBuf; 4] {
     [
         PathBuf::from(format!("chips/{chip}/registers/evidence")),
         PathBuf::from(format!("chips/{chip}/registers/types")),
         PathBuf::from(format!("chips/{chip}/registers/layouts")),
+        PathBuf::from(format!("chips/{chip}/registers/dictionaries.toml")),
     ]
 }
 
-/// Every `description` string of the TOML files below `chip`'s
-/// [`description_directories`], in path order, with the file it is in,
-/// relative to `root`.
+/// Every `description` string of the TOML files at or below `chip`'s
+/// [`description_paths`] that exist, in path order, with the file it is
+/// in, relative to `root`.
 pub fn descriptions(root: &Path, chip: &str) -> Result<Vec<(PathBuf, String)>> {
     let mut texts = Vec::new();
-    for directory in description_directories(chip) {
+    for path in description_paths(chip) {
+        let path = root.join(path);
         let mut files = Vec::new();
-        toml_files(&root.join(directory), &mut files)?;
+        if path.is_file() {
+            files.push(path);
+        } else {
+            toml_files(&path, &mut files)?;
+        }
         files.sort();
         for file in files {
             let text = std::fs::read_to_string(&file)?;
@@ -122,8 +128,14 @@ mod tests {
             "[[source]]\nid = \"x\"\ndescription = \"libpp[pm.o]::pm_on\"\n",
         )
         .unwrap();
+        std::fs::write(
+            root.path().join("chips/chip/registers/dictionaries.toml"),
+            "[[flags]]\nname = \"MAP\"\ndescription = \"BIT(PMU_HP_ICG_MODEM_CODE_SLEEP)\"\n",
+        )
+        .unwrap();
         let model = PathBuf::from("chips/chip/registers/types/radio/a.toml");
         let evidence = PathBuf::from("chips/chip/registers/evidence/e.toml");
+        let definitions = PathBuf::from("chips/chip/registers/dictionaries.toml");
         assert_eq!(
             descriptions(root.path(), "chip").unwrap(),
             [
@@ -134,6 +146,7 @@ mod tests {
                     "bt_bb_rx_dpo_set replaces this field".to_owned()
                 ),
                 (model, "inline phy_enable".to_owned()),
+                (definitions, "BIT(PMU_HP_ICG_MODEM_CODE_SLEEP)".to_owned()),
             ]
         );
     }

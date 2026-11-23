@@ -832,19 +832,13 @@ impl<B: PlatformClockBackend, T> RadioDomain<B, T> {
 /// The writes of [`RadioDomain::reset_wifi_mac_block`].
 pub(crate) trait MacBlockResetPort {
     /// `RST_WIFIMAC`, asserted or released.
-    fn set_wifi_mac_reset(
-        &mut self,
-        reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
-    );
+    fn set_wifi_mac_reset(&mut self, reset: oer_chips_esp32s31_pac::dictionaries::Reset);
     /// What the domain keeps inside the block, for the lowered width `cbw`.
     fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8);
 }
 
 impl MacBlockResetPort for SharedRadioRegisters {
-    fn set_wifi_mac_reset(
-        &mut self,
-        reset: oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset,
-    ) {
+    fn set_wifi_mac_reset(&mut self, reset: oer_chips_esp32s31_pac::dictionaries::Reset) {
         self.radio_phy_mut().set_wifi_mac_reset(reset);
     }
     fn write_back_wifi_mac_foreign_words(&mut self, cbw: u8) {
@@ -858,8 +852,8 @@ pub(crate) fn reset_wifi_mac_block(
     port: &mut impl MacBlockResetPort,
     cbw: u8,
 ) -> crate::radio::ieee80211::init::MacBlockReset {
-    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Asserted);
-    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::modem_syscon::dictionaries::Reset::Released);
+    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Asserted);
+    port.set_wifi_mac_reset(oer_chips_esp32s31_pac::dictionaries::Reset::Released);
     port.write_back_wifi_mac_foreign_words(cbw);
     crate::radio::ieee80211::init::MacBlockReset::after_pulse()
 }

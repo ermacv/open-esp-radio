@@ -11,8 +11,8 @@ use oer_tools_registers_contracts::NameOrigin;
 use super::{
     Error, ErrorKind,
     source::{
-        Command, DeclaredValues, Field, FieldClass, Group, Register, ReviewOverride, Space,
-        TYPE_SCHEMA, TypeFile,
+        Command, DeclaredValues, Definitions, Dictionary, Field, FieldClass, FlagSet, Group,
+        Register, ReviewOverride, Space, TYPE_SCHEMA, TypeFile,
     },
 };
 use crate::{Position, ReviewAnnotation, opaque_position_name};
@@ -187,6 +187,7 @@ impl BlockType {
         evidence: &BTreeSet<String>,
         budget: &mut ExpansionBudget,
         harts: Option<super::topology::Geometry>,
+        definitions: &Definitions,
     ) -> Result<Self, Error> {
         let text = std::fs::read_to_string(path)
             .map_err(|error| Error::new(path, "", ErrorKind::Read(error)))?;
@@ -194,7 +195,7 @@ impl BlockType {
         let mut file: TypeFile = toml_edit::de::from_str(&text)
             .map_err(|error| Error::new(path, "", ErrorKind::Parse(error.to_string())))?;
         let context = Context { path, evidence };
-        resolve_dictionaries(context, &mut file)?;
+        resolve_dictionaries(context, &mut file, definitions)?;
         super::topology::fields(&mut file, path)?;
         Self::check(context, path.to_owned(), file, budget)
     }
@@ -298,32 +299,26 @@ impl BlockType {
 /// list, or the dictionary it names. A field never names a dictionary and
 /// lists values, names no dictionary the type lacks, and has the
 /// dictionary's width.
-fn resolve_dictionaries(context: Context<'_>, file: &mut TypeFile) -> Result<(), Error> {
+fn resolve_dictionaries(
+    context: Context<'_>,
+    file: &mut TypeFile,
+    definitions: &Definitions,
+) -> Result<(), Error> {
     let name = file.header.name.clone();
     let mut dictionaries = BTreeMap::new();
     for dictionary in &file.dictionaries {
         let entity = format!("{name}.{}", dictionary.name);
         let fail = |kind| context.error(&entity, kind);
-        check_name(&dictionary.name, false).map_err(fail)?;
-        if dictionary.description.trim().is_empty() {
-            return Err(fail(ErrorKind::MissingDescription));
-        }
-        context.sources(&entity, &dictionary.sources)?;
-        if dictionary.width == 0 || dictionary.width > 32 || dictionary.values.is_empty() {
-            return Err(fail(ErrorKind::Values(
-                "a dictionary has a width of 1 to 32 bits and values".to_owned(),
-            )));
-        }
-        let mut names = BTreeSet::new();
-        for value in &dictionary.values {
-            check_name(&value.name, false).map_err(fail)?;
-            if !names.insert(value.name.as_str()) || !fits(value.value, dictionary.width) {
-                return Err(fail(ErrorKind::Values(format!(
-                    "value {} is named twice or wider than the dictionary",
-                    value.name
-                ))));
-            }
-            context.sources(&entity, &value.sources)?;
+        check_dictionary(context, &entity, dictionary)?;
+        if definitions
+            .dictionaries
+            .iter()
+            .any(|chip| chip.name == dictionary.name)
+        {
+            return Err(fail(ErrorKind::Duplicate(format!(
+                "dictionary {}, also the chip's: one definition",
+                dictionary.name
+            ))));
         }
         if dictionaries
             .insert(dictionary.name.clone(), dictionary)
@@ -349,18 +344,50 @@ fn resolve_dictionaries(context: Context<'_>, file: &mut TypeFile) -> Result<(),
     for (prefix, register) in registers.chain(grouped) {
         for field in &mut register.fields {
             let entity = format!("{name}.{prefix}{}.{}", register.name, field.name);
+            if let Some(set) = &field.declared_flags {
+                let Some(flags) = definitions.flags.iter().find(|flags| flags.name == *set) else {
+                    return Err(context.error(
+                        &entity,
+                        ErrorKind::Values(format!("names no flag set of the chip: {set}")),
+                    ));
+                };
+                let (_, field_width) =
+                    parse_bits(&field.bits).map_err(|kind| context.error(&entity, kind))?;
+                if field_width != flags.width
+                    || !matches!(&field.declared_values, DeclaredValues::List(values) if values.is_empty())
+                    || field.write_values_only
+                    || field.write_range.is_some()
+                    || field.class != FieldClass::Plain
+                {
+                    return Err(context.error(
+                        &entity,
+                        ErrorKind::Values(format!(
+                            "holds the flag set {set}: a plain field of its width, with no values or write constraint"
+                        )),
+                    ));
+                }
+                field.flags = Some(flags.clone());
+                continue;
+            }
             match &field.declared_values {
                 DeclaredValues::List(values) => field.values = values.clone(),
                 DeclaredValues::Dictionary(reference) => {
-                    let Some(dictionary) = dictionaries.get(&reference.dictionary) else {
+                    let chip = definitions
+                        .dictionaries
+                        .iter()
+                        .find(|dictionary| dictionary.name == reference.dictionary);
+                    let Some(dictionary) =
+                        dictionaries.get(&reference.dictionary).copied().or(chip)
+                    else {
                         return Err(context.error(
                             &entity,
                             ErrorKind::Values(format!(
-                                "names no dictionary of the type: {}",
+                                "names no dictionary of the type or the chip: {}",
                                 reference.dictionary
                             )),
                         ));
                     };
+                    field.chip_dictionary = chip.is_some();
                     let (_, field_width) =
                         parse_bits(&field.bits).map_err(|kind| context.error(&entity, kind))?;
                     if field_width != dictionary.width {
@@ -377,6 +404,72 @@ fn resolve_dictionaries(context: Context<'_>, file: &mut TypeFile) -> Result<(),
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// A dictionary's own rules: a name, a description, sources, a width of 1
+/// to 32 bits and distinct named values that fit it.
+pub(super) fn check_dictionary(
+    context: Context<'_>,
+    entity: &str,
+    dictionary: &Dictionary,
+) -> Result<(), Error> {
+    let fail = |kind| context.error(entity, kind);
+    check_name(&dictionary.name, false).map_err(fail)?;
+    if dictionary.description.trim().is_empty() {
+        return Err(fail(ErrorKind::MissingDescription));
+    }
+    context.sources(entity, &dictionary.sources)?;
+    if dictionary.width == 0 || dictionary.width > 32 || dictionary.values.is_empty() {
+        return Err(fail(ErrorKind::Values(
+            "a dictionary has a width of 1 to 32 bits and values".to_owned(),
+        )));
+    }
+    let mut names = BTreeSet::new();
+    for value in &dictionary.values {
+        check_name(&value.name, false).map_err(fail)?;
+        if !names.insert(value.name.as_str()) || !fits(value.value, dictionary.width) {
+            return Err(fail(ErrorKind::Values(format!(
+                "value {} is named twice or wider than the dictionary",
+                value.name
+            ))));
+        }
+        context.sources(entity, &value.sources)?;
+    }
+    Ok(())
+}
+
+/// A flag set's own rules: names for the set and its flag, a description,
+/// sources, a width of 1 to 32 bits and distinct named bits inside it.
+pub(super) fn check_flags(
+    context: Context<'_>,
+    entity: &str,
+    flags: &FlagSet,
+) -> Result<(), Error> {
+    let fail = |kind| context.error(entity, kind);
+    check_name(&flags.name, false).map_err(fail)?;
+    check_name(&flags.flag, false).map_err(fail)?;
+    if flags.description.trim().is_empty() {
+        return Err(fail(ErrorKind::MissingDescription));
+    }
+    context.sources(entity, &flags.sources)?;
+    if flags.width == 0 || flags.width > 32 || flags.bits.is_empty() || flags.name == flags.flag {
+        return Err(fail(ErrorKind::Values(
+            "a flag set has a width of 1 to 32 bits, flags and a flag name of its own".to_owned(),
+        )));
+    }
+    let mut names = BTreeSet::new();
+    let mut bits = BTreeSet::new();
+    for flag in &flags.bits {
+        check_name(&flag.name, false).map_err(fail)?;
+        if !names.insert(flag.name.as_str()) || !bits.insert(flag.bit) || flag.bit >= flags.width {
+            return Err(fail(ErrorKind::Values(format!(
+                "flag {} is named twice, shares a bit or lies outside the set",
+                flag.name
+            ))));
+        }
+        context.sources(entity, &flag.sources)?;
     }
     Ok(())
 }

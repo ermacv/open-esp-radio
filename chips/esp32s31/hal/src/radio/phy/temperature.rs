@@ -9,8 +9,7 @@ use super::restore::Restore;
 use crate::radio::phy::RadioPhyRegisters;
 use crate::system::owner::{SharedPhyAccess, phy_parts_mut};
 use oer_chips_esp32s31_pac::{
-    lp_peri_clkrst::tsens_ctrl::{LpTsensClkEn, LpTsensRstEn},
-    tsens::ctrl::PowerUp,
+    dictionaries::Reset, lp_peri_clkrst::tsens_ctrl::LpTsensClkEn, tsens::ctrl::PowerUp,
 };
 
 pub mod ops;
@@ -47,7 +46,7 @@ trait TemperaturePort {
     fn power_on_sar(&mut self);
     fn power_off_sar(&mut self);
     fn sensor_clock(&mut self, clock: LpTsensClkEn);
-    fn sensor_reset(&mut self, reset: LpTsensRstEn);
+    fn sensor_reset(&mut self, reset: Reset);
     fn sensor_power(&mut self, power: PowerUp);
 }
 
@@ -76,7 +75,7 @@ impl<P: crate::radio::phy::registers::RadioPlacement> TemperaturePort for RadioP
     fn sensor_clock(&mut self, clock: LpTsensClkEn) {
         ops::set_clock(&mut self.peripherals.lp_periclkrst, clock);
     }
-    fn sensor_reset(&mut self, reset: LpTsensRstEn) {
+    fn sensor_reset(&mut self, reset: Reset) {
         ops::set_reset(&mut self.peripherals.lp_periclkrst, reset);
     }
     fn sensor_power(&mut self, power: PowerUp) {
@@ -110,8 +109,8 @@ impl Restore {
         port.power_on_sar();
         port.release_sar_reset();
         port.sensor_clock(LpTsensClkEn::Enabled);
-        port.sensor_reset(LpTsensRstEn::Asserted);
-        port.sensor_reset(LpTsensRstEn::Released);
+        port.sensor_reset(Reset::Asserted);
+        port.sensor_reset(Reset::Released);
         port.sensor_power(PowerUp::Enabled);
         *self = Self::Empty;
         Ok(())

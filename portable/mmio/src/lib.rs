@@ -1718,13 +1718,6 @@ impl<const WIDTH: u32> Bits<WIDTH> {
         Self(value & Self::MAX)
     }
 
-    /// The bits set in either value: two values of one width give a value
-    /// of that width, so nothing is lost.
-    #[must_use]
-    pub const fn or(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-
     /// The value.
     pub const fn get(self) -> u32 {
         self.0

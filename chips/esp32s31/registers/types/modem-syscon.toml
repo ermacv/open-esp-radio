@@ -548,42 +548,42 @@ name = "CLK_ZB_ST_MAP"
 bits = "11:8"
 class = "plain"
 description = "The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers.fields]]
 name = "CLK_FE_ST_MAP"
 bits = "15:12"
 class = "plain"
 description = "The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers.fields]]
 name = "CLK_BT_ST_MAP"
 bits = "19:16"
 class = "plain"
 description = "The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers.fields]]
 name = "CLK_WIFI_ST_MAP"
 bits = "23:20"
 class = "plain"
 description = "The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers.fields]]
 name = "CLK_MODEM_PERI_ST_MAP"
 bits = "27:24"
 class = "plain"
 description = "The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers.fields]]
 name = "CLK_MODEM_APB_ST_MAP"
 bits = "31:28"
 class = "plain"
 description = "The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads."
-values = { dictionary = "ICG_STATE_MAP" }
+flags = "ICG_STATE_MAP"
 
 [[registers]]
 name = "MODEM_RST_CONF"
@@ -1038,16 +1038,3 @@ width = 1
 values = [{ name = "DISABLED", value = 0x0, description = "The selected MODEM_SYSCON clock gate is disabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ENABLED", value = 0x1, description = "The selected MODEM_SYSCON clock gate is enabled.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
 sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
 
-[[dictionaries]]
-name = "RESET"
-description = "A modem block reset: the selected block's reset is released or asserted."
-width = 1
-values = [{ name = "RELEASED", value = 0x0, description = "The selected MODEM_SYSCON reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }, { name = "ASSERTED", value = 0x1, description = "The selected MODEM_SYSCON reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"] }]
-sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD"]
-
-[[dictionaries]]
-name = "ICG_STATE_MAP"
-description = "A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads."
-width = 4
-values = [{ name = "NOGATING_SLEEP", value = 0x1, description = "ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_MODEM", value = 0x2, description = "ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_ACTIVE", value = 0x4, description = "ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }]
-sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]

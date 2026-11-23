@@ -1293,6 +1293,112 @@ pub mod instances {
     }
 }
 
+/// The chip's value lists and flag sets that fields of several types
+/// share, each with its sources.
+pub mod dictionaries {
+    /// A block's reset bit: the block's reset is released or held asserted.
+    ///
+    /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD, IDF_S31_TSENS_POWER_LIFECYCLE.
+    /// The declared values of the `RESET` dictionary.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    #[allow(
+        clippy::enum_variant_names,
+        reason = "the variants are the model's value names"
+    )]
+    pub enum Reset {
+        /// The block's reset is released.
+        Released = 0x0,
+        /// The block's reset is asserted.
+        Asserted = 0x1,
+    }
+
+    impl Reset {
+        /// The value's field bits.
+        #[inline]
+        pub const fn bits(self) -> u32 {
+            self as u32
+        }
+
+        /// The value of the field in the low bits of `bits`; the field has
+        /// exactly the declared values.
+        #[inline]
+        pub const fn from_field(bits: u32) -> Self {
+            match bits & 0x1 {
+                0x0 => Self::Released,
+                _ => Self::Asserted,
+            }
+        }
+    }
+
+    /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
+    ///
+    /// One flag of [`IcgStateMap`].
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub enum IcgState {
+        /// ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        NogatingSleep,
+        /// ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        NogatingModem,
+        /// ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.
+        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+        NogatingActive,
+    }
+
+    impl IcgState {
+        /// The flag's bit in the set.
+        const fn mask(self) -> u32 {
+            match self {
+                Self::NogatingSleep => 0x1,
+                Self::NogatingModem => 0x2,
+                Self::NogatingActive => 0x4,
+            }
+        }
+    }
+
+    /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
+    ///
+    /// A set of [`IcgState`]s: a union of flags is its only combination,
+    /// and the bits no flag names are kept as read.
+    ///
+    /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+    pub struct IcgStateMap(u32);
+
+    impl IcgStateMap {
+        /// No flag.
+        pub const EMPTY: Self = Self(0);
+
+        /// The set with `flag` too.
+        #[must_use]
+        pub const fn with(self, flag: IcgState) -> Self {
+            Self(self.0 | flag.mask())
+        }
+
+        /// The flags of either set.
+        #[must_use]
+        pub const fn union(self, other: Self) -> Self {
+            Self(self.0 | other.0)
+        }
+
+        /// Whether the set holds `flag`.
+        pub const fn contains(self, flag: IcgState) -> bool {
+            self.0 & flag.mask() != 0
+        }
+
+        /// The set a field's bits read as.
+        pub(crate) const fn from_field(bits: u32) -> Self {
+            Self(bits)
+        }
+
+        /// The set's bits, for its field's setter.
+        pub(crate) const fn field_bits(self) -> u32 {
+            self.0
+        }
+    }
+}
+
 /// The `AES` block type.
 ///
 /// The S31 AES accelerator; Typical AES uses CPU-owned blocks without DMA.
@@ -130413,41 +130519,6 @@ pub mod lp_peri_clkrst {
         /// Positioned bits of `LP_TSENS_RST_EN`.
         pub const LP_TSENS_RST_EN_MASK: u32 = 0x80000000;
 
-        /// The declared values of the `LP_TSENS_RST_EN` field.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum LpTsensRstEn {
-            Released = 0x0,
-            Asserted = 0x1,
-        }
-
-        impl LpTsensRstEn {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value positioned in its register.
-            #[inline]
-            pub const fn register_bits(self) -> u32 {
-                self.bits() << 31
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
         /// One observation of the register.
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct R(pub(super) u32);
@@ -130461,8 +130532,8 @@ pub mod lp_peri_clkrst {
 
             /// Temperature-sensor peripheral reset enable, pulsed by its first resource owner.
             #[inline]
-            pub const fn lp_tsens_rst_en(self) -> LpTsensRstEn {
-                LpTsensRstEn::from_field(self.0 >> 31)
+            pub const fn lp_tsens_rst_en(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 31)
             }
         }
 
@@ -130478,8 +130549,8 @@ pub mod lp_peri_clkrst {
 
             /// Temperature-sensor peripheral reset enable, pulsed by its first resource owner.
             #[inline]
-            pub const fn lp_tsens_rst_en(&self) -> LpTsensRstEn {
-                LpTsensRstEn::from_field(self.0 >> 31)
+            pub const fn lp_tsens_rst_en(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 31)
             }
 
             /// Set `LP_TSENS_CLK_EN`.
@@ -130491,7 +130562,10 @@ pub mod lp_peri_clkrst {
 
             /// Set `LP_TSENS_RST_EN`.
             #[inline]
-            pub fn set_lp_tsens_rst_en(&mut self, value: LpTsensRstEn) -> &mut Self {
+            pub fn set_lp_tsens_rst_en(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0x7fffffff) | (value.bits() << 31);
                 self
             }
@@ -133702,53 +133776,6 @@ pub mod modem_etm {
 ///
 /// The modem low-power controller: the modem's low-power clocks, their sources and dividers, and its low-power resets.
 pub mod modem_lpcon {
-    /// Value lists fields of one meaning share, each with its sources.
-    pub mod dictionaries {
-        /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
-        ///
-        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
-        /// The declared values of the `ICG_STATE_MAP` dictionary.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum IcgStateMap {
-            /// ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.
-            NogatingSleep = 0x1,
-            /// ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.
-            NogatingModem = 0x2,
-            /// ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.
-            NogatingActive = 0x4,
-        }
-
-        impl IcgStateMap {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x1 => Some(Self::NogatingSleep),
-                    0x2 => Some(Self::NogatingModem),
-                    0x4 => Some(Self::NogatingActive),
-                    _ => None,
-                }
-            }
-        }
-
-        impl From<IcgStateMap> for oer_portable_mmio::Bits<4> {
-            #[inline]
-            fn from(value: IcgStateMap) -> Self {
-                oer_portable_mmio::Bits::truncate(value.bits())
-            }
-        }
-    }
-
     /// The `TEST_CONF` register.
     pub mod test_conf {
         /// The bits of the register's declared fields.
@@ -134825,56 +134852,26 @@ pub mod modem_lpcon {
 
             /// The Wi-Fi-power clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_wifipwr_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `CLK_WIFIPWR_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_wifipwr_st_map_variant(
-                self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            pub const fn clk_wifipwr_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 16) & 0xf)
             }
 
             /// The coexistence clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_coex_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 20)
-            }
-
-            /// The `CLK_COEX_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_coex_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
+            pub const fn clk_coex_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 20) & 0xf)
             }
 
             /// The PHY-I2C-master clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_i2c_mst_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `CLK_I2C_MST_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_i2c_mst_st_map_variant(
-                self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            pub const fn clk_i2c_mst_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 24) & 0xf)
             }
 
             /// The low-power APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_lp_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 28)
-            }
-
-            /// The `CLK_LP_APB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_lp_apb_st_map_variant(
-                self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
+            pub const fn clk_lp_apb_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 28) & 0xf)
             }
 
             /// The whole word as the hardware has it, for a diagnostic record
@@ -134897,58 +134894,26 @@ pub mod modem_lpcon {
 
             /// The Wi-Fi-power clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_wifipwr_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `CLK_WIFIPWR_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_wifipwr_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            pub const fn clk_wifipwr_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 16) & 0xf)
             }
 
             /// The coexistence clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_coex_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 20)
-            }
-
-            /// The `CLK_COEX_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_coex_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
+            pub const fn clk_coex_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 20) & 0xf)
             }
 
             /// The PHY-I2C-master clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_i2c_mst_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `CLK_I2C_MST_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_i2c_mst_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            pub const fn clk_i2c_mst_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 24) & 0xf)
             }
 
             /// The low-power APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed shared active-state initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_lp_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 28)
-            }
-
-            /// The `CLK_LP_APB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_lp_apb_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
+            pub const fn clk_lp_apb_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 28) & 0xf)
             }
 
             /// Set `BITS_0_15_OPAQUE`.
@@ -134962,16 +134927,19 @@ pub mod modem_lpcon {
             #[inline]
             pub fn set_clk_wifipwr_st_map(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: super::super::dictionaries::IcgStateMap,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xfff0ffff) | (value.get() << 16);
+                self.0 = (self.0 & 0xfff0ffff) | (value.field_bits() << 16);
                 self
             }
 
             /// Set `CLK_COEX_ST_MAP`.
             #[inline]
-            pub fn set_clk_coex_st_map(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xff0fffff) | (value.get() << 20);
+            pub fn set_clk_coex_st_map(
+                &mut self,
+                value: super::super::dictionaries::IcgStateMap,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff0fffff) | (value.field_bits() << 20);
                 self
             }
 
@@ -134979,9 +134947,9 @@ pub mod modem_lpcon {
             #[inline]
             pub fn set_clk_i2c_mst_st_map(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: super::super::dictionaries::IcgStateMap,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xf0ffffff) | (value.get() << 24);
+                self.0 = (self.0 & 0xf0ffffff) | (value.field_bits() << 24);
                 self
             }
 
@@ -134989,9 +134957,9 @@ pub mod modem_lpcon {
             #[inline]
             pub fn set_clk_lp_apb_st_map(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: super::super::dictionaries::IcgStateMap,
             ) -> &mut Self {
-                self.0 = (self.0 & 0x0fffffff) | (value.get() << 28);
+                self.0 = (self.0 & 0x0fffffff) | (value.field_bits() << 28);
                 self
             }
         }
@@ -146044,84 +146012,6 @@ pub mod modem_syscon {
                 }
             }
         }
-
-        /// A modem block reset: the selected block's reset is released or asserted.
-        ///
-        /// SOURCE: S31_MODEM_SYSCON_STRUCT, S31_ESP_PACS_SVD.
-        /// The declared values of the `RESET` dictionary.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum Reset {
-            /// The selected MODEM_SYSCON reset is released.
-            Released = 0x0,
-            /// The selected MODEM_SYSCON reset is asserted.
-            Asserted = 0x1,
-        }
-
-        impl Reset {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The value of the field in the low bits of `bits`; the field has
-            /// exactly the declared values.
-            #[inline]
-            pub const fn from_field(bits: u32) -> Self {
-                match bits & 0x1 {
-                    0x0 => Self::Released,
-                    _ => Self::Asserted,
-                }
-            }
-        }
-
-        /// A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads.
-        ///
-        /// SOURCE: ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP, ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG.
-        /// The declared values of the `ICG_STATE_MAP` dictionary.
-        #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-        #[allow(
-            clippy::enum_variant_names,
-            reason = "the variants are the model's value names"
-        )]
-        pub enum IcgStateMap {
-            /// ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.
-            NogatingSleep = 0x1,
-            /// ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.
-            NogatingModem = 0x2,
-            /// ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.
-            NogatingActive = 0x4,
-        }
-
-        impl IcgStateMap {
-            /// The value's field bits.
-            #[inline]
-            pub const fn bits(self) -> u32 {
-                self as u32
-            }
-
-            /// The declared value `bits`, if it is one.
-            #[inline]
-            pub const fn from_bits(bits: u32) -> Option<Self> {
-                match bits {
-                    0x1 => Some(Self::NogatingSleep),
-                    0x2 => Some(Self::NogatingModem),
-                    0x4 => Some(Self::NogatingActive),
-                    _ => None,
-                }
-            }
-        }
-
-        impl From<IcgStateMap> for oer_portable_mmio::Bits<4> {
-            #[inline]
-            fn from(value: IcgStateMap) -> Self {
-                oer_portable_mmio::Bits::truncate(value.bits())
-            }
-        }
     }
 
     /// The `TEST_CONF` register.
@@ -147431,78 +147321,38 @@ pub mod modem_syscon {
 
             /// The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_zb_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// The `CLK_ZB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_zb_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
+            pub const fn clk_zb_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 8) & 0xf)
             }
 
             /// The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_fe_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 12)
-            }
-
-            /// The `CLK_FE_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_fe_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
+            pub const fn clk_fe_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 12) & 0xf)
             }
 
             /// The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_bt_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `CLK_BT_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_bt_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            pub const fn clk_bt_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 16) & 0xf)
             }
 
             /// The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_wifi_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 20)
-            }
-
-            /// The `CLK_WIFI_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_wifi_st_map_variant(self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
+            pub const fn clk_wifi_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 20) & 0xf)
             }
 
             /// The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_modem_peri_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `CLK_MODEM_PERI_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_modem_peri_st_map_variant(
-                self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            pub const fn clk_modem_peri_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 24) & 0xf)
             }
 
             /// The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_modem_apb_st_map(self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 28)
-            }
-
-            /// The `CLK_MODEM_APB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_modem_apb_st_map_variant(
-                self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
+            pub const fn clk_modem_apb_st_map(self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 28) & 0xf)
             }
 
             /// The whole word as the hardware has it, for a diagnostic record
@@ -147525,80 +147375,38 @@ pub mod modem_syscon {
 
             /// The IEEE 802.15.4 clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_zb_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 8)
-            }
-
-            /// The `CLK_ZB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_zb_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 8) & 0xf)
+            pub const fn clk_zb_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 8) & 0xf)
             }
 
             /// The radio front-end clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_fe_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 12)
-            }
-
-            /// The `CLK_FE_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_fe_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 12) & 0xf)
+            pub const fn clk_fe_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 12) & 0xf)
             }
 
             /// The Bluetooth clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_bt_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 16)
-            }
-
-            /// The `CLK_BT_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_bt_st_map_variant(&self) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 16) & 0xf)
+            pub const fn clk_bt_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 16) & 0xf)
             }
 
             /// The Wi-Fi clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_wifi_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 20)
-            }
-
-            /// The `CLK_WIFI_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_wifi_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 20) & 0xf)
+            pub const fn clk_wifi_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 20) & 0xf)
             }
 
             /// The modem-peripheral clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_modem_peri_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 24)
-            }
-
-            /// The `CLK_MODEM_PERI_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_modem_peri_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 24) & 0xf)
+            pub const fn clk_modem_peri_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 24) & 0xf)
             }
 
             /// The modem-APB clock domain's ICG state map: bit n stands for the PMU ICG modem code n (ICG_STATE_MAP), and a set bit keeps the domain's clock ungated in the HP power state of that code. The reviewed modem clock initialization ORs NOGATING_MODEM and NOGATING_ACTIVE into the map it reads.
             #[inline]
-            pub const fn clk_modem_apb_st_map(&self) -> oer_portable_mmio::Bits<4> {
-                oer_portable_mmio::Bits::truncate(self.0 >> 28)
-            }
-
-            /// The `CLK_MODEM_APB_ST_MAP` field as its declared value, if it is one.
-            #[inline]
-            pub const fn clk_modem_apb_st_map_variant(
-                &self,
-            ) -> Option<super::dictionaries::IcgStateMap> {
-                super::dictionaries::IcgStateMap::from_bits((self.0 >> 28) & 0xf)
+            pub const fn clk_modem_apb_st_map(&self) -> super::super::dictionaries::IcgStateMap {
+                super::super::dictionaries::IcgStateMap::from_field((self.0 >> 28) & 0xf)
             }
 
             /// Set `BITS_0_7_OPAQUE`.
@@ -147610,29 +147418,41 @@ pub mod modem_syscon {
 
             /// Set `CLK_ZB_ST_MAP`.
             #[inline]
-            pub fn set_clk_zb_st_map(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xfffff0ff) | (value.get() << 8);
+            pub fn set_clk_zb_st_map(
+                &mut self,
+                value: super::super::dictionaries::IcgStateMap,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfffff0ff) | (value.field_bits() << 8);
                 self
             }
 
             /// Set `CLK_FE_ST_MAP`.
             #[inline]
-            pub fn set_clk_fe_st_map(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xffff0fff) | (value.get() << 12);
+            pub fn set_clk_fe_st_map(
+                &mut self,
+                value: super::super::dictionaries::IcgStateMap,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xffff0fff) | (value.field_bits() << 12);
                 self
             }
 
             /// Set `CLK_BT_ST_MAP`.
             #[inline]
-            pub fn set_clk_bt_st_map(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xfff0ffff) | (value.get() << 16);
+            pub fn set_clk_bt_st_map(
+                &mut self,
+                value: super::super::dictionaries::IcgStateMap,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xfff0ffff) | (value.field_bits() << 16);
                 self
             }
 
             /// Set `CLK_WIFI_ST_MAP`.
             #[inline]
-            pub fn set_clk_wifi_st_map(&mut self, value: oer_portable_mmio::Bits<4>) -> &mut Self {
-                self.0 = (self.0 & 0xff0fffff) | (value.get() << 20);
+            pub fn set_clk_wifi_st_map(
+                &mut self,
+                value: super::super::dictionaries::IcgStateMap,
+            ) -> &mut Self {
+                self.0 = (self.0 & 0xff0fffff) | (value.field_bits() << 20);
                 self
             }
 
@@ -147640,9 +147460,9 @@ pub mod modem_syscon {
             #[inline]
             pub fn set_clk_modem_peri_st_map(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: super::super::dictionaries::IcgStateMap,
             ) -> &mut Self {
-                self.0 = (self.0 & 0xf0ffffff) | (value.get() << 24);
+                self.0 = (self.0 & 0xf0ffffff) | (value.field_bits() << 24);
                 self
             }
 
@@ -147650,9 +147470,9 @@ pub mod modem_syscon {
             #[inline]
             pub fn set_clk_modem_apb_st_map(
                 &mut self,
-                value: oer_portable_mmio::Bits<4>,
+                value: super::super::dictionaries::IcgStateMap,
             ) -> &mut Self {
-                self.0 = (self.0 & 0x0fffffff) | (value.get() << 28);
+                self.0 = (self.0 & 0x0fffffff) | (value.field_bits() << 28);
                 self
             }
         }
@@ -147835,14 +147655,14 @@ pub mod modem_syscon {
         impl R {
             /// Wi-Fi baseband reset.
             #[inline]
-            pub const fn rst_wifibb(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 8)
+            pub const fn rst_wifibb(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 8)
             }
 
             /// Wi-Fi MAC reset.
             #[inline]
-            pub const fn rst_wifimac(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 9)
+            pub const fn rst_wifimac(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 9)
             }
 
             /// The `RST_FE_PWDET_ADC` field.
@@ -147877,14 +147697,14 @@ pub mod modem_syscon {
 
             /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac_apb(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 15)
+            pub const fn rst_btmac_apb(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 15)
             }
 
             /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 16)
+            pub const fn rst_btmac(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 16)
             }
 
             /// The `RST_BTBB_APB` field.
@@ -147919,44 +147739,44 @@ pub mod modem_syscon {
 
             /// IEEE 802.15.4 MAC APB reset.
             #[inline]
-            pub const fn rst_zbmac_apb(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 23)
+            pub const fn rst_zbmac_apb(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 23)
             }
 
             /// IEEE 802.15.4 MAC reset.
             #[inline]
-            pub const fn rst_zbmac(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 24)
+            pub const fn rst_zbmac(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 24)
             }
 
             /// Modem-security ECB reset.
             #[inline]
-            pub const fn rst_modem_ecb(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 25)
+            pub const fn rst_modem_ecb(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 25)
             }
 
             /// Modem-security CCM reset.
             #[inline]
-            pub const fn rst_modem_ccm(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 26)
+            pub const fn rst_modem_ccm(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 26)
             }
 
             /// Modem-security BAH reset.
             #[inline]
-            pub const fn rst_modem_bah(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 27)
+            pub const fn rst_modem_bah(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 27)
             }
 
             /// Modem-security reset.
             #[inline]
-            pub const fn rst_modem_sec(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 29)
+            pub const fn rst_modem_sec(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 29)
             }
 
             /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
-            pub const fn rst_ble_timer(self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 30)
+            pub const fn rst_ble_timer(self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 30)
             }
 
             /// The `RST_DATA_DUMP` field.
@@ -147979,14 +147799,14 @@ pub mod modem_syscon {
         impl W {
             /// Wi-Fi baseband reset.
             #[inline]
-            pub const fn rst_wifibb(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 8)
+            pub const fn rst_wifibb(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 8)
             }
 
             /// Wi-Fi MAC reset.
             #[inline]
-            pub const fn rst_wifimac(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 9)
+            pub const fn rst_wifimac(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 9)
             }
 
             /// The `RST_FE_PWDET_ADC` field.
@@ -148021,14 +147841,14 @@ pub mod modem_syscon {
 
             /// Bluetooth MAC APB reset. After BT MAC reset, this assert/release cleared the tested ENA0/ENA1 images 0x8000/0x1302 to zero and removed isolated overflow pending, verified after re-enable and CONTROL0 reopen with a fresh positive wrap control. Other pending causes and POR state are unqualified. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac_apb(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 15)
+            pub const fn rst_btmac_apb(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 15)
             }
 
             /// Bluetooth MAC reset. In the bounded overflow experiment, assert/release preserved ENA0=0x8000, ENA1=0x1302 and primary pending 2/124 high before the separate APB reset. SOURCE: HW12_S31_BLE_APB_RESET_20261026.
             #[inline]
-            pub const fn rst_btmac(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 16)
+            pub const fn rst_btmac(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 16)
             }
 
             /// The `RST_BTBB_APB` field.
@@ -148063,44 +147883,44 @@ pub mod modem_syscon {
 
             /// IEEE 802.15.4 MAC APB reset.
             #[inline]
-            pub const fn rst_zbmac_apb(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 23)
+            pub const fn rst_zbmac_apb(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 23)
             }
 
             /// IEEE 802.15.4 MAC reset.
             #[inline]
-            pub const fn rst_zbmac(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 24)
+            pub const fn rst_zbmac(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 24)
             }
 
             /// Modem-security ECB reset.
             #[inline]
-            pub const fn rst_modem_ecb(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 25)
+            pub const fn rst_modem_ecb(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 25)
             }
 
             /// Modem-security CCM reset.
             #[inline]
-            pub const fn rst_modem_ccm(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 26)
+            pub const fn rst_modem_ccm(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 26)
             }
 
             /// Modem-security BAH reset.
             #[inline]
-            pub const fn rst_modem_bah(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 27)
+            pub const fn rst_modem_bah(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 27)
             }
 
             /// Modem-security reset.
             #[inline]
-            pub const fn rst_modem_sec(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 29)
+            pub const fn rst_modem_sec(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 29)
             }
 
             /// Vendor-named Bluetooth low-power timer reset. In the tested initialized MODEM_PWR LP runtime, assert/release alone or within the production controller-domain reset did not clear the two pending bytes, suppress their enabled source-127 delivery or stop the counter with LP clocks on. Clock-off read images are unqualified; restoring LP clocks recovered pending delivery and counter progression without START or enable commands. This field is not a MODEM_PWR LP all-off operation. SOURCE: HW6_S31_LP_RESET_RETENTION_20261026.
             #[inline]
-            pub const fn rst_ble_timer(&self) -> super::dictionaries::Reset {
-                super::dictionaries::Reset::from_field(self.0 >> 30)
+            pub const fn rst_ble_timer(&self) -> super::super::dictionaries::Reset {
+                super::super::dictionaries::Reset::from_field(self.0 >> 30)
             }
 
             /// The `RST_DATA_DUMP` field.
@@ -148111,14 +147931,20 @@ pub mod modem_syscon {
 
             /// Set `RST_WIFIBB`.
             #[inline]
-            pub fn set_rst_wifibb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_wifibb(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffeff) | (value.bits() << 8);
                 self
             }
 
             /// Set `RST_WIFIMAC`.
             #[inline]
-            pub fn set_rst_wifimac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_wifimac(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfffffdff) | (value.bits() << 9);
                 self
             }
@@ -148160,14 +147986,17 @@ pub mod modem_syscon {
 
             /// Set `RST_BTMAC_APB`.
             #[inline]
-            pub fn set_rst_btmac_apb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_btmac_apb(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xffff7fff) | (value.bits() << 15);
                 self
             }
 
             /// Set `RST_BTMAC`.
             #[inline]
-            pub fn set_rst_btmac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_btmac(&mut self, value: super::super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfffeffff) | (value.bits() << 16);
                 self
             }
@@ -148209,49 +148038,67 @@ pub mod modem_syscon {
 
             /// Set `RST_ZBMAC_APB`.
             #[inline]
-            pub fn set_rst_zbmac_apb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_zbmac_apb(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xff7fffff) | (value.bits() << 23);
                 self
             }
 
             /// Set `RST_ZBMAC`.
             #[inline]
-            pub fn set_rst_zbmac(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_zbmac(&mut self, value: super::super::dictionaries::Reset) -> &mut Self {
                 self.0 = (self.0 & 0xfeffffff) | (value.bits() << 24);
                 self
             }
 
             /// Set `RST_MODEM_ECB`.
             #[inline]
-            pub fn set_rst_modem_ecb(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_modem_ecb(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfdffffff) | (value.bits() << 25);
                 self
             }
 
             /// Set `RST_MODEM_CCM`.
             #[inline]
-            pub fn set_rst_modem_ccm(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_modem_ccm(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xfbffffff) | (value.bits() << 26);
                 self
             }
 
             /// Set `RST_MODEM_BAH`.
             #[inline]
-            pub fn set_rst_modem_bah(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_modem_bah(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xf7ffffff) | (value.bits() << 27);
                 self
             }
 
             /// Set `RST_MODEM_SEC`.
             #[inline]
-            pub fn set_rst_modem_sec(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_modem_sec(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xdfffffff) | (value.bits() << 29);
                 self
             }
 
             /// Set `RST_BLE_TIMER`.
             #[inline]
-            pub fn set_rst_ble_timer(&mut self, value: super::dictionaries::Reset) -> &mut Self {
+            pub fn set_rst_ble_timer(
+                &mut self,
+                value: super::super::dictionaries::Reset,
+            ) -> &mut Self {
                 self.0 = (self.0 & 0xbfffffff) | (value.bits() << 30);
                 self
             }
@@ -335139,11 +334986,10 @@ pub mod layouts {
         }
         /// Decode one element, or no element when the index is outside the array.
         pub fn entry(self, index: usize) -> Option<BlePhyChannelFrequencyOffset<'a>> {
-            let bytes = self
-                .bytes
-                .chunks_exact(BlePhyChannelFrequencyOffset::SIZE)
-                .nth(index)?;
-            Some(BlePhyChannelFrequencyOffset::new(bytes.try_into().ok()?))
+            let start = index.checked_mul(BlePhyChannelFrequencyOffset::SIZE)?;
+            Some(BlePhyChannelFrequencyOffset::new(
+                self.bytes.get(start..)?.first_chunk()?,
+            ))
         }
     }
 
@@ -335162,11 +335008,10 @@ pub mod layouts {
         }
         /// Borrow a typed element writer, or no writer for an outside index.
         pub fn entry(&mut self, index: usize) -> Option<BlePhyChannelFrequencyOffsetMut<'_>> {
-            let bytes = self
-                .bytes
-                .chunks_exact_mut(BlePhyChannelFrequencyOffset::SIZE)
-                .nth(index)?;
-            Some(BlePhyChannelFrequencyOffsetMut::new(bytes.try_into().ok()?))
+            let start = index.checked_mul(BlePhyChannelFrequencyOffset::SIZE)?;
+            Some(BlePhyChannelFrequencyOffsetMut::new(
+                self.bytes.get_mut(start..)?.first_chunk_mut()?,
+            ))
         }
     }
 

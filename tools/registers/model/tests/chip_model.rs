@@ -7,7 +7,7 @@ use oer_tools_registers_contracts::{FactAccuracy, NameOrigin};
 use oer_tools_registers_model::{
     RegisterEvidenceSet,
     analog::AnalogAddress,
-    chip_model::{ChipModel, Error, ErrorKind, FieldClass, Location},
+    chip_model::{ChipModel, Error, ErrorKind, Field, FieldClass, Location},
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn StdError>>;
@@ -1867,6 +1867,166 @@ fn a_dictionary_without_sources_is_refused() -> TestResult {
     )?;
     let error = fixture.rejection()?;
     assert!(matches!(error.kind, ErrorKind::InvalidSources), "{error}");
+    Ok(())
+}
+
+/// The chip's definitions: `GATE` and a flag set `STATE_MAP` of three flags
+/// in four bits.
+const DEFINITIONS: &str = "schema = 1\n\n[[dictionaries]]\nname = \"GATE\"\n\
+    description = \"A gate that is closed or open.\"\nwidth = 1\n\
+    values = [{ name = \"CLOSED\", value = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"OPEN\", value = 1, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n\n[[flags]]\nname = \"STATE_MAP\"\nflag = \"STATE\"\n\
+    description = \"The states a clock stays on in.\"\nwidth = 4\n\
+    bits = [{ name = \"SLEEP\", bit = 0, sources = [\"SRC_HEADER\"] }, \
+    { name = \"MODEM\", bit = 1, sources = [\"SRC_HEADER\"] }, \
+    { name = \"ACTIVE\", bit = 2, sources = [\"SRC_HEADER\"] }]\n\
+    sources = [\"SRC_HEADER\"]\n";
+
+/// The fixture with `definitions` as the chip's definitions file.
+fn with_definitions(definitions: &str) -> TestResult<Fixture> {
+    let fixture = Fixture::new()?;
+    fixture.write("dictionaries.toml", definitions)?;
+    fixture.edit(
+        "root.toml",
+        "schema = 4\n",
+        "schema = 4\ndefinitions = \"dictionaries.toml\"\n",
+    )?;
+    Ok(fixture)
+}
+
+/// `TIMG.CONFIG.EN` (bit 31) and `BITS_0_7_OPAQUE` (7:0) with `en` and
+/// `opaque` appended to their declarations.
+fn declare(fixture: &Fixture, en: &str, opaque: &str) -> TestResult {
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"EN\"\nbits = \"31\"\nclass = \"plain\"",
+        &format!("name = \"EN\"\nbits = \"31\"\nclass = \"plain\"{en}"),
+    )?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"",
+        &format!("name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"\nclass = \"plain\"{opaque}"),
+    )?;
+    Ok(())
+}
+
+fn field<'a>(model: &'a ChipModel, name: &str) -> TestResult<&'a Field> {
+    model
+        .types()
+        .values()
+        .flat_map(|block| {
+            block.file.registers.iter().chain(
+                block
+                    .file
+                    .groups
+                    .iter()
+                    .flat_map(|group| group.registers.iter()),
+            )
+        })
+        .flat_map(|register| register.fields.iter())
+        .find(|field| field.name == name)
+        .ok_or_else(|| format!("no field {name}").into())
+}
+
+#[test]
+fn a_field_takes_the_values_of_the_chips_dictionary_it_names() -> TestResult {
+    let fixture = with_definitions(DEFINITIONS)?;
+    declare(&fixture, "\nvalues = { dictionary = \"GATE\" }", "")?;
+    let model = fixture.load()?;
+    let en = field(&model, "EN")?;
+    assert_eq!(en.dictionary.as_deref(), Some("GATE"));
+    assert!(en.chip_dictionary);
+    assert_eq!(
+        en.values
+            .iter()
+            .map(|value| value.name.as_str())
+            .collect::<Vec<_>>(),
+        ["CLOSED", "OPEN"]
+    );
+    assert_eq!(model.definitions().flags.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn a_dictionary_of_the_type_and_the_chip_at_once_is_refused() -> TestResult {
+    let fixture = with_definitions(DEFINITIONS)?;
+    fixture.edit("types/timg.toml", "schema = 3\n", GATE)?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Duplicate(_)), "{error}");
+    assert!(error.entity.ends_with("GATE"), "{error}");
+    Ok(())
+}
+
+#[test]
+fn a_field_holds_the_chips_flag_set_it_names() -> TestResult {
+    let fixture = with_definitions(DEFINITIONS)?;
+    fixture.edit(
+        "types/timg.toml",
+        "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"",
+        "name = \"BITS_0_3_OPAQUE\"\nbits = \"3:0\"\nflags = \"STATE_MAP\"",
+    )?;
+    let model = fixture.load()?;
+    let held = field(&model, "BITS_0_3_OPAQUE")?;
+    assert_eq!(
+        held.flags.as_ref().map(|flags| flags.name.as_str()),
+        Some("STATE_MAP")
+    );
+    assert!(held.values.is_empty());
+    Ok(())
+}
+
+#[test]
+fn a_flag_field_of_another_width_or_with_values_is_refused() -> TestResult {
+    let fixture = with_definitions(DEFINITIONS)?;
+    declare(&fixture, "", "\nflags = \"STATE_MAP\"")?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Values(_)), "{error}");
+    assert!(error.entity.ends_with("BITS_0_7_OPAQUE"), "{error}");
+    for extra in [
+        "\nvalues = [{ name = \"ALL\", value = 7 }]",
+        "\nwrite-values-only = true",
+    ] {
+        let fixture = with_definitions(DEFINITIONS)?;
+        fixture.edit(
+            "types/timg.toml",
+            "name = \"BITS_0_7_OPAQUE\"\nbits = \"7:0\"",
+            &format!("name = \"BITS_0_3_OPAQUE\"\nbits = \"3:0\"\nflags = \"STATE_MAP\"{extra}"),
+        )?;
+        let error = fixture.rejection()?;
+        assert!(
+            matches!(error.kind, ErrorKind::Values(_)),
+            "{extra} {error}"
+        );
+        assert!(error.entity.ends_with("BITS_0_3_OPAQUE"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_flag_set_whose_flags_share_a_bit_or_leave_it_is_refused() -> TestResult {
+    for (from, to) in [
+        ("name = \"MODEM\", bit = 1", "name = \"MODEM\", bit = 0"),
+        ("name = \"ACTIVE\", bit = 2", "name = \"ACTIVE\", bit = 4"),
+        ("name = \"ACTIVE\", bit = 2", "name = \"SLEEP\", bit = 2"),
+    ] {
+        let fixture = with_definitions(&DEFINITIONS.replace(from, to))?;
+        let error = fixture.rejection()?;
+        assert!(matches!(error.kind, ErrorKind::Values(_)), "{from} {error}");
+        assert!(error.entity.ends_with("STATE_MAP"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_definitions_file_of_another_schema_or_a_name_twice_is_refused() -> TestResult {
+    let fixture = with_definitions(&DEFINITIONS.replace("schema = 1", "schema = 2"))?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Schema { .. }), "{error}");
+    let fixture =
+        with_definitions(&DEFINITIONS.replace("name = \"STATE_MAP\"", "name = \"GATE\""))?;
+    let error = fixture.rejection()?;
+    assert!(matches!(error.kind, ErrorKind::Duplicate(_)), "{error}");
     Ok(())
 }
 

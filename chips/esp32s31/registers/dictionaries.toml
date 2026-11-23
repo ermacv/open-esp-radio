@@ -1,0 +1,19 @@
+# The esp32s31's shared dictionaries and flag sets: those that fields of
+# several types name. A definition the fields of one type alone use stays in
+# that type's file.
+schema = 1
+
+[[dictionaries]]
+name = "RESET"
+description = "A block's reset bit: the block's reset is released or held asserted."
+width = 1
+values = [{ name = "RELEASED", value = 0x0, description = "The block's reset is released.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"] }, { name = "ASSERTED", value = 0x1, description = "The block's reset is asserted.", sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"] }]
+sources = ["S31_MODEM_SYSCON_STRUCT", "S31_ESP_PACS_SVD", "IDF_S31_TSENS_POWER_LIFECYCLE"]
+
+[[flags]]
+name = "ICG_STATE_MAP"
+flag = "ICG_STATE"
+description = "A modem clock domain's ICG state map: each bit keeps the domain's clock ungated in one HP power state, at the bit position of that state's ICG modem code; the vendor ORs its configured bits into the map it reads."
+width = 4
+bits = [{ name = "NOGATING_SLEEP", bit = 0, description = "ICG_NOGATING_SLEEP, BIT(PMU_HP_ICG_MODEM_CODE_SLEEP): the clock stays ungated in HP_SLEEP.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_MODEM", bit = 1, description = "ICG_NOGATING_MODEM, BIT(PMU_HP_ICG_MODEM_CODE_MODEM): the clock stays ungated in HP_MODEM.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }, { name = "NOGATING_ACTIVE", bit = 2, description = "ICG_NOGATING_ACTIVE, BIT(PMU_HP_ICG_MODEM_CODE_ACTIVE): the clock stays ungated in HP_ACTIVE.", sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"] }]
+sources = ["ESP_HAL_63E97BE_S31_MODEM_CLOCK_MAP", "ESP_IDF_4D59230D_S31_PMU_ACTIVE_ICG"]
