@@ -24,19 +24,27 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
     let ran = Ran::Done(Tally {
         trials: u16::MAX,
         lost: u16::MAX,
-        after_load: [u16::MAX; 3],
-        before_load: u16::MAX,
+        before_strobe: u16::MAX,
+        after_strobe: [u16::MAX; 3],
+        early: u16::MAX,
+        on_time: u16::MAX,
+        first: spread,
         at: spread,
-        load: spread,
     });
     let attempt = Attempt::Made {
-        offset: i32::MIN,
-        loaded: i32::MIN,
+        strobe: i32::MIN,
         alarms: u8::MAX,
         first: Some(i32::MIN),
         second: Some(i32::MIN),
     };
     let swept = Swept::Done(core::iter::repeat_n(attempt, MOST_ATTEMPTS).collect());
+    let timed = Timed::Made {
+        strobe: i32::MIN,
+        read: i32::MIN,
+        alarms: u8::MAX,
+        first: Some(u32::MAX),
+    };
+    let shot = Shot::Done(core::iter::repeat_n(timed, MOST_ATTEMPTS).collect());
     for (name, length) in [
         (
             "calibrated",
@@ -47,6 +55,7 @@ fn the_largest_answer_of_each_endpoint_fits_one_frame() {
         ),
         ("ran", encoded_length(&ran)),
         ("swept", encoded_length(&swept)),
+        ("shot", encoded_length(&shot)),
         (
             "reached",
             encoded_length(&Reached::AtOnce { latency: u32::MAX }),
@@ -79,12 +88,23 @@ fn every_request_fits_the_images_payload_bound() {
     for length in [
         encoded_length(&Calibrate),
         encoded_length(&Run {
-            case: Case::Behind { ticks: u32::MAX },
+            case: Case::Behind {
+                ticks: u32::MAX,
+                over: Standing::Ahead,
+            },
             trials: u16::MAX,
         }),
         encoded_length(&Run {
-            case: Case::Apart(Apart::HighFirst),
+            case: Case::Apart(Apart {
+                mixed: Mixed::Ahead,
+                order: Order::Early,
+            }),
             trials: u16::MAX,
+        }),
+        encoded_length(&Short {
+            quarters: i16::MIN,
+            over: Standing::Ahead,
+            trials: u8::MAX,
         }),
         encoded_length(&Sweep {
             offset: i32::MIN,
@@ -115,6 +135,6 @@ fn a_spread_keeps_its_least_greatest_and_sum() {
 }
 
 #[test]
-fn the_service_has_six_endpoints_and_their_answers() {
-    assert_eq!(Request::KEYS.len(), 12);
+fn the_service_has_seven_endpoints_and_their_answers() {
+    assert_eq!(Request::KEYS.len(), 14);
 }

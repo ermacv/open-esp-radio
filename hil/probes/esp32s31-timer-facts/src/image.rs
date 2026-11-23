@@ -23,10 +23,11 @@ use oer_chips_family_platform_executor::Executor;
 use oer_chips_family_platform_port::AlarmPart as _;
 use oer_chips_family_platform_runtime::SecondaryHandoff;
 use oer_hil_services_timer_facts::{
-    self as service, ACT_AFTER, AFTER_ALARM_AHEAD, APART_BEHIND, APART_WAIT, Apart, Attempt,
+    self as service, ACT_AFTER, AFTER_ALARM_AHEAD, APART_AHEAD, APART_LOW, Apart, Attempt,
     Calibrated, Case, Concurrent, EARLIER_BEFORE_STANDING, LATER_PAST_STANDING, LOOP_STEP, Looped,
-    MOST_ATTEMPTS, MOST_TRIALS, New, RATE_TICKS, REFERENCE_AHEAD, Ran, Reached, Refusal, Request,
-    STANDING_AHEAD, SWEEP_NEW, Spread, Swept, Tally, WINDOW, WordsRead,
+    MOST_ATTEMPTS, MOST_TRIALS, Mixed, New, Order, RATE_TICKS, REFERENCE_AHEAD, Ran, Reached,
+    Refusal, Request, STANDING_AHEAD, SWEEP_NEW, Shot, Standing, Swept, TOLERANCE, Tally, Timed,
+    WINDOW, WordsRead,
 };
 use oer_portable_diagnostics::{Name, name};
 use oer_portable_embassy_time::EmbassyClock;
@@ -34,7 +35,7 @@ use oer_portable_time::settle::{SettleCounter as _, SettleLimit};
 use oer_portable_time::{Duration, Timer as _};
 
 use crate::comparators::{One, Ticks, Two};
-use crate::trial::{Rate, Seen, before, offset};
+use crate::trial::{Rate, Seen, before, classify, offset};
 use crate::usb;
 
 oer_chips_family_platform_interrupt_table::interrupt_table! {
@@ -248,15 +249,21 @@ struct Reference {
 }
 
 /// What one trial of a [`Run`](service::Run) saw: the alarms before its
-/// load, the load's first write and strobe, the alarms after it and the
-/// cycle its first alarm after the load is expected at.
+/// strobe, the strobe's cycle, the alarms after it and the cycle its alarm
+/// is expected at.
 struct Observed {
     before: Seen,
-    start: u32,
-    end: u32,
     after: Seen,
     expected: u32,
 }
+
+/// The cycles before an act within which its wait stops polling the
+/// comparator and spins on the cycle counter alone, so that the strobe
+/// falls on its cycle.
+const SPIN_CYCLES: u32 = 64;
+
+/// One high word of the counter, in ticks.
+const HIGH_WORD: u64 = 1 << 32;
 
 impl Bench {
     fn sample(&self) -> u32 {
@@ -268,11 +275,13 @@ impl Bench {
         from.wrapping_add(self.per_micro.saturating_mul(micros))
     }
 
-    /// Comparator 1's alarms until `until`, each acknowledged when seen.
+    /// Comparator 1's alarms until `until`, each acknowledged when seen;
+    /// each round polls `INT_RAW` first, then the cycle counter.
     fn watch(&mut self, until: u32, mut seen: Seen) -> Seen {
         loop {
+            let raised = self.one.raised();
             let now = self.sample();
-            if self.one.raised() {
+            if raised {
                 seen = seen.with(now);
                 self.alarm.acknowledge();
             }
@@ -285,8 +294,9 @@ impl Bench {
     /// The first alarm before `until`, acknowledged: its cycle.
     fn first(&mut self, until: u32) -> Option<u32> {
         loop {
+            let raised = self.one.raised();
             let now = self.sample();
-            if self.one.raised() {
+            if raised {
                 self.alarm.acknowledge();
                 return Some(now);
             }
@@ -294,6 +304,16 @@ impl Bench {
                 return None;
             }
         }
+    }
+
+    /// The strobe at cycle `at`: the alarms until shortly before it, then
+    /// a spin on the cycle counter alone; the strobe's cycle.
+    fn strobe_at(&mut self, at: u32, seen: Seen) -> (Seen, u32) {
+        let seen = self.watch(at.wrapping_sub(SPIN_CYCLES), seen);
+        while before(self.sample(), at) {}
+        let strobe = self.sample();
+        self.one.strobe();
+        (seen, strobe)
     }
 
     /// A target `ahead` of the counter loaded once the previous alarm was
@@ -334,18 +354,16 @@ impl Bench {
         }
     }
 
-    /// The load of `target`, timed: the cycles of its first write and of
-    /// its strobe.
-    fn timed_load(&mut self, target: u64) -> Option<(u32, u32)> {
-        let start = self.sample();
-        self.one.load(target).ok()?;
-        Some((start, self.sample()))
-    }
-
-    /// Case a's and e's standing target, and the alarms until the act.
-    fn stand(&mut self, standing: u64, until: u32) -> Option<Seen> {
-        self.one.load(standing).ok()?;
-        Some(self.watch(until, Seen::NONE))
+    /// The standing target `over` names: loaded when it is ahead, the
+    /// reference's left when it is reached.
+    fn stand(&mut self, reference: Reference, over: Standing) -> Option<()> {
+        match over {
+            Standing::Reached => Some(()),
+            Standing::Ahead => self
+                .one
+                .load(reference.target.wrapping_add(STANDING_AHEAD))
+                .ok(),
+        }
     }
 
     /// One trial of `case`; `None` when it could not act (see
@@ -354,75 +372,79 @@ impl Bench {
         let reference = self.reference(REFERENCE_AHEAD)?;
         let r = reference.target;
         let at = |ticks| rate.expected(reference.seen, ticks);
-        let standing = r.wrapping_add(STANDING_AHEAD);
-        let later = STANDING_AHEAD.saturating_add(LATER_PAST_STANDING);
-        // What the trial loaded, and the ticks after the reference its alarm
-        // is expected at: `None` for an alarm expected at once.
-        let (before_load, (start, end), new) = match case {
-            Case::Later => {
-                let early = self.stand(standing, at(ACT_AFTER))?;
-                (early, self.timed_load(r.wrapping_add(later))?, Some(later))
+        let act = at(ACT_AFTER);
+        // The ticks after the reference the alarm is expected at: `None`
+        // for an alarm expected at the strobe.
+        let (before_strobe, strobe, expected) = match case {
+            Case::Later | Case::Earlier => {
+                let new = match case {
+                    Case::Later => STANDING_AHEAD.saturating_add(LATER_PAST_STANDING),
+                    _ => STANDING_AHEAD.saturating_sub(EARLIER_BEFORE_STANDING),
+                };
+                self.stand(reference, Standing::Ahead)?;
+                self.one.prepare(r.wrapping_add(new)).ok()?;
+                let (seen, strobe) = self.strobe_at(act, Seen::NONE);
+                (seen, strobe, Some(new))
             }
-            Case::Earlier => {
-                let earlier = STANDING_AHEAD.saturating_sub(EARLIER_BEFORE_STANDING);
-                let early = self.stand(standing, at(ACT_AFTER))?;
-                (
-                    early,
-                    self.timed_load(r.wrapping_add(earlier))?,
-                    Some(earlier),
-                )
+            Case::AfterAlarm => {
+                let new = ACT_AFTER.saturating_add(AFTER_ALARM_AHEAD);
+                self.one.prepare(r.wrapping_add(new)).ok()?;
+                let (seen, strobe) = self.strobe_at(act, Seen::NONE);
+                (seen, strobe, Some(new))
             }
-            Case::AfterAlarm => (
-                Seen::NONE,
-                self.timed_load(r.wrapping_add(AFTER_ALARM_AHEAD))?,
-                Some(AFTER_ALARM_AHEAD),
-            ),
-            Case::Behind { ticks } => {
-                let now = self.ticks.now().ok()?;
-                (
-                    Seen::NONE,
-                    self.timed_load(now.wrapping_sub(u64::from(ticks)))?,
-                    None,
-                )
+            Case::Behind { ticks, over } => {
+                self.stand(reference, over)?;
+                // At the strobe the counter is the act's.
+                let target = r.wrapping_add(ACT_AFTER).wrapping_sub(u64::from(ticks));
+                self.one.prepare(target).ok()?;
+                let (seen, strobe) = self.strobe_at(act, Seen::NONE);
+                (seen, strobe, None)
             }
-            Case::Apart(order) => {
-                let early = match order {
-                    // The standing target's HI over a passed LO.
-                    Apart::LowFirst => {
-                        let early = self.stand(standing, at(ACT_AFTER))?;
-                        let passed = self.ticks.now().ok()?.wrapping_sub(APART_BEHIND);
-                        self.one.write_low(passed).ok()?;
-                        early
+            Case::Apart(Apart { mixed, order }) => {
+                let new = ACT_AFTER.saturating_add(APART_AHEAD);
+                let target = r.wrapping_add(new);
+                // The standing target one high word ahead: its low word
+                // behind the counter's at the act, or past the new target's.
+                let low = match mixed {
+                    Mixed::Passed => r.wrapping_add(ACT_AFTER).wrapping_sub(APART_LOW),
+                    Mixed::Ahead => target.wrapping_add(APART_LOW),
+                };
+                self.one.load(low.wrapping_add(HIGH_WORD)).ok()?;
+                let (seen, strobe) = match order {
+                    Order::Early => {
+                        self.one.prepare(target).ok()?;
+                        self.strobe_at(act, Seen::NONE)
                     }
-                    // A standing target one HI ahead over a passed LO, then
-                    // the counter's HI.
-                    Apart::HighFirst => {
-                        let passed = self.ticks.now().ok()?.wrapping_sub(APART_BEHIND);
-                        let early = self.stand(passed.wrapping_add(1 << 32), at(ACT_AFTER))?;
-                        self.one.write_high(passed).ok()?;
-                        early
+                    Order::HighFirst | Order::LowFirst => {
+                        let seen = self.watch(act, Seen::NONE);
+                        if let Order::HighFirst = order {
+                            self.one.write_high(target).ok()?;
+                            self.one.write_low(target).ok()?;
+                        } else {
+                            self.one.write_low(target).ok()?;
+                            self.one.write_high(target).ok()?;
+                        }
+                        let strobe = self.sample();
+                        self.one.strobe();
+                        (seen, strobe)
                     }
                 };
-                let wait = self.sample().wrapping_add(rate.cycles_of(APART_WAIT));
-                let early = self.watch(wait, early);
-                (early, self.timed_load(r.wrapping_add(later))?, Some(later))
+                (seen, strobe, Some(new))
             }
         };
-        let (until, expected) = match new {
+        let (until, expected) = match expected {
             Some(new) => (at(new.saturating_add(WINDOW)), at(new)),
-            None => (end.wrapping_add(rate.cycles_of(WINDOW)), end),
+            None => (strobe.wrapping_add(rate.cycles_of(WINDOW)), strobe),
         };
         let after = self.watch(until, Seen::NONE);
         Some(Observed {
-            before: before_load,
-            start,
-            end,
+            before: before_strobe,
             after,
             expected,
         })
     }
 
-    /// One trial of case d: the standing target, and the new one loaded
+    /// One trial of case d′: the standing target, and the new one strobed
     /// `asked` cycles from the standing target's expected cycle.
     fn attempt(&mut self, asked: i32, new: New, rate: Rate) -> Attempt {
         self.attempted(asked, new, rate).unwrap_or(Attempt::Lost)
@@ -432,12 +454,13 @@ impl Bench {
         let reference = self.reference(REFERENCE_AHEAD)?;
         let standing = reference.target.wrapping_add(STANDING_AHEAD);
         let expiry = rate.expected(reference.seen, STANDING_AHEAD);
+        self.one.load(standing).ok()?;
         let target = match new {
             New::Future => standing.wrapping_add(SWEEP_NEW),
             New::Behind => standing.wrapping_sub(SWEEP_NEW),
         };
-        let seen = self.stand(standing, expiry.wrapping_add_signed(asked))?;
-        let (start, end) = self.timed_load(target)?;
+        self.one.prepare(target).ok()?;
+        let (seen, strobe) = self.strobe_at(expiry.wrapping_add_signed(asked), Seen::NONE);
         let until = rate.expected(
             reference.seen,
             STANDING_AHEAD
@@ -446,28 +469,67 @@ impl Bench {
         );
         let seen = self.watch(until, seen);
         Some(Attempt::Made {
-            offset: offset(start, expiry),
-            loaded: offset(end, expiry),
+            strobe: offset(strobe, expiry),
             alarms: seen.count,
             first: seen.first.map(|cycle| offset(cycle, expiry)),
             second: seen.second.map(|cycle| offset(cycle, expiry)),
         })
     }
 
-    /// Case g: a target `ahead` of the counter.
+    /// One trial of case h: over `over`, a target `quarters` quarter ticks
+    /// ahead of the counter at the strobe; one read of the counter after
+    /// the strobe, then the watch.
+    fn shot(&mut self, quarters: i16, over: Standing, rate: Rate) -> Timed {
+        self.shoot(quarters, over, rate).unwrap_or(Timed::Lost)
+    }
+
+    fn shoot(&mut self, quarters: i16, over: Standing, rate: Rate) -> Option<Timed> {
+        let reference = self.reference(REFERENCE_AHEAD)?;
+        self.stand(reference, over)?;
+        let target = reference.target.wrapping_add(ACT_AFTER);
+        let expected = rate.expected(reference.seen, ACT_AFTER);
+        self.one.prepare(target).ok()?;
+        // Ahead by `quarters` at the strobe: the strobe that much before
+        // the target's cycle.
+        let lead = rate.cycles_of_quarters(quarters.unsigned_abs());
+        let at = if quarters >= 0 {
+            expected.wrapping_sub(lead)
+        } else {
+            expected.wrapping_add(lead)
+        };
+        let (_, strobe) = self.strobe_at(at, Seen::NONE);
+        let read = self.ticks.now().ok()?;
+        let seen = self.watch(strobe.wrapping_add(rate.cycles_of(WINDOW)), Seen::NONE);
+        Some(Timed::Made {
+            strobe: offset(strobe, expected),
+            read: i32::try_from(read.wrapping_sub(target).cast_signed()).unwrap_or(i32::MAX),
+            alarms: seen.count,
+            first: seen.first.map(|cycle| cycle.wrapping_sub(strobe)),
+        })
+    }
+
+    /// Case g′: over a target still ahead, a target `ahead` of the counter.
     fn far(&mut self, ahead: u64, rate: Rate) -> Reached {
         let Ok(now) = self.ticks.now() else {
             return Reached::Refused(Refusal::Unverified);
         };
-        // Whatever the previous target raised is acknowledged before the
-        // load: an alarm at once must stay seen.
-        self.alarm.acknowledge();
-        let Some((_, end)) = self.timed_load(now.wrapping_add(ahead)) else {
+        // The standing target ahead past the window: it cannot fire in it.
+        if self
+            .one
+            .load(now.wrapping_add(WINDOW.saturating_mul(2)))
+            .is_err()
+            || self.one.prepare(now.wrapping_add(ahead)).is_err()
+        {
             return Reached::Refused(Refusal::Unverified);
-        };
-        match self.first(end.wrapping_add(rate.cycles_of(WINDOW))) {
+        }
+        // Whatever an earlier target raised is acknowledged before the
+        // strobe: an alarm at once must stay seen.
+        self.alarm.acknowledge();
+        let strobe = self.sample();
+        self.one.strobe();
+        match self.first(strobe.wrapping_add(rate.cycles_of(WINDOW))) {
             Some(cycle) => Reached::AtOnce {
-                latency: cycle.wrapping_sub(end),
+                latency: cycle.wrapping_sub(strobe),
             },
             None => Reached::Waiting,
         }
@@ -595,14 +657,8 @@ impl service::Commander for Owner {
         if request.trials == 0 || request.trials > MOST_TRIALS {
             return Ran::Refused(Refusal::Trials);
         }
-        let mut tally = Tally {
-            trials: 0,
-            lost: 0,
-            after_load: [0; 3],
-            before_load: 0,
-            at: Spread::EMPTY,
-            load: Spread::EMPTY,
-        };
+        let mut tally = Tally::EMPTY;
+        let tolerance = rate.cycles_of(TOLERANCE);
         for _ in 0..request.trials {
             let observed =
                 oer_portable_riscv::interrupt_free(|| self.bench.trial(request.case, rate));
@@ -612,14 +668,21 @@ impl service::Commander for Owner {
                 continue;
             };
             if observed.before.count > 0 {
-                tally.before_load = tally.before_load.saturating_add(1);
+                tally.before_strobe = tally.before_strobe.saturating_add(1);
             }
-            if let Some(bin) = tally.after_load.get_mut(observed.after.bin()) {
+            if let Some(bin) = tally.after_strobe.get_mut(observed.after.bin()) {
                 *bin = bin.saturating_add(1);
             }
-            tally.load = tally.load.with(offset(observed.end, observed.start));
             if let Some(first) = observed.after.first {
-                tally.at = tally.at.with(offset(first, observed.expected));
+                tally.first = tally.first.with(offset(first, observed.expected));
+            }
+            let (early, on_time) = classify(observed.after, observed.expected, tolerance);
+            if early {
+                tally.early = tally.early.saturating_add(1);
+            }
+            if let Some(deviation) = on_time {
+                tally.on_time = tally.on_time.saturating_add(1);
+                tally.at = tally.at.with(deviation);
             }
         }
         Ran::Done(tally)
@@ -643,6 +706,26 @@ impl service::Commander for Owner {
             }
         }
         Swept::Done(attempts)
+    }
+
+    async fn short(&mut self, request: service::Short) -> Shot {
+        let Some(rate) = self.rate() else {
+            return Shot::Refused(Refusal::NoRate);
+        };
+        if request.trials == 0 || usize::from(request.trials) > MOST_ATTEMPTS {
+            return Shot::Refused(Refusal::Trials);
+        }
+        let mut shots = heapless::Vec::new();
+        for _ in 0..request.trials {
+            let shot = oer_portable_riscv::interrupt_free(|| {
+                self.bench.shot(request.quarters, request.over, rate)
+            });
+            // At most `MOST_ATTEMPTS` trials: the list has room for each.
+            if shots.push(shot).is_err() {
+                break;
+            }
+        }
+        Shot::Done(shots)
     }
 
     async fn far(&mut self, request: service::Far) -> Reached {

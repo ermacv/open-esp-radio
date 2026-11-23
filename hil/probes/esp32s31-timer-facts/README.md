@@ -17,7 +17,10 @@ An alarm is seen by polling `INT_RAW` against the hart's cycle counter
 (`CycleCounter::sample`); it is acknowledged through the comparator's
 `SystimerAlarmN` part. The ticks are read on the boot hart alone, from the
 counter latch. Each trial starts from a reference alarm and counts its
-targets from it (`oer-hil-services-timer-facts`).
+targets from it, writes its target's words before its act and strobes the
+load at the act; the first poll of `INT_RAW` follows the strobe with
+nothing between, except in the short timer, whose one read of the counter
+comes first (`oer-hil-services-timer-facts`).
 
 ## Access
 
@@ -39,9 +42,10 @@ module.
 | Endpoint | Case |
 |---|---|
 | `timer-facts/calibrate` | the boot's rate: the cycles of 160 000 ticks between two alarms |
-| `timer-facts/run` | a (`Later`, `Earlier`), b (`AfterAlarm`), c (`Behind`), e (`Apart`): up to 250 trials, their tally |
-| `timer-facts/sweep` | d: up to 8 trials at one asked offset, each as it happened |
-| `timer-facts/far` | g: one target far ahead |
+| `timer-facts/run` | a (`Later`, `Earlier`), b (`AfterAlarm`), c′ (`Behind`), e′ (`Apart`): up to 250 trials, their tally |
+| `timer-facts/sweep` | d′: up to 8 trials at one asked strobe offset, each as it happened |
+| `timer-facts/short` | h: up to 8 trials at one distance at the strobe, each with its counter read |
+| `timer-facts/far` | g′: one target far ahead, over a target still ahead |
 | `timer-facts/concurrent` | f: hart 1's loop started or stopped, its counts |
 | `timer-facts/words` | the enables, read at the end |
 

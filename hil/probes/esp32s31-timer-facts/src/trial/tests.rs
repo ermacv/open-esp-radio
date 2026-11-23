@@ -45,3 +45,24 @@ fn a_window_keeps_its_count_and_its_first_two_alarms() {
     );
     assert_eq!(Seen::NONE.bin(), 0);
 }
+
+#[test]
+fn quarter_ticks_are_a_quarter_of_a_tick_s_cycles() {
+    assert_eq!(RATE.cycles_of_quarters(1), 5);
+    assert_eq!(RATE.cycles_of_quarters(40), 200);
+}
+
+#[test]
+fn an_alarm_is_early_or_at_its_cycle_within_the_tolerance() {
+    // One alarm at the load, long before, then one at the target.
+    let seen = Seen::NONE.with(100).with(10_005);
+    assert_eq!(classify(seen, 10_000, 20), (true, Some(5)));
+    // One late beyond the tolerance: neither.
+    assert_eq!(classify(Seen::NONE.with(10_050), 10_000, 20), (false, None));
+    // At the edge of the tolerance, before the expected cycle.
+    assert_eq!(
+        classify(Seen::NONE.with(9_980), 10_000, 20),
+        (false, Some(-20))
+    );
+    assert_eq!(classify(Seen::NONE, 10_000, 20), (false, None));
+}

@@ -121,9 +121,8 @@ impl One {
         self.0.trigger_comp_load_load(ONE);
     }
 
-    /// The target's high and low words, then the load's strobe; the
-    /// comparator's enable untouched.
-    pub(crate) fn load(&mut self, target: u64) -> Result<(), ValueError> {
+    /// The target's high and low words, without the strobe.
+    pub(crate) fn prepare(&mut self, target: u64) -> Result<(), ValueError> {
         let (low, high) = words(target)?;
         self.0.modify_target_hi(ONE, |word| {
             word.set_hi(high);
@@ -131,6 +130,13 @@ impl One {
         self.0.modify_target_lo(ONE, |word| {
             word.set_lo(low);
         });
+        Ok(())
+    }
+
+    /// The target's high and low words, then the load's strobe; the
+    /// comparator's enable untouched.
+    pub(crate) fn load(&mut self, target: u64) -> Result<(), ValueError> {
+        self.prepare(target)?;
         self.strobe();
         Ok(())
     }
