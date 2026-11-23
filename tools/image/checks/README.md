@@ -75,7 +75,9 @@ task root, every interrupt-table handler (including shorter handlers at the same
 level) and exception root must have complete resolved paths excluding both linked critical-section entry points. Task polls
 follow their owning entry or handler's existing call resolutions. Linked aliases
 and DWARF inline copies are checked. Partial bounds on the declared hart remain
-permitted. Unused harts' containment is also required independently of the optional stack gate. A secondary hart starts only in an
+permitted. Unused harts' containment is also required independently of the optional stack gate. The report also lists every function that holds an entry of the section, out of line or inlined, by name and address, or `none`: a report, which changes no verdict.
+
+`interrupt-masks.txt` lists every instruction of the runtime image that clears `mstatus.MIE` (`csrrci`/`csrci` with bit 3, `csrrc`/`csrc` by a register, a write of `mstatus`) or writes the CLIC's threshold (`mintthresh`, CSR 0x347): its address, the instruction, what it does and the function that holds it, decoded function by function. The CSR numbers are `oer-portable-riscv`'s. It is a report, never a gate: no list of allowed functions, no count compared. A secondary hart starts only in an
 image that declares it. `cargo fw probe` emits reachability reports only, including for
 runtime-linked binaries; it does not run this critical-section gate.
 

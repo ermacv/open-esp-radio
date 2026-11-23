@@ -55,6 +55,7 @@
 pub mod codegen;
 pub mod copies;
 pub mod critical_section;
+pub mod interrupt_masks;
 pub mod interrupts;
 pub mod linker;
 pub mod panics;
@@ -368,9 +369,17 @@ impl Gates {
                         critical_section,
                     )?;
                     std::fs::write(input.output.join(crate::stack::cores::REPORT), cores)?;
+                    std::fs::write(
+                        input.output.join(crate::interrupt_masks::REPORT),
+                        crate::interrupt_masks::report(&image)?,
+                    )?;
                     outcome.reports.extend(
-                        [crate::critical_section::REPORT, crate::stack::cores::REPORT]
-                            .map(str::to_owned),
+                        [
+                            crate::critical_section::REPORT,
+                            crate::stack::cores::REPORT,
+                            crate::interrupt_masks::REPORT,
+                        ]
+                        .map(str::to_owned),
                     );
                     outcome.sizes = Some(sizes::Measurements::of(&image, profile)?);
                     outcome
