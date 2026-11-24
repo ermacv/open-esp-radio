@@ -35,7 +35,7 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/data.rs` | MSDU fields (`MsduHeader`, `MsduParts`), data encapsulation plans, MSDU and A-MSDU decapsulation |
 | `wire/src/station/data.rs` | Data codecs, with A-MSDU framing in `station/data/amsdu.rs` |
 | `wire/src/sequence.rs` | Twelve-bit sequence numbers: the checked Sequence Number subfield |
-| `core/upper-mac/src/sequence.rs` | Modulo-4096 sequence arithmetic (`SequenceSpace`) and the separate management/non-QoS and per-TID TX sequence owners of the station, the access point and ESP-NOW |
+| `core/upper-mac/src/sequence.rs` | Modulo-4096 sequence arithmetic (`SequenceSpace`) and the separate management/non-QoS and per-TID TX sequence owners of the station and the access point |
 | `core/upper-mac/src/ccmp.rs` | CCMP transmit packet numbers and the receive replay frontier of every CCMP user |
 | `contracts/security` | The CCMP-128 temporal-key owner that RSN, the port, the software cipher and a backend share |
 | `core/security/rsn/src/pmksa.rs` | The PMKSA cache of the station and of the access point |
@@ -44,10 +44,9 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/qos.rs` | User priorities and access categories |
 | `core/upper-mac/src/qos.rs` | Admission-control downgrade of an access category |
 | `core/upper-mac/src/vif.rs` | Receive routing for one same-channel STA plus SoftAP pair |
-| `core/upper-mac/src/monitor.rs` | The frames a monitor keeps and the channels it visits |
+| `core/upper-mac/src/monitor.rs` | The frames a monitor keeps |
 | `core/arbiter/src/interface.rs` | Virtual-interface identities and their channel-context bindings |
 | `core/arbiter/src/configuration.rs` | The requested owner topology against a backend's service description |
-| `core/extensions/esp-now/src/configuration.rs` | Exclusive station-address topology for standalone ESP-NOW |
 | `core/roles/sta/src/port.rs` | The station's tokens on a lower-MAC port and its numbered pairwise key |
 | `wire/src/channel.rs` | Validated 2.4/5 GHz channels and 20/40 MHz geometry |
 | `contracts/port/src/regulated.rs` | The regulatory view of a channel: the frequencies it occupies (`RegulatedChannel`) |
@@ -59,12 +58,9 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/beacon.rs` | Beacon encoding, DTIM/TIM stamping and template element edits |
 | `wire/src/monitor_injection.rs` | Header geometry of a monitor-injected MPDU |
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
-| `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
-| `core/extensions/esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
 | `core/roles/sta/src/events.rs` | The station core's events: lost tokens, dropped RSN input, scan table outcomes |
 | `core/datapath/src/events.rs` (`DataEvent`) | The data plane's events: lost data and how each aggregate settled |
 | `core/upper-mac/src/block_ack/banks.rs` (`RxBlockAckEvent`) | The receive agreements' events: containment, reorder decisions, agreement start and stop |
-| `core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowPeersCleared`) | The keys shutdown cleared, the one fact its result does not return |
 
 Frame builders, sequence owners and reorder windows use
 `wire::sequence::SequenceNumber`, validating the twelve-bit range at
@@ -111,24 +107,21 @@ MAC's transmit queues. The upper MAC's
 `block_ack/banks.rs` owns an association's receive agreements and reordering.
 Its `ccmp.rs` is the one owner of CCMP numbering: the receive replay frontier
 (`CcmpReplayFrontier`; `ccmp/replay.rs` checks an association's keys) of the
-station, the access point's protected management frames, the RSN management
-receiver and ESP-NOW peers, and the transmit packet-number allocator, which
+station, the access point's protected management frames and the RSN management
+receiver, and the transmit packet-number allocator, which
 numbers each fresh protected MPDU before the port takes it (the station's
 pairwise key in `core/roles/sta/src/port.rs` holds it); the backend encrypts with the
 supplied number. Its `sequence.rs` owns the transmit sequence spaces of every
 role. Espressif policy parameters live in
 [`oer-chips-family-radio-ieee80211-policy`](../../chips/family/radio/ieee80211/policy/README.md).
 
-`core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs` owns ESP-NOW peers and
-protocol state. Its `security.rs` sibling owns secrets and generations; each
-peer's packet numbers and replay frontier are `core/upper-mac`'s CCMP owners. Both use the wire codecs, the interface identities of
-`core/arbiter/src/interface.rs` and the PHY requests of
-`core/extensions/esp-now/src/extensions/espressif/phy.rs`. ESP-NOW's `configuration` narrows
-the arbiter's checked `WifiPlan` to exclusive standalone ESP-NOW ownership.
+ESP-NOW (`core/extensions/esp-now`, the wire's `extensions/espressif`), NDP
+Announcement (the wire's `ndpa.rs`) and the monitor's channel sequence
+(`core/upper-mac/src/monitor/channels.rs`) are kept as sources outside the
+build.
 
 The cores and the runtime keep no counters or diagnostics of their own work.
-An owner (the station, its data plane, the receive agreements, the
-ESP-NOW peer table) takes `&mut impl oer_portable_events::EventSink<E>` as a call
+An owner (the station, its data plane, the receive agreements) takes `&mut impl oer_portable_events::EventSink<E>` as a call
 parameter and reports what it dropped, refused or decided as a value of its
 own event type `E`; it never stores the sink. The station service holds the
 sink its composition chose (`O: StationEvents`, by default `()`) and lends it

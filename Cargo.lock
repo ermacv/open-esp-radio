@@ -2351,19 +2351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oer-protocols-ieee80211-core-extensions-esp-now"
-version = "0.1.0"
-dependencies = [
- "oer-portable-events",
- "oer-portable-wire",
- "oer-protocols-ieee80211-contracts-port",
- "oer-protocols-ieee80211-core-arbiter",
- "oer-protocols-ieee80211-core-upper-mac",
- "oer-protocols-ieee80211-wire",
- "zeroize",
-]
-
-[[package]]
 name = "oer-protocols-ieee80211-core-installation"
 version = "0.1.0"
 dependencies = [
@@ -2458,7 +2445,6 @@ dependencies = [
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-time-virtual",
- "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",

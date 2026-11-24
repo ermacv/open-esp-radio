@@ -50,7 +50,6 @@ protocols/hil/{agent, protocol}/
 protocols/ieee80211/{runtime, wire}/
 protocols/ieee80211/contracts/{port, security}/
 protocols/ieee80211/core/{arbiter, upper-mac}/
-protocols/ieee80211/core/extensions/esp-now/
 protocols/ieee80211/core/roles/{ap, sta}/
 protocols/ieee80211/core/security/{cipher, rsn}/
 protocols/ieee80211/testing/{conformance, model}/
@@ -91,6 +90,9 @@ not built. Kept as sources until their radio returns:
   `chips/family/radio/ieee802154/{engine, values}/`);
 - the IEEE 802.15.4 host stand (`tools/vendor/ieee802154-esp32s31{,-cli}/`).
 
+Kept too, until a plan takes it up: ESP-NOW
+(`protocols/ieee80211/core/extensions/esp-now/`).
+
 `protocols/bluetooth/hci/` stays built: the stand's Linux fixture helpers
 (`tools/lab/fixture-helpers`) depend on it, the Wi-Fi fixture's programs
 among them. Inside built packages, files stay as sources outside their
@@ -106,7 +108,11 @@ crate's module tree:
   SAE: `rsn`'s `authenticator/sae{.rs,/}`, the validity of a station's
   Commit and the anti-clogging tokens (`sae/access_point.rs`, with their
   compile-fail cases in `sae/access_point_ui/`), and the wire's received
-  Commit (`sae/access_point.rs`).
+  Commit (`sae/access_point.rs`);
+- what no step of the current work reads: the wire's ESP-NOW formats
+  (`extensions/espressif{.rs,/}`) and NDP Announcement (`ndpa{.rs,/}`), and
+  the upper MAC's monitor channel sequence and policy
+  (`monitor/channels.rs`).
 
 Awaiting deletion at their successor:
 - the old Wi-Fi path, its backend and station

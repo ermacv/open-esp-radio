@@ -1396,7 +1396,7 @@ its model and conformance case.
   machine: no fixed data or control-frame rate; frames before association and
   to a group use the lowest rate the BSS basic set allows. MSDU age starts at
   software admission. Monitor is a tap in the shared lower-MAC loop, not a
-  role; ESP-NOW and FTM are clients of the lower-MAC port. The installation
+  role; FTM is a client of the lower-MAC port. The installation
   machine decides every transition of a port's installation for every role,
   and `drive` carries its steps out on the port. The engine
   (`core/datapath`) fills and publishes the arenas, settles their ends and

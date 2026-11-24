@@ -124,10 +124,10 @@ data port. A credit stays free to close a reorder
 gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers for every
 CCMP user: one strictly increasing `CcmpReplayFrontier` per lane, key or
 peer, borrowed by an admission candidate until commit, for the station's
-data, the access point's and the RSN receiver's protected management frames
-and ESP-NOW peers; key material, headers and PN values are wire vocabulary.
+data, and the access point's and the RSN receiver's protected management
+frames; key material, headers and PN values are wire vocabulary.
 `sequence` owns the transmit sequence spaces (`SequenceCounter`,
-`TxSequenceCounters`) of the station, the access point and ESP-NOW. `duplicate` owns
+`TxSequenceCounters`) of the station and the access point. `duplicate` owns
 receive duplicate history, `fragmentation` bounded MSDU reassembly and its
 reassembly refusals (`OpenDataReassemblyError`, over the wire's frame
 refusals), and `receive` the replay commit boundary. `ccmp`'s
@@ -136,8 +136,9 @@ refusals), and `receive` the replay commit boundary. `ccmp`'s
 categories and downgrades an access category under admission control.
 `rate_selection::RateSelection::learn` routes a terminal's sample to the
 record of its frame class (probe, control, data), only for a current link's
-completion that carries one. `monitor` selects the frames a monitor keeps and
-the channels it visits, and revalidates a retained injection request; `vif`
+completion that carries one. `monitor` selects the frames a monitor keeps
+and revalidates a retained injection request; the channels it visits
+(`monitor/channels.rs`) are outside the build. `vif`
 routes a received MPDU of a same-channel station and SoftAP pair to its
 interface from its public header fields. These owners accept decoded wire
 values and retain no executor, HAL or chip dependency.
