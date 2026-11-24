@@ -1,7 +1,7 @@
 //! Split-MAC offload boundaries, service capabilities, receive metadata and
 //! the terminal status of one logical MPDU exchange.
 
-use crate::{HardwareServices, RxCryptoStatus, RxEvidence, TxStatus};
+use crate::{Aggregation, HardwareServices, RxCryptoStatus, RxEvidence, TxStatus};
 use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Owner that must perform one indivisible MAC operation.
@@ -183,23 +183,13 @@ pub struct MacRxMetadata<Rate = PhyRate> {
     pub rate: RxEvidence<Rate>,
     pub rssi_dbm: RxEvidence<i8>,
     pub crypto: RxEvidence<RxCryptoStatus>,
-    /// Whether the hardware marked this as an IEEE VHT/HE S-MPDU (an MPDU
-    /// carried alone in an A-MPDU subframe with the delimiter EOF bit set).
-    /// This is not a synonym for an ordinary non-aggregated MPDU.
-    pub s_mpdu: RxEvidence<bool>,
-    /// Whether this MPDU was carried in an A-MPDU container.
-    ///
-    /// This does not state how many MPDUs the container carried. In
-    /// particular, an S-MPDU is the sole MPDU in a VHT/HE A-MPDU and
-    /// therefore has both `s_mpdu=true` and `ampdu=true`. Provenance remains
-    /// explicit because HT supplies an RXVECTOR Aggregation bit, while the
-    /// VHT/HE PPDU format establishes A-MPDU containment by protocol rule.
-    pub ampdu: RxEvidence<bool>,
+    /// How this MPDU was carried in its PPDU, with its provenance.
+    pub aggregation: RxEvidence<Aggregation>,
     /// Whether this MPDU carries an A-MSDU payload.
     ///
-    /// A-MPDU and A-MSDU are independent dimensions and deliberately retain
-    /// independent evidence. Protocol parsing can prove the latter without
-    /// proving the former.
+    /// A-MPDU and A-MSDU are independent, each with its own evidence: the
+    /// QoS Control field's A-MSDU Present subfield (IEEE Std 802.11-2020,
+    /// 9.2.4.5) can be proved by protocol parsing without the aggregation.
     pub amsdu: RxEvidence<bool>,
 }
 
@@ -212,8 +202,7 @@ impl<Rate> MacRxMetadata<Rate> {
             rate: RxEvidence::Unavailable,
             rssi_dbm: RxEvidence::Unavailable,
             crypto: RxEvidence::Unavailable,
-            s_mpdu: RxEvidence::Unavailable,
-            ampdu: RxEvidence::Unavailable,
+            aggregation: RxEvidence::Unavailable,
             amsdu: RxEvidence::Unavailable,
         }
     }
@@ -227,8 +216,7 @@ impl<Rate> MacRxMetadata<Rate> {
             rate: self.rate.and_then(convert),
             rssi_dbm: self.rssi_dbm,
             crypto: self.crypto,
-            s_mpdu: self.s_mpdu,
-            ampdu: self.ampdu,
+            aggregation: self.aggregation,
             amsdu: self.amsdu,
         }
     }

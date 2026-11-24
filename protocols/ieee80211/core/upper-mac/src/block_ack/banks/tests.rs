@@ -671,7 +671,7 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     }
     let reads = Cell::new(0);
     let mut common = meta();
-    common.ampdu = RxEvidence::HardwareObserved(true);
+    common.aggregation = RxEvidence::HardwareObserved(Aggregation::Ampdu);
     let mut storage = RxBlockAckStorage::<CountedTypes<'_>, u8, 1, 8, 8>::new([0], GAP);
     let mut view = storage.view();
     let counted = Counted {
@@ -708,7 +708,7 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     assert!(matches!(
         events.0.as_slice(),
         [RxBlockAckEvent::Contained {
-            ampdu: RxEvidence::HardwareObserved(true),
+            aggregation: RxEvidence::HardwareObserved(Aggregation::Ampdu),
             bytes: Some(_),
             ..
         }]

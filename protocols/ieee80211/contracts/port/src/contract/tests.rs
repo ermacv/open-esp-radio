@@ -97,8 +97,7 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
         rate: RxEvidence::HardwareObserved(11_u8),
         rssi_dbm: RxEvidence::HardwareObserved(-47),
         crypto: RxEvidence::Unavailable,
-        s_mpdu: RxEvidence::Unavailable,
-        ampdu: RxEvidence::Unavailable,
+        aggregation: RxEvidence::Unavailable,
         amsdu: RxEvidence::Unavailable,
     };
     assert!(staged.channel.is_available());
@@ -106,16 +105,15 @@ fn receive_metadata_keeps_absence_and_provenance_distinct() {
 
     let validated = MacRxMetadata {
         crypto: RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified),
-        s_mpdu: RxEvidence::HardwareObserved(true),
+        aggregation: RxEvidence::HardwareObserved(Aggregation::SMpdu),
         amsdu: RxEvidence::ProtocolValidated(false),
         ..staged
     };
     assert_ne!(validated.crypto, staged.crypto);
     assert_eq!(
-        validated.s_mpdu.as_ref(),
-        RxEvidence::HardwareObserved(&true)
+        validated.aggregation.as_ref(),
+        RxEvidence::HardwareObserved(&Aggregation::SMpdu)
     );
-    assert_eq!(validated.ampdu, RxEvidence::Unavailable);
     assert_eq!(validated.amsdu, RxEvidence::ProtocolValidated(false));
 }
 
@@ -194,4 +192,29 @@ fn a_chip_rate_maps_to_the_portable_rate_with_its_provenance() {
         ..chip
     };
     assert_eq!(unknown.map_rate(decode).rate, RxEvidence::Unavailable);
+}
+
+#[test]
+fn a_rate_conversion_keeps_every_other_field_as_it_was() {
+    let chip = MacRxMetadata {
+        channel: RxEvidence::HardwareObserved(
+            Channel::ghz2_4(
+                11,
+                oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+            )
+            .unwrap(),
+        ),
+        rate: RxEvidence::ProtocolValidated(7_u8),
+        rssi_dbm: RxEvidence::HardwareObserved(-61),
+        crypto: RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified),
+        aggregation: RxEvidence::HardwareObserved(Aggregation::SMpdu),
+        amsdu: RxEvidence::ProtocolValidated(true),
+    };
+    let portable = chip.map_rate(|code| Some(u16::from(code) + 1));
+    assert_eq!(portable.rate, RxEvidence::ProtocolValidated(8_u16));
+    assert_eq!(portable.channel, chip.channel);
+    assert_eq!(portable.rssi_dbm, chip.rssi_dbm);
+    assert_eq!(portable.crypto, chip.crypto);
+    assert_eq!(portable.aggregation, chip.aggregation);
+    assert_eq!(portable.amsdu, chip.amsdu);
 }
