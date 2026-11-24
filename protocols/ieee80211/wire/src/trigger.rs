@@ -15,7 +15,11 @@
 //! are exposed separately from their wire encodings.
 //!
 //! Received bytes reach this module; nothing here panics on them.
+//!
+//! This file is outside the build: no `mod` names it
+//! (`docs/repository-layout.md`). It returns with triggered uplink.
 
+use crate::block_ack::frame::BarControlFields;
 use crate::frame::FrameControlFields;
 
 use crate::sequence::SequenceNumber;
@@ -857,15 +861,6 @@ oer_portable_wire::bitfield! {
         pub minimum_transmit_power, with_minimum_transmit_power: bool = 11..12;
         pub reserved, with_reserved: u8 = 12..14;
         pub unparsed_upper_bits, with_unparsed_upper_bits: u32 = 14..32;
-    }
-}
-
-oer_portable_wire::bitfield! {
-    /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
-    pub struct BarControlFields[2] (little) {
-        pub ack_policy, with_ack_policy: bool = 0..1;
-        pub bar_type, with_bar_type: u8 = 1..5;
-        pub tid, with_tid: (u8) = 12..16;
     }
 }
 

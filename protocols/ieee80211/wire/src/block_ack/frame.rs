@@ -183,7 +183,7 @@ pub fn encode_block_ack_request(
     crate::encoding::write_array::<4, _, _>(&mut frame, &receiver);
     crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter);
     let tid = QosControl::from_bytes([tid, 0]).tid();
-    let control = crate::trigger::BarControlFields::from_bytes([4, 0]).with_tid(tid);
+    let control = BarControlFields::from_bytes([4, 0]).with_tid(tid);
     crate::encoding::write_array::<16, _, _>(&mut frame, &control.to_bytes());
     crate::encoding::write_array::<18, _, _>(
         &mut frame,
@@ -354,7 +354,7 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
     let (&receiver, rest) = rest.split_first_chunk::<6>()?;
     let (&transmitter, rest) = rest.split_first_chunk::<6>()?;
     let (&[c0, c1, s0, s1], _) = rest.split_first_chunk::<4>()?;
-    let parameters = crate::trigger::BarControlFields::from_bytes([c0, c1]);
+    let parameters = BarControlFields::from_bytes([c0, c1]);
     if parameters.bar_type() != COMPRESSED_BAR_TYPE {
         return None;
     }
@@ -455,6 +455,15 @@ oer_portable_wire::bitfield! {
     pub struct DelbaParameters[2] (little) {
         pub initiator, with_initiator: bool = 11..12;
         pub tid, with_tid: u8 = 12..16;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.3.1.8 (BlockAckReq frame).
+    pub struct BarControlFields[2] (little) {
+        pub ack_policy, with_ack_policy: bool = 0..1;
+        pub bar_type, with_bar_type: u8 = 1..5;
+        pub tid, with_tid: (u8) = 12..16;
     }
 }
 

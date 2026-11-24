@@ -110,9 +110,9 @@ crate's module tree:
   compile-fail cases in `sae/access_point_ui/`), and the wire's received
   Commit (`sae/access_point.rs`);
 - what no step of the current work reads: the wire's ESP-NOW formats
-  (`extensions/espressif{.rs,/}`) and NDP Announcement (`ndpa{.rs,/}`), and
-  the upper MAC's monitor channel sequence and policy
-  (`monitor/channels.rs`).
+  (`extensions/espressif{.rs,/}`), NDP Announcement (`ndpa{.rs,/}`) and
+  Trigger frames with HE control (`trigger{.rs,/}`), and the upper MAC's
+  monitor channel sequence and policy (`monitor/channels.rs`).
 
 Awaiting deletion at their successor:
 - the old Wi-Fi path, its backend and station
