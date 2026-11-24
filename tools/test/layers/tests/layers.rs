@@ -5843,6 +5843,14 @@ fn protocol_code(path: &str) -> bool {
 /// `data`, `memory`).
 fn raw_bytes_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     let word = ident_at(tokens, at)?;
+    // A lifetime (`&'frame [u8]`) names no value: the slice after it is a
+    // type, not an index.
+    if at
+        .checked_sub(1)
+        .is_some_and(|before| punct_at(tokens, before, '\''))
+    {
+        return None;
+    }
     if [
         "from_le_bytes",
         "from_be_bytes",
@@ -6667,27 +6675,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/hil/protocol/src/framing.rs", 12, BY_STEP_3),
     ("protocols/hil/protocol/src/key.rs", 1, BY_STEP_3),
     (
-        "protocols/ieee80211/contracts/port/src/monitor.rs",
-        1,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs",
-        6,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs",
-        2,
-        BY_STEP_3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/association.rs",
-        1,
-        BY_STEP_13,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/data/ethernet.rs",
         1,
         BY_STEP_13,
     ),
@@ -6704,11 +6692,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs",
         3,
-        BY_STEP_13,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/receive.rs",
-        1,
         BY_STEP_13,
     ),
     (
@@ -6747,16 +6730,11 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_STEP_13,
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs",
-        1,
-        BY_STEP_3,
-    ),
-    (
         "protocols/ieee80211/core/upper-mac/src/receive.rs",
         4,
         BY_STEP_3,
     ),
-    ("protocols/ieee80211/wire/src/ap.rs", 38, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/ap.rs", 37, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ap/probe.rs", 2, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ap/profile.rs", 3, BY_STEP_3),
     ("protocols/ieee80211/wire/src/beacon.rs", 5, BY_STEP_3),
@@ -6772,27 +6750,27 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         4,
         BY_STEP_3,
     ),
-    ("protocols/ieee80211/wire/src/data.rs", 8, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/data.rs", 7, BY_STEP_3),
     ("protocols/ieee80211/wire/src/eapol.rs", 11, BY_STEP_3),
     ("protocols/ieee80211/wire/src/encoding.rs", 2, BY_STEP_3),
     (
         "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
-        55,
+        39,
         BY_STEP_3,
     ),
     (
         "protocols/ieee80211/wire/src/extensions/espressif/esp_now/v2.rs",
-        16,
+        4,
         BY_STEP_3,
     ),
     (
         "protocols/ieee80211/wire/src/fragmentation.rs",
-        3,
+        1,
         BY_STEP_3,
     ),
     (
         "protocols/ieee80211/wire/src/fragmentation/parsing.rs",
-        9,
+        5,
         BY_STEP_3,
     ),
     ("protocols/ieee80211/wire/src/frame.rs", 16, BY_STEP_3),
@@ -6800,11 +6778,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/wire/src/he.rs", 11, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ht.rs", 6, BY_STEP_3),
     ("protocols/ieee80211/wire/src/management.rs", 4, BY_STEP_3),
-    (
-        "protocols/ieee80211/wire/src/monitor_injection.rs",
-        3,
-        BY_STEP_3,
-    ),
     ("protocols/ieee80211/wire/src/ndpa.rs", 17, BY_STEP_3),
     ("protocols/ieee80211/wire/src/sae.rs", 3, BY_STEP_3),
     ("protocols/ieee80211/wire/src/scan.rs", 5, BY_STEP_3),
@@ -7005,6 +6978,7 @@ fn f(cell: &mut Option<u8>, r: Result<u8, ()>) -> Result<u8, ()> {
     let _wide = u16::from_le_bytes([payload[0], value]);
     Ok(value)
 }
+fn g<'frame>(frame: &'frame [u8]) -> u8 { frame[1] }
 #[cfg(test)]
 mod tests {
     pub enum TestError { AlreadyRunning }
@@ -7052,7 +7026,7 @@ mod tests {
         ["pub use … as", "serde(default)", "deprecated"]
     );
     assert_eq!(found["registers"], ["from_bits", "bits"]);
-    assert_eq!(found["bytes"], ["from_le_bytes", "index"]);
+    assert_eq!(found["bytes"], ["from_le_bytes", "index", "index"]);
 }
 
 #[test]
