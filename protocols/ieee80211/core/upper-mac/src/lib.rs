@@ -1,4 +1,3 @@
-#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::let_underscore_must_use, clippy::let_underscore_untyped)]

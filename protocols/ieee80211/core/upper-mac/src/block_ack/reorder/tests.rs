@@ -147,11 +147,11 @@ fn a_slot_cannot_be_owned_twice_or_leave_its_domain() {
         reorder.ingest(frame(3, 4)),
         Err(RxReorderError::SlotAlreadyOwned(4))
     );
-    let last = (SLOTS - 1) as u8;
+    let last = u8::try_from(SLOTS - 1).unwrap();
     assert!(reorder.ingest(frame(3, last)).is_ok());
     assert_eq!(
-        reorder.ingest(frame(4, SLOTS as u8)),
-        Err(RxReorderError::InvalidSlot(SLOTS as u8))
+        reorder.ingest(frame(4, u8::try_from(SLOTS).unwrap())),
+        Err(RxReorderError::InvalidSlot(u8::try_from(SLOTS).unwrap()))
     );
 }
 
@@ -283,12 +283,13 @@ fn one_input_returns_a_full_window_without_losing_or_repeating_any_slot() {
             // all N frames, including the frame supplied by this input.
             for received_offset in [0, N] {
                 let start = seq(start);
-                let mut reorder = RxReorderBuffer::<N, 64>::new(start, N as u16).unwrap();
+                let mut reorder =
+                    RxReorderBuffer::<N, 64>::new(start, u16::try_from(N).unwrap()).unwrap();
                 for offset in (1..N).rev() {
                     let release = reorder
                         .ingest(RxReorderMpdu {
-                            sequence: start.wrapping_add(offset as u16),
-                            slot: offset as u8,
+                            sequence: start.wrapping_add(u16::try_from(offset).unwrap()),
+                            slot: u8::try_from(offset).unwrap(),
                         })
                         .unwrap();
                     assert_eq!(release.received, Received::Buffered);
@@ -296,22 +297,22 @@ fn one_input_returns_a_full_window_without_losing_or_repeating_any_slot() {
                 }
                 let release = reorder
                     .ingest(RxReorderMpdu {
-                        sequence: start.wrapping_add(received_offset as u16),
+                        sequence: start.wrapping_add(u16::try_from(received_offset).unwrap()),
                         slot: 0,
                     })
                     .unwrap();
                 let first_offset = usize::from(received_offset != 0);
                 let expected = (first_offset..first_offset + N).map(|offset| RxReorderMpdu {
-                    sequence: start.wrapping_add(offset as u16),
-                    slot: (offset % N) as u8,
+                    sequence: start.wrapping_add(u16::try_from(offset).unwrap()),
+                    slot: u8::try_from(offset % N).unwrap(),
                 });
                 assert!(release.iter().eq(expected));
                 assert_ne!(release.received, Received::Buffered);
-                assert_eq!(release.missing, first_offset as u16);
+                assert_eq!(release.missing, u16::try_from(first_offset).unwrap());
                 assert_eq!(reorder.occupied(), 0);
                 assert_eq!(
                     reorder.next_sequence(),
-                    start.wrapping_add((first_offset + N) as u16)
+                    start.wrapping_add(u16::try_from(first_offset + N).unwrap())
                 );
                 assert!(reorder.stop().iter().next().is_none());
             }
@@ -335,7 +336,7 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
                 reorder
                     .ingest(RxReorderMpdu {
                         sequence: start.wrapping_add(offset),
-                        slot: offset as u8,
+                        slot: u8::try_from(offset).unwrap(),
                     })
                     .unwrap()
                     .received
@@ -363,7 +364,7 @@ fn every_drain_returns_all_retained_slots_at_the_capacity_boundary() {
         };
         assert!(release.iter().eq((1..64).map(|offset| RxReorderMpdu {
             sequence: start.wrapping_add(offset),
-            slot: offset as u8,
+            slot: u8::try_from(offset).unwrap(),
         })));
         assert_eq!(reorder.occupied(), 0);
         assert!(reorder.stop().iter().next().is_none());

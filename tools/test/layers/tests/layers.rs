@@ -10305,12 +10305,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "the frame's owner, view and metadata, the caller's room and event sink / the validated action's fields, the caller's event sink and where released frames go",
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/testing/conformance/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,

@@ -97,7 +97,7 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     offset += 2;
     rsn_ie[offset..offset + 4].copy_from_slice(&[0, 0x0f, 0xac, 4]);
     offset += 4;
-    rsn_ie[offset..offset + 2].copy_from_slice(&(akms.len() as u16).to_le_bytes());
+    rsn_ie[offset..offset + 2].copy_from_slice(&(u16::try_from(akms.len()).unwrap()).to_le_bytes());
     offset += 2;
     for akm in akms {
         rsn_ie[offset..offset + 4].copy_from_slice(akm);
@@ -106,7 +106,7 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     rsn_ie[offset..offset + 2].copy_from_slice(&capabilities.to_le_bytes());
     offset += 2;
     rsn_ie[0] = 48;
-    rsn_ie[1] = (offset - 2) as u8;
+    rsn_ie[1] = u8::try_from(offset - 2).unwrap();
     record.set_rsn_ie(&rsn_ie[..offset]).unwrap();
     record
 }

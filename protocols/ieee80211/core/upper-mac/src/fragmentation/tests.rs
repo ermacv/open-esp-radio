@@ -306,7 +306,7 @@ fn protected_amsdu_overflow_and_lifecycle_edges_fail_closed() {
         RetrySubfield::Clear,
         &payload,
     );
-    qos[0] = QOS_DATA as u8;
+    qos[0] = u8::try_from(QOS_DATA).unwrap();
     qos[24] = QOS_AMSDU_PRESENT;
     assert_eq!(
         parse_open_data_fragment(DataInterfaceRole::Station, &qos[..35]),

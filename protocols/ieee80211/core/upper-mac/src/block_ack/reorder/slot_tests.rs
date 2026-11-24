@@ -162,7 +162,7 @@ fn a_slot_index_cannot_be_owned_twice() {
 #[test]
 fn backing_slot_id_is_independent_of_reorder_window_index() {
     let mut reorder = RxReorderBuffer::<64, 34>::new(SequenceNumber::new(1).unwrap(), 64).unwrap();
-    let highest_valid = (34 - 1) as u8;
+    let highest_valid = u8::try_from(34 - 1).unwrap();
     let first_invalid = 34 as u8;
     assert_eq!(
         reorder
