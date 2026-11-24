@@ -193,3 +193,28 @@ fn a_chip_rate_maps_to_the_portable_rate_with_its_provenance() {
     };
     assert_eq!(unknown.map_rate(decode).rate, RxEvidence::Unavailable);
 }
+
+#[test]
+fn a_rate_conversion_keeps_every_other_field_as_it_was() {
+    let chip = MacRxMetadata {
+        channel: RxEvidence::HardwareObserved(
+            Channel::ghz2_4(
+                11,
+                oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+            )
+            .unwrap(),
+        ),
+        rate: RxEvidence::ProtocolValidated(7_u8),
+        rssi_dbm: RxEvidence::HardwareObserved(-61),
+        crypto: RxEvidence::ProtocolValidated(RxCryptoStatus::DecryptedAndIntegrityVerified),
+        aggregation: RxEvidence::HardwareObserved(Aggregation::SMpdu),
+        amsdu: RxEvidence::ProtocolValidated(true),
+    };
+    let portable = chip.map_rate(|code| Some(u16::from(code) + 1));
+    assert_eq!(portable.rate, RxEvidence::ProtocolValidated(8_u16));
+    assert_eq!(portable.channel, chip.channel);
+    assert_eq!(portable.rssi_dbm, chip.rssi_dbm);
+    assert_eq!(portable.crypto, chip.crypto);
+    assert_eq!(portable.aggregation, chip.aggregation);
+    assert_eq!(portable.amsdu, chip.amsdu);
+}
