@@ -1,18 +1,18 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
 #![cfg_attr(
     test,
     expect(
         clippy::struct_excessive_bools,
-        reason = "step 16: the PHY's procedures in the one-loop form"
+        reason = "the PHY's procedures as programs"
     )
 )]
 //! PHY analog and PBus operations over chip-owned register ports.
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

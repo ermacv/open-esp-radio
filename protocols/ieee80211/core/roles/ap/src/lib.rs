@@ -1,10 +1,10 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 13: step 6 with C, the radio's controller"
+    reason = "the radio's controller and the roles"
 )]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "step 13: step 6 with C, the radio's controller"
+    reason = "the radio's controller and the roles"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

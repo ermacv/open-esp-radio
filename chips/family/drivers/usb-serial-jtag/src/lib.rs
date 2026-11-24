@@ -1,7 +1,4 @@
-#![expect(
-    clippy::struct_excessive_bools,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::struct_excessive_bools, reason = "the rows no step rewrites")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -13,10 +10,7 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::arithmetic_side_effects, reason = "the rows no step rewrites")]
 
 //! The USB Serial/JTAG console of Espressif chips, over the registers the
 //! chip HAL lends ([`EndpointRegisters`], [`InterruptRegisters`]).

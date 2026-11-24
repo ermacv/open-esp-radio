@@ -1,9 +1,6 @@
 #![cfg_attr(
     target_arch = "riscv32",
-    expect(
-        clippy::cast_possible_truncation,
-        reason = "step 16b: the boot's and the family drivers' rows"
-    )
+    expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")
 )]
 #![cfg_attr(target_arch = "riscv32", no_main, no_std)]
 #![deny(clippy::undocumented_unsafe_blocks)]

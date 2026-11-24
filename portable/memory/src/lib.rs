@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 9: 5.5, transmit on the DMA memory contract"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "transmit")]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 #![cfg_attr(
@@ -13,10 +10,7 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "step 9: 5.5, transmit on the DMA memory contract"
-)]
+#![expect(clippy::arithmetic_side_effects, reason = "transmit")]
 
 //! Audited storage primitives for radio pipelines.
 //!

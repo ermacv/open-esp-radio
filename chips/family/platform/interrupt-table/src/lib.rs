@@ -1,7 +1,4 @@
-#![expect(
-    clippy::fn_params_excessive_bools,
-    reason = "step 7: P, a level's task"
-)]
+#![expect(clippy::fn_params_excessive_bools, reason = "a level's task")]
 #![cfg_attr(
     test,
     expect(
@@ -77,7 +74,7 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(clippy::arithmetic_side_effects, reason = "step 7: P, a level's task")]
+#![expect(clippy::arithmetic_side_effects, reason = "a level's task")]
 
 mod binding;
 pub use binding::{BindFault, BindFaultCode, BindFaultKind, Quarantined};

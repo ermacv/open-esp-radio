@@ -1,4 +1,4 @@
-#![expect(clippy::cast_possible_truncation, reason = "step 7: P, a level's task")]
+#![expect(clippy::cast_possible_truncation, reason = "a level's task")]
 #![cfg_attr(
     test,
     expect(

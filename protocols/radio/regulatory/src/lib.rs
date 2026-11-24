@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(

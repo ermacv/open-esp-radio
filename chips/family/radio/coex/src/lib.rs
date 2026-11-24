@@ -1,11 +1,11 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "step 8: G, the port in the radio's level task"
+    reason = "the port in the radio's task; receive"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 8: G, the port in the radio's level task"
+    reason = "the port in the radio's task; receive"
 )]
 #![cfg_attr(
     test,

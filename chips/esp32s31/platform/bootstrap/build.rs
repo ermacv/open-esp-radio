@@ -1,7 +1,7 @@
 #![expect(
     clippy::disallowed_macros,
     clippy::expect_used,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
 fn main() {
     let (facts, files) = oer_chips_family_facts::generate::tracked("esp32s31").expect("S31 facts");

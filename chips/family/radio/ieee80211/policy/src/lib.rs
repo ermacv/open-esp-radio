@@ -1,15 +1,6 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
-#![expect(
-    clippy::cast_possible_wrap,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
-#![expect(
-    clippy::cast_sign_loss,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
+#![expect(clippy::cast_possible_wrap, reason = "the final crates cleaned")]
+#![expect(clippy::cast_sign_loss, reason = "the final crates cleaned")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(clippy::let_underscore_must_use, clippy::let_underscore_untyped)]

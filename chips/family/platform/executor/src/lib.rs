@@ -2,12 +2,12 @@
     any(feature = "chip", test),
     expect(
         clippy::fn_params_excessive_bools,
-        reason = "step 14: step 7 with the rest of P"
+        reason = "the pump, the entry and the images"
     )
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 14: step 7 with the rest of P"
+    reason = "the pump, the entry and the images"
 )]
 #![cfg_attr(
     test,
@@ -30,13 +30,13 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "step 14: step 7 with the rest of P"
+    reason = "the pump, the entry and the images"
 )]
 #![cfg_attr(
     all(target_arch = "riscv32", feature = "chip"),
     expect(
         clippy::indexing_slicing,
-        reason = "step 14: step 7 with the rest of P"
+        reason = "the pump, the entry and the images"
     )
 )]
 

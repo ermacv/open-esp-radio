@@ -1,22 +1,10 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")]
 #![cfg_attr(
     feature = "render",
-    expect(
-        clippy::cast_possible_wrap,
-        reason = "step 16b: the boot's and the family drivers' rows"
-    )
+    expect(clippy::cast_possible_wrap, reason = "the rows no step rewrites")
 )]
-#![expect(
-    clippy::cast_sign_loss,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_sign_loss, reason = "the rows no step rewrites")]
+#![expect(clippy::let_underscore_must_use, reason = "the rows no step rewrites")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(

@@ -1,10 +1,10 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "R2: the family drivers' area"
+    reason = "the PHY under one owner: its state, its operations, clocks and power"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
+    reason = "the PHY under one owner: its state, its operations, clocks and power"
 )]
 //! Chip-neutral shared modem clock reference-count planner.
 //!

@@ -1951,12 +1951,12 @@ const WAITING_DEVIATIONS: &[(&str, usize, &str)] = &[
     (
         "protocols/network/core/src/owner.rs",
         2,
-        "step 14: step 7 with the rest of P, the network owner in the network runtime: `register_port` takes a `Context`",
+        "the pump, the entry and the images, the network owner in the network runtime: `register_port` takes a `Context`",
     ),
     (
         "protocols/hil/protocol/src/io.rs",
         1,
-        "step 3: R3, R4 and R5 on the final crates: the async `write_frame` has no caller in the workspace",
+        "the final crates cleaned: the async `write_frame` has no caller in the workspace",
     ),
 ];
 
@@ -3302,7 +3302,7 @@ fn outside_its_role(from: &Member, to: &Member) -> bool {
 const OUTSIDE_THE_ROLES: &[Deviation] = &[(
     "chips/esp32s31/hal",
     "protocols/radio/coex",
-    "step 8: G, radio/coex merges into the HAL",
+    "the port in the radio's task; receive: radio/coex merges into the HAL",
 )];
 
 #[test]
@@ -4066,15 +4066,15 @@ const HAL_SEQUENCE_REMOVAL: &[(&str, &str)] = &[
     ),
     (
         "system/boot",
-        "step 16b: the boot block drivers and the cold-start sequence",
+        "the rows no step rewrites: the boot block drivers and the cold-start sequence",
     ),
     (
         "radio/ieee80211",
-        "step 10: 5.6, the Wi-Fi hardware engine's life out of the HAL",
+        "the radio's life: the Wi-Fi hardware engine's life out of the HAL",
     ),
     (
         "phy",
-        "step 4: D1, D2 and D3, the PHY analog bus and delays in the PHY driver",
+        "the PHY under one owner: the PHY analog bus and delays in the PHY driver",
     ),
 ];
 
@@ -4618,12 +4618,12 @@ fn hal_production_code_gains_no_waits_or_sequences() {
 }
 
 /// The removal of the Wi-Fi DMA's machines from the HAL.
-const WIFI_DMA: &str = "step 9: 5.5, the Wi-Fi DMA ownership out of the HAL, with its quarantines";
-/// The receive ring's atoms over 5.1's arena (5.4, PR 2a): the HAL's custody
+const WIFI_DMA: &str = "transmit: the Wi-Fi DMA ownership out of the HAL, with its quarantines";
+/// The receive ring's atoms over the arena: the HAL's custody
 /// of the walker's buffers, which the old receive machines give way to.
-const RX_RING_ATOMS: &str = "step 8: G, the receive ring's atoms over the arena; the old receive machines leave with the walker's registers";
+const RX_RING_ATOMS: &str = "the port in the radio's task; receive: the receive ring's atoms over the arena; the old receive machines leave with the walker's registers";
 /// The removal of the PHY's calibration machines and temperature resource.
-const PHY_DRIVER: &str = "step 4: D1, D2 and D3, to the PHY driver, with the PHY's poison";
+const PHY_DRIVER: &str = "the PHY under one owner: to the PHY driver, with the PHY's poison";
 
 /// HAL production code that decides (state machines, error policy,
 /// quarantine) beside its owners and atoms, by path below
@@ -4795,17 +4795,17 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
         2,
-        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed in step 9 (5.5)",
+        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed by transmit",
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
         1,
-        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed in step 9 (5.5)",
+        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed by transmit",
     ),
     (
         "chips/esp32s31/platform/runtime/src/sampler.rs",
         1,
-        "product: `&mut dyn FnMut()` of the masked section, removed in step 14 (step 7 with the rest of P)",
+        "product: `&mut dyn FnMut()` of the masked section, removed by the pump, the entry and the images",
     ),
     (
         "chips/esp32s31/platform/layout/src/lib.rs",
@@ -4974,7 +4974,7 @@ fn bool_methods(name: &str, body: TokenStream, found: &mut BTreeSet<String>) {
 const SAMPLED_BIT: &str = "predicate: a sampled bit of the hardware";
 /// A conformance harness's observation, in a testing package.
 const HARNESS: &str = "predicate: a test harness observation (testing package)";
-const PHASE_C: &str = "decision: step 14, step 7 with the rest of P";
+const PHASE_C: &str = "decision: the pump, the entry and the images";
 
 const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Alarm::alarm_at", SAMPLED_BIT),
@@ -5880,26 +5880,24 @@ fn by_file(hits: &[(String, String)]) -> BTreeMap<String, usize> {
 }
 
 /// What removes a list's entry: the step of the plan that writes its code
-/// last (`design/plan-2026-11-23.md`, section 3), or why it stays.
-const BY_STEP_3: &str = "step 3: R3, R4 and R5 on the final crates";
-const BY_STEP_4: &str = "step 4: D1, D2 and D3, the PHY without quarantine";
-const BY_STEP_7: &str = "step 7: P, a level's task";
-const BY_STEP_8: &str = "step 8: G, the port in the radio's level task";
-const BY_STEP_9: &str = "step 9: 5.5, transmit on the DMA memory contract";
-const BY_STEP_10: &str = "step 10: 5.6, the life";
-const BY_STEP_11: &str = "step 11: 5.7, the port type and the conformance suite";
-const BY_STEP_12A: &str = "step 12a: addresses, time and the Wi-Fi dictionaries as their types";
-const BY_STEP_13: &str = "step 13: step 6 with C, the radio's controller";
-const BY_STEP_14: &str = "step 14: step 7 with the rest of P";
-const BY_STEP_15: &str = "step 15: the exception path as one module";
-const BY_STEP_16: &str = "step 16: the PHY's procedures in the one-loop form";
-const BY_STEP_16A: &str = "step 16a: the PAC's raw conversions closed by the language";
-const BY_STEP_16B: &str = "step 16b: the boot's and the family drivers' rows";
+/// last (`design/plan-2026-11-24.md`, section 4), or why it stays.
+const BY_FINAL_CRATES: &str = "the final crates cleaned";
+const BY_PHY_OWNER: &str = "the PHY under one owner: its state, its operations, clocks and power";
+const BY_LEVEL_TASK: &str = "a level's task";
+const BY_RECEIVE: &str = "the port in the radio's task; receive";
+const BY_TRANSMIT: &str = "transmit";
+const BY_RADIO_LIFE: &str = "the radio's life";
+const BY_CONFORMANCE: &str = "the port type and the conformance suite";
+const BY_CONTROLLER: &str = "the radio's controller and the roles";
+const BY_PUMP: &str = "the pump, the entry and the images";
+const BY_EXCEPTION_PATH: &str = "the CPU exception path as one module";
+const BY_PHY_PROGRAMS: &str = "the PHY's procedures as programs";
+const BY_PAC_CONVERSIONS: &str = "the PAC's raw conversions closed by the language";
+const BY_UNOWNED_ROWS: &str = "the rows no step rewrites";
 const BY_BLUETOOTH: &str = "Bluetooth LE's own plan, outside this plan";
-const BY_PROBE: &str = "the probe's first change: deleted, or moved onto HIL (plan, section 6)";
-const CORRECT: &str = "correct code: named in the pull request that deletes the scan (design 3)";
-const IN_ITS_HOME: &str =
-    "a door in its home: stays when S6 becomes the check of doors (design 3, 4.4)";
+const BY_PROBE: &str = "the probe's first change: deleted, or moved onto HIL";
+const CORRECT: &str = "correct code: named in the pull request that deletes the scan (`design/name-keyed-lists-2026-11-23.md`)";
+const IN_ITS_HOME: &str = "a door in its home: stays when S6 becomes the check of doors (`design/name-keyed-lists-2026-11-23.md`, 4.4)";
 
 /// The step that writes a file's code last, by its place: the first
 /// match is the printed lists' first assignment, which a pull request
@@ -5907,98 +5905,104 @@ const IN_ITS_HOME: &str =
 const STEP_BY_PLACE: &[(&str, &str)] = &[
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
-    ("protocols/network/core/src/owner.rs", BY_STEP_14),
+    ("protocols/network/core/src/owner.rs", BY_PUMP),
     ("portable/memory/src/waking_spsc", CORRECT),
-    ("portable/memory/src/rx_external_handoff", BY_STEP_8),
-    ("portable/memory/src/pinned_tx", BY_STEP_9),
-    ("portable/time/src/deadline.rs", BY_STEP_16B),
-    ("portable/time/src/connected_tasks.rs", BY_STEP_14),
+    ("portable/memory/src/rx_external_handoff", BY_RECEIVE),
+    ("portable/memory/src/pinned_tx", BY_TRANSMIT),
+    ("portable/time/src/deadline.rs", BY_UNOWNED_ROWS),
+    ("portable/time/src/connected_tasks.rs", BY_PUMP),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/receive",
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/coex",
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/interrupt",
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
-    ("chips/esp32s31/hal/src/radio/coex", BY_STEP_8),
-    ("chips/esp32s31/hal/src/radio/ieee80211/dma/", BY_STEP_9),
+    ("chips/esp32s31/hal/src/radio/coex", BY_RECEIVE),
+    ("chips/esp32s31/hal/src/radio/ieee80211/dma/", BY_TRANSMIT),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/",
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
-    ("chips/esp32s31/hal/src/radio/ieee80211/init", BY_STEP_10),
-    ("chips/esp32s31/hal/src/radio/domain", BY_STEP_4),
-    ("chips/esp32s31/hal/src/power/", BY_STEP_4),
-    ("chips/esp32s31/hal/src/radio/phy/", BY_STEP_4),
+    ("chips/esp32s31/hal/src/radio/ieee80211/init", BY_RADIO_LIFE),
+    ("chips/esp32s31/hal/src/radio/domain", BY_PHY_OWNER),
+    ("chips/esp32s31/hal/src/power/", BY_PHY_OWNER),
+    ("chips/esp32s31/hal/src/radio/phy/", BY_PHY_OWNER),
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller",
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
-    ("chips/esp32s31/hal/src/system/cores", BY_STEP_14),
-    ("chips/esp32s31/hal/src/system/boot", BY_STEP_16B),
-    ("chips/esp32s31/hal/src/peripherals/watchdog", BY_STEP_16B),
-    ("chips/esp32s31/hal", BY_STEP_16B),
-    ("chips/esp32s31/radio/phy", BY_STEP_16),
-    ("chips/family/radio/phy", BY_STEP_16),
-    ("chips/family/drivers/regi2c", BY_STEP_16),
-    ("chips/family/radio/power", BY_STEP_4),
-    ("chips/family/radio/modem-clock", BY_STEP_4),
-    ("protocols/radio/port", BY_STEP_4),
-    ("chips/family/radio/coex", BY_STEP_8),
-    ("protocols/radio/coex", BY_STEP_8),
-    ("chips/family/platform/interrupt-table", BY_STEP_7),
-    ("chips/family/platform/executor", BY_STEP_14),
-    ("chips/family/platform/runtime", BY_STEP_15),
-    ("chips/esp32s31/platform/runtime/src/sampler", BY_STEP_14),
-    ("chips/esp32s31/platform/runtime", BY_STEP_15),
-    ("chips/family/platform/bootstrap", BY_STEP_16B),
-    ("chips/esp32s31/platform/bootstrap", BY_STEP_16B),
-    ("chips/family/platform/layout", BY_STEP_16B),
-    ("chips/esp32s31/platform/layout", BY_STEP_16B),
-    ("chips/family/boot", BY_STEP_16B),
-    ("chips/family/drivers/", BY_STEP_16B),
-    ("chips/esp32s31/drivers/aes", BY_STEP_16B),
-    ("hil/scenarios/aes", BY_STEP_16B),
-    ("chips/esp32s31/knowledge", BY_STEP_16B),
-    ("chips/esp32s31/app", BY_STEP_14),
-    ("chips/family/app", BY_STEP_14),
-    ("oer/", BY_STEP_14),
-    ("protocols/network/runtime", BY_STEP_14),
-    ("protocols/network/testing", BY_STEP_14),
-    ("hil/scenarios/sdk-station", BY_STEP_14),
-    ("hil/scenarios/wifi-access-point", BY_STEP_14),
-    ("protocols/ieee80211/core/arbiter", BY_STEP_13),
-    ("protocols/ieee80211/core/roles", BY_STEP_13),
-    ("protocols/ieee80211/core/datapath", BY_STEP_13),
-    ("protocols/ieee80211/testing", BY_STEP_11),
+    ("chips/esp32s31/hal/src/system/cores", BY_PUMP),
+    ("chips/esp32s31/hal/src/system/boot", BY_UNOWNED_ROWS),
+    (
+        "chips/esp32s31/hal/src/peripherals/watchdog",
+        BY_UNOWNED_ROWS,
+    ),
+    ("chips/esp32s31/hal", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/radio/phy", BY_PHY_PROGRAMS),
+    ("chips/family/radio/phy", BY_PHY_PROGRAMS),
+    ("chips/family/drivers/regi2c", BY_PHY_PROGRAMS),
+    ("chips/family/radio/power", BY_PHY_OWNER),
+    ("chips/family/radio/modem-clock", BY_PHY_OWNER),
+    ("protocols/radio/port", BY_PHY_OWNER),
+    ("chips/family/radio/coex", BY_RECEIVE),
+    ("protocols/radio/coex", BY_RECEIVE),
+    ("chips/family/platform/interrupt-table", BY_LEVEL_TASK),
+    ("chips/family/platform/executor", BY_PUMP),
+    ("chips/family/platform/runtime", BY_EXCEPTION_PATH),
+    ("chips/esp32s31/platform/runtime/src/sampler", BY_PUMP),
+    ("chips/esp32s31/platform/runtime", BY_EXCEPTION_PATH),
+    ("chips/family/platform/bootstrap", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/platform/bootstrap", BY_UNOWNED_ROWS),
+    ("chips/family/platform/layout", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/platform/layout", BY_UNOWNED_ROWS),
+    ("chips/family/boot", BY_UNOWNED_ROWS),
+    ("chips/family/drivers/", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/drivers/aes", BY_UNOWNED_ROWS),
+    ("hil/scenarios/aes", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/knowledge", BY_UNOWNED_ROWS),
+    ("chips/esp32s31/app", BY_PUMP),
+    ("chips/family/app", BY_PUMP),
+    ("oer/", BY_PUMP),
+    ("protocols/network/runtime", BY_PUMP),
+    ("protocols/network/testing", BY_PUMP),
+    ("hil/scenarios/sdk-station", BY_PUMP),
+    ("hil/scenarios/wifi-access-point", BY_PUMP),
+    ("protocols/ieee80211/core/arbiter", BY_CONTROLLER),
+    ("protocols/ieee80211/core/roles", BY_CONTROLLER),
+    ("protocols/ieee80211/core/datapath", BY_CONTROLLER),
+    ("protocols/ieee80211/testing", BY_CONFORMANCE),
     ("protocols/bluetooth", BY_BLUETOOTH),
     ("hil/probes/", BY_PROBE),
-    ("portable/memory", BY_STEP_9),
-    ("portable/time", BY_STEP_7),
-    ("portable/riscv", BY_STEP_16B),
-    ("portable/diagnostics", BY_STEP_16B),
-    ("portable/trace", BY_STEP_16B),
-    ("portable/wire", BY_STEP_16B),
-    ("portable/waker", BY_STEP_16B),
-    ("protocols/radio/regulatory", BY_STEP_16B),
-    ("protocols/ieee80211/wire/", BY_STEP_3),
-    ("protocols/ieee80211/core/upper-mac/", BY_STEP_3),
-    ("protocols/ieee80211/core/security/rsn/", BY_STEP_3),
-    ("protocols/ieee80211/contracts/port/", BY_STEP_3),
-    ("protocols/ieee80211/core/extensions/esp-now/", BY_STEP_3),
-    ("protocols/network/wire/", BY_STEP_3),
-    ("protocols/network/core/", BY_STEP_3),
-    ("protocols/network/port/", BY_STEP_3),
-    ("protocols/hil/", BY_STEP_3),
-    ("chips/family/radio/ieee80211/policy/", BY_STEP_3),
-    ("chips/family/facts/", BY_STEP_3),
+    ("portable/memory", BY_TRANSMIT),
+    ("portable/time", BY_LEVEL_TASK),
+    ("portable/riscv", BY_UNOWNED_ROWS),
+    ("portable/diagnostics", BY_UNOWNED_ROWS),
+    ("portable/trace", BY_UNOWNED_ROWS),
+    ("portable/wire", BY_UNOWNED_ROWS),
+    ("portable/waker", BY_UNOWNED_ROWS),
+    ("protocols/radio/regulatory", BY_UNOWNED_ROWS),
+    ("protocols/ieee80211/wire/", BY_FINAL_CRATES),
+    ("protocols/ieee80211/core/upper-mac/", BY_FINAL_CRATES),
+    ("protocols/ieee80211/core/security/rsn/", BY_FINAL_CRATES),
+    ("protocols/ieee80211/contracts/port/", BY_FINAL_CRATES),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/",
+        BY_FINAL_CRATES,
+    ),
+    ("protocols/network/wire/", BY_FINAL_CRATES),
+    ("protocols/network/core/", BY_FINAL_CRATES),
+    ("protocols/network/port/", BY_FINAL_CRATES),
+    ("protocols/hil/", BY_FINAL_CRATES),
+    ("chips/family/radio/ieee80211/policy/", BY_FINAL_CRATES),
+    ("chips/family/facts/", BY_FINAL_CRATES),
 ];
 
 /// The step that removes a list's entry in `file`.
@@ -6012,20 +6016,19 @@ fn remover(file: &str) -> &'static str {
 /// What the printed lists write for `file`'s remover.
 fn remover_name(file: &str) -> &'static str {
     [
-        ("BY_STEP_3", BY_STEP_3),
-        ("BY_STEP_4", BY_STEP_4),
-        ("BY_STEP_7", BY_STEP_7),
-        ("BY_STEP_8", BY_STEP_8),
-        ("BY_STEP_9", BY_STEP_9),
-        ("BY_STEP_10", BY_STEP_10),
-        ("BY_STEP_11", BY_STEP_11),
-        ("BY_STEP_12A", BY_STEP_12A),
-        ("BY_STEP_13", BY_STEP_13),
-        ("BY_STEP_14", BY_STEP_14),
-        ("BY_STEP_15", BY_STEP_15),
-        ("BY_STEP_16", BY_STEP_16),
-        ("BY_STEP_16A", BY_STEP_16A),
-        ("BY_STEP_16B", BY_STEP_16B),
+        ("BY_FINAL_CRATES", BY_FINAL_CRATES),
+        ("BY_PHY_OWNER", BY_PHY_OWNER),
+        ("BY_LEVEL_TASK", BY_LEVEL_TASK),
+        ("BY_RECEIVE", BY_RECEIVE),
+        ("BY_TRANSMIT", BY_TRANSMIT),
+        ("BY_RADIO_LIFE", BY_RADIO_LIFE),
+        ("BY_CONFORMANCE", BY_CONFORMANCE),
+        ("BY_CONTROLLER", BY_CONTROLLER),
+        ("BY_PUMP", BY_PUMP),
+        ("BY_EXCEPTION_PATH", BY_EXCEPTION_PATH),
+        ("BY_PHY_PROGRAMS", BY_PHY_PROGRAMS),
+        ("BY_PAC_CONVERSIONS", BY_PAC_CONVERSIONS),
+        ("BY_UNOWNED_ROWS", BY_UNOWNED_ROWS),
         ("BY_BLUETOOTH", BY_BLUETOOTH),
         ("BY_PROBE", BY_PROBE),
         ("CORRECT", CORRECT),
@@ -6042,168 +6045,200 @@ const NO_STEP: &str = "no step: name it in the plan";
 /// S1: places claimed at run time in the entry and the facade (`try_take`,
 /// `try_init`, `try_uninit`, an option's `take()` answered by a refusal), by
 /// file with their count. The list only shrinks.
-const CLAIMS: &[(&str, usize, &str)] = &[("chips/esp32s31/app/src/lib.rs", 1, BY_STEP_14)];
+const CLAIMS: &[(&str, usize, &str)] = &[("chips/esp32s31/app/src/lib.rs", 1, BY_PUMP)];
 /// S3: error types that name the caller's state (an enum named `…Error`,
 /// `…Refused`, `…Refusal`, `…Failure`, `…Fault` or `…Unavailable` with a
 /// variant `Already…`, `Not…` of a state, `Running`, `Stopped`, `Closed`,
 /// `Open` or `Active`), by file with their count of such variants. The list
 /// only shrinks.
 const ERROR_STATES: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/app/src/lib.rs", 1, BY_STEP_14),
-    ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_STEP_4),
-    ("chips/esp32s31/hal/src/radio/coex.rs", 2, BY_STEP_8),
-    ("chips/esp32s31/hal/src/radio/domain.rs", 1, BY_STEP_4),
-    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_STEP_4),
+    ("chips/esp32s31/app/src/lib.rs", 1, BY_PUMP),
+    ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_PHY_OWNER),
+    ("chips/esp32s31/hal/src/radio/coex.rs", 2, BY_RECEIVE),
+    ("chips/esp32s31/hal/src/radio/domain.rs", 1, BY_PHY_OWNER),
+    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_PHY_OWNER),
     (
         "chips/esp32s31/hal/src/radio/phy/temperature.rs",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
-    ("chips/esp32s31/hal/src/system/cores.rs", 2, BY_STEP_14),
+    ("chips/esp32s31/hal/src/system/cores.rs", 2, BY_PUMP),
     (
         "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
         5,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/dcode.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/frequency.rs",
         4,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/analog/i2c.rs", 7, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/analog/pbus.rs", 3, BY_STEP_16),
+    (
+        "chips/esp32s31/radio/phy/src/analog/i2c.rs",
+        7,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/pbus.rs",
+        3,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/analog/pbus/memory.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/rfpll.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/temperature.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/baseband.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/bluetooth.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/cold.rs",
         3,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/estimator.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/registration.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/channel.rs", 1, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/concurrent.rs", 1, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/lifecycle.rs", 1, BY_STEP_16),
+    (
+        "chips/esp32s31/radio/phy/src/channel.rs",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/concurrent.rs",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/lifecycle.rs",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/rx/dc_offset.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 7, BY_STEP_16),
+    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 7, BY_PHY_PROGRAMS),
     (
         "chips/esp32s31/radio/phy/src/rx/saturation.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/rx/signal_power.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/calibration.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/i2c.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/parameters.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/power.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/rfpll.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/rfpll/search.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/calibration.rs",
         5,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_offset.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 6, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/tx/power.rs", 2, BY_STEP_16),
+    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 6, BY_PHY_PROGRAMS),
+    (
+        "chips/esp32s31/radio/phy/src/tx/power.rs",
+        2,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/tx/power_detector.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/family/drivers/regi2c/src/lib.rs", 1, BY_STEP_16),
-    ("chips/family/radio/power/src/domain.rs", 2, BY_STEP_4),
-    ("chips/family/radio/power/src/membership.rs", 1, BY_STEP_4),
-    ("chips/family/radio/power/src/modem.rs", 1, BY_STEP_4),
+    ("chips/family/drivers/regi2c/src/lib.rs", 1, BY_PHY_PROGRAMS),
+    ("chips/family/radio/power/src/domain.rs", 2, BY_PHY_OWNER),
+    (
+        "chips/family/radio/power/src/membership.rs",
+        1,
+        BY_PHY_OWNER,
+    ),
+    ("chips/family/radio/power/src/modem.rs", 1, BY_PHY_OWNER),
     ("portable/memory/src/waking_spsc/closing.rs", 1, CORRECT),
-    ("portable/time/src/connected_tasks.rs", 1, BY_STEP_14),
-    ("portable/time/src/deadline.rs", 1, BY_STEP_16B),
-    ("protocols/ieee80211/core/arbiter/src/lib.rs", 1, BY_STEP_13),
+    ("portable/time/src/connected_tasks.rs", 1, BY_PUMP),
+    ("portable/time/src/deadline.rs", 1, BY_UNOWNED_ROWS),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs",
+        1,
+        BY_CONTROLLER,
+    ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/commands.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
-    ("protocols/network/runtime/src/local.rs", 1, BY_STEP_14),
-    ("protocols/network/runtime/src/returns.rs", 1, BY_STEP_14),
-    ("protocols/network/runtime/src/socket.rs", 1, BY_STEP_14),
+    ("protocols/network/runtime/src/local.rs", 1, BY_PUMP),
+    ("protocols/network/runtime/src/returns.rs", 1, BY_PUMP),
+    ("protocols/network/runtime/src/socket.rs", 1, BY_PUMP),
 ];
 /// S4: statuses that hold a failure and are no outcome (an enum named
 /// `…Step`, `…Phase`, `…State`, `…Progress`, `…Poll`, `…Collected` or
@@ -6213,135 +6248,143 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
         5,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/dcode.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/frequency.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/rfpll.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/temperature.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/baseband.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/bluetooth.rs",
         3,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/estimator.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/calibration/registration.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/channel.rs", 1, BY_STEP_16),
+    (
+        "chips/esp32s31/radio/phy/src/channel.rs",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/executor/step.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/rx/dc_offset.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 6, BY_STEP_16),
+    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 6, BY_PHY_PROGRAMS),
     (
         "chips/esp32s31/radio/phy/src/rx/signal_power.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/calibration.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tracking/observation/health.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/calibration.rs",
         5,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_offset.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
         2,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 5, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/tx/power.rs", 2, BY_STEP_16),
+    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 5, BY_PHY_PROGRAMS),
+    (
+        "chips/esp32s31/radio/phy/src/tx/power.rs",
+        2,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/tx/power_detector.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/family/drivers/regi2c/src/lib.rs", 2, BY_STEP_16),
+    ("chips/family/drivers/regi2c/src/lib.rs", 2, BY_PHY_PROGRAMS),
     (
         "chips/family/platform/executor/src/observation/timer.rs",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/radio/ieee80211/policy/src/rate_control.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("portable/memory/src/rx_external_handoff.rs", 1, BY_STEP_8),
+    ("portable/memory/src/rx_external_handoff.rs", 1, BY_RECEIVE),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/join/association.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/sa_query.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/radio/port/src/slot.rs", 1, BY_STEP_4),
+    ("protocols/radio/port/src/slot.rs", 1, BY_PHY_OWNER),
 ];
 /// S5: results dropped or replaced (a statement `.ok();`, an
 /// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`), by file with their
@@ -6350,191 +6393,211 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/platform/runtime/src/exception.rs",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/family/facts/src/generate.rs", 1, BY_STEP_3),
-    ("chips/family/facts/src/layers.rs", 1, BY_STEP_3),
+    ("chips/family/facts/src/generate.rs", 1, BY_FINAL_CRATES),
+    ("chips/family/facts/src/layers.rs", 1, BY_FINAL_CRATES),
     (
         "chips/family/platform/bootstrap/src/startup.rs",
         3,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
+    ("chips/family/platform/executor/src/executor.rs", 2, BY_PUMP),
     (
-        "chips/family/platform/executor/src/executor.rs",
+        "chips/family/platform/runtime/src/panic.rs",
         2,
-        BY_STEP_14,
+        BY_EXCEPTION_PATH,
     ),
-    ("chips/family/platform/runtime/src/panic.rs", 2, BY_STEP_15),
-    ("portable/memory/src/pinned_tx.rs", 2, BY_STEP_9),
+    ("portable/memory/src/pinned_tx.rs", 2, BY_TRANSMIT),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         2,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/monitor.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/block.rs", 1, BY_STEP_3),
-    ("protocols/network/core/src/dhcp.rs", 1, BY_STEP_3),
-    ("protocols/network/runtime/src/service.rs", 1, BY_STEP_14),
+    ("protocols/network/core/src/block.rs", 1, BY_FINAL_CRATES),
+    ("protocols/network/core/src/dhcp.rs", 1, BY_FINAL_CRATES),
+    ("protocols/network/runtime/src/service.rs", 1, BY_PUMP),
 ];
 /// S6: memory kept out of its owner and quarantines by name
 /// (`ManuallyDrop`, `mem::forget`, `Box::leak`, a name `Poison…`,
 /// `Quarantin…`, `ResetRequired…`, `Unfinished…`), mentions by file. The
 /// list only shrinks.
 const KEPT_OUT: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_STEP_4),
+    ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_PHY_OWNER),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
         9,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
         11,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
         12,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
-    ("chips/esp32s31/radio/phy/src/concurrent.rs", 22, BY_STEP_16),
+    (
+        "chips/esp32s31/radio/phy/src/concurrent.rs",
+        22,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/diagnostic_path.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
         9,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    (
-        "chips/family/platform/executor/src/executor.rs",
-        2,
-        BY_STEP_14,
-    ),
-    ("chips/family/platform/executor/src/fault.rs", 5, BY_STEP_14),
-    ("chips/family/platform/executor/src/task.rs", 6, BY_STEP_14),
+    ("chips/family/platform/executor/src/executor.rs", 2, BY_PUMP),
+    ("chips/family/platform/executor/src/fault.rs", 5, BY_PUMP),
+    ("chips/family/platform/executor/src/task.rs", 6, BY_PUMP),
     (
         "chips/family/platform/executor/src/time_driver.rs",
         4,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/platform/interrupt-table/src/binding.rs",
         10,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/interrupt-table/src/lib.rs",
         1,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
         4,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/interrupt-table/src/signal.rs",
         7,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/runtime/src/interrupts.rs",
         2,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/family/platform/runtime/src/retained_fault.rs",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/family/radio/modem-clock/src/execution.rs",
         4,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
-    ("chips/family/radio/modem-clock/src/lib.rs", 12, BY_STEP_4),
-    ("chips/family/radio/power/src/modem.rs", 8, BY_STEP_4),
+    (
+        "chips/family/radio/modem-clock/src/lib.rs",
+        12,
+        BY_PHY_OWNER,
+    ),
+    ("chips/family/radio/power/src/modem.rs", 8, BY_PHY_OWNER),
     (
         "portable/memory/src/indexed_custody.rs",
         7,
-        "two doors in their home and five `Quarantine` names: the names go with step 4 (design 3)",
+        "two doors in their home and five `Quarantine` names: the names go with the PHY under one owner (`design/name-keyed-lists-2026-11-23.md`)",
     ),
     ("portable/memory/src/init_in_place.rs", 1, IN_ITS_HOME),
-    ("portable/memory/src/lib.rs", 1, BY_STEP_4),
+    ("portable/memory/src/lib.rs", 1, BY_PHY_OWNER),
     ("portable/memory/src/placed.rs", 2, IN_ITS_HOME),
     ("portable/memory/src/request_slot.rs", 4, IN_ITS_HOME),
-    ("portable/time/src/connected_tasks.rs", 3, BY_STEP_14),
+    ("portable/time/src/connected_tasks.rs", 3, BY_PUMP),
     ("portable/waker/src/lib.rs", 4, IN_ITS_HOME),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "protocols/radio/port/src/conformance/registration.rs",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
-    ("protocols/radio/port/src/lib.rs", 3, BY_STEP_4),
-    ("protocols/radio/port/src/lifecycle.rs", 24, BY_STEP_4),
-    ("protocols/radio/port/src/slot.rs", 21, BY_STEP_4),
+    ("protocols/radio/port/src/lib.rs", 3, BY_PHY_OWNER),
+    ("protocols/radio/port/src/lifecycle.rs", 24, BY_PHY_OWNER),
+    ("protocols/radio/port/src/slot.rs", 21, BY_PHY_OWNER),
 ];
 /// S7: compatibility layers (`#[serde(default)]`, `#[serde(alias)]`,
 /// `#[deprecated]`, a renamed re-export `pub use … as …`), by file with
 /// their count. The list only shrinks.
 const COMPATIBILITY: &[(&str, usize, &str)] = &[
-    ("chips/esp32s31/app/src/console.rs", 1, BY_STEP_14),
-    ("chips/esp32s31/app/src/cpu.rs", 1, BY_STEP_14),
-    ("chips/esp32s31/app/src/lib.rs", 2, BY_STEP_14),
+    ("chips/esp32s31/app/src/console.rs", 1, BY_PUMP),
+    ("chips/esp32s31/app/src/cpu.rs", 1, BY_PUMP),
+    ("chips/esp32s31/app/src/lib.rs", 2, BY_PUMP),
     (
         "chips/esp32s31/hal/src/radio/domain/transaction.rs",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
         1,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
-    ("chips/esp32s31/radio/phy/src/lib.rs", 1, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/target_port.rs", 1, BY_STEP_16),
-    ("chips/esp32s31/radio/phy/src/tracking.rs", 2, BY_STEP_16),
+    ("chips/esp32s31/radio/phy/src/lib.rs", 1, BY_PHY_PROGRAMS),
+    (
+        "chips/esp32s31/radio/phy/src/target_port.rs",
+        1,
+        BY_PHY_PROGRAMS,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tracking.rs",
+        2,
+        BY_PHY_PROGRAMS,
+    ),
     (
         "chips/esp32s31/radio/phy/src/tracking/rfpll/search.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
-    ("chips/family/facts/src/lib.rs", 19, BY_STEP_3),
-    ("chips/family/facts/src/model.rs", 26, BY_STEP_3),
+    ("chips/family/facts/src/lib.rs", 19, BY_FINAL_CRATES),
+    ("chips/family/facts/src/model.rs", 26, BY_FINAL_CRATES),
     (
         "chips/family/platform/executor/src/installations.rs",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
-    ("chips/family/platform/executor/src/lib.rs", 1, BY_STEP_14),
-    ("chips/family/platform/runtime/src/lib.rs", 4, BY_STEP_15),
-    ("oer/src/print.rs", 1, BY_STEP_14),
-    ("protocols/hil/agent/src/lib.rs", 1, BY_STEP_3),
-    ("protocols/hil/protocol/src/base/boot.rs", 3, BY_STEP_3),
-    ("protocols/hil/protocol/src/lib.rs", 2, BY_STEP_3),
+    ("chips/family/platform/executor/src/lib.rs", 1, BY_PUMP),
+    (
+        "chips/family/platform/runtime/src/lib.rs",
+        4,
+        BY_EXCEPTION_PATH,
+    ),
+    ("oer/src/print.rs", 1, BY_PUMP),
+    ("protocols/hil/agent/src/lib.rs", 1, BY_FINAL_CRATES),
+    (
+        "protocols/hil/protocol/src/base/boot.rs",
+        3,
+        BY_FINAL_CRATES,
+    ),
+    ("protocols/hil/protocol/src/lib.rs", 2, BY_FINAL_CRATES),
     (
         "protocols/ieee80211/core/roles/ap/src/engine.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
-    ("protocols/network/core/src/lib.rs", 1, BY_STEP_3),
+    ("protocols/network/core/src/lib.rs", 1, BY_FINAL_CRATES),
 ];
 /// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
@@ -6545,52 +6608,52 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/hal/src/radio/ieee80211/dma/descriptor.rs",
         2,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
         1,
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
         1,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/interrupt.rs",
         3,
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
         2,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
         14,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
         2,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
         3,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/esp32s31/radio/phy/src/analog/rfpll.rs",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
         1,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
 ];
 
@@ -6661,64 +6724,76 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         BY_BLUETOOTH,
     ),
     ("protocols/bluetooth/hci/src/wire.rs", 1, BY_BLUETOOTH),
-    ("protocols/hil/agent/src/postmortem.rs", 3, BY_STEP_3),
-    ("protocols/hil/protocol/src/framing.rs", 12, BY_STEP_3),
-    ("protocols/hil/protocol/src/key.rs", 1, BY_STEP_3),
+    ("protocols/hil/agent/src/postmortem.rs", 3, BY_FINAL_CRATES),
+    ("protocols/hil/protocol/src/framing.rs", 12, BY_FINAL_CRATES),
+    ("protocols/hil/protocol/src/key.rs", 1, BY_FINAL_CRATES),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs",
         2,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/sa_query.rs",
         3,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/security.rs",
         2,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/crypto.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/crypto/pbkdf2.rs",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/kdf.rs",
         2,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/sae.rs",
         7,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/dhcp.rs", 3, BY_STEP_3),
-    ("protocols/network/core/src/interface.rs", 4, BY_STEP_3),
-    ("protocols/network/wire/src/arp.rs", 3, BY_STEP_3),
-    ("protocols/network/wire/src/checksum.rs", 3, BY_STEP_3),
-    ("protocols/network/wire/src/dhcp.rs", 3, BY_STEP_3),
-    ("protocols/network/wire/src/ethernet.rs", 2, BY_STEP_3),
-    ("protocols/network/wire/src/icmp.rs", 6, BY_STEP_3),
-    ("protocols/network/wire/src/ip.rs", 5, BY_STEP_3),
-    ("protocols/network/wire/src/transport.rs", 13, BY_STEP_3),
-    ("protocols/network/wire/src/udp_frame.rs", 5, BY_STEP_3),
+    ("protocols/network/core/src/dhcp.rs", 3, BY_FINAL_CRATES),
+    (
+        "protocols/network/core/src/interface.rs",
+        4,
+        BY_FINAL_CRATES,
+    ),
+    ("protocols/network/wire/src/arp.rs", 3, BY_FINAL_CRATES),
+    ("protocols/network/wire/src/checksum.rs", 3, BY_FINAL_CRATES),
+    ("protocols/network/wire/src/dhcp.rs", 3, BY_FINAL_CRATES),
+    ("protocols/network/wire/src/ethernet.rs", 2, BY_FINAL_CRATES),
+    ("protocols/network/wire/src/icmp.rs", 6, BY_FINAL_CRATES),
+    ("protocols/network/wire/src/ip.rs", 5, BY_FINAL_CRATES),
+    (
+        "protocols/network/wire/src/transport.rs",
+        13,
+        BY_FINAL_CRATES,
+    ),
+    (
+        "protocols/network/wire/src/udp_frame.rs",
+        5,
+        BY_FINAL_CRATES,
+    ),
 ];
 
 /// The hits of a scan against its list: a new file, a grown count and an
@@ -7454,22 +7529,27 @@ fn wifi_path(path: &str) -> bool {
 /// its package; none is added. The list is emptied after the stand
 /// campaign.
 const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
-    ("chips/esp32s31/drivers/aes", 2, 0, BY_STEP_16B),
-    ("chips/esp32s31/hal", 43, 15, BY_STEP_16A),
-    ("chips/esp32s31/platform/runtime", 0, 2, BY_STEP_15),
-    ("chips/esp32s31/radio/phy", 38, 5, BY_STEP_16),
-    ("chips/family/boot", 5, 2, BY_STEP_16B),
-    ("chips/family/drivers/pmu", 2, 0, BY_STEP_16B),
-    ("chips/family/drivers/usb-serial-jtag", 2, 0, BY_STEP_16B),
-    ("chips/family/drivers/watchdog", 1, 2, BY_STEP_16B),
-    ("chips/family/facts", 1, 0, BY_STEP_3),
-    ("chips/family/platform/executor", 0, 3, BY_STEP_14),
-    ("chips/family/platform/interrupt-table", 0, 1, BY_STEP_7),
-    ("chips/family/platform/runtime", 0, 2, BY_STEP_15),
-    ("chips/family/radio/coex", 1, 0, BY_STEP_8),
-    ("chips/family/radio/modem-clock", 0, 2, BY_STEP_4),
-    ("chips/family/radio/phy", 2, 1, BY_STEP_16),
-    ("chips/family/radio/power", 9, 0, BY_STEP_4),
+    ("chips/esp32s31/drivers/aes", 2, 0, BY_UNOWNED_ROWS),
+    ("chips/esp32s31/hal", 43, 15, BY_PAC_CONVERSIONS),
+    ("chips/esp32s31/platform/runtime", 0, 2, BY_EXCEPTION_PATH),
+    ("chips/esp32s31/radio/phy", 38, 5, BY_PHY_PROGRAMS),
+    ("chips/family/boot", 5, 2, BY_UNOWNED_ROWS),
+    ("chips/family/drivers/pmu", 2, 0, BY_UNOWNED_ROWS),
+    (
+        "chips/family/drivers/usb-serial-jtag",
+        2,
+        0,
+        BY_UNOWNED_ROWS,
+    ),
+    ("chips/family/drivers/watchdog", 1, 2, BY_UNOWNED_ROWS),
+    ("chips/family/facts", 1, 0, BY_FINAL_CRATES),
+    ("chips/family/platform/executor", 0, 3, BY_PUMP),
+    ("chips/family/platform/interrupt-table", 0, 1, BY_LEVEL_TASK),
+    ("chips/family/platform/runtime", 0, 2, BY_EXCEPTION_PATH),
+    ("chips/family/radio/coex", 1, 0, BY_RECEIVE),
+    ("chips/family/radio/modem-clock", 0, 2, BY_PHY_OWNER),
+    ("chips/family/radio/phy", 2, 1, BY_PHY_PROGRAMS),
+    ("chips/family/radio/power", 9, 0, BY_PHY_OWNER),
 ];
 
 /// The package whose one `bool` parameter is a bit's value: the PAC (the
@@ -7915,7 +7995,7 @@ fn k0_print() {
 const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[(
     "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
     3,
-    BY_STEP_3,
+    BY_FINAL_CRATES,
 )];
 
 /// K0, `HIDDEN_BOOL_PARAMETERS`: what `fn_params_excessive_bools` does not
@@ -7932,17 +8012,17 @@ const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[];
 /// through a method of the field's own type that takes `&mut self` (an
 /// `Option` wrapped in a newtype). The list only shrinks.
 const OPTION_SLOTS: &[(&str, &str)] = &[
-    ("chips/esp32s31/app/src/lib.rs::Boot.app_alarm", BY_STEP_14),
-    ("chips/esp32s31/app/src/lib.rs::Boot.entropy", BY_STEP_14),
-    ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_STEP_14),
-    ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_STEP_14),
+    ("chips/esp32s31/app/src/lib.rs::Boot.app_alarm", BY_PUMP),
+    ("chips/esp32s31/app/src/lib.rs::Boot.entropy", BY_PUMP),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_PUMP),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_PUMP),
     (
         "chips/family/radio/ieee80211/policy/src/rate_control.rs::StaRateControlAssociation.ampdu_runtime",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/radio/ieee80211/policy/src/rate_selection.rs::EspressifRateSelection.control",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/bluetooth/hci/src/controller/le/acl.rs::LeHostAclPacket.in_flight_end",
@@ -7962,363 +8042,363 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/hil/protocol/src/base/image_keys.rs::ImageKeysCheck.previous",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.access_point",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.monitor",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiPlan.access_point",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiPlan.monitor",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/coordinator.rs::ChannelCoordinator.last_follow",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::AbsenceTerminal.then_leave",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.absence",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.cycle",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.next_id",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.primary",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Lease.access_point",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_end",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_started",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.announce",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.leave",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.moved",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_end",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_started",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.start",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.absence",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.lease",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::StoppedArbiter.next_id",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.channel_switch",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.next_publication",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.probe_after",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.tsf_epoch",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApAssociationCapabilities.ht",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.authenticator",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.ht",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmk",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmkid",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.wpa2_retry_alarm",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeerStatus.ht",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs::ArenaBook.published",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs::ArenaBook.right",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.rate",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/events.rs::AggregateSettled.rate",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs::FtmPartialResult.pending",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.last_measurement",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.pending",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/link.rs::LinkHandover.data",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/link.rs::RxLink.replay",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/numbers.rs::TxNumbers.tids",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.deadline",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.last_observation",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.background",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.block_ack",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.confirmation",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.report",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.rsn",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.fault",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.management",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.replay",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.management",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.supplicant",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::NewConnection.confirmation",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.management",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.supplicant",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Scan.access_point",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::StaConfig.tx_block_ack",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence_place",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.epoch",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.place",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.profile",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence_place",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.epoch",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.place",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.profile",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/group_keys.rs::GroupKeys.current",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.group",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.request",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.response",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.pending",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.timing",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/request.rs::StationScanChannelOrderIter.preferred",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/sa_query.rs::ActiveSaQuery.next_retry",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/sa_query.rs::StationSaQuery.active",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.association_security_binding",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.pending_ptk",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.accepted_scalar",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.keys",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.own",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.peer_commit",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.stored_confirm",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/retry.rs::RsnRetry.pending",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::RsnApState.latest_built",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnConnectedSupplicant.completed_group_message1",
@@ -8326,75 +8406,75 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.completed_message3",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.ptk",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/aggregate.rs::AmpduRun.previous",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.alarm",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.due",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckNegotiation.inactivity",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.gap",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.inactivity",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/reorder.rs::RxReorderRelease.rejected",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::ReassemblySlot.identity",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.any_address",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.minimum_rssi_dbm",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/protection.rs::ProtectionPolicy.rts_length_threshold",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx.rs::PublicationReport.ack_snr_db",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx.rs::TxExchange.ack_snr_db",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacAmpduTxStatus.ack_snr_db",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.rejected_groups",
@@ -8426,111 +8506,135 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/network/core/src/dhcp.rs::Client.lease",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/dhcp.rs::Client.link", BY_STEP_3),
-    ("protocols/network/core/src/dhcp.rs::Client.owed", BY_STEP_3),
-    ("protocols/network/core/src/dhcp.rs::Client.sent", BY_STEP_3),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.link",
+        BY_FINAL_CRATES,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.owed",
+        BY_FINAL_CRATES,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.sent",
+        BY_FINAL_CRATES,
+    ),
     (
         "protocols/network/core/src/machine.rs::Configuration.dhcp",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/machine.rs::Configuration.ipv4",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/machine.rs::Configuration.lease",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/machine.rs::Kept.outcome",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/machine.rs::Kept.tag", BY_STEP_3),
+    (
+        "protocols/network/core/src/machine.rs::Kept.tag",
+        BY_FINAL_CRATES,
+    ),
     (
         "protocols/network/core/src/machine.rs::Socket.port",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/machine.rs::Socket.prepared",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/owner.rs::Transmitted.ended",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/core/src/payload.rs::Payload.left",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/places.rs::Line.head", BY_STEP_3),
-    ("protocols/network/core/src/places.rs::Line.tail", BY_STEP_3),
+    (
+        "protocols/network/core/src/places.rs::Line.head",
+        BY_FINAL_CRATES,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Line.tail",
+        BY_FINAL_CRATES,
+    ),
     (
         "protocols/network/core/src/places.rs::Place.next",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/core/src/places.rs::Place.on", BY_STEP_3),
+    (
+        "protocols/network/core/src/places.rs::Place.on",
+        BY_FINAL_CRATES,
+    ),
     (
         "protocols/network/core/src/places.rs::Place.previous",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
-    ("protocols/network/port/src/slot.rs::Slot.held", BY_STEP_3),
+    (
+        "protocols/network/port/src/slot.rs::Slot.held",
+        BY_FINAL_CRATES,
+    ),
     (
         "protocols/network/runtime/src/local.rs::Producer.at",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/local.rs::Producer.ends",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/local.rs::Producer.hold",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/local.rs::Producer.socket",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/service.rs::Bound.closing",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/service.rs::Bound.lent",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/service.rs::Bound.open",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/socket.rs::Inbound.stopped",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/socket.rs::LateSocket.loans",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/socket.rs::Socket.inbound",
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/wire/src/checksum.rs::Checksum.odd",
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/radio/port/src/pool/fifo.rs::Place.ticket",
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "protocols/radio/port/src/slot.rs::SlotRegistration.invocation",
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "protocols/radio/port/src/slot.rs::SlotRegistration.owner",
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
 ];
 
@@ -8719,7 +8823,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/app/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/esp32s31/app/src/lib.rs",
@@ -8737,67 +8841,67 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::cast_possible_wrap",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::cast_sign_loss",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::expect_used",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::indexing_slicing",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::panic",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/lib.rs",
         "clippy::unreachable",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/hal/src/peripherals/aes_dma.rs",
@@ -8947,7 +9051,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/knowledge/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/pac/src/lib.rs",
@@ -8977,7 +9081,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/platform/bootstrap/src/main.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/esp32s31/platform/bootstrap/src/main.rs",
@@ -8995,13 +9099,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/platform/runtime/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/esp32s31/platform/runtime/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/esp32s31/platform/runtime/src/sampler.rs",
@@ -9037,37 +9141,37 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::cast_possible_wrap",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::cast_sign_loss",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
@@ -9085,25 +9189,25 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::expect_used",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::indexing_slicing",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/lib.rs",
         "clippy::panic",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
@@ -9175,7 +9279,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/app/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/app/src/lib.rs",
@@ -9193,73 +9297,73 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/boot/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/boot/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/boot/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/pmu/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/pmu/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/usb-serial-jtag/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/usb-serial-jtag/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/watchdog/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/drivers/watchdog/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/facts/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/facts/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/facts/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/platform/bootstrap/src/app_descriptor.rs",
@@ -9271,7 +9375,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/bootstrap/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/bootstrap/src/lib.rs",
@@ -9283,13 +9387,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/bootstrap/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/bootstrap/src/lib.rs",
         "clippy::indexing_slicing",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/bootstrap/src/runtime.rs",
@@ -9331,25 +9435,25 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/executor/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/platform/executor/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/platform/executor/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/platform/executor/src/lib.rs",
         "clippy::indexing_slicing",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "chips/family/platform/executor/src/software_line.rs",
@@ -9397,7 +9501,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/interrupt-table/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/interrupt-table/src/lib.rs",
@@ -9421,7 +9525,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/interrupt-table/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "chips/family/platform/layout/src/handoff.rs",
@@ -9433,19 +9537,19 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/layout/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/layout/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/layout/src/lib.rs",
         "clippy::indexing_slicing",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "chips/family/platform/runtime/src/default_handlers.rs",
@@ -9463,13 +9567,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/runtime/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/family/platform/runtime/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/family/platform/runtime/src/lib.rs",
@@ -9487,7 +9591,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/platform/runtime/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_15,
+        BY_EXCEPTION_PATH,
     ),
     (
         "chips/family/platform/runtime/src/secondary.rs",
@@ -9529,37 +9633,37 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/radio/coex/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/family/radio/coex/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/family/radio/coex/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_8,
+        BY_RECEIVE,
     ),
     (
         "chips/family/radio/ieee80211/policy/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/radio/ieee80211/policy/src/lib.rs",
         "clippy::cast_possible_wrap",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/radio/ieee80211/policy/src/lib.rs",
         "clippy::cast_sign_loss",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "chips/family/radio/modem-clock/src/execution.rs",
@@ -9571,13 +9675,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/radio/modem-clock/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/family/radio/modem-clock/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        "R2: the family drivers' area",
+        BY_PHY_OWNER,
     ),
     (
         "chips/family/radio/modem-clock/src/lib.rs",
@@ -9589,25 +9693,25 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "chips/family/radio/phy/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/family/radio/phy/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_16,
+        BY_PHY_PROGRAMS,
     ),
     (
         "chips/family/radio/power/src/lib.rs",
         "clippy::fn_params_excessive_bools",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/family/radio/power/src/lib.rs",
         "clippy::struct_excessive_bools",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "chips/family/radio/power/src/modem.rs",
@@ -9853,7 +9957,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "hil/scenarios/aes/src/main.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "hil/services/radio-pair/src/lib.rs",
@@ -9907,25 +10011,25 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/diagnostics/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/diagnostics/src/lib.rs",
         "clippy::cast_possible_wrap",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/diagnostics/src/lib.rs",
         "clippy::cast_sign_loss",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/diagnostics/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/diagnostics/src/note.rs",
@@ -10021,7 +10125,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/memory/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "portable/memory/src/lib.rs",
@@ -10033,7 +10137,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/memory/src/lib.rs",
         "clippy::arithmetic_side_effects",
         1,
-        BY_STEP_9,
+        BY_TRANSMIT,
     ),
     (
         "portable/memory/src/link.rs",
@@ -10177,7 +10281,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/riscv/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/riscv/src/lib.rs",
@@ -10195,13 +10299,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/time/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_7,
+        BY_LEVEL_TASK,
     ),
     (
         "portable/trace/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "portable/waker/src/lib.rs",
@@ -10213,7 +10317,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "portable/wire/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "protocols/bluetooth/hci/src/lib.rs",
@@ -10225,7 +10329,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/hil/agent/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/hil/protocol/src/key.rs",
@@ -10237,13 +10341,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/hil/protocol/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
@@ -10279,7 +10383,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/core/datapath/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs",
@@ -10303,13 +10407,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/core/roles/ap/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/ftm.rs",
@@ -10321,7 +10425,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/core/roles/sta/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_13,
+        BY_CONTROLLER,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/link.rs",
@@ -10363,7 +10467,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/core/security/rsn/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",
@@ -10375,7 +10479,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/core/upper-mac/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/testing/conformance/src/lib.rs",
@@ -10387,7 +10491,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/testing/conformance/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_11,
+        BY_CONFORMANCE,
     ),
     (
         "protocols/ieee80211/testing/conformance/src/lib.rs",
@@ -10435,7 +10539,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/testing/model/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_11,
+        BY_CONFORMANCE,
     ),
     (
         "protocols/ieee80211/wire/src/ap.rs",
@@ -10477,25 +10581,25 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/ieee80211/wire/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/ieee80211/wire/src/lib.rs",
         "clippy::cast_sign_loss",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/core/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/network/runtime/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_14,
+        BY_PUMP,
     ),
     (
         "protocols/network/runtime/src/service.rs",
@@ -10507,7 +10611,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/network/wire/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_3,
+        BY_FINAL_CRATES,
     ),
     (
         "protocols/radio/port/src/conformance.rs",
@@ -10555,13 +10659,13 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/radio/port/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "protocols/radio/port/src/lib.rs",
         "clippy::let_underscore_must_use",
         1,
-        BY_STEP_4,
+        BY_PHY_OWNER,
     ),
     (
         "protocols/radio/port/src/pool.rs",
@@ -10579,7 +10683,7 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "protocols/radio/regulatory/src/lib.rs",
         "clippy::cast_possible_truncation",
         1,
-        BY_STEP_16B,
+        BY_UNOWNED_ROWS,
     ),
     (
         "tools/analysis/blobray-analysis/src/lib.rs",
