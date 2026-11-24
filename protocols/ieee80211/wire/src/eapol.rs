@@ -22,7 +22,7 @@ oer_portable_wire::bitfield! {
         pub encrypted_key_data, with_encrypted_key_data: bool = 12..13;
         pub smk_message, with_smk_message: bool = 13..14;
         /// The whole field as one big-endian value.
-        pub value, with_value: (u16) = 0..16, view;
+        pub value, with_value: {u16} = 0..16, view;
     }
 }
 
@@ -32,13 +32,12 @@ impl KeyInformation {
 
     /// The field whose big-endian value is `raw`.
     pub const fn from_raw(raw: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::EMPTY.with_value(oer_portable_wire::U16::from_low_bits(raw))
+        Self::EMPTY.with_value(raw)
     }
 
     /// The field's big-endian value.
     pub const fn raw(self) -> u16 {
-        self.value().get()
+        self.value()
     }
 }
 
@@ -48,30 +47,28 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.1X-2020, 11.3 (EAPOL PDU, Packet Body Length);
     /// IEEE Std 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame).
     pub struct EapolLength[2] (big) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame:
     /// Key Replay Counter, eight octets).
     pub struct KeyReplayCounter[8] (big) {
-        pub value, with_value: (u64) = 0..64;
+        pub value, with_value: {u64} = 0..64;
     }
 }
 
 impl EapolLength {
     /// The field holding `value`.
     pub const fn of(value: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(value))
+        Self::from_bytes([0; 2]).with_value(value)
     }
 }
 
 impl KeyReplayCounter {
     /// The field holding `value`.
     pub const fn of(value: u64) -> Self {
-        // Sixty-four bits of sixty-four: nothing is cut.
-        Self::from_bytes([0; 8]).with_value(oer_portable_wire::U64::from_low_bits(value))
+        Self::from_bytes([0; 8]).with_value(value)
     }
 }
 
@@ -119,7 +116,7 @@ impl GtkKdeInfo {
     /// The info octet of a GTK named `key_id`, its Tx bit clear: a GTK
     /// for transmission sets it ([`Self::with_tx`]).
     pub const fn new(key_id: GroupKeyId) -> Self {
-        Self::from_bytes([0]).with_key_id(oer_portable_wire::U8::<2>::from_low_bits(key_id.get()))
+        Self::from_bytes([0]).with_key_id(key_id.wire())
     }
 
     /// The Tx bit.
@@ -272,11 +269,7 @@ impl<'a> EapolKey<'a> {
         if packet_type != EAPOL_PACKET_TYPE_KEY {
             return Err(EapolParseError::NotKeyPacket);
         }
-        let body_len = usize::from(
-            EapolLength::from_bytes([length_high, length_low])
-                .value()
-                .get(),
-        );
+        let body_len = usize::from(EapolLength::from_bytes([length_high, length_low]).value());
         let packet_len = EAPOL_HEADER_LEN
             .checked_add(body_len)
             .ok_or(EapolParseError::LengthMismatch)?;
@@ -324,11 +317,11 @@ impl<'a> EapolKey<'a> {
     }
 
     pub const fn key_length(self) -> u16 {
-        self.key_length.value().get()
+        self.key_length.value()
     }
 
     pub const fn replay_counter(self) -> u64 {
-        self.replay_counter.value().get()
+        self.replay_counter.value()
     }
 
     pub const fn nonce(self) -> &'a [u8; 32] {
@@ -527,9 +520,7 @@ impl<'a> IgtkKde<'a> {
         let (&packet_number, key) = rest.split_first_chunk::<6>()?;
         let key = <&[u8; 16]>::try_from(key).ok()?;
         Some(Self {
-            key_id: crate::bip::KeyIdField::from_bytes([id0, id1])
-                .key_id()
-                .get(),
+            key_id: crate::bip::KeyIdField::from_bytes([id0, id1]).key_id(),
             packet_number,
             key,
         })
@@ -543,9 +534,8 @@ impl<'a> IgtkKde<'a> {
                 None => panic!("IGTK KDE geometry"),
             };
         let mut kde = [0; IGTK_KDE_LEN];
-        // Sixteen bits of sixteen: nothing is cut.
         let id = crate::bip::KeyIdField::from_bytes([0; 2])
-            .with_key_id(oer_portable_wire::U16::from_low_bits(self.key_id))
+            .with_key_id(self.key_id)
             .to_bytes();
         for (target, source) in kde.iter_mut().zip(
             HEADER

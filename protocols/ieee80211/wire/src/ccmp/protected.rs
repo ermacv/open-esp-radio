@@ -103,11 +103,8 @@ impl<'a> ProtectedMpdu<'a> {
     /// number, most significant octet first.
     pub fn nonce(&self, spp: Spp) -> [u8; CCMP_NONCE_LEN] {
         let [a0, a1, a2, a3, a4, a5] = self.header.transmitter();
-        // `CcmpPacketNumber::new` admits 48 bits alone: nothing is cut.
         let [p0, p1, p2, p3, p4, p5] = NoncePacketNumber::from_bytes([0; 6])
-            .with_value(oer_portable_wire::U64::from_low_bits(
-                self.ccmp.packet_number().value(),
-            ))
+            .with_value(self.ccmp.packet_number().wire())
             .to_bytes();
         [
             self.nonce_flags(spp),

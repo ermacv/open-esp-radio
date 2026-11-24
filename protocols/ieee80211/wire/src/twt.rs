@@ -107,7 +107,16 @@ impl IndividualTwtFlowId {
     }
     /// The flow's three-bit Flow Identifier field.
     pub const fn field(self) -> oer_portable_wire::U8<3> {
-        oer_portable_wire::U8::from_low_bits(self.get())
+        match self.0 {
+            FlowNumber::Flow0 => oer_portable_wire::U8::constant::<0>(),
+            FlowNumber::Flow1 => oer_portable_wire::U8::constant::<1>(),
+            FlowNumber::Flow2 => oer_portable_wire::U8::constant::<2>(),
+            FlowNumber::Flow3 => oer_portable_wire::U8::constant::<3>(),
+            FlowNumber::Flow4 => oer_portable_wire::U8::constant::<4>(),
+            FlowNumber::Flow5 => oer_portable_wire::U8::constant::<5>(),
+            FlowNumber::Flow6 => oer_portable_wire::U8::constant::<6>(),
+            FlowNumber::Flow7 => oer_portable_wire::U8::constant::<7>(),
+        }
     }
     pub const fn index(self) -> usize {
         self.get() as usize
@@ -174,7 +183,16 @@ impl IndividualTwtSetupCommand {
 
     /// The command's three-bit TWT Setup Command field.
     pub const fn field(self) -> oer_portable_wire::U8<3> {
-        oer_portable_wire::U8::from_low_bits(self as u8)
+        match self {
+            Self::Request => oer_portable_wire::U8::constant::<0>(),
+            Self::Suggest => oer_portable_wire::U8::constant::<1>(),
+            Self::Demand => oer_portable_wire::U8::constant::<2>(),
+            Self::Grouping => oer_portable_wire::U8::constant::<3>(),
+            Self::Accept => oer_portable_wire::U8::constant::<4>(),
+            Self::Alternate => oer_portable_wire::U8::constant::<5>(),
+            Self::Dictate => oer_portable_wire::U8::constant::<6>(),
+            Self::Reject => oer_portable_wire::U8::constant::<7>(),
+        }
     }
 
     pub const fn is_requester_command(self) -> bool {
@@ -371,27 +389,20 @@ impl IndividualTwtParameterSet {
         let fields = IndividualTwtFields::from_bytes(bytes);
         Self {
             request,
-            target_wake_time_tsf: fields.target_wake_time().get(),
-            nominal_minimum_wake_duration: fields.nominal_minimum_wake_duration().get(),
-            wake_interval_mantissa: fields.wake_interval_mantissa().get(),
-            twt_channel: fields.twt_channel().get(),
+            target_wake_time_tsf: fields.target_wake_time(),
+            nominal_minimum_wake_duration: fields.nominal_minimum_wake_duration(),
+            wake_interval_mantissa: fields.wake_interval_mantissa(),
+            twt_channel: fields.twt_channel(),
         }
     }
 
     /// The fields after the Request Type, as they appear on air.
     const fn fields(self) -> IndividualTwtFields {
-        // Each value fills its field's width: nothing is cut.
         IndividualTwtFields::from_bytes([0; 12])
-            .with_target_wake_time(oer_portable_wire::U64::from_low_bits(
-                self.target_wake_time_tsf,
-            ))
-            .with_nominal_minimum_wake_duration(oer_portable_wire::U8::from_low_bits(
-                self.nominal_minimum_wake_duration,
-            ))
-            .with_wake_interval_mantissa(oer_portable_wire::U16::from_low_bits(
-                self.wake_interval_mantissa,
-            ))
-            .with_twt_channel(oer_portable_wire::U8::from_low_bits(self.twt_channel))
+            .with_target_wake_time(self.target_wake_time_tsf)
+            .with_nominal_minimum_wake_duration(self.nominal_minimum_wake_duration)
+            .with_wake_interval_mantissa(self.wake_interval_mantissa)
+            .with_twt_channel(self.twt_channel)
     }
 }
 
@@ -629,10 +640,10 @@ oer_portable_wire::bitfield! {
     /// Target Wake Time, Nominal Minimum TWT Wake Duration, TWT Wake
     /// Interval Mantissa and TWT Channel.
     pub struct IndividualTwtFields[12] (little) {
-        pub target_wake_time, with_target_wake_time: (u64) = 0..64;
-        pub nominal_minimum_wake_duration, with_nominal_minimum_wake_duration: (u8) = 64..72;
-        pub wake_interval_mantissa, with_wake_interval_mantissa: (u16) = 72..88;
-        pub twt_channel, with_twt_channel: (u8) = 88..96;
+        pub target_wake_time, with_target_wake_time: {u64} = 0..64;
+        pub nominal_minimum_wake_duration, with_nominal_minimum_wake_duration: {u8} = 64..72;
+        pub wake_interval_mantissa, with_wake_interval_mantissa: {u16} = 72..88;
+        pub twt_channel, with_twt_channel: {u8} = 88..96;
     }
 }
 
@@ -664,6 +675,19 @@ oer_portable_wire::bitfield! {
 mod tests {
     use super::*;
 
+    /// Each flow and setup command is its three-bit field, both ways.
+    #[test]
+    fn flows_and_commands_are_their_fields() {
+        for (index, flow) in IndividualTwtFlowId::ALL.into_iter().enumerate() {
+            assert_eq!(usize::from(flow.field().get()), index);
+            assert_eq!(IndividualTwtFlowId::from_field(flow.field()), flow);
+        }
+        for value in 0..8 {
+            let field = oer_portable_wire::U8::<3>::new(value).unwrap();
+            assert_eq!(IndividualTwtSetupCommand::from_field(field).field(), field);
+        }
+    }
+
     #[test]
     fn a_rejected_setup_with_the_largest_exponent_round_trips() {
         let setup = IndividualTwtSetup {
@@ -673,7 +697,7 @@ mod tests {
                 request: TwtRequestFields::from_bytes([0; 2])
                     .with_setup_command(IndividualTwtSetupCommand::Reject.field())
                     .with_flow_id(IndividualTwtFlowId::ALL[0].field())
-                    .with_wake_interval_exponent(oer_portable_wire::U8::from_low_bits(31)),
+                    .with_wake_interval_exponent(oer_portable_wire::U8::constant::<31>()),
                 target_wake_time_tsf: 0,
                 nominal_minimum_wake_duration: 0,
                 wake_interval_mantissa: 0,
@@ -704,7 +728,7 @@ mod tests {
                     .with_implicit(true)
                     .with_flow_type(true)
                     .with_flow_id(IndividualTwtFlowId::ALL[5].field())
-                    .with_wake_interval_exponent(oer_portable_wire::U8::from_low_bits(10))
+                    .with_wake_interval_exponent(oer_portable_wire::U8::constant::<10>())
                     .with_protection(true),
                 target_wake_time_tsf: 0x0123_4567_89ab_cdef,
                 nominal_minimum_wake_duration: 0x40,

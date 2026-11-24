@@ -563,7 +563,7 @@ impl<'id, K> ArenaBook<'id, K> {
             right: Some(Held::Idle(arena)),
             epoch: 0,
             tid: WmmUserPriority::UP0,
-            first: SequenceNumber::from_low_bits(0),
+            first: SequenceNumber::ZERO,
             taken: 0,
             pending: 0,
             octets: 0,

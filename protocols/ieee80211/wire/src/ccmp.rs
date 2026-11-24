@@ -19,37 +19,41 @@ pub const CCMP_MIC_LEN: usize = 8;
 pub const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct CcmpPacketNumber(u64);
+pub struct CcmpPacketNumber(oer_portable_wire::U64<48>);
 
 impl CcmpPacketNumber {
-    pub const ZERO: Self = Self(0);
+    pub const ZERO: Self = Self(oer_portable_wire::U64::ZERO);
 
+    /// `value`, when it fits the 48-bit PN.
     pub const fn new(value: u64) -> Option<Self> {
-        if value <= CCMP_PACKET_NUMBER_MAX {
-            Some(Self(value))
-        } else {
-            None
+        match oer_portable_wire::U64::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
         }
     }
 
+    /// The PN as its 48-bit field holds it.
+    pub const fn from_wire(value: oer_portable_wire::U64<48>) -> Self {
+        Self(value)
+    }
+
     pub const fn value(self) -> u64 {
+        self.0.get()
+    }
+
+    /// The PN as its 48-bit field holds it.
+    pub const fn wire(self) -> oer_portable_wire::U64<48> {
         self.0
     }
 
     pub const fn from_header_bytes(bytes: [u8; CCMP_HEADER_LEN]) -> Self {
         let [pn0, pn1, _, _, pn2, pn3, pn4, pn5] = bytes;
-        Self(
-            PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5])
-                .value()
-                .get(),
-        )
+        Self(PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5]).value())
     }
 
     /// The six octets PN0 to PN5.
     const fn field(self) -> PacketNumberField {
-        // `new` admits 48 bits alone: nothing is cut.
-        PacketNumberField::from_bytes([0; 6])
-            .with_value(oer_portable_wire::U64::from_low_bits(self.0))
+        PacketNumberField::from_bytes([0; 6]).with_value(self.0)
     }
 
     /// Encode this packet number as an EAPOL-Key Key RSC: six little-endian
@@ -71,9 +75,7 @@ impl CcmpPacketNumber {
             return Err(CcmpReceiveSequenceError::HighBitsSet);
         }
         Ok(Self(
-            PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5])
-                .value()
-                .get(),
+            PacketNumberField::from_bytes([pn0, pn1, pn2, pn3, pn4, pn5]).value(),
         ))
     }
 }
@@ -81,7 +83,7 @@ impl CcmpPacketNumber {
 /// An ESP-NOW packet number is a nonzero CCMP packet number.
 impl From<crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber> for CcmpPacketNumber {
     fn from(packet_number: crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber) -> Self {
-        Self(packet_number.value())
+        Self(packet_number.wire())
     }
 }
 
@@ -154,22 +156,22 @@ impl GroupKeyId {
 
     /// The identifier.
     pub const fn get(self) -> u8 {
+        self.wire().get()
+    }
+
+    /// The identifier as its two-bit fields hold it.
+    pub const fn wire(self) -> oer_portable_wire::U8<2> {
         match self.0 {
-            GroupIndex::Zero => 0,
-            GroupIndex::One => 1,
-            GroupIndex::Two => 2,
-            GroupIndex::Three => 3,
+            GroupIndex::Zero => oer_portable_wire::U8::constant::<0>(),
+            GroupIndex::One => oer_portable_wire::U8::constant::<1>(),
+            GroupIndex::Two => oer_portable_wire::U8::constant::<2>(),
+            GroupIndex::Three => oer_portable_wire::U8::constant::<3>(),
         }
     }
 
     /// The identifier, as a CCMP header names it.
     pub const fn key_id(self) -> CcmpKeyId {
-        CcmpKeyId(match self.0 {
-            GroupIndex::Zero => oer_portable_wire::U8::constant::<0>(),
-            GroupIndex::One => oer_portable_wire::U8::constant::<1>(),
-            GroupIndex::Two => oer_portable_wire::U8::constant::<2>(),
-            GroupIndex::Three => oer_portable_wire::U8::constant::<3>(),
-        })
+        CcmpKeyId(self.wire())
     }
 
     /// Select the record for this wire ID, independently of hardware slots.

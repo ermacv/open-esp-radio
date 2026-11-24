@@ -13,12 +13,6 @@ pub trait SequenceSpace: Sized {
 
     /// The following sequence number.
     fn next(self) -> Self;
-    /// `increment` numbers forward.
-    fn wrapping_add(self, increment: u16) -> Self;
-    /// `decrement` numbers back.
-    fn wrapping_sub(self, decrement: u16) -> Self;
-    /// Number of increments from `self` forward to `later`, in `0..4096`.
-    fn forward_distance(self, later: Self) -> u16;
     /// Whether `self` strictly precedes `later` in modulo-4096 order: the
     /// forward distance is nonzero and below [`Self::HALF_SPACE`].
     fn precedes(self, later: Self) -> bool;
@@ -31,18 +25,6 @@ impl SequenceSpace for SequenceNumber {
         next(self)
     }
 
-    fn wrapping_add(self, increment: u16) -> Self {
-        wrapping_add(self, increment)
-    }
-
-    fn wrapping_sub(self, decrement: u16) -> Self {
-        SequenceNumber::from_low_bits(self.get().wrapping_sub(decrement))
-    }
-
-    fn forward_distance(self, later: Self) -> u16 {
-        forward_distance(self, later)
-    }
-
     fn precedes(self, later: Self) -> bool {
         let distance = self.forward_distance(later);
         distance != 0 && distance < Self::HALF_SPACE
@@ -51,18 +33,7 @@ impl SequenceSpace for SequenceNumber {
 
 /// The following sequence number, for a constant context.
 const fn next(sequence: SequenceNumber) -> SequenceNumber {
-    wrapping_add(sequence, 1)
-}
-
-/// [`SequenceSpace::wrapping_add`] for a constant context.
-// u16 wrapping is congruent modulo this power-of-two space.
-pub const fn wrapping_add(sequence: SequenceNumber, increment: u16) -> SequenceNumber {
-    SequenceNumber::from_low_bits(sequence.get().wrapping_add(increment))
-}
-
-/// [`SequenceSpace::forward_distance`] for a constant context.
-pub const fn forward_distance(earlier: SequenceNumber, later: SequenceNumber) -> u16 {
-    SequenceNumber::from_low_bits(later.get().wrapping_sub(earlier.get())).get()
+    sequence.wrapping_add(1)
 }
 
 /// Monotonic twelve-bit owner for one IEEE 802.11 transmit sequence space.

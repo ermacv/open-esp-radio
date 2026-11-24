@@ -157,7 +157,7 @@ impl<'id> World<'id> {
             plane,
             single,
             aggregate,
-            sequences: [SequenceCounter::new(SequenceNumber::from_low_bits(0)); 8],
+            sequences: [SequenceCounter::new(SequenceNumber::ZERO); 8],
             key: None,
             returned: Vec::new(),
             costs: Vec::new(),
@@ -944,7 +944,7 @@ fn spent_key(model: Installed<'_>) {
 
 fn numbering(model: Installed<'_>) {
     let mut world = World::new(model, link(LinkProtection::Open));
-    let mut numbers = TxNumbers::new(SequenceCounter::new(SequenceNumber::from_low_bits(0)), None);
+    let mut numbers = TxNumbers::new(SequenceCounter::new(SequenceNumber::ZERO), None);
     let now = world.now();
     let Intake::Refused { reason, .. } = world.plane.intake(
         &mut world.port,

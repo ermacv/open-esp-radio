@@ -2416,6 +2416,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "oer-portable-crypto",
+ "oer-portable-wire",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-wire",
  "oer-tools-test-ui-cases",

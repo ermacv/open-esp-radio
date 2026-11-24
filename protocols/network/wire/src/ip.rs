@@ -156,7 +156,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: RFC 8200, 3 (IPv6 Header Format).
     pub struct Ipv6HeaderPrefix[2] (big) {
         pub flow_label_high, with_flow_label_high: u8 = 0..4;
-        pub traffic_class, with_traffic_class: u8 = 4..12;
+        pub traffic_class, with_traffic_class: {u8} = 4..12;
         pub version, with_version: u8 = 12..16;
     }
 }

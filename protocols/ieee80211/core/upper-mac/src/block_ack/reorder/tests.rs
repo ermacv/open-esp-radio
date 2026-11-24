@@ -1,5 +1,4 @@
 use super::*;
-use crate::sequence::SequenceSpace;
 
 const WINDOW: usize = 64;
 const SLOTS: usize = 34;
@@ -382,7 +381,7 @@ fn run_script<const CAPACITY: usize, const SLOT_CAPACITY: usize>(bytes: &[u8]) {
     let Some((&[window, start0, start1], operations)) = bytes.split_first_chunk() else {
         return;
     };
-    let start = SequenceNumber::from_low_bits(u16::from_le_bytes([start0, start1]));
+    let start = SequenceNumber::ZERO.wrapping_add(u16::from_le_bytes([start0, start1]));
     let Ok(mut reorder) =
         RxReorderBuffer::<CAPACITY, SLOT_CAPACITY>::new(start, u16::from(window) % 70)
     else {
@@ -396,7 +395,7 @@ fn run_script<const CAPACITY: usize, const SLOT_CAPACITY: usize>(bytes: &[u8]) {
     };
     for operation in operations.chunks_exact(4) {
         let [kind, low, high, slot]: [u8; 4] = operation.try_into().unwrap();
-        let sequence = SequenceNumber::from_low_bits(u16::from_le_bytes([low, high]));
+        let sequence = SequenceNumber::ZERO.wrapping_add(u16::from_le_bytes([low, high]));
         let frame = RxReorderMpdu { sequence, slot };
         match kind % 7 {
             0 | 1 => {

@@ -117,8 +117,21 @@ impl FtmBurstDuration {
         }
     }
 
-    pub const fn wire(self) -> u8 {
-        self as u8
+    /// The code as its four-bit Burst Duration field holds it.
+    pub const fn wire(self) -> oer_portable_wire::U8<4> {
+        match self {
+            Self::Micros250 => oer_portable_wire::U8::constant::<2>(),
+            Self::Micros500 => oer_portable_wire::U8::constant::<3>(),
+            Self::Millis1 => oer_portable_wire::U8::constant::<4>(),
+            Self::Millis2 => oer_portable_wire::U8::constant::<5>(),
+            Self::Millis4 => oer_portable_wire::U8::constant::<6>(),
+            Self::Millis8 => oer_portable_wire::U8::constant::<7>(),
+            Self::Millis16 => oer_portable_wire::U8::constant::<8>(),
+            Self::Millis32 => oer_portable_wire::U8::constant::<9>(),
+            Self::Millis64 => oer_portable_wire::U8::constant::<10>(),
+            Self::Millis128 => oer_portable_wire::U8::constant::<11>(),
+            Self::NoPreference => oer_portable_wire::U8::constant::<15>(),
+        }
     }
 }
 
@@ -160,8 +173,23 @@ impl FtmFormatAndBandwidth {
         }
     }
 
-    pub const fn wire(self) -> u8 {
-        self as u8
+    /// The code as its six-bit Format And Bandwidth field holds it.
+    pub const fn wire(self) -> oer_portable_wire::U8<6> {
+        match self {
+            Self::NoPreference => oer_portable_wire::U8::constant::<0>(),
+            Self::NonHt5Mhz => oer_portable_wire::U8::constant::<4>(),
+            Self::NonHt10Mhz => oer_portable_wire::U8::constant::<6>(),
+            Self::NonHt20Mhz => oer_portable_wire::U8::constant::<8>(),
+            Self::HtMixed20Mhz => oer_portable_wire::U8::constant::<9>(),
+            Self::Vht20Mhz => oer_portable_wire::U8::constant::<10>(),
+            Self::HtMixed40Mhz => oer_portable_wire::U8::constant::<11>(),
+            Self::Vht40Mhz => oer_portable_wire::U8::constant::<12>(),
+            Self::Vht80Mhz => oer_portable_wire::U8::constant::<13>(),
+            Self::Vht80Plus80Mhz => oer_portable_wire::U8::constant::<14>(),
+            Self::Vht160MhzSeparateLos => oer_portable_wire::U8::constant::<15>(),
+            Self::Vht160MhzSingleLo => oer_portable_wire::U8::constant::<16>(),
+            Self::Dmg2160Mhz => oer_portable_wire::U8::constant::<31>(),
+        }
     }
 }
 
@@ -259,24 +287,14 @@ impl FtmRequestParameters {
         // A request's Status Indication and Value are zero (9.4.2.167).
         let fields = FtmParameterFields::from_bytes([0; 9])
             .with_bursts(self.number_of_bursts_exponent)
-            .with_duration(oer_portable_wire::U8::from_low_bits(
-                self.burst_duration.wire(),
-            ))
-            .with_partial_tsf(oer_portable_wire::U16::from_low_bits(
-                self.partial_tsf_timer.unwrap_or(0),
-            ))
+            .with_duration(self.burst_duration.wire())
+            .with_partial_tsf(self.partial_tsf_timer.unwrap_or(0))
             .with_no_partial_tsf(self.partial_tsf_timer.is_none())
             .with_asap(self.asap.bit())
             .with_ftms(self.ftms_per_burst)
-            .with_bandwidth(oer_portable_wire::U8::from_low_bits(
-                self.format_and_bandwidth.wire(),
-            ))
-            .with_burst_period(oer_portable_wire::U16::from_low_bits(
-                self.burst_period_100ms,
-            ))
-            .with_min_delta(oer_portable_wire::U8::from_low_bits(
-                self.min_delta_ftm_100us,
-            ));
+            .with_bandwidth(self.format_and_bandwidth.wire())
+            .with_burst_period(self.burst_period_100ms)
+            .with_min_delta(self.min_delta_ftm_100us);
         parameters_element(fields)
     }
 
@@ -289,7 +307,7 @@ impl FtmRequestParameters {
         if FtmParameterFields::from_bytes(fields).asap_capable() {
             return Err(FtmParameterError::RequestAsapCapableSet);
         }
-        let partial_tsf = parsed.partial_tsf().get();
+        let partial_tsf = parsed.partial_tsf();
         let partial_tsf_no_preference = FtmParameterFields::from_bytes(fields).no_partial_tsf();
         if partial_tsf_no_preference && partial_tsf != 0 {
             return Err(FtmParameterError::ReservedBitsSet);
@@ -297,7 +315,7 @@ impl FtmRequestParameters {
         Self::new(
             FtmParameterFields::from_bytes(fields).bursts().get(),
             FtmBurstDuration::from_wire(FtmParameterFields::from_bytes(fields).duration().get())?,
-            parsed.min_delta().get(),
+            parsed.min_delta(),
             if !partial_tsf_no_preference {
                 Some(partial_tsf)
             } else {
@@ -312,7 +330,7 @@ impl FtmRequestParameters {
             FtmFormatAndBandwidth::from_wire(
                 FtmParameterFields::from_bytes(fields).bandwidth().get(),
             )?,
-            parsed.burst_period().get(),
+            parsed.burst_period(),
         )
     }
 }
@@ -398,7 +416,7 @@ impl FtmResponseParameters {
         }
         let number_of_bursts_exponent = FtmParameterFields::from_bytes(fields).bursts().get();
         let parsed = FtmParameterFields::from_bytes(fields);
-        let burst_period_100ms = parsed.burst_period().get();
+        let burst_period_100ms = parsed.burst_period();
         if number_of_bursts_exponent == 0 && burst_period_100ms != 0 {
             return Err(FtmParameterError::BurstPeriodReserved);
         }
@@ -406,8 +424,8 @@ impl FtmResponseParameters {
             status,
             number_of_bursts_exponent,
             burst_duration,
-            min_delta_ftm_100us: parsed.min_delta().get(),
-            partial_tsf_timer: parsed.partial_tsf().get(),
+            min_delta_ftm_100us: parsed.min_delta(),
+            partial_tsf_timer: parsed.partial_tsf(),
             asap_capable: if FtmParameterFields::from_bytes(fields).asap_capable() {
                 FtmAsapCapability::Capable
             } else {
@@ -440,25 +458,15 @@ impl FtmResponseParameters {
             .with_status(status)
             .and_then(|fields| fields.with_retry(retry))
             .map_err(|_| FtmParameterError::ValueOutOfRange)?
-            .with_min_delta(oer_portable_wire::U8::from_low_bits(
-                self.min_delta_ftm_100us,
-            ))
+            .with_min_delta(self.min_delta_ftm_100us)
             .with_bursts(bursts)
-            .with_duration(oer_portable_wire::U8::from_low_bits(
-                self.burst_duration.wire(),
-            ))
-            .with_partial_tsf(oer_portable_wire::U16::from_low_bits(
-                self.partial_tsf_timer,
-            ))
+            .with_duration(self.burst_duration.wire())
+            .with_partial_tsf(self.partial_tsf_timer)
             .with_asap_capable(self.asap_capable.bit())
             .with_asap(self.asap.bit())
             .with_ftms(ftms)
-            .with_bandwidth(oer_portable_wire::U8::from_low_bits(
-                self.format_and_bandwidth.wire(),
-            ))
-            .with_burst_period(oer_portable_wire::U16::from_low_bits(
-                self.burst_period_100ms,
-            ));
+            .with_bandwidth(self.format_and_bandwidth.wire())
+            .with_burst_period(self.burst_period_100ms);
         let element = parameters_element(fields);
         Self::decode_element(&element)?;
         Ok(element)
@@ -560,31 +568,29 @@ pub const fn encode_request_trigger(trigger: FtmTrigger) -> [u8; FTM_REQUEST_PRE
 
 /// One 48-bit timestamp in the picosecond wire domain.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct FtmTimestampPs(u64);
+pub struct FtmTimestampPs(oer_portable_wire::U64<48>);
 
 impl FtmTimestampPs {
-    pub const ZERO: Self = Self(0);
+    pub const ZERO: Self = Self(oer_portable_wire::U64::ZERO);
 
     pub const fn new(value: u64) -> Result<Self, FtmWireError> {
-        if value <= FTM_TIMESTAMP_MASK {
-            Ok(Self(value))
-        } else {
-            Err(FtmWireError::TimestampOutOfRange)
+        match oer_portable_wire::U64::new(value) {
+            Some(value) => Ok(Self(value)),
+            None => Err(FtmWireError::TimestampOutOfRange),
         }
     }
 
     pub const fn get(self) -> u64 {
-        self.0
+        self.0.get()
     }
 
     fn decode(octets: [u8; 6]) -> Self {
-        Self(FtmTimestampField::from_bytes(octets).picoseconds().get())
+        Self(FtmTimestampField::from_bytes(octets).picoseconds())
     }
 
     fn encode(self) -> [u8; 6] {
-        // `new` admits 48 bits alone: nothing is cut.
         FtmTimestampField::from_bytes([0; 6])
-            .with_picoseconds(oer_portable_wire::U64::from_low_bits(self.0))
+            .with_picoseconds(self.0)
             .to_bytes()
     }
 }
@@ -808,15 +814,15 @@ oer_portable_wire::bitfield! {
         pub status_reserved, with_status_reserved: bool = 7..8;
         pub bursts, with_bursts: (u8) = 8..12;
         pub duration, with_duration: (u8) = 12..16;
-        pub min_delta, with_min_delta: (u8) = 16..24;
-        pub partial_tsf, with_partial_tsf: (u16) = 24..40;
+        pub min_delta, with_min_delta: {u8} = 16..24;
+        pub partial_tsf, with_partial_tsf: {u16} = 24..40;
         pub no_partial_tsf, with_no_partial_tsf: bool = 40..41;
         pub asap_capable, with_asap_capable: bool = 41..42;
         pub asap, with_asap: bool = 42..43;
         pub ftms, with_ftms: (u8) = 43..48;
         pub bandwidth_reserved, with_bandwidth_reserved: u8 = 48..50;
         pub bandwidth, with_bandwidth: (u8) = 50..56;
-        pub burst_period, with_burst_period: (u16) = 56..72;
+        pub burst_period, with_burst_period: {u16} = 56..72;
     }
 }
 oer_portable_wire::bitfield! {

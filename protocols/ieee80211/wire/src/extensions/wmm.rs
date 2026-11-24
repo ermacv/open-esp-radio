@@ -157,9 +157,7 @@ pub(crate) const fn encode_wmm_parameter_element(
             })
             .with_ecw_min(parameters.ecw_min)
             .with_ecw_max(parameters.ecw_max)
-            .with_txop(oer_portable_wire::U16::from_low_bits(
-                parameters.txop_limit_units_32_us,
-            ))
+            .with_txop(parameters.txop_limit_units_32_us)
             .to_bytes()
     }
     let [be, bk, vi, vo] = categories;
@@ -259,7 +257,7 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
             aifsn: fields.aifsn(),
             ecw_min: fields.ecw_min(),
             ecw_max: fields.ecw_max(),
-            txop_limit_units_32_us: fields.txop().get(),
+            txop_limit_units_32_us: fields.txop(),
         };
     }
     if seen != ALL_ACCESS_CATEGORIES {
@@ -285,7 +283,7 @@ oer_portable_wire::bitfield! {
         pub aci, with_aci: (u8) = 5..7;
         pub ecw_min, with_ecw_min: (u8) = 8..12;
         pub ecw_max, with_ecw_max: (u8) = 12..16;
-        pub txop, with_txop: (u16) = 16..32;
+        pub txop, with_txop: {u16} = 16..32;
     }
 }
 oer_portable_wire::bitfield! {

@@ -821,15 +821,14 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.2.4.2 (Duration/ID field, Table
     /// 9-2).
     pub struct DurationId[2] (little) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 
 impl DurationId {
     /// The field holding `value`.
     pub const fn of(value: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(value))
+        Self::from_bytes([0; 2]).with_value(value)
     }
 }
 oer_portable_wire::bitfield! {
@@ -839,7 +838,7 @@ oer_portable_wire::bitfield! {
         pub eosp, with_eosp: bool = 4..5;
         pub ack_policy, with_ack_policy: (u8) = 5..7;
         pub amsdu, with_amsdu: bool = 7..8;
-        pub upper, with_upper: u8 = 8..16;
+        pub upper, with_upper: {u8} = 8..16;
     }
 }
 oer_portable_wire::bitfield! {

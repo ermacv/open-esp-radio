@@ -316,3 +316,36 @@ fn each_reserved_timestamp_bit_refuses_a_measurement() {
         );
     }
 }
+
+/// Every Burst Duration and Format And Bandwidth code reads back as
+/// itself through its field; the timestamp holds 48 bits.
+#[test]
+fn the_codes_and_the_timestamp_fill_their_fields() {
+    for duration in [
+        FtmBurstDuration::Micros250,
+        FtmBurstDuration::Millis128,
+        FtmBurstDuration::NoPreference,
+    ] {
+        assert_eq!(
+            FtmBurstDuration::from_wire(duration.wire().get()),
+            Ok(duration)
+        );
+    }
+    for format in [
+        FtmFormatAndBandwidth::NoPreference,
+        FtmFormatAndBandwidth::Vht160MhzSingleLo,
+        FtmFormatAndBandwidth::Dmg2160Mhz,
+    ] {
+        assert_eq!(
+            FtmFormatAndBandwidth::from_wire(format.wire().get()),
+            Ok(format)
+        );
+    }
+    let highest = FtmTimestampPs::new(FTM_TIMESTAMP_MASK).unwrap();
+    assert_eq!(FtmTimestampPs::decode(highest.encode()), highest);
+    assert_eq!(highest.encode(), [0xff; 6]);
+    assert_eq!(
+        FtmTimestampPs::new(FTM_TIMESTAMP_MASK + 1),
+        Err(FtmWireError::TimestampOutOfRange)
+    );
+}

@@ -684,3 +684,18 @@ fn the_element_carries_the_width_set_it_is_given() {
         assert_eq!(advertised.channel_width_set().get(), field);
     }
 }
+
+/// The width set is its named bits in the seven-bit subfield.
+#[test]
+fn the_channel_width_set_is_its_bits() {
+    assert_eq!(HeChannelWidthSet::MHZ20.field().get(), 0);
+    assert_eq!(HeChannelWidthSet::GHZ2_4_MHZ40.field().get(), 1);
+    assert_eq!(HeChannelWidthSet::GHZ5_MHZ40_80.field().get(), 2);
+    let both = HeChannelWidthSet::GHZ2_4_MHZ40.union(HeChannelWidthSet::GHZ5_MHZ40_80);
+    assert_eq!(both.field().get(), 3);
+    assert_eq!(both.union(HeChannelWidthSet::MHZ20), both);
+    assert_eq!(
+        HeChannelWidthSet::MHZ20.union(HeChannelWidthSet::MHZ20),
+        HeChannelWidthSet::MHZ20
+    );
+}

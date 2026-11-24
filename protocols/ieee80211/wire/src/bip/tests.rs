@@ -32,7 +32,7 @@ fn an_appended_element_has_the_reference_layout_and_parses_back() {
 
     let parsed = BipFrame::parse(&frame).unwrap();
     assert_eq!(
-        (parsed.key_id(), parsed.packet_number()),
+        (parsed.key_id(), parsed.packet_number().get()),
         (4, 0x0102_0304_0506)
     );
     assert_eq!(parsed.mic(), &[0xa5; 8]);
@@ -93,4 +93,25 @@ fn a_data_frame_or_another_version_with_a_valid_element_is_refused() {
         );
         assert_eq!(frame, before);
     }
+}
+
+/// The highest IPN is written and read whole.
+#[test]
+fn the_highest_ipn_round_trips() {
+    let mut frame = [0_u8; 26 + MANAGEMENT_MIC_ELEMENT_LEN];
+    frame[..26].copy_from_slice(&deauthentication()[..26]);
+    let protection = BipProtection::append(&mut frame, 26, 4, IPN_MAX).unwrap();
+    let length = protection.finish(&[0; BIP_MIC_LEN]);
+    assert_eq!(
+        BipFrame::parse(&frame[..length])
+            .unwrap()
+            .packet_number()
+            .get(),
+        IPN_MAX
+    );
+    assert_eq!(ipn_from_bytes([0xff; IPN_LEN]).get(), IPN_MAX);
+    assert_eq!(
+        ipn_to_bytes(ipn_from_bytes([1, 2, 3, 4, 5, 6])),
+        [1, 2, 3, 4, 5, 6]
+    );
 }

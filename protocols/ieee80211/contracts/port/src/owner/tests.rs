@@ -247,3 +247,20 @@ fn a_port_rate_carries_no_ack_and_a_block_ack_request_only_where_the_rate_allows
     assert_eq!(rate.no_ack().unwrap_err().get(), ht);
     assert_eq!(rate.legacy().unwrap_err().get(), ht);
 }
+
+/// A TID is its four-bit field: 15 is held and read back, 16 is refused.
+#[test]
+fn a_tid_is_its_four_bit_field() {
+    let highest = Tid::new(15).unwrap();
+    assert_eq!(highest.get(), 15);
+    assert_eq!(highest.wire().get(), 15);
+    let control = QosControl {
+        tid: highest,
+        service_period: ServicePeriod::Continues,
+        body: QosBody::Msdu,
+        high: 0,
+    };
+    let field = control.field(oer_protocols_ieee80211_wire::frame::QosAckPolicy::Normal);
+    assert_eq!(QosControl::from_field(field).tid, highest);
+    assert_eq!(Tid::new(16), None);
+}

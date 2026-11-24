@@ -6,18 +6,17 @@
 //! the shutdown subevent and its observation bytes are the controller shutdown dialect.
 
 use bt_hci::{PacketKind, cmd::Opcode, param::Status};
-use oer_portable_wire::{U8, U16};
 
 use crate::HciControllerResponse;
 
 oer_portable_wire::bitfield! {
     struct HardwareErrorFields[3] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4 and 7.7.16: event code 0x10.
-        code, with_code: (u8) = 0..8;
+        code, with_code: {u8} = 0..8;
         /// Core 6.0, Vol 4, Part E, 5.4.4: one parameter octet.
-        length, with_length: (u8) = 8..16;
+        length, with_length: {u8} = 8..16;
         /// Core 6.0, Vol 4, Part E, 7.7.16: implementation-specific code.
-        hardware_code, with_hardware_code: (u8) = 16..24;
+        hardware_code, with_hardware_code: {u8} = 16..24;
     }
 }
 
@@ -29,10 +28,9 @@ impl HardwareErrorEvent {
     pub const fn new(hardware_code: u8) -> Self {
         Self(
             HardwareErrorFields::from_bytes([0; 3])
-                .with_code(U8::constant::<0x10>())
-                .with_length(U8::constant::<1>())
-                // Full-octet fields preserve every input bit.
-                .with_hardware_code(U8::from_low_bits(hardware_code))
+                .with_code(0x10)
+                .with_length(1)
+                .with_hardware_code(hardware_code)
                 .to_bytes(),
         )
     }
@@ -50,15 +48,15 @@ impl HciControllerResponse for HardwareErrorEvent {
 oer_portable_wire::bitfield! {
     struct CommandCompleteStatusFields[6] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4 and 7.7.14: event code 0x0e.
-        code, with_code: (u8) = 0..8;
+        code, with_code: {u8} = 0..8;
         /// Core 6.0, Vol 4, Part E, 5.4.4: four parameter octets.
-        length, with_length: (u8) = 8..16;
+        length, with_length: {u8} = 8..16;
         /// Core 6.0, Vol 4, Part E, 7.7.14: one available command credit.
-        credits, with_credits: (u8) = 16..24;
+        credits, with_credits: {u8} = 16..24;
         /// Core 6.0, Vol 4, Part E, 7.7.14: completed command, little endian.
-        opcode, with_opcode: (u16) = 24..40;
+        opcode, with_opcode: {u16} = 24..40;
         /// Core 6.0, Vol 4, Part E, 7.7.14: command's Status return parameter.
-        status, with_status: (u8) = 40..48;
+        status, with_status: {u8} = 40..48;
     }
 }
 
@@ -70,11 +68,11 @@ impl CommandCompleteStatusEvent {
     pub fn new(opcode: Opcode, status: Status) -> Self {
         Self(
             CommandCompleteStatusFields::from_bytes([0; 6])
-                .with_code(U8::constant::<0x0e>())
-                .with_length(U8::constant::<4>())
-                .with_credits(U8::constant::<1>())
-                .with_opcode(U16::from_low_bits(opcode.to_raw()))
-                .with_status(U8::from_low_bits(status.into_inner()))
+                .with_code(0x0e)
+                .with_length(4)
+                .with_credits(1)
+                .with_opcode(opcode.to_raw())
+                .with_status(status.into_inner())
                 .to_bytes(),
         )
     }
@@ -92,15 +90,15 @@ impl HciControllerResponse for CommandCompleteStatusEvent {
 oer_portable_wire::bitfield! {
     struct ShutdownObservationFields[5] (little) {
         /// Core 6.0, Vol 4, Part E, 5.4.4: vendor event code 0xff.
-        code, with_code: (u8) = 0..8;
+        code, with_code: {u8} = 0..8;
         /// Core 6.0, Vol 4, Part E, 5.4.4: three parameter octets.
-        length, with_length: (u8) = 8..16;
+        length, with_length: {u8} = 8..16;
         /// Controller shutdown dialect: shutdown observation subevent 1.
-        subevent, with_subevent: (u8) = 16..24;
+        subevent, with_subevent: {u8} = 16..24;
         /// Controller shutdown dialect: software-pending observation, unmodified.
-        software, with_software: (u8) = 24..32;
+        software, with_software: {u8} = 24..32;
         /// Controller shutdown dialect: rollover-pending observation, unmodified.
-        rollover, with_rollover: (u8) = 32..40;
+        rollover, with_rollover: {u8} = 32..40;
     }
 }
 
@@ -112,11 +110,11 @@ impl VendorShutdownObservationEvent {
     pub const fn new([software, rollover]: [u8; 2]) -> Self {
         Self(
             ShutdownObservationFields::from_bytes([0; 5])
-                .with_code(U8::constant::<0xff>())
-                .with_length(U8::constant::<3>())
-                .with_subevent(U8::constant::<1>())
-                .with_software(U8::from_low_bits(software))
-                .with_rollover(U8::from_low_bits(rollover))
+                .with_code(0xff)
+                .with_length(3)
+                .with_subevent(1)
+                .with_software(software)
+                .with_rollover(rollover)
                 .to_bytes(),
         )
     }
@@ -128,8 +126,7 @@ impl VendorShutdownObservationEvent {
         };
         let bytes = oer_portable_wire::Reader::new(bytes).read::<5>().ok()?;
         let fields = ShutdownObservationFields::from_bytes(bytes);
-        if fields.code().get() != 0xff || fields.length().get() != 3 || fields.subevent().get() != 1
-        {
+        if fields.code() != 0xff || fields.length() != 3 || fields.subevent() != 1 {
             return None;
         }
         Some(Self(bytes))
@@ -138,7 +135,7 @@ impl VendorShutdownObservationEvent {
     /// The sampled software-pending and rollover-pending octets, in that order.
     pub const fn pending(&self) -> [u8; 2] {
         let fields = ShutdownObservationFields::from_bytes(self.0);
-        [fields.software().get(), fields.rollover().get()]
+        [fields.software(), fields.rollover()]
     }
 }
 

@@ -521,7 +521,7 @@ pub fn parse_trigger_frame(frame: &[u8]) -> Result<TriggerFrame<'_>, TriggerPars
     }
     Ok(TriggerFrame {
         frame_control,
-        duration: crate::frame::DurationId::from_bytes(duration).value().get(),
+        duration: crate::frame::DurationId::from_bytes(duration).value(),
         receiver_address,
         transmitter_address,
         common: parse_trigger_common_info(common)?,
@@ -542,9 +542,7 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
     let pre_fec_padding_factor_encoding = fields.pre_fec_padding_factor_encoding();
     Ok(TriggerCommonInfo {
         fields,
-        ap_tx_power: TriggerApTxPower::from_common_encoding(oer_portable_wire::U8::from_low_bits(
-            ap_tx_power_encoding,
-        )),
+        ap_tx_power: TriggerApTxPower::from_common_encoding(ap_tx_power_encoding),
         pre_fec_padding_factor: if pre_fec_padding_factor_encoding == 0 {
             4
         } else {
@@ -568,9 +566,7 @@ pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerP
     let fields = TriggerRandomAccessUserFields::from_bytes(*chunk(bytes)?);
     Ok(TriggerUserRuInfo {
         fields,
-        target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
-            fields.target_rssi_encoding(),
-        )),
+        target_rssi: TriggerTargetRssi::from_user_encoding(fields.target_rssi_encoding()),
     })
 }
 
@@ -597,9 +593,7 @@ pub fn parse_trigger_user_spatial_stream(
         fields,
         starting_spatial_stream: fields.starting_spatial_stream_encoding().saturating_add(1),
         spatial_stream_count: fields.spatial_stream_count_encoding().saturating_add(1),
-        target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
-            fields.target_rssi_encoding(),
-        )),
+        target_rssi: TriggerTargetRssi::from_user_encoding(fields.target_rssi_encoding()),
     })
 }
 
@@ -714,11 +708,9 @@ pub fn parse_trigger_response_scheduling_control(
     let fields = TrsFields::from_bytes(*chunk(bytes)?);
     Ok(TriggerResponseSchedulingControl {
         fields,
-        ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
-            fields.ap_tx_power_encoding(),
-        )),
+        ap_tx_power: TriggerApTxPower::from_trs_encoding(fields.ap_tx_power_encoding()),
         uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(
-            oer_portable_wire::U8::from_low_bits(fields.uplink_target_rssi_encoding()),
+            fields.uplink_target_rssi_encoding(),
         ),
     })
 }
@@ -769,10 +761,10 @@ oer_portable_wire::bitfield! {
         pub he_ltf_symbols_and_midamble_periodicity, with_he_ltf_symbols_and_midamble_periodicity: u8 = 23..26;
         pub uplink_stbc, with_uplink_stbc: bool = 26..27;
         pub ldpc_extra_symbol_segment, with_ldpc_extra_symbol_segment: bool = 27..28;
-        pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 28..34;
+        pub ap_tx_power_encoding, with_ap_tx_power_encoding: (u8) = 28..34;
         pub pre_fec_padding_factor_encoding, with_pre_fec_padding_factor_encoding: u8 = 34..36;
         pub packet_extension_disambiguity, with_packet_extension_disambiguity: bool = 36..37;
-        pub uplink_spatial_reuse, with_uplink_spatial_reuse: u16 = 37..53;
+        pub uplink_spatial_reuse, with_uplink_spatial_reuse: {u16} = 37..53;
         pub doppler, with_doppler: bool = 53..54;
         pub uplink_he_sig_a2_reserved, with_uplink_he_sig_a2_reserved: u16 = 54..63;
         pub trailing_reserved, with_trailing_reserved: bool = 63..64;
@@ -800,7 +792,7 @@ oer_portable_wire::bitfield! {
         pub dcm, with_dcm: bool = 25..26;
         pub starting_spatial_stream_encoding, with_starting_spatial_stream_encoding: u8 = 26..29;
         pub spatial_stream_count_encoding, with_spatial_stream_count_encoding: u8 = 29..32;
-        pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
+        pub target_rssi_encoding, with_target_rssi_encoding: (u8) = 32..39;
         pub reserved, with_reserved: bool = 39..40;
     }
 }
@@ -816,7 +808,7 @@ oer_portable_wire::bitfield! {
         pub dcm, with_dcm: bool = 25..26;
         pub number_of_ra_ru, with_number_of_ra_ru: u8 = 26..31;
         pub more_ra_ru, with_more_ra_ru: bool = 31..32;
-        pub target_rssi_encoding, with_target_rssi_encoding: u8 = 32..39;
+        pub target_rssi_encoding, with_target_rssi_encoding: (u8) = 32..39;
         pub reserved, with_reserved: bool = 39..40;
     }
 }
@@ -850,8 +842,8 @@ oer_portable_wire::bitfield! {
         pub uplink_data_symbols, with_uplink_data_symbols: u8 = 6..11;
         pub ru_allocation_region, with_ru_allocation_region: bool = 11..12;
         pub ru_allocation, with_ru_allocation: u8 = 12..19;
-        pub ap_tx_power_encoding, with_ap_tx_power_encoding: u8 = 19..24;
-        pub uplink_target_rssi_encoding, with_uplink_target_rssi_encoding: u8 = 24..29;
+        pub ap_tx_power_encoding, with_ap_tx_power_encoding: (u8) = 19..24;
+        pub uplink_target_rssi_encoding, with_uplink_target_rssi_encoding: (u8) = 24..29;
         pub mcs, with_mcs: u8 = 29..31;
         pub trailing_reserved, with_trailing_reserved: bool = 31..32;
     }

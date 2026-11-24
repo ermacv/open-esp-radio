@@ -58,3 +58,24 @@ fn receive_sequence_round_trips_every_packet_number_width() {
         [1, 2, 3, 4, 5, 6, 0, 0]
     );
 }
+
+/// The highest 48-bit PN is written and read whole; the first beyond it
+/// is refused where the number enters.
+#[test]
+fn the_packet_number_holds_48_bits() {
+    let highest = CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX).unwrap();
+    let header = CcmpHeader::new(highest, CcmpKeyId::new(3).unwrap()).encode();
+    assert_eq!(header, [0xff, 0xff, 0, 0xe0, 0xff, 0xff, 0xff, 0xff]);
+    assert_eq!(CcmpHeader::parse(header).unwrap().packet_number(), highest);
+    assert_eq!(
+        CcmpPacketNumber::from_receive_sequence(highest.receive_sequence()),
+        Ok(highest)
+    );
+    assert_eq!(CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX + 1), None);
+    for key_id in 0..4 {
+        let group = GroupKeyId::new(key_id).unwrap();
+        assert_eq!(group.wire().get(), key_id);
+        assert_eq!(group.get(), key_id);
+    }
+    assert_eq!(GroupKeyId::new(4), None);
+}

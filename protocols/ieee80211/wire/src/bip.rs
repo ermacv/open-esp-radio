@@ -25,14 +25,14 @@ pub const MANAGEMENT_MIC_ELEMENT_LEN: usize = 2 + MANAGEMENT_MIC_BODY_LEN;
 pub const IPN_MAX: u64 = (1 << 48) - 1;
 
 /// The IPN six little-endian octets carry.
-pub const fn ipn_from_bytes(bytes: [u8; IPN_LEN]) -> u64 {
-    IpnField::from_bytes(bytes).value().get()
+pub const fn ipn_from_bytes(bytes: [u8; IPN_LEN]) -> oer_portable_wire::U64<48> {
+    IpnField::from_bytes(bytes).value()
 }
 
-/// The six little-endian octets of an IPN; its bits above 48 are dropped.
-pub const fn ipn_to_bytes(value: u64) -> [u8; IPN_LEN] {
+/// The six little-endian octets of an IPN.
+pub const fn ipn_to_bytes(value: oer_portable_wire::U64<48>) -> [u8; IPN_LEN] {
     IpnField::from_bytes([0; IPN_LEN])
-        .with_value(oer_portable_wire::U64::from_low_bits(value))
+        .with_value(value)
         .to_bytes()
 }
 
@@ -47,7 +47,7 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.54 (Management MIC element:
     /// Key ID, two octets).
     pub struct KeyIdField[2] (little) {
-        pub key_id, with_key_id: (u16) = 0..16;
+        pub key_id, with_key_id: {u16} = 0..16;
     }
 }
 const MANAGEMENT_HEADER_LEN: usize = 24;
@@ -100,7 +100,7 @@ pub struct BipFrame<'a> {
     body: &'a [u8],
     mme_before_mic: &'a [u8],
     key_id: u16,
-    packet_number: u64,
+    packet_number: oer_portable_wire::U64<48>,
     mic: &'a [u8; BIP_MIC_LEN],
 }
 
@@ -128,7 +128,7 @@ impl<'a> BipFrame<'a> {
             aad: aad(header),
             body,
             mme_before_mic: before_mic,
-            key_id: KeyIdField::from_bytes([key_low, key_high]).key_id().get(),
+            key_id: KeyIdField::from_bytes([key_low, key_high]).key_id(),
             packet_number: ipn_from_bytes(ipn),
             mic,
         })
@@ -140,7 +140,7 @@ impl<'a> BipFrame<'a> {
     }
 
     /// The element's IPN.
-    pub const fn packet_number(&self) -> u64 {
+    pub const fn packet_number(&self) -> oer_portable_wire::U64<48> {
         self.packet_number
     }
 
@@ -175,9 +175,11 @@ impl<'a> BipProtection<'a> {
         key_id: u16,
         packet_number: u64,
     ) -> Result<Self, BipFormatError> {
-        if packet_number > IPN_MAX {
+        // The one entry of a caller's IPN: `rsn` and the cipher keep a
+        // `u64` until their half of the typed path.
+        let Some(packet_number) = oer_portable_wire::U64::<48>::new(packet_number) else {
             return Err(BipFormatError::PacketNumberOutOfRange);
-        }
+        };
         let protected = length
             .checked_add(MANAGEMENT_MIC_ELEMENT_LEN)
             .ok_or(BipFormatError::Truncated)?;
@@ -197,9 +199,8 @@ impl<'a> BipProtection<'a> {
         let (body, element) = covered
             .split_last_chunk_mut::<{ MANAGEMENT_MIC_ELEMENT_LEN - BIP_MIC_LEN }>()
             .ok_or(BipFormatError::Truncated)?;
-        // Sixteen bits of sixteen: nothing is cut.
         let [k0, k1] = KeyIdField::from_bytes([0; 2])
-            .with_key_id(oer_portable_wire::U16::from_low_bits(key_id))
+            .with_key_id(key_id)
             .to_bytes();
         let [i0, i1, i2, i3, i4, i5] = ipn_to_bytes(packet_number);
         *element = [

@@ -19,3 +19,14 @@ fn typed_user_priorities_map_to_the_four_standard_access_categories() {
     }
     assert_eq!(WmmUserPriority::new(8), None);
 }
+
+/// Each priority is its three-bit value; an eighth is refused.
+#[test]
+fn a_user_priority_is_its_three_bit_value() {
+    for (value, priority) in WmmUserPriority::ALL.into_iter().enumerate() {
+        assert_eq!(usize::from(priority.wire().get()), value);
+        assert_eq!(usize::from(priority.value()), value);
+        assert_eq!(WmmUserPriority::new(priority.value()), Some(priority));
+    }
+    assert_eq!(WmmUserPriority::new(8), None);
+}

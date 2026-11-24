@@ -2,8 +2,10 @@
 //! value of the Sequence Number subfield.
 //!
 //! Every constructor yields a twelve-bit value, so frame builders need no
-//! range validation. Their modulo-4096 arithmetic belongs to the MAC
-//! mechanisms (`oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace`).
+//! range validation. The number's modulo-4096 sum, difference and distance
+//! are its own operations; the MAC mechanisms' ordering and horizon
+//! (`oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace`)
+//! are built on them.
 
 /// One twelve-bit IEEE 802.11 sequence number.
 ///
@@ -28,12 +30,6 @@ impl SequenceNumber {
         }
     }
 
-    /// The low twelve bits of `value`, for entropy seeds and free-running
-    /// counters whose wider bits are not part of the sequence space.
-    pub const fn from_low_bits(value: u16) -> Self {
-        Self(oer_portable_wire::U16::from_low_bits(value))
-    }
-
     /// The Sequence Number subfield of a Sequence Control field.
     pub const fn from_sequence_control(field: SequenceControl) -> Self {
         Self(field.sequence())
@@ -41,6 +37,37 @@ impl SequenceNumber {
 
     pub const fn get(self) -> u16 {
         self.0.get()
+    }
+
+    /// The number `increment` numbers after this one.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2 (sequence numbers are
+    /// assigned modulo 4096).
+    #[must_use]
+    pub const fn wrapping_add(self, increment: u16) -> Self {
+        // u16 wrapping is congruent modulo this power-of-two space.
+        Self::residue(self.get().wrapping_add(increment))
+    }
+
+    /// The number `decrement` numbers before this one; [`Self::wrapping_add`].
+    #[must_use]
+    pub const fn wrapping_sub(self, decrement: u16) -> Self {
+        Self::residue(self.get().wrapping_sub(decrement))
+    }
+
+    /// The count of increments from this number forward to `later`, in
+    /// `0..4096`.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 10.24.7 (the modulo-4096 distance of
+    /// two sequence numbers).
+    pub const fn forward_distance(self, later: Self) -> u16 {
+        Self::residue(later.get().wrapping_sub(self.get())).get()
+    }
+
+    /// `count` modulo 4096: the number in the low twelve bits of a
+    /// sixteen-bit count, read as their field.
+    const fn residue(count: u16) -> Self {
+        Self(Residue::from_bytes([0; 2]).with_count(count).residue())
     }
 
     /// Sequence Control of an unfragmented MPDU (fragment number zero).
@@ -52,6 +79,17 @@ impl SequenceNumber {
 impl From<SequenceNumber> for u16 {
     fn from(sequence: SequenceNumber) -> Self {
         sequence.get()
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// A sixteen-bit count and its low twelve bits: its residue modulo the
+    /// 4096 sequence numbers.
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.4.2 (sequence numbers modulo
+    /// 4096).
+    struct Residue[2] (little) {
+        count, with_count: {u16} = 0..16, view;
+        residue, with_residue: (u16) = 0..12;
     }
 }
 

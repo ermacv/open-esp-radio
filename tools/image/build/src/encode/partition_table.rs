@@ -29,11 +29,11 @@ const MAX_PARTITIONS: usize = TABLE_BYTES / RECORD_BYTES - 2; // MD5 and end mar
 // PartitionDefinition.STRUCT_FORMAT specifies little-endian byte order.
 oer_portable_wire::bitfield! {
     struct Header[12] (little) {
-        magic, with_magic: u16 = 0..16;
-        kind, with_kind: u8 = 16..24;
-        subtype, with_subtype: u8 = 24..32;
-        offset, with_offset: u32 = 32..64;
-        size, with_size: u32 = 64..96;
+        magic, with_magic: {u16} = 0..16;
+        kind, with_kind: {u8} = 16..24;
+        subtype, with_subtype: {u8} = 24..32;
+        offset, with_offset: {u32} = 32..64;
+        size, with_size: {u32} = 64..96;
     }
 }
 
@@ -291,11 +291,11 @@ impl Table {
         let mut output = Writer::new(&mut bytes);
         for entry in &self.entries {
             let header = Header::from_bytes([0; 12])
-                .with_magic(MAGIC)?
-                .with_kind(entry.kind.raw())?
-                .with_subtype(entry.subtype)?
-                .with_offset(entry.offset)?
-                .with_size(entry.size)?;
+                .with_magic(MAGIC)
+                .with_kind(entry.kind.raw())
+                .with_subtype(entry.subtype)
+                .with_offset(entry.offset)
+                .with_size(entry.size);
             let mut record = [0; RECORD_BYTES];
             let mut fields = Writer::new(&mut record);
             fields.write(&header.to_bytes())?;

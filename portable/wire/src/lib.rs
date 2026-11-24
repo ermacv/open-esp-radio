@@ -61,7 +61,10 @@ pub enum Error {
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
 /// `Result<Self, Error>`; a boolean setter is infallible. Parenthesized integer
 /// types, such as `(u16)`, return a width-proved [`U16`] from the getter and
-/// take that same type in an infallible setter.
+/// take that same type in an infallible setter; such a field is narrower
+/// than its type. A field that is its type's whole width is written in
+/// braces, such as `{u16}`: its getter returns the primitive and its
+/// infallible setter takes it, and it builds only at exactly that width.
 ///
 /// A closed enum names its width, as `enum Policy: u8 [1] { Delayed = 0,
 /// Immediate = 1 }`, and every value of that width exactly once: it has no
@@ -251,8 +254,39 @@ macro_rules! bitfield {
     (@bounded u64, $width:expr) => { $crate::U64<$width> };
     // A closed enum: its own `from_field` and `to_field` prove the width.
     (@bounded $ty:ident, $width:expr) => { $ty };
+    // A width-proved integer is narrower than its type; the whole width is
+    // the braced form's.
+    (@width (u8), $width:expr) => { $crate::bitfield!(@narrower u8, $width) };
+    (@width (u16), $width:expr) => { $crate::bitfield!(@narrower u16, $width) };
+    (@width (u32), $width:expr) => { $crate::bitfield!(@narrower u32, $width) };
+    (@width (u64), $width:expr) => { $crate::bitfield!(@narrower u64, $width) };
+    (@narrower $ty:ident, $width:expr) => {
+        const { if !($width < $ty::BITS as usize) { panic!("a field of its integer's whole width is the braced form"); } }
+    };
     (@width ($ty:ident), $width:expr) => {
         const { if !($width <= $ty::BITS as usize) { panic!("wire field exceeds its integer width"); } }
+    };
+    (@width {$ty:ident}, $width:expr) => {
+        const {
+            if !($ty::MIN == 0 && $ty::BITS <= 64 && $width == $ty::BITS as usize) {
+                panic!("a whole wire field is its unsigned integer's whole width");
+            }
+        }
+    };
+    // A field that is its integer's whole width: every value fits.
+    (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: {$ty:ident},
+        $start:literal, $end:literal, $size:literal, $order:ident) => {
+        $(#[$meta])*
+        $vis const fn $get(self) -> $ty {
+            const { if !($start < $end && $end <= $size * 8 && $end - $start == $ty::BITS as usize && $ty::MIN == 0) { panic!("invalid wire field geometry or value"); } }
+            // The extraction returns exactly the type's bits: lossless.
+            $crate::__private::get::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&self.0) as $ty
+        }
+        $vis const fn $set(mut self, value: $ty) -> Self {
+            const { if !($start < $end && $end <= $size * 8 && $end - $start == $ty::BITS as usize && $ty::MIN == 0) { panic!("invalid wire field geometry or value"); } }
+            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value as u64);
+            self
+        }
     };
     (@field $(#[$meta:meta])* $vis:vis $get:ident, $set:ident: [$ty:ident],
         $start:literal, $end:literal, $size:literal, $order:ident) => {
@@ -480,6 +514,14 @@ mod tests;
 /// }
 /// ```
 /// ```compile_fail
+/// // A whole field is its type's whole width.
+/// oer_portable_wire::bitfield! { struct Narrow[2] (little) { value, with_value: {u16} = 0..15; } }
+/// ```
+/// ```compile_fail
+/// // A width-proved field of the whole width is the whole form's.
+/// oer_portable_wire::bitfield! { struct Proved[2] (little) { value, with_value: (u16) = 0..16; } }
+/// ```
+/// ```compile_fail
 /// // A closed enum names every value of its width.
 /// oer_portable_wire::bitfield! { enum Missing: u8 [2] { A = 0, B = 1, C = 2 } }
 /// ```
@@ -506,7 +548,11 @@ pub struct InvalidDeclarations;
 /// let _ = oer_portable_wire::U8::<0>::new(0);
 /// ```
 /// ```compile_fail
-/// let _ = oer_portable_wire::U8::<9>::from_low_bits(0);
+/// let _ = oer_portable_wire::U8::<9>::constant::<0>();
+/// ```
+/// ```compile_fail,E0599
+/// // No constructor cuts a number to a width.
+/// let _ = oer_portable_wire::U8::<4>::from_low_bits(0);
 /// ```
 /// ```compile_fail
 /// let _ = oer_portable_wire::U16::<12>::ZERO.widen::<8>();

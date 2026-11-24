@@ -84,16 +84,14 @@ oer_portable_wire::bitfield! {
     /// 9.4.1.37 (Send-Confirm field) and 9.4.2.246 (Rejected Groups
     /// element).
     pub struct SaeField[2] (little) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 
 impl SaeField {
     /// The field holding `value`.
     pub const fn of(value: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; SAE_FIELD_LEN])
-            .with_value(oer_portable_wire::U16::from_low_bits(value))
+        Self::from_bytes([0; SAE_FIELD_LEN]).with_value(value)
     }
 }
 /// An SAE Commit body of group 19 without an anti-clogging token or
@@ -374,7 +372,7 @@ fn extension_element(bytes: &[u8], extension: u8, minimum_length: u8) -> Option<
 /// Whether a Rejected Groups payload of little-endian groups names group 19.
 fn contains_offered_group(mut groups: &[u8]) -> bool {
     while let Some((group, rest)) = groups.split_first_chunk::<SAE_FIELD_LEN>() {
-        if SaeField::from_bytes(*group).value().get() == SAE_GROUP_P256 {
+        if SaeField::from_bytes(*group).value() == SAE_GROUP_P256 {
             return true;
         }
         groups = rest;
@@ -386,14 +384,14 @@ fn contains_offered_group(mut groups: &[u8]) -> bool {
 /// shorter than the field.
 pub fn finite_cyclic_group(body: &[u8]) -> Option<u16> {
     body.first_chunk::<SAE_FIELD_LEN>()
-        .map(|&field| SaeField::from_bytes(field).value().get())
+        .map(|&field| SaeField::from_bytes(field).value())
 }
 
 /// The Send-Confirm field of an SAE Confirm body; `None` for a body shorter
 /// than the field.
 pub fn send_confirm(body: &[u8]) -> Option<u16> {
     body.first_chunk::<SAE_FIELD_LEN>()
-        .map(|&field| SaeField::from_bytes(field).value().get())
+        .map(|&field| SaeField::from_bytes(field).value())
 }
 
 /// The three header octets of an Anti-Clogging Token Container carrying a

@@ -59,7 +59,8 @@ impl<'a> BipFrame<'a> {
         Ok(Self(frame))
     }
 
-    pub const fn packet_number(&self) -> u64 {
+    /// The frame's IPN, as its six-octet field holds it.
+    pub const fn packet_number(&self) -> oer_portable_wire::U64<48> {
         self.0.packet_number()
     }
 

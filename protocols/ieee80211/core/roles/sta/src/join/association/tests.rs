@@ -1,7 +1,6 @@
 use super::super::test_support::{BSSID, LOCAL, association_response, deauthentication};
 use super::*;
 use oer_portable_time::{Duration, Instant};
-use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceSpace;
 use oer_protocols_ieee80211_wire::station::StaDisconnectKind;
 
 fn at(millis: u64) -> Instant {

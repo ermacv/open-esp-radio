@@ -108,7 +108,7 @@ fn a_management_header_round_trips_and_a_short_frame_is_refused() {
     frame[24..].copy_from_slice(&[7, 8]);
     let (header, body) = ManagementHeader::split(&frame).unwrap();
     assert!(header.frame_control.protected());
-    assert_eq!(header.duration.value().get(), 0x013a);
+    assert_eq!(header.duration.value(), 0x013a);
     assert!(header.group_receiver());
     assert_eq!(header.transmitter, [2; 6]);
     assert_eq!(header.bssid, [4; 6]);

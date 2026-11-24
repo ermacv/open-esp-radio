@@ -103,7 +103,7 @@ impl<'a> HeNdpa<'a> {
     }
 
     pub const fn duration(self) -> u16 {
-        self.duration.value().get()
+        self.duration.value()
     }
 
     pub const fn receiver_address(self) -> [u8; 6] {
