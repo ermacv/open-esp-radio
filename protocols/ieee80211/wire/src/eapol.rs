@@ -685,6 +685,46 @@ impl<'a> Iterator for KeyDataElements<'a> {
 mod tests {
     use super::*;
 
+    /// The encoder lays out every field where the parser reads it: each
+    /// field holds a value no other field holds, and the Key Data closes
+    /// the packet.
+    #[test]
+    fn every_encoded_field_is_read_back_from_its_place() {
+        let mut nonce = [0; 32];
+        for (index, octet) in (0x40_u8..).zip(nonce.iter_mut()) {
+            *octet = index;
+        }
+        let key_rsc = [0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98];
+        let key_data = [0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda];
+        let fixed = EapolKeyFixedFields {
+            protocol_version: 2,
+            key_information: KeyInformation::from_raw(0x13ca),
+            key_length: 0x0110,
+            replay_counter: 0x0102_0304_0506_0708,
+            nonce,
+            key_rsc,
+        };
+        let packet = EapolKeyBuffer::<160>::encode(&EapolKeyFields {
+            fixed,
+            key_data: &key_data,
+        })
+        .unwrap();
+        let bytes = packet.as_bytes();
+        assert_eq!(bytes.len(), EAPOL_KEY_PACKET_LEN + key_data.len());
+        assert_eq!(bytes.get(EAPOL_KEY_PACKET_LEN..), Some(&key_data[..]));
+        let key = EapolKey::parse(bytes).unwrap();
+        assert_eq!(key.protocol_version(), 2);
+        assert_eq!(key.key_information().raw(), 0x13ca);
+        assert_eq!(key.key_length(), 0x0110);
+        assert_eq!(key.replay_counter(), 0x0102_0304_0506_0708);
+        assert_eq!(key.nonce(), &nonce);
+        assert_eq!(key.key_iv(), &[0; 16]);
+        assert_eq!(key.key_rsc(), &key_rsc);
+        assert_eq!(key.key_identifier(), &[0; 8]);
+        assert_eq!(key.mic(), &[0; EAPOL_KEY_MIC_LEN]);
+        assert_eq!(key.key_data(), &key_data);
+    }
+
     /// A packet without Key Data is the packet `encode` writes for empty
     /// Key Data, in a buffer of exactly its length.
     #[test]
