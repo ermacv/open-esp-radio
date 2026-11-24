@@ -45,7 +45,7 @@ use oer_protocols_ieee80211_contracts_port::{
     StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
-use oer_protocols_ieee80211_wire::frame::FrameControl;
+use oer_protocols_ieee80211_wire::frame::MacHeader;
 use oer_protocols_ieee80211_wire::phy::{
     HtGuardInterval, HtMcs, HtRate, LegacyRate, PpduBandwidth,
 };
@@ -522,22 +522,14 @@ pub fn a_second_run_is_as_the_first<
 
 /// An individual Probe Request of 24 octets at 6 Mb/s, for a single.
 fn single_frame<'id, P: DataPort<'id>>(port: &P) -> (TxFrame<'id, P::Caps>, MpduLength<P::Caps>) {
-    // A Probe Request: management, subtype 4.
-    let control = FrameControl::new(0x0040).unwrap();
-    let receiver = IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap();
-    let header = HeaderSpec::new(
-        control,
-        0,
-        receiver,
-        [2, 0, 0, 0, 0, 1],
-        [2, 0, 0, 0, 0, 2],
-        oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([0; 2]),
-        None,
-        None,
-        None,
-    )
-    .and_then(AckHeader::new)
-    .expect("a Probe Request's header");
+    // A Probe Request: management, subtype 4, to an individual receiver.
+    const PROBE_REQUEST: [u8; 24] = [
+        0x40, 0, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 0, 0,
+    ];
+    let header = MacHeader::decode(&PROBE_REQUEST)
+        .and_then(|header| HeaderSpec::from_mac_header(header, IndividualAddress::new))
+        .and_then(AckHeader::new)
+        .expect("a Probe Request's header");
     let length = MpduLength::new(24).expect("an MPDU's length");
     let rate = port
         .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))

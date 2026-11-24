@@ -12,7 +12,7 @@ use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
-    frame::{FrameControl, MacHeader, QosControl},
+    frame::{MacHeader, QosControl},
     status::status_code,
 };
 use std::vec::Vec;
@@ -227,23 +227,20 @@ fn addba(tid: u8, timeout_tu: u16) -> BlockAckAction {
 }
 
 fn qos_data(tid: u8, sequence: u16) -> Frame {
-    let control = FrameControl::new(0x0288).unwrap();
-    let qos = QosControl::from_bytes([tid, 0]);
-    let header = MacHeader::new(
-        control,
-        0,
-        LOCAL,
-        AP,
-        AP,
-        SequenceNumber::new(sequence).unwrap().sequence_control(),
-        None,
-        Some(qos),
-        None,
-    )
-    .unwrap();
-    let mut bytes = std::vec![0; 40];
-    let length = header.encode(&mut bytes).unwrap();
-    bytes.truncate(length);
+    // QoS Data, From DS: Frame Control, Duration/ID, Addresses 1 to 3,
+    // Sequence Control, QoS Control.
+    let mut bytes = std::vec![0x88, 0x02, 0, 0];
+    bytes.extend_from_slice(&LOCAL);
+    bytes.extend_from_slice(&AP);
+    bytes.extend_from_slice(&AP);
+    bytes.extend_from_slice(
+        &SequenceNumber::new(sequence)
+            .unwrap()
+            .sequence_control()
+            .to_bytes(),
+    );
+    bytes.extend_from_slice(&QosControl::from_bytes([tid, 0]).to_bytes());
+    assert!(MacHeader::decode(&bytes).is_some_and(|header| header.header_len() == bytes.len()));
     bytes.extend_from_slice(&sequence.to_le_bytes());
     Frame(bytes)
 }

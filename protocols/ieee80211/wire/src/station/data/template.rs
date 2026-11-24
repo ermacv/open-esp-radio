@@ -136,16 +136,10 @@ impl StaDataHeaderTemplate {
             .header
             .with_address3(fields.destination)
             .with_sequence_control(fields.sequence_number.sequence_control());
-        match header.qos() {
-            // User priorities are three-bit values; the TID field is four
-            // bits.
-            Some(qos) => header
-                .with_qos(qos.with_tid(
-                    oer_portable_wire::U8::<3>::from_low_bits(fields.priority.value()).widen(),
-                ))
-                .unwrap_or(header),
-            None => header,
-        }
+        // User priorities are three-bit values; the TID field is four bits.
+        header.map_qos(|qos| {
+            qos.with_tid(oer_portable_wire::U8::<3>::from_low_bits(fields.priority.value()).widen())
+        })
     }
 
     /// The prefix's octets: the MAC header, a zero CCMP header on a

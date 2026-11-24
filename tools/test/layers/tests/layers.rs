@@ -10376,12 +10376,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "preserve the carried service vocabulary's documentation coverage",
     ),
     (
-        "protocols/ieee80211/contracts/port/src/owner.rs",
-        "clippy::too_many_arguments",
-        1,
-        "the fields of a MAC header",
-    ),
-    (
         "protocols/ieee80211/core/arbiter/src/lib.rs",
         "clippy::large_enum_variant",
         1,
@@ -10596,12 +10590,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         1,
         "unknown, to read",
-    ),
-    (
-        "protocols/ieee80211/wire/src/frame.rs",
-        "clippy::too_many_arguments",
-        1,
-        "the fields of a MAC header",
     ),
     (
         "protocols/ieee80211/wire/src/ftm.rs",
