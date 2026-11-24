@@ -29,6 +29,38 @@ const IEEE80211_TO_DS: u8 = 0x01;
 const IEEE80211_FROM_DS: u8 = 0x02;
 #[cfg(test)]
 const IEEE80211_QOS_AMSDU_PRESENT: u8 = 0x80;
+oer_portable_wire::bitfield! {
+    /// The EtherType after an LLC/SNAP header, big-endian.
+    /// SOURCE: IETF RFC 1042, "SNAP header"; IEEE Std 802-2014, 10.5.
+    pub struct EtherTypeField[2] (big) {
+        pub value, with_value: (u16) = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// An A-MSDU subframe header's Length, big-endian.
+    /// SOURCE: IEEE Std 802.11-2020, 9.3.2.2.2 (A-MSDU subframe header,
+    /// Figure 9-71).
+    pub struct AmsduLength[2] (big) {
+        pub value, with_value: (u16) = 0..16;
+    }
+}
+
+impl EtherTypeField {
+    /// The field holding `ether_type`.
+    pub const fn of(ether_type: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(ether_type))
+    }
+}
+
+impl AmsduLength {
+    /// The field holding `length`.
+    pub const fn of(length: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(length))
+    }
+}
+
 /// RFC 1042 LLC/SNAP prefix before the EtherType.
 pub const RFC1042_LLC_SNAP_PREFIX: [u8; 6] = [0xaa, 0xaa, 0x03, 0, 0, 0];
 
@@ -217,7 +249,7 @@ pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
     let [p0, p1, p2, p3, p4, p5, e0, e1] = llc;
     let [r0, r1, r2, r3, r4, r5] = RFC1042_LLC_SNAP_PREFIX;
     if p0 == r0 && p1 == r1 && p2 == r2 && p3 == r3 && p4 == r4 && p5 == r5 {
-        Some(u16::from_be_bytes([e0, e1]))
+        Some(EtherTypeField::from_bytes([e0, e1]).value().get())
     } else {
         None
     }
@@ -332,7 +364,7 @@ impl<'a> AmsduSubframes<'a> {
             length0,
             length1,
         ] = *header;
-        let msdu_length = u16::from_be_bytes([length0, length1]);
+        let msdu_length = AmsduLength::from_bytes([length0, length1]).value().get();
         let mut reader = oer_portable_wire::Reader::new(body);
         let msdu = reader
             .take(usize::from(msdu_length))
@@ -413,7 +445,7 @@ pub const fn plan_data_encapsulation(
         ether_type,
     } = msdu;
     let [d0, ..] = destination;
-    let [e0, e1] = ether_type.to_be_bytes();
+    let [e0, e1] = EtherTypeField::of(ether_type).to_bytes();
     // An access point's group-addressed data stays non-QoS.
     let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
         && crate::address::AddressFlags::from_bytes([d0]).group();

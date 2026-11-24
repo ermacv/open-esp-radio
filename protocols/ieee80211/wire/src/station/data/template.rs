@@ -154,7 +154,7 @@ impl StaDataHeaderTemplate {
             .octets()
             .chain(core::iter::repeat_n(0, ccmp))
             .chain(RFC1042_LLC_SNAP_PREFIX)
-            .chain(ether_type.to_be_bytes())
+            .chain(crate::data::EtherTypeField::of(ether_type).to_bytes())
     }
 
     /// Write the prefix of the MPDU of `fields` flush against the end of

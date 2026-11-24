@@ -409,7 +409,7 @@ impl<'a> DecodedHeader<'a> {
         let mut reader = oer_portable_wire::Reader::new(frame);
         let control = FrameControl::new(FrameControlFields::from_bytes(reader.read().ok()?))?;
         let fields = control.fields();
-        let duration = reader.u16_le().ok()?;
+        let duration = DurationId::from_bytes(reader.read().ok()?);
         let address1 = reader.read().ok()?;
         let address2 = reader.read().ok()?;
         let address3 = reader.read().ok()?;
@@ -470,7 +470,7 @@ impl<'a> DecodedHeader<'a> {
         self.header.control()
     }
     /// The decoded `duration` field.
-    pub const fn duration(&self) -> u16 {
+    pub const fn duration(&self) -> DurationId {
         self.header.duration
     }
     /// The decoded `receiver` field.
@@ -557,7 +557,7 @@ pub struct MacHeader {
     /// QoS subtype bit, a data frame's To DS and From DS, and the Order bit
     /// of a management or QoS data frame are clear here.
     others: FrameControlFields,
-    duration: u16,
+    duration: DurationId,
     address1: [u8; 6],
     address2: [u8; 6],
     address3: [u8; 6],
@@ -625,7 +625,7 @@ impl MacHeader {
         self.layout
     }
     /// The Duration/ID field.
-    pub const fn duration(&self) -> u16 {
+    pub const fn duration(&self) -> DurationId {
         self.duration
     }
     /// Address 1, the receiver.
@@ -755,7 +755,7 @@ impl MacHeader {
             .fields()
             .to_bytes()
             .into_iter()
-            .chain(self.duration.to_le_bytes())
+            .chain(self.duration.to_bytes())
             .chain(self.address1)
             .chain(self.address2)
             .chain(self.address3)
@@ -818,6 +818,15 @@ oer_portable_wire::bitfield! {
         pub more_data, with_more_data: bool = 13..14;
         pub protected, with_protected: bool = 14..15;
         pub order, with_order: bool = 15..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// The Duration/ID field: a duration in microseconds, or, in a PS-Poll,
+    /// the AID; its meaning is the frame's.
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.2 (Duration/ID field, Table
+    /// 9-2).
+    pub struct DurationId[2] (little) {
+        pub value, with_value: u16 = 0..16;
     }
 }
 oer_portable_wire::bitfield! {

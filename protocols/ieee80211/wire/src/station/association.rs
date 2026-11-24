@@ -246,7 +246,10 @@ impl AssociationRequest<'_> {
                 LinkProtection::Ccmp
             ));
         crate::encoding::write_array::<24, _, _>(&mut fixed, &capability.to_bytes());
-        crate::encoding::write_array::<26, _, _>(&mut fixed, &self.listen_interval.to_le_bytes());
+        crate::encoding::write_array::<26, _, _>(
+            &mut fixed,
+            &crate::management::ListenIntervalField::of(self.listen_interval).to_bytes(),
+        );
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
         let rates = rates
             .get_mut(..rates_len)
@@ -477,7 +480,8 @@ pub fn parse_association_response(
             ..,
         ] = *element
         {
-            let comeback = u32::from_le_bytes([a, b, c, d]);
+            let comeback =
+                crate::management::TimeoutIntervalValue::from_bytes([a, b, c, d]).value();
             association_comeback_tu = (comeback != 0).then_some(comeback);
         }
         remaining = tail;

@@ -48,9 +48,12 @@ impl OpenAuthenticationRequest {
         );
         crate::encoding::FrameParts([
             header.as_slice(),
-            &OPEN_SYSTEM_ALGORITHM.to_le_bytes(),
-            &OPEN_SYSTEM_REQUEST_SEQUENCE.to_le_bytes(),
-            &0_u16.to_le_bytes(),
+            &crate::management::AuthenticationFields::of(
+                OPEN_SYSTEM_ALGORITHM,
+                OPEN_SYSTEM_REQUEST_SEQUENCE,
+                0,
+            )
+            .to_bytes(),
         ])
         .write(output)
         .map_err(|required| StationFrameError::OutputTooSmall { required })
@@ -194,9 +197,12 @@ impl SaeAuthenticationFrame<'_> {
         );
         crate::encoding::FrameParts([
             header.as_slice(),
-            &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
-            &self.transaction.to_le_bytes(),
-            &self.status_code.to_le_bytes(),
+            &crate::management::AuthenticationFields::of(
+                SAE_AUTHENTICATION_ALGORITHM,
+                self.transaction,
+                self.status_code,
+            )
+            .to_bytes(),
             self.body,
         ])
         .write(output)
@@ -221,8 +227,11 @@ pub fn parse_sae_authentication(
 ) -> Option<SaeAuthentication<'_>> {
     let (header, fixed, body) = split_received_management(frame)?;
     let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
-    let (algorithm, transaction, status_code) =
-        (fixed.algorithm(), fixed.transaction(), fixed.status_code());
+    let (algorithm, transaction, status_code) = (
+        fixed.algorithm().get(),
+        fixed.transaction().get(),
+        fixed.status_code().get(),
+    );
     if header.frame_control.type_and_subtype()
         != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
@@ -251,8 +260,11 @@ pub fn parse_open_authentication_response(
 ) -> Option<OpenAuthenticationResponse> {
     let (header, fixed, _) = split_received_management(frame)?;
     let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
-    let (algorithm, transaction, status_code) =
-        (fixed.algorithm(), fixed.transaction(), fixed.status_code());
+    let (algorithm, transaction, status_code) = (
+        fixed.algorithm().get(),
+        fixed.transaction().get(),
+        fixed.status_code().get(),
+    );
     if header.frame_control.type_and_subtype()
         != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
@@ -308,9 +320,9 @@ pub fn parse_sta_disconnect(
         _ => return None,
     };
     let mut reader = oer_portable_wire::Reader::new(header.body());
-    let reason_code = reader.array().ok()?;
+    let reason_code = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?);
     Some(StaDisconnect {
         kind,
-        reason_code: u16::from_le_bytes(*reason_code),
+        reason_code: reason_code.code(),
     })
 }

@@ -106,7 +106,7 @@ impl ProbeRequest<'_> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ManagementHeader {
     pub frame_control: crate::frame::FrameControlFields,
-    pub duration: u16,
+    pub duration: crate::frame::DurationId,
     /// Address 1: the receiver.
     pub receiver: [u8; 6],
     /// Address 2: the transmitter.
@@ -154,7 +154,7 @@ impl ManagementHeader {
         ] = *bytes;
         Self {
             frame_control: crate::frame::FrameControlFields::from_bytes([f0, f1]),
-            duration: u16::from_le_bytes([d0, d1]),
+            duration: crate::frame::DurationId::from_bytes([d0, d1]),
             receiver: [r0, r1, r2, r3, r4, r5],
             transmitter: [t0, t1, t2, t3, t4, t5],
             bssid: [b0, b1, b2, b3, b4, b5],
@@ -165,7 +165,7 @@ impl ManagementHeader {
     /// The header as it appears on air.
     pub const fn to_bytes(self) -> [u8; MANAGEMENT_HEADER_LEN] {
         let [f0, f1] = self.frame_control.to_bytes();
-        let [d0, d1] = self.duration.to_le_bytes();
+        let [d0, d1] = self.duration.to_bytes();
         let [r0, r1, r2, r3, r4, r5] = self.receiver;
         let [t0, t1, t2, t3, t4, t5] = self.transmitter;
         let [b0, b1, b2, b3, b4, b5] = self.bssid;
@@ -219,15 +219,80 @@ oer_portable_wire::bitfield! {
     /// Authentication transaction sequence number (9.4.1.2), Status code
     /// (9.4.1.9).
     pub struct AuthenticationFields[6] (little) {
-        pub algorithm, with_algorithm: u16 = 0..16;
-        pub transaction, with_transaction: u16 = 16..32;
-        pub status_code, with_status_code: u16 = 32..48;
+        pub algorithm, with_algorithm: (u16) = 0..16;
+        pub transaction, with_transaction: (u16) = 16..32;
+        pub status_code, with_status_code: (u16) = 32..48;
     }
 }
+
+impl AuthenticationFields {
+    /// The fields of `algorithm`, `transaction` and `status_code`.
+    pub const fn of(algorithm: u16, transaction: u16, status_code: u16) -> Self {
+        // Each value is sixteen bits of a sixteen-bit field: nothing is cut.
+        Self::from_bytes([0; 6])
+            .with_algorithm(oer_portable_wire::U16::from_low_bits(algorithm))
+            .with_transaction(oer_portable_wire::U16::from_low_bits(transaction))
+            .with_status_code(oer_portable_wire::U16::from_low_bits(status_code))
+    }
+}
+
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.9 (Status Code field).
     pub struct StatusCodeField[2] (little) {
         pub code, with_code: u16 = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.7 (Reason Code field).
+    pub struct ReasonCodeField[2] (little) {
+        pub code, with_code: u16 = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.3 (Beacon Interval field), in
+    /// time units.
+    pub struct BeaconIntervalField[2] (little) {
+        pub time_units, with_time_units: u16 = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.6 (Listen Interval field), in
+    /// beacon intervals.
+    pub struct ListenIntervalField[2] (little) {
+        pub intervals, with_intervals: (u16) = 0..16;
+    }
+}
+
+impl ListenIntervalField {
+    /// The field holding `intervals`.
+    pub const fn of(intervals: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_intervals(oer_portable_wire::U16::from_low_bits(intervals))
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// A Timeout Interval element's Timeout Interval Value.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.49 (Timeout Interval element).
+    pub struct TimeoutIntervalValue[4] (little) {
+        pub value, with_value: u32 = 0..32;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// The PMKID Count of an RSN element's PMKID List.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (RSNE: general, Figure
+    /// 9-288).
+    pub struct PmkidCount[2] (little) {
+        pub count, with_count: (u16) = 0..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// An element's header: its Element ID and Length.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.1 (Elements: general, Figure
+    /// 9-144).
+    pub struct ElementHeader[2] (little) {
+        pub id, with_id: u8 = 0..8;
+        pub length, with_length: u8 = 8..16;
     }
 }
 
