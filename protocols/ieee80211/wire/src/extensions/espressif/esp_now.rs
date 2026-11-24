@@ -998,6 +998,7 @@ mod tests {
     fn a_packet_number_holds_48_bits() {
         let highest = EspNowCcmpPacketNumber::new((1 << 48) - 1).unwrap();
         assert_eq!(highest.bytes(), [0xff; 6]);
+        assert_eq!(highest.value(), (1 << 48) - 1);
         assert_eq!(
             crate::ccmp::CcmpPacketNumber::from(highest).value(),
             (1 << 48) - 1

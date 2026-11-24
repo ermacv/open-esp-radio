@@ -343,6 +343,7 @@ fn the_codes_and_the_timestamp_fill_their_fields() {
     }
     let highest = FtmTimestampPs::new(FTM_TIMESTAMP_MASK).unwrap();
     assert_eq!(FtmTimestampPs::decode(highest.encode()), highest);
+    assert_eq!(highest.get(), FTM_TIMESTAMP_MASK);
     assert_eq!(highest.encode(), [0xff; 6]);
     assert_eq!(
         FtmTimestampPs::new(FTM_TIMESTAMP_MASK + 1),
