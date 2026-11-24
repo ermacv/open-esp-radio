@@ -288,24 +288,51 @@ impl EspNowPeerId {
     }
 }
 
+/// One peer-table slot: vacant, or a peer's configuration. Its generation
+/// counts the installs, so a handle to an earlier occupant is stale.
 #[derive(Clone, Copy)]
-struct EspNowPeerSlot {
-    generation: u32,
-    config: Option<EspNowPeerConfig>,
+enum EspNowPeerSlot {
+    Vacant {
+        generation: u32,
+    },
+    Occupied {
+        generation: u32,
+        config: EspNowPeerConfig,
+    },
 }
 
 impl EspNowPeerSlot {
-    const EMPTY: Self = Self {
-        generation: 0,
-        config: None,
-    };
+    const EMPTY: Self = Self::Vacant { generation: 0 };
+
+    const fn generation(&self) -> u32 {
+        match self {
+            Self::Vacant { generation } | Self::Occupied { generation, .. } => *generation,
+        }
+    }
+
+    /// The configuration a handle of `generation` names here.
+    const fn config(&self, generation: u32) -> Option<EspNowPeerConfig> {
+        match self {
+            Self::Occupied {
+                generation: occupant,
+                config,
+            } if *occupant == generation => Some(*config),
+            Self::Occupied { .. } | Self::Vacant { .. } => None,
+        }
+    }
+
+    const fn occupant(&self) -> Option<EspNowPeerConfig> {
+        match self {
+            Self::Occupied { config, .. } => Some(*config),
+            Self::Vacant { .. } => None,
+        }
+    }
 }
 
 /// Fixed-capacity plaintext peer owner with explicit per-peer channel policy.
 pub struct EspNowPeerTable<const N: usize = ESP_NOW_DEFAULT_PEER_CAPACITY> {
     home_channel: Ghz2_4Channel,
     slots: [EspNowPeerSlot; N],
-    length: usize,
 }
 
 impl<const N: usize> EspNowPeerTable<N> {
@@ -313,7 +340,6 @@ impl<const N: usize> EspNowPeerTable<N> {
         Self {
             home_channel,
             slots: [EspNowPeerSlot::EMPTY; N],
-            length: 0,
         }
     }
 
@@ -321,12 +347,13 @@ impl<const N: usize> EspNowPeerTable<N> {
         self.home_channel
     }
 
-    pub const fn len(&self) -> usize {
-        self.length
+    /// The number of peers: the occupied slots.
+    pub fn len(&self) -> usize {
+        self.iter().count()
     }
 
-    pub const fn is_empty(&self) -> bool {
-        self.length == 0
+    pub fn is_empty(&self) -> bool {
+        self.iter().next().is_none()
     }
 
     pub const fn capacity(&self) -> usize {
@@ -348,86 +375,54 @@ impl<const N: usize> EspNowPeerTable<N> {
             | EspNowPeerChannelPolicy::StandaloneFixed(_) => {}
         }
 
-        if self.slots.iter().any(|slot| {
-            slot.config
-                .is_some_and(|peer| peer.destination == config.destination)
-        }) {
+        if self.find(config.destination).is_some() {
             return Err(EspNowPeerTableError::Duplicate(config.destination));
         }
-        let Some((index, slot)) = self
-            .slots
-            .iter_mut()
-            .enumerate()
-            .find(|(_, slot)| slot.config.is_none() && slot.generation < u32::MAX)
+        let vacant = |slot: &EspNowPeerSlot| matches!(slot, EspNowPeerSlot::Vacant { .. });
+        let Some((index, slot, generation)) =
+            self.slots
+                .iter_mut()
+                .enumerate()
+                .find_map(|(index, slot)| match slot {
+                    EspNowPeerSlot::Vacant { generation } => generation
+                        .checked_add(1)
+                        .map(|generation| (index, slot, generation)),
+                    EspNowPeerSlot::Occupied { .. } => None,
+                })
         else {
-            return Err(if self.slots.iter().any(|slot| slot.config.is_none()) {
+            return Err(if self.slots.iter().any(vacant) {
                 EspNowPeerTableError::GenerationExhausted
             } else {
                 EspNowPeerTableError::Full
             });
         };
-        let generation = slot
-            .generation
-            .checked_add(1)
-            .ok_or(EspNowPeerTableError::GenerationExhausted)?;
-        let length = self
-            .length
-            .checked_add(1)
-            .filter(|length| *length <= N)
-            .ok_or(EspNowPeerTableError::InvalidCount {
-                count: self.length,
-                capacity: N,
-            })?;
-        slot.generation = generation;
-        slot.config = Some(config);
-        self.length = length;
+        *slot = EspNowPeerSlot::Occupied { generation, config };
         Ok(EspNowPeerId { index, generation })
     }
 
     pub fn get(&self, peer: EspNowPeerId) -> Result<EspNowPeerConfig, EspNowPeerTableError> {
-        let Some(slot) = self.slots.get(peer.index) else {
-            return Err(EspNowPeerTableError::Stale(peer));
-        };
-        if slot.generation != peer.generation {
-            return Err(EspNowPeerTableError::Stale(peer));
-        }
-        slot.config.ok_or(EspNowPeerTableError::Stale(peer))
+        self.slots
+            .get(peer.index)
+            .and_then(|slot| slot.config(peer.generation))
+            .ok_or(EspNowPeerTableError::Stale(peer))
     }
 
     pub fn find(&self, destination: EspNowDestination) -> Option<EspNowPeerId> {
-        self.slots
-            .iter()
-            .enumerate()
-            .find(|(_, slot)| {
-                slot.config
-                    .is_some_and(|peer| peer.destination == destination)
-            })
-            .map(|(index, slot)| EspNowPeerId {
-                index,
-                generation: slot.generation,
-            })
+        self.iter()
+            .find(|(_, config)| config.destination == destination)
+            .map(|(peer, _)| peer)
     }
 
     pub fn remove(&mut self, peer: EspNowPeerId) -> Result<EspNowPeerConfig, EspNowPeerTableError> {
         let Some(slot) = self.slots.get_mut(peer.index) else {
             return Err(EspNowPeerTableError::Stale(peer));
         };
-        if slot.generation != peer.generation {
-            return Err(EspNowPeerTableError::Stale(peer));
-        }
-        let Some(config) = slot.config else {
+        let Some(config) = slot.config(peer.generation) else {
             return Err(EspNowPeerTableError::Stale(peer));
         };
-        let length = self
-            .length
-            .checked_sub(1)
-            .filter(|length| *length < N)
-            .ok_or(EspNowPeerTableError::InvalidCount {
-                count: self.length,
-                capacity: N,
-            })?;
-        slot.config = None;
-        self.length = length;
+        *slot = EspNowPeerSlot::Vacant {
+            generation: peer.generation,
+        };
         Ok(config)
     }
 
@@ -449,11 +444,11 @@ impl<const N: usize> Iterator for EspNowPeers<'_, N> {
         while let Some((slot, remaining)) = self.slots.split_first() {
             let index = N.abs_diff(self.slots.len());
             self.slots = remaining;
-            if let Some(config) = slot.config {
+            if let Some(config) = slot.occupant() {
                 return Some((
                     EspNowPeerId {
                         index,
-                        generation: slot.generation,
+                        generation: slot.generation(),
                     },
                     config,
                 ));
@@ -470,10 +465,6 @@ impl<const N: usize> Iterator for EspNowPeers<'_, N> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowPeerTableError {
     Full,
-    InvalidCount {
-        count: usize,
-        capacity: usize,
-    },
     Duplicate(EspNowDestination),
     ChannelMismatch {
         peer: Ghz2_4Channel,
@@ -488,10 +479,6 @@ impl fmt::Display for EspNowPeerTableError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Full => formatter.write_str("the ESP-NOW peer table is full"),
-            Self::InvalidCount { count, capacity } => write!(
-                formatter,
-                "ESP-NOW peer count {count} is inconsistent with capacity {capacity}"
-            ),
             Self::Duplicate(destination) => {
                 write!(
                     formatter,
@@ -569,7 +556,7 @@ impl<const N: usize> EspNowProtocol<N> {
 
         let mut slots = [EspNowRxPeerSlot::EMPTY; N];
         for ((index, peer_slot), rx_slot) in self.peers.slots.iter().enumerate().zip(&mut slots) {
-            let Some(config) = peer_slot.config else {
+            let Some(config) = peer_slot.occupant() else {
                 continue;
             };
             if !config.channel_policy().is_home_channel() {
@@ -583,7 +570,7 @@ impl<const N: usize> EspNowProtocol<N> {
             };
             let peer = EspNowPeerId {
                 index,
-                generation: peer_slot.generation,
+                generation: peer_slot.generation(),
             };
             *rx_slot = EspNowRxPeerSlot {
                 peer: Some((peer, address, config.capability, config.phy_mode)),
@@ -609,7 +596,7 @@ impl<const N: usize> EspNowProtocol<N> {
             return false;
         }
         for ((index, peer_slot), rx_slot) in self.peers.slots.iter().enumerate().zip(&epoch.slots) {
-            let expected = match peer_slot.config {
+            let expected = match peer_slot.occupant() {
                 Some(EspNowPeerConfig {
                     destination: EspNowDestination::Unicast(address),
                     channel: EspNowPeerChannelPolicy::HomeChannel(_),
@@ -619,7 +606,7 @@ impl<const N: usize> EspNowProtocol<N> {
                 }) => Some((
                     EspNowPeerId {
                         index,
-                        generation: peer_slot.generation,
+                        generation: peer_slot.generation(),
                     },
                     address,
                     capability,
@@ -1113,7 +1100,7 @@ pub struct EspNowOwnedReceivedV1 {
     random_value: EspNowRandomValue,
     sequence_number: SequenceNumber,
     retry: bool,
-    payload_length: u8,
+    payload_length: oer_portable_wire::PrefixLength<ESP_NOW_V1_MAX_PAYLOAD_LEN>,
     payload: [u8; ESP_NOW_V1_MAX_PAYLOAD_LEN],
 }
 
@@ -1122,9 +1109,11 @@ impl EspNowOwnedReceivedV1 {
     /// storage. The wire codec proves the payload length is at most 250.
     pub fn copy_from(received: EspNowReceivedV1<'_>) -> Self {
         let frame = received.frame();
-        let payload = frame.action().payload().bytes();
+        let payload = frame.action().payload();
         let mut owned_payload = [0_u8; ESP_NOW_V1_MAX_PAYLOAD_LEN];
-        for (out, byte) in owned_payload.iter_mut().zip(payload) {
+        // The payload's admitted length is at most the array's: every octet
+        // is copied.
+        for (out, byte) in owned_payload.iter_mut().zip(payload.bytes()) {
             *out = *byte;
         }
         Self {
@@ -1134,7 +1123,7 @@ impl EspNowOwnedReceivedV1 {
             random_value: frame.action().random_value(),
             sequence_number: frame.sequence_number(),
             retry: frame.retry(),
-            payload_length: payload.len() as u8,
+            payload_length: payload.length(),
             payload: owned_payload,
         }
     }
@@ -1164,9 +1153,7 @@ impl EspNowOwnedReceivedV1 {
     }
 
     pub fn payload(&self) -> &[u8] {
-        self.payload
-            .get(..usize::from(self.payload_length))
-            .unwrap_or_default()
+        self.payload_length.borrow(&self.payload)
     }
 }
 
@@ -1182,7 +1169,7 @@ pub struct EspNowOwnedReceivedV2 {
     random_value: EspNowRandomValue,
     sequence_number: SequenceNumber,
     retry: bool,
-    payload_length: u16,
+    payload_length: oer_portable_wire::PrefixLength<ESP_NOW_V2_MAX_PAYLOAD_LEN>,
     payload: [u8; ESP_NOW_V2_MAX_PAYLOAD_LEN],
 }
 
@@ -1190,7 +1177,8 @@ impl EspNowOwnedReceivedV2 {
     pub fn copy_from(received: EspNowReceivedV2<'_>) -> Result<Self, EspNowV2WireError> {
         let frame = received.frame();
         let mut payload = [0_u8; ESP_NOW_V2_MAX_PAYLOAD_LEN];
-        let payload_length = frame.action().copy_payload(&mut payload)?;
+        // The copy writes the action's admitted payload length.
+        frame.action().copy_payload(&mut payload)?;
         Ok(Self {
             peer: received.peer(),
             destination: frame.destination(),
@@ -1198,7 +1186,7 @@ impl EspNowOwnedReceivedV2 {
             random_value: frame.action().random_value(),
             sequence_number: frame.sequence_number(),
             retry: frame.retry(),
-            payload_length: payload_length as u16,
+            payload_length: frame.action().payload_length(),
             payload,
         })
     }
@@ -1228,9 +1216,7 @@ impl EspNowOwnedReceivedV2 {
     }
 
     pub fn payload(&self) -> &[u8] {
-        self.payload
-            .get(..usize::from(self.payload_length))
-            .unwrap_or_default()
+        self.payload_length.borrow(&self.payload)
     }
 }
 

@@ -44,29 +44,31 @@ const MIN_ACTION_LEN: usize = ESP_NOW_V2_ACTION_PREFIX_LEN + VENDOR_ELEMENT_ENCO
 
 /// Borrowed v2 payload validated against the public 1470-byte limit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct EspNowV2Payload<'payload>(&'payload [u8]);
+pub struct EspNowV2Payload<'payload> {
+    bytes: &'payload [u8],
+    length: oer_portable_wire::PrefixLength<ESP_NOW_V2_MAX_PAYLOAD_LEN>,
+}
 
 impl<'payload> EspNowV2Payload<'payload> {
     pub const fn new(bytes: &'payload [u8]) -> Result<Self, EspNowV2WireError> {
-        if bytes.len() > ESP_NOW_V2_MAX_PAYLOAD_LEN {
-            return Err(EspNowV2WireError::PayloadTooLong {
+        match oer_portable_wire::PrefixLength::new(bytes.len()) {
+            Some(length) => Ok(Self { bytes, length }),
+            None => Err(EspNowV2WireError::PayloadTooLong {
                 length: bytes.len(),
-            });
+            }),
         }
-        Ok(Self(bytes))
     }
 
     pub const fn bytes(self) -> &'payload [u8] {
-        self.0
+        self.bytes
     }
 
     pub const fn len(self) -> usize {
-        self.0.len()
+        self.length.get()
     }
 
     pub const fn is_empty(self) -> bool {
-        self.0.is_empty()
+        self.length.get() == 0
     }
 }
 
@@ -186,7 +188,7 @@ const _: () = {
 pub struct EspNowV2Action<'payload> {
     random_value: EspNowRandomValue,
     content: EspNowV2ActionContent<'payload>,
-    payload_length: usize,
+    payload_length: oer_portable_wire::PrefixLength<ESP_NOW_V2_MAX_PAYLOAD_LEN>,
     element_count: usize,
     encoded_length: u16,
     frame_length: u16,
@@ -226,7 +228,7 @@ impl<'payload> EspNowV2Action<'payload> {
         Ok(Self {
             random_value,
             content: EspNowV2ActionContent::Contiguous(payload),
-            payload_length: payload.len(),
+            payload_length: payload.length,
             element_count,
             encoded_length: encoded_length as u16,
             frame_length: frame_length as u16,
@@ -238,11 +240,18 @@ impl<'payload> EspNowV2Action<'payload> {
     }
 
     pub const fn payload_len(self) -> usize {
+        self.payload_length.get()
+    }
+
+    /// The payload's length, admitted within the 1470-octet maximum.
+    pub const fn payload_length(
+        self,
+    ) -> oer_portable_wire::PrefixLength<ESP_NOW_V2_MAX_PAYLOAD_LEN> {
         self.payload_length
     }
 
     pub const fn is_empty(self) -> bool {
-        self.payload_length == 0
+        self.payload_length.get() == 0
     }
 
     pub const fn element_count(self) -> usize {
@@ -273,9 +282,11 @@ impl<'payload> EspNowV2Action<'payload> {
     /// On a capacity failure `output` is left unchanged.
     pub fn copy_payload(self, output: &mut [u8]) -> Result<usize, EspNowV2WireError> {
         let too_small = EspNowV2WireError::OutputTooSmall {
-            required: self.payload_length,
+            required: self.payload_length.get(),
         };
-        let mut rest = output.get_mut(..self.payload_length).ok_or(too_small)?;
+        let mut rest = output
+            .get_mut(..self.payload_length.get())
+            .ok_or(too_small)?;
         let mut copied = 0_usize;
         for element in self.elements() {
             let (target, tail) = core::mem::take(&mut rest)
@@ -370,7 +381,7 @@ impl<'payload> EspNowV2Action<'payload> {
 
         let mut rest = elements;
         let mut element_count = 0_usize;
-        let mut payload_length = 0_usize;
+        let mut payload_length = oer_portable_wire::PrefixLength::ZERO;
         while !rest.is_empty() {
             if element_count == ESP_NOW_V2_MAX_ELEMENT_COUNT {
                 return Err(EspNowV2WireError::TooManyElements {
@@ -454,14 +465,12 @@ impl<'payload> EspNowV2Action<'payload> {
                 });
             }
 
-            payload_length = payload_length
+            let total = payload_length
+                .get()
                 .checked_add(payload.len())
                 .ok_or(EspNowV2WireError::PayloadTooLong { length: usize::MAX })?;
-            if payload_length > ESP_NOW_V2_MAX_PAYLOAD_LEN {
-                return Err(EspNowV2WireError::PayloadTooLong {
-                    length: payload_length,
-                });
-            }
+            payload_length = oer_portable_wire::PrefixLength::new(total)
+                .ok_or(EspNowV2WireError::PayloadTooLong { length: total })?;
             element_count = element_count
                 .checked_add(1)
                 .ok_or(EspNowV2WireError::PayloadTooLong { length: usize::MAX })?;
@@ -476,13 +485,13 @@ impl<'payload> EspNowV2Action<'payload> {
             encoded_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
                 .checked_add(elements.len())
                 .ok_or(EspNowV2WireError::PayloadTooLong {
-                    length: payload_length,
+                    length: payload_length.get(),
                 })?) as u16,
             frame_length: (ESP_NOW_V2_ACTION_PREFIX_LEN
                 .checked_add(elements.len())
                 .and_then(|length| ESP_NOW_MANAGEMENT_HEADER_LEN.checked_add(length))
                 .ok_or(EspNowV2WireError::PayloadTooLong {
-                    length: payload_length,
+                    length: payload_length.get(),
                 })?) as u16,
         })
     }

@@ -78,28 +78,48 @@ pub enum EspNowVersionError {
 pub fn esp_now_wire_version(body: &[u8]) -> Result<EspNowWireVersion, EspNowVersionError> {
     const MINIMUM: usize = ESP_NOW_V1_ACTION_OVERHEAD;
     let mut reader = oer_portable_wire::Reader::new(body);
-    let body = reader
+    // Category, OUI, the random value, then the vendor element's ID,
+    // Length, OUI, Type and Version.
+    let &[
+        category,
+        action_oui0,
+        action_oui1,
+        action_oui2,
+        _,
+        _,
+        _,
+        _,
+        element_id,
+        element_length,
+        element_oui0,
+        element_oui1,
+        element_oui2,
+        element_type,
+        version,
+    ] = reader
         .array::<MINIMUM>()
         .map_err(|_| EspNowVersionError::ActionTooShort { minimum: MINIMUM })?;
-    if body[0] != ESP_NOW_ACTION_CATEGORY {
-        return Err(EspNowVersionError::UnsupportedActionCategory(body[0]));
+    if category != ESP_NOW_ACTION_CATEGORY {
+        return Err(EspNowVersionError::UnsupportedActionCategory(category));
     }
-    if body[1..4] != ESP_NOW_ORGANIZATION_IDENTIFIER {
+    if [action_oui0, action_oui1, action_oui2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
         return Err(EspNowVersionError::InvalidActionOrganizationIdentifier);
     }
-    if body[8] != ESP_NOW_VENDOR_ELEMENT_ID {
-        return Err(EspNowVersionError::UnsupportedElementId(body[8]));
+    if element_id != ESP_NOW_VENDOR_ELEMENT_ID {
+        return Err(EspNowVersionError::UnsupportedElementId(element_id));
     }
-    if body[9] < VENDOR_ELEMENT_FIXED_BODY_LEN as u8 {
-        return Err(EspNowVersionError::ElementBodyTooShort { declared: body[9] });
+    if element_length < VENDOR_ELEMENT_FIXED_BODY_LEN as u8 {
+        return Err(EspNowVersionError::ElementBodyTooShort {
+            declared: element_length,
+        });
     }
-    if body[10..13] != ESP_NOW_ORGANIZATION_IDENTIFIER {
+    if [element_oui0, element_oui1, element_oui2] != ESP_NOW_ORGANIZATION_IDENTIFIER {
         return Err(EspNowVersionError::InvalidElementOrganizationIdentifier);
     }
-    if body[13] != ESP_NOW_VENDOR_ELEMENT_TYPE {
-        return Err(EspNowVersionError::UnsupportedElementType(body[13]));
+    if element_type != ESP_NOW_VENDOR_ELEMENT_TYPE {
+        return Err(EspNowVersionError::UnsupportedElementType(element_type));
     }
-    match EspNowVersion::from_bytes([body[14]]).version() {
+    match EspNowVersion::from_bytes([version]).version() {
         ESP_NOW_V1_VERSION => Ok(EspNowWireVersion::V1),
         ESP_NOW_V2_VERSION => Ok(EspNowWireVersion::V2),
         version => Err(EspNowVersionError::UnsupportedVersion(version)),
@@ -152,16 +172,11 @@ pub struct EspNowUnicastAddress([u8; 6]);
 
 impl EspNowUnicastAddress {
     pub const fn new(bytes: [u8; 6]) -> Result<Self, EspNowAddressError> {
-        if bytes[0] == 0
-            && bytes[1] == 0
-            && bytes[2] == 0
-            && bytes[3] == 0
-            && bytes[4] == 0
-            && bytes[5] == 0
-        {
+        let [first, ..] = bytes;
+        if matches!(bytes, [0, 0, 0, 0, 0, 0]) {
             return Err(EspNowAddressError::Unspecified);
         }
-        if crate::address::AddressFlags::from_bytes([bytes[0]]).group() {
+        if crate::address::AddressFlags::from_bytes([first]).group() {
             return Err(EspNowAddressError::Multicast);
         }
         Ok(Self(bytes))
@@ -184,13 +199,7 @@ pub enum EspNowDestination {
 
 impl EspNowDestination {
     pub const fn new(bytes: [u8; 6]) -> Result<Self, EspNowAddressError> {
-        if bytes[0] == 0xff
-            && bytes[1] == 0xff
-            && bytes[2] == 0xff
-            && bytes[3] == 0xff
-            && bytes[4] == 0xff
-            && bytes[5] == 0xff
-        {
+        if matches!(bytes, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff]) {
             return Ok(Self::Broadcast);
         }
         match EspNowUnicastAddress::new(bytes) {
@@ -302,29 +311,36 @@ impl core::error::Error for EspNowCcmpPacketNumberError {}
 
 /// Borrowed v1 payload whose size fits the one-byte vendor-element length.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct EspNowV1Payload<'payload>(&'payload [u8]);
+pub struct EspNowV1Payload<'payload> {
+    bytes: &'payload [u8],
+    length: oer_portable_wire::PrefixLength<ESP_NOW_V1_MAX_PAYLOAD_LEN>,
+}
 
 impl<'payload> EspNowV1Payload<'payload> {
     pub const fn new(bytes: &'payload [u8]) -> Result<Self, EspNowV1WireError> {
-        if bytes.len() > ESP_NOW_V1_MAX_PAYLOAD_LEN {
-            return Err(EspNowV1WireError::PayloadTooLong {
+        match oer_portable_wire::PrefixLength::new(bytes.len()) {
+            Some(length) => Ok(Self { bytes, length }),
+            None => Err(EspNowV1WireError::PayloadTooLong {
                 length: bytes.len(),
-            });
+            }),
         }
-        Ok(Self(bytes))
     }
 
     pub const fn bytes(self) -> &'payload [u8] {
-        self.0
+        self.bytes
     }
 
     pub const fn len(self) -> usize {
-        self.0.len()
+        self.length.get()
+    }
+
+    /// The payload's length, admitted within the 250-octet maximum.
+    pub const fn length(self) -> oer_portable_wire::PrefixLength<ESP_NOW_V1_MAX_PAYLOAD_LEN> {
+        self.length
     }
 
     pub const fn is_empty(self) -> bool {
-        self.0.is_empty()
+        self.length.get() == 0
     }
 }
 

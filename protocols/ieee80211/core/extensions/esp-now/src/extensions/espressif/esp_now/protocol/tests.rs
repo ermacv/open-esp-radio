@@ -24,59 +24,25 @@ fn peer(last: u8) -> EspNowPeerConfig {
     )
 }
 
+/// The count is the occupied slots: it follows each add and remove, and a
+/// stale handle changes nothing.
 #[test]
-fn invalid_counts_refuse_mutations_without_losing_peers() {
+fn the_count_follows_the_occupied_slots() {
     let mut table = EspNowPeerTable::<2>::new(channel(1));
-    // Fault injection: the former increment and decrement panicked here.
-    table.length = usize::MAX;
-    assert_eq!(
-        table.add(peer(2)),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: usize::MAX,
-            capacity: 2
-        })
-    );
-    assert!(
-        table
-            .slots
-            .iter()
-            .all(|slot| slot.config.is_none() && slot.generation == 0)
-    );
-    table.length = 2;
-    assert_eq!(
-        table.add(peer(2)),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 2,
-            capacity: 2
-        })
-    );
-    table.length = 0;
+    assert!(table.is_empty());
     let first = table.add(peer(2)).unwrap();
     assert_eq!(table.len(), 1);
     let second = table.add(peer(3)).unwrap();
-    table.length = 0;
-    assert_eq!(
-        table.remove(first),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 0,
-            capacity: 2
-        })
-    );
-    assert_eq!(table.get(first), Ok(peer(2)));
-    table.length = 3;
-    assert_eq!(
-        table.remove(first),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 3,
-            capacity: 2
-        })
-    );
-    table.length = 2;
+    assert_eq!(table.len(), 2);
+    assert_eq!(table.add(peer(4)), Err(EspNowPeerTableError::Full));
     assert_eq!(table.remove(first), Ok(peer(2)));
     assert_eq!(table.len(), 1);
     assert_eq!(table.get(second), Ok(peer(3)));
     assert_eq!(table.remove(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.get(first), Err(EspNowPeerTableError::Stale(first)));
     assert_eq!(table.len(), 1);
+    assert_eq!(table.remove(second), Ok(peer(3)));
+    assert!(table.is_empty());
 }
 
 #[test]
@@ -86,7 +52,9 @@ fn zero_capacity_exhaustion_and_sparse_iteration_preserve_slot_identity() {
         Err(EspNowPeerTableError::Full)
     );
     let mut table = EspNowPeerTable::<3>::new(channel(1));
-    table.slots[0].generation = u32::MAX;
+    table.slots[0] = EspNowPeerSlot::Vacant {
+        generation: u32::MAX,
+    };
     let first = table.add(peer(2)).unwrap();
     let last = table.add(peer(3)).unwrap();
     assert_eq!((first.index(), last.index()), (1, 2));
