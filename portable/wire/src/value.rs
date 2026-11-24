@@ -86,6 +86,31 @@ macro_rules! unsigned {
                 self.0
             }
 
+            /// Encode into a field whose const geometry proves this exact
+            /// width, retaining every other bit.
+            ///
+            /// ```compile_fail,E0080
+            /// // A four-bit proof cannot fill a five-bit field.
+            /// oer_portable_wire::U8::<4>::ZERO.to_field::<0, 5, true, 1>(&mut [0]);
+            /// ```
+            #[doc(hidden)]
+            pub const fn to_field<
+                const START: usize,
+                const END: usize,
+                const LITTLE: bool,
+                const N: usize,
+            >(
+                self,
+                bytes: &mut [u8; N],
+            ) {
+                const {
+                    if !(START < END && END - START == WIDTH) {
+                        panic!("invalid wire field geometry or value");
+                    }
+                }
+                crate::__private::set::<START, END, LITTLE, N>(bytes, self.0 as u64);
+            }
+
             /// Widen a proof without validating the same value again.
             pub const fn widen<const NEW_WIDTH: usize>(self) -> $name<NEW_WIDTH> {
                 const {

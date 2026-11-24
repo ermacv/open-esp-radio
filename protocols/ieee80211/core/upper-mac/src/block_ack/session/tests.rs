@@ -125,11 +125,14 @@ fn active(start: u16, window: u16) -> TxBlockAckSession {
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
             status: 0,
-            tid: CONFIG.tid,
-            immediate: true,
-            amsdu: false,
-            window,
             timeout_tu: 0,
+            parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+                oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+                CONFIG.tid,
+                window,
+            )
+            .unwrap(),
         })
         .unwrap();
     session
@@ -170,11 +173,14 @@ fn terminal_marks_are_idempotent_and_reset_with_the_agreement() {
         .on_response_action(BlockAckAction::AddbaResponse {
             dialog_token: request.dialog_token,
             status: 0,
-            tid: CONFIG.tid,
-            immediate: true,
-            amsdu: false,
-            window: 32,
             timeout_tu: 0,
+            parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+                oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+                CONFIG.tid,
+                32,
+            )
+            .unwrap(),
         })
         .unwrap();
     assert_eq!(session.on_delivered(seq(100), 1), None);

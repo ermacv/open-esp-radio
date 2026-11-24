@@ -42,8 +42,8 @@ pub use originator::{
     TxBlockAckResponseDisposition, TxBlockAckRetry, next_nonzero_dialog_token,
 };
 pub use recipient::{
-    AddbaResponse, AddbaStatus, Amsdu, AmsduInAmpdu, BankRoom, BlockAckPolicy, RxAddbaRequest,
-    RxBlockAckError, RxBlockAckNegotiation, RxBlockAckSession,
+    AddbaResponse, AddbaStatus, Amsdu, AmsduInAmpdu, BankRoom, RxAddbaRequest, RxBlockAckError,
+    RxBlockAckNegotiation, RxBlockAckSession,
 };
 pub use reorder::{
     MAX_RX_REORDER_WINDOW, ResyncStart, RxReorderBuffer, RxReorderError, RxReorderMpdu,

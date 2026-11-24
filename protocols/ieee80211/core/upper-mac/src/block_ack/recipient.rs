@@ -7,7 +7,9 @@ use super::{RxReorderBuffer, RxReorderError, RxReorderMpdu, RxReorderRelease};
 use core::num::NonZeroU64;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::{
-    block_ack::frame::{ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_addba_response},
+    block_ack::frame::{
+        ADDBA_ACTION_BODY_LEN, BlockAckAction, BlockAckPolicy, encode_addba_response,
+    },
     sequence::SequenceNumber,
     status::status_code,
     tsf::time_units_micros,
@@ -20,14 +22,6 @@ pub enum AddbaStatus {
     Success = status_code::SUCCESS,
     RequestDeclined = status_code::REQUEST_DECLINED,
     InvalidParameters = status_code::INVALID_PARAMETERS,
-}
-
-/// The Block Ack Policy subfield of a Block Ack Parameter Set (IEEE Std
-/// 802.11-2020, 9.4.1.14).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum BlockAckPolicy {
-    Immediate,
-    Delayed,
 }
 
 /// The A-MSDU Supported subfield of a Block Ack Parameter Set (IEEE Std
@@ -70,26 +64,19 @@ impl RxAddbaRequest {
         match action {
             BlockAckAction::AddbaRequest {
                 dialog_token,
-                tid,
-                immediate,
-                amsdu,
-                window,
+                parameters,
                 timeout_tu,
                 starting_sequence,
             } => Some(Self {
                 dialog_token,
-                tid,
-                policy: if immediate {
-                    BlockAckPolicy::Immediate
-                } else {
-                    BlockAckPolicy::Delayed
-                },
-                amsdu: if amsdu {
+                tid: parameters.tid(),
+                policy: parameters.policy(),
+                amsdu: if parameters.amsdu() {
                     Amsdu::Permitted
                 } else {
                     Amsdu::NotPermitted
                 },
-                window,
+                window: parameters.window(),
                 timeout_tu,
                 starting_sequence,
             }),
@@ -347,7 +334,10 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
     }
 
     pub fn peer_delba(&self, action: BlockAckAction) -> bool {
-        matches!(action, BlockAckAction::Delba { tid, initiator: true, .. } if tid == self.tid)
+        matches!(
+            action,
+            BlockAckAction::Delba { tid, initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator, .. } if tid == self.tid
+        )
     }
 
     /// Take the common in-order MPDU without a release list: `true` when

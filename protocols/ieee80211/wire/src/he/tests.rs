@@ -16,34 +16,38 @@ fn parses_single_stream_mcs9_capability_without_optional_tails() {
 
 #[test]
 fn decodes_complete_non_mimo_sig_b_user_and_terminal_sentinel() {
-    let word = 0x10_0000 | 0x08_0000 | (9 << 15) | (1 << 14) | (5 << 11) | 0x234;
+    let word: u32 = 0x10_0000 | 0x08_0000 | (9 << 15) | (1 << 14) | (5 << 11) | 0x234;
+    let HeMuSigBNonMimoUser::Scheduled(user) =
+        HeMuSigBNonMimoUser::decode(SigBNonMimoUserFields::from_bytes(word.to_le_bytes()))
+    else {
+        panic!("a scheduled user");
+    };
+    assert_eq!(user.station_id(), 0x234);
+    assert_eq!(user.nsts(), 5);
+    assert!(user.beamformed());
+    assert_eq!(user.mcs(), 9);
+    assert!(user.dcm());
+    assert_eq!(user.coding(), SigBCoding::Ldpc);
+    let bcc = SigBNonMimoUserFields::from_bytes((word & !0x10_0000).to_le_bytes());
+    assert_eq!(bcc.coding(), SigBCoding::Bcc);
     assert_eq!(
-        HeMuSigBNonMimoUser::decode(word),
-        HeMuSigBNonMimoUser::Scheduled {
-            station_id: 0x234,
-            nsts: 5,
-            beamformed: true,
-            mcs: 9,
-            dcm: true,
-            ldpc: true,
-        }
-    );
-    assert_eq!(
-        HeMuSigBNonMimoUser::decode(0x001f_f7fe),
+        HeMuSigBNonMimoUser::decode(SigBNonMimoUserFields::from_bytes(
+            0x001f_f7fe_u32.to_le_bytes()
+        )),
         HeMuSigBNonMimoUser::NonMuMimo
     );
 }
 
 #[test]
 fn decodes_complete_mimo_sig_b_user_without_exposing_reserved_bit() {
-    let word = 0x10_0000 | 0x08_0000 | (7 << 15) | (12 << 11) | 0x345;
+    let word: u32 = 0x10_0000 | 0x08_0000 | (7 << 15) | (12 << 11) | 0x345;
     assert_eq!(
-        HeMuSigBMimoUser::decode(word),
+        HeMuSigBMimoUser::decode(SigBMimoUserFields::from_bytes(word.to_le_bytes())),
         HeMuSigBMimoUser {
             station_id: 0x345,
             spatial_configuration: 12,
             mcs: 7,
-            ldpc: true,
+            coding: SigBCoding::Ldpc,
         }
     );
 }
@@ -454,8 +458,16 @@ fn every_stream_after_the_first_is_not_supported() {
             HeChannelWidthSet::MHZ20,
         );
         let capability = parse_he_capabilities(&element).unwrap();
-        assert_eq!(capability.receive_mcs_map, map, "{support:?}");
-        assert_eq!(capability.transmit_mcs_map, map, "{support:?}");
+        assert_eq!(
+            capability.receive_mcs_map,
+            HeMcsMap::from_bytes(map.to_le_bytes()),
+            "{support:?}"
+        );
+        assert_eq!(
+            capability.transmit_mcs_map,
+            HeMcsMap::from_bytes(map.to_le_bytes()),
+            "{support:?}"
+        );
         assert_eq!(capability.receive_nss1(), support);
     }
 }

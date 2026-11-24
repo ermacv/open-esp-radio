@@ -24,8 +24,8 @@ fn decodes_the_complete_blob_geometry_and_aid_membership() {
 
     assert_eq!(ndpa.frame_control().to_bytes(), [0x54, 0x08]);
     assert_eq!(ndpa.duration(), 0x1234);
-    assert_eq!(ndpa.receiver_address(), &RA);
-    assert_eq!(ndpa.transmitter_address(), &TA);
+    assert_eq!(ndpa.receiver_address(), RA);
+    assert_eq!(ndpa.transmitter_address(), TA);
     // The general address view reads the same RA and TA, and requires both.
     let fields = crate::frame::AddressFields::parse(&frame).unwrap();
     assert_eq!(fields.receiver(), RA);
@@ -39,11 +39,15 @@ fn decodes_the_complete_blob_geometry_and_aid_membership() {
     let mut stations = ndpa.stations();
     assert_eq!(
         stations.next(),
-        Some(HeNdpaStationInfo { raw: 0xa5a5_8123 })
+        Some(HeNdpaStationInfo {
+            fields: NdpaStationFields::from_bytes(0xa5a5_8123_u32.to_le_bytes())
+        })
     );
     assert_eq!(
         stations.next(),
-        Some(HeNdpaStationInfo { raw: 0x5a5a_8456 })
+        Some(HeNdpaStationInfo {
+            fields: NdpaStationFields::from_bytes(0x5a5a_8456_u32.to_le_bytes())
+        })
     );
     assert_eq!(stations.next(), None);
     assert!(ndpa.contains_association_id(0x123));
@@ -191,11 +195,14 @@ fn decodes_the_complete_vendor_he20_compressed_feedback_header() {
     let decoded = HeCompressedBeamformingReport::parse(&report).unwrap();
     assert_eq!(
         decoded.receiver_address(),
-        &[0xdc, 0x15, 0xc8, 0x54, 0xbc, 0x1e]
+        [0xdc, 0x15, 0xc8, 0x54, 0xbc, 0x1e]
     );
-    assert_eq!(decoded.transmitter_address(), &RA);
+    assert_eq!(decoded.transmitter_address(), RA);
     assert_eq!(decoded.sequence_number(), seq(10));
-    assert_eq!(decoded.mimo_control(), 0x000d_c400_8208);
+    assert_eq!(
+        decoded.mimo_control(),
+        MimoControlFields::from_bytes([0x08, 0x82, 0x00, 0xc4, 0x0d])
+    );
     assert_eq!(decoded.column_count(), 1);
     assert_eq!(decoded.row_count(), 2);
     assert_eq!(decoded.bandwidth_encoding(), 0);
@@ -253,4 +260,26 @@ fn every_prefix_of_an_ndpa_or_report_is_handled() {
             let _ = (parsed.average_snr(), parsed.feedback_matrices());
         }
     }
+}
+
+/// Each subfield of a STA Info is read from its own bits.
+#[test]
+fn a_station_info_reads_each_subfield() {
+    // AID 0x123, RU 5..9, feedback/Ng 2, disambiguation, codebook, Nc 6.
+    let word: u32 = 0x123 | (5 << 11) | (9 << 18) | (2 << 25) | (1 << 27) | (1 << 28) | (6 << 29);
+    let station = HeNdpaStationInfo {
+        fields: NdpaStationFields::from_bytes(word.to_le_bytes()),
+    };
+    assert_eq!(station.association_id(), 0x123);
+    assert_eq!(station.resource_unit_start_index(), 5);
+    assert_eq!(station.resource_unit_end_index(), 9);
+    assert_eq!(station.feedback_type_and_ng_encoding(), 2);
+    assert!(station.disambiguation());
+    assert!(station.codebook_size());
+    assert_eq!(station.nc_encoding(), 6);
+    let clear = HeNdpaStationInfo {
+        fields: NdpaStationFields::from_bytes(0x123_u32.to_le_bytes()),
+    };
+    assert!(!clear.disambiguation());
+    assert!(!clear.codebook_size());
 }

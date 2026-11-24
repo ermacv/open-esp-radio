@@ -7,12 +7,15 @@ fn parses_all_block_ack_action_bodies() {
         parse_block_ack_action(&[3, 0, 7, 0x87, 0x07, 0, 0, 0x30, 0x12]),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: 7,
-            tid: 1,
-            immediate: true,
-            amsdu: true,
-            window: 30,
             timeout_tu: 0,
             starting_sequence: seq(0x123),
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                1,
+                30
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -20,18 +23,21 @@ fn parses_all_block_ack_action_bodies() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 7,
             status: 0,
-            tid: 1,
-            immediate: true,
-            amsdu: false,
-            window: 30,
             timeout_tu: 5,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                1,
+                30
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
         parse_block_ack_action(&[3, 2, 0, 0x58, 39, 0]),
         Some(BlockAckAction::Delba {
             tid: 5,
-            initiator: true,
+            initiator: crate::block_ack::frame::DelbaInitiator::Originator,
             reason: 39,
         })
     );
@@ -65,11 +71,14 @@ fn successful_response_narrows_the_window_and_disables_amsdu() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 137,
             status: 0,
-            tid: 0,
-            immediate: true,
-            amsdu: false,
-            window: 16,
             timeout_tu: 0,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                0,
+                16
+            )
+            .unwrap(),
         })
     );
 }
@@ -83,11 +92,14 @@ fn declined_response_preserves_request_identity_without_claiming_success() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 23,
             status: ADDBA_STATUS_REQUEST_DECLINED,
-            tid: 6,
-            immediate: true,
-            amsdu: false,
-            window: 64,
             timeout_tu: 0,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                6,
+                64
+            )
+            .unwrap(),
         })
     );
 }
@@ -143,12 +155,15 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaRequest {
             dialog_token: 7,
-            tid: 15,
-            immediate: true,
-            amsdu: true,
-            window: 1023,
             timeout_tu: 12,
             starting_sequence: sequence,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                15,
+                1023
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -193,11 +208,14 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         Some(BlockAckAction::AddbaResponse {
             dialog_token: 9,
             status: 0,
-            tid: 5,
-            immediate: true,
-            amsdu: true,
-            window: 64,
             timeout_tu: 0x1234,
+            parameters: crate::block_ack::frame::AddbaParameters::new(
+                crate::block_ack::frame::BlockAckPolicy::Immediate,
+                crate::block_ack::frame::AmsduSupport::Supported,
+                5,
+                64
+            )
+            .unwrap(),
         })
     );
     assert_eq!(
@@ -229,7 +247,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         parse_block_ack_action(&delba),
         Some(BlockAckAction::Delba {
             tid: 6,
-            initiator: false,
+            initiator: crate::block_ack::frame::DelbaInitiator::Recipient,
             reason: 39,
         })
     );
@@ -262,4 +280,95 @@ fn a_compressed_bar_round_trips_and_other_variants_are_refused() {
     let mut protected = frame;
     protected[1] |= 0x40;
     assert_eq!(parse_compressed_block_ack_request(&protected), None);
+}
+
+/// TID 15 is the largest a four-bit TID holds: an ADDBA Response for it
+/// is written, one for 16 is refused.
+#[test]
+fn an_addba_response_holds_tid_15_and_refuses_16() {
+    let written = encode_addba_response(1, 0, 15, 64, 0, AmsduSupport::NotSupported).unwrap();
+    assert!(matches!(
+        parse_block_ack_action(&written),
+        Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.tid() == 15
+    ));
+    assert_eq!(
+        encode_addba_response(1, 0, 16, 64, 0, AmsduSupport::NotSupported),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+}
+
+/// The Parameter Set names why it refuses: a TID past four bits or a
+/// window past ten, each at its first value out.
+#[test]
+fn the_parameter_set_names_its_refusal() {
+    let new = |tid, window| {
+        AddbaParameters::new(
+            BlockAckPolicy::Delayed,
+            AmsduSupport::Supported,
+            tid,
+            window,
+        )
+    };
+    let largest = new(15, 0x03ff).unwrap();
+    assert_eq!(largest.tid(), 15);
+    assert_eq!(largest.window(), 0x03ff);
+    assert_eq!(largest.policy(), BlockAckPolicy::Delayed);
+    assert!(largest.amsdu());
+    assert_eq!(new(16, 1), Err(AddbaParametersError::TidOutOfRange(16)));
+    assert_eq!(
+        new(0, 0x0400),
+        Err(AddbaParametersError::WindowOutOfRange(0x0400))
+    );
+    // The TID is the first refusal of two.
+    assert_eq!(
+        new(16, 0x0400),
+        Err(AddbaParametersError::TidOutOfRange(16))
+    );
+}
+
+/// Each encoder's error is the Parameter Set's reason; a zero window is
+/// refused where an agreement needs a buffer, and written in a refusal.
+#[test]
+fn each_encoder_reports_the_parameter_reason() {
+    let sequence = SequenceNumber::new(0).unwrap();
+    let request =
+        |tid, window| encode_addba_request(1, tid, window, 0, AmsduSupport::NotSupported, sequence);
+    assert_eq!(request(16, 0), Err(AddbaRequestError::InvalidTid(16)));
+    assert_eq!(
+        request(0, 0x0400),
+        Err(AddbaRequestError::InvalidWindow(0x0400))
+    );
+    assert_eq!(request(0, 0), Err(AddbaRequestError::InvalidWindow(0)));
+    assert!(request(15, 0x03ff).is_ok());
+
+    let mut body = [0_u8; ADDBA_ACTION_BODY_LEN];
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 16, 0),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 0, 0x0400),
+        Err(RxAddbaResponseError::InvalidWindow(0x0400))
+    );
+    assert_eq!(
+        write_successful_addba_response(&mut body, 1, 0, 0),
+        Err(RxAddbaResponseError::InvalidWindow(0))
+    );
+    // A refused write leaves the body as it was.
+    assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
+
+    assert_eq!(
+        write_declined_addba_response(&mut body, 1, 16, 1),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+    assert_eq!(
+        write_declined_addba_response(&mut body, 1, 0, 0x0400),
+        Err(RxAddbaResponseError::InvalidWindow(0x0400))
+    );
+    assert_eq!(body, [0; ADDBA_ACTION_BODY_LEN]);
+    write_declined_addba_response(&mut body, 1, 0, 0).unwrap();
+    assert!(matches!(
+        parse_block_ack_action(&body),
+        Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.window() == 0
+    ));
 }

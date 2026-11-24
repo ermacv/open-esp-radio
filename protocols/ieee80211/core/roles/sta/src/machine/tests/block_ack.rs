@@ -43,9 +43,9 @@ fn unsupported_addba_receives_an_explicit_decline() {
             [BlockAckAction::AddbaResponse {
                 dialog_token: 17,
                 status: ADDBA_STATUS_REQUEST_DECLINED,
-                tid: 15,
+                parameters,
                 ..
-            }]
+            }] if parameters.tid() == 15
         ));
         assert!(world.station.is_connected());
     });
@@ -97,7 +97,8 @@ fn the_station_s_own_delba_names_it_the_agreement_s_originator() {
             parse_block_ack_action(&body),
             Some(BlockAckAction::Delba {
                 tid,
-                initiator: true,
+                initiator:
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
                 reason: oer_protocols_ieee80211_wire::status::reason_code::TIMEOUT,
             })
         );

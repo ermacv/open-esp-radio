@@ -36,11 +36,22 @@ impl TsfTimestamp {
 
     /// The field as it appears on air (little-endian).
     pub const fn from_bytes(bytes: [u8; Self::LEN]) -> Self {
-        Self(u64::from_le_bytes(bytes))
+        Self(TimestampField::from_bytes(bytes).micros().get())
     }
 
     pub const fn to_bytes(self) -> [u8; Self::LEN] {
-        self.0.to_le_bytes()
+        // Sixty-four bits of sixty-four: nothing is cut.
+        TimestampField::from_bytes([0; Self::LEN])
+            .with_micros(oer_portable_wire::U64::from_low_bits(self.0))
+            .to_bytes()
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.10 (Timestamp field), in
+    /// microseconds.
+    pub struct TimestampField[8] (little) {
+        pub micros, with_micros: (u64) = 0..64;
     }
 }
 

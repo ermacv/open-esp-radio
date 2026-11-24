@@ -1103,11 +1103,11 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
     let mut reader = oer_portable_wire::Reader::new(frame);
     let &[fc0, fc1] = reader.array().ok()?;
     let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
-    let frame_type = frame_control.kind().encoding() as u16;
+    let frame_type = frame_control.kind();
     let subtype = frame_control.subtype();
 
     // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
-    if frame_type == 1
+    if frame_type == FrameType::Control
         && subtype == 10
         && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
@@ -1149,7 +1149,7 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
     ] = *header;
     let to_ds = frame_control.to_ds();
     let from_ds = frame_control.from_ds();
-    if frame_type != 2 || !to_ds || from_ds {
+    if frame_type != FrameType::Data || !to_ds || from_ds {
         return None;
     }
     let peer = [t0, t1, t2, t3, t4, t5];

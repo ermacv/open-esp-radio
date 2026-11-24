@@ -239,13 +239,29 @@ impl AuthenticationFields {
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.9 (Status Code field).
     pub struct StatusCodeField[2] (little) {
-        pub code, with_code: u16 = 0..16;
+        pub code, with_code: (u16) = 0..16;
     }
 }
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.7 (Reason Code field).
     pub struct ReasonCodeField[2] (little) {
-        pub code, with_code: u16 = 0..16;
+        pub code, with_code: (u16) = 0..16;
+    }
+}
+
+impl StatusCodeField {
+    /// The field holding `code`.
+    pub const fn of(code: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_code(oer_portable_wire::U16::from_low_bits(code))
+    }
+}
+
+impl ReasonCodeField {
+    /// The field holding `code`.
+    pub const fn of(code: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_code(oer_portable_wire::U16::from_low_bits(code))
     }
 }
 oer_portable_wire::bitfield! {

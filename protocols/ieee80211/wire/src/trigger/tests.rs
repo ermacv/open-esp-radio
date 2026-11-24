@@ -413,12 +413,12 @@ fn parses_all_dependent_user_forms() {
     assert_eq!(parse_trigger_bfrp_dependent(&[0xa5]).unwrap(), 0xa5);
 
     let mu_bar = parse_trigger_mu_bar_dependent(&[0x05, 0xa0, 0x30, 0x12]).unwrap();
-    assert_eq!(mu_bar.bar_control, 0xa005);
-    assert!(mu_bar.ack_policy);
-    assert_eq!(mu_bar.bar_type, 2);
-    assert_eq!(mu_bar.tid, 10);
-    assert_eq!(mu_bar.bar_information, 0x1230);
-    assert_eq!(mu_bar.starting_sequence_number, seq(0x123));
+    assert_eq!(mu_bar.bar_control.to_bytes(), [0x05, 0xa0]);
+    assert!(mu_bar.ack_policy());
+    assert_eq!(mu_bar.bar_type(), 2);
+    assert_eq!(mu_bar.tid(), 10);
+    assert_eq!(mu_bar.bar_information.to_bytes(), [0x30, 0x12]);
+    assert_eq!(mu_bar.starting_sequence_number(), seq(0x123));
 
     let nfrp = parse_trigger_nfrp_user(&[0x34, 0xa2, 0xb5, 0x6b, 0xd5]).unwrap();
     assert_eq!(nfrp.starting_aid, 0x234);
@@ -533,4 +533,13 @@ fn every_bounded_power_encoding_has_its_exact_dbm_value() {
             }
         );
     }
+}
+
+/// A MU-BAR's Ack Policy is its BAR Control's bit 0.
+#[test]
+fn a_mu_bar_ack_policy_is_its_own_bit() {
+    let set = parse_trigger_mu_bar_dependent(&[0x05, 0xa0, 0x30, 0x12]).unwrap();
+    let clear = parse_trigger_mu_bar_dependent(&[0x04, 0xa0, 0x30, 0x12]).unwrap();
+    assert!(set.ack_policy());
+    assert!(!clear.ack_policy());
 }

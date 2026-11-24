@@ -110,7 +110,7 @@ impl<'frame> MonitorInjectionMpdu<'frame> {
             }
             other => {
                 return Err(MonitorInjectionFrameError::UnsupportedFrameType(
-                    other.encoding(),
+                    other.encoding().get(),
                 ));
             }
         };

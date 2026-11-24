@@ -285,7 +285,7 @@ fn frame_type(control: FrameControlFields) -> MonitorFrameType {
         FrameType::Management => MonitorFrameType::Management,
         FrameType::Control => MonitorFrameType::Control,
         FrameType::Data => MonitorFrameType::Data,
-        FrameType::Extension | FrameType::Reserved(_) => MonitorFrameType::Extension,
+        FrameType::Extension => MonitorFrameType::Extension,
     }
 }
 

@@ -6724,11 +6724,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/wire/src/ap/profile.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/beacon.rs", 4, BY_STEP_3),
     ("protocols/ieee80211/wire/src/bip.rs", 4, BY_STEP_3),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs",
-        19,
-        BY_STEP_3,
-    ),
     ("protocols/ieee80211/wire/src/ccmp.rs", 16, BY_STEP_3),
     (
         "protocols/ieee80211/wire/src/ccmp/protected.rs",
@@ -6741,15 +6736,9 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         31,
         BY_STEP_3,
     ),
-    ("protocols/ieee80211/wire/src/ftm.rs", 19, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/he.rs", 11, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/ndpa.rs", 12, BY_STEP_3),
     ("protocols/ieee80211/wire/src/sae.rs", 3, BY_STEP_3),
     ("protocols/ieee80211/wire/src/scan.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/security/rsn.rs", 8, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/trigger.rs", 8, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/tsf.rs", 2, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/twt.rs", 14, BY_STEP_3),
     ("protocols/network/core/src/dhcp.rs", 3, BY_STEP_3),
     ("protocols/network/core/src/interface.rs", 4, BY_STEP_3),
     ("protocols/network/wire/src/arp.rs", 3, BY_STEP_3),
@@ -7953,28 +7942,11 @@ fn k0_print() {
 /// mentions `bool` without being it), by `file::Struct` or
 /// `file::Enum::Variant` with the number of flags. It misses a flag behind
 /// a type alias (`type Flag = bool`). The list only shrinks.
-const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
-        3,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",
-        2,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaResponse",
-        2,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/he.rs::HeMuSigBNonMimoUser::Scheduled",
-        3,
-        BY_STEP_3,
-    ),
-];
+const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[(
+    "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
+    3,
+    BY_STEP_3,
+)];
 
 /// K0, `HIDDEN_BOOL_PARAMETERS`: what `fn_params_excessive_bools` does not
 /// see of a parameter that selects behaviour (a type that mentions `bool`

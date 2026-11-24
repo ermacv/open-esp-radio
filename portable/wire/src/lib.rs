@@ -61,10 +61,84 @@ pub enum Error {
 /// can follow the raw type, as `(from_raw, raw)`. Numeric and enum setters return
 /// `Result<Self, Error>`; a boolean setter is infallible. Parenthesized integer
 /// types, such as `(u16)`, return a width-proved [`U16`] from the getter and
-/// take that same type in an infallible setter. Invalid declarations
-/// (range, type width, byte order, implicit overlap) fail at compile time.
+/// take that same type in an infallible setter.
+///
+/// A closed enum names its width, as `enum Policy: u8 [1] { Delayed = 0,
+/// Immediate = 1 }`, and every value of that width exactly once: it has no
+/// `Reserved`, its `from_encoding` takes the width-proved value and is total,
+/// and its `encoding` returns one. As a parenthesized field of exactly its
+/// width, `(Policy)`, its getter and its setter are both infallible.
+///
+/// Invalid declarations (range, type width, byte order, implicit overlap, a
+/// closed enum's missing, repeated or too wide value, a field of another
+/// width than its closed enum) fail at compile time.
 #[macro_export]
 macro_rules! bitfield {
+    ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident [$width:literal] {
+        $($(#[$variant_meta:meta])* $variant:ident = $value:literal),+ $(,)?
+    }) => {
+        const _: () = {
+            if !($raw::MIN == 0 && $raw::BITS <= 64) {
+                panic!("wire enum requires an unsigned integer of at most 64 bits");
+            }
+            if !($width > 0 && $width <= $raw::BITS) {
+                panic!("closed wire enum width must fit its integer");
+            }
+            if !$crate::__private::names_every_value(&[$($value as u64),+], $width) {
+                panic!("closed wire enum must name every value of its width once");
+            }
+        };
+        $(#[$meta])*
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        $vis enum $name {
+            $($(#[$variant_meta])* $variant,)+
+        }
+        impl $name {
+            /// The field width this enum fills, every value named.
+            pub const BITS: u32 = $width;
+            pub const fn from_encoding(value: $crate::bitfield!(@bounded $raw, $width)) -> Self {
+                $crate::bitfield!(@closed_decode value.get(); []; $($variant = $value,)+)
+            }
+            pub const fn encoding(self) -> $crate::bitfield!(@bounded $raw, $width) {
+                match self {
+                    $(Self::$variant => <$crate::bitfield!(@bounded $raw, $width)>::constant::<$value>(),)+
+                }
+            }
+            #[doc(hidden)]
+            pub const fn from_field<
+                const START: usize,
+                const END: usize,
+                const LITTLE: bool,
+                const N: usize,
+            >(
+                bytes: &[u8; N],
+            ) -> Self {
+                Self::from_encoding(<$crate::bitfield!(@bounded $raw, $width)>::from_field::<
+                    START, END, LITTLE, N
+                >(bytes))
+            }
+            #[doc(hidden)]
+            pub const fn to_field<
+                const START: usize,
+                const END: usize,
+                const LITTLE: bool,
+                const N: usize,
+            >(
+                self,
+                bytes: &mut [u8; N],
+            ) {
+                self.encoding().to_field::<START, END, LITTLE, N>(bytes);
+            }
+        }
+    };
+    // The declaration names every value of its width once, so the last
+    // name's arm takes the one value of that width no other arm takes.
+    (@closed_decode $value:expr; [$($arms:tt)*]; $variant:ident = $literal:literal, $($rest:tt)+) => {
+        $crate::bitfield!(@closed_decode $value; [$($arms)* $literal => Self::$variant,]; $($rest)+)
+    };
+    (@closed_decode $value:expr; [$($arms:tt)*]; $variant:ident = $literal:literal,) => {
+        match $value { $($arms)* _ => Self::$variant }
+    };
     ($(#[$meta:meta])* $vis:vis enum $name:ident : $raw:ident {
         $($(#[$variant_meta:meta])* $variant:ident = $value:literal),* $(,)?
     }) => {
@@ -167,7 +241,7 @@ macro_rules! bitfield {
             >(&self.0)
         }
         $vis const fn $set(mut self, value: $crate::bitfield!(@bounded $ty, {$end - $start})) -> Self {
-            $crate::__private::set::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0, value.get() as u64);
+            value.to_field::<$start, $end, {$crate::bitfield!(@order $order)}, $size>(&mut self.0);
             self
         }
     };
@@ -175,6 +249,8 @@ macro_rules! bitfield {
     (@bounded u16, $width:expr) => { $crate::U16<$width> };
     (@bounded u32, $width:expr) => { $crate::U32<$width> };
     (@bounded u64, $width:expr) => { $crate::U64<$width> };
+    // A closed enum: its own `from_field` and `to_field` prove the width.
+    (@bounded $ty:ident, $width:expr) => { $ty };
     (@width ($ty:ident), $width:expr) => {
         const { if !($width <= $ty::BITS as usize) { panic!("wire field exceeds its integer width"); } }
     };
@@ -218,6 +294,29 @@ pub mod __private {
             let mut others = rest;
             while let Some((&(other_start, other_end, other_view), next)) = others.split_first() {
                 if !view && !other_view && start < other_end && other_start < end {
+                    return false;
+                }
+                others = next;
+            }
+            remaining = rest;
+        }
+        true
+    }
+
+    /// Whether `values` are distinct, each below `1 << width`, and as many
+    /// as the values of `width` bits: every value of that width named once.
+    pub const fn names_every_value(values: &[u64], width: u32) -> bool {
+        if width >= usize::BITS || values.len() != 1_usize << width {
+            return false;
+        }
+        let mut remaining = values;
+        while let Some((&value, rest)) = remaining.split_first() {
+            if value >> width != 0 {
+                return false;
+            }
+            let mut others = rest;
+            while let Some((&other, next)) = others.split_first() {
+                if other == value {
                     return false;
                 }
                 others = next;
@@ -379,6 +478,21 @@ mod tests;
 ///         second, with_second: u8 = 3..7;
 ///     }
 /// }
+/// ```
+/// ```compile_fail
+/// // A closed enum names every value of its width.
+/// oer_portable_wire::bitfield! { enum Missing: u8 [2] { A = 0, B = 1, C = 2 } }
+/// ```
+/// ```compile_fail
+/// oer_portable_wire::bitfield! { enum Repeated: u8 [1] { A = 0, B = 0 } }
+/// ```
+/// ```compile_fail
+/// oer_portable_wire::bitfield! { enum Wide: u8 [1] { A = 0, B = 2 } }
+/// ```
+/// ```compile_fail
+/// oer_portable_wire::bitfield! { enum Bit: u8 [1] { A = 0, B = 1 } }
+/// oer_portable_wire::bitfield! { struct Wider[1] (little) { bit, with_bit: (Bit) = 0..2; } }
+/// let _ = Wider::from_bytes([0]).bit();
 /// ```
 #[cfg(doctest)]
 pub struct InvalidDeclarations;

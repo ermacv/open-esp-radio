@@ -1470,11 +1470,14 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: 0,
-        tid: AP_TX_BLOCK_ACK_TID,
-        immediate: true,
-        amsdu: false,
-        window: AP_TX_BLOCK_ACK_WINDOW,
         timeout_tu: 0,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_WINDOW,
+        )
+        .unwrap(),
     };
     assert!(matches!(
         service.on_tx_block_ack_action(PEER, response),
@@ -1514,7 +1517,8 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             PEER,
             BlockAckAction::Delba {
                 tid: AP_TX_BLOCK_ACK_TID,
-                initiator: true,
+                initiator:
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
                 reason: 37,
             },
         )
@@ -1535,7 +1539,8 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
             PEER,
             BlockAckAction::Delba {
                 tid: AP_TX_BLOCK_ACK_TID,
-                initiator: false,
+                initiator:
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                 reason: 37,
             },
         )
@@ -1548,11 +1553,14 @@ fn tx_block_ack_is_owned_by_the_exact_authorized_ht_peer() {
     let response = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: 0,
-        tid: AP_TX_BLOCK_ACK_TID,
-        immediate: true,
-        amsdu: true,
-        window: AP_TX_BLOCK_ACK_WINDOW,
         timeout_tu: 0,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_WINDOW,
+        )
+        .unwrap(),
     };
     service.on_tx_block_ack_action(PEER, response).unwrap();
     assert!(
@@ -1597,11 +1605,14 @@ fn addba_response_after_the_negotiation_timeout_is_dropped_as_stale() {
     let late = BlockAckAction::AddbaResponse {
         dialog_token: request.dialog_token,
         status: 0,
-        tid: AP_TX_BLOCK_ACK_TID,
-        immediate: true,
-        amsdu: false,
-        window: AP_TX_BLOCK_ACK_WINDOW,
         timeout_tu: 0,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            AP_TX_BLOCK_ACK_TID,
+            AP_TX_BLOCK_ACK_WINDOW,
+        )
+        .unwrap(),
     };
     assert_eq!(service.on_tx_block_ack_action(PEER, late), Ok(None));
     assert_eq!(service.operational_tx_block_ack_window(PEER), None);
@@ -1689,11 +1700,14 @@ fn an_unanswered_or_unsent_offer_is_retried_after_the_interval_while_attempts_re
     let declined = BlockAckAction::AddbaResponse {
         dialog_token: third.dialog_token,
         status: 37,
-        tid: AP_TX_BLOCK_ACK_TID,
-        immediate: true,
-        amsdu: false,
-        window: 0,
         timeout_tu: 0,
+        parameters: oer_protocols_ieee80211_wire::block_ack::frame::AddbaParameters::new(
+            oer_protocols_ieee80211_wire::block_ack::frame::BlockAckPolicy::Immediate,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+            AP_TX_BLOCK_ACK_TID,
+            0,
+        )
+        .unwrap(),
     };
     assert_eq!(
         service.on_tx_block_ack_action(PEER, declined),

@@ -438,7 +438,9 @@ pub fn parse_association_response(
     let (header, [c0, c1, s0, s1, a0, a1], information_elements) =
         split_received_management(frame)?;
     let capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
-    let status_code = crate::management::StatusCodeField::from_bytes([s0, s1]).code();
+    let status_code = crate::management::StatusCodeField::from_bytes([s0, s1])
+        .code()
+        .get();
     let association_id = crate::management::AssociationId::from_bytes([a0, a1]);
     if header.frame_control.type_and_subtype()
         != ASSOCIATION_RESPONSE_FRAME_CONTROL.type_and_subtype()

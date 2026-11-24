@@ -367,15 +367,31 @@ impl IndividualTwtParameterSet {
         Ok(self)
     }
 
-    fn parse(request_type: u16, bytes: &[u8; 12]) -> Self {
-        let [t0, t1, t2, t3, t4, t5, t6, t7, duration, m0, m1, channel] = *bytes;
+    fn parse(request: TwtRequestFields, bytes: [u8; 12]) -> Self {
+        let fields = IndividualTwtFields::from_bytes(bytes);
         Self {
-            request: TwtRequestFields::from_bytes(request_type.to_le_bytes()),
-            target_wake_time_tsf: u64::from_le_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
-            nominal_minimum_wake_duration: duration,
-            wake_interval_mantissa: u16::from_le_bytes([m0, m1]),
-            twt_channel: channel,
+            request,
+            target_wake_time_tsf: fields.target_wake_time().get(),
+            nominal_minimum_wake_duration: fields.nominal_minimum_wake_duration().get(),
+            wake_interval_mantissa: fields.wake_interval_mantissa().get(),
+            twt_channel: fields.twt_channel().get(),
         }
+    }
+
+    /// The fields after the Request Type, as they appear on air.
+    const fn fields(self) -> IndividualTwtFields {
+        // Each value fills its field's width: nothing is cut.
+        IndividualTwtFields::from_bytes([0; 12])
+            .with_target_wake_time(oer_portable_wire::U64::from_low_bits(
+                self.target_wake_time_tsf,
+            ))
+            .with_nominal_minimum_wake_duration(oer_portable_wire::U8::from_low_bits(
+                self.nominal_minimum_wake_duration,
+            ))
+            .with_wake_interval_mantissa(oer_portable_wire::U16::from_low_bits(
+                self.wake_interval_mantissa,
+            ))
+            .with_twt_channel(oer_portable_wire::U8::from_low_bits(self.twt_channel))
     }
 }
 
@@ -407,25 +423,36 @@ impl IndividualTwtSetup {
             });
         };
 
-        let mut body = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
-        body[0] = TWT_ACTION_CATEGORY;
-        body[1] = TWT_SETUP_ACTION;
-        body[2] = self.dialog_token;
-        body[3] = TWT_ELEMENT_ID;
-        body[4] = INDIVIDUAL_TWT_ELEMENT_BODY_LEN;
         let [control] = self.control.to_bytes();
-        body[5] = control;
-        crate::encoding::write_array::<6, _, _>(&mut body, &self.parameters.request.to_bytes());
-        crate::encoding::write_array::<8, _, _>(
-            &mut body,
-            &self.parameters.target_wake_time_tsf.to_le_bytes(),
-        );
-        body[16] = self.parameters.nominal_minimum_wake_duration;
-        crate::encoding::write_array::<17, _, _>(
-            &mut body,
-            &self.parameters.wake_interval_mantissa.to_le_bytes(),
-        );
-        body[19] = self.parameters.twt_channel;
+        let [r0, r1] = self.parameters.request.to_bytes();
+        let [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11] =
+            self.parameters.fields().to_bytes();
+        // SOURCE: IEEE Std 802.11-2020, 9.6.24.2 (TWT Setup frame format):
+        // Category, S1G Action, Dialog Token, then the TWT element (9.4.2.199)
+        // with Control, Request Type, Target Wake Time, Nominal Minimum TWT
+        // Wake Duration, TWT Wake Interval Mantissa and TWT Channel.
+        let body = [
+            TWT_ACTION_CATEGORY,
+            TWT_SETUP_ACTION,
+            self.dialog_token,
+            TWT_ELEMENT_ID,
+            INDIVIDUAL_TWT_ELEMENT_BODY_LEN,
+            control,
+            r0,
+            r1,
+            p0,
+            p1,
+            p2,
+            p3,
+            p4,
+            p5,
+            p6,
+            p7,
+            p8,
+            p9,
+            p10,
+            p11,
+        ];
         *target = body;
         Ok(INDIVIDUAL_TWT_SETUP_BODY_LEN)
     }
@@ -461,8 +488,10 @@ impl IndividualTwtSetup {
             return Err(TwtWireError::InvalidElement);
         }
         let control = TwtControlFields::supported(control)?;
-        let request_type = u16::from_le_bytes([request_type_low, request_type_high]);
-        let parameters = IndividualTwtParameterSet::parse(request_type, &parameters);
+        let parameters = IndividualTwtParameterSet::parse(
+            TwtRequestFields::from_bytes([request_type_low, request_type_high]),
+            parameters,
+        );
         Self {
             dialog_token,
             control,
@@ -591,6 +620,19 @@ oer_portable_wire::bitfield! {
         pub information_disabled, with_information_disabled: bool = 4..5;
         pub duration_unit, with_duration_unit: bool = 5..6;
         pub reserved, with_reserved: u8 = 6..8;
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// An individual TWT parameter set's fields after its Request Type.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.2.199 (TWT element, Figure 9-686):
+    /// Target Wake Time, Nominal Minimum TWT Wake Duration, TWT Wake
+    /// Interval Mantissa and TWT Channel.
+    pub struct IndividualTwtFields[12] (little) {
+        pub target_wake_time, with_target_wake_time: (u64) = 0..64;
+        pub nominal_minimum_wake_duration, with_nominal_minimum_wake_duration: (u8) = 64..72;
+        pub wake_interval_mantissa, with_wake_interval_mantissa: (u16) = 72..88;
+        pub twt_channel, with_twt_channel: (u8) = 88..96;
     }
 }
 

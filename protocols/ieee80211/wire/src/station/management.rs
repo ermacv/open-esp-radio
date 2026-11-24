@@ -323,6 +323,6 @@ pub fn parse_sta_disconnect(
     let reason_code = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?);
     Some(StaDisconnect {
         kind,
-        reason_code: reason_code.code(),
+        reason_code: reason_code.code().get(),
     })
 }

@@ -394,7 +394,8 @@ impl StaTxBlockAck {
 
     fn take_action(&mut self, action: BlockAckAction, now: Instant) -> bool {
         match action {
-            BlockAckAction::AddbaResponse { tid, .. } => {
+            BlockAckAction::AddbaResponse { parameters, .. } => {
+                let tid = parameters.tid();
                 match self.originator.on_response_action(action) {
                     Ok(TxBlockAckResponseDisposition::Matched(matched)) => {
                         if let TxBlockAckResponse::Operational(agreement) = matched.response
@@ -415,7 +416,7 @@ impl StaTxBlockAck {
             }
             BlockAckAction::Delba {
                 tid,
-                initiator: false,
+                initiator: oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
                 ..
             } => {
                 self.originator.stop(tid);

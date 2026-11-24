@@ -40,6 +40,15 @@ pub enum AddbaRequestError {
     InvalidWindow(u16),
 }
 
+impl From<AddbaParametersError> for AddbaRequestError {
+    fn from(error: AddbaParametersError) -> Self {
+        match error {
+            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
+            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
+        }
+    }
+}
+
 /// Encode an immediate-policy ADDBA Request action body.
 ///
 /// The session owner supplies the dialog token, timeout and starting sequence;
@@ -52,55 +61,47 @@ pub fn encode_addba_request(
     amsdu: AmsduSupport,
     starting_sequence: SequenceNumber,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
-    if tid > 15 {
-        return Err(AddbaRequestError::InvalidTid(tid));
-    }
-    if window == 0 || window > 0x03ff {
+    let parameters = AddbaParameters::immediate(amsdu, tid, window)?;
+    // A request names the buffer it asks for: zero is no buffer.
+    if window == 0 {
         return Err(AddbaRequestError::InvalidWindow(window));
     }
-    let parameters = AddbaParameters::from_bytes([0; 2])
-        .with_amsdu(amsdu == AmsduSupport::Supported)
-        .with_immediate(true)
-        .with_tid(tid)
-        .map_err(|_| AddbaRequestError::InvalidTid(tid))?
-        .with_window(window)
-        .map_err(|_| AddbaRequestError::InvalidWindow(window))?;
-    let mut body = [0; ADDBA_ACTION_BODY_LEN];
-    body[0] = BLOCK_ACK_CATEGORY;
-    body[1] = ADDBA_REQUEST_ACTION;
-    body[2] = dialog_token;
-    crate::encoding::write_array::<3, _, _>(&mut body, &parameters.to_bytes());
-    crate::encoding::write_array::<5, _, _>(&mut body, &timeout_tu.to_le_bytes());
-    crate::encoding::write_array::<7, _, _>(
-        &mut body,
-        &starting_sequence.sequence_control().to_bytes(),
-    );
-    Ok(body)
+    let [p0, p1] = parameters.to_bytes();
+    let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
+    let [s0, s1] = starting_sequence.sequence_control().to_bytes();
+    // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame format):
+    // Category, Block Ack Action, Dialog Token, Block Ack Parameter Set,
+    // Block Ack Timeout Value, Block Ack Starting Sequence Control.
+    Ok([
+        BLOCK_ACK_CATEGORY,
+        ADDBA_REQUEST_ACTION,
+        dialog_token,
+        p0,
+        p1,
+        t0,
+        t1,
+        s0,
+        s1,
+    ])
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BlockAckAction {
     AddbaRequest {
         dialog_token: u8,
-        tid: u8,
-        immediate: bool,
-        amsdu: bool,
-        window: u16,
+        parameters: AddbaParameters,
         timeout_tu: u16,
         starting_sequence: SequenceNumber,
     },
     AddbaResponse {
         dialog_token: u8,
         status: u16,
-        tid: u8,
-        immediate: bool,
-        amsdu: bool,
-        window: u16,
+        parameters: AddbaParameters,
         timeout_tu: u16,
     },
     Delba {
         tid: u8,
-        initiator: bool,
+        initiator: DelbaInitiator,
         reason: u16,
     },
 }
@@ -113,50 +114,54 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
     let [BLOCK_ACK_CATEGORY, action, fields @ ..] = body else {
         return None;
     };
+    let mut reader = oer_portable_wire::Reader::new(fields);
     match *action {
-        ADDBA_REQUEST_ACTION => {
-            let mut reader = oer_portable_wire::Reader::new(fields);
-            let &[dialog_token, p0, p1, t0, t1, s0, s1] = reader.array().ok()?;
-            let parameters = AddbaParameters::from_bytes([p0, p1]);
-            Some(BlockAckAction::AddbaRequest {
-                dialog_token,
-                tid: parameters.tid(),
-                immediate: parameters.immediate(),
-                amsdu: parameters.amsdu(),
-                window: parameters.window(),
-                timeout_tu: u16::from_le_bytes([t0, t1]),
-                starting_sequence: SequenceNumber::from_sequence_control(
-                    crate::sequence::SequenceControl::from_bytes([s0, s1]),
-                ),
-            })
-        }
-        ADDBA_RESPONSE_ACTION => {
-            let mut reader = oer_portable_wire::Reader::new(fields);
-            let &[dialog_token, s0, s1, p0, p1, t0, t1] = reader.array().ok()?;
-            let parameters = AddbaParameters::from_bytes([p0, p1]);
-            Some(BlockAckAction::AddbaResponse {
-                dialog_token,
-                status: u16::from_le_bytes([s0, s1]),
-                tid: parameters.tid(),
-                immediate: parameters.immediate(),
-                amsdu: parameters.amsdu(),
-                window: parameters.window(),
-                timeout_tu: u16::from_le_bytes([t0, t1]),
-            })
-        }
+        // SOURCE: IEEE Std 802.11-2020, 9.6.5.2 (ADDBA Request frame
+        // format).
+        ADDBA_REQUEST_ACTION => Some(BlockAckAction::AddbaRequest {
+            dialog_token: reader.u8().ok()?,
+            parameters: AddbaParameters::from_bytes(reader.read().ok()?),
+            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?)
+                .time_units()
+                .get(),
+            starting_sequence: SequenceNumber::from_sequence_control(SequenceControl::from_bytes(
+                reader.read().ok()?,
+            )),
+        }),
+        // SOURCE: IEEE Std 802.11-2020, 9.6.5.3 (ADDBA Response frame
+        // format).
+        ADDBA_RESPONSE_ACTION => Some(BlockAckAction::AddbaResponse {
+            dialog_token: reader.u8().ok()?,
+            status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?)
+                .code()
+                .get(),
+            parameters: AddbaParameters::from_bytes(reader.read().ok()?),
+            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?)
+                .time_units()
+                .get(),
+        }),
+        // SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
         DELBA_ACTION => {
-            let mut reader = oer_portable_wire::Reader::new(fields);
-            let &[p0, p1, r0, r1] = reader.array().ok()?;
-            let parameters = DelbaParameters::from_bytes([p0, p1]);
+            let parameters = DelbaParameters::from_bytes(reader.read().ok()?);
             Some(BlockAckAction::Delba {
                 tid: parameters.tid(),
-                initiator: parameters.initiator(),
-                reason: u16::from_le_bytes([r0, r1]),
+                initiator: if parameters.initiator() {
+                    DelbaInitiator::Originator
+                } else {
+                    DelbaInitiator::Recipient
+                },
+                reason: crate::management::ReasonCodeField::from_bytes(reader.read().ok()?)
+                    .code()
+                    .get(),
             })
         }
         _ => None,
     }
 }
+
+/// A BlockAckReq's Frame Control: control subtype 8, every flag clear.
+const BLOCK_ACK_REQUEST_FRAME_CONTROL: FrameControlFields =
+    FrameControlFields::from_bytes([0x84, 0x00]);
 
 /// Length of a Compressed BlockAckReq frame without its FCS.
 pub const BLOCK_ACK_REQUEST_LEN: usize = 20;
@@ -179,7 +184,10 @@ pub fn encode_block_ack_request(
     starting_sequence: SequenceNumber,
 ) -> [u8; BLOCK_ACK_REQUEST_LEN] {
     let mut frame = [0_u8; BLOCK_ACK_REQUEST_LEN];
-    crate::encoding::write_array::<0, _, _>(&mut frame, &0x0084_u16.to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(
+        &mut frame,
+        &BLOCK_ACK_REQUEST_FRAME_CONTROL.to_bytes(),
+    );
     crate::encoding::write_array::<4, _, _>(&mut frame, &receiver);
     crate::encoding::write_array::<10, _, _>(&mut frame, &transmitter);
     let tid = QosControl::from_bytes([tid, 0]).tid();
@@ -200,6 +208,15 @@ pub enum RxAddbaResponseError {
     InvalidWindow(u16),
 }
 
+impl From<AddbaParametersError> for RxAddbaResponseError {
+    fn from(error: AddbaParametersError) -> Self {
+        match error {
+            AddbaParametersError::TidOutOfRange(tid) => Self::InvalidTid(tid),
+            AddbaParametersError::WindowOutOfRange(window) => Self::InvalidWindow(window),
+        }
+    }
+}
+
 /// Write one successful immediate BlockAck response into an owned action body.
 ///
 /// A-MSDU is deliberately not advertised by the initial strict RX path.
@@ -213,24 +230,13 @@ pub fn write_successful_addba_response(
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    if tid > 15 {
-        return Err(RxAddbaResponseError::InvalidTid(tid));
-    }
-    if window == 0 || window > 0x03ff {
+    let written =
+        encode_addba_response(dialog_token, 0, tid, window, 0, AmsduSupport::NotSupported)?;
+    // A successful agreement has a buffer: zero is none.
+    if window == 0 {
         return Err(RxAddbaResponseError::InvalidWindow(window));
     }
-    body.fill(0);
-    body[0] = BLOCK_ACK_CATEGORY;
-    body[1] = ADDBA_RESPONSE_ACTION;
-    body[2] = dialog_token;
-    let parameters = AddbaParameters::from_bytes([0; 2])
-        .with_amsdu(false)
-        .with_immediate(true)
-        .with_tid(tid)
-        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
-        .with_window(window)
-        .map_err(|_| RxAddbaResponseError::InvalidWindow(window))?;
-    crate::encoding::write_array::<5, _, _>(body, &parameters.to_bytes());
+    *body = written;
     Ok(())
 }
 
@@ -252,25 +258,14 @@ pub fn write_declined_addba_response(
     let Ok(body) = <&mut [u8; ADDBA_ACTION_BODY_LEN]>::try_from(body) else {
         return Err(RxAddbaResponseError::InvalidBodyLength(length));
     };
-    if tid > 15 {
-        return Err(RxAddbaResponseError::InvalidTid(tid));
-    }
-    if requested_window > 0x03ff {
-        return Err(RxAddbaResponseError::InvalidWindow(requested_window));
-    }
-    body.fill(0);
-    body[0] = BLOCK_ACK_CATEGORY;
-    body[1] = ADDBA_RESPONSE_ACTION;
-    body[2] = dialog_token;
-    crate::encoding::write_array::<3, _, _>(body, &ADDBA_STATUS_REQUEST_DECLINED.to_le_bytes());
-    let parameters = AddbaParameters::from_bytes([0; 2])
-        .with_amsdu(false)
-        .with_immediate(true)
-        .with_tid(tid)
-        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
-        .with_window(requested_window)
-        .map_err(|_| RxAddbaResponseError::InvalidWindow(requested_window))?;
-    crate::encoding::write_array::<5, _, _>(body, &parameters.to_bytes());
+    *body = encode_addba_response(
+        dialog_token,
+        ADDBA_STATUS_REQUEST_DECLINED,
+        tid,
+        requested_window,
+        0,
+        AmsduSupport::NotSupported,
+    )?;
     Ok(())
 }
 
@@ -291,16 +286,9 @@ pub fn encode_addba_response(
     timeout_tu: u16,
     amsdu: AmsduSupport,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
-    let parameters = AddbaParameters::from_bytes([0; 2])
-        .with_immediate(true)
-        .with_amsdu(amsdu == AmsduSupport::Supported)
-        .with_tid(tid)
-        .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
-        .with_window(window)
-        .map_err(|_| RxAddbaResponseError::InvalidWindow(window))?;
-    let [s0, s1] = status.to_le_bytes();
-    let [p0, p1] = parameters.to_bytes();
-    let [t0, t1] = timeout_tu.to_le_bytes();
+    let [p0, p1] = AddbaParameters::immediate(amsdu, tid, window)?.to_bytes();
+    let [s0, s1] = crate::management::StatusCodeField::of(status).to_bytes();
+    let [t0, t1] = BlockAckTimeout::of(timeout_tu).to_bytes();
     Ok([
         BLOCK_ACK_CATEGORY,
         ADDBA_RESPONSE_ACTION,
@@ -331,7 +319,7 @@ pub fn encode_delba(
         .map_err(|_| AddbaRequestError::InvalidTid(tid))?
         .with_initiator(initiator == DelbaInitiator::Originator);
     let [p0, p1] = parameters.to_bytes();
-    let [r0, r1] = reason.to_le_bytes();
+    let [r0, r1] = crate::management::ReasonCodeField::of(reason).to_bytes();
     Ok([BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1])
 }
 
@@ -393,12 +381,82 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
 }
 
 oer_portable_wire::bitfield! {
-    /// SOURCE: IEEE Std 802.11-2020, 9.6.5 (Block Ack Action frame details).
+    /// The Block Ack Policy subfield of a Block Ack Parameter Set.
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.14 (Block Ack Parameter Set
+    /// field).
+    pub enum BlockAckPolicy: u8 [1] { Delayed = 0, Immediate = 1 }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.14 (Block Ack Parameter Set
+    /// field).
     pub struct AddbaParameters[2] (little) {
         pub amsdu, with_amsdu: bool = 0..1;
-        pub immediate, with_immediate: bool = 1..2;
+        pub policy, with_policy: (BlockAckPolicy) = 1..2;
         pub tid, with_tid: u8 = 2..6;
         pub window, with_window: u16 = 6..16;
+    }
+}
+
+/// Why a Block Ack Parameter Set cannot hold a value (IEEE Std
+/// 802.11-2020, 9.4.1.14: a four-bit TID, a ten-bit Buffer Size).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AddbaParametersError {
+    TidOutOfRange(u8),
+    WindowOutOfRange(u16),
+}
+
+impl AddbaParameters {
+    /// The parameters of an agreement under `policy` for `tid` and
+    /// `window`.
+    ///
+    /// # Errors
+    ///
+    /// A TID wider than four bits or a window wider than ten.
+    pub const fn new(
+        policy: BlockAckPolicy,
+        amsdu: AmsduSupport,
+        tid: u8,
+        window: u16,
+    ) -> Result<Self, AddbaParametersError> {
+        let parameters = Self::from_bytes([0; 2])
+            .with_amsdu(matches!(amsdu, AmsduSupport::Supported))
+            .with_policy(policy);
+        let Ok(parameters) = parameters.with_tid(tid) else {
+            return Err(AddbaParametersError::TidOutOfRange(tid));
+        };
+        match parameters.with_window(window) {
+            Ok(parameters) => Ok(parameters),
+            Err(_) => Err(AddbaParametersError::WindowOutOfRange(window)),
+        }
+    }
+
+    /// An immediate agreement's parameters; [`Self::new`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::new`].
+    pub const fn immediate(
+        amsdu: AmsduSupport,
+        tid: u8,
+        window: u16,
+    ) -> Result<Self, AddbaParametersError> {
+        Self::new(BlockAckPolicy::Immediate, amsdu, tid, window)
+    }
+}
+
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.15 (Block Ack Timeout Value
+    /// field), in time units.
+    pub struct BlockAckTimeout[2] (little) {
+        pub time_units, with_time_units: (u16) = 0..16;
+    }
+}
+
+impl BlockAckTimeout {
+    /// The field holding `time_units`.
+    pub const fn of(time_units: u16) -> Self {
+        // Sixteen bits of sixteen: nothing is cut.
+        Self::from_bytes([0; 2]).with_time_units(oer_portable_wire::U16::from_low_bits(time_units))
     }
 }
 oer_portable_wire::bitfield! {
