@@ -212,5 +212,24 @@ oer_portable_wire::bitfield! {
     }
 }
 
+oer_portable_wire::bitfield! {
+    /// The fixed fields of an Authentication frame's body.
+    /// SOURCE: IEEE Std 802.11-2020, 9.3.3.12 (Authentication frame format,
+    /// Table 9-36): Authentication algorithm number (9.4.1.1),
+    /// Authentication transaction sequence number (9.4.1.2), Status code
+    /// (9.4.1.9).
+    pub struct AuthenticationFields[6] (little) {
+        pub algorithm, with_algorithm: u16 = 0..16;
+        pub transaction, with_transaction: u16 = 16..32;
+        pub status_code, with_status_code: u16 = 32..48;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// SOURCE: IEEE Std 802.11-2020, 9.4.1.9 (Status Code field).
+    pub struct StatusCodeField[2] (little) {
+        pub code, with_code: u16 = 0..16;
+    }
+}
+
 #[cfg(test)]
 mod tests;

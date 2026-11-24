@@ -8,7 +8,6 @@ use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
 use oer_protocols_ieee80211_core_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
-use oer_protocols_ieee80211_wire::management::CapabilityInformation;
 
 /// Whether `access_point` admits an HE association: it advertises HT
 /// Capabilities, HE Capabilities with HE-MCS 0..9 both ways on one stream
@@ -427,9 +426,7 @@ impl StaAssociatedPeer {
                     access_point.supported_rates_bytes(),
                     access_point.extended_supported_rates_bytes(),
                 ),
-                short_preamble: CapabilityInformation::from_bytes(
-                    access_point.capability_info.to_le_bytes(),
-                )
+                short_preamble: access_point.capability_info
                 .short_preamble(),
             },
             edca,

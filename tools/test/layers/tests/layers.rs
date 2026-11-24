@@ -6675,11 +6675,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/hil/protocol/src/framing.rs", 12, BY_STEP_3),
     ("protocols/hil/protocol/src/key.rs", 1, BY_STEP_3),
     (
-        "protocols/ieee80211/core/roles/sta/src/association.rs",
-        1,
-        BY_STEP_13,
-    ),
-    (
         "protocols/ieee80211/core/datapath/src/plane.rs",
         1,
         BY_STEP_13,
@@ -6724,9 +6719,9 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         7,
         BY_STEP_3,
     ),
-    ("protocols/ieee80211/wire/src/ap.rs", 27, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/ap.rs", 20, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ap/probe.rs", 1, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/ap/profile.rs", 3, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/ap/profile.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/beacon.rs", 4, BY_STEP_3),
     ("protocols/ieee80211/wire/src/bip.rs", 4, BY_STEP_3),
     (
@@ -6751,16 +6746,14 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/wire/src/frame.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ftm.rs", 19, BY_STEP_3),
     ("protocols/ieee80211/wire/src/he.rs", 11, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/ht.rs", 6, BY_STEP_3),
     ("protocols/ieee80211/wire/src/management.rs", 2, BY_STEP_3),
     ("protocols/ieee80211/wire/src/ndpa.rs", 12, BY_STEP_3),
     ("protocols/ieee80211/wire/src/sae.rs", 3, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/scan.rs", 5, BY_STEP_3),
+    ("protocols/ieee80211/wire/src/scan.rs", 1, BY_STEP_3),
     ("protocols/ieee80211/wire/src/security/rsn.rs", 8, BY_STEP_3),
-    ("protocols/ieee80211/wire/src/station.rs", 3, BY_STEP_3),
     (
         "protocols/ieee80211/wire/src/station/association.rs",
-        5,
+        2,
         BY_STEP_3,
     ),
     (
@@ -6780,7 +6773,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     (
         "protocols/ieee80211/wire/src/station_beacon.rs",
-        3,
+        1,
         BY_STEP_3,
     ),
     ("protocols/ieee80211/wire/src/trigger.rs", 8, BY_STEP_3),

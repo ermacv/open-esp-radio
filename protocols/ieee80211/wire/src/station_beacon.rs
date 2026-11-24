@@ -53,7 +53,7 @@ pub struct StaBeaconObservation {
     /// The beacon's Timestamp field: the access point's TSF.
     pub timestamp_tsf: crate::tsf::TsfTimestamp,
     pub interval_tu: u16,
-    pub capability_information: u16,
+    pub capability_information: crate::management::CapabilityInformation,
     pub tim: Option<StaTimObservation>,
     pub protection: StaBeaconProtection,
     /// The EDCA parameters of the beacon's WMM Parameter element, if it
@@ -187,9 +187,9 @@ pub fn parse_sta_beacon(
             if bitmap.is_empty() || dtim_period == 0 || tim.is_some() {
                 return Err(StaBeaconError::MalformedTim);
             }
-            let aid = usize::from(
-                crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid(),
-            );
+            // The station's association ID, as the Association Response's
+            // AID field gave it ([`crate::station::AssociationResponse`]).
+            let aid = usize::from(association_id);
             let aid_byte = aid / 8;
             // Bitmap Offset is encoded in units of two octets in bits 7:1;
             // the decoded offset is doubled to obtain N1 in octets.
@@ -240,7 +240,7 @@ pub fn parse_sta_beacon(
         observation: StaBeaconObservation {
             timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
             interval_tu,
-            capability_information: u16::from_le_bytes([c0, c1]),
+            capability_information: crate::management::CapabilityInformation::from_bytes([c0, c1]),
             tim,
             protection,
             edca,

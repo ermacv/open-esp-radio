@@ -60,7 +60,7 @@ impl HtDuplicateMcs32 {
 /// reviewed A-MPDU receive limits and one-stream MCS advertisement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HtLocalCapabilities {
-    capability_info: u16,
+    capability_info: HtCapabilityInfo,
     ampdu_parameters: u8,
     rx_mcs_0_to_7: u8,
     tx_mcs_parameters: u8,
@@ -68,7 +68,7 @@ pub struct HtLocalCapabilities {
 
 impl HtLocalCapabilities {
     pub const fn new(
-        capability_info: u16,
+        capability_info: HtCapabilityInfo,
         ampdu_parameters: u8,
         rx_mcs_0_to_7: u8,
         tx_mcs_parameters: u8,
@@ -104,7 +104,8 @@ pub const fn ht_capability_ie_for_peer(
     // Channel geometry owns the width and short-GI bits even when the
     // caller supplies them in the capability base.
     let width40 = !matches!(channel.width(), ChannelWidth::Mhz20);
-    let [c0, c1] = HtCapabilityInfo::from_bytes(local_ht.capability_info.to_le_bytes())
+    let [c0, c1] = local_ht
+        .capability_info
         .with_width40(width40)
         .with_short_gi20(true)
         .with_short_gi40(width40)
@@ -168,7 +169,7 @@ pub const fn ht_operation_ie(
 /// One peer's directly observed one-stream HT receive capabilities.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HtPeerCapabilities {
-    capability_info: u16,
+    capability_info: HtCapabilityInfo,
     ampdu_parameters: u8,
     rx_mcs_0_to_7: core::num::NonZeroU8,
     rx_ht_duplicate_mcs32: bool,
@@ -176,22 +177,19 @@ pub struct HtPeerCapabilities {
 
 impl HtPeerCapabilities {
     pub const fn supports_40_mhz(self) -> bool {
-        HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).width40()
+        self.capability_info.width40()
     }
 
     /// HT Capabilities Information HT-Greenfield.
     pub const fn supports_greenfield(self) -> bool {
-        HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).greenfield()
+        self.capability_info.greenfield()
     }
 
     pub const fn supports_short_guard_interval(self, width: ChannelWidth) -> bool {
         match width {
-            ChannelWidth::Mhz20 => {
-                HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi20()
-            }
+            ChannelWidth::Mhz20 => self.capability_info.short_gi20(),
             ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below => {
-                self.supports_40_mhz()
-                    && HtCapabilityInfo::from_bytes(self.capability_info.to_le_bytes()).short_gi40()
+                self.supports_40_mhz() && self.capability_info.short_gi40()
             }
         }
     }
@@ -233,7 +231,7 @@ pub fn ht_peer_capabilities(bytes: &[u8]) -> Option<HtPeerCapabilities> {
             && let Some(rx_mcs_0_to_7) = core::num::NonZeroU8::new(rx_mcs_0_to_7)
         {
             return Some(HtPeerCapabilities {
-                capability_info: u16::from_le_bytes([c0, c1]),
+                capability_info: HtCapabilityInfo::from_bytes([c0, c1]),
                 ampdu_parameters,
                 rx_mcs_0_to_7,
                 rx_ht_duplicate_mcs32: HtMcs32Octet::from_bytes([

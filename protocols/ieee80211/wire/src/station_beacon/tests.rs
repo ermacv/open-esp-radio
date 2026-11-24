@@ -29,7 +29,9 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
         Ok(StaBeaconObservation {
             timestamp_tsf: crate::tsf::TsfTimestamp::from_micros(0x0102_0304_0506_0708),
             interval_tu: 100,
-            capability_information: 0x0431,
+            capability_information: crate::management::CapabilityInformation::from_bytes([
+                0x31, 0x04
+            ]),
             tim: Some(StaTimObservation {
                 dtim_count: 0,
                 dtim_period: 3,

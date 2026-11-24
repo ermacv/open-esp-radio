@@ -44,7 +44,12 @@ const OPEN_SYSTEM_AUTHENTICATION_ALGORITHM: u16 = 0;
 pub enum ApAssociationResponseError {
     LengthOverflow,
     MissingAssociationId,
-    OutputTooSmall { required: usize },
+    /// An association ID wider than the AID field's 14 bits (IEEE Std
+    /// 802.11-2020, 9.4.1.8).
+    AssociationIdOutOfRange,
+    OutputTooSmall {
+        required: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1041,20 +1046,18 @@ pub fn write_ht_association_response(
     peer_ht: Option<HtPeerCapabilities>,
     protection: ApBssProtection,
 ) -> Result<usize, ApAssociationResponseError> {
-    if status == 0
-        && crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid() == 0
-    {
-        return Err(ApAssociationResponseError::MissingAssociationId);
-    }
-
+    // The AID field: the association ID with both marker bits set, or zero
+    // when the association is refused (IEEE Std 802.11-2020, 9.4.1.8).
     let encoded_association_id = if status == 0 {
-        u16::from_le_bytes(
-            crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-                .with_marker(oer_portable_wire::U8::constant::<3>())
-                .to_bytes(),
-        )
+        if association_id == 0 {
+            return Err(ApAssociationResponseError::MissingAssociationId);
+        }
+        crate::management::AssociationId::from_bytes([0; 2])
+            .with_aid(association_id)
+            .map_err(|_| ApAssociationResponseError::AssociationIdOutOfRange)?
+            .with_marker(oer_portable_wire::U8::constant::<3>())
     } else {
-        0
+        crate::management::AssociationId::from_bytes([0; 2])
     };
     let ht_capability = ht_capability_ie_for_peer(profile.ht, channel, peer_ht);
     let ht_operation = ht_operation_ie(channel, protection.ht);
@@ -1062,7 +1065,7 @@ pub fn write_ht_association_response(
     crate::encoding::FrameParts([
         &profile.capabilities(LinkProtection::Ccmp).to_le_bytes(),
         &status.to_le_bytes(),
-        &encoded_association_id.to_le_bytes(),
+        &encoded_association_id.to_bytes(),
         &[1, 8],
         profile.legacy_rates.supported(),
         &[50, 4],
@@ -1109,15 +1112,9 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
-        let raw_association_id = u16::from_le_bytes([a0, a1]);
-        let association_id =
-            crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).aid();
-        if crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes())
-            .marker()
-            .get()
-            != 3
-            || association_id == 0
-        {
+        let field = crate::management::AssociationId::from_bytes([a0, a1]);
+        let association_id = field.aid();
+        if field.marker().get() != 3 || association_id == 0 {
             return None;
         }
         return Some((

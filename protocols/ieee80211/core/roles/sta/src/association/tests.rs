@@ -39,7 +39,8 @@ mod associated_peer {
 
     fn response(status_code: u16) -> AssociationResponse {
         AssociationResponse {
-            capability_info: 0,
+            capability_info:
+                oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0; 2]),
             status_code,
             association_id: 7,
             ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Present,
@@ -121,7 +122,10 @@ mod associated_peer {
             )
             .unwrap(),
         );
-        access_point.capability_info = 0x0421;
+        access_point.capability_info =
+            oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([
+                0x21, 0x04,
+            ]);
         access_point
             .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24])
             .unwrap();

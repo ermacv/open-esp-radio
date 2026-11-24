@@ -9,7 +9,12 @@ use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapab
 fn ht_capability() -> [u8; 28] {
     use oer_protocols_ieee80211_wire::ht::{HtLocalCapabilities, ht_capability_ie};
     ht_capability_ie(
-        HtLocalCapabilities::new(0, 0, 0xff, 1),
+        HtLocalCapabilities::new(
+            oer_protocols_ieee80211_wire::ht::HtCapabilityInfo::from_bytes([0x00, 0x00]),
+            0,
+            0xff,
+            1,
+        ),
         Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
     )
 }

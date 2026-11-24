@@ -112,7 +112,12 @@ fn management_seeds() -> Vec<Vec<u8>> {
     let mut ht = to_access_point(0x0000, &[0x01, 0, 10, 0]);
     ht.extend_from_slice(&[1, 4, 0x82, 0x84, 0x0c, 0x6c]);
     ht.extend_from_slice(&crate::ht::ht_capability_ie(
-        crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
+        crate::ht::HtLocalCapabilities::new(
+            crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+            0x03,
+            0xff,
+            0x01,
+        ),
         channel,
     ));
     seeds.push(ht);

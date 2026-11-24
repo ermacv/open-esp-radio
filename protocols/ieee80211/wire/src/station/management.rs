@@ -219,7 +219,10 @@ pub fn parse_sae_authentication(
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<SaeAuthentication<'_>> {
-    let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
+    let (header, fixed, body) = split_received_management(frame)?;
+    let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
+    let (algorithm, transaction, status_code) =
+        (fixed.algorithm(), fixed.transaction(), fixed.status_code());
     if header.frame_control.type_and_subtype()
         != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
@@ -246,7 +249,10 @@ pub fn parse_open_authentication_response(
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<OpenAuthenticationResponse> {
-    let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
+    let (header, fixed, _) = split_received_management(frame)?;
+    let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
+    let (algorithm, transaction, status_code) =
+        (fixed.algorithm(), fixed.transaction(), fixed.status_code());
     if header.frame_control.type_and_subtype()
         != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local

@@ -1,5 +1,9 @@
-const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities =
-    crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities = crate::ht::HtLocalCapabilities::new(
+    crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+    0x03,
+    0xff,
+    0x01,
+);
 
 use super::*;
 use crate::protection::HtProtectionMode;
@@ -37,7 +41,7 @@ fn ht20_records_are_complete_and_bounded() {
     assert_eq!(
         ht_peer_capabilities(&capability),
         Some(HtPeerCapabilities {
-            capability_info: 0x102c,
+            capability_info: HtCapabilityInfo::from_bytes([0x2c, 0x10]),
             ampdu_parameters: 0x03,
             rx_mcs_0_to_7: core::num::NonZeroU8::new(0xff).unwrap(),
             rx_ht_duplicate_mcs32: false,
@@ -82,7 +86,7 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
         .to_bytes();
     let below = crate::channel::Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
     let capability = ht_capability_ie(
-        HtLocalCapabilities::new(u16::from_le_bytes(info), ampdu, 0xff, 1),
+        HtLocalCapabilities::new(HtCapabilityInfo::from_bytes(info), ampdu, 0xff, 1),
         below,
     );
     // Width, both short guard intervals and SM power save disabled.
@@ -158,7 +162,12 @@ fn local_profile_cannot_override_channel_geometry() {
             let geometry_bits = (supplied_geometry & 1) << 1
                 | (supplied_geometry & 2) << 4
                 | (supplied_geometry & 4) << 4;
-            let profile = HtLocalCapabilities::new(0x100c | geometry_bits, 0x03, 0xff, 0x01);
+            let profile = HtLocalCapabilities::new(
+                HtCapabilityInfo::from_bytes((0x100c | geometry_bits).to_le_bytes()),
+                0x03,
+                0xff,
+                0x01,
+            );
             assert_eq!(ht_capability_ie(profile, channel), expected);
         }
     }

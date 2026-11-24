@@ -277,7 +277,7 @@ const OFDM_ADVERTISEMENT: crate::ap::profile::Advertisement =
         ),
         TEST_ADVERTISEMENT.ht,
         TEST_ADVERTISEMENT.wmm,
-        0x0001,
+        crate::management::CapabilityInformation::from_bytes([0x01, 0x00]),
     )
     .unwrap();
 

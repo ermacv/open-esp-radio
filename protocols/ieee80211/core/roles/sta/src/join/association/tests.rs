@@ -132,7 +132,10 @@ fn association_runtime_accepts_only_selected_peer_response() {
     assert_eq!(
         response,
         AssociationResponse {
-            capability_info: 0x0431,
+            capability_info:
+                oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([
+                    0x31, 0x04
+                ]),
             status_code: 0,
             association_id: 42,
             ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,

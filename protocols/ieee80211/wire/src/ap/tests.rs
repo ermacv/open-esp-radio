@@ -1,7 +1,11 @@
 use crate::ap::profile::tests::TEST_ADVERTISEMENT;
 
-const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities =
-    crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities = crate::ht::HtLocalCapabilities::new(
+    crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+    0x03,
+    0xff,
+    0x01,
+);
 
 use super::*;
 use crate::protection::ApBssProtection;
@@ -357,6 +361,20 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         ),
         Err(ApAssociationResponseError::MissingAssociationId)
     );
+    // The AID field holds 14 bits: a wider association ID is refused, its
+    // high bits never read as the marker.
+    assert_eq!(
+        write_ht_association_response(
+            &TEST_ADVERTISEMENT,
+            &mut body,
+            0,
+            0x4001,
+            ht20,
+            None,
+            ApBssProtection::default(),
+        ),
+        Err(ApAssociationResponseError::AssociationIdOutOfRange)
+    );
 
     let ht40 =
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Below).unwrap();
@@ -670,7 +688,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         access_point,
         peer,
         0,
-        0xc001,
+        1,
         seq(8),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,

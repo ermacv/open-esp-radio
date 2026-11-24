@@ -21,7 +21,12 @@ use oer_protocols_ieee80211_wire::{
 };
 
 /// The HT capabilities the access point announces.
-pub const HT_CAPABILITIES: HtLocalCapabilities = HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+pub const HT_CAPABILITIES: HtLocalCapabilities = HtLocalCapabilities::new(
+    oer_protocols_ieee80211_wire::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+    0x03,
+    0xff,
+    0x01,
+);
 
 /// One access category's parameters.
 const fn ac(aifsn: U8<4>, ecw_min: U8<4>, ecw_max: U8<4>, txop: u16) -> WmmAcParameters {
@@ -77,7 +82,7 @@ pub const ADVERTISEMENT: Advertisement = {
         wmm,
         // ESS, Short Preamble and Short Slot Time. Privacy follows the
         // access point's security.
-        0x0421,
+        oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0x21, 0x04]),
     ) else {
         panic!("the advertisement leaves Privacy to the security mode");
     };

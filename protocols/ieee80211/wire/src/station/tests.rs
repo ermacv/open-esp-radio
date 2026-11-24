@@ -821,7 +821,7 @@ fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
 fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
     use crate::scan::ElementPresence::{Absent, Present};
     let response = |ht_capability, wmm_element, he| AssociationResponse {
-        capability_info: 0,
+        capability_info: crate::management::CapabilityInformation::from_bytes([0; 2]),
         status_code: 0,
         association_id: 1,
         ht_capability,

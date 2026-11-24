@@ -126,52 +126,24 @@ struct ReceivedManagementHeader {
 /// fixed body that follows (the Authentication algorithm, transaction and
 /// status, or the Association Response capability, status and AID) and the
 /// rest; `None` when the frame is shorter than both.
-fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u16; 3], &[u8])> {
+fn split_received_management(frame: &[u8]) -> Option<(ReceivedManagementHeader, [u8; 6], &[u8])> {
     let mut reader = oer_portable_wire::Reader::new(frame);
-    let header = reader.array::<MANAGEMENT_HEADER_LEN>().ok()?;
-    let body = reader.remaining();
-    let mut reader = oer_portable_wire::Reader::new(body);
-    let &[f0, f1, f2, f3, f4, f5] = reader.array().ok()?;
-    let rest = reader.remaining();
-    let [
-        c0,
-        c1,
-        _duration0,
-        _duration1,
-        r0,
-        r1,
-        r2,
-        r3,
-        r4,
-        r5,
-        t0,
-        t1,
-        t2,
-        t3,
-        t4,
-        t5,
-        b0,
-        b1,
-        b2,
-        b3,
-        b4,
-        b5,
-        _sequence0,
-        _sequence1,
-    ] = *header;
+    let frame_control = crate::frame::FrameControlFields::from_bytes(reader.read().ok()?);
+    let _duration: [u8; 2] = reader.read().ok()?;
+    let receiver = reader.read().ok()?;
+    let transmitter = reader.read().ok()?;
+    let bssid = reader.read().ok()?;
+    let _sequence_control: [u8; 2] = reader.read().ok()?;
+    let fixed = reader.read().ok()?;
     Some((
         ReceivedManagementHeader {
-            frame_control: crate::frame::FrameControlFields::from_bytes([c0, c1]),
-            receiver: [r0, r1, r2, r3, r4, r5],
-            transmitter: [t0, t1, t2, t3, t4, t5],
-            bssid: [b0, b1, b2, b3, b4, b5],
+            frame_control,
+            receiver,
+            transmitter,
+            bssid,
         },
-        [
-            u16::from_le_bytes([f0, f1]),
-            u16::from_le_bytes([f2, f3]),
-            u16::from_le_bytes([f4, f5]),
-        ],
-        rest,
+        fixed,
+        reader.remaining(),
     ))
 }
 
