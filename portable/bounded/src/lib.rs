@@ -64,6 +64,20 @@ impl<const COUNT: usize> Index<COUNT> {
         byte
     }
 
+    /// The number as a 16-bit word: every number below `COUNT` is one,
+    /// checked where it is monomorphized.
+    pub const fn to_u16(self) -> u16 {
+        const {
+            if COUNT > 1 << 16 {
+                panic!("every number below the bound is a 16-bit word");
+            }
+        };
+        // Below 2^16 (checked above): the low two bytes are the whole
+        // number.
+        let [b0, b1, ..] = self.0.to_le_bytes();
+        u16::from_le_bytes([b0, b1])
+    }
+
     /// The number as a 32-bit word: every number below `COUNT` is one,
     /// checked where it is monomorphized.
     pub const fn to_u32(self) -> u32 {
@@ -76,6 +90,30 @@ impl<const COUNT: usize> Index<COUNT> {
         // number, on a 32- or a 64-bit target.
         let [b0, b1, b2, b3, ..] = self.0.to_le_bytes();
         u32::from_le_bytes([b0, b1, b2, b3])
+    }
+
+    /// Every index below `COUNT`, in order: each is the array position
+    /// `from_fn` gives, which is below its length.
+    pub fn every() -> [Self; COUNT] {
+        core::array::from_fn(Self)
+    }
+
+    /// The number of ones in `word`, when every such number (at most 64)
+    /// is below `COUNT`. A smaller bound refuses to build:
+    ///
+    /// ```compile_fail,E0080
+    /// let ones = oer_portable_bounded::Index::<64>::ones(7);
+    /// # let _ = ones;
+    /// ```
+    pub const fn ones(word: u64) -> Self {
+        const {
+            if COUNT <= u64::BITS as usize {
+                panic!("every count of a word's ones is below the bound");
+            }
+        };
+        // At most 64: the low byte is the whole number.
+        let [byte, ..] = word.count_ones().to_le_bytes();
+        Self(byte as usize)
     }
 
     /// The byte `value`, when every byte is below `COUNT`. A smaller bound

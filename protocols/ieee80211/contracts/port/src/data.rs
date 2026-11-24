@@ -10,6 +10,8 @@
 use core::marker::PhantomData;
 use core::task::Context;
 
+use oer_portable_bounded::Index;
+
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
@@ -147,7 +149,7 @@ impl FrameSet {
 
     /// The number of frames, which a byte holds: a set names at most 64.
     pub const fn count(self) -> u8 {
-        self.0.count_ones() as u8
+        Index::<65>::ones(self.0).to_u8()
     }
 
     /// Whether the set holds no frame.
@@ -388,15 +390,17 @@ impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const D
                 side,
                 brand: PhantomData,
             }),
-            singles: core::array::from_fn(|index| SinglePlace {
-                index: index as u8,
+            singles: Index::<SINGLES>::every().map(|index| SinglePlace {
+                index: index.to_u8(),
                 brand: PhantomData,
             }),
             // After the controller's: each place's index is the installation's
             // own. The sum fits a byte (the const check above), so the
             // addition saturates nowhere.
-            data: core::array::from_fn(|index| SinglePlace {
-                index: SINGLES.saturating_add(index) as u8,
+            data: Index::<DATA>::every().map(|index| SinglePlace {
+                index: Index::<256>::constant::<SINGLES>()
+                    .to_u8()
+                    .saturating_add(index.to_u8()),
                 brand: PhantomData,
             }),
             queues: QUEUES.map(|category| QueueRight {
@@ -405,12 +409,12 @@ impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize, const D
             }),
             command: CommandPlace { brand: PhantomData },
             pairwise: PairwiseSlot { brand: PhantomData },
-            groups: core::array::from_fn(|index| GroupSlot {
-                index: index as u8,
+            groups: Index::<GROUPS>::every().map(|index| GroupSlot {
+                index: index.to_u8(),
                 brand: PhantomData,
             }),
-            agreements: core::array::from_fn(|index| AgreementSlot {
-                index: index as u8,
+            agreements: Index::<AGREEMENTS>::every().map(|index| AgreementSlot {
+                index: index.to_u8(),
                 brand: PhantomData,
             }),
         }
@@ -464,10 +468,9 @@ pub const HEADROOM: usize = match WRITTEN % BODY_ALIGNMENT {
 impl HeaderLen {
     /// `len`, when it fits the headroom.
     pub const fn new(len: usize) -> Option<Self> {
-        if len <= HEADROOM {
-            Some(Self(len as u8))
-        } else {
-            None
+        match Index::<{ HEADROOM + 1 }>::new(len) {
+            Ok(octets) => Some(Self(octets.to_u8())),
+            Err(_) => None,
         }
     }
 
@@ -1326,5 +1329,23 @@ mod tests {
         let other = FrameSet::from_bits(0b0110);
         assert_eq!(set.union(other).bits(), 0b1110);
         assert_eq!(set.without(other).bits(), 0b1000);
+    }
+
+    /// A set's count is its frames, up to the whole 64.
+    #[test]
+    fn a_frame_set_counts_its_frames() {
+        assert_eq!(super::FrameSet::from_bits(0).count(), 0);
+        assert_eq!(super::FrameSet::from_bits(0b1011).count(), 3);
+        assert_eq!(super::FrameSet::from_bits(u64::MAX).count(), 64);
+    }
+
+    /// A front's length is taken up to the headroom, and no further.
+    #[test]
+    fn a_front_is_as_long_as_the_headroom_at_most() {
+        use super::{HEADROOM, HeaderLen};
+        assert_eq!(HeaderLen::new(0).map(HeaderLen::get), Some(0));
+        assert_eq!(HeaderLen::new(HEADROOM).map(HeaderLen::get), Some(HEADROOM));
+        assert_eq!(HeaderLen::new(HEADROOM + 1), None);
+        assert_eq!(HeaderLen::new(usize::MAX), None);
     }
 }

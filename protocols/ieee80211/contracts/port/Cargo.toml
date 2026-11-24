@@ -13,6 +13,7 @@ readme = "README.md"
 test-support = []
 
 [dependencies]
+oer-portable-bounded = { path = "../../../../portable/bounded" }
 oer-portable-wire = { path = "../../../../portable/wire" }
 heapless = "0.9.3"
 oer-protocols-ieee80211-wire = { path = "../../wire" }
