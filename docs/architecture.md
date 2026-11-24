@@ -204,8 +204,9 @@ before that hart first unmasks. The engine (`oer-chips-esp32s31-drivers-aes::Aes
 is a synchronous AES-128 engine: it owns AES by value, retains IRQ55 with
 `Silent`, waits for each Typical block on its `STATE` flag within a named
 settle and erases the hardware key and intermediates when its keyed view
-drops. A failed engine retains its owner and refuses further keys with a
-typed error. Its one owner is the image that takes it from the library
+drops. A block that times out or ends in an unsupported status ends its
+keyed run with a typed error; nothing of the failure outlives the keyed
+view, and the next key starts the accelerator as the first did. Its one owner is the image that takes it from the library
 (`AesPeripheral::engine`) or boot-smoke's hart-1 task. An
 operation borrows it for the length of its call (`oer_portable_crypto::block::unwrap_now`),
 so no operation outlives the call and no AES service, client or async
@@ -758,6 +759,29 @@ probe has one at each of P1 to P4).
   `struct_excessive_bools` and `fn_params_excessive_bools` are errors
   with no `allow` or `expect`; the layer tests list what no lint sees
   (`HIDDEN_FLAGS`, `HIDDEN_BOOL_PARAMETERS`, `OPTION_SLOTS`).
+- A hardware block serves a core in one of two forms, chosen by the
+  operation, not by the block. **An operation that answers within
+  the step** (its result is a function of what it was given, and its
+  wait is a named settle of the execution rule: an AES block on the
+  S31's Typical accelerator) is a capability: a trait in
+  `portable/`, the core generic over it, the block's driver held in
+  its place by the task that runs the cores and lent by `&mut` to
+  the one step that needs it. A keyed run is a borrowed view whose
+  drop takes the block down, so nothing of a key outlives the call.
+  **An operation that answers later** (a DMA run ended by an
+  interrupt, a multiplication on an elliptic curve, a software
+  computation longer than a step may hold its task) is a request the
+  step yields and a completion that enters a later step: "awaiting
+  it" is a variant of the core's state, its order a permit, its
+  operands named by their place. A long software computation is cut
+  into bounded pieces behind the same request, so a core cannot tell
+  what served it. A core never owns a block's driver and never names
+  an implementation; a block's refusal is a handled error of the
+  operation, with no software fallback. A user in another context is
+  not lent the block: it has an engine of its own, or asks the owner
+  through its hand-over. A core that holds an engine (the station's
+  callbacks) or names one (the access point's software AES) is debt
+  to remove, never a precedent to repeat.
 - A guarantee is written down only with what enforces it: a type with a
   compile-fail test, or a stated run-time check. A type-level mechanism names
   the bug it prevents.
