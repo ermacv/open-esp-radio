@@ -150,67 +150,12 @@ fn invalid_commits_are_refused() {
 }
 
 #[test]
-fn an_access_point_refuses_commit_values_off_the_scalar_range_or_curve() {
-    let peer = SaeCommitValues::parse(
-        &hex::<SAE_COMMIT_LEN>(PEER_COMMIT),
-        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
-    )
-    .unwrap();
-    assert!(valid_peer_commit(&peer));
-    let mut zero_scalar = peer;
-    zero_scalar.scalar.fill(0);
-    assert!(!valid_peer_commit(&zero_scalar));
-    let mut one_scalar = peer;
-    one_scalar.scalar = [0; 32];
-    one_scalar.scalar[31] = 1;
-    assert!(!valid_peer_commit(&one_scalar));
-    let mut off_curve = peer;
-    off_curve.element[63] ^= 1;
-    assert!(!valid_peer_commit(&off_curve));
-}
-
-#[test]
-fn a_comeback_token_is_bound_to_its_station_and_used_once() {
-    let station = [2, 0, 0, 0, 0, 7];
-    let mut tokens = SaeComebackTokens::new();
-    let token = tokens.issue(
-        station,
-        oer_portable_time::Instant::from_micros(1_000),
-        || [0x42; 32],
-    );
-    assert_eq!(token[..2], [0, 1]);
-    assert_eq!(
-        tokens.issue(
-            station,
-            oer_portable_time::Instant::from_micros(2_000),
-            || unreachable!()
-        ),
-        token
-    );
-    assert!(!tokens.check([2, 0, 0, 0, 0, 8], &token));
-    let mut forged = token;
-    forged[31] ^= 1;
-    assert!(!tokens.check(station, &forged));
-    assert!(tokens.check(station, &token));
-    assert!(!tokens.check(station, &token));
-
-    let reissued = tokens.issue(
-        station,
-        oer_portable_time::Instant::from_micros(70_000_000),
-        || [0x43; 32],
-    );
-    assert_ne!(reissued, token);
-    assert!(tokens.check(station, &reissued));
-}
-
-#[test]
 fn secret_owners_wipe_and_redact_debug() {
     fn wipes_on_drop<T: ZeroizeOnDrop>() {}
     wipes_on_drop::<SaePassword>();
     wipes_on_drop::<SaePasswordElement>();
     wipes_on_drop::<SaePasswordToken>();
     wipes_on_drop::<SaeKeys>();
-    wipes_on_drop::<SaeComebackTokens>();
 
     let mut password = SaePassword::new(PASSWORD).unwrap();
     assert_eq!(std::format!("{password:?}"), "SaePassword(<redacted>)");
@@ -237,15 +182,6 @@ fn secret_owners_wipe_and_redact_debug() {
     assert_eq!(keys.kck(), &[0; SAE_KEY_LEN]);
     assert_eq!(keys.pmk(), &[0; SAE_KEY_LEN]);
     assert_eq!(keys.pmkid(), &[0; RSN_PMKID_LEN]);
-
-    let mut comeback = SaeComebackTokens::new();
-    comeback.issue(ADDR1, Instant::EPOCH, || [0x42; 32]);
-    assert_eq!(
-        std::format!("{comeback:?}"),
-        "SaeComebackTokens(<redacted>)"
-    );
-    comeback.zeroize();
-    assert_eq!(comeback.key, [0; 32]);
 }
 
 #[test]
@@ -309,43 +245,4 @@ fn invalid_curve_coordinates_keep_their_validity_bit() {
     ] {
         assert!(bool::from(sswu(&value).is_some()));
     }
-}
-
-#[test]
-fn every_comeback_slot_is_updated_without_affecting_another_slot() {
-    let mut tokens = SaeComebackTokens::new();
-    for slot in 0_u8..=u8::MAX {
-        tokens.set_pending(slot, u16::from(slot) + 1);
-    }
-    for (pending, slot) in tokens.pending.iter().zip(0_u8..=u8::MAX) {
-        assert_eq!(*pending, u16::from(slot) + 1);
-    }
-    tokens.set_pending(0, 0);
-    tokens.set_pending(255, 0);
-    assert_eq!(tokens.pending[0], 0);
-    assert_eq!(tokens.pending[255], 0);
-    assert_eq!(tokens.pending[1], 2);
-    assert_eq!(tokens.pending[254], 255);
-}
-
-/// A token naming another index than the station's pending one is refused,
-/// even with a valid MAC for that index.
-#[test]
-fn a_comeback_token_of_another_index_is_refused() {
-    let station = [2, 0, 0, 0, 0, 7];
-    let key = [0x42; 32];
-    let mut tokens = SaeComebackTokens::new();
-    let token = tokens.issue(
-        station,
-        oer_portable_time::Instant::from_micros(1_000),
-        || key,
-    );
-    assert_eq!(token[..2], [0, 1]);
-    let other_index = [0, 2];
-    let mac = hmac_sha256(&key, &[&station, &other_index]);
-    let mut other = token;
-    other[..2].copy_from_slice(&other_index);
-    other[2..].copy_from_slice(&mac[2..]);
-    assert!(!tokens.check(station, &other));
-    assert!(tokens.check(station, &token));
 }

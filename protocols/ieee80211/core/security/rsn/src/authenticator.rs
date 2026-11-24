@@ -8,12 +8,11 @@
 //! and MIC of Message 3. A failure ends the handshake: the step returns the
 //! end and its holder drops the machine. The access point keeps its peer
 //! table, the response windows' timing, the group keys and the Message 3 key
-//! data it advertises, and transmission; the SAE side of an access point is
-//! [`sae`].
+//! data it advertises, and transmission. The SAE side of an access point,
+//! `authenticator/sae.rs`, is outside the build until the access point's role
+//! serves SAE.
 //!
 //! Received EAPOL reaches this module; nothing here panics on it.
-
-pub mod sae;
 
 use crate::{
     Akm, AssociationSecurityBinding, EapolKeyMessage, OwnedEapolFrame, Pmk, Ptk, PtkContext,
