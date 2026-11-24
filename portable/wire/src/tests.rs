@@ -462,3 +462,19 @@ fn a_closed_enum_field_reads_and_writes_every_value() {
     }
     assert_eq!(Quarter::BITS, 2);
 }
+
+/// A closed enum's declaration check: every value of the width, once.
+#[test]
+fn a_closed_enum_names_every_value_of_its_width_once() {
+    use crate::__private::names_every_value;
+    assert!(names_every_value(&[1, 0, 3, 2], 2));
+    assert!(names_every_value(&[0, 1], 1));
+    // A missing value, one value too many, a repeated and a too-wide one.
+    assert!(!names_every_value(&[0, 1, 2], 2));
+    assert!(!names_every_value(&[0, 1, 2], 1));
+    assert!(!names_every_value(&[0, 0], 1));
+    assert!(!names_every_value(&[0, 2], 1));
+    // A width no array of names can fill.
+    assert!(!names_every_value(&[0, 1], usize::BITS));
+    assert!(!names_every_value(&[0, 1], 64));
+}
