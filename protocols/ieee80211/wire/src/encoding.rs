@@ -189,9 +189,9 @@ impl<'a> AmsduBody<'a> {
                 [
                     Fragment::Borrowed(&frame.destination),
                     Fragment::Borrowed(&frame.source),
-                    Fragment::Word((msdu_length as u16).to_be_bytes()),
+                    Fragment::Word(crate::data::AmsduLength::of(msdu_length as u16).to_bytes()),
                     Fragment::Borrowed(&RFC1042_LLC_SNAP_PREFIX),
-                    Fragment::Word(frame.ether_type.to_be_bytes()),
+                    Fragment::Word(crate::data::EtherTypeField::of(frame.ether_type).to_bytes()),
                     Fragment::Borrowed(frame.payload),
                     Fragment::Borrowed(padding),
                 ]

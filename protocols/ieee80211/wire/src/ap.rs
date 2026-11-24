@@ -44,7 +44,12 @@ const OPEN_SYSTEM_AUTHENTICATION_ALGORITHM: u16 = 0;
 pub enum ApAssociationResponseError {
     LengthOverflow,
     MissingAssociationId,
-    OutputTooSmall { required: usize },
+    /// An association ID wider than the AID field's 14 bits (IEEE Std
+    /// 802.11-2020, 9.4.1.8).
+    AssociationIdOutOfRange,
+    OutputTooSmall {
+        required: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -105,7 +110,7 @@ impl ApDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
@@ -159,7 +164,7 @@ impl ApUnprotectedDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
@@ -320,7 +325,7 @@ impl ProtectedDataPlan {
         }
         crate::encoding::write_array::<22, _, _>(
             &mut plan.header,
-            &sequence_number.sequence_control().to_le_bytes(),
+            &sequence_number.sequence_control().to_bytes(),
         );
         let llc_snap = plan.llc_snap;
         Ok(Self { plan, llc_snap })
@@ -439,7 +444,7 @@ impl ApAmsduFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         crate::encoding::FrameParts([
             header.as_slice(),
@@ -570,17 +575,17 @@ pub fn parse_ap_management_request<'a>(
     let destination = [d0, d1, d2, d3, d4, d5];
     let peer = [p0, p1, p2, p3, p4, p5];
     let bssid = [b0, b1, b2, b3, b4, b5];
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if FrameControlFields::from_raw(frame_control).kind() != FrameType::Management {
+    let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
+    if frame_control.kind() != FrameType::Management {
         return None;
     }
-    let subtype = FrameControlFields::from_raw(frame_control).subtype();
+    let subtype = frame_control.subtype();
     if subtype == 4 {
-        if (FrameControlFields::from_raw(frame_control).version() != 0
-            || FrameControlFields::from_raw(frame_control).kind() != FrameType::Management
-            || FrameControlFields::from_raw(frame_control).ds() != 0
-            || FrameControlFields::from_raw(frame_control).more_fragments()
-            || FrameControlFields::from_raw(frame_control).protected())
+        if (frame_control.version() != 0
+            || frame_control.kind() != FrameType::Management
+            || frame_control.ds() != 0
+            || frame_control.more_fragments()
+            || frame_control.protected())
             || crate::sequence::SequenceControl::from_bytes((sc0 as u16).to_le_bytes()).fragment()
                 != 0
             || crate::address::AddressFlags::from_bytes([peer[0]]).group()
@@ -595,9 +600,9 @@ pub fn parse_ap_management_request<'a>(
             ssid: probe::ssid(body)?,
         });
     }
-    if (FrameControlFields::from_raw(frame_control).version() != 0
-        || FrameControlFields::from_raw(frame_control).kind() != FrameType::Management
-        || FrameControlFields::from_raw(frame_control).ds() != 0)
+    if (frame_control.version() != 0
+        || frame_control.kind() != FrameType::Management
+        || frame_control.ds() != 0)
         || crate::address::AddressFlags::from_bytes([peer[0]]).group()
         || peer == [0; 6]
         || destination != access_point
@@ -607,7 +612,7 @@ pub fn parse_ap_management_request<'a>(
     }
     // Parsing is not authentication. The caller must verify the pairwise
     // integrity and replay state before acting on a protected request.
-    let protected = FrameControlFields::from_raw(frame_control).protected();
+    let protected = frame_control.protected();
     if protected && !matches!(subtype, 10 | 12 | 13) {
         return None;
     }
@@ -705,11 +710,11 @@ pub enum ApManagementSubtype {
 }
 
 impl ApManagementSubtype {
-    const fn frame_control(self) -> u16 {
+    const fn frame_control(self) -> FrameControlFields {
         match self {
-            Self::Action => 0x00d0,
-            Self::Disassociation => 0x00a0,
-            Self::Deauthentication => 0x00c0,
+            Self::Action => FrameControlFields::from_bytes([0xd0, 0x00]),
+            Self::Disassociation => FrameControlFields::from_bytes([0xa0, 0x00]),
+            Self::Deauthentication => FrameControlFields::from_bytes([0xc0, 0x00]),
         }
     }
 
@@ -717,14 +722,11 @@ impl ApManagementSubtype {
     pub fn parse(frame: &[u8]) -> Option<Self> {
         let mut reader = oer_portable_wire::Reader::new(frame);
         let control = reader.array().ok()?;
-        let control = u16::from_le_bytes(*control);
-        if FrameControlFields::from_raw(control).version() != 0
-            || FrameControlFields::from_raw(control).kind() != FrameType::Management
-            || FrameControlFields::from_raw(control).ds() != 0
-        {
+        let control = FrameControlFields::from_bytes(*control);
+        if control.version() != 0 || control.kind() != FrameType::Management || control.ds() != 0 {
             return None;
         }
-        match FrameControlFields::from_raw(control).subtype() {
+        match control.subtype() {
             13 => Some(Self::Action),
             10 => Some(Self::Disassociation),
             12 => Some(Self::Deauthentication),
@@ -783,9 +785,7 @@ pub struct ApProtectedManagementFrame<'a> {
 impl ApProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApAssociationResponseError> {
         let header = management_header(
-            FrameControlFields::from_raw(self.subtype.frame_control())
-                .with_protected(true)
-                .raw(),
+            self.subtype.frame_control().with_protected(true),
             self.access_point,
             self.peer,
             self.sequence_number,
@@ -882,7 +882,12 @@ pub fn write_open_authentication_response(
     status: u16,
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
-    let header = management_header(0x00b0, access_point, peer, management_sequence);
+    let header = management_header(
+        AUTHENTICATION_FRAME_CONTROL,
+        access_point,
+        peer,
+        management_sequence,
+    );
     crate::encoding::FrameParts([
         header.as_slice(),
         &0_u16.to_le_bytes(),
@@ -904,7 +909,12 @@ pub fn write_sae_authentication(
     body: &[u8],
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
-    let header = management_header(0x00b0, access_point, peer, management_sequence);
+    let header = management_header(
+        AUTHENTICATION_FRAME_CONTROL,
+        access_point,
+        peer,
+        management_sequence,
+    );
     crate::encoding::FrameParts([
         header.as_slice(),
         &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
@@ -943,7 +953,12 @@ pub fn write_ht_association_response_frame_for_security(
     frame.fill(0);
     crate::encoding::write_array::<0, _, _>(
         frame,
-        &management_header(0x0010, access_point, peer, management_sequence),
+        &management_header(
+            ASSOCIATION_RESPONSE_FRAME_CONTROL,
+            access_point,
+            peer,
+            management_sequence,
+        ),
     );
     let Some(body) =
         frame[MANAGEMENT_HEADER_LEN..].first_chunk_mut::<AP_ASSOCIATION_RESPONSE_BODY_LEN>()
@@ -984,29 +999,37 @@ pub fn write_ap_peer_disconnect(
     management_sequence: SequenceNumber,
 ) -> Result<usize, ApAssociationResponseError> {
     let frame_control = match kind {
-        ApPeerDisconnectKind::Disassociation => 0x00a0,
-        ApPeerDisconnectKind::Deauthentication => 0x00c0,
-    };
+        ApPeerDisconnectKind::Disassociation => ApManagementSubtype::Disassociation,
+        ApPeerDisconnectKind::Deauthentication => ApManagementSubtype::Deauthentication,
+    }
+    .frame_control();
     let header = management_header(frame_control, access_point, peer, management_sequence);
     crate::encoding::FrameParts([header.as_slice(), &reason.to_le_bytes()])
         .write(output)
         .map_err(|required| ApAssociationResponseError::OutputTooSmall { required })
 }
 
+/// Association Response, management subtype 1 (IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1).
+const ASSOCIATION_RESPONSE_FRAME_CONTROL: FrameControlFields =
+    FrameControlFields::from_bytes([0x10, 0x00]);
+/// Authentication, management subtype 11 (IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1).
+const AUTHENTICATION_FRAME_CONTROL: FrameControlFields =
+    FrameControlFields::from_bytes([0xb0, 0x00]);
+
 fn management_header(
-    frame_control: u16,
+    frame_control: FrameControlFields,
     access_point: [u8; 6],
     peer: [u8; 6],
     management_sequence: SequenceNumber,
 ) -> [u8; MANAGEMENT_HEADER_LEN] {
     let mut frame = [0; MANAGEMENT_HEADER_LEN];
-    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_le_bytes());
+    crate::encoding::write_array::<0, _, _>(&mut frame, &frame_control.to_bytes());
     crate::encoding::write_array::<4, _, _>(&mut frame, &peer);
     crate::encoding::write_array::<10, _, _>(&mut frame, &access_point);
     crate::encoding::write_array::<16, _, _>(&mut frame, &access_point);
     crate::encoding::write_array::<22, _, _>(
         &mut frame,
-        &management_sequence.sequence_control().to_le_bytes(),
+        &management_sequence.sequence_control().to_bytes(),
     );
     frame
 }
@@ -1023,20 +1046,18 @@ pub fn write_ht_association_response(
     peer_ht: Option<HtPeerCapabilities>,
     protection: ApBssProtection,
 ) -> Result<usize, ApAssociationResponseError> {
-    if status == 0
-        && crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid() == 0
-    {
-        return Err(ApAssociationResponseError::MissingAssociationId);
-    }
-
+    // The AID field: the association ID with both marker bits set, or zero
+    // when the association is refused (IEEE Std 802.11-2020, 9.4.1.8).
     let encoded_association_id = if status == 0 {
-        u16::from_le_bytes(
-            crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-                .with_marker(oer_portable_wire::U8::constant::<3>())
-                .to_bytes(),
-        )
+        if association_id == 0 {
+            return Err(ApAssociationResponseError::MissingAssociationId);
+        }
+        crate::management::AssociationId::from_bytes([0; 2])
+            .with_aid(association_id)
+            .map_err(|_| ApAssociationResponseError::AssociationIdOutOfRange)?
+            .with_marker(oer_portable_wire::U8::constant::<3>())
     } else {
-        0
+        crate::management::AssociationId::from_bytes([0; 2])
     };
     let ht_capability = ht_capability_ie_for_peer(profile.ht, channel, peer_ht);
     let ht_operation = ht_operation_ie(channel, protection.ht);
@@ -1044,7 +1065,7 @@ pub fn write_ht_association_response(
     crate::encoding::FrameParts([
         &profile.capabilities(LinkProtection::Ccmp).to_le_bytes(),
         &status.to_le_bytes(),
-        &encoded_association_id.to_le_bytes(),
+        &encoded_association_id.to_bytes(),
         &[1, 8],
         profile.legacy_rates.supported(),
         &[50, 4],
@@ -1081,11 +1102,9 @@ pub fn observe_ap_power_save(frame: &[u8]) -> Option<ApPowerSaveObservation> {
 fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])> {
     let mut reader = oer_portable_wire::Reader::new(frame);
     let &[fc0, fc1] = reader.array().ok()?;
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let frame_type = FrameControlFields::from_raw(frame_control)
-        .kind()
-        .encoding() as u16;
-    let subtype = FrameControlFields::from_raw(frame_control).subtype();
+    let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
+    let frame_type = frame_control.kind().encoding() as u16;
+    let subtype = frame_control.subtype();
 
     // PS-Poll: Frame Control, AID, Receiver and Transmitter Address.
     if frame_type == 1
@@ -1093,15 +1112,9 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         && let Ok(ps_poll) = oer_portable_wire::Reader::new(frame).array::<16>()
     {
         let [_, _, a0, a1, r0, r1, r2, r3, r4, r5, t0, t1, t2, t3, t4, t5] = *ps_poll;
-        let raw_association_id = u16::from_le_bytes([a0, a1]);
-        let association_id =
-            crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes()).aid();
-        if crate::management::AssociationId::from_bytes(raw_association_id.to_le_bytes())
-            .marker()
-            .get()
-            != 3
-            || association_id == 0
-        {
+        let field = crate::management::AssociationId::from_bytes([a0, a1]);
+        let association_id = field.aid();
+        if field.marker().get() != 3 || association_id == 0 {
             return None;
         }
         return Some((
@@ -1134,14 +1147,14 @@ fn observe_power_save(frame: &[u8]) -> Option<(ApPowerSaveObservation, [u8; 6])>
         t5,
         ..,
     ] = *header;
-    let to_ds = FrameControlFields::from_raw(frame_control).to_ds();
-    let from_ds = FrameControlFields::from_raw(frame_control).from_ds();
+    let to_ds = frame_control.to_ds();
+    let from_ds = frame_control.from_ds();
     if frame_type != 2 || !to_ds || from_ds {
         return None;
     }
     let peer = [t0, t1, t2, t3, t4, t5];
     let receiver = [r0, r1, r2, r3, r4, r5];
-    if FrameControlFields::from_raw(frame_control).power_management() {
+    if frame_control.power_management() {
         Some((ApPowerSaveObservation::Sleeping { peer }, receiver))
     } else {
         Some((ApPowerSaveObservation::Active { peer }, receiver))
@@ -1177,7 +1190,8 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     frame: &[u8],
     access_point: [u8; 6],
 ) -> Option<ApPowerSaveObservation> {
-    const NULL_DATA_TO_DS_FRAME_CONTROL: u16 = 0x0148;
+    const NULL_DATA_TO_DS_FRAME_CONTROL: FrameControlFields =
+        FrameControlFields::from_bytes([0x48, 0x01]);
 
     let Ok(
         &[
@@ -1210,12 +1224,8 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     else {
         return None;
     };
-    let frame_control = u16::from_le_bytes([c0, c1]);
-    if FrameControlFields::from_raw(frame_control)
-        .with_retry(false)
-        .with_power_management(false)
-        .raw()
-        != NULL_DATA_TO_DS_FRAME_CONTROL
+    let frame_control = FrameControlFields::from_bytes([c0, c1]);
+    if frame_control.with_retry(false).with_power_management(false) != NULL_DATA_TO_DS_FRAME_CONTROL
         || [r0, r1, r2, r3, r4, r5] != access_point
         || [b0, b1, b2, b3, b4, b5] != access_point
         || crate::sequence::SequenceControl::from_bytes((sequence0 as u16).to_le_bytes()).fragment()
@@ -1230,7 +1240,7 @@ pub fn observe_ap_null_data_power_save_for_access_point(
     {
         return None;
     }
-    if FrameControlFields::from_raw(frame_control).power_management() {
+    if frame_control.power_management() {
         Some(ApPowerSaveObservation::Sleeping { peer })
     } else {
         Some(ApPowerSaveObservation::Active { peer })

@@ -1,7 +1,11 @@
 use crate::ap::profile::tests::TEST_ADVERTISEMENT;
 
-const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities =
-    crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities = crate::ht::HtLocalCapabilities::new(
+    crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+    0x03,
+    0xff,
+    0x01,
+);
 
 use super::*;
 use crate::protection::ApBssProtection;
@@ -357,6 +361,20 @@ fn association_response_owns_status_aid_and_ht_channel_capability() {
         ),
         Err(ApAssociationResponseError::MissingAssociationId)
     );
+    // The AID field holds 14 bits: a wider association ID is refused, its
+    // high bits never read as the marker.
+    assert_eq!(
+        write_ht_association_response(
+            &TEST_ADVERTISEMENT,
+            &mut body,
+            0,
+            0x4001,
+            ht20,
+            None,
+            ApBssProtection::default(),
+        ),
+        Err(ApAssociationResponseError::AssociationIdOutOfRange)
+    );
 
     let ht40 =
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz40Below).unwrap();
@@ -670,7 +688,7 @@ fn complete_response_encoders_own_addresses_sequence_and_status() {
         access_point,
         peer,
         0,
-        0xc001,
+        1,
         seq(8),
         crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
         None,
@@ -831,4 +849,147 @@ fn ap_management_encoders_admit_complete_capacity_before_writing() {
         }
         assert!(complete[required..].iter().all(|byte| *byte == 0xa5));
     }
+}
+
+/// Each Frame Control bit an access point refuses in a peer's management
+/// request refuses it alone: protocol version, To DS, From DS; and in a
+/// Probe Request also More Fragments, Protected and a fragment number.
+#[test]
+fn each_refused_frame_control_bit_refuses_a_management_request() {
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let peer = [2, 0, 0, 0, 0, 2];
+    let mut authentication = [0_u8; 30];
+    authentication[..2].copy_from_slice(&[0xb0, 0x00]);
+    authentication[4..10].copy_from_slice(&access_point);
+    authentication[10..16].copy_from_slice(&peer);
+    authentication[16..22].copy_from_slice(&access_point);
+    authentication[26..28].copy_from_slice(&[1, 0]);
+    fn parse(frame: &[u8]) -> Option<ApManagementRequest<'_>> {
+        parse_ap_management_request(&TEST_ADVERTISEMENT, frame, [2, 0, 0, 0, 0, 1])
+    }
+    assert!(parse(&authentication).is_some());
+    // Version (bit 0), To DS (bit 8), From DS (bit 9).
+    for (octet, bit) in [(0, 0x01), (1, 0x01), (1, 0x02)] {
+        let mut refused = authentication;
+        refused[octet] ^= bit;
+        assert_eq!(parse(&refused), None, "octet {octet} bit {bit:#04x}");
+    }
+
+    let mut probe = std::vec![0_u8; 24];
+    probe[..2].copy_from_slice(&[0x40, 0x00]);
+    probe[4..10].copy_from_slice(&[0xff; 6]);
+    probe[10..16].copy_from_slice(&peer);
+    probe[16..22].copy_from_slice(&[0xff; 6]);
+    probe.extend_from_slice(&[0, 0, 1, 1, 0x82]);
+    assert!(matches!(
+        parse(&probe),
+        Some(ApManagementRequest::Probe { .. })
+    ));
+    // Version, To DS, From DS, More Fragments, Protected; a fragment
+    // number in Sequence Control.
+    for (octet, bit) in [
+        (0, 0x01),
+        (1, 0x01),
+        (1, 0x02),
+        (1, 0x04),
+        (1, 0x40),
+        (22, 0x01),
+    ] {
+        let mut refused = probe.clone();
+        refused[octet] ^= bit;
+        assert_eq!(parse(&refused), None, "octet {octet} bit {bit:#04x}");
+    }
+}
+
+/// A robust management subtype is read from a version-0 management frame
+/// with neither DS bit, each refused bit alone refusing it.
+#[test]
+fn a_robust_subtype_is_read_only_from_its_frame_control() {
+    let mut frame = [0_u8; AP_PEER_DISCONNECT_LEN];
+    write_ap_peer_disconnect(
+        &mut frame,
+        [2, 0, 0, 0, 0, 1],
+        [2, 0, 0, 0, 0, 2],
+        ApPeerDisconnectKind::Deauthentication,
+        2,
+        seq(1),
+    )
+    .unwrap();
+    assert_eq!(
+        ApManagementSubtype::parse(&frame),
+        Some(ApManagementSubtype::Deauthentication)
+    );
+    frame[0] = 0xa0;
+    assert_eq!(
+        ApManagementSubtype::parse(&frame),
+        Some(ApManagementSubtype::Disassociation)
+    );
+    frame[0] = 0xd0;
+    assert_eq!(
+        ApManagementSubtype::parse(&frame),
+        Some(ApManagementSubtype::Action)
+    );
+    // Version, a data frame's type bit, To DS, From DS.
+    for (octet, bit) in [(0, 0x01), (0, 0x08), (1, 0x01), (1, 0x02)] {
+        let mut refused = frame;
+        refused[octet] ^= bit;
+        assert_eq!(
+            ApManagementSubtype::parse(&refused),
+            None,
+            "octet {octet} bit {bit:#04x}"
+        );
+    }
+}
+
+/// A PS-Poll needs both marker bits of its AID field and a nonzero AID.
+#[test]
+fn a_ps_poll_needs_its_marker_and_a_nonzero_association_id() {
+    let mut frame = [0_u8; 16];
+    frame[..2].copy_from_slice(&[0xa4, 0x00]);
+    frame[10..16].copy_from_slice(&[1, 2, 3, 4, 5, 6]);
+    for (aid, observed) in [
+        ([0x23, 0xc1], true),
+        ([0x23, 0x41], false),
+        ([0x00, 0xc0], false),
+    ] {
+        frame[2..4].copy_from_slice(&aid);
+        assert_eq!(
+            observe_ap_power_save(&frame).is_some(),
+            observed,
+            "{aid:02x?}"
+        );
+    }
+}
+
+/// The largest association ID the 14-bit AID field holds is written whole
+/// with both marker bits, and read whole from a PS-Poll (IEEE Std
+/// 802.11-2020, 9.4.1.8).
+#[test]
+fn the_largest_association_id_is_written_and_read_whole() {
+    let mut body = [0; AP_ASSOCIATION_RESPONSE_BODY_LEN];
+    write_ht_association_response(
+        &TEST_ADVERTISEMENT,
+        &mut body,
+        0,
+        0x3fff,
+        crate::channel::Channel::ghz2_4(6, crate::channel::ChannelWidth::Mhz20).unwrap(),
+        None,
+        ApBssProtection::default(),
+    )
+    .unwrap();
+    // Capability Information, Status Code, then the AID field.
+    assert_eq!(&body[4..6], &[0xff, 0xff]);
+
+    let peer = [1, 2, 3, 4, 5, 6];
+    let mut frame = [0_u8; 16];
+    frame[..2].copy_from_slice(&[0xa4, 0x00]);
+    frame[2..4].copy_from_slice(&body[4..6]);
+    frame[10..16].copy_from_slice(&peer);
+    assert_eq!(
+        observe_ap_power_save(&frame),
+        Some(ApPowerSaveObservation::PsPoll {
+            peer,
+            association_id: 0x3fff
+        })
+    );
 }

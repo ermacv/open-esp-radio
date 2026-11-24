@@ -7,7 +7,8 @@ const BEACON: StaBeacon = StaBeacon {
     observation: StaBeaconObservation {
         timestamp_tsf: oer_protocols_ieee80211_wire::tsf::TsfTimestamp::from_micros(10),
         interval_tu: 100,
-        capability_information: 0,
+        capability_information:
+            oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0; 2]),
         tim: None,
         protection: StaBeaconProtection::UNPROTECTED,
         edca: None,

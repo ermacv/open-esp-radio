@@ -1,7 +1,5 @@
 //! Station association request construction and response admission.
 
-use crate::frame::FrameControlFields;
-
 use super::*;
 use crate::address::OwnAddress;
 
@@ -238,9 +236,7 @@ impl AssociationRequest<'_> {
         );
         // Privacy comes from the selected security mode, not an untrusted
         // scan record, even if that record bypassed candidate admission.
-        let advertised = crate::management::CapabilityInformation::from_bytes(
-            self.access_point.capability_info.to_le_bytes(),
-        );
+        let advertised = self.access_point.capability_info;
         let capability = crate::management::CapabilityInformation::from_bytes([0; 2])
             .with_ess(true)
             .with_short_preamble(advertised.short_preamble())
@@ -250,7 +246,10 @@ impl AssociationRequest<'_> {
                 LinkProtection::Ccmp
             ));
         crate::encoding::write_array::<24, _, _>(&mut fixed, &capability.to_bytes());
-        crate::encoding::write_array::<26, _, _>(&mut fixed, &self.listen_interval.to_le_bytes());
+        crate::encoding::write_array::<26, _, _>(
+            &mut fixed,
+            &crate::management::ListenIntervalField::of(self.listen_interval).to_bytes(),
+        );
         let mut rates = [0; MAX_SUPPORTED_RATES_LEN];
         let rates = rates
             .get_mut(..rates_len)
@@ -314,7 +313,7 @@ pub enum AssociationRequestError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AssociationResponse {
-    pub capability_info: u16,
+    pub capability_info: crate::management::CapabilityInformation,
     pub status_code: u16,
     pub association_id: u16,
     /// An HT Capabilities element of its 26 octets.
@@ -423,10 +422,7 @@ impl AssociationResponse {
     /// Match the AP's successful response to the exact security mode selected
     /// from scan admission. There is no fallback between Open and WPA2.
     pub const fn matches_security(self, security: LinkProtection) -> bool {
-        let privacy = crate::management::CapabilityInformation::from_bytes(
-            self.capability_info.to_le_bytes(),
-        )
-        .privacy();
+        let privacy = self.capability_info.privacy();
         match security {
             LinkProtection::Open => !privacy,
             LinkProtection::Ccmp => privacy,
@@ -439,10 +435,13 @@ pub fn parse_association_response(
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<AssociationResponse> {
-    let (header, [capability_info, status_code, association_id], information_elements) =
+    let (header, [c0, c1, s0, s1, a0, a1], information_elements) =
         split_received_management(frame)?;
-    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(ASSOCIATION_RESPONSE_FRAME_CONTROL).type_and_subtype()
+    let capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
+    let status_code = crate::management::StatusCodeField::from_bytes([s0, s1]).code();
+    let association_id = crate::management::AssociationId::from_bytes([a0, a1]);
+    if header.frame_control.type_and_subtype()
+        != ASSOCIATION_RESPONSE_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -481,7 +480,8 @@ pub fn parse_association_response(
             ..,
         ] = *element
         {
-            let comeback = u32::from_le_bytes([a, b, c, d]);
+            let comeback =
+                crate::management::TimeoutIntervalValue::from_bytes([a, b, c, d]).value();
             association_comeback_tu = (comeback != 0).then_some(comeback);
         }
         remaining = tail;
@@ -490,8 +490,7 @@ pub fn parse_association_response(
     Some(AssociationResponse {
         capability_info,
         status_code,
-        association_id: crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
-            .aid(),
+        association_id: association_id.aid(),
         ht_capability,
         he,
         wmm_element,

@@ -79,7 +79,7 @@ impl StaOpenDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
@@ -161,7 +161,7 @@ impl StaProtectedDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {

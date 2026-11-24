@@ -7,8 +7,7 @@ use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, OwnAddress},
     ccmp::CcmpHeader,
     data::{MsduParts, decapsulate_payload},
-    frame::{DecodedHeader, FrameControlFields, QosControl},
-    sequence::SequenceControl,
+    frame::DecodedHeader,
 };
 
 /// Why an RX frame or one of its MSDUs was refused.
@@ -52,7 +51,7 @@ impl<'a> AdmittedData<'a> {
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         if !control.is_data() || fields.no_data() || !fields.from_ds() || fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
@@ -63,9 +62,7 @@ impl<'a> AdmittedData<'a> {
         {
             return Err(RxDropReason::Address);
         }
-        if control.more_fragments()
-            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
-        {
+        if control.more_fragments() || header.sequence_control().fragment() != 0 {
             return Err(RxDropReason::Fragmented);
         }
         let mut payload = header.body();
@@ -84,13 +81,7 @@ impl<'a> AdmittedData<'a> {
                 CcmpRxProtection::Group
             };
             replay
-                .check(
-                    protection,
-                    header
-                        .qos()
-                        .map(|qos| QosControl::from_bytes(qos.to_le_bytes()).tid().get()),
-                    ccmp,
-                )
+                .check(protection, header.qos().map(|qos| qos.tid().get()), ccmp)
                 .map_err(|_| RxDropReason::Replay)?;
             payload = rest;
         }
@@ -114,16 +105,14 @@ impl<'a> AdmittedData<'a> {
         replay: Option<&mut CcmpRxReplayEpoch>,
     ) -> Result<Self, RxDropReason> {
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         if !control.is_data() || fields.no_data() || fields.from_ds() || !fields.to_ds() {
             return Err(RxDropReason::FrameKind);
         }
         if header.receiver() != bssid.get() || header.transmitter() != peer {
             return Err(RxDropReason::Address);
         }
-        if control.more_fragments()
-            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
-        {
+        if control.more_fragments() || header.sequence_control().fragment() != 0 {
             return Err(RxDropReason::Fragmented);
         }
         let mut payload = header.body();
@@ -139,9 +128,7 @@ impl<'a> AdmittedData<'a> {
             replay
                 .check(
                     CcmpRxProtection::Pairwise,
-                    header
-                        .qos()
-                        .map(|qos| QosControl::from_bytes(qos.to_le_bytes()).tid().get()),
+                    header.qos().map(|qos| qos.tid().get()),
                     ccmp,
                 )
                 .map_err(|_| RxDropReason::Replay)?;

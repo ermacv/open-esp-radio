@@ -6,7 +6,7 @@ const TA: [u8; 6] = [0x70, 0x15, 0xfb, 0xa8, 0x48, 0xf0];
 
 fn two_station_frame() -> [u8; 25] {
     let mut frame = [0_u8; 25];
-    frame[0] = NDPA_FRAME_CONTROL as u8;
+    frame[0] = NDPA_FRAME_CONTROL.to_bytes()[0];
     frame[1] = 0x08;
     frame[2..4].copy_from_slice(&0x1234_u16.to_le_bytes());
     frame[4..10].copy_from_slice(&RA);
@@ -22,7 +22,7 @@ fn decodes_the_complete_blob_geometry_and_aid_membership() {
     let frame = two_station_frame();
     let ndpa = HeNdpa::parse(&frame).unwrap();
 
-    assert_eq!(ndpa.frame_control(), 0x0854);
+    assert_eq!(ndpa.frame_control().to_bytes(), [0x54, 0x08]);
     assert_eq!(ndpa.duration(), 0x1234);
     assert_eq!(ndpa.receiver_address(), &RA);
     assert_eq!(ndpa.transmitter_address(), &TA);
@@ -62,7 +62,7 @@ fn fails_closed_on_non_he_or_partial_station_info() {
     frame[0] = 0x44;
     assert_eq!(HeNdpa::parse(&frame), Err(HeNdpaError::NotNdpa));
 
-    frame[0] = NDPA_FRAME_CONTROL as u8;
+    frame[0] = NDPA_FRAME_CONTROL.to_bytes()[0];
     assert_eq!(
         HeNdpa::parse(&frame[..24]),
         Err(HeNdpaError::MisalignedStationInfo)
@@ -170,7 +170,7 @@ fn ndpa_encoder_rejects_every_unowned_boundary() {
 #[test]
 fn decodes_the_complete_vendor_he20_compressed_feedback_header() {
     let mut report = [0_u8; 112];
-    report[0..2].copy_from_slice(&ACTION_NO_ACK_FRAME_CONTROL.to_le_bytes());
+    report[0..2].copy_from_slice(&ACTION_NO_ACK_FRAME_CONTROL.to_bytes());
     report[4..10].copy_from_slice(&[0xdc, 0x15, 0xc8, 0x54, 0xbc, 0x1e]);
     report[10..16].copy_from_slice(&RA);
     report[16..22].copy_from_slice(&[0xdc, 0x15, 0xc8, 0x54, 0xbc, 0x1e]);
@@ -215,7 +215,7 @@ fn decodes_the_complete_vendor_he20_compressed_feedback_header() {
 #[test]
 fn compressed_feedback_parser_rejects_other_actions_and_missing_snr() {
     let mut report = [0_u8; 32];
-    report[0..2].copy_from_slice(&ACTION_NO_ACK_FRAME_CONTROL.to_le_bytes());
+    report[0..2].copy_from_slice(&ACTION_NO_ACK_FRAME_CONTROL.to_bytes());
     report[24] = HE_ACTION_CATEGORY;
     report[25] = HE_COMPRESSED_BEAMFORMING_AND_CQI_ACTION;
     report[26] = 1;

@@ -2,15 +2,12 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-/// Plain station-to-DS Data frame control.
-pub const DATA_TO_DS: u16 = 0x0108;
-/// QoS station-to-DS Data frame control.
-pub const QOS_DATA_TO_DS: u16 = 0x0188;
+use crate::sequence::SequenceControl;
 
 /// The Frame Control field of a data or management frame of protocol
 /// version 0: never a control frame, whose kinds have their own buffers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FrameControl(u16);
+pub struct FrameControl(FrameControlFields);
 
 /// The Protected Frame subfield of a Frame Control field: the frame body
 /// is encapsulated by a cryptographic protocol, or not (IEEE Std
@@ -31,26 +28,21 @@ pub enum Retry {
 }
 
 impl FrameControl {
-    const fn fields(self) -> FrameControlFields {
-        FrameControlFields::from_bytes(self.0.to_le_bytes())
+    /// The field's subfields.
+    pub const fn fields(self) -> FrameControlFields {
+        self.0
     }
     const DATA: u16 = 2;
     const MANAGEMENT: u16 = 0;
 
     /// `field`, when it is a data or management frame of version 0.
-    pub const fn new(field: u16) -> Option<Self> {
-        let fields = FrameControlFields::from_bytes(field.to_le_bytes());
+    pub const fn new(fields: FrameControlFields) -> Option<Self> {
         let kind = fields.kind().encoding() as u16;
         if fields.version() == 0 && (kind == Self::DATA || kind == Self::MANAGEMENT) {
-            Some(Self(field))
+            Some(Self(fields))
         } else {
             None
         }
-    }
-
-    /// The field.
-    pub const fn get(self) -> u16 {
-        self.0
     }
 
     /// Select the Protected Frame subfield while retaining the validated
@@ -72,7 +64,7 @@ impl FrameControl {
 
     /// The field of `fields`, which keep a validated frame kind.
     const fn of_fields(fields: FrameControlFields) -> Self {
-        Self(u16::from_le_bytes(fields.to_bytes()))
+        Self(fields)
     }
     /// This MPDU repeats an earlier transmission.
     pub const fn retry(self) -> bool {
@@ -155,10 +147,30 @@ impl FrameControl {
 pub struct AddressFields {
     control: FrameControlFields,
     receiver: [u8; 6],
-    transmitter: Option<[u8; 6]>,
-    address3: Option<[u8; 6]>,
-    sequence_control: Option<u16>,
-    address4: Option<[u8; 6]>,
+    rest: AfterReceiver,
+}
+
+/// The fields after Address 1, as the frame's layout holds them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AfterReceiver {
+    /// A control frame of Address 1 alone: CTS, Ack, Control Wrapper.
+    Nothing,
+    /// A control frame that carries a TA.
+    Transmitter([u8; 6]),
+    /// A management frame, or a data frame without Address 4: Addresses 2
+    /// and 3 and Sequence Control.
+    Three {
+        transmitter: [u8; 6],
+        address3: [u8; 6],
+        sequence_control: SequenceControl,
+    },
+    /// A data frame with both To DS and From DS set: Address 4 as well.
+    Four {
+        transmitter: [u8; 6],
+        address3: [u8; 6],
+        sequence_control: SequenceControl,
+        address4: [u8; 6],
+    },
 }
 
 /// Why a frame's address fields cannot be read.
@@ -171,6 +183,15 @@ pub enum AddressFieldsError {
     /// A frame type or control subtype whose address layout this view does
     /// not know.
     UnknownLayout,
+}
+
+/// The layout Frame Control decides, before any field it governs is read.
+#[derive(Clone, Copy)]
+enum AddressLayout {
+    Receiver,
+    Transmitter,
+    Three,
+    Four,
 }
 
 impl AddressFields {
@@ -186,15 +207,12 @@ impl AddressFields {
         // governs is read: an unknown layout is refused as such, however
         // short the frame.
         let layout = match control.kind() {
-            FrameType::Management => AddressLayout::ThreeAddress { address4: false },
-            FrameType::Data => AddressLayout::ThreeAddress {
-                address4: control.to_ds() && control.from_ds(),
-            },
+            FrameType::Management => AddressLayout::Three,
+            FrameType::Data if control.to_ds() && control.from_ds() => AddressLayout::Four,
+            FrameType::Data => AddressLayout::Three,
             FrameType::Control => match control_layout(control.control_subtype()) {
-                ControlLayout::ReceiverAndTransmitter => {
-                    AddressLayout::Control { transmitter: true }
-                }
-                ControlLayout::Receiver => AddressLayout::Control { transmitter: false },
+                ControlLayout::ReceiverAndTransmitter => AddressLayout::Transmitter,
+                ControlLayout::Receiver => AddressLayout::Receiver,
                 ControlLayout::Unknown => return Err(AddressFieldsError::UnknownLayout),
             },
             FrameType::Extension | FrameType::Reserved(_) => {
@@ -203,30 +221,30 @@ impl AddressFields {
         };
         let _duration: [u8; 2] = reader.read().map_err(truncated)?;
         let receiver = reader.read().map_err(truncated)?;
-        let mut fields = Self {
+        // A struct expression evaluates its fields in the order written: the
+        // order of the fields in the frame.
+        let rest = match layout {
+            AddressLayout::Receiver => AfterReceiver::Nothing,
+            AddressLayout::Transmitter => {
+                AfterReceiver::Transmitter(reader.read().map_err(truncated)?)
+            }
+            AddressLayout::Three => AfterReceiver::Three {
+                transmitter: reader.read().map_err(truncated)?,
+                address3: reader.read().map_err(truncated)?,
+                sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
+            },
+            AddressLayout::Four => AfterReceiver::Four {
+                transmitter: reader.read().map_err(truncated)?,
+                address3: reader.read().map_err(truncated)?,
+                sequence_control: SequenceControl::from_bytes(reader.read().map_err(truncated)?),
+                address4: reader.read().map_err(truncated)?,
+            },
+        };
+        Ok(Self {
             control,
             receiver,
-            transmitter: None,
-            address3: None,
-            sequence_control: None,
-            address4: None,
-        };
-        match layout {
-            AddressLayout::ThreeAddress { address4 } => {
-                fields.transmitter = Some(reader.read().map_err(truncated)?);
-                fields.address3 = Some(reader.read().map_err(truncated)?);
-                fields.sequence_control =
-                    Some(u16::from_le_bytes(reader.read().map_err(truncated)?));
-                if address4 {
-                    fields.address4 = Some(reader.read().map_err(truncated)?);
-                }
-            }
-            AddressLayout::Control { transmitter: true } => {
-                fields.transmitter = Some(reader.read().map_err(truncated)?);
-            }
-            AddressLayout::Control { transmitter: false } => {}
-        }
-        Ok(fields)
+            rest,
+        })
     }
 
     pub const fn control(&self) -> FrameControlFields {
@@ -238,47 +256,64 @@ impl AddressFields {
         self.receiver
     }
 
+    /// The fields after Address 1.
+    pub const fn rest(&self) -> AfterReceiver {
+        self.rest
+    }
+
     /// Address 2, in management and data frames and in a control frame
     /// carrying a TA.
     pub const fn transmitter(&self) -> Option<[u8; 6]> {
-        self.transmitter
+        match self.rest {
+            AfterReceiver::Nothing => None,
+            AfterReceiver::Transmitter(transmitter)
+            | AfterReceiver::Three { transmitter, .. }
+            | AfterReceiver::Four { transmitter, .. } => Some(transmitter),
+        }
     }
 
     /// Address 3, in management and data frames.
     pub const fn address3(&self) -> Option<[u8; 6]> {
-        self.address3
+        match self.rest {
+            AfterReceiver::Nothing | AfterReceiver::Transmitter(_) => None,
+            AfterReceiver::Three { address3, .. } | AfterReceiver::Four { address3, .. } => {
+                Some(address3)
+            }
+        }
     }
 
     /// Sequence Control, in management and data frames.
-    pub const fn sequence_control(&self) -> Option<u16> {
-        self.sequence_control
+    pub const fn sequence_control(&self) -> Option<SequenceControl> {
+        match self.rest {
+            AfterReceiver::Nothing | AfterReceiver::Transmitter(_) => None,
+            AfterReceiver::Three {
+                sequence_control, ..
+            }
+            | AfterReceiver::Four {
+                sequence_control, ..
+            } => Some(sequence_control),
+        }
     }
 
     /// Address 4, in a data frame with both To DS and From DS set.
     pub const fn address4(&self) -> Option<[u8; 6]> {
-        self.address4
+        match self.rest {
+            AfterReceiver::Four { address4, .. } => Some(address4),
+            _ => None,
+        }
     }
 
     /// Every address the frame holds, in field order.
     pub fn addresses(&self) -> impl Iterator<Item = [u8; 6]> {
         [
             Some(self.receiver),
-            self.transmitter,
-            self.address3,
-            self.address4,
+            self.transmitter(),
+            self.address3(),
+            self.address4(),
         ]
         .into_iter()
         .flatten()
     }
-}
-
-/// The address fields a known frame layout holds after Address 1.
-#[derive(Clone, Copy)]
-enum AddressLayout {
-    /// Addresses 2 and 3 and Sequence Control, then Address 4 when set.
-    ThreeAddress { address4: bool },
-    /// Address 2 when set.
-    Control { transmitter: bool },
 }
 
 /// The addresses a control frame of one subtype carries.
@@ -320,96 +355,151 @@ pub const fn control_layout(subtype: ControlSubtype) -> ControlLayout {
     }
 }
 
+/// To DS and From DS of a data frame, with Address 4 exactly when both
+/// are set.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS subfields,
+/// Table 9-4) and 9.3.2.1 (Data frame format: Address 4).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DataDirection {
+    /// Neither bit: a frame within an IBSS or a direct link.
+    Neither,
+    /// To DS alone: a frame to the AP.
+    ToDs,
+    /// From DS alone: a frame from the AP.
+    FromDs,
+    /// Both bits: a mesh or WDS frame, with its Address 4.
+    Wds([u8; 6]),
+}
+
+/// What a data or management header holds after Sequence Control, as its
+/// type decides it. The Frame Control bits it decides are not stored
+/// beside it: [`MacHeader::control`] derives them from the variant.
+///
+/// SOURCE: IEEE Std 802.11-2020, 9.2.3 (General frame format), 9.3.2.1
+/// (Data frame format) and 9.3.3.2 (Management frame format); the Order
+/// bit, 9.2.4.1.10: an HT Control field in a QoS data or management frame,
+/// the StrictlyOrdered service class in a non-QoS data frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HeaderLayout {
+    /// A management frame: HT Control when its Order bit is set.
+    Management { ht_control: Option<[u8; 4]> },
+    /// A non-QoS data frame: no QoS Control and no HT Control. Its Order
+    /// bit, the StrictlyOrdered class, stays among the frame's other bits.
+    Data { direction: DataDirection },
+    /// A QoS data frame: QoS Control, and HT Control when its Order bit is
+    /// set.
+    QosData {
+        direction: DataDirection,
+        qos: QosControl,
+        ht_control: Option<[u8; 4]>,
+    },
+}
+
 /// A complete MAC header with its checked variable-length boundary.
 #[derive(Clone, Copy, Debug)]
 pub struct DecodedHeader<'a> {
-    control: FrameControl,
-    duration: u16,
-    receiver: [u8; 6],
-    transmitter: [u8; 6],
-    address3: [u8; 6],
-    sequence_control: u16,
-    address4: Option<[u8; 6]>,
-    qos: Option<u16>,
-    ht_control: Option<[u8; 4]>,
+    header: MacHeader,
     frame: &'a [u8],
     body: &'a [u8],
 }
 impl<'a> DecodedHeader<'a> {
     /// Decode the complete MAC/QoS/HT-Control header.
     pub fn decode(frame: &'a [u8]) -> Option<Self> {
-        let original = frame;
         let mut reader = oer_portable_wire::Reader::new(frame);
-        let control = FrameControl::new(u16::from_le_bytes(reader.read().ok()?))?;
-        let duration = u16::from_le_bytes(reader.read().ok()?);
-        let receiver = reader.read().ok()?;
-        let transmitter = reader.read().ok()?;
+        let control = FrameControl::new(FrameControlFields::from_bytes(reader.read().ok()?))?;
+        let fields = control.fields();
+        let duration = DurationId::from_bytes(reader.read().ok()?);
+        let address1 = reader.read().ok()?;
+        let address2 = reader.read().ok()?;
         let address3 = reader.read().ok()?;
-        let sequence_control = u16::from_le_bytes(reader.read().ok()?);
-        let address4 = if control.is_four_address() {
-            Some(reader.read().ok()?)
-        } else {
-            None
+        let sequence_control = SequenceControl::from_bytes(reader.read().ok()?);
+        let direction = |reader: &mut oer_portable_wire::Reader<'a>| -> Option<DataDirection> {
+            Some(match (fields.to_ds_bit(), fields.from_ds_bit()) {
+                (false, false) => DataDirection::Neither,
+                (true, false) => DataDirection::ToDs,
+                (false, true) => DataDirection::FromDs,
+                (true, true) => DataDirection::Wds(reader.read().ok()?),
+            })
         };
-        let qos = if control.is_qos_data() {
-            Some(u16::from_le_bytes(reader.read().ok()?))
-        } else {
-            None
+        let ht = |reader: &mut oer_portable_wire::Reader<'a>| -> Option<Option<[u8; 4]>> {
+            if fields.order() {
+                Some(Some(reader.read().ok()?))
+            } else {
+                Some(None)
+            }
         };
-        let ht_control = if control.has_ht_control() {
-            Some(reader.read().ok()?)
+        // Address 4, then QoS Control, then HT Control: the fields' order.
+        let layout = if control.is_management_frame() {
+            HeaderLayout::Management {
+                ht_control: ht(&mut reader)?,
+            }
+        } else if fields.qos() {
+            let direction = direction(&mut reader)?;
+            let qos = QosControl::from_bytes(reader.read().ok()?);
+            HeaderLayout::QosData {
+                direction,
+                qos,
+                ht_control: ht(&mut reader)?,
+            }
         } else {
-            None
+            HeaderLayout::Data {
+                direction: direction(&mut reader)?,
+            }
         };
         Some(Self {
-            control,
-            duration,
-            receiver,
-            transmitter,
-            address3,
-            sequence_control,
-            address4,
-            qos,
-            ht_control,
-            frame: original,
+            header: MacHeader {
+                others: MacHeader::others_of(fields, &layout),
+                duration,
+                address1,
+                address2,
+                address3,
+                sequence_control,
+                layout,
+            },
+            frame,
             body: reader.remaining(),
         })
     }
+    /// The decoded header.
+    pub const fn header(&self) -> MacHeader {
+        self.header
+    }
     /// The decoded `control` field.
     pub const fn control(&self) -> FrameControl {
-        self.control
+        self.header.control()
     }
     /// The decoded `duration` field.
-    pub const fn duration(&self) -> u16 {
-        self.duration
+    pub const fn duration(&self) -> DurationId {
+        self.header.duration
     }
     /// The decoded `receiver` field.
     pub const fn receiver(&self) -> [u8; 6] {
-        self.receiver
+        self.header.address1
     }
     /// The decoded `transmitter` field.
     pub const fn transmitter(&self) -> [u8; 6] {
-        self.transmitter
+        self.header.address2
     }
     /// The decoded `address3` field.
     pub const fn address3(&self) -> [u8; 6] {
-        self.address3
+        self.header.address3
     }
     /// The decoded `sequence_control` field.
-    pub const fn sequence_control(&self) -> u16 {
-        self.sequence_control
+    pub const fn sequence_control(&self) -> SequenceControl {
+        self.header.sequence_control
     }
     /// The decoded `address4` field.
     pub const fn address4(&self) -> Option<[u8; 6]> {
-        self.address4
+        self.header.address4()
     }
     /// The decoded `qos` field.
-    pub const fn qos(&self) -> Option<u16> {
-        self.qos
+    pub const fn qos(&self) -> Option<QosControl> {
+        self.header.qos()
     }
     /// The decoded `ht_control` field.
     pub const fn ht_control(&self) -> Option<[u8; 4]> {
-        self.ht_control
+        self.header.ht_control()
     }
     /// The complete MPDU whose header was decoded.
     pub const fn frame(&self) -> &'a [u8] {
@@ -418,109 +508,6 @@ impl<'a> DecodedHeader<'a> {
     /// Bytes following all MAC header fields.
     pub const fn body(&self) -> &'a [u8] {
         self.body
-    }
-}
-
-/// A MAC header decoded once, kept compact beside its frame's owner: the
-/// fields that decide its variable length and the frame's place. It gives
-/// its [`DecodedHeader`] again for those same bytes only, reading the fixed
-/// fields with no second decode of the variable layout; any other slice,
-/// another frame's or the same buffer after its start moved, gets none, and
-/// so do the same bytes rewritten: the kept fields are compared with them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CheckedHeader {
-    control: FrameControl,
-    sequence_control: u16,
-    /// The QoS Control field, when [`Self::has_qos`].
-    qos: u16,
-    has_qos: bool,
-    /// Where the body starts: at most 36 octets.
-    header_length: u8,
-    /// The frame the header was decoded from: its length and its first
-    /// byte's address. Kept this small, it travels with its receive buffer.
-    length: u16,
-    at: usize,
-}
-
-impl CheckedHeader {
-    /// Decode `frame`'s header once; `None` as [`DecodedHeader::decode`].
-    pub fn check(frame: &[u8]) -> Option<Self> {
-        let header = DecodedHeader::decode(frame)?;
-        let header_length = u8::try_from(frame.len().checked_sub(header.body.len())?).ok()?;
-        Some(Self {
-            control: header.control,
-            sequence_control: header.sequence_control,
-            qos: header.qos.unwrap_or(0),
-            has_qos: header.qos.is_some(),
-            header_length,
-            length: u16::try_from(frame.len()).ok()?,
-            at: frame.as_ptr().addr(),
-        })
-    }
-
-    /// The decoded header of `frame`, when it is the frame this was checked
-    /// against.
-    pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
-        if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
-            return None;
-        }
-        // What decided the layout must still be in the bytes: a rewrite of
-        // the frame in place is another frame.
-        let field = |at: usize| -> Option<u16> {
-            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
-        };
-        let qos_at = if self.control.is_four_address() {
-            30
-        } else {
-            24
-        };
-        if field(0)? != self.control.get()
-            || field(22)? != self.sequence_control
-            || (self.has_qos && field(qos_at)? != self.qos)
-        {
-            return None;
-        }
-        let address =
-            |at: usize| -> Option<[u8; 6]> { frame.get(at..)?.first_chunk::<6>().copied() };
-        let address4 = if self.control.is_four_address() {
-            Some(address(24)?)
-        } else {
-            None
-        };
-        let ht_control = if self.control.has_ht_control() {
-            let at = usize::from(self.header_length).checked_sub(4)?;
-            Some(*frame.get(at..)?.first_chunk::<4>()?)
-        } else {
-            None
-        };
-        Some(DecodedHeader {
-            control: self.control,
-            duration: u16::from_le_bytes(*frame.get(2..)?.first_chunk::<2>()?),
-            receiver: address(4)?,
-            transmitter: address(10)?,
-            address3: address(16)?,
-            sequence_control: self.sequence_control,
-            address4,
-            qos: self.qos(),
-            ht_control,
-            frame,
-            body: frame.get(usize::from(self.header_length)..)?,
-        })
-    }
-
-    /// The decoded `control` field.
-    pub const fn control(&self) -> FrameControl {
-        self.control
-    }
-
-    /// The decoded `sequence_control` field.
-    pub const fn sequence_control(&self) -> u16 {
-        self.sequence_control
-    }
-
-    /// The decoded `qos` field.
-    pub const fn qos(&self) -> Option<u16> {
-        if self.has_qos { Some(self.qos) } else { None }
     }
 }
 
@@ -555,10 +542,10 @@ impl QosControl {
     }
 }
 
-/// A data or management MAC header whose fields agree with its Frame
-/// Control: a fourth address exactly when To DS and From DS are both set, a
-/// QoS Control exactly in a QoS data frame, an HT Control exactly when the
-/// Order bit marks one ([`FrameControl::has_ht_control`]).
+/// A data or management MAC header. Its layout ([`HeaderLayout`]) is a
+/// sum by the frame's type, and the Frame Control bits the layout decides
+/// are derived from it, so a header whose Frame Control disagrees with its
+/// fields cannot be built.
 ///
 /// SOURCE: IEEE Std 802.11-2020, 9.3.2.1 (Data frame format) and 9.3.3.2
 /// (Management frame format): Frame Control, Duration/ID, Address 1 to
@@ -566,75 +553,79 @@ impl QosControl {
 /// transmission order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacHeader {
-    control: FrameControl,
-    duration: u16,
+    /// Frame Control without the bits the layout decides: the type, the
+    /// QoS subtype bit, a data frame's To DS and From DS, and the Order bit
+    /// of a management or QoS data frame are clear here.
+    others: FrameControlFields,
+    duration: DurationId,
     address1: [u8; 6],
     address2: [u8; 6],
     address3: [u8; 6],
-    sequence_control: u16,
-    address4: Option<[u8; 6]>,
-    qos: Option<QosControl>,
-    ht_control: Option<[u8; 4]>,
+    sequence_control: SequenceControl,
+    layout: HeaderLayout,
 }
 
 impl MacHeader {
-    /// The header, when its optional fields agree with `control`.
-    #[allow(clippy::too_many_arguments, reason = "the fields of a MAC header")]
-    pub const fn new(
-        control: FrameControl,
-        duration: u16,
-        address1: [u8; 6],
-        address2: [u8; 6],
-        address3: [u8; 6],
-        sequence_control: u16,
-        address4: Option<[u8; 6]>,
-        qos: Option<QosControl>,
-        ht_control: Option<[u8; 4]>,
-    ) -> Option<Self> {
-        if address4.is_some() == control.is_four_address()
-            && qos.is_some() == control.is_qos_data()
-            && ht_control.is_some() == control.has_ht_control()
-        {
-            Some(Self {
-                control,
-                duration,
-                address1,
-                address2,
-                address3,
-                sequence_control,
-                address4,
-                qos,
-                ht_control,
-            })
-        } else {
-            None
+    /// Decode the header at the start of `frame`.
+    pub fn decode(frame: &[u8]) -> Option<Self> {
+        DecodedHeader::decode(frame).map(|decoded| decoded.header)
+    }
+
+    /// `fields` without the bits `layout` decides.
+    const fn others_of(fields: FrameControlFields, layout: &HeaderLayout) -> FrameControlFields {
+        // A management frame's bit B7 is a bit of its subtype, and its DS
+        // bits are its own: only a data frame's are the layout's.
+        let fields = fields.with_type_data(false);
+        match layout {
+            HeaderLayout::Management { .. } => fields.with_order(false),
+            HeaderLayout::Data { .. } => fields
+                .with_qos(false)
+                .with_to_ds_bit(false)
+                .with_from_ds_bit(false),
+            HeaderLayout::QosData { .. } => fields
+                .with_qos(false)
+                .with_to_ds_bit(false)
+                .with_from_ds_bit(false)
+                .with_order(false),
         }
     }
 
-    /// Decode the header at the start of `frame`.
-    pub fn decode(frame: &[u8]) -> Option<Self> {
-        let header = DecodedHeader::decode(frame)?;
-        Self::new(
-            header.control(),
-            header.duration(),
-            header.receiver(),
-            header.transmitter(),
-            header.address3(),
-            header.sequence_control(),
-            header.address4(),
-            header
-                .qos()
-                .map(|field| QosControl::from_bytes(field.to_le_bytes())),
-            header.ht_control(),
-        )
-    }
-
-    /// The Frame Control field.
+    /// The Frame Control field: the header's other bits and those its
+    /// layout decides.
     pub const fn control(&self) -> FrameControl {
-        self.control
+        const fn directed(
+            fields: FrameControlFields,
+            direction: DataDirection,
+        ) -> FrameControlFields {
+            let (to_ds, from_ds) = match direction {
+                DataDirection::Neither => (false, false),
+                DataDirection::ToDs => (true, false),
+                DataDirection::FromDs => (false, true),
+                DataDirection::Wds(_) => (true, true),
+            };
+            fields
+                .with_type_data(true)
+                .with_to_ds_bit(to_ds)
+                .with_from_ds_bit(from_ds)
+        }
+        FrameControl::of_fields(match self.layout {
+            HeaderLayout::Management { ht_control } => self.others.with_order(ht_control.is_some()),
+            HeaderLayout::Data { direction } => directed(self.others, direction),
+            HeaderLayout::QosData {
+                direction,
+                ht_control,
+                ..
+            } => directed(self.others, direction)
+                .with_qos(true)
+                .with_order(ht_control.is_some()),
+        })
+    }
+    /// The fields after Sequence Control.
+    pub const fn layout(&self) -> HeaderLayout {
+        self.layout
     }
     /// The Duration/ID field.
-    pub const fn duration(&self) -> u16 {
+    pub const fn duration(&self) -> DurationId {
         self.duration
     }
     /// Address 1, the receiver.
@@ -650,67 +641,109 @@ impl MacHeader {
         self.address3
     }
     /// The Sequence Control field.
-    pub const fn sequence_control(&self) -> u16 {
+    pub const fn sequence_control(&self) -> SequenceControl {
         self.sequence_control
     }
     /// Address 4 of a four-address data frame.
     pub const fn address4(&self) -> Option<[u8; 6]> {
-        self.address4
+        match self.layout {
+            HeaderLayout::Data {
+                direction: DataDirection::Wds(address4),
+            }
+            | HeaderLayout::QosData {
+                direction: DataDirection::Wds(address4),
+                ..
+            } => Some(address4),
+            _ => None,
+        }
     }
     /// The QoS Control field of a QoS data frame.
     pub const fn qos(&self) -> Option<QosControl> {
-        self.qos
+        match self.layout {
+            HeaderLayout::QosData { qos, .. } => Some(qos),
+            _ => None,
+        }
     }
     /// The HT Control field.
     pub const fn ht_control(&self) -> Option<[u8; 4]> {
-        self.ht_control
-    }
-
-    /// The same header with the Protected Frame subfield `protection`.
-    pub const fn with_protected(mut self, protection: FrameProtection) -> Self {
-        self.control = self.control.with_protected(protection);
-        self
-    }
-    /// The same header with Address 1 `address1`.
-    pub const fn with_address1(mut self, address1: [u8; 6]) -> Self {
-        self.address1 = address1;
-        self
-    }
-    /// The same header with Address 3 `address3`.
-    pub const fn with_address3(mut self, address3: [u8; 6]) -> Self {
-        self.address3 = address3;
-        self
-    }
-    /// The same header with the Sequence Control field `sequence_control`.
-    pub const fn with_sequence_control(mut self, sequence_control: u16) -> Self {
-        self.sequence_control = sequence_control;
-        self
-    }
-    /// The same QoS data header with `qos`; `None` for a header without a
-    /// QoS Control field.
-    pub const fn with_qos(mut self, qos: QosControl) -> Option<Self> {
-        if self.qos.is_some() {
-            self.qos = Some(qos);
-            Some(self)
-        } else {
-            None
+        match self.layout {
+            HeaderLayout::Management { ht_control } | HeaderLayout::QosData { ht_control, .. } => {
+                ht_control
+            }
+            HeaderLayout::Data { .. } => None,
         }
     }
 
-    /// The header's length in octets.
+    /// The same header with the Protected Frame subfield `protection`.
+    pub const fn with_protected(self, protection: FrameProtection) -> Self {
+        Self {
+            others: self
+                .others
+                .with_protected(matches!(protection, FrameProtection::Protected)),
+            ..self
+        }
+    }
+    /// The same header with Address 1 `address1`.
+    pub const fn with_address1(self, address1: [u8; 6]) -> Self {
+        Self { address1, ..self }
+    }
+    /// The same header with Address 3 `address3`.
+    pub const fn with_address3(self, address3: [u8; 6]) -> Self {
+        Self { address3, ..self }
+    }
+    /// The same header with the Sequence Control field `sequence_control`.
+    pub const fn with_sequence_control(self, sequence_control: SequenceControl) -> Self {
+        Self {
+            sequence_control,
+            ..self
+        }
+    }
+    /// The same header with its QoS Control changed by `change`; a header
+    /// without one, which has nothing to change, as it is.
+    pub fn map_qos(self, change: impl FnOnce(QosControl) -> QosControl) -> Self {
+        match self.layout {
+            HeaderLayout::QosData {
+                direction,
+                qos,
+                ht_control,
+            } => Self {
+                layout: HeaderLayout::QosData {
+                    direction,
+                    qos: change(qos),
+                    ht_control,
+                },
+                ..self
+            },
+            HeaderLayout::Management { .. } | HeaderLayout::Data { .. } => self,
+        }
+    }
+
+    /// The header's length in octets: 24 for Frame Control, Duration/ID,
+    /// three addresses and Sequence Control, then 6 for Address 4, 2 for
+    /// QoS Control and 4 for HT Control.
     pub const fn header_len(&self) -> usize {
-        match (
-            self.address4.is_some(),
-            self.qos.is_some(),
-            self.ht_control.is_some(),
-        ) {
-            (false, false, false) => 24,
-            (false, true, false) => 26,
-            (false, false, true) => 28,
-            (false, true, true) | (true, false, false) => 30,
-            (true, true, false) => 32,
-            (true, false, true) => 34,
-            (true, true, true) => 36,
+        match self.layout {
+            HeaderLayout::Management { ht_control: None } => 24,
+            HeaderLayout::Management {
+                ht_control: Some(_),
+            } => 28,
+            HeaderLayout::Data {
+                direction: DataDirection::Wds(_),
+            } => 30,
+            HeaderLayout::Data { .. } => 24,
+            HeaderLayout::QosData {
+                direction,
+                ht_control,
+                ..
+            } => match (
+                matches!(direction, DataDirection::Wds(_)),
+                ht_control.is_some(),
+            ) {
+                (false, false) => 26,
+                (false, true) => 30,
+                (true, false) => 32,
+                (true, true) => 36,
+            },
         }
     }
 
@@ -718,18 +751,18 @@ impl MacHeader {
     /// 9.2.3: Frame Control, Duration/ID, Address 1 to 3, Sequence Control,
     /// Address 4, QoS Control, HT Control), [`Self::header_len`] of them.
     pub fn octets(&self) -> impl Iterator<Item = u8> + use<> {
-        self.control
+        self.control()
             .fields()
             .to_bytes()
             .into_iter()
-            .chain(self.duration.to_le_bytes())
+            .chain(self.duration.to_bytes())
             .chain(self.address1)
             .chain(self.address2)
             .chain(self.address3)
-            .chain(self.sequence_control.to_le_bytes())
-            .chain(self.address4.into_iter().flatten())
-            .chain(self.qos.map(QosControl::to_bytes).into_iter().flatten())
-            .chain(self.ht_control.into_iter().flatten())
+            .chain(self.sequence_control.to_bytes())
+            .chain(self.address4().into_iter().flatten())
+            .chain(self.qos().map(QosControl::to_bytes).into_iter().flatten())
+            .chain(self.ht_control().into_iter().flatten())
     }
 
     /// Write the header at the start of `out` and return its length. A
@@ -758,6 +791,11 @@ oer_portable_wire::bitfield! {
         pub management_subtype, with_management_subtype: [ManagementSubtype] = 4..8, view;
         pub control_subtype, with_control_subtype: [ControlSubtype] = 4..8, view;
         pub type_and_subtype, with_type_and_subtype: u8 = 2..8, view;
+        /// Type bit B3: set in a data (10) or extension (11) frame, clear
+        /// in a management (00) or control (01) one.
+        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
+        /// subfields).
+        pub type_data, with_type_data: bool = 3..4, view;
         /// Data subtype bit B6: the frame carries no Frame Body (Null and
         /// CF-only subtypes).
         /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3 (Type and Subtype
@@ -770,12 +808,25 @@ oer_portable_wire::bitfield! {
         pub cf_poll, with_cf_poll: bool = 5..6, view;
         pub qos, with_qos: bool = 7..8, view;
         pub ds, with_ds: u16 = 8..10;
+        /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.4 (To DS and From DS
+        /// subfields).
+        pub to_ds_bit, with_to_ds_bit: bool = 8..9, view;
+        pub from_ds_bit, with_from_ds_bit: bool = 9..10, view;
         pub more_fragments, with_more_fragments: bool = 10..11;
         pub retry, with_retry: bool = 11..12;
         pub power_management, with_power_management: bool = 12..13;
         pub more_data, with_more_data: bool = 13..14;
         pub protected, with_protected: bool = 14..15;
         pub order, with_order: bool = 15..16;
+    }
+}
+oer_portable_wire::bitfield! {
+    /// The Duration/ID field: a duration in microseconds, or, in a PS-Poll,
+    /// the AID; its meaning is the frame's.
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.2 (Duration/ID field, Table
+    /// 9-2).
+    pub struct DurationId[2] (little) {
+        pub value, with_value: u16 = 0..16;
     }
 }
 oer_portable_wire::bitfield! {
@@ -861,9 +912,6 @@ mod fuzz_tests;
 mod header_tests;
 
 impl FrameControlFields {
-    pub const fn from_raw(raw: u16) -> Self {
-        Self::from_bytes(raw.to_le_bytes())
-    }
     /// The Frame Control field of a protocol-version-0 management frame of
     /// `subtype`, every flag clear; `None` for a reserved encoding wider
     /// than the four-bit subtype.
@@ -895,9 +943,6 @@ impl FrameControlFields {
         matches!(self.kind(), FrameType::Control)
             && self.control_subtype().encoding() == subtype.encoding()
     }
-    pub const fn raw(self) -> u16 {
-        u16::from_le_bytes(self.to_bytes())
-    }
     pub const fn to_ds(self) -> bool {
         DsDirection::from_bytes([self.ds() as u8]).to_ds()
     }
@@ -921,19 +966,19 @@ pub const SEQUENCE_CONTROL_OFFSET: usize = 22;
 
 /// The Sequence Control field of a data or management MPDU; `None` for an
 /// MPDU shorter than the field's end.
-pub fn sequence_control(mpdu: &[u8]) -> Option<u16> {
+pub fn sequence_control(mpdu: &[u8]) -> Option<SequenceControl> {
     mpdu.get(SEQUENCE_CONTROL_OFFSET..)?
         .first_chunk::<2>()
         .copied()
-        .map(u16::from_le_bytes)
+        .map(SequenceControl::from_bytes)
 }
 
 /// Write the Sequence Control field of a data or management MPDU; `None`,
 /// without a change, for an MPDU shorter than the field's end.
-pub fn write_sequence_control(mpdu: &mut [u8], sequence_control: u16) -> Option<()> {
+pub fn write_sequence_control(mpdu: &mut [u8], sequence_control: SequenceControl) -> Option<()> {
     *mpdu
         .get_mut(SEQUENCE_CONTROL_OFFSET..)?
-        .first_chunk_mut::<2>()? = sequence_control.to_le_bytes();
+        .first_chunk_mut::<2>()? = sequence_control.to_bytes();
     Some(())
 }
 
@@ -966,12 +1011,13 @@ mod retry_tests {
 
     #[test]
     fn sequence_control_round_trips_and_a_short_mpdu_is_refused_unchanged() {
+        let field = SequenceControl::from_bytes([0x34, 0x12]);
         let mut mpdu = [0_u8; 24];
-        write_sequence_control(&mut mpdu, 0x1234).unwrap();
+        write_sequence_control(&mut mpdu, field).unwrap();
         assert_eq!(&mpdu[22..], &[0x34, 0x12]);
-        assert_eq!(sequence_control(&mpdu), Some(0x1234));
+        assert_eq!(sequence_control(&mpdu), Some(field));
         let mut short = [0_u8; 23];
-        assert_eq!(write_sequence_control(&mut short, 0x1234), None);
+        assert_eq!(write_sequence_control(&mut short, field), None);
         assert_eq!(short, [0; 23]);
         assert_eq!(sequence_control(&short), None);
     }

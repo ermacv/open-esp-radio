@@ -12,7 +12,12 @@ pub(crate) const TEST_ADVERTISEMENT: crate::ap::profile::Advertisement = {
             [0x8b, 0x96, 0x82, 0x84, 0x0c, 0x18, 0x30, 0x60],
             [0x6c, 0x12, 0x24, 0x48],
         ),
-        crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
+        crate::ht::HtLocalCapabilities::new(
+            crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+            0x03,
+            0xff,
+            0x01,
+        ),
         WmmParameters::new(
             4,
             crate::extensions::wmm::Uapsd::NotSupported,
@@ -49,7 +54,7 @@ pub(crate) const TEST_ADVERTISEMENT: crate::ap::profile::Advertisement = {
         )
         .unwrap(),
         // ESS, Short Preamble and Short Slot Time. Privacy follows AP security.
-        0x0421,
+        crate::management::CapabilityInformation::from_bytes([0x21, 0x04]),
     )
     .unwrap()
 };
@@ -122,7 +127,7 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
         LegacyRates::new([0x82; 8], [0x84; 4]),
         TEST_ADVERTISEMENT.ht,
         TEST_ADVERTISEMENT.wmm,
-        1,
+        crate::management::CapabilityInformation::from_bytes([0x01, 0x00]),
     )
     .unwrap();
     let protection = crate::protection::ApBssProtection {

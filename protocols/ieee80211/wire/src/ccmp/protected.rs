@@ -9,7 +9,7 @@
 //! Received bytes reach this module; nothing here panics on them.
 
 use super::{CCMP_HEADER_LEN, CcmpHeader, CcmpHeaderError};
-use crate::frame::{DecodedHeader, FrameControlFields, QosControl};
+use crate::frame::{DecodedHeader, QosControl};
 use crate::security::Spp;
 use crate::sequence::SequenceControl;
 
@@ -128,7 +128,8 @@ impl<'a> ProtectedMpdu<'a> {
         // Retry, Power Management and More Data are masked in every frame;
         // a data frame also masks its subtype bits 4 to 6, QoS data its
         // Order bit. Protected stays set.
-        let fields = FrameControlFields::from_bytes(control.get().to_le_bytes())
+        let fields = control
+            .fields()
             .with_retry(false)
             .with_power_management(false)
             .with_more_data(false);
@@ -145,7 +146,7 @@ impl<'a> ProtectedMpdu<'a> {
         } else {
             fields
         };
-        let sequence = SequenceControl::from_bytes(self.header.sequence_control().to_le_bytes());
+        let sequence = SequenceControl::from_bytes(self.header.sequence_control().to_bytes());
         let address4 = self.header.address4();
         let qos = self.masked_qos(spp).map(|qos| qos.to_bytes());
         let mut bytes = [0; 30];
@@ -173,7 +174,7 @@ impl<'a> ProtectedMpdu<'a> {
     /// remains, and the A-MSDU Present bit when SPP is negotiated.
     fn masked_qos(&self, spp: Spp) -> Option<QosControl> {
         self.header.qos().map(|qos| {
-            let control = QosControl::from_bytes(qos.to_le_bytes());
+            let control = qos;
             QosControl::from_bytes([0; 2])
                 .with_tid(control.tid())
                 .with_amsdu(matches!(spp, Spp::Negotiated) && control.amsdu())

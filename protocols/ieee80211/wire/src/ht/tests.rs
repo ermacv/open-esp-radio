@@ -1,5 +1,9 @@
-const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities =
-    crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+const TEST_HT_CAPABILITIES: crate::ht::HtLocalCapabilities = crate::ht::HtLocalCapabilities::new(
+    crate::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+    0x03,
+    0xff,
+    0x01,
+);
 
 use super::*;
 use crate::protection::HtProtectionMode;
@@ -37,7 +41,7 @@ fn ht20_records_are_complete_and_bounded() {
     assert_eq!(
         ht_peer_capabilities(&capability),
         Some(HtPeerCapabilities {
-            capability_info: 0x102c,
+            capability_info: HtCapabilityInfo::from_bytes([0x2c, 0x10]),
             ampdu_parameters: 0x03,
             rx_mcs_0_to_7: core::num::NonZeroU8::new(0xff).unwrap(),
             rx_ht_duplicate_mcs32: false,
@@ -82,7 +86,7 @@ fn named_codes_build_a_disabled_sm_power_save_and_the_longest_aggregate() {
         .to_bytes();
     let below = crate::channel::Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
     let capability = ht_capability_ie(
-        HtLocalCapabilities::new(u16::from_le_bytes(info), ampdu, 0xff, 1),
+        HtLocalCapabilities::new(HtCapabilityInfo::from_bytes(info), ampdu, 0xff, 1),
         below,
     );
     // Width, both short guard intervals and SM power save disabled.
@@ -158,7 +162,12 @@ fn local_profile_cannot_override_channel_geometry() {
             let geometry_bits = (supplied_geometry & 1) << 1
                 | (supplied_geometry & 2) << 4
                 | (supplied_geometry & 4) << 4;
-            let profile = HtLocalCapabilities::new(0x100c | geometry_bits, 0x03, 0xff, 0x01);
+            let profile = HtLocalCapabilities::new(
+                HtCapabilityInfo::from_bytes((0x100c | geometry_bits).to_le_bytes()),
+                0x03,
+                0xff,
+                0x01,
+            );
             assert_eq!(ht_capability_ie(profile, channel), expected);
         }
     }
@@ -240,4 +249,24 @@ fn ampdu_parameters_name_the_maximum_length_and_spacing() {
         assert_eq!(parameters.max_ampdu_length(), length);
         assert_eq!(parameters.spacing().get(), 6);
     }
+}
+
+/// A peer's HT capabilities answer from their own bits: HT-Greenfield,
+/// the 20 MHz short guard interval, and the 40 MHz one only with 40 MHz.
+#[test]
+fn a_peer_s_ht_capability_bits_each_answer_alone() {
+    let peer = |info: [u8; 2]| {
+        let mut element = [0_u8; HT_CAPABILITY_IE_LEN];
+        element[..4].copy_from_slice(&[45, 26, info[0], info[1]]);
+        element[5] = 0xff;
+        ht_peer_capabilities(&element).unwrap()
+    };
+    // Bit 1 40 MHz, bit 4 Greenfield, bit 5 SGI 20, bit 6 SGI 40.
+    assert!(peer([0x10, 0]).supports_greenfield());
+    assert!(!peer([0x00, 0]).supports_greenfield());
+    assert!(peer([0x20, 0]).supports_short_guard_interval(ChannelWidth::Mhz20));
+    assert!(!peer([0x00, 0]).supports_short_guard_interval(ChannelWidth::Mhz20));
+    assert!(peer([0x42, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Above));
+    assert!(!peer([0x40, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Above));
+    assert!(!peer([0x02, 0]).supports_short_guard_interval(ChannelWidth::Mhz40Below));
 }

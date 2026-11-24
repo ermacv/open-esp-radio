@@ -550,9 +550,11 @@ impl<'id> World<'id> {
                 };
                 if self.agreed[tid] {
                     let sequence = |front: &[u8]| {
-                        SequenceNumber::from_sequence_control(u16::from_le_bytes([
-                            front[22], front[23],
-                        ]))
+                        SequenceNumber::from_sequence_control(
+                            oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+                                front[22], front[23],
+                            ]),
+                        )
                         .get()
                     };
                     let oldest = after
@@ -607,9 +609,11 @@ impl<'id> World<'id> {
                 .filter_map(|id| self.around.port.front(*id))
                 .filter(|front| front[24] & 0x07 == up.value())
                 .map(|front| {
-                    SequenceNumber::from_sequence_control(u16::from_le_bytes([
-                        front[22], front[23],
-                    ]))
+                    SequenceNumber::from_sequence_control(
+                        oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+                            front[22], front[23],
+                        ]),
+                    )
                     .get()
                 })
                 .collect();
@@ -938,7 +942,10 @@ impl<'id> World<'id> {
                 if retried {
                     continue;
                 }
-                let control = u16::from_le_bytes([front[22], front[23]]);
+                let control =
+                    oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+                        front[22], front[23],
+                    ]);
                 let sequence = SequenceNumber::from_sequence_control(control).get();
                 let up = front[24] & 0x07;
                 let Some(tid) = TIDS.iter().position(|tid| tid.value() == up) else {
@@ -979,7 +986,9 @@ impl<'id> World<'id> {
         }
         let (published_from, home_from) = self.link_from;
         let numbered = |front: &[u8]| {
-            let control = u16::from_le_bytes([front[22], front[23]]);
+            let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+                front[22], front[23],
+            ]);
             (
                 front[24] & 0x07,
                 SequenceNumber::from_sequence_control(control).get(),

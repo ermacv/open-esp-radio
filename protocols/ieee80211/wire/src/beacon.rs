@@ -214,7 +214,7 @@ pub fn write_ht_beacon(
     crate::encoding::write_array::<16, _, _>(&mut fixed, &access_point);
     crate::encoding::write_array::<22, _, _>(
         &mut fixed,
-        &management_sequence.sequence_control().to_le_bytes(),
+        &management_sequence.sequence_control().to_bytes(),
     );
     crate::encoding::write_array::<32, _, _>(&mut fixed, &beacon_interval_tu.to_le_bytes());
     let capabilities = profile.capabilities(security.link_protection());

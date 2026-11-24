@@ -5547,7 +5547,12 @@ fn ht_access_point(operation_width: Option<ChannelWidth>) -> ScanRecord {
     );
     if let Some(width) = operation_width {
         let channel = Channel::ghz2_4(13, width).unwrap();
-        let local = HtLocalCapabilities::new(0, 0, 0xff, 1);
+        let local = HtLocalCapabilities::new(
+            oer_protocols_ieee80211_wire::ht::HtCapabilityInfo::from_bytes([0x00, 0x00]),
+            0,
+            0xff,
+            1,
+        );
         let wide = Channel::ghz2_4(13, ChannelWidth::Mhz40Below).unwrap();
         record.set_ht_capability_ie(Some(ht_capability_ie(local, wide)));
         record.set_ht_operation_ie(Some(ht_operation_ie(channel, Default::default())));

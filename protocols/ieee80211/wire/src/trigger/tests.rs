@@ -53,7 +53,7 @@ fn admits_trigger_mac_header_and_borrows_user_tail() {
     frame[16] = 1;
     frame[24..].copy_from_slice(&[13, 14, 15, 16, 17]);
     let trigger = parse_trigger_frame(&frame).unwrap();
-    assert_eq!(trigger.frame_control, 0x0824);
+    assert_eq!(trigger.frame_control.to_bytes(), [0x24, 0x08]);
     assert_eq!(trigger.duration, 0x1234);
     assert_eq!(trigger.receiver_address, [1, 2, 3, 4, 5, 6]);
     assert_eq!(trigger.transmitter_address, [7, 8, 9, 10, 11, 12]);
@@ -128,7 +128,7 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
     );
 
     let trigger = parse_trigger_frame(&bytes).unwrap();
-    assert_eq!(trigger.frame_control, 0x0024);
+    assert_eq!(trigger.frame_control.to_bytes(), [0x24, 0x00]);
     assert_eq!(trigger.duration, encoded.duration);
     assert_eq!(trigger.receiver_address, encoded.receiver_address);
     assert_eq!(trigger.transmitter_address, encoded.transmitter_address);

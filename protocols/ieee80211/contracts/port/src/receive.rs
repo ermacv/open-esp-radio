@@ -39,9 +39,9 @@ pub struct RxHeader {
     /// Address 3.
     pub address3: [u8; 6],
     /// The Sequence Control field.
-    pub sequence_control: u16,
+    pub sequence_control: oer_protocols_ieee80211_wire::sequence::SequenceControl,
     /// The QoS Control field, when the frame has one.
-    pub qos: Option<u16>,
+    pub qos: Option<oer_protocols_ieee80211_wire::frame::QosControl>,
     /// The offset of the body.
     pub body: u16,
 }

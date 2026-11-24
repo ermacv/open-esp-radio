@@ -48,9 +48,12 @@ impl OpenAuthenticationRequest {
         );
         crate::encoding::FrameParts([
             header.as_slice(),
-            &OPEN_SYSTEM_ALGORITHM.to_le_bytes(),
-            &OPEN_SYSTEM_REQUEST_SEQUENCE.to_le_bytes(),
-            &0_u16.to_le_bytes(),
+            &crate::management::AuthenticationFields::of(
+                OPEN_SYSTEM_ALGORITHM,
+                OPEN_SYSTEM_REQUEST_SEQUENCE,
+                0,
+            )
+            .to_bytes(),
         ])
         .write(output)
         .map_err(|required| StationFrameError::OutputTooSmall { required })
@@ -87,7 +90,7 @@ pub enum StaManagementSubtype {
 }
 
 impl StaManagementSubtype {
-    const fn frame_control(self) -> u16 {
+    const fn frame_control(self) -> FrameControlFields {
         match self {
             Self::Action => ACTION_FRAME_CONTROL,
             Self::Deauthentication => DEAUTHENTICATION_FRAME_CONTROL,
@@ -152,9 +155,7 @@ impl StaProtectedManagementFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, StationFrameError> {
         validate_peer(self.bssid.get())?;
         let header = management_header(
-            FrameControlFields::from_raw(self.subtype.frame_control())
-                .with_protected(true)
-                .raw(),
+            self.subtype.frame_control().with_protected(true),
             self.bssid.get(),
             self.source.get(),
             self.bssid.get(),
@@ -196,9 +197,12 @@ impl SaeAuthenticationFrame<'_> {
         );
         crate::encoding::FrameParts([
             header.as_slice(),
-            &SAE_AUTHENTICATION_ALGORITHM.to_le_bytes(),
-            &self.transaction.to_le_bytes(),
-            &self.status_code.to_le_bytes(),
+            &crate::management::AuthenticationFields::of(
+                SAE_AUTHENTICATION_ALGORITHM,
+                self.transaction,
+                self.status_code,
+            )
+            .to_bytes(),
             self.body,
         ])
         .write(output)
@@ -221,9 +225,15 @@ pub fn parse_sae_authentication(
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<SaeAuthentication<'_>> {
-    let (header, [algorithm, transaction, status_code], body) = split_received_management(frame)?;
-    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
+    let (header, fixed, body) = split_received_management(frame)?;
+    let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
+    let (algorithm, transaction, status_code) = (
+        fixed.algorithm().get(),
+        fixed.transaction().get(),
+        fixed.status_code().get(),
+    );
+    if header.frame_control.type_and_subtype()
+        != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -248,9 +258,15 @@ pub fn parse_open_authentication_response(
     local: [u8; 6],
     bssid: [u8; 6],
 ) -> Option<OpenAuthenticationResponse> {
-    let (header, [algorithm, transaction, status_code], _) = split_received_management(frame)?;
-    if FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).type_and_subtype()
-        != FrameControlFields::from_raw(OPEN_AUTHENTICATION_FRAME_CONTROL).type_and_subtype()
+    let (header, fixed, _) = split_received_management(frame)?;
+    let fixed = crate::management::AuthenticationFields::from_bytes(fixed);
+    let (algorithm, transaction, status_code) = (
+        fixed.algorithm().get(),
+        fixed.transaction().get(),
+        fixed.status_code().get(),
+    );
+    if header.frame_control.type_and_subtype()
+        != OPEN_AUTHENTICATION_FRAME_CONTROL.type_and_subtype()
         || header.receiver != local
         || header.transmitter != bssid
         || header.bssid != bssid
@@ -288,7 +304,7 @@ pub fn parse_sta_disconnect(
         || control.ds() != 0
         || control.protected()
         || control.more_fragments()
-        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_le_bytes())
+        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_bytes())
             .fragment()
             != 0
         || (header.receiver() != local.get() && header.receiver() != [0xff; 6])
@@ -304,9 +320,9 @@ pub fn parse_sta_disconnect(
         _ => return None,
     };
     let mut reader = oer_portable_wire::Reader::new(header.body());
-    let reason_code = reader.array().ok()?;
+    let reason_code = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?);
     Some(StaDisconnect {
         kind,
-        reason_code: u16::from_le_bytes(*reason_code),
+        reason_code: reason_code.code(),
     })
 }

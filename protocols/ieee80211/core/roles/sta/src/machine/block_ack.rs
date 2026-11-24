@@ -173,7 +173,7 @@ pub(super) fn unprotected_action(
         || control.protected()
         || control.ds() != 0
         || control.more_fragments()
-        || header.sequence_control() & 15 != 0
+        || header.sequence_control().fragment() != 0
         || header.ht_control().is_some()
         || header.receiver() != local.get()
         || header.transmitter() != bssid.get()

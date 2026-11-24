@@ -52,7 +52,12 @@ fn gtk_numbers() -> oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpT
 }
 
 const TEST_HT_CAPABILITIES: oer_protocols_ieee80211_wire::ht::HtLocalCapabilities =
-    oer_protocols_ieee80211_wire::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01);
+    oer_protocols_ieee80211_wire::ht::HtLocalCapabilities::new(
+        oer_protocols_ieee80211_wire::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+        0x03,
+        0xff,
+        0x01,
+    );
 
 mod handshake_retry;
 mod storage;

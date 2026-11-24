@@ -141,7 +141,7 @@ impl fmt::Display for EspNowVersionError {
 
 impl core::error::Error for EspNowVersionError {}
 
-const ACTION_FRAME_CONTROL: u16 = 0x00d0;
+const ACTION_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0xd0, 0x00]);
 const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const VENDOR_ELEMENT_FIXED_BODY_LEN: usize = 5;
 const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
@@ -549,18 +549,16 @@ impl<'payload> EspNowV1Frame<'payload> {
             .split_first_chunk_mut::<ESP_NOW_MANAGEMENT_HEADER_LEN>()
             .ok_or(EspNowV1WireError::OutputTooSmall { required })?;
         header.fill(0);
-        let frame_control = FrameControlFields::from_raw(ACTION_FRAME_CONTROL)
-            .with_retry(self.retry)
-            .raw();
+        let frame_control = ACTION_FRAME_CONTROL.with_retry(self.retry);
         let mut writer = oer_portable_wire::Writer::new(header);
         let too_small = |_| EspNowV1WireError::OutputTooSmall { required };
-        writer.u16_le(frame_control).map_err(too_small)?;
+        writer.write(&frame_control.to_bytes()).map_err(too_small)?;
         writer.u16_le(0).map_err(too_small)?;
         writer.write(&self.destination.bytes()).map_err(too_small)?;
         writer.write(&self.source.bytes()).map_err(too_small)?;
         writer.write(&BROADCAST_ADDRESS).map_err(too_small)?;
         writer
-            .u16_le(self.sequence_number.sequence_control())
+            .write(&self.sequence_number.sequence_control().to_bytes())
             .map_err(too_small)?;
         self.action.encode(body)?;
         Ok(required)
@@ -575,18 +573,17 @@ impl<'payload> EspNowV1Frame<'payload> {
                 minimum: ESP_NOW_MANAGEMENT_HEADER_LEN,
             })?;
         let action = reader.remaining();
-        let frame_control = u16::from_le_bytes([header[0], header[1]]);
-        if FrameControlFields::from_raw(frame_control).version() != 0
-            || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
-            || FrameControlFields::from_raw(frame_control).ds() != 0
-            || (FrameControlFields::from_raw(frame_control).power_management()
-                || FrameControlFields::from_raw(frame_control).more_data()
-                || FrameControlFields::from_raw(frame_control).order())
+        let frame_control = FrameControlFields::from_bytes([header[0], header[1]]);
+        if frame_control.version() != 0
+            || frame_control.type_and_subtype() != ACTION_FRAME_CONTROL.type_and_subtype()
+            || frame_control.ds() != 0
+            || (frame_control.power_management()
+                || frame_control.more_data()
+                || frame_control.order())
         {
             return Err(EspNowV1WireError::UnsupportedFrameControl(frame_control));
         }
-        if FrameControlFields::from_raw(frame_control).protected() {
+        if frame_control.protected() {
             return Err(EspNowV1WireError::ProtectedFrameUnsupported);
         }
 
@@ -601,15 +598,11 @@ impl<'payload> EspNowV1Frame<'payload> {
         if header[16..22] != BROADCAST_ADDRESS {
             return Err(EspNowV1WireError::InvalidBssid);
         }
-        let sequence_control = u16::from_le_bytes([header[22], header[23]]);
-        if FrameControlFields::from_raw(frame_control).more_fragments()
-            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                .fragment()
-                != 0
-        {
+        let sequence_control =
+            crate::sequence::SequenceControl::from_bytes([header[22], header[23]]);
+        if frame_control.more_fragments() || sequence_control.fragment() != 0 {
             return Err(EspNowV1WireError::FragmentedFrame(
-                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                    .fragment(),
+                sequence_control.fragment(),
             ));
         }
         let action = EspNowV1Action::parse(action)?;
@@ -617,7 +610,7 @@ impl<'payload> EspNowV1Frame<'payload> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: FrameControlFields::from_raw(frame_control).retry(),
+            retry: frame_control.retry(),
             action,
         })
     }
@@ -672,20 +665,20 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             });
         }
 
-        let frame_control = u16::from_le_bytes([management_header[0], management_header[1]]);
-        if FrameControlFields::from_raw(frame_control).version() != 0
-            || FrameControlFields::from_raw(frame_control).type_and_subtype()
-                != FrameControlFields::from_raw(ACTION_FRAME_CONTROL).type_and_subtype()
-            || FrameControlFields::from_raw(frame_control).ds() != 0
-            || (FrameControlFields::from_raw(frame_control).power_management()
-                || FrameControlFields::from_raw(frame_control).more_data()
-                || FrameControlFields::from_raw(frame_control).order())
+        let frame_control =
+            FrameControlFields::from_bytes([management_header[0], management_header[1]]);
+        if frame_control.version() != 0
+            || frame_control.type_and_subtype() != ACTION_FRAME_CONTROL.type_and_subtype()
+            || frame_control.ds() != 0
+            || (frame_control.power_management()
+                || frame_control.more_data()
+                || frame_control.order())
         {
             return Err(EspNowProtectedV1WireError::UnsupportedFrameControl(
                 frame_control,
             ));
         }
-        if !FrameControlFields::from_raw(frame_control).protected() {
+        if !frame_control.protected() {
             return Err(EspNowProtectedV1WireError::ProtectionRequired);
         }
 
@@ -715,15 +708,13 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             return Err(EspNowProtectedV1WireError::InvalidBssid);
         }
 
-        let sequence_control = u16::from_le_bytes([management_header[22], management_header[23]]);
-        if FrameControlFields::from_raw(frame_control).more_fragments()
-            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                .fragment()
-                != 0
-        {
+        let sequence_control = crate::sequence::SequenceControl::from_bytes([
+            management_header[22],
+            management_header[23],
+        ]);
+        if frame_control.more_fragments() || sequence_control.fragment() != 0 {
             return Err(EspNowProtectedV1WireError::FragmentedFrame(
-                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                    .fragment(),
+                sequence_control.fragment(),
             ));
         }
 
@@ -747,7 +738,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             destination,
             source,
             sequence_number: SequenceNumber::from_sequence_control(sequence_control),
-            retry: FrameControlFields::from_raw(frame_control).retry(),
+            retry: frame_control.retry(),
             key_id: crate::ccmp::CcmpKeyControl::from_bytes([ccmp_header[3]])
                 .key_id()
                 .get(),
@@ -805,7 +796,7 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
 pub enum EspNowProtectedV1WireError {
     FrameTooShort { minimum: usize },
     FrameTooLong { maximum: usize, actual: usize },
-    UnsupportedFrameControl(u16),
+    UnsupportedFrameControl(FrameControlFields),
     ProtectionRequired,
     EncryptedBroadcastUnsupported,
     InvalidDestination(EspNowAddressError),
@@ -832,7 +823,8 @@ impl fmt::Display for EspNowProtectedV1WireError {
             ),
             Self::UnsupportedFrameControl(frame_control) => write!(
                 formatter,
-                "unsupported protected ESP-NOW frame-control value {frame_control:#06x}"
+                "unsupported protected ESP-NOW frame-control value {:02x?}",
+                frame_control.to_bytes()
             ),
             Self::ProtectionRequired => {
                 formatter.write_str("protected ESP-NOW envelope requires the Protected flag")
@@ -898,7 +890,7 @@ pub enum EspNowV1WireError {
     InvalidDestination(EspNowAddressError),
     InvalidSource(EspNowAddressError),
     InvalidBssid,
-    UnsupportedFrameControl(u16),
+    UnsupportedFrameControl(FrameControlFields),
     ProtectedFrameUnsupported,
     FragmentedFrame(u8),
     UnsupportedActionCategory(u8),
@@ -930,7 +922,8 @@ impl fmt::Display for EspNowV1WireError {
             Self::InvalidBssid => formatter.write_str("ESP-NOW v1 BSSID is not broadcast"),
             Self::UnsupportedFrameControl(frame_control) => write!(
                 formatter,
-                "unsupported ESP-NOW frame-control value {frame_control:#06x}"
+                "unsupported ESP-NOW frame-control value {:02x?}",
+                frame_control.to_bytes()
             ),
             Self::ProtectedFrameUnsupported => {
                 formatter.write_str("protected ESP-NOW frames are outside the v1 plaintext profile")
@@ -1033,7 +1026,7 @@ mod tests {
         let frame = EspNowV1Frame::new(
             EspNowDestination::Broadcast,
             source(),
-            SequenceNumber::from_sequence_control(0),
+            SequenceNumber::ZERO,
             EspNowRandomValue::new([1, 2, 3, 4]),
             &[7; 9],
         )
@@ -1053,7 +1046,7 @@ mod tests {
         let frame = EspNowV2Frame::new(
             EspNowDestination::Broadcast,
             source(),
-            SequenceNumber::from_sequence_control(0),
+            SequenceNumber::ZERO,
             EspNowRandomValue::new([1, 2, 3, 4]),
             &payload,
         )
@@ -1070,5 +1063,119 @@ mod tests {
         assert_eq!(copied, payload);
         let mut small = [0_u8; 299];
         assert!(parsed.action().copy_payload(&mut small).is_err());
+    }
+
+    /// Frame Control octet and bit pairs an ESP-NOW frame refuses: version,
+    /// another subtype, To DS, From DS, More Fragments, Power Management,
+    /// More Data, Order; and a fragment number in Sequence Control.
+    const REFUSED: [(usize, u8); 9] = [
+        (0, 0x01),
+        (0, 0x10),
+        (1, 0x01),
+        (1, 0x02),
+        (1, 0x04),
+        (1, 0x10),
+        (1, 0x20),
+        (1, 0x80),
+        (22, 0x01),
+    ];
+
+    #[test]
+    fn each_refused_frame_control_bit_refuses_an_unprotected_frame() {
+        let mut bytes = [0_u8; 64];
+        let len = EspNowV1Frame::new(
+            EspNowDestination::Broadcast,
+            source(),
+            SequenceNumber::ZERO,
+            EspNowRandomValue::new([1, 2, 3, 4]),
+            &[7; 9],
+        )
+        .unwrap()
+        .encode(&mut bytes)
+        .unwrap();
+        assert!(EspNowV1Frame::parse(&bytes[..len]).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = bytes;
+            refused[octet] ^= bit;
+            assert!(
+                EspNowV1Frame::parse(&refused[..len]).is_err(),
+                "v1, octet {octet} bit {bit:#04x}"
+            );
+        }
+        let mut protected = bytes;
+        protected[1] |= 0x40;
+        assert_eq!(
+            EspNowV1Frame::parse(&protected[..len]).err(),
+            Some(EspNowV1WireError::ProtectedFrameUnsupported)
+        );
+
+        let mut bytes = [0_u8; 64];
+        let len = EspNowV2Frame::new(
+            EspNowDestination::Broadcast,
+            source(),
+            SequenceNumber::ZERO,
+            EspNowRandomValue::new([1, 2, 3, 4]),
+            &[7; 9],
+        )
+        .unwrap()
+        .encode(&mut bytes)
+        .unwrap();
+        assert!(EspNowV2Frame::parse(&bytes[..len]).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = bytes;
+            refused[octet] ^= bit;
+            assert!(
+                EspNowV2Frame::parse(&refused[..len]).is_err(),
+                "v2, octet {octet} bit {bit:#04x}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_refused_frame_control_bit_refuses_a_protected_envelope() {
+        let mut frame = std::vec![0_u8; ESP_NOW_MANAGEMENT_HEADER_LEN];
+        frame[..2].copy_from_slice(&[0xd0, 0x40]);
+        frame[4..10].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
+        frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 1]);
+        frame[16..22].copy_from_slice(&BROADCAST_ADDRESS);
+        // CCMP header: PN 1, Extended IV, key 0.
+        frame.extend_from_slice(&[1, 0, 0, 0x20, 0, 0, 0, 0]);
+        frame.extend_from_slice(&[0; ESP_NOW_V1_ACTION_OVERHEAD]);
+        frame.extend_from_slice(&[0; ESP_NOW_CCMP_MIC_LEN]);
+        assert!(EspNowProtectedV1Envelope::parse(&frame).is_ok());
+        for (octet, bit) in REFUSED {
+            let mut refused = frame.clone();
+            refused[octet] ^= bit;
+            assert!(
+                EspNowProtectedV1Envelope::parse(&refused).is_err(),
+                "octet {octet} bit {bit:#04x}"
+            );
+        }
+        let mut open = frame.clone();
+        open[1] &= !0x40;
+        assert_eq!(
+            EspNowProtectedV1Envelope::parse(&open).err(),
+            Some(EspNowProtectedV1WireError::ProtectionRequired)
+        );
+    }
+
+    /// Every wire error names itself: its text is never empty.
+    #[test]
+    fn a_wire_error_s_text_names_it() {
+        let control = crate::frame::FrameControlFields::from_bytes([0xd1, 0x00]);
+        let texts = [
+            std::format!("{}", EspNowV1WireError::UnsupportedFrameControl(control)),
+            std::format!(
+                "{}",
+                EspNowProtectedV1WireError::UnsupportedFrameControl(control)
+            ),
+            std::format!(
+                "{}",
+                v2::EspNowV2WireError::UnsupportedFrameControl(control)
+            ),
+        ];
+        for text in texts {
+            assert!(text.contains("d1"), "{text}");
+        }
     }
 }

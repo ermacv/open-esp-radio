@@ -776,50 +776,17 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     pub const fn receiver(&self) -> A {
         self.receiver
     }
-    /// The header, when its fields agree with its Frame Control.
-    #[allow(clippy::too_many_arguments, reason = "the fields of a MAC header")]
-    pub fn new(
-        frame_control: FrameControl,
-        duration: u16,
-        receiver: A,
-        transmitter: [u8; 6],
-        address3: [u8; 6],
-        sequence_control: u16,
-        address4: Option<[u8; 6]>,
-        qos: Option<QosControl>,
-        ht_control: Option<[u8; 4]>,
-    ) -> Option<Self> {
-        let header = MacHeader::new(
-            frame_control,
-            duration,
-            receiver.address(),
-            transmitter,
-            address3,
-            sequence_control,
-            address4,
-            qos.map(|qos| qos.field(QosAckPolicy::Normal)),
-            ht_control,
-        )?;
-        Some(Self { header, receiver })
-    }
-
     /// The decoded header of a data or management frame, checking its
-    /// receiver's kind. Its QoS Control keeps no Ack Policy.
+    /// receiver's kind. Its QoS Control keeps no Ack Policy: the response's
+    /// header writes its own ([`ResponseHeader::encode`]).
     pub fn from_mac_header(
         header: MacHeader,
         receiver: impl FnOnce([u8; 6]) -> Option<A>,
     ) -> Option<Self> {
-        Self::new(
-            header.control(),
-            header.duration(),
-            receiver(header.address1())?,
-            header.address2(),
-            header.address3(),
-            header.sequence_control(),
-            header.address4(),
-            header.qos().map(QosControl::from_field),
-            header.ht_control(),
-        )
+        let receiver = receiver(header.address1())?;
+        let header =
+            header.map_qos(|field| QosControl::from_field(field).field(QosAckPolicy::Normal));
+        Some(Self { header, receiver })
     }
 
     /// The header's length in octets.
@@ -956,13 +923,10 @@ pub trait ResponseHeader: response_header::Sealed {
     where
         Self: Sized,
     {
-        let header = self.into_header().header;
-        let header = match header.qos() {
-            Some(qos) => header
-                .with_qos(qos.with_ack_policy(Self::ACK_POLICY.field()))
-                .unwrap_or(header),
-            None => header,
-        };
+        let header = self
+            .into_header()
+            .header
+            .map_qos(|qos| qos.with_ack_policy(Self::ACK_POLICY.field()));
         header.encode(out).map_err(|_| StorageTooShort)
     }
 }

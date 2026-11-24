@@ -8,10 +8,9 @@ use oer_protocols_ieee80211_core_security_rsn::{
 use oer_protocols_ieee80211_wire::bip::MANAGEMENT_MIC_ELEMENT_LEN;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, OwnAddress},
-    frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
+    frame::{DecodedHeader, ManagementSubtype},
     management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,
-    sequence::SequenceControl,
 };
 
 use crate::sa_query::{SaQueryStep, StationSaQuery};
@@ -61,14 +60,14 @@ impl ManagementProtection {
     ) -> Option<ManagementEvent> {
         let header = DecodedHeader::decode(frame)?;
         let control = header.control();
-        let fields = FrameControlFields::from_raw(control.get());
+        let fields = control.fields();
         let disconnect = fields.is_management(ManagementSubtype::Disassociation)
             || fields.is_management(ManagementSubtype::Deauthentication);
         let action = fields.is_management(ManagementSubtype::Action);
         if !(disconnect || action)
             || control.ds() != 0
             || control.more_fragments()
-            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
+            || header.sequence_control().fragment() != 0
             || header.ht_control().is_some()
             || (header.receiver() != local.get() && header.receiver() != BROADCAST_ADDRESS)
             || header.transmitter() != bssid.get()

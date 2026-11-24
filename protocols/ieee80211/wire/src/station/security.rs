@@ -56,10 +56,18 @@ impl SelectedRsn {
         let mut reader = oer_portable_wire::Reader::new(self.as_bytes());
         reader.array::<SELECTED_RSN_IE_LEN>().ok()?;
         let rsnxe = reader.remaining();
-        resumed.bytes[1] = resumed.bytes[1].checked_add(PMKID_LIST_LEN as u8)?;
+        // The element's Length grows by the PMKID List it now holds.
+        let element = resumed.bytes.first_chunk_mut::<2>()?;
+        let header = crate::management::ElementHeader::from_bytes(*element);
+        *element = header
+            .with_length(header.length().checked_add(PMKID_LIST_LEN as u8)?)
+            .ok()?
+            .to_bytes();
         crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
             &mut resumed.bytes,
-            &1_u16.to_le_bytes(),
+            &crate::management::PmkidCount::from_bytes([0; 2])
+                .with_count(oer_portable_wire::U16::constant::<1>())
+                .to_bytes(),
         );
         crate::encoding::write_array::<{ SELECTED_RSN_IE_LEN + 2 }, _, _>(
             &mut resumed.bytes,

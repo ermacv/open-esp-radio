@@ -232,7 +232,10 @@ fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
     assert_eq!(record.ssid_bytes(), b"test");
     assert_eq!(record.beacon_interval_tu, 100);
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
-    assert_eq!(record.capability_info, 0x0011);
+    assert_eq!(
+        record.capability_info,
+        oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0x11, 0x00])
+    );
     assert!(
         record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Complete
     );

@@ -13,7 +13,12 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
         [0x8b, 0x96, 0x82, 0x84, 0x0c, 0x18, 0x30, 0x60],
         [0x6c, 0x12, 0x24, 0x48],
     ),
-    HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
+    HtLocalCapabilities::new(
+        oer_protocols_ieee80211_wire::ht::HtCapabilityInfo::from_bytes([0x0c, 0x10]),
+        0x03,
+        0xff,
+        0x01,
+    ),
     match WmmParameters::new(
         4,
         oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
@@ -22,7 +27,7 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
         Some(value) => value,
         None => panic!("the WMM parameters fit their fields"),
     },
-    0x0421,
+    oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes([0x21, 0x04]),
 ) {
     Some(value) => value,
     None => panic!("the advertisement leaves Privacy to the security mode"),

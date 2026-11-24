@@ -28,8 +28,7 @@ use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
     },
-    frame::QosControl,
-    sequence::{SequenceControl, SequenceNumber},
+    sequence::SequenceNumber,
     status::reason_code,
 };
 
@@ -1016,8 +1015,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
     ) -> Option<(usize, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
         let control = header.control;
-        let fragment =
-            SequenceControl::from_bytes(header.sequence_control.to_le_bytes()).fragment();
+        let fragment = header.sequence_control.fragment();
         // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
         // 9.2.4.1.3, Table 9-1).
         if !control.is_data()
@@ -1038,9 +1036,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const WINDOW: usize> RxBlockAckView<'_, T
         {
             return None;
         }
-        let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
-            .tid()
-            .get();
+        let tid = header.qos?.tid().get();
         let index = self
             .banks
             .iter()

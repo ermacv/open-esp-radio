@@ -13,33 +13,44 @@ fn qos() -> QosControl {
     .with_amsdu(true)
 }
 
+/// The octets of a data or management header whose Frame Control is `raw`,
+/// with every field its type holds.
+fn header_octets(raw: u16) -> Option<std::vec::Vec<u8>> {
+    let control = FrameControl::new(FrameControlFields::from_bytes(raw.to_le_bytes()))?;
+    let mut octets = std::vec::Vec::new();
+    octets.extend(raw.to_le_bytes());
+    octets.extend(0x5634_u16.to_le_bytes());
+    octets.extend([0xff; 6]);
+    octets.extend(A);
+    octets.extend(B);
+    octets.extend([0x9a, 0x78]);
+    if control.is_four_address() {
+        octets.extend([4, 3, 2, 1, 0, 9]);
+    }
+    if control.is_qos_data() {
+        octets.extend(qos().to_bytes());
+    }
+    if control.has_ht_control() {
+        octets.extend([0x10, 0x20, 0x30, 0x40]);
+    }
+    Some(octets)
+}
+
+/// Every data or management Frame Control decodes to a header whose
+/// derived Frame Control is the same field, and the header encodes to the
+/// same octets: no bit is lost or invented by the layout.
 #[test]
-fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
+fn every_valid_header_shape_round_trips_and_leaves_its_tail_untouched() {
     for raw in 0..=u16::MAX {
-        let Some(control) = FrameControl::new(raw) else {
+        let Some(expected) = header_octets(raw) else {
             continue;
         };
-        let address4 = control.is_four_address().then_some([4, 3, 2, 1, 0, 9]);
-        let qos = control.is_qos_data().then_some(qos());
-        let ht = control.has_ht_control().then_some([0x10, 0x20, 0x30, 0x40]);
-        let header =
-            MacHeader::new(control, 0x5634, [0xff; 6], A, B, 0x789a, address4, qos, ht).unwrap();
-        let mut expected = std::vec::Vec::new();
-        expected.extend(raw.to_le_bytes());
-        expected.extend(0x5634_u16.to_le_bytes());
-        expected.extend([0xff; 6]);
-        expected.extend(A);
-        expected.extend(B);
-        expected.extend(0x789a_u16.to_le_bytes());
-        if let Some(address4) = address4 {
-            expected.extend(address4);
-        }
-        if qos.is_some() {
-            expected.extend([0xb9, 0x72]);
-        }
-        if let Some(ht) = ht {
-            expected.extend(ht);
-        }
+        let header = MacHeader::decode(&expected).unwrap();
+        assert_eq!(
+            header.control().fields().to_bytes(),
+            raw.to_le_bytes(),
+            "control {raw:#06x}"
+        );
         let mut out = [0xa5; 40];
         assert_eq!(
             header.encode(&mut out),
@@ -53,47 +64,84 @@ fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
     }
 }
 
+/// The layout is the frame type's: a fourth address with both DS bits, QoS
+/// Control in a QoS data frame, HT Control with the Order bit of a QoS
+/// data or management frame; a non-QoS data frame's Order bit stays a bit.
 #[test]
-fn optional_fields_agree_with_the_frame_control() {
-    let header = |raw, address4: Option<[u8; 6]>, qos: Option<QosControl>, ht: Option<[u8; 4]>| {
-        MacHeader::new(FrameControl::new(raw)?, 0, B, A, B, 0, address4, qos, ht)
-    };
-    assert!(header(0x0088, None, Some(qos()), None).is_some());
-    assert!(header(0x0088, None, None, None).is_none());
-    assert!(header(0x0008, None, Some(qos()), None).is_none());
-    assert!(header(0x0308, Some(A), None, None).is_some());
-    assert!(header(0x0308, None, None, None).is_none());
-    assert!(header(0x0108, Some(A), None, None).is_none());
-    assert!(header(0x8088, None, Some(qos()), Some([0; 4])).is_some());
-    assert!(header(0x8088, None, Some(qos()), None).is_none());
-    assert!(header(0x8080, None, None, Some([0; 4])).is_some());
-    assert!(header(0x8008, None, None, None).is_some());
-    assert!(header(0x8008, None, None, Some([0; 4])).is_none());
-    // Only a QoS data header takes a new QoS Control.
-    assert!(
-        header(0x0008, None, None, None)
+fn a_header_s_layout_is_the_one_its_frame_control_names() {
+    let layout = |raw| {
+        MacHeader::decode(&header_octets(raw).unwrap())
             .unwrap()
-            .with_qos(qos())
-            .is_none()
+            .layout()
+    };
+    assert_eq!(
+        layout(0x0088),
+        HeaderLayout::QosData {
+            direction: DataDirection::Neither,
+            qos: qos(),
+            ht_control: None
+        }
+    );
+    assert_eq!(
+        layout(0x0308),
+        HeaderLayout::Data {
+            direction: DataDirection::Wds([4, 3, 2, 1, 0, 9])
+        }
+    );
+    assert_eq!(
+        layout(0x0108),
+        HeaderLayout::Data {
+            direction: DataDirection::ToDs
+        }
+    );
+    assert_eq!(
+        layout(0x0208),
+        HeaderLayout::Data {
+            direction: DataDirection::FromDs
+        }
+    );
+    assert_eq!(
+        layout(0x8088),
+        HeaderLayout::QosData {
+            direction: DataDirection::Neither,
+            qos: qos(),
+            ht_control: Some([0x10, 0x20, 0x30, 0x40])
+        }
+    );
+    assert_eq!(
+        layout(0x8080),
+        HeaderLayout::Management {
+            ht_control: Some([0x10, 0x20, 0x30, 0x40])
+        }
+    );
+    // StrictlyOrdered: no HT Control, the bit kept.
+    assert_eq!(
+        layout(0x8008),
+        HeaderLayout::Data {
+            direction: DataDirection::Neither
+        }
+    );
+    let ordered = MacHeader::decode(&header_octets(0x8008).unwrap()).unwrap();
+    assert!(ordered.control().fields().order());
+    // A management frame's DS bits and its subtype's bit B7 are its own.
+    let action_no_ack = MacHeader::decode(&header_octets(0x03e0).unwrap()).unwrap();
+    assert_eq!(action_no_ack.control().fields().to_bytes(), [0xe0, 0x03]);
+    assert_eq!(action_no_ack.address4(), None);
+    // Only a QoS data header has a QoS Control to change.
+    let plain = MacHeader::decode(&header_octets(0x0008).unwrap()).unwrap();
+    assert_eq!(plain.map_qos(|_| QosControl::from_bytes([1, 2])), plain);
+    let qos_header = MacHeader::decode(&header_octets(0x0088).unwrap()).unwrap();
+    assert_eq!(
+        qos_header.map_qos(|_| QosControl::from_bytes([1, 2])).qos(),
+        Some(QosControl::from_bytes([1, 2]))
     );
 }
 
 #[test]
 fn a_short_buffer_is_refused_unwritten_and_a_short_frame_undecoded() {
-    let header = MacHeader::new(
-        FrameControl::new(0x8388).unwrap(),
-        0,
-        B,
-        A,
-        B,
-        0,
-        Some(A),
-        Some(qos()),
-        Some([1, 2, 3, 4]),
-    )
-    .unwrap();
-    let mut bytes = [0; 36];
-    assert_eq!(header.encode(&mut bytes), Ok(36));
+    let bytes = header_octets(0x8388).unwrap();
+    let header = MacHeader::decode(&bytes).unwrap();
+    assert_eq!(header.header_len(), 36);
     for len in 0..header.header_len() {
         let mut short = [0xa5; 36];
         assert!(header.encode(&mut short[..len]).is_err());
@@ -124,15 +172,15 @@ fn the_qos_field_places_each_subfield() {
 #[test]
 fn named_subtypes_round_trip_through_the_frame_control_field() {
     let beacon = FrameControlFields::management(ManagementSubtype::Beacon).unwrap();
-    assert_eq!(beacon.raw(), 0x0080);
+    assert_eq!(beacon.to_bytes(), [0x80, 0x00]);
     assert!(beacon.is_management(ManagementSubtype::Beacon));
     assert!(!beacon.is_management(ManagementSubtype::ProbeResponse));
     assert!(!beacon.is_control(ControlSubtype::BlockAck));
     let request = FrameControlFields::control(ControlSubtype::BlockAckRequest).unwrap();
-    assert_eq!(request.raw(), 0x0084);
+    assert_eq!(request.to_bytes(), [0x84, 0x00]);
     assert!(request.is_control(ControlSubtype::BlockAckRequest));
     assert_eq!(
-        FrameControlFields::from_raw(0x00d0 | 0x4000).management_subtype(),
+        FrameControlFields::from_bytes([0xd0, 0x40]).management_subtype(),
         ManagementSubtype::Action
     );
     // A reserved encoding wider than the subtype is refused.
@@ -165,10 +213,18 @@ fn a_three_address_qos_data_frame_has_no_address4() {
     assert_eq!(fields.address3(), Some(address_at(&frame, 16)));
     assert_eq!(
         fields.sequence_control(),
-        Some(u16::from_le_bytes([22, 23]))
+        Some(SequenceControl::from_bytes([22, 23]))
     );
     assert_eq!(fields.address4(), None);
     assert_eq!(fields.addresses().count(), 3);
+    assert_eq!(
+        fields.rest(),
+        AfterReceiver::Three {
+            transmitter: address_at(&frame, 10),
+            address3: address_at(&frame, 16),
+            sequence_control: SequenceControl::from_bytes([22, 23]),
+        }
+    );
 }
 
 #[test]
@@ -300,80 +356,12 @@ fn every_control_subtype_has_a_known_or_refused_layout() {
     );
 }
 
-/// A checked header gives what a decode of the same bytes gives, for every
-/// layout a header has, and nothing for any other slice.
-#[test]
-fn a_checked_header_gives_its_own_frame_s_decode_and_no_other_s() {
-    // Frame Control octets: (type, subtype, flags), then the frame's length
-    // past the 24 fixed octets of a three-address header.
-    let layouts: [([u8; 2], usize); 5] = [
-        ([0x08, 0x02], 0),     // data, from DS
-        ([0x88, 0x02], 2),     // QoS data, from DS
-        ([0x88, 0x03], 6 + 2), // QoS data, four addresses
-        ([0x88, 0x82], 2 + 4), // QoS data with HT Control (+HTC/Order)
-        ([0x80, 0x00], 0),     // beacon
-    ];
-    for (control, extra) in layouts {
-        let mut frame = std::vec![0_u8; 24 + extra + 5];
-        frame[..2].copy_from_slice(&control);
-        for (at, octet) in frame.iter_mut().enumerate().skip(2) {
-            *octet = at as u8 ^ 0x5a;
-        }
-        let decoded = DecodedHeader::decode(&frame).unwrap();
-        let checked = CheckedHeader::check(&frame).unwrap();
-        let again = checked.of(&frame).unwrap();
-        assert_eq!(
-            std::format!("{again:?}"),
-            std::format!("{decoded:?}"),
-            "{control:x?}"
-        );
-        let copy = frame.clone();
-        assert!(checked.of(&copy).is_none(), "another frame's bytes");
-        assert!(checked.of(&frame[1..]).is_none(), "a moved start");
-        assert!(
-            checked.of(&frame[..frame.len() - 1]).is_none(),
-            "a shorter view"
-        );
-    }
-    assert!(
-        CheckedHeader::check(&[0x08, 0x02, 0, 0]).is_none(),
-        "truncated"
-    );
-}
-
-/// The same bytes rewritten in place hold another frame: a header checked
-/// against the earlier one gives none, as a QoS frame overwritten by one
-/// without QoS, or by another sequence or QoS field, shows.
-#[test]
-fn a_checked_header_gives_none_once_its_bytes_are_rewritten() {
-    let mut frame = std::vec![0_u8; 24 + 2 + 8];
-    frame[..2].copy_from_slice(&[0x88, 0x02]);
-    frame[22..24].copy_from_slice(&[0x10, 0x00]);
-    frame[24..26].copy_from_slice(&[0x05, 0x00]);
-    let checked = CheckedHeader::check(&frame).unwrap();
-    assert!(checked.of(&frame).is_some());
-    let rewrites: [(usize, [u8; 2]); 3] =
-        [(0, [0x08, 0x02]), (22, [0x20, 0x00]), (24, [0x06, 0x00])];
-    for (at, octets) in rewrites {
-        let mut other = frame.clone();
-        other[at..at + 2].copy_from_slice(&octets);
-        frame.copy_from_slice(&other);
-        assert!(checked.of(&frame).is_none(), "rewritten at {at}");
-        let original = CheckedHeader::check(&other).map(|_| ());
-        assert!(original.is_some(), "the rewrite is a frame of its own");
-        frame[..2].copy_from_slice(&[0x88, 0x02]);
-        frame[22..24].copy_from_slice(&[0x10, 0x00]);
-        frame[24..26].copy_from_slice(&[0x05, 0x00]);
-        assert!(checked.of(&frame).is_some(), "the same frame again");
-    }
-}
-
 /// A Null and a QoS Null are data frames with no body; Data, QoS Data and a
 /// management frame of the same subtype numbers are not (IEEE Std
 /// 802.11-2020, 9.2.4.1.3, Table 9-1).
 #[test]
 fn a_null_and_a_qos_null_are_the_data_frames_with_no_body() {
-    let control = |byte: u8| FrameControl::new(u16::from(byte)).unwrap();
+    let control = |byte: u8| FrameControl::new(FrameControlFields::from_bytes([byte, 0])).unwrap();
     // Type in bits 2-3, subtype in bits 4-7.
     assert!(control(0x48).is_null_data(), "Null");
     assert!(control(0xc8).is_null_data(), "QoS Null");
@@ -384,4 +372,41 @@ fn a_null_and_a_qos_null_are_the_data_frames_with_no_body() {
         !control(0xc0).is_null_data(),
         "a deauthentication, subtype 12"
     );
+}
+
+/// A decoded header's every field is the one at its place in the octets.
+#[test]
+fn a_decoded_header_reads_each_field_from_its_place() {
+    // QoS data, both DS bits, Order: Address 4, QoS Control, HT Control.
+    let octets = header_octets(0x8388).unwrap();
+    let decoded = DecodedHeader::decode(&octets).unwrap();
+    assert_eq!(decoded.control().fields().to_bytes(), [0x88, 0x83]);
+    assert_eq!(decoded.duration().value(), 0x5634);
+    assert_eq!(decoded.receiver(), [0xff; 6]);
+    assert_eq!(decoded.transmitter(), A);
+    assert_eq!(decoded.address3(), B);
+    assert_eq!(decoded.sequence_control().to_bytes(), [0x9a, 0x78]);
+    assert_eq!(decoded.address4(), Some([4, 3, 2, 1, 0, 9]));
+    assert_eq!(decoded.qos(), Some(qos()));
+    assert_eq!(decoded.ht_control(), Some([0x10, 0x20, 0x30, 0x40]));
+    assert_eq!(decoded.body(), &[] as &[u8]);
+    assert_eq!(decoded.header(), MacHeader::decode(&octets).unwrap());
+}
+
+/// The builders by value change their field and keep every other.
+#[test]
+fn a_builder_changes_its_field_alone() {
+    let header = MacHeader::decode(&header_octets(0x0388).unwrap()).unwrap();
+    let changed = header
+        .with_address1(A)
+        .with_address3(A)
+        .with_sequence_control(SequenceControl::from_bytes([1, 2]))
+        .with_protected(FrameProtection::Protected);
+    assert_eq!(changed.address1(), A);
+    assert_eq!(changed.address2(), header.address2());
+    assert_eq!(changed.address3(), A);
+    assert_eq!(changed.sequence_control().to_bytes(), [1, 2]);
+    assert!(changed.control().protected());
+    assert_eq!(changed.layout(), header.layout());
+    assert_eq!(changed.duration(), header.duration());
 }

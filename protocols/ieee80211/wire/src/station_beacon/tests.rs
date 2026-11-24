@@ -7,7 +7,7 @@ const BSSID: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
 
 fn beacon(tim: &[u8]) -> std::vec::Vec<u8> {
     let mut frame = std::vec![0_u8; FIXED_BEACON_LENGTH];
-    frame[..2].copy_from_slice(&BEACON_FRAME_CONTROL.to_le_bytes());
+    frame[..2].copy_from_slice(&BEACON_FRAME_CONTROL.to_bytes());
     frame[4..10].fill(0xff);
     frame[10..16].copy_from_slice(&BSSID);
     frame[16..22].copy_from_slice(&BSSID);
@@ -29,7 +29,9 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
         Ok(StaBeaconObservation {
             timestamp_tsf: crate::tsf::TsfTimestamp::from_micros(0x0102_0304_0506_0708),
             interval_tu: 100,
-            capability_information: 0x0431,
+            capability_information: crate::management::CapabilityInformation::from_bytes([
+                0x31, 0x04
+            ]),
             tim: Some(StaTimObservation {
                 dtim_count: 0,
                 dtim_period: 3,

@@ -86,7 +86,7 @@ impl<'a> StaProtectedAmsduFrame<'a> {
         plan.set_amsdu();
         crate::encoding::write_array::<22, _, _>(
             &mut plan.header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let body = crate::encoding::AmsduBody::checked(self.msdus, HT_AMSDU_BASELINE_MAX_LEN)
             .map_err(amsdu_error)?;

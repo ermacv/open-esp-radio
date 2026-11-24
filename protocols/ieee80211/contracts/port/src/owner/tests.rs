@@ -1,5 +1,5 @@
 use super::*;
-use oer_protocols_ieee80211_wire::frame::MacHeader;
+use oer_protocols_ieee80211_wire::frame::{FrameControlFields, MacHeader};
 
 const A: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -13,19 +13,44 @@ fn qos(tid: u8) -> QosControl {
     }
 }
 
+/// The header a frame of these fields decodes to, its receiver `receiver`.
+fn header_to<R: ReceiverAddress>(
+    frame_control: u16,
+    receiver: [u8; 6],
+    kind: impl FnOnce([u8; 6]) -> Option<R>,
+    address4: Option<[u8; 6]>,
+    qos: Option<QosControl>,
+    ht_control: Option<[u8; 4]>,
+) -> Option<HeaderSpec<R>> {
+    let mut octets = std::vec::Vec::new();
+    octets.extend(frame_control.to_le_bytes());
+    octets.extend([0; 2]);
+    octets.extend(receiver);
+    octets.extend(A);
+    octets.extend(B);
+    octets.extend([0; 2]);
+    octets.extend(address4.into_iter().flatten());
+    octets.extend(
+        qos.map(|qos| qos.field(QosAckPolicy::Normal).to_bytes())
+            .into_iter()
+            .flatten(),
+    );
+    octets.extend(ht_control.into_iter().flatten());
+    let decoded = MacHeader::decode(&octets)?;
+    (decoded.header_len() == octets.len()).then_some(())?;
+    HeaderSpec::from_mac_header(decoded, kind)
+}
+
 fn header(
     frame_control: u16,
     address4: Option<[u8; 6]>,
     qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
 ) -> Option<HeaderSpec<IndividualAddress>> {
-    HeaderSpec::new(
-        FrameControl::new(frame_control)?,
-        0,
-        IndividualAddress::new(B).unwrap(),
-        A,
+    header_to(
+        frame_control,
         B,
-        0,
+        IndividualAddress::new,
         address4,
         qos,
         ht_control,
@@ -42,31 +67,29 @@ fn a_receiver_address_is_individual_or_group_by_its_group_bit() {
 
 #[test]
 fn a_frame_control_is_a_data_or_management_frame_of_version_zero() {
-    assert!(FrameControl::new(0x0008).is_some()); // data
-    assert!(FrameControl::new(0x0080).is_some()); // beacon
-    assert!(FrameControl::new(0x0084).is_none()); // BlockAckReq, a control frame
-    assert!(FrameControl::new(0x0009).is_none()); // protocol version 1
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x08, 0x00])).is_some()); // data
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x80, 0x00])).is_some()); // beacon
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x84, 0x00])).is_none()); // BlockAckReq, a control frame
+    assert!(FrameControl::new(FrameControlFields::from_bytes([0x09, 0x00])).is_none()); // protocol version 1
     assert!(Tid::new(15).is_some());
     assert!(Tid::new(16).is_none());
 }
 
 #[test]
-fn a_header_agrees_with_its_frame_control() {
-    // QoS data needs its QoS Control, and plain data has none.
+fn a_decoded_header_keeps_its_receiver_kind() {
     assert!(header(0x0088, None, Some(qos(1)), None).is_some());
-    assert!(header(0x0088, None, None, None).is_none());
-    assert!(header(0x0008, None, Some(qos(1)), None).is_none());
-    // A fourth address exactly when To DS and From DS are both set.
-    assert!(header(0x0308, Some(A), None, None).is_some());
-    assert!(header(0x0308, None, None, None).is_none());
-    assert!(header(0x0108, Some(A), None, None).is_none());
-    // An HT Control exactly with the Order bit of a QoS data or
-    // management frame; in non-QoS data the bit asks for strict order.
-    assert!(header(0x8088, None, Some(qos(1)), Some([0; 4])).is_some());
-    assert!(header(0x8088, None, Some(qos(1)), None).is_none());
-    assert!(header(0x8080, None, None, Some([0; 4])).is_some());
-    assert!(header(0x8008, None, None, None).is_some());
-    assert!(header(0x8008, None, None, Some([0; 4])).is_none());
+    assert!(header_to(0x0088, B, GroupAddress::new, None, Some(qos(1)), None).is_none());
+    assert!(
+        header_to(
+            0x0088,
+            [0xff; 6],
+            IndividualAddress::new,
+            None,
+            Some(qos(1)),
+            None
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -85,13 +108,10 @@ fn the_qos_ack_policy_follows_the_frames_response() {
 #[test]
 fn group_qos_frames_encode_no_ack_without_an_individual_response() {
     let group = GroupAddress::new([0xff; 6]).unwrap();
-    let header = HeaderSpec::new(
-        FrameControl::new(0x0288).unwrap(),
-        0,
-        group,
-        A,
-        B,
-        0,
+    let header = header_to(
+        0x0288,
+        group.get(),
+        GroupAddress::new,
         None,
         Some(qos(3)),
         None,

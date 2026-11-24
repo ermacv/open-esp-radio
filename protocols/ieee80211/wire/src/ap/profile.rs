@@ -90,7 +90,7 @@ pub struct Advertisement {
     pub legacy_rates: LegacyRates,
     pub ht: HtLocalCapabilities,
     pub wmm: WmmParameters,
-    capability_information: u16,
+    capability_information: crate::management::CapabilityInformation,
 }
 
 impl Advertisement {
@@ -99,14 +99,10 @@ impl Advertisement {
         legacy_rates: LegacyRates,
         ht: HtLocalCapabilities,
         wmm: WmmParameters,
-        capability_information: u16,
+        capability_information: crate::management::CapabilityInformation,
     ) -> Option<Self> {
         // Privacy belongs to the security mode: `None` when it is set.
-        if crate::management::CapabilityInformation::from_bytes(
-            capability_information.to_le_bytes(),
-        )
-        .privacy()
-        {
+        if capability_information.privacy() {
             return None;
         }
         Some(Self {
@@ -119,11 +115,9 @@ impl Advertisement {
 
     pub const fn capabilities(&self, security: LinkProtection) -> u16 {
         u16::from_le_bytes(
-            crate::management::CapabilityInformation::from_bytes(
-                self.capability_information.to_le_bytes(),
-            )
-            .with_privacy(matches!(security, LinkProtection::Ccmp))
-            .to_bytes(),
+            self.capability_information
+                .with_privacy(matches!(security, LinkProtection::Ccmp))
+                .to_bytes(),
         )
     }
 }

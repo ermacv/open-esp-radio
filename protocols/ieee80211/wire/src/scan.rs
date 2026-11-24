@@ -103,7 +103,7 @@ pub struct ScanRecord {
     /// A legacy WPA vendor element (OUI 00:50:f2, type 1).
     pub legacy_wpa: ElementPresence,
     pub information_elements: ElementList,
-    pub capability_info: u16,
+    pub capability_info: crate::management::CapabilityInformation,
     /// The access point's TSF when it sent this beacon or probe response.
     pub timestamp: crate::tsf::TsfTimestamp,
     pub beacon_interval_tu: u16,
@@ -128,8 +128,7 @@ pub struct ScanRecord {
 impl ScanRecord {
     /// The Privacy subfield of the record's Capability Information.
     pub const fn privacy(&self) -> bool {
-        crate::management::CapabilityInformation::from_bytes(self.capability_info.to_le_bytes())
-            .privacy()
+        self.capability_info.privacy()
     }
 
     /// Whether the frame carried an RSN element.
@@ -149,7 +148,7 @@ impl ScanRecord {
             rsn_ie_count: 0,
             legacy_wpa: ElementPresence::Absent,
             information_elements: ElementList::Complete,
-            capability_info: 0,
+            capability_info: crate::management::CapabilityInformation::from_bytes([0; 2]),
             timestamp: crate::tsf::TsfTimestamp::from_micros(0),
             beacon_interval_tu: 0,
             supported_rates: [0; 8],
@@ -243,8 +242,9 @@ impl ScanRecord {
     pub fn secondary_channel(&self, primary_channel: u8) -> Option<HtSecondaryChannel> {
         let capability = self.ht_capability_ie_bytes()?;
         let operation = self.ht_operation_ie_bytes()?;
-        let capability_info = u16::from_le_bytes([capability[2], capability[3]]);
-        if !crate::ht::HtCapabilityInfo::from_bytes(capability_info.to_le_bytes()).width40()
+        let capability_info =
+            crate::ht::HtCapabilityInfo::from_bytes([capability[2], capability[3]]);
+        if !capability_info.width40()
             || operation[2] != primary_channel
             || !crate::ht::HtOperationInfo::from_bytes([operation[3]]).width40()
         {
@@ -411,7 +411,7 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let mut record = ScanRecord::new(bssid);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
-    record.capability_info = u16::from_le_bytes([c0, c1]);
+    record.capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
 
     while let Ok(&element_header) = elements.array::<2>() {
         let [id, length] = element_header;
@@ -570,17 +570,37 @@ mod record_tests {
         ScanRecord::new(Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap()).unwrap())
     }
 
+    /// A 40 MHz BSS needs both the HT capability's 40 MHz bit and the HT
+    /// operation's, on its own primary channel; its secondary is the
+    /// operation's offset.
+    #[test]
+    fn a_secondary_channel_needs_40_mhz_on_both_elements() {
+        let with = |capability_info: u8, primary: u8, operation_info: u8| {
+            let mut record = record();
+            let mut capability = [0_u8; HT_CAPABILITY_IE_LEN];
+            capability[..4].copy_from_slice(&[45, 26, capability_info, 0]);
+            let mut operation = [0_u8; HT_OPERATION_IE_LEN];
+            operation[..4].copy_from_slice(&[61, 22, primary, operation_info]);
+            record.ht_capability_ie = Some(capability);
+            record.ht_operation_ie = Some(operation);
+            record.secondary_channel(6)
+        };
+        // Operation info: secondary offset in bits 0-1, width in bit 2.
+        assert_eq!(with(0x02, 6, 0x05), Some(HtSecondaryChannel::Above));
+        assert_eq!(with(0x02, 6, 0x07), Some(HtSecondaryChannel::Below));
+        assert_eq!(with(0x00, 6, 0x05), None, "no 40 MHz capability");
+        assert_eq!(with(0x02, 6, 0x01), None, "no 40 MHz operation");
+        assert_eq!(with(0x02, 7, 0x05), None, "another primary channel");
+    }
+
     #[test]
     fn privacy_is_the_capability_s_bit_and_rsn_an_element_counted() {
         let mut record = record();
         assert!(!record.privacy() && !record.rsn());
-        record.capability_info = u16::from_le_bytes(
-            crate::management::CapabilityInformation::from_bytes([0; 2])
-                .with_privacy(true)
-                .to_bytes(),
-        );
+        record.capability_info =
+            crate::management::CapabilityInformation::from_bytes([0; 2]).with_privacy(true);
         assert!(record.privacy() && !record.rsn());
-        record.capability_info = 0;
+        record.capability_info = crate::management::CapabilityInformation::from_bytes([0; 2]);
         record.rsn_ie_count = 1;
         assert!(!record.privacy() && record.rsn());
     }

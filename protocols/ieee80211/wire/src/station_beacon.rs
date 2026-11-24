@@ -8,7 +8,7 @@
 
 use crate::frame::FrameControlFields;
 
-const BEACON_FRAME_CONTROL: u16 = 0x0080;
+const BEACON_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0x80, 0x00]);
 const FIXED_BEACON_LENGTH: usize = 36;
 const TIM_ELEMENT_ID: u8 = 5;
 const HT_OPERATION_ELEMENT_ID: u8 = 61;
@@ -53,7 +53,7 @@ pub struct StaBeaconObservation {
     /// The beacon's Timestamp field: the access point's TSF.
     pub timestamp_tsf: crate::tsf::TsfTimestamp,
     pub interval_tu: u16,
-    pub capability_information: u16,
+    pub capability_information: crate::management::CapabilityInformation,
     pub tim: Option<StaTimObservation>,
     pub protection: StaBeaconProtection,
     /// The EDCA parameters of the beacon's WMM Parameter element, if it
@@ -146,16 +146,14 @@ pub fn parse_sta_beacon(
         c0,
         c1,
     ] = *header;
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    if FrameControlFields::from_raw(frame_control).type_and_subtype()
-        != FrameControlFields::from_raw(BEACON_FRAME_CONTROL).type_and_subtype()
-    {
+    let frame_control = FrameControlFields::from_bytes([fc0, fc1]);
+    if frame_control.type_and_subtype() != BEACON_FRAME_CONTROL.type_and_subtype() {
         return Err(StaBeaconError::NotBeacon);
     }
     if [a0, a1, a2, a3, a4, a5] != expected_bssid || [b0, b1, b2, b3, b4, b5] != expected_bssid {
         return Err(StaBeaconError::ForeignBssid);
     }
-    let interval_tu = u16::from_le_bytes([i0, i1]);
+    let interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();
     if interval_tu == 0 {
         return Err(StaBeaconError::ZeroInterval);
     }
@@ -189,9 +187,9 @@ pub fn parse_sta_beacon(
             if bitmap.is_empty() || dtim_period == 0 || tim.is_some() {
                 return Err(StaBeaconError::MalformedTim);
             }
-            let aid = usize::from(
-                crate::management::AssociationId::from_bytes(association_id.to_le_bytes()).aid(),
-            );
+            // The station's association ID, as the Association Response's
+            // AID field gave it ([`crate::station::AssociationResponse`]).
+            let aid = usize::from(association_id);
             let aid_byte = aid / 8;
             // Bitmap Offset is encoded in units of two octets in bits 7:1;
             // the decoded offset is doubled to obtain N1 in octets.
@@ -242,7 +240,7 @@ pub fn parse_sta_beacon(
         observation: StaBeaconObservation {
             timestamp_tsf: crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
             interval_tu,
-            capability_information: u16::from_le_bytes([c0, c1]),
+            capability_information: crate::management::CapabilityInformation::from_bytes([c0, c1]),
             tim,
             protection,
             edca,
