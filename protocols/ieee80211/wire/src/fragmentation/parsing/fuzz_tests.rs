@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ccmp::CCMP_HEADER_LEN;
+use crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN;
 use crate::fuzz::{FULL, QUICK, inputs};
 
 /// Fragment 0 of sequence 0x123 from the AP, with More Fragments, carrying

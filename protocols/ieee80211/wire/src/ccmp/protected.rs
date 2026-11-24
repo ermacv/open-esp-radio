@@ -145,7 +145,7 @@ impl<'a> ProtectedMpdu<'a> {
         } else {
             fields
         };
-        let sequence = SequenceControl::from_bytes(self.header.sequence_control().to_le_bytes());
+        let sequence = SequenceControl::from_bytes(self.header.sequence_control().to_bytes());
         let address4 = self.header.address4();
         let qos = self.masked_qos(spp).map(|qos| qos.to_bytes());
         let mut bytes = [0; 30];
@@ -173,7 +173,7 @@ impl<'a> ProtectedMpdu<'a> {
     /// remains, and the A-MSDU Present bit when SPP is negotiated.
     fn masked_qos(&self, spp: Spp) -> Option<QosControl> {
         self.header.qos().map(|qos| {
-            let control = QosControl::from_bytes(qos.to_le_bytes());
+            let control = qos;
             QosControl::from_bytes([0; 2])
                 .with_tid(control.tid())
                 .with_amsdu(matches!(spp, Spp::Negotiated) && control.amsdu())

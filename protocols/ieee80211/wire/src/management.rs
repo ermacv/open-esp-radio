@@ -73,7 +73,7 @@ impl ProbeRequest<'_> {
         crate::encoding::write_array::<16, _, _>(&mut header, &self.bssid);
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let extended_header = [
             EXTENDED_SUPPORTED_RATES_ELEMENT_ID,

@@ -11,7 +11,6 @@ use oer_protocols_ieee80211_wire::{
     frame::{DecodedHeader, FrameControlFields, ManagementSubtype},
     management::{BROADCAST_ADDRESS, MANAGEMENT_HEADER_LEN},
     management_protection::SaQuery,
-    sequence::SequenceControl,
 };
 
 use crate::sa_query::{SaQueryStep, StationSaQuery};
@@ -68,7 +67,7 @@ impl ManagementProtection {
         if !(disconnect || action)
             || control.ds() != 0
             || control.more_fragments()
-            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
+            || header.sequence_control().fragment() != 0
             || header.ht_control().is_some()
             || (header.receiver() != local.get() && header.receiver() != BROADCAST_ADDRESS)
             || header.transmitter() != bssid.get()

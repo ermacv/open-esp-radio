@@ -576,7 +576,7 @@ impl<'payload> EspNowV2Frame<'payload> {
         writer.write(&self.source.bytes()).map_err(too_small)?;
         writer.write(&BROADCAST_ADDRESS).map_err(too_small)?;
         writer
-            .u16_le(self.sequence_number.sequence_control())
+            .write(&self.sequence_number.sequence_control().to_bytes())
             .map_err(too_small)?;
         self.action.encode(body)?;
         Ok(required)
@@ -617,15 +617,13 @@ impl<'payload> EspNowV2Frame<'payload> {
         if header[16..22] != BROADCAST_ADDRESS {
             return Err(EspNowV2WireError::InvalidBssid);
         }
-        let sequence_control = u16::from_le_bytes([header[22], header[23]]);
+        let sequence_control =
+            crate::sequence::SequenceControl::from_bytes([header[22], header[23]]);
         if FrameControlFields::from_raw(frame_control).more_fragments()
-            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                .fragment()
-                != 0
+            || sequence_control.fragment() != 0
         {
             return Err(EspNowV2WireError::FragmentedFrame(
-                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                    .fragment(),
+                sequence_control.fragment(),
             ));
         }
         let action = EspNowV2Action::parse(action)?;

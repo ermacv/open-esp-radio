@@ -2,6 +2,8 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::sequence::SequenceControl;
+
 /// Plain station-to-DS Data frame control.
 pub const DATA_TO_DS: u16 = 0x0108;
 /// QoS station-to-DS Data frame control.
@@ -328,9 +330,9 @@ pub struct DecodedHeader<'a> {
     receiver: [u8; 6],
     transmitter: [u8; 6],
     address3: [u8; 6],
-    sequence_control: u16,
+    sequence_control: SequenceControl,
     address4: Option<[u8; 6]>,
-    qos: Option<u16>,
+    qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
     frame: &'a [u8],
     body: &'a [u8],
@@ -340,19 +342,19 @@ impl<'a> DecodedHeader<'a> {
     pub fn decode(frame: &'a [u8]) -> Option<Self> {
         let original = frame;
         let mut reader = oer_portable_wire::Reader::new(frame);
-        let control = FrameControl::new(u16::from_le_bytes(reader.read().ok()?))?;
-        let duration = u16::from_le_bytes(reader.read().ok()?);
+        let control = FrameControl::new(reader.u16_le().ok()?)?;
+        let duration = reader.u16_le().ok()?;
         let receiver = reader.read().ok()?;
         let transmitter = reader.read().ok()?;
         let address3 = reader.read().ok()?;
-        let sequence_control = u16::from_le_bytes(reader.read().ok()?);
+        let sequence_control = SequenceControl::from_bytes(reader.read().ok()?);
         let address4 = if control.is_four_address() {
             Some(reader.read().ok()?)
         } else {
             None
         };
         let qos = if control.is_qos_data() {
-            Some(u16::from_le_bytes(reader.read().ok()?))
+            Some(QosControl::from_bytes(reader.read().ok()?))
         } else {
             None
         };
@@ -396,7 +398,7 @@ impl<'a> DecodedHeader<'a> {
         self.address3
     }
     /// The decoded `sequence_control` field.
-    pub const fn sequence_control(&self) -> u16 {
+    pub const fn sequence_control(&self) -> SequenceControl {
         self.sequence_control
     }
     /// The decoded `address4` field.
@@ -404,7 +406,7 @@ impl<'a> DecodedHeader<'a> {
         self.address4
     }
     /// The decoded `qos` field.
-    pub const fn qos(&self) -> Option<u16> {
+    pub const fn qos(&self) -> Option<QosControl> {
         self.qos
     }
     /// The decoded `ht_control` field.
@@ -430,10 +432,8 @@ impl<'a> DecodedHeader<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CheckedHeader {
     control: FrameControl,
-    sequence_control: u16,
-    /// The QoS Control field, when [`Self::has_qos`].
-    qos: u16,
-    has_qos: bool,
+    sequence_control: SequenceControl,
+    qos: Option<QosControl>,
     /// Where the body starts: at most 36 octets.
     header_length: u8,
     /// The frame the header was decoded from: its length and its first
@@ -450,8 +450,7 @@ impl CheckedHeader {
         Some(Self {
             control: header.control,
             sequence_control: header.sequence_control,
-            qos: header.qos.unwrap_or(0),
-            has_qos: header.qos.is_some(),
+            qos: header.qos,
             header_length,
             length: u16::try_from(frame.len()).ok()?,
             at: frame.as_ptr().addr(),
@@ -466,17 +465,17 @@ impl CheckedHeader {
         }
         // What decided the layout must still be in the bytes: a rewrite of
         // the frame in place is another frame.
-        let field = |at: usize| -> Option<u16> {
-            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
-        };
+        let field = |at: usize| -> Option<[u8; 2]> { frame.get(at..)?.first_chunk::<2>().copied() };
         let qos_at = if self.control.is_four_address() {
             30
         } else {
             24
         };
-        if field(0)? != self.control.get()
-            || field(22)? != self.sequence_control
-            || (self.has_qos && field(qos_at)? != self.qos)
+        if field(0)? != self.control.fields().to_bytes()
+            || field(22)? != self.sequence_control.to_bytes()
+            || self
+                .qos
+                .is_some_and(|qos| field(qos_at) != Some(qos.to_bytes()))
         {
             return None;
         }
@@ -495,13 +494,15 @@ impl CheckedHeader {
         };
         Some(DecodedHeader {
             control: self.control,
-            duration: u16::from_le_bytes(*frame.get(2..)?.first_chunk::<2>()?),
+            duration: oer_portable_wire::Reader::new(frame.get(2..)?)
+                .u16_le()
+                .ok()?,
             receiver: address(4)?,
             transmitter: address(10)?,
             address3: address(16)?,
             sequence_control: self.sequence_control,
             address4,
-            qos: self.qos(),
+            qos: self.qos,
             ht_control,
             frame,
             body: frame.get(usize::from(self.header_length)..)?,
@@ -514,13 +515,13 @@ impl CheckedHeader {
     }
 
     /// The decoded `sequence_control` field.
-    pub const fn sequence_control(&self) -> u16 {
+    pub const fn sequence_control(&self) -> SequenceControl {
         self.sequence_control
     }
 
     /// The decoded `qos` field.
-    pub const fn qos(&self) -> Option<u16> {
-        if self.has_qos { Some(self.qos) } else { None }
+    pub const fn qos(&self) -> Option<QosControl> {
+        self.qos
     }
 }
 
@@ -571,7 +572,7 @@ pub struct MacHeader {
     address1: [u8; 6],
     address2: [u8; 6],
     address3: [u8; 6],
-    sequence_control: u16,
+    sequence_control: SequenceControl,
     address4: Option<[u8; 6]>,
     qos: Option<QosControl>,
     ht_control: Option<[u8; 4]>,
@@ -586,7 +587,7 @@ impl MacHeader {
         address1: [u8; 6],
         address2: [u8; 6],
         address3: [u8; 6],
-        sequence_control: u16,
+        sequence_control: SequenceControl,
         address4: Option<[u8; 6]>,
         qos: Option<QosControl>,
         ht_control: Option<[u8; 4]>,
@@ -622,9 +623,7 @@ impl MacHeader {
             header.address3(),
             header.sequence_control(),
             header.address4(),
-            header
-                .qos()
-                .map(|field| QosControl::from_bytes(field.to_le_bytes())),
+            header.qos(),
             header.ht_control(),
         )
     }
@@ -650,7 +649,7 @@ impl MacHeader {
         self.address3
     }
     /// The Sequence Control field.
-    pub const fn sequence_control(&self) -> u16 {
+    pub const fn sequence_control(&self) -> SequenceControl {
         self.sequence_control
     }
     /// Address 4 of a four-address data frame.
@@ -682,18 +681,19 @@ impl MacHeader {
         self
     }
     /// The same header with the Sequence Control field `sequence_control`.
-    pub const fn with_sequence_control(mut self, sequence_control: u16) -> Self {
+    pub const fn with_sequence_control(mut self, sequence_control: SequenceControl) -> Self {
         self.sequence_control = sequence_control;
         self
     }
     /// The same QoS data header with `qos`; `None` for a header without a
     /// QoS Control field.
-    pub const fn with_qos(mut self, qos: QosControl) -> Option<Self> {
-        if self.qos.is_some() {
-            self.qos = Some(qos);
-            Some(self)
-        } else {
-            None
+    pub const fn with_qos(self, qos: QosControl) -> Option<Self> {
+        match self.qos {
+            Some(_) => Some(Self {
+                qos: Some(qos),
+                ..self
+            }),
+            None => None,
         }
     }
 
@@ -726,7 +726,7 @@ impl MacHeader {
             .chain(self.address1)
             .chain(self.address2)
             .chain(self.address3)
-            .chain(self.sequence_control.to_le_bytes())
+            .chain(self.sequence_control.to_bytes())
             .chain(self.address4.into_iter().flatten())
             .chain(self.qos.map(QosControl::to_bytes).into_iter().flatten())
             .chain(self.ht_control.into_iter().flatten())
@@ -921,19 +921,19 @@ pub const SEQUENCE_CONTROL_OFFSET: usize = 22;
 
 /// The Sequence Control field of a data or management MPDU; `None` for an
 /// MPDU shorter than the field's end.
-pub fn sequence_control(mpdu: &[u8]) -> Option<u16> {
+pub fn sequence_control(mpdu: &[u8]) -> Option<SequenceControl> {
     mpdu.get(SEQUENCE_CONTROL_OFFSET..)?
         .first_chunk::<2>()
         .copied()
-        .map(u16::from_le_bytes)
+        .map(SequenceControl::from_bytes)
 }
 
 /// Write the Sequence Control field of a data or management MPDU; `None`,
 /// without a change, for an MPDU shorter than the field's end.
-pub fn write_sequence_control(mpdu: &mut [u8], sequence_control: u16) -> Option<()> {
+pub fn write_sequence_control(mpdu: &mut [u8], sequence_control: SequenceControl) -> Option<()> {
     *mpdu
         .get_mut(SEQUENCE_CONTROL_OFFSET..)?
-        .first_chunk_mut::<2>()? = sequence_control.to_le_bytes();
+        .first_chunk_mut::<2>()? = sequence_control.to_bytes();
     Some(())
 }
 
@@ -966,12 +966,13 @@ mod retry_tests {
 
     #[test]
     fn sequence_control_round_trips_and_a_short_mpdu_is_refused_unchanged() {
+        let field = SequenceControl::from_bytes([0x34, 0x12]);
         let mut mpdu = [0_u8; 24];
-        write_sequence_control(&mut mpdu, 0x1234).unwrap();
+        write_sequence_control(&mut mpdu, field).unwrap();
         assert_eq!(&mpdu[22..], &[0x34, 0x12]);
-        assert_eq!(sequence_control(&mpdu), Some(0x1234));
+        assert_eq!(sequence_control(&mpdu), Some(field));
         let mut short = [0_u8; 23];
-        assert_eq!(write_sequence_control(&mut short, 0x1234), None);
+        assert_eq!(write_sequence_control(&mut short, field), None);
         assert_eq!(short, [0; 23]);
         assert_eq!(sequence_control(&short), None);
     }

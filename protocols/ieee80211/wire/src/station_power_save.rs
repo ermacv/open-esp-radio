@@ -96,7 +96,7 @@ impl StaNullDataFrame {
         crate::encoding::write_array::<16, _, _>(frame, &self.bssid.get());
         crate::encoding::write_array::<22, _, _>(
             frame,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         Ok(STA_NULL_DATA_FRAME_LEN)
     }

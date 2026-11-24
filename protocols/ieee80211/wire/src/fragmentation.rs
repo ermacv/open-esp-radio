@@ -31,7 +31,7 @@ pub struct OpenDataFragmentIdentity {
     transmitter_address: [u8; 6],
     address3: [u8; 6],
     sequence_number: SequenceNumber,
-    qos_control: Option<u16>,
+    qos_control: Option<crate::frame::QosControl>,
 }
 
 impl OpenDataFragmentIdentity {
@@ -61,11 +61,7 @@ impl OpenDataFragmentIdentity {
 
     pub const fn tid(self) -> Option<u8> {
         match self.qos_control {
-            Some(control) => Some(
-                crate::frame::QosControl::from_bytes(control.to_le_bytes())
-                    .tid()
-                    .get(),
-            ),
+            Some(control) => Some(control.tid().get()),
             None => None,
         }
     }

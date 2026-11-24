@@ -6,10 +6,9 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
-use crate::frame::{FrameControlFields, QosControl};
+use crate::frame::FrameControlFields;
 
 use crate::ccmp::CcmpHeader;
-use crate::data::IEEE80211_LEGACY_DATA_HEADER_LEN;
 use crate::sequence::SequenceNumber;
 
 use super::{
@@ -77,9 +76,8 @@ fn parse_data_fragment<'frame>(
         // individual.
         return Err(OpenDataFragmentError::InvalidDestination);
     }
-    let sequence_control =
-        crate::sequence::SequenceControl::from_bytes(header.sequence_control.to_le_bytes());
-    let frame_control = FrameControlFields::from_bytes(header.frame_control.to_le_bytes());
+    let sequence_control = header.sequence_control;
+    let frame_control = header.frame_control;
     if sequence_control.fragment() == 0 && !frame_control.more_fragments() {
         return Err(OpenDataFragmentError::NotFragmented);
     }
@@ -121,8 +119,8 @@ pub fn parse_ccmp_data_identity(
 #[derive(Clone, Copy)]
 struct ParsedOpenDataHeader<'frame> {
     identity: OpenDataFragmentIdentity,
-    frame_control: u16,
-    sequence_control: u16,
+    frame_control: FrameControlFields,
+    sequence_control: crate::sequence::SequenceControl,
     payload: &'frame [u8],
     qos_amsdu_present: bool,
 }
@@ -133,49 +131,22 @@ fn parse_data_header(
     protection: DataFragmentProtection,
 ) -> Result<ParsedOpenDataHeader<'_>, OpenDataFragmentError> {
     let mut reader = oer_portable_wire::Reader::new(mpdu);
-    let header = reader
-        .array::<IEEE80211_LEGACY_DATA_HEADER_LEN>()
-        .map_err(|_| OpenDataFragmentError::Truncated)?;
+    let truncated = |_| OpenDataFragmentError::Truncated;
+    // The three-address header, read whole before any field decides: a
+    // frame shorter than it is truncated whatever its Frame Control says.
+    let frame_control = FrameControlFields::from_bytes(reader.read().map_err(truncated)?);
+    let _duration: [u8; 2] = reader.read().map_err(truncated)?;
+    let receiver_address: [u8; 6] = reader.read().map_err(truncated)?;
+    let transmitter_address: [u8; 6] = reader.read().map_err(truncated)?;
+    let address3: [u8; 6] = reader.read().map_err(truncated)?;
+    let sequence_control =
+        crate::sequence::SequenceControl::from_bytes(reader.read().map_err(truncated)?);
     let remainder = reader.remaining();
-    let [
-        fc0,
-        fc1,
-        _duration0,
-        _duration1,
-        r0,
-        r1,
-        r2,
-        r3,
-        r4,
-        r5,
-        t0,
-        t1,
-        t2,
-        t3,
-        t4,
-        t5,
-        a0,
-        a1,
-        a2,
-        a3,
-        a4,
-        a5,
-        sc0,
-        sc1,
-    ] = *header;
-    let receiver_address = [r0, r1, r2, r3, r4, r5];
-    let transmitter_address = [t0, t1, t2, t3, t4, t5];
-    let address3 = [a0, a1, a2, a3, a4, a5];
-    let frame_control = u16::from_le_bytes([fc0, fc1]);
-    let subtype = FrameControlFields::from_raw(frame_control).type_and_subtype();
-    if FrameControlFields::from_raw(frame_control).version() != 0 || (subtype != 2 && subtype != 34)
-    {
+    let subtype = frame_control.type_and_subtype();
+    if frame_control.version() != 0 || (subtype != 2 && subtype != 34) {
         return Err(OpenDataFragmentError::NotData);
     }
-    match (
-        protection,
-        FrameControlFields::from_raw(frame_control).protected(),
-    ) {
+    match (protection, frame_control.protected()) {
         (DataFragmentProtection::Open, true) => {
             return Err(OpenDataFragmentError::Protected);
         }
@@ -184,11 +155,11 @@ fn parse_data_header(
         }
         _ => {}
     }
-    if FrameControlFields::from_raw(frame_control).order() {
+    if frame_control.order() {
         return Err(OpenDataFragmentError::OrderedUnsupported);
     }
     let role_matches = matches!(
-        (role, FrameControlFields::from_raw(frame_control).ds()),
+        (role, frame_control.ds()),
         (DataInterfaceRole::Station, 2) | (DataInterfaceRole::AccessPoint, 1)
     );
     if !role_matches {
@@ -197,14 +168,11 @@ fn parse_data_header(
 
     let (qos_control, payload) = if subtype == 34 {
         let mut reader = oer_portable_wire::Reader::new(remainder);
-        let qos = reader
-            .u16_le()
-            .map_err(|_| OpenDataFragmentError::Truncated)?;
+        let qos = crate::frame::QosControl::from_bytes(reader.read().map_err(truncated)?);
         (Some(qos), reader.remaining())
     } else {
         (None, remainder)
     };
-    let sequence_control = u16::from_le_bytes([sc0, sc1]);
     if transmitter_address == [0; 6]
         || crate::address::AddressFlags::from_bytes([transmitter_address[0]]).group()
     {
@@ -223,8 +191,7 @@ fn parse_data_header(
         frame_control,
         sequence_control,
         payload,
-        qos_amsdu_present: qos_control
-            .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu()),
+        qos_amsdu_present: qos_control.is_some_and(|qos| qos.amsdu()),
     })
 }
 

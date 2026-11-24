@@ -560,7 +560,7 @@ impl<'payload> EspNowV1Frame<'payload> {
         writer.write(&self.source.bytes()).map_err(too_small)?;
         writer.write(&BROADCAST_ADDRESS).map_err(too_small)?;
         writer
-            .u16_le(self.sequence_number.sequence_control())
+            .write(&self.sequence_number.sequence_control().to_bytes())
             .map_err(too_small)?;
         self.action.encode(body)?;
         Ok(required)
@@ -601,15 +601,13 @@ impl<'payload> EspNowV1Frame<'payload> {
         if header[16..22] != BROADCAST_ADDRESS {
             return Err(EspNowV1WireError::InvalidBssid);
         }
-        let sequence_control = u16::from_le_bytes([header[22], header[23]]);
+        let sequence_control =
+            crate::sequence::SequenceControl::from_bytes([header[22], header[23]]);
         if FrameControlFields::from_raw(frame_control).more_fragments()
-            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                .fragment()
-                != 0
+            || sequence_control.fragment() != 0
         {
             return Err(EspNowV1WireError::FragmentedFrame(
-                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                    .fragment(),
+                sequence_control.fragment(),
             ));
         }
         let action = EspNowV1Action::parse(action)?;
@@ -715,15 +713,15 @@ impl<'frame> EspNowProtectedV1Envelope<'frame> {
             return Err(EspNowProtectedV1WireError::InvalidBssid);
         }
 
-        let sequence_control = u16::from_le_bytes([management_header[22], management_header[23]]);
+        let sequence_control = crate::sequence::SequenceControl::from_bytes([
+            management_header[22],
+            management_header[23],
+        ]);
         if FrameControlFields::from_raw(frame_control).more_fragments()
-            || crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                .fragment()
-                != 0
+            || sequence_control.fragment() != 0
         {
             return Err(EspNowProtectedV1WireError::FragmentedFrame(
-                crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes())
-                    .fragment(),
+                sequence_control.fragment(),
             ));
         }
 
@@ -1033,7 +1031,7 @@ mod tests {
         let frame = EspNowV1Frame::new(
             EspNowDestination::Broadcast,
             source(),
-            SequenceNumber::from_sequence_control(0),
+            SequenceNumber::ZERO,
             EspNowRandomValue::new([1, 2, 3, 4]),
             &[7; 9],
         )
@@ -1053,7 +1051,7 @@ mod tests {
         let frame = EspNowV2Frame::new(
             EspNowDestination::Broadcast,
             source(),
-            SequenceNumber::from_sequence_control(0),
+            SequenceNumber::ZERO,
             EspNowRandomValue::new([1, 2, 3, 4]),
             &payload,
         )

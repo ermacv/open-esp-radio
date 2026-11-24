@@ -82,10 +82,7 @@ pub fn write_response(
     crate::encoding::write_array::<0, _, _>(&mut fixed, &[0x50, 0]);
     fixed[2..4].fill(0);
     crate::encoding::write_array::<4, _, _>(&mut fixed, &peer);
-    crate::encoding::write_array::<22, _, _>(
-        &mut fixed,
-        &sequence.sequence_control().to_le_bytes(),
-    );
+    crate::encoding::write_array::<22, _, _>(&mut fixed, &sequence.sequence_control().to_bytes());
     crate::encoding::write_array::<24, _, _>(&mut fixed, &timestamp_micros.to_le_bytes());
     let mut writer = oer_portable_wire::Writer::new(output);
     let too_small = |_| ResponseError::OutputTooSmall { required };

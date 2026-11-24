@@ -12,7 +12,7 @@ use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
     block_ack::frame::{encode_addba_request, encode_block_ack_request, parse_block_ack_action},
-    frame::{FrameControl, MacHeader},
+    frame::{FrameControl, MacHeader, QosControl},
     status::status_code,
 };
 use std::vec::Vec;

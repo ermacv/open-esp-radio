@@ -653,7 +653,10 @@ fn a_key_change_waits_for_the_air_and_sends_home_what_the_old_key_wrote() {
 /// The sequence number of the first frame of the `index`th publication.
 fn first_sequence<const S: usize, const D: usize>(around: &Around<'_, S, D>, index: usize) -> u16 {
     let front = &around.port.published()[index].frames[0];
-    SequenceNumber::from_sequence_control(u16::from_le_bytes([front[22], front[23]])).get()
+    SequenceNumber::from_sequence_control(
+        oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([front[22], front[23]]),
+    )
+    .get()
 }
 
 /// A frame that was transmitted and waited for its retry goes home at a
@@ -724,7 +727,9 @@ fn a_key_change_owes_a_block_ack_request_to_the_number_it_set_back_and_it_ends_o
         around.net.offer(4, WmmUserPriority::UP0, DESTINATION);
         let _ = engine.offered(&mut around.turn());
         let front = around.port.front(4).unwrap();
-        let control = u16::from_le_bytes([front[22], front[23]]);
+        let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+            front[22], front[23],
+        ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 2);
     });
 }
@@ -1065,7 +1070,9 @@ fn the_stations_own_numbers_are_taken_one_by_one_apart_from_its_tids() {
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
         let _ = engine.offered(&mut around.turn());
         let front = around.port.front(1).unwrap();
-        let control = u16::from_le_bytes([front[22], front[23]]);
+        let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+            front[22], front[23],
+        ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 0);
     });
 }
@@ -1314,7 +1321,9 @@ fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
         assert_eq!(around.port.published().len(), 1);
         // The first data MPDU after the name carries the named number.
         let front = around.port.front(1).unwrap();
-        let control = u16::from_le_bytes([front[22], front[23]]);
+        let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+            front[22], front[23],
+        ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 0);
     });
 }
@@ -1364,7 +1373,9 @@ fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
             let _ = named.tx_agreement(2, &mut around.turn());
         });
         let front = around.port.front(3).unwrap();
-        let control = u16::from_le_bytes([front[22], front[23]]);
+        let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+            front[22], front[23],
+        ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 2);
     });
 }
@@ -1606,7 +1617,9 @@ fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
             let _ = named.release(&mut around.turn());
         }
         let single = around.port.single(data_place(BEST_EFFORT)).unwrap();
-        let control = u16::from_le_bytes([single[22], single[23]]);
+        let control = oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([
+            single[22], single[23],
+        ]);
         assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
         // The other client's TID, with nothing on the air, is told at once,
         // under its own peer.

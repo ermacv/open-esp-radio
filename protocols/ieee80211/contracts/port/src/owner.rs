@@ -170,7 +170,7 @@ use oer_protocols_ieee80211_wire::frame::{
 };
 
 use crate::EdcaParameterSet;
-use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
+use oer_protocols_ieee80211_wire::sequence::{SequenceControl, SequenceNumber};
 use oer_protocols_radio_regulatory::Permitted;
 
 use crate::{
@@ -784,7 +784,7 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
         receiver: A,
         transmitter: [u8; 6],
         address3: [u8; 6],
-        sequence_control: u16,
+        sequence_control: SequenceControl,
         address4: Option<[u8; 6]>,
         qos: Option<QosControl>,
         ht_control: Option<[u8; 4]>,

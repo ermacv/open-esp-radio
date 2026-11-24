@@ -531,7 +531,7 @@ fn single_frame<'id, P: DataPort<'id>>(port: &P) -> (TxFrame<'id, P::Caps>, Mpdu
         receiver,
         [2, 0, 0, 0, 0, 1],
         [2, 0, 0, 0, 0, 2],
-        0,
+        oer_protocols_ieee80211_wire::sequence::SequenceControl::from_bytes([0; 2]),
         None,
         None,
         None,

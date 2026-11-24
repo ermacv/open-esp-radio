@@ -22,8 +22,18 @@ fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
         let address4 = control.is_four_address().then_some([4, 3, 2, 1, 0, 9]);
         let qos = control.is_qos_data().then_some(qos());
         let ht = control.has_ht_control().then_some([0x10, 0x20, 0x30, 0x40]);
-        let header =
-            MacHeader::new(control, 0x5634, [0xff; 6], A, B, 0x789a, address4, qos, ht).unwrap();
+        let header = MacHeader::new(
+            control,
+            0x5634,
+            [0xff; 6],
+            A,
+            B,
+            SequenceControl::from_bytes([0x9a, 0x78]),
+            address4,
+            qos,
+            ht,
+        )
+        .unwrap();
         let mut expected = std::vec::Vec::new();
         expected.extend(raw.to_le_bytes());
         expected.extend(0x5634_u16.to_le_bytes());
@@ -56,7 +66,17 @@ fn every_valid_header_shape_writes_all_fields_and_leaves_its_tail_untouched() {
 #[test]
 fn optional_fields_agree_with_the_frame_control() {
     let header = |raw, address4: Option<[u8; 6]>, qos: Option<QosControl>, ht: Option<[u8; 4]>| {
-        MacHeader::new(FrameControl::new(raw)?, 0, B, A, B, 0, address4, qos, ht)
+        MacHeader::new(
+            FrameControl::new(raw)?,
+            0,
+            B,
+            A,
+            B,
+            SequenceControl::from_bytes([0; 2]),
+            address4,
+            qos,
+            ht,
+        )
     };
     assert!(header(0x0088, None, Some(qos()), None).is_some());
     assert!(header(0x0088, None, None, None).is_none());
@@ -86,7 +106,7 @@ fn a_short_buffer_is_refused_unwritten_and_a_short_frame_undecoded() {
         B,
         A,
         B,
-        0,
+        SequenceControl::from_bytes([0; 2]),
         Some(A),
         Some(qos()),
         Some([1, 2, 3, 4]),

@@ -539,10 +539,7 @@ pub fn plan_data_decapsulation(
     payload_length: usize,
 ) -> Result<DataDecapPlan, DataDecapError> {
     let header = data_header(role, mpdu)?;
-    if header
-        .qos()
-        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu())
-    {
+    if header.qos().is_some_and(|qos| qos.amsdu()) {
         return Err(DataDecapError::AmsduUnsupported);
     }
     let payload = data_payload(header, payload_offset, payload_length)?;
@@ -569,7 +566,7 @@ fn data_header(
         return Err(DataDecapError::NotData);
     }
     if control.more_fragments()
-        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_le_bytes())
+        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_bytes())
             .fragment()
             != 0
     {
@@ -637,10 +634,7 @@ pub fn amsdu_subframes<'a>(
     payload_length: usize,
 ) -> Result<AmsduSubframes<'a>, DataDecapError> {
     let header = data_header(role, mpdu)?;
-    if !header
-        .qos()
-        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu())
-    {
+    if !header.qos().is_some_and(|qos| qos.amsdu()) {
         return Err(DataDecapError::AmsduUnsupported);
     }
     let payload = data_payload(header, payload_offset, payload_length)?;
@@ -689,9 +683,7 @@ pub fn decapsulate_payload<'a>(
     header: crate::frame::DecodedHeader<'_>,
     payload: &'a [u8],
 ) -> Result<DataDecapsulation<'a>, DataDecapError> {
-    let amsdu = header
-        .qos()
-        .is_some_and(|qos| QosControl::from_bytes(qos.to_le_bytes()).amsdu());
+    let amsdu = header.qos().is_some_and(|qos| qos.amsdu());
     let frames = if amsdu {
         DataDecapsulationFrames::Aggregate(aggregate_payload(payload)?)
     } else {

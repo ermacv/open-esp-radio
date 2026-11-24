@@ -103,7 +103,7 @@ fn management_header(
     crate::encoding::write_array::<16, _, _>(&mut frame, &bssid);
     crate::encoding::write_array::<22, _, _>(
         &mut frame,
-        &sequence_number.sequence_control().to_le_bytes(),
+        &sequence_number.sequence_control().to_bytes(),
     );
     frame
 }

@@ -655,7 +655,9 @@ pub fn parse_trigger_mu_bar_dependent(
             .tid()
             .get(),
         bar_information,
-        starting_sequence_number: SequenceNumber::from_sequence_control(bar_information),
+        starting_sequence_number: SequenceNumber::from_sequence_control(
+            crate::sequence::SequenceControl::from_bytes([b2, b3]),
+        ),
     })
 }
 

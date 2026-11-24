@@ -105,7 +105,7 @@ impl ApDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
@@ -159,7 +159,7 @@ impl ApUnprotectedDataFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         let mut reader = oer_portable_wire::Reader::new(&header);
         let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
@@ -320,7 +320,7 @@ impl ProtectedDataPlan {
         }
         crate::encoding::write_array::<22, _, _>(
             &mut plan.header,
-            &sequence_number.sequence_control().to_le_bytes(),
+            &sequence_number.sequence_control().to_bytes(),
         );
         let llc_snap = plan.llc_snap;
         Ok(Self { plan, llc_snap })
@@ -439,7 +439,7 @@ impl ApAmsduFrame<'_> {
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &self.sequence_number.sequence_control().to_bytes(),
         );
         crate::encoding::FrameParts([
             header.as_slice(),
@@ -1006,7 +1006,7 @@ fn management_header(
     crate::encoding::write_array::<16, _, _>(&mut frame, &access_point);
     crate::encoding::write_array::<22, _, _>(
         &mut frame,
-        &management_sequence.sequence_control().to_le_bytes(),
+        &management_sequence.sequence_control().to_bytes(),
     );
     frame
 }

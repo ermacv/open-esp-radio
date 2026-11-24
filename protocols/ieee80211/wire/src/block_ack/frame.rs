@@ -73,7 +73,7 @@ pub fn encode_addba_request(
     crate::encoding::write_array::<5, _, _>(&mut body, &timeout_tu.to_le_bytes());
     crate::encoding::write_array::<7, _, _>(
         &mut body,
-        &starting_sequence.sequence_control().to_le_bytes(),
+        &starting_sequence.sequence_control().to_bytes(),
     );
     Ok(body)
 }
@@ -125,9 +125,9 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
                 amsdu: parameters.amsdu(),
                 window: parameters.window(),
                 timeout_tu: u16::from_le_bytes([t0, t1]),
-                starting_sequence: SequenceNumber::from_sequence_control(u16::from_le_bytes([
-                    s0, s1,
-                ])),
+                starting_sequence: SequenceNumber::from_sequence_control(
+                    crate::sequence::SequenceControl::from_bytes([s0, s1]),
+                ),
             })
         }
         ADDBA_RESPONSE_ACTION => {
@@ -187,7 +187,7 @@ pub fn encode_block_ack_request(
     crate::encoding::write_array::<16, _, _>(&mut frame, &control.to_bytes());
     crate::encoding::write_array::<18, _, _>(
         &mut frame,
-        &starting_sequence.sequence_control().to_le_bytes(),
+        &starting_sequence.sequence_control().to_bytes(),
     );
     frame
 }
@@ -386,7 +386,9 @@ pub fn parse_compressed_block_ack_request(frame: &[u8]) -> Option<CompressedBloc
         receiver,
         transmitter,
         tid: parameters.tid().get(),
-        starting_sequence: SequenceNumber::from_sequence_control(u16::from_le_bytes([s0, s1])),
+        starting_sequence: SequenceNumber::from_sequence_control(
+            crate::sequence::SequenceControl::from_bytes([s0, s1]),
+        ),
     })
 }
 

@@ -288,7 +288,7 @@ pub fn parse_sta_disconnect(
         || control.ds() != 0
         || control.protected()
         || control.more_fragments()
-        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_le_bytes())
+        || crate::sequence::SequenceControl::from_bytes(header.sequence_control().to_bytes())
             .fragment()
             != 0
         || (header.receiver() != local.get() && header.receiver() != [0xff; 6])

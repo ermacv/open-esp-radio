@@ -326,7 +326,7 @@ impl<'a> HeCompressedBeamformingReport<'a> {
     }
 
     pub const fn sequence_number(self) -> SequenceNumber {
-        SequenceNumber::from_sequence_control(u16::from_le_bytes([
+        SequenceNumber::from_sequence_control(crate::sequence::SequenceControl::from_bytes([
             self.header[22],
             self.header[23],
         ]))

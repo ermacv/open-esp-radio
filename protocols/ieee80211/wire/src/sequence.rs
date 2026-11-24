@@ -35,8 +35,8 @@ impl SequenceNumber {
     }
 
     /// The Sequence Number subfield of a Sequence Control field.
-    pub const fn from_sequence_control(sequence_control: u16) -> Self {
-        Self(SequenceControl::from_bytes(sequence_control.to_le_bytes()).sequence())
+    pub const fn from_sequence_control(field: SequenceControl) -> Self {
+        Self(field.sequence())
     }
 
     pub const fn get(self) -> u16 {
@@ -44,21 +44,8 @@ impl SequenceNumber {
     }
 
     /// Sequence Control of an unfragmented MPDU (fragment number zero).
-    pub const fn sequence_control(self) -> u16 {
-        u16::from_le_bytes(
-            SequenceControl::from_bytes([0; 2])
-                .with_sequence(self.0)
-                .to_bytes(),
-        )
-    }
-
-    /// Sequence Control with an explicit four-bit fragment number.
-    pub const fn sequence_control_with_fragment(self, fragment: u8) -> u16 {
-        u16::from_le_bytes(
-            SequenceControl::from_bytes([fragment, 0])
-                .with_sequence(self.0)
-                .to_bytes(),
-        )
+    pub const fn sequence_control(self) -> SequenceControl {
+        SequenceControl::from_bytes([0; 2]).with_sequence(self.0)
     }
 }
 

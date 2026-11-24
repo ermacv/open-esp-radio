@@ -10,7 +10,15 @@ fn construction_is_limited_to_twelve_bits() {
 #[test]
 fn sequence_control_carries_the_number_above_the_fragment() {
     let sequence = SequenceNumber::new(0x0abc).unwrap();
-    assert_eq!(sequence.sequence_control(), 0xabc0);
-    assert_eq!(sequence.sequence_control_with_fragment(0x13), 0xabc3);
-    assert_eq!(SequenceNumber::from_sequence_control(0xabc7), sequence);
+    assert_eq!(
+        sequence.sequence_control().to_bytes(),
+        0xabc0_u16.to_le_bytes()
+    );
+    assert_eq!(sequence.sequence_control().fragment(), 0);
+    assert_eq!(
+        SequenceNumber::from_sequence_control(SequenceControl::from_bytes(
+            0xabc7_u16.to_le_bytes()
+        )),
+        sequence
+    );
 }
