@@ -27,10 +27,10 @@ use crate::{
         parse_group_gtk_key_data, parse_gtk_key_data,
     },
     management_ccmp::ManagementCcmpReceiver,
-    sae::{SaeComebackTokens, SaeCommit, SaePasswordElement, valid_peer_commit},
+    sae::{SaeCommit, SaePasswordElement},
 };
 use oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128;
-use oer_protocols_ieee80211_wire::sae::{SaeCommitValues, SaeReceivedCommit, anti_clogging_token};
+use oer_protocols_ieee80211_wire::sae::{SaeCommitValues, anti_clogging_token};
 
 /// The captured Message 3's PTK and its decrypted key data.
 fn message3() -> (crate::Ptk, Vec<u8>) {
@@ -262,14 +262,8 @@ fn sae_parsers(count: usize) {
             &mut with_token,
         )
         .unwrap();
-    let mut tokens = SaeComebackTokens::new();
-    let issued = tokens.issue(
-        [2, 0, 0, 0, 0, 3],
-        oer_portable_time::Instant::from_micros(0),
-        || [9; 32],
-    );
     inputs(
-        &[&plain[..length], &with_token[..token_length], &issued],
+        &[&plain[..length], &with_token[..token_length]],
         count,
         200,
         |bytes| {
@@ -278,13 +272,8 @@ fn sae_parsers(count: usize) {
                 oer_protocols_ieee80211_wire::security::SaePwe::HashToElement,
             ] {
                 let _ = SaeCommitValues::parse(bytes, pwe);
-                if let Ok(commit) = SaeReceivedCommit::parse(bytes, pwe) {
-                    let _ = commit.rejects_offered_group();
-                    let _ = valid_peer_commit(&commit.values);
-                }
                 let _ = anti_clogging_token(bytes, pwe);
             }
-            let _ = tokens.check([2, 0, 0, 0, 0, 3], bytes);
         },
     );
 }

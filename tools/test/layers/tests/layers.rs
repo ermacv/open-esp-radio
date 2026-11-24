@@ -7967,11 +7967,7 @@ fn k0_print() {
 /// mentions `bool` without being it), by `file::Struct` or
 /// `file::Enum::Variant` with the number of flags. It misses a flag behind
 /// a type alias (`type Flag = bool`). The list only shrinks.
-const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[(
-    "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
-    3,
-    BY_FINAL_CRATES,
-)];
+const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[];
 
 /// K0, `HIDDEN_BOOL_PARAMETERS`: what `fn_params_excessive_bools` does not
 /// see of a parameter that selects behaviour (a type that mentions `bool`
@@ -8332,31 +8328,7 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_CONTROLLER,
     ),
     (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.accepted_scalar",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.keys",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.own",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.peer_commit",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.stored_confirm",
-        BY_FINAL_CRATES,
-    ),
-    (
         "protocols/ieee80211/core/security/rsn/src/retry.rs::RsnRetry.pending",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
         BY_FINAL_CRATES,
     ),
     (
@@ -8422,14 +8394,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
         BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.rejected_groups",
-        "correct: a received commit's Rejected Groups element, absent when the station sends none (tasks/402)",
-    ),
-    (
-        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.token",
-        "correct: the anti-clogging token a received commit echoes, absent when it echoes none (tasks/402)",
     ),
     (
         "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ds_channel",

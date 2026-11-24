@@ -102,6 +102,11 @@ crate's module tree:
   (`chips/family/app/src/observe{.rs,/}`), whose one reader is
   `hil/images/wifi-station`, and the S31 application's `observed.rs`,
   `wifi.rs` and `wifi/`.
+- the access point's SAE responder, until the access point's role serves
+  SAE: `rsn`'s `authenticator/sae{.rs,/}`, the validity of a station's
+  Commit and the anti-clogging tokens (`sae/access_point.rs`, with their
+  compile-fail cases in `sae/access_point_ui/`), and the wire's received
+  Commit (`sae/access_point.rs`).
 
 Awaiting deletion at their successor:
 - the old Wi-Fi path, its backend and station

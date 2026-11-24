@@ -9,7 +9,7 @@ execute its typed transmit and key-install requests.
 | Module | Responsibility |
 | --- | --- |
 | `akm` | Key descriptor version, PTK expansion and EAPOL-Key MIC of each `oer_protocols_ieee80211_wire::security::rsn::Akm` |
-| `sae` | SAE commit/confirm cryptography, hunting-and-pecking and hash-to-element password elements, the validity of a peer's scalar and element, anti-clogging tokens; the Commit and Confirm body codecs are `oer_protocols_ieee80211_wire::sae` |
+| `sae` | SAE commit/confirm cryptography, hunting-and-pecking and hash-to-element password elements; the Commit and Confirm body codecs are `oer_protocols_ieee80211_wire::sae` |
 | `bip`, `management_ccmp` | BIP IPN allocation and replay, and the management CCMP receiver over the stateless transforms in `oer-protocols-ieee80211-core-security-cipher`; the management receiver's PN frontier is `oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpReplayFrontier`; their receive errors add `Replay` to the transform's refusals |
 | `element` | Association RSN element policy and selection of its first supported suite; wire syntax is `oer_protocols_ieee80211_wire::security::rsn` |
 | `crypto` | Zeroizing PMK/PTK owners, PSK passphrase derivation and the association security binding |
@@ -18,7 +18,7 @@ execute its typed transmit and key-install requests.
 | `frames` | Which EAPOL-Key fields each handshake message sends, the MIC it computes, which elements and KDEs a Key Data carries, and owned security elements; the EAPOL-Key layout and its MIC field, GTK/IGTK KDEs, Key Data elements and padding, SAE element IDs and status codes are `oer-protocols-ieee80211-wire`'s |
 | `state` | Station and authenticator four-way-handshake transitions |
 | `supplicant` | Station orchestration: the EAPOL-Key MIC and the RFC 3394 key-data unwrap over the caller's synchronous `oer_portable_crypto::block::Aes128Engine`, lent to each call that needs it, typed key-install requests and their completions, response deadlines |
-| `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification on the caller's engine, the binding of the station's security IEs and the Message 3 wrap (software AES) and MIC over key data the access point supplies; `authenticator::sae` is the access point's SAE responder |
+| `authenticator` | Access point orchestration: PTK derivation from the association's PMK, Message 2 and 4 MIC verification on the caller's engine, the binding of the station's security IEs and the Message 3 wrap (software AES) and MIC over key data the access point supplies |
 | `pmksa` | The PMKSA cache of both roles: per peer and, for a station, per SSID |
 | `keys`, `retry` | Owned CCMP key installs and event-driven EAPOL retransmission |
 
@@ -38,7 +38,12 @@ are `oer-protocols-ieee80211-wire`'s (`ccmp::protected`, `bip`). Key data is bou
 `RSN_KEY_DATA_CAPACITY`. It has no handshake state, replay frontier or clock.
 
 The crate is Apache-2.0: `authenticator/sae.rs` ports the ESP-IDF access
-point's SAE handling (`NOTICE`).
+point's SAE handling (`NOTICE`). The access point's SAE responder is outside
+the build until the access point's role serves SAE: `authenticator/sae.rs`,
+the validity of a station's Commit and the anti-clogging tokens
+(`sae/access_point.rs`) and the wire's received Commit
+(`oer_protocols_ieee80211_wire`'s `sae/access_point.rs`) are kept as files no
+`mod` names.
 
 `PmkDerivation::new` validates and owns the password/SSID; `step` evaluates
 one HMAC-SHA1 and yields the PMK exactly once after 8192 steps (two blocks,
@@ -67,7 +72,7 @@ engine's AES-128 key schedule enables RustCrypto's `zeroize` feature and wipes
 on drop; the CCM and AES-CMAC states erase their chaining values on drop. HMAC and SHA-1/SHA-2
 internal state derived from KCK/PMK material does not wipe on drop; zeroizing
 the input owners does not erase that state. SAE passwords, password elements,
-password tokens, derived keys and comeback-token keys zeroize on drop. Their
+password tokens and derived keys zeroize on drop. Their
 owners do not implement `Copy` or `Clone`, and Debug reveals only a redaction.
 Derived keys expose borrowed bytes through accessors.
 
@@ -152,33 +157,31 @@ operation boundary; intermediate values never cause a secret-dependent early
 return. Commit secrets retain validated scalar types. Point conversion uses
 `DecompressPoint` and checked field coordinates without the SEC1 tag parser.
 Encoding a commit reconstructs y with a field square root, adding one exponentiation.
-The comeback table selects and updates its slot with `ConditionallySelectable`.
 Tests retain local allowances for assertions and fixture construction. The
 `test-support` feature exposes owned-buffer invalidation only for caller
 regressions; production owners have no such mutator.
 
 The authenticator sends every Message 1 and Message 3, a retransmission
-included, under a new and larger Key Replay Counter taken from its handshake
-state (`state/authenticator.rs::RsnApState::retransmit_message1`,
-`retransmit_message3`); the retry schedule (`retry`) owns only timing and the
-message kind. A counter is never handed out twice, but only a transmission
-whose frame was built (`RsnApState::record_built`) is awaited: a Message 2
-or 4 may answer any of the latest `RSN_AP_REPLAY_WINDOW` built transmissions
-of its step, so a retransmission never invalidates an earlier frame the
-station may have answered, and a frame that failed to build is neither
-awaited nor evicts one; other counters are refused as stale peer input. The window closes when the step completes:
-a later Message 4 neither authorizes nor installs a key again. Message 3
-carries as its Key RSC the packet number the caller names, the last one the
-installed GTK has handed out.
+included, under a new and larger Key Replay Counter its handshake
+(`authenticator.rs::RsnApHandshake`) takes; the retry schedule (`retry`) owns
+only timing and the message kind. A counter is never handed out twice, but
+only a transmission whose frame was built is awaited: a Message 2 or 4 may
+answer any of the latest `RSN_AP_REPLAY_WINDOW` built transmissions of its
+step, so a retransmission never invalidates an earlier frame the station may
+have answered, and a frame that failed to build is neither awaited nor evicts
+one; other counters are refused as stale peer input. The window closes when
+the step completes: a later Message 4 neither authorizes nor installs a key
+again. Message 3 carries as its Key RSC the packet number the caller names,
+the last one the installed GTK has handed out.
 
 ## Known defects
 
 - **SAE H2E ignores the Rejected Groups salt.** `sae.rs::SaeCommit::process`
   always derives the keyseed with a zero salt; `rejected_groups` is only
   parsed. H2E with a rejected group does not interoperate.
-- **The SAE responder can be exhausted with spoofed MACs.**
-  `authenticator/sae.rs::receive_commit` allocates a session before checking
-  status, token or commit; sessions have no expiry or retransmission timer.
-  No access point uses the responder yet.
+- **The SAE responder, outside the build, can be exhausted with spoofed
+  MACs.** `authenticator/sae.rs::receive_commit` allocates a session before
+  checking status, token or commit; sessions have no expiry or
+  retransmission timer.
 - **Non-constant-time comparison** of IGTK material in
   `bip.rs::BipReceiver::rekey`.
