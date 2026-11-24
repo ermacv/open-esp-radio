@@ -155,6 +155,11 @@ impl<'bitmap> TimPartialVirtualBitmap<'bitmap> {
     }
 }
 
+/// Beacon, management subtype 8, every flag clear (IEEE Std 802.11-2020,
+/// 9.2.4.1.3, Table 9-1).
+const BEACON_FRAME_CONTROL: crate::frame::FrameControlFields =
+    crate::frame::FrameControlFields::from_bytes([0x80, 0x00]);
+
 /// Build the exact Open or WPA2-Personal HT/WMM beacon without allocating.
 ///
 /// Open clears Privacy and omits the RSN element. The ERP and HT Operation
@@ -166,11 +171,6 @@ impl<'bitmap> TimPartialVirtualBitmap<'bitmap> {
     clippy::too_many_arguments,
     reason = "the frame writer keeps the caller-owned local profile and independent 802.11 fields explicit"
 )]
-/// Beacon, management subtype 8, every flag clear (IEEE Std 802.11-2020,
-/// 9.2.4.1.3, Table 9-1).
-const BEACON_FRAME_CONTROL: crate::frame::FrameControlFields =
-    crate::frame::FrameControlFields::from_bytes([0x80, 0x00]);
-
 pub fn write_ht_beacon(
     profile: &Advertisement,
     output: &mut [u8],

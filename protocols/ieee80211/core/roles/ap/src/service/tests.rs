@@ -2752,3 +2752,41 @@ fn a_buffered_unicast_completion_counts_only_against_the_release_in_flight() {
     );
     assert_eq!(status(&service), (1, BufferedRelease::Idle));
 }
+
+/// An Open BSS refuses an association request carrying an RSN element or
+/// an RSN Extension element, each alone.
+#[test]
+fn an_open_bss_refuses_each_security_element_alone() {
+    use oer_protocols_ieee80211_wire::scan::ElementOccurrence;
+    let open = ApAssociationSecurityObservation {
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
+        rsn_ie: ElementOccurrence::Absent,
+        rsnxe: ElementOccurrence::Absent,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
+    };
+    let admit = |security| {
+        admit_association_security::<oer_protocols_ieee80211_wire::security::spp::Interface>(
+            ApSecurityPolicy::Open,
+            security,
+        )
+    };
+    assert_eq!(admit(open), Ok(AssociationSecurity::Open));
+    for security in [
+        ApAssociationSecurityObservation {
+            rsn_ie: ElementOccurrence::Once(&WPA2_RSN),
+            ..open
+        },
+        ApAssociationSecurityObservation {
+            rsnxe: ElementOccurrence::Once(&[244, 1, 0x20]),
+            ..open
+        },
+    ] {
+        assert_eq!(
+            admit(security),
+            Err(ApAssociationSecurityError::InvalidElements)
+        );
+    }
+}

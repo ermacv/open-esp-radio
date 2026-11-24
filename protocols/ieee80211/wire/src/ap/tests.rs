@@ -991,3 +991,25 @@ fn the_largest_association_id_is_written_and_read_whole() {
         })
     );
 }
+
+/// A Null data frame names the access point as Receiver Address and BSSID;
+/// either one of another address refuses it alone.
+#[test]
+fn null_data_names_the_access_point_in_both_addresses() {
+    const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 1];
+    let mut frame = [0_u8; STA_NULL_DATA_FRAME_LEN];
+    // Null, To DS, Power Management (IEEE Std 802.11-2020, 9.2.4.1).
+    frame[..2].copy_from_slice(&[0x48, 0x11]);
+    frame[4..10].copy_from_slice(&ACCESS_POINT);
+    frame[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 2]);
+    frame[16..22].copy_from_slice(&ACCESS_POINT);
+    assert!(observe_ap_null_data_power_save_for_access_point(&frame, ACCESS_POINT).is_some());
+    for address in [4, 16] {
+        let mut other = frame;
+        other[address + 5] = 9;
+        assert!(
+            observe_ap_null_data_power_save_for_access_point(&other, ACCESS_POINT).is_none(),
+            "address at {address}"
+        );
+    }
+}

@@ -425,6 +425,8 @@ mod tests {
         assert_eq!(send_confirm(&[1, 2]), Some(0x0201));
         assert_eq!(finite_cyclic_group(&[19]), None);
         assert_eq!(send_confirm(&[]), None);
+        assert_eq!(finite_cyclic_group_field(SAE_GROUP_P256), [19, 0]);
+        assert_eq!(finite_cyclic_group_field(0x0201), [1, 2]);
     }
 
     const VALUES: SaeCommitValues = SaeCommitValues {

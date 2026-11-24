@@ -704,6 +704,23 @@ mod tests {
         .unwrap()
     }
 
+    /// The Key Length is written and read big-endian, whole.
+    #[test]
+    fn the_key_length_reads_back_whole() {
+        let packet = EapolKeyBuffer::<128>::encode(&EapolKeyFields {
+            protocol_version: 2,
+            key_information: KeyInformation::from_raw(0x008a),
+            key_length: 0x0110,
+            replay_counter: 1,
+            nonce: [0; 32],
+            key_rsc: [0; 8],
+            key_data: &[],
+        })
+        .unwrap();
+        assert_eq!(&packet.as_bytes()[7..9], &[0x01, 0x10]);
+        assert_eq!(packet.key().unwrap().key_length(), 0x0110);
+    }
+
     #[test]
     fn an_encoded_packet_has_the_reference_layout_and_reads_back() {
         let mut packet = message4();
