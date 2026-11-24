@@ -1,6 +1,9 @@
 //! Allocation-free HE NDP Announcement parsing and encoding.
 //!
 //! Received bytes reach this module; nothing here panics on them.
+//!
+//! This file is outside the build: no `mod` names it
+//! (`docs/repository-layout.md`). It returns with a role that sounds.
 
 use crate::frame::FrameControlFields;
 

@@ -16,8 +16,7 @@ channel context. `WifiPlan` retains the checked station, AP and monitor
 configuration; `standalone_monitor` narrows it to an exclusive monitor plan.
 Credentials, scan policy, DMA storage and executor resources belong to the
 service or composition. Monitor filters remain upper-MAC policy. ESP-NOW's
-exclusive station-address plan belongs to `oer-protocols-ieee80211-core-extensions-esp-now`, which
-consumes the arbiter's checked topology.
+exclusive station-address plan is outside the build (`core/extensions/esp-now`).
 
 The arbiter carries the lower-MAC `GateOpen<'id>` and `GateClosed<'id>`
 directly. Both own the install's one `GatePlace`; only the backend's

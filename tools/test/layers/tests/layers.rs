@@ -1498,13 +1498,12 @@ fn bluetooth_backend_core_edges_have_no_exemption() {
 }
 
 /// The IEEE 802.11 cores above the lower-MAC port.
-const IEEE80211_CORES: [&str; 7] = [
+const IEEE80211_CORES: [&str; 6] = [
     "oer-protocols-ieee80211-core-upper-mac",
     "oer-protocols-ieee80211-core-security-rsn",
     "oer-protocols-ieee80211-core-roles-sta",
     "oer-protocols-ieee80211-core-roles-ap",
     "oer-protocols-ieee80211-core-arbiter",
-    "oer-protocols-ieee80211-core-extensions-esp-now",
     "oer-protocols-ieee80211-runtime",
 ];
 
@@ -2234,7 +2233,7 @@ fn protocol_cores_never_wait_outside_their_tests() {
         }
     }
     // The rule takes the cores the tree has today, and more as they come.
-    assert!(cores >= 18, "only {cores} packages must not wait");
+    assert!(cores >= 17, "only {cores} packages must not wait");
     let known = WAITING_DEVIATIONS
         .iter()
         .map(|(file, count, _)| (*file, *count))
@@ -5993,10 +5992,6 @@ const STEP_BY_PLACE: &[(&str, &str)] = &[
     ("protocols/ieee80211/core/upper-mac/", BY_FINAL_CRATES),
     ("protocols/ieee80211/core/security/rsn/", BY_FINAL_CRATES),
     ("protocols/ieee80211/contracts/port/", BY_FINAL_CRATES),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/",
-        BY_FINAL_CRATES,
-    ),
     ("protocols/network/wire/", BY_FINAL_CRATES),
     ("protocols/network/core/", BY_FINAL_CRATES),
     ("protocols/network/port/", BY_FINAL_CRATES),

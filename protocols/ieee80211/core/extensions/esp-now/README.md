@@ -1,5 +1,7 @@
 # ESP-NOW protocol owners
 
+This package is kept as a source: the workspace excludes it.
+
 `oer-protocols-ieee80211-core-extensions-esp-now` contains the sans-IO ESP-NOW peer, security,
 duplicate-detection and bounded v2 reassembly owners, and the Espressif
 long-range PHY requests of an ESP-NOW peer. It forbids unsafe code and

@@ -1,9 +1,7 @@
-//! Monitor admission and channel policy above the lower-MAC monitor tap.
+//! Monitor admission above the lower-MAC monitor tap.
 //!
 //! The tap publishes every frame at its point of the receive path; these
-//! values select which frames a monitor keeps and which channels it visits.
-
-use core::{fmt, num::NonZeroU16};
+//! values select which frames a monitor keeps.
 
 use oer_protocols_ieee80211_contracts_port::{
     MonitorFrame, MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
@@ -11,7 +9,6 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 pub use oer_protocols_ieee80211_wire::monitor_injection::MonitorInjectionFrameError;
 use oer_protocols_ieee80211_wire::{
-    channel::Ghz2_4Channel,
     frame::{AddressFields, FrameControlFields, FrameType},
     monitor_injection::MonitorInjectionMpdu,
 };
@@ -25,138 +22,6 @@ pub fn stored_injection_request(
 ) -> Result<MonitorInjectionRequest<'_>, MonitorInjectionFrameError> {
     MonitorInjectionMpdu::from_no_fcs(mpdu)
         .map(|mpdu| MonitorInjectionRequest::new(binding, rate, mpdu))
-}
-
-/// Maximum number of ordered 2.4-GHz channels in one monitor hopping cycle.
-///
-/// This is a bounded product policy, not a claim that fourteen entries exhaust
-/// every valid 20/40-MHz channel geometry. Each retained entry carries the
-/// complete validated [`Ghz2_4Channel`], including its width relationship.
-pub const MONITOR_CHANNEL_SEQUENCE_CAPACITY: usize = 14;
-
-/// Allocation-free ordered channel cycle with one nonzero dwell per channel.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MonitorChannelSequence {
-    channels: [Ghz2_4Channel; MONITOR_CHANNEL_SEQUENCE_CAPACITY],
-    length: oer_portable_wire::PrefixLength<MONITOR_CHANNEL_SEQUENCE_CAPACITY>,
-    dwell_millis: NonZeroU16,
-}
-
-impl MonitorChannelSequence {
-    pub fn new(
-        channels: &[Ghz2_4Channel],
-        dwell_millis: NonZeroU16,
-    ) -> Result<Self, MonitorChannelSequenceError> {
-        let Some(&first) = channels.first() else {
-            return Err(MonitorChannelSequenceError::Empty);
-        };
-        let Some(length) = oer_portable_wire::PrefixLength::new(channels.len()) else {
-            return Err(MonitorChannelSequenceError::TooMany {
-                requested: channels.len(),
-                capacity: MONITOR_CHANNEL_SEQUENCE_CAPACITY,
-            });
-        };
-        for (index, &channel) in channels.iter().enumerate() {
-            if channels
-                .iter()
-                .take(index)
-                .any(|earlier| *earlier == channel)
-            {
-                return Err(MonitorChannelSequenceError::Duplicate(channel));
-            }
-        }
-        let mut stored = [first; MONITOR_CHANNEL_SEQUENCE_CAPACITY];
-        for (slot, &channel) in stored.iter_mut().zip(channels) {
-            *slot = channel;
-        }
-        Ok(Self {
-            channels: stored,
-            length,
-            dwell_millis,
-        })
-    }
-
-    pub fn channels(&self) -> &[Ghz2_4Channel] {
-        self.length.borrow(&self.channels)
-    }
-
-    /// How many channels the cycle visits; at least one.
-    pub const fn count(self) -> usize {
-        self.length.get()
-    }
-
-    pub const fn first(self) -> Ghz2_4Channel {
-        let [first, ..] = self.channels;
-        first
-    }
-
-    pub const fn dwell(self) -> NonZeroU16 {
-        self.dwell_millis
-    }
-
-    pub const fn dwell_millis(self) -> u16 {
-        self.dwell_millis.get()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MonitorChannelSequenceError {
-    Empty,
-    TooMany { requested: usize, capacity: usize },
-    Duplicate(Ghz2_4Channel),
-}
-
-impl fmt::Display for MonitorChannelSequenceError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Empty => formatter.write_str("a monitor hopping cycle cannot be empty"),
-            Self::TooMany {
-                requested,
-                capacity,
-            } => write!(
-                formatter,
-                "monitor hopping requested {requested} channels but capacity is {capacity}"
-            ),
-            Self::Duplicate(channel) => {
-                write!(formatter, "monitor hopping repeats channel {channel:?}")
-            }
-        }
-    }
-}
-
-impl core::error::Error for MonitorChannelSequenceError {}
-
-/// Physical-channel policy for one exclusive standalone monitor role.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MonitorChannelPolicy {
-    /// Preserve the historical behavior: capture on one channel until stop.
-    Fixed(Ghz2_4Channel),
-    /// Repeatedly traverse one bounded ordered cycle.
-    Hopping(MonitorChannelSequence),
-}
-
-impl MonitorChannelPolicy {
-    pub const fn fixed(channel: Ghz2_4Channel) -> Self {
-        Self::Fixed(channel)
-    }
-
-    pub const fn hopping(sequence: MonitorChannelSequence) -> Self {
-        Self::Hopping(sequence)
-    }
-
-    pub const fn initial_channel(self) -> Ghz2_4Channel {
-        match self {
-            Self::Fixed(channel) => channel,
-            Self::Hopping(sequence) => sequence.first(),
-        }
-    }
-
-    pub const fn hopping_sequence(self) -> Option<MonitorChannelSequence> {
-        match self {
-            Self::Fixed(_) => None,
-            Self::Hopping(sequence) => Some(sequence),
-        }
-    }
 }
 
 /// IEEE 802.11 frame class used by the bounded monitor filter.

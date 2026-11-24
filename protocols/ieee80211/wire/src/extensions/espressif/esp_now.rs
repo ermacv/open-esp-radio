@@ -7,6 +7,10 @@
 //! here is not evidence that a backend has admitted or authenticated its
 //! sender. Fixed headers are borrowed arrays after a single length check;
 //! variable Action data and ciphertext remain borrowed slices.
+//!
+//! This file is outside the build: no `mod` names it
+//! (`docs/repository-layout.md`). It returns with its one reader, the
+//! package `core/extensions/esp-now`.
 
 use crate::frame::FrameControlFields;
 
@@ -1001,6 +1005,14 @@ oer_portable_wire::bitfield! {
     pub struct EspNowV1Control[1] (little) {
         pub version, with_version: u8 = 0..4;
         pub reserved, with_reserved: u8 = 4..8;
+    }
+}
+
+// From `crate::ccmp`, whose private field it names; it returns there.
+/// An ESP-NOW packet number is a nonzero CCMP packet number.
+impl From<crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber> for CcmpPacketNumber {
+    fn from(packet_number: crate::extensions::espressif::esp_now::EspNowCcmpPacketNumber) -> Self {
+        Self(packet_number.wire())
     }
 }
 
