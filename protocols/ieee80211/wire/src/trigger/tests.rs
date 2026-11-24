@@ -31,7 +31,7 @@ fn parses_every_common_info_field_across_the_word_boundary() {
     assert_eq!(common.fields.he_ltf_symbols_and_midamble_periodicity(), 5);
     assert!(common.fields.uplink_stbc());
     assert!(common.fields.ldpc_extra_symbol_segment());
-    assert_eq!(common.fields.ap_tx_power_encoding(), 42);
+    assert_eq!(common.fields.ap_tx_power_encoding().get(), 42);
     assert_eq!(common.ap_tx_power, TriggerApTxPower::Dbm(22));
     assert_eq!(common.fields.pre_fec_padding_factor_encoding(), 2);
     assert_eq!(common.pre_fec_padding_factor, 2);
@@ -83,9 +83,9 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
             .and_then(|fields| fields.with_uplink_bandwidth_encoding(0))
             .and_then(|fields| fields.with_gi_ltf(TriggerGiLtf::TwoLtf1600Ns.encoding()))
             .and_then(|fields| fields.with_he_ltf_symbols_and_midamble_periodicity(5))
-            .and_then(|fields| fields.with_ap_tx_power_encoding(42))
+            .map(|fields| fields.with_ap_tx_power_encoding(oer_portable_wire::U8::constant::<42>()))
             .and_then(|fields| fields.with_pre_fec_padding_factor_encoding(2))
-            .and_then(|fields| fields.with_uplink_spatial_reuse(0xbeef))
+            .map(|fields| fields.with_uplink_spatial_reuse(0xbeef))
             .and_then(|fields| fields.with_uplink_he_sig_a2_reserved(0x155))
             .unwrap()
             .with_more_trigger_frames(true)
@@ -102,7 +102,9 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
             .and_then(|fields| fields.with_mcs(9))
             .and_then(|fields| fields.with_starting_spatial_stream_encoding(2))
             .and_then(|fields| fields.with_spatial_stream_count_encoding(3))
-            .and_then(|fields| fields.with_target_rssi_encoding(0x55))
+            .map(|fields| {
+                fields.with_target_rssi_encoding(oer_portable_wire::U8::constant::<0x55>())
+            })
             .unwrap()
             .with_ru_allocation_region(true)
             .with_coding_type(true)
@@ -193,14 +195,16 @@ fn basic_trigger_encoder_rejects_truncation_and_unbounded_fields() {
         common: TriggerCommonFields::from_bytes([0; 8])
             .with_uplink_length(1)
             .and_then(|fields| fields.with_gi_ltf(TriggerGiLtf::OneLtf1600Ns.encoding()))
-            .and_then(|fields| fields.with_ap_tx_power_encoding(20))
+            .map(|fields| fields.with_ap_tx_power_encoding(oer_portable_wire::U8::constant::<20>()))
             .and_then(|fields| fields.with_pre_fec_padding_factor_encoding(1))
             .and_then(|fields| fields.with_uplink_he_sig_a2_reserved(0x1ff))
             .unwrap(),
         user: TriggerScheduledUserFields::from_bytes([0; 5])
             .with_aid12(1)
             .and_then(|fields| fields.with_ru_allocation(61))
-            .and_then(|fields| fields.with_target_rssi_encoding(0x7f))
+            .map(|fields| {
+                fields.with_target_rssi_encoding(oer_portable_wire::U8::constant::<0x7f>())
+            })
             .unwrap(),
         dependent: TriggerBasicDependentInfo {
             mpdu_mu_spacing_factor: 0,

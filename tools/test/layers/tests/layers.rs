@@ -6721,7 +6721,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     (
         "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
-        31,
+        24,
         BY_STEP_3,
     ),
     ("protocols/network/core/src/dhcp.rs", 3, BY_STEP_3),

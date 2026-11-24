@@ -10,7 +10,7 @@ fn operation_fields() -> HeOperationFields {
     HeOperationFields::from_bytes([0; 6])
         .with_default_pe(4)
         .and_then(|fields| fields.with_bss_color(42))
-        .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+        .map(|fields| fields.with_basic_mcs_nss(0xfffc))
         .unwrap()
         .with_partial_bss_color(true)
 }

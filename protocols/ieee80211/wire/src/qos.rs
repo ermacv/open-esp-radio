@@ -107,7 +107,21 @@ impl WmmUserPriority {
         }
     }
     pub const fn value(self) -> u8 {
-        self.0 as u8
+        self.wire().get()
+    }
+    /// The priority as its three-bit value; the QoS Control TID field is
+    /// four bits wide (IEEE Std 802.11-2020, 9.2.4.5.2).
+    pub const fn wire(self) -> oer_portable_wire::U8<3> {
+        match self.0 {
+            UserPriority::Up0 => oer_portable_wire::U8::constant::<0>(),
+            UserPriority::Up1 => oer_portable_wire::U8::constant::<1>(),
+            UserPriority::Up2 => oer_portable_wire::U8::constant::<2>(),
+            UserPriority::Up3 => oer_portable_wire::U8::constant::<3>(),
+            UserPriority::Up4 => oer_portable_wire::U8::constant::<4>(),
+            UserPriority::Up5 => oer_portable_wire::U8::constant::<5>(),
+            UserPriority::Up6 => oer_portable_wire::U8::constant::<6>(),
+            UserPriority::Up7 => oer_portable_wire::U8::constant::<7>(),
+        }
     }
     /// Select a cell of the exact eight-entry array by the closed identifier.
     pub const fn select<T>(self, entries: &[T; 8]) -> &T {

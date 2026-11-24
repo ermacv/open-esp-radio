@@ -33,7 +33,7 @@ oer_portable_wire::bitfield! {
     /// The EtherType after an LLC/SNAP header, big-endian.
     /// SOURCE: IETF RFC 1042, "SNAP header"; IEEE Std 802-2014, 10.5.
     pub struct EtherTypeField[2] (big) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 oer_portable_wire::bitfield! {
@@ -41,23 +41,21 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.3.2.2.2 (A-MSDU subframe header,
     /// Figure 9-71).
     pub struct AmsduLength[2] (big) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 
 impl EtherTypeField {
     /// The field holding `ether_type`.
     pub const fn of(ether_type: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(ether_type))
+        Self::from_bytes([0; 2]).with_value(ether_type)
     }
 }
 
 impl AmsduLength {
     /// The field holding `length`.
     pub const fn of(length: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(length))
+        Self::from_bytes([0; 2]).with_value(length)
     }
 }
 
@@ -249,7 +247,7 @@ pub const fn rfc1042_ether_type(llc: [u8; LLC_SNAP_HEADER_LEN]) -> Option<u16> {
     let [p0, p1, p2, p3, p4, p5, e0, e1] = llc;
     let [r0, r1, r2, r3, r4, r5] = RFC1042_LLC_SNAP_PREFIX;
     if p0 == r0 && p1 == r1 && p2 == r2 && p3 == r3 && p4 == r4 && p5 == r5 {
-        Some(EtherTypeField::from_bytes([e0, e1]).value().get())
+        Some(EtherTypeField::from_bytes([e0, e1]).value())
     } else {
         None
     }
@@ -364,7 +362,7 @@ impl<'a> AmsduSubframes<'a> {
             length0,
             length1,
         ] = *header;
-        let msdu_length = AmsduLength::from_bytes([length0, length1]).value().get();
+        let msdu_length = AmsduLength::from_bytes([length0, length1]).value();
         let mut reader = oer_portable_wire::Reader::new(body);
         let msdu = reader
             .take(usize::from(msdu_length))
@@ -464,8 +462,7 @@ pub const fn plan_data_encapsulation(
     ];
     let qos_control = if qos {
         QosControl::from_bytes([0; 2])
-            // User priorities are three-bit values; the TID field is four bits.
-            .with_tid(oer_portable_wire::U8::<3>::from_low_bits(priority.value()).widen())
+            .with_tid(priority.wire().widen())
             .with_ack_policy(ack_policy.field())
             .to_bytes()
     } else {

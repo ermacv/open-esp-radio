@@ -121,9 +121,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         ADDBA_REQUEST_ACTION => Some(BlockAckAction::AddbaRequest {
             dialog_token: reader.u8().ok()?,
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
-            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?)
-                .time_units()
-                .get(),
+            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
             starting_sequence: SequenceNumber::from_sequence_control(SequenceControl::from_bytes(
                 reader.read().ok()?,
             )),
@@ -132,13 +130,9 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
         // format).
         ADDBA_RESPONSE_ACTION => Some(BlockAckAction::AddbaResponse {
             dialog_token: reader.u8().ok()?,
-            status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?)
-                .code()
-                .get(),
+            status: crate::management::StatusCodeField::from_bytes(reader.read().ok()?).code(),
             parameters: AddbaParameters::from_bytes(reader.read().ok()?),
-            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?)
-                .time_units()
-                .get(),
+            timeout_tu: BlockAckTimeout::from_bytes(reader.read().ok()?).time_units(),
         }),
         // SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
         DELBA_ACTION => {
@@ -150,9 +144,7 @@ pub fn parse_block_ack_action(body: &[u8]) -> Option<BlockAckAction> {
                 } else {
                     DelbaInitiator::Recipient
                 },
-                reason: crate::management::ReasonCodeField::from_bytes(reader.read().ok()?)
-                    .code()
-                    .get(),
+                reason: crate::management::ReasonCodeField::from_bytes(reader.read().ok()?).code(),
             })
         }
         _ => None,
@@ -448,15 +440,14 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.1.15 (Block Ack Timeout Value
     /// field), in time units.
     pub struct BlockAckTimeout[2] (little) {
-        pub time_units, with_time_units: (u16) = 0..16;
+        pub time_units, with_time_units: {u16} = 0..16;
     }
 }
 
 impl BlockAckTimeout {
     /// The field holding `time_units`.
     pub const fn of(time_units: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_time_units(oer_portable_wire::U16::from_low_bits(time_units))
+        Self::from_bytes([0; 2]).with_time_units(time_units)
     }
 }
 oer_portable_wire::bitfield! {

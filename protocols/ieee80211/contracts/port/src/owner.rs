@@ -623,16 +623,24 @@ impl GroupAddress {
 
 /// A traffic identifier, 0 to 15.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Tid(u8);
+pub struct Tid(oer_portable_wire::U8<4>);
 
 impl Tid {
     /// `tid`, when it is at most 15.
     pub const fn new(tid: u8) -> Option<Self> {
-        if tid <= 15 { Some(Self(tid)) } else { None }
+        match oer_portable_wire::U8::new(tid) {
+            Some(tid) => Some(Self(tid)),
+            None => None,
+        }
     }
 
     /// The identifier.
     pub const fn get(self) -> u8 {
+        self.0.get()
+    }
+
+    /// The identifier as its four-bit TID field holds it.
+    pub const fn wire(self) -> oer_portable_wire::U8<4> {
         self.0
     }
 }
@@ -675,19 +683,15 @@ pub struct QosControl {
 impl QosControl {
     /// The field, with the policy derived from its checked response header.
     pub const fn field(self, policy: QosAckPolicy) -> QosControlField {
-        QosControlField::new(
-            oer_portable_wire::U8::from_low_bits(self.tid.get()),
-            policy,
-            self.high,
-        )
-        .with_eosp(matches!(self.service_period, ServicePeriod::Ends))
-        .with_amsdu(matches!(self.body, QosBody::Amsdu))
+        QosControlField::new(self.tid.wire(), policy, self.high)
+            .with_eosp(matches!(self.service_period, ServicePeriod::Ends))
+            .with_amsdu(matches!(self.body, QosBody::Amsdu))
     }
 
     /// The values of a received field; its Ack Policy is the response's.
     pub const fn from_field(field: QosControlField) -> Self {
         Self {
-            tid: Tid(field.tid().get()),
+            tid: Tid(field.tid()),
             service_period: if field.eosp() {
                 ServicePeriod::Ends
             } else {

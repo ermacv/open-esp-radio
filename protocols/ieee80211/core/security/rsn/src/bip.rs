@@ -21,7 +21,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A six-octet BIP IPN. This value cannot be used as a CCMP PN.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct BipPacketNumber(u64);
+pub struct BipPacketNumber(oer_portable_wire::U64<48>);
 
 impl BipPacketNumber {
     pub const fn from_bytes(bytes: [u8; RSN_IPN_LEN]) -> Self {
@@ -35,8 +35,8 @@ impl BipPacketNumber {
 
 impl PacketNumber48 for BipPacketNumber {
     fn checked_add(self, distance: u64) -> Option<Self> {
-        let next = self.0.checked_add(distance)?;
-        (next <= oer_protocols_ieee80211_wire::bip::IPN_MAX).then_some(Self(next))
+        let next = self.0.get().checked_add(distance)?;
+        oer_portable_wire::U64::new(next).map(Self)
     }
 }
 
@@ -169,7 +169,7 @@ impl BipTransmitter {
             engine,
             self.key_id,
             &self.key,
-            candidate.packet_number().0,
+            candidate.packet_number().0.get(),
             frame,
             length,
         )

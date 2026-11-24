@@ -309,24 +309,21 @@ fn unaligned_big_endian_fields_retain_reserved_end_bits() {
 }
 
 crate::bitfield! {
-    struct Proved32[4] (little) { value, with_value: (u32) = 0..32; }
+    struct Whole32[4] (little) { value, with_value: {u32} = 0..32; }
 }
 crate::bitfield! {
-    struct ProvedBigSpan[9] (big) { value, with_value: (u64) = 7..71; }
+    struct WholeBigSpan[9] (big) { value, with_value: {u64} = 7..71; }
 }
 
 #[test]
-fn full_width_and_unaligned_getters_retain_proofs_without_truncation() {
-    let field = Proved32::from_bytes(u32::MAX.to_le_bytes());
-    assert_eq!(field.value().get(), u32::MAX);
-    assert_eq!(
-        Proved32::from_bytes([0; 4]).with_value(field.value()),
-        field
-    );
+fn whole_and_unaligned_fields_read_and_write_without_truncation() {
+    let field = Whole32::from_bytes(u32::MAX.to_le_bytes());
+    assert_eq!(field.value(), u32::MAX);
+    assert_eq!(Whole32::from_bytes([0; 4]).with_value(field.value()), field);
     for raw in [0, 1, 0x0123_4567_89ab_cdef, u64::MAX] {
-        let original = ProvedBigSpan::from_bytes([0xa5; 9]);
-        let changed = original.with_value(crate::U64::new(raw).unwrap());
-        assert_eq!(changed.value().get(), raw);
+        let original = WholeBigSpan::from_bytes([0xa5; 9]);
+        let changed = original.with_value(raw);
+        assert_eq!(changed.value(), raw);
         assert_eq!(changed.with_value(changed.value()), changed);
         assert_eq!(changed.to_bytes()[0] & 0x80, 0x80);
         assert_eq!(changed.to_bytes()[8] & 0x7f, 0x25);
@@ -334,20 +331,20 @@ fn full_width_and_unaligned_getters_retain_proofs_without_truncation() {
 }
 
 crate::bitfield! {
-    struct PaddedLittle[12] (little) { value, with_value: (u64) = 15..79; }
+    struct PaddedLittle[12] (little) { value, with_value: {u64} = 15..79; }
 }
 crate::bitfield! {
-    struct PaddedBig[12] (big) { value, with_value: (u64) = 15..79; }
+    struct PaddedBig[12] (big) { value, with_value: {u64} = 15..79; }
 }
 
 #[test]
 fn const_fields_skip_whole_octets_and_preserve_surrounding_data() {
-    const VALUE: crate::U64<64> = crate::U64::constant::<0x0123_4567_89ab_cdef>();
+    const VALUE: u64 = 0x0123_4567_89ab_cdef;
     const LITTLE: PaddedLittle = PaddedLittle::from_bytes([0xa5; 12]).with_value(VALUE);
     const BIG: PaddedBig = PaddedBig::from_bytes([0xa5; 12]).with_value(VALUE);
-    const DECODED: [u64; 2] = [LITTLE.value().get(), BIG.value().get()];
+    const DECODED: [u64; 2] = [LITTLE.value(), BIG.value()];
 
-    assert_eq!(DECODED, [VALUE.get(); 2]);
+    assert_eq!(DECODED, [VALUE; 2]);
     assert_eq!(LITTLE.value(), VALUE);
     assert_eq!(BIG.value(), VALUE);
     // The field is the low 64 bits shifted by 15, retaining both partial
@@ -477,4 +474,33 @@ fn a_closed_enum_names_every_value_of_its_width_once() {
     // A width no array of names can fill.
     assert!(!names_every_value(&[0, 1], usize::BITS));
     assert!(!names_every_value(&[0, 1], 64));
+}
+
+crate::bitfield! {
+    struct WholeOctets[5] (little) {
+        low, with_low: u8 = 0..4;
+        word, with_word: {u16} = 4..20;
+        high, with_high: u32 = 20..40;
+    }
+}
+
+/// A whole field reads and writes every value of its type, each octet it
+/// spans, and keeps every other bit of the struct.
+#[test]
+fn a_whole_field_writes_every_octet_and_keeps_the_rest() {
+    for value in [0, 1, 0x00ff, 0xff00, 0x1234, u16::MAX] {
+        for around in [[0; 5], [0xff; 5], [0xa5; 5]] {
+            let original = WholeOctets::from_bytes(around);
+            let written = original.with_word(value);
+            assert_eq!(written.word(), value);
+            assert_eq!(written.low(), original.low());
+            assert_eq!(written.high(), original.high());
+            assert_eq!(written.with_word(original.word()), original);
+            // Its neighbours' setters keep it.
+            let neighbours = written.with_low(0x9).unwrap().with_high(0xabcde).unwrap();
+            assert_eq!(neighbours.word(), value);
+        }
+    }
+    let written = WholeOctets::from_bytes([0; 5]).with_word(0xabcd);
+    assert_eq!(written.to_bytes(), [0xd0, 0xbc, 0x0a, 0, 0]);
 }

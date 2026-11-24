@@ -61,12 +61,11 @@ impl SelectedRsn {
         let header = crate::management::ElementHeader::from_bytes(*element);
         *element = header
             .with_length(header.length().checked_add(PMKID_LIST_LEN as u8)?)
-            .ok()?
             .to_bytes();
         crate::encoding::write_array::<SELECTED_RSN_IE_LEN, _, _>(
             &mut resumed.bytes,
             &crate::management::PmkidCount::from_bytes([0; 2])
-                .with_count(oer_portable_wire::U16::constant::<1>())
+                .with_count(1)
                 .to_bytes(),
         );
         crate::encoding::write_array::<{ SELECTED_RSN_IE_LEN + 2 }, _, _>(

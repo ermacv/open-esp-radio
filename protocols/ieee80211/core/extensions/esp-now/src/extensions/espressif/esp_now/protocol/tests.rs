@@ -172,7 +172,7 @@ fn duplicate_history_evicts_only_oldest_and_reset_counts_all_fingerprints() {
         EspNowV1Frame::new(
             EspNowDestination::Unicast(config.local_address()),
             EspNowUnicastAddress::new([2, 0, 0, 0, 0, 2]).unwrap(),
-            SequenceNumber::from_low_bits(u16::from(number)),
+            SequenceNumber::new(u16::from(number)).unwrap(),
             EspNowRandomValue::new([number; 4]),
             b"body",
         )

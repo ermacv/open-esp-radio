@@ -27,25 +27,17 @@ pub const RSN_AKM_SAE: u8 = 8;
 /// `00-0F-AC:6`: BIP-CMAC-128, the default group management cipher.
 pub const RSN_CIPHER_BIP_CMAC_128: u8 = 6;
 /// RSN Capabilities: management frame protection required.
-pub const RSN_CAPABILITY_MFPR: u16 = RsnCapabilities::from_bytes([0; 2])
-    .with_mfpr(true)
-    .value()
-    .get();
+pub const RSN_CAPABILITY_MFPR: u16 = RsnCapabilities::from_bytes([0; 2]).with_mfpr(true).value();
 /// RSN Capabilities: management frame protection capable.
-pub const RSN_CAPABILITY_MFPC: u16 = RsnCapabilities::from_bytes([0; 2])
-    .with_mfpc(true)
-    .value()
-    .get();
+pub const RSN_CAPABILITY_MFPC: u16 = RsnCapabilities::from_bytes([0; 2]).with_mfpc(true).value();
 /// RSN Capabilities: signaling-and-payload-protected A-MSDU capable.
 pub const RSN_CAPABILITY_SPP_AMSDU_CAPABLE: u16 = RsnCapabilities::from_bytes([0; 2])
     .with_spp_capable(true)
-    .value()
-    .get();
+    .value();
 /// SPP A-MSDU Required; valid only together with SPP A-MSDU Capable.
 pub const RSN_CAPABILITY_SPP_AMSDU_REQUIRED: u16 = RsnCapabilities::from_bytes([0; 2])
     .with_spp_required(true)
-    .value()
-    .get();
+    .value();
 /// Length of one PMKID.
 pub const RSN_PMKID_LEN: usize = 16;
 
@@ -434,7 +426,7 @@ oer_portable_wire::bitfield! {
         pub spp_capable, with_spp_capable: bool = 10..11;
         pub spp_required, with_spp_required: bool = 11..12;
         /// The whole field as one little-endian value.
-        pub value, with_value: (u16) = 0..16, view;
+        pub value, with_value: {u16} = 0..16, view;
     }
 }
 oer_portable_wire::bitfield! {
@@ -443,15 +435,14 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.24.1 (RSNE: general, Figure
     /// 9-288).
     pub struct RsnField[2] (little) {
-        pub value, with_value: (u16) = 0..16;
+        pub value, with_value: {u16} = 0..16;
     }
 }
 
 impl RsnField {
     /// The field holding `value`.
     pub const fn of(value: u16) -> Self {
-        // Sixteen bits of sixteen: nothing is cut.
-        Self::from_bytes([0; 2]).with_value(oer_portable_wire::U16::from_low_bits(value))
+        Self::from_bytes([0; 2]).with_value(value)
     }
 }
 oer_portable_wire::bitfield! {

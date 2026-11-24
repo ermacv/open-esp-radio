@@ -792,24 +792,38 @@ pub struct HeLocalCapabilities {
 /// 160 MHz and 80+80 MHz, whose maps this element does not hold); clause
 /// numbers as Linux `include/linux/ieee80211-he.h` cites them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HeChannelWidthSet(u8);
+pub struct HeChannelWidthSet(ChannelWidthSetField);
+
+oer_portable_wire::bitfield! {
+    /// The Supported Channel Width Set subfield's bits this element names,
+    /// and the seven-bit subfield they lie in.
+    struct ChannelWidthSetField[1] (little) {
+        ghz2_4_mhz40, with_ghz2_4_mhz40: bool = 0..1;
+        ghz5_mhz40_80, with_ghz5_mhz40_80: bool = 1..2;
+        set, with_set: (u8) = 0..7, view;
+    }
+}
 
 impl HeChannelWidthSet {
     /// 20 MHz only, in any band.
-    pub const MHZ20: Self = Self(0);
+    pub const MHZ20: Self = Self(ChannelWidthSetField::from_bytes([0]));
     /// B0: 40 MHz in the 2.4 GHz band.
-    pub const GHZ2_4_MHZ40: Self = Self(1 << 0);
+    pub const GHZ2_4_MHZ40: Self = Self(Self::MHZ20.0.with_ghz2_4_mhz40(true));
     /// B1: 40 and 80 MHz in the 5 and 6 GHz bands.
-    pub const GHZ5_MHZ40_80: Self = Self(1 << 1);
+    pub const GHZ5_MHZ40_80: Self = Self(Self::MHZ20.0.with_ghz5_mhz40_80(true));
 
     /// The widths of either set.
     pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+        Self(
+            self.0
+                .with_ghz2_4_mhz40(self.0.ghz2_4_mhz40() || other.0.ghz2_4_mhz40())
+                .with_ghz5_mhz40_80(self.0.ghz5_mhz40_80() || other.0.ghz5_mhz40_80()),
+        )
     }
 
     /// The field's value.
     pub const fn field(self) -> oer_portable_wire::U8<7> {
-        oer_portable_wire::U8::from_low_bits(self.0)
+        self.0.set()
     }
 }
 
@@ -1130,7 +1144,7 @@ oer_portable_wire::bitfield! {
         pub bss_color, with_bss_color: u8 = 24..30;
         pub partial_bss_color, with_partial_bss_color: bool = 30..31;
         pub bss_color_disabled, with_bss_color_disabled: bool = 31..32;
-        pub basic_mcs_nss, with_basic_mcs_nss: u16 = 32..48;
+        pub basic_mcs_nss, with_basic_mcs_nss: {u16} = 32..48;
     }
 }
 oer_portable_wire::bitfield! {

@@ -629,9 +629,9 @@ pub fn parse_ap_management_request<'a>(
             let mut reader = oer_portable_wire::Reader::new(management_body);
             let fields = crate::management::AuthenticationFields::from_bytes(reader.read().ok()?);
             let body = reader.remaining();
-            let algorithm = fields.algorithm().get();
-            let transaction = fields.transaction().get();
-            let status = fields.status_code().get();
+            let algorithm = fields.algorithm();
+            let transaction = fields.transaction();
+            let status = fields.status_code();
             match algorithm {
                 OPEN_SYSTEM_AUTHENTICATION_ALGORITHM => (transaction == 1 && status == 0)
                     .then_some(ApManagementRequest::OpenAuthentication { peer }),
@@ -670,9 +670,7 @@ pub fn parse_ap_management_request<'a>(
         }
         10 | 12 => {
             let mut reader = oer_portable_wire::Reader::new(management_body);
-            let reason = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?)
-                .code()
-                .get();
+            let reason = crate::management::ReasonCodeField::from_bytes(reader.read().ok()?).code();
             if subtype == 10 {
                 Some(ApManagementRequest::Disassociation { peer, reason })
             } else {

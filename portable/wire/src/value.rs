@@ -43,17 +43,6 @@ macro_rules! unsigned {
                 Self(VALUE)
             }
 
-            /// Extract the low `WIDTH` bits. Callers choose this only when the
-            /// wire format defines truncation, or the source is a decoded field.
-            pub const fn from_low_bits(value: $raw) -> Self {
-                const {
-                    if !(WIDTH > 0 && WIDTH <= <$raw>::BITS as usize) {
-                        panic!("invalid wire field geometry or value");
-                    }
-                }
-                Self(value & const { <$raw>::MAX >> (<$raw>::BITS as usize - WIDTH) })
-            }
-
             /// Decode a field whose const geometry proves this exact width.
             ///
             /// ```compile_fail,E0080

@@ -430,9 +430,8 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     let bssid = Bssid::new(IndividualAddress::new([b0, b1, b2, b3, b4, b5])?)?;
     let mut record = ScanRecord::new(bssid);
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
-    record.beacon_interval_tu = crate::management::BeaconIntervalField::from_bytes([i0, i1])
-        .time_units()
-        .get();
+    record.beacon_interval_tu =
+        crate::management::BeaconIntervalField::from_bytes([i0, i1]).time_units();
     record.capability_info = crate::management::CapabilityInformation::from_bytes([c0, c1]);
 
     while let Ok(&element_header) = elements.array::<2>() {

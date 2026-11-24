@@ -9,6 +9,7 @@ description = "Stateless IEEE 802.11 CCMP, BIP and bounded AES key-wrap transfor
 
 [dependencies]
 oer-portable-crypto = { path = "../../../../../portable/crypto" }
+oer-portable-wire = { path = "../../../../../portable/wire" }
 oer-protocols-ieee80211-wire = { path = "../../../wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
 aes = { version = "0.8.4", default-features = false, features = ["zeroize"] }

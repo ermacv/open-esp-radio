@@ -144,7 +144,6 @@ impl core::error::Error for EspNowVersionError {}
 const ACTION_FRAME_CONTROL: FrameControlFields = FrameControlFields::from_bytes([0xd0, 0x00]);
 const BROADCAST_ADDRESS: [u8; 6] = [0xff; 6];
 const VENDOR_ELEMENT_FIXED_BODY_LEN: usize = 5;
-const CCMP_PACKET_NUMBER_MAX: u64 = (1_u64 << 48) - 1;
 
 /// Valid individual address used as the source of an ESP-NOW frame.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -253,26 +252,32 @@ impl EspNowRandomValue {
 /// was checked or that the frame is fresh.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
-pub struct EspNowCcmpPacketNumber(u64);
+pub struct EspNowCcmpPacketNumber(oer_portable_wire::U64<48>);
 
 impl EspNowCcmpPacketNumber {
     pub const fn new(value: u64) -> Result<Self, EspNowCcmpPacketNumberError> {
         if value == 0 {
             return Err(EspNowCcmpPacketNumberError::Zero);
         }
-        if value > CCMP_PACKET_NUMBER_MAX {
-            return Err(EspNowCcmpPacketNumberError::Exceeds48Bits(value));
+        match oer_portable_wire::U64::new(value) {
+            Some(value) => Ok(Self(value)),
+            None => Err(EspNowCcmpPacketNumberError::Exceeds48Bits(value)),
         }
-        Ok(Self(value))
     }
 
     pub const fn value(self) -> u64 {
+        self.0.get()
+    }
+
+    /// The PN as its 48-bit field holds it.
+    pub const fn wire(self) -> oer_portable_wire::U64<48> {
         self.0
     }
 
     pub const fn bytes(self) -> [u8; 6] {
-        let bytes = self.0.to_le_bytes();
-        [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]
+        crate::ccmp::PacketNumberField::from_bytes([0; 6])
+            .with_value(self.0)
+            .to_bytes()
     }
 }
 
@@ -986,6 +991,27 @@ oer_portable_wire::bitfield! {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The highest 48-bit PN is held whole; one beyond it and zero are
+    /// refused where the number enters.
+    #[test]
+    fn a_packet_number_holds_48_bits() {
+        let highest = EspNowCcmpPacketNumber::new((1 << 48) - 1).unwrap();
+        assert_eq!(highest.bytes(), [0xff; 6]);
+        assert_eq!(highest.value(), (1 << 48) - 1);
+        assert_eq!(
+            crate::ccmp::CcmpPacketNumber::from(highest).value(),
+            (1 << 48) - 1
+        );
+        assert_eq!(
+            EspNowCcmpPacketNumber::new(1 << 48),
+            Err(EspNowCcmpPacketNumberError::Exceeds48Bits(1 << 48))
+        );
+        assert_eq!(
+            EspNowCcmpPacketNumber::new(0),
+            Err(EspNowCcmpPacketNumberError::Zero)
+        );
+    }
 
     #[test]
     fn v2_element_boundaries_preserve_every_admitted_payload_length() {
