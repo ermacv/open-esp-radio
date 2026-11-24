@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_wire::{
 };
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::state::{RsnApState, RsnStaState, RsnTransmit, RsnTxMessage};
+use crate::state::{RsnStaState, RsnTransmit, RsnTxMessage};
 use crate::{
     Akm, EapolKeyFrame, Ptk, RSN_KCK_LEN, RSN_MIC_LEN, RsnInterface, RsnKeyConfirmationKey,
 };
@@ -57,7 +57,7 @@ pub use key_data::{
     RsnGroupKeys, RsnGtk, RsnIgtk, RsnPlainKeyData, parse_group_gtk_key_data, parse_gtk_key_data,
 };
 pub use security_ies::{OwnedAssociationSecurityIes, OwnedRsnIe};
-pub use transmit::{RsnTxFrame, build_ap_action_frame, build_sta_action_frame};
+pub use transmit::{RsnTxFrame, build_sta_action_frame};
 
 #[cfg(test)]
 pub(crate) mod captured_m3;

@@ -412,8 +412,9 @@ fn a_message3_retry_that_failed_to_build_is_not_awaited() {
         .unwrap()
         .replay_counter();
     let deadline = service.next_wpa2_retry_deadline().unwrap();
+    // 128 octets hold Message 1 but not Message 3.
     assert_eq!(
-        service.take_due_wpa2_retry::<1, _>(deadline, &gtk).err(),
+        service.take_due_wpa2_retry::<128, _>(deadline, &gtk).err(),
         Some(ApWpa2Error::Frame(RsnFrameError::CapacityExceeded))
     );
     // Its counter is spent; a signed answer to it is not an awaited answer.
@@ -439,41 +440,4 @@ fn a_message3_retry_that_failed_to_build_is_not_awaited() {
             .unwrap(),
         ApWpa2Progress::AuthorizePeer
     ));
-}
-
-#[test]
-fn a_message1_retry_that_failed_to_build_is_not_awaited() {
-    let mut storage = AccessPointPeerStorage::new();
-    let mut service = service(&mut storage);
-    let gtk = gtk_numbers();
-    begin(&mut service);
-    let deadline = service.next_wpa2_retry_deadline().unwrap();
-    assert_eq!(
-        service.take_due_wpa2_retry::<1, _>(deadline, &gtk).err(),
-        Some(ApWpa2Error::Frame(RsnFrameError::CapacityExceeded))
-    );
-    // `signed_message2` answers counter 9, the built first Message 1; the
-    // failed retry took counter 10, which no answer may claim.
-    let unbuilt = {
-        let rsn = OwnedRsnIe::<64>::try_copy(&WPA2_RSN).unwrap();
-        let frame = RsnTxFrame::<512>::message2(
-            oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
-            AP,
-            10,
-            SNONCE,
-            &rsn,
-        )
-        .unwrap()
-        .authenticate(&station_ptk(), &mut SoftwareAes128)
-        .unwrap();
-        OwnedEapolFrame::<512>::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
-    };
-    assert!(matches!(
-        service.on_eapol(PEER, unbuilt, &gtk).unwrap(),
-        ApWpa2Progress::None
-    ));
-    // The built first Message 1 is still awaited; Message 3 takes a counter
-    // above the spent one.
-    let message3 = first_message3(&mut service, &gtk);
-    assert_eq!(message3.key_frame().unwrap().replay_counter(), 11);
 }

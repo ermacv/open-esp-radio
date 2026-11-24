@@ -69,7 +69,6 @@ use oer_protocols_ieee80211_core_security_cipher::aes::{RsnKeyData, SoftwareAes1
 use oer_protocols_ieee80211_core_security_rsn::{
     EapolKeyMessage, OwnedEapolFrame, PtkContext, RsnInterface,
     frames::{OwnedAssociationSecurityIes, OwnedRsnIe, RsnGtk, RsnTxFrame, parse_gtk_key_data},
-    state::{RsnApAction, RsnTicket},
 };
 use oer_protocols_ieee80211_wire::status::status_code;
 use oer_protocols_ieee80211_wire::{
@@ -726,11 +725,16 @@ fn association_owns_a_bounded_wpa2_state() {
         service.begin_wpa2(PEER).unwrap(),
         ApMlmeAction::BeginWpa2 { peer: PEER }
     );
-    assert!(matches!(
-        service.wpa2(PEER).unwrap().message1().unwrap(),
-        RsnApAction::Transmit(_)
-    ));
-    let _ticket_type_is_owned: Option<RsnTicket> = None;
+    let (message1, _) = service.begin_wpa2_frame::<512>(PEER).unwrap().into_parts();
+    assert_eq!(
+        message1.key_frame().unwrap().message(),
+        EapolKeyMessage::PairwiseMessage1
+    );
+    // The handshake started once: Message 1 is not built again.
+    assert_eq!(
+        service.begin_wpa2_frame::<512>(PEER).err(),
+        Some(ApWpa2Error::Service(ApServiceError::WrongPeerPhase))
+    );
 }
 
 #[test]
@@ -987,8 +991,17 @@ fn message2_must_echo_the_exact_association_rsn() {
             .unwrap(),
         ApWpa2Progress::DeauthenticatePeer
     ));
-    assert_eq!(service.wpa2(PEER).unwrap().phase(), RsnApPhase::Failed);
+    // The ended handshake is dropped: nothing of it answers.
     assert!(service.pending_ptk(PEER).is_err());
+    assert!(!service.wpa2_authorized(PEER).unwrap());
+    assert!(matches!(
+        service.on_eapol(
+            PEER,
+            signed_message2(&SUPPLICANT_RSN, &[], ANONCE, SNONCE),
+            &gtk_numbers()
+        ),
+        Err(ApWpa2Error::Service(ApServiceError::WrongPeerPhase))
+    ));
 }
 
 #[test]
@@ -1056,10 +1069,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         service.on_eapol(PEER, forged_m2, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
     ));
-    assert_eq!(
-        service.wpa2(PEER).unwrap().phase(),
-        RsnApPhase::AwaitingMessage2
-    );
+    // Message 2 is still awaited: no PTK.
     assert!(service.pending_ptk(PEER).is_err());
     assert_eq!(
         service.peer_status(PEER).unwrap().deadline,
@@ -1072,10 +1082,9 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         service.on_eapol(PEER, valid_m2, &gtk_numbers()).unwrap(),
         ApWpa2Progress::Transmit(_)
     ));
-    assert_eq!(
-        service.wpa2(PEER).unwrap().phase(),
-        RsnApPhase::AwaitingMessage4
-    );
+    // Message 4 is awaited: the PTK exists and the peer is not authorized.
+    assert!(service.pending_ptk(PEER).is_ok());
+    assert!(!service.wpa2_authorized(PEER).unwrap());
 
     // Neither forged nor even MIC-valid duplicate M2 directly elicits a
     // fresh M3. The finite authenticator retry timer owns retransmission.
@@ -1121,10 +1130,9 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         service.on_eapol(PEER, forged_m4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::None
     ));
-    assert_eq!(
-        service.wpa2(PEER).unwrap().phase(),
-        RsnApPhase::AwaitingMessage4
-    );
+    // Message 4 is awaited: the PTK exists and the peer is not authorized.
+    assert!(service.pending_ptk(PEER).is_ok());
+    assert!(!service.wpa2_authorized(PEER).unwrap());
     assert!(matches!(
         service.on_eapol(PEER, valid_m4, &gtk_numbers()).unwrap(),
         ApWpa2Progress::AuthorizePeer

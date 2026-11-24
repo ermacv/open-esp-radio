@@ -27,9 +27,9 @@
 //!
 //! The RFC 3394 algorithm has one copy, in [`rfc3394`]: the unwrap and the
 //! wrap run to completion in place in the caller's buffer, each block finished
-//! on return. The unwrap runs over a block engine that may refuse a key or a
-//! block with a typed error ([`block::BlockEngine`]); the wrap over the
-//! infallible [`block::BlockCipher`].
+//! on return, over a block engine that may refuse a key or a block with a
+//! typed error ([`block::BlockEngine`]). [`KeyWrapRequest`] and
+//! [`block::wrap_now`] are the wrap's request and run, as the unwrap's.
 
 #[cfg(test)]
 extern crate std;
@@ -92,13 +92,6 @@ impl<const N: usize> KeyData<N> {
     /// The held bytes.
     pub fn as_bytes(&self) -> &[u8] {
         self.bytes.get(..self.len).unwrap_or(&[])
-    }
-
-    fn cleared() -> Self {
-        Self {
-            len: 0,
-            bytes: [0; N],
-        }
     }
 }
 
@@ -170,6 +163,46 @@ impl<const N: usize> KeyUnwrapResponse<N> {
     /// The buffer with its plaintext, or why the unwrap refused (the cleared
     /// buffer is erased with the response).
     pub fn into_plaintext(self) -> Result<KeyData<N>, KeyUnwrapError> {
+        let Self { data, outcome } = self;
+        outcome.map(|()| data)
+    }
+}
+
+/// One RFC 3394 wrap under an AES-128 key-encryption key. The request owns
+/// both; consuming it erases the key.
+pub struct KeyWrapRequest<const N: usize> {
+    kek: Aes128Key,
+    plaintext: KeyData<N>,
+}
+
+impl<const N: usize> KeyWrapRequest<N> {
+    pub const fn new(kek: Aes128Key, plaintext: KeyData<N>) -> Self {
+        Self { kek, plaintext }
+    }
+
+    /// Split the request for an engine: the key goes to its block primitive,
+    /// the buffer to [`rfc3394::wrap`].
+    pub fn into_parts(self) -> (Aes128Key, KeyData<N>) {
+        (self.kek, self.plaintext)
+    }
+}
+
+/// The completion of one wrap: the request's buffer, holding the wrapped key
+/// data on success and cleared on refusal.
+pub struct KeyWrapResponse<const N: usize> {
+    data: KeyData<N>,
+    outcome: Result<(), rfc3394::KeyWrapError>,
+}
+
+impl<const N: usize> KeyWrapResponse<N> {
+    /// The wrapped key data, or why the wrap refused.
+    pub fn wrapped(&self) -> Result<&[u8], rfc3394::KeyWrapError> {
+        self.outcome.map(|()| self.data.as_bytes())
+    }
+
+    /// The buffer with its wrapped data, or why the wrap refused (the cleared
+    /// buffer is erased with the response).
+    pub fn into_wrapped(self) -> Result<KeyData<N>, rfc3394::KeyWrapError> {
         let Self { data, outcome } = self;
         outcome.map(|()| data)
     }

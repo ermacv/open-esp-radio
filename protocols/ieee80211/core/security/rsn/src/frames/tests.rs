@@ -6,7 +6,6 @@ use oer_protocols_ieee80211_wire::eapol::GtkTx;
 const BIP: Option<oer_protocols_ieee80211_wire::security::GroupManagementCipher> =
     Some(oer_protocols_ieee80211_wire::security::GroupManagementCipher::BipCmac128);
 use crate::EapolKeyMessage;
-use crate::state::RsnApAction;
 
 fn rsn_ie() -> OwnedRsnIe<22> {
     let mut bytes = [0; 22];
@@ -125,24 +124,6 @@ fn state_actions_are_bound_to_role_peer_and_nonce_context() {
     let m2 = build_sta_action_frame::<128, _>(&sta, m2_action, &security_ies).unwrap();
     assert_eq!(m2.peer(), &[2; 6]);
     assert_eq!(m2.key_frame().unwrap().nonce(), &[3; 32]);
-    assert_eq!(
-        build_ap_action_frame::<128>(
-            &RsnApState::new(crate::Akm::Psk, [2; 6], [1; 6], [4; 32], 7).unwrap(),
-            m2_action,
-            [0; 8],
-            &[]
-        )
-        .err(),
-        Some(RsnFrameError::UnexpectedTransmitAction)
-    );
-
-    let ap = RsnApState::new(crate::Akm::Psk, [2; 6], [1; 6], [4; 32], 7).unwrap();
-    let RsnApAction::Transmit(m1_action) = ap.message1().unwrap() else {
-        panic!("message1 must produce a transmit action")
-    };
-    let m1 = build_ap_action_frame::<128>(&ap, m1_action, [0; 8], &[]).unwrap();
-    assert_eq!(m1.peer(), &[1; 6]);
-    assert_eq!(m1.key_frame().unwrap().nonce(), &[4; 32]);
 }
 
 #[test]

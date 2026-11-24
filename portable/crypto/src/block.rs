@@ -90,6 +90,19 @@ impl<P: Aes128Blocks> Aes128Engine for P {
     }
 }
 
+/// Wrap `request` to completion over `engine` ([`rfc3394::wrap`]): each
+/// block is encrypted at once, and a refused key or block ends the operation
+/// with [`crate::rfc3394::KeyWrapError::Engine`]. The key is erased from the
+/// request right after the engine loads it, before the first block, and from
+/// the engine after the last; plaintext of an invalid length loads no key.
+pub fn wrap_now<E: Aes128Engine, const N: usize>(
+    engine: &mut E,
+    request: crate::KeyWrapRequest<N>,
+) -> crate::KeyWrapResponse<N> {
+    let (kek, plaintext) = request.into_parts();
+    crate::rfc3394::wrap(plaintext, move || engine.load(&kek))
+}
+
 /// Unwrap `request` to completion over `engine` ([`rfc3394::unwrap`]): each
 /// block is decrypted at once, and a refused key or block ends the operation
 /// with [`crate::KeyUnwrapError::Engine`]. The key is erased from the request

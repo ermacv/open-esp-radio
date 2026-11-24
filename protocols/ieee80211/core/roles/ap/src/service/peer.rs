@@ -195,15 +195,17 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
                 association_id: None,
             });
         }
-        let wpa2 = RsnApState::new(
+        // The checked start is built straight into the holder's variant; the
+        // language moves it there by value.
+        existing.handshake = ApHandshake::Associated(RsnApStart::new(
             akm,
             access_point,
             peer,
             authenticator_nonce,
             initial_replay_counter,
-        )?;
+            association_security_binding,
+        )?);
         existing.phase = ApPeerPhase::Securing;
-        existing.authenticator = Some(RsnAuthenticator::new(wpa2, association_security_binding));
         if let Some((pmk, pmkid)) = resumed {
             existing.pmk = Some(pmk);
             existing.pmkid = Some(pmkid);
@@ -293,7 +295,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             });
         }
         existing.phase = ApPeerPhase::Authorized;
-        existing.authenticator = None;
+        existing.handshake = ApHandshake::Absent;
         existing.maximum_legacy_rate_500kbps = capabilities.maximum_legacy_rate_500kbps;
         existing.preamble = capabilities.preamble;
         existing.ht = capabilities.ht;
