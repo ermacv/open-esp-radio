@@ -74,7 +74,9 @@ mod tests {
     fn capacity_refusal_preserves_payload_and_clear_handles_empty_storage() {
         let action = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[7, 8]).unwrap();
         let mut buffer = EspNowV2Reassembly::<2>::new();
+        assert_eq!((buffer.len(), buffer.is_empty()), (0, true));
         assert_eq!(buffer.reassemble(action), Ok([7, 8].as_slice()));
+        assert_eq!((buffer.len(), buffer.is_empty()), (2, false));
         let larger = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[3; 3]).unwrap();
         assert_eq!(
             buffer.reassemble(larger),
@@ -86,6 +88,7 @@ mod tests {
         assert_eq!(buffer.payload(), [7, 8].as_slice());
         buffer.clear();
         assert_eq!(buffer.payload(), [].as_slice());
+        assert_eq!((buffer.len(), buffer.is_empty()), (0, true));
         let empty = EspNowV2Action::new(EspNowRandomValue::new([1; 4]), &[]).unwrap();
         assert_eq!(
             EspNowV2Reassembly::<0>::new().reassemble(empty),
