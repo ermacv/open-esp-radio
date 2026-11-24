@@ -92,15 +92,19 @@ recorded M3 regression in `frames/captured_m3.rs` authenticates and unwraps
 a PSK-SHA256 + MFP Message 3 that hostapd sent on a hardware bench. Derived
 KDE cases change only its ID to exercise all four wire values, including zero.
 
-The portable station can retain a completed key installation while waiting for
-M4 delivery. `RsnStaSupplicant` authenticates a repeated M3 before advancing its
-counter. The station retains the installed PTK and processes only changed GTK
-material from a newer M3; an exact repeat produces M4 without an install.
-`RsnStaReady::RetryInstall` carries `RsnStaRetryInstall`, which has no pairwise
-field. `RsnStaSupplicant::on_frame` unwraps an authenticated Message 3's key
-data over the engine it is lent and returns `RsnStaReady`, so callers
-exhaustively handle all remaining work; key data that does not fit or unwrap
-fails the handshake (`RsnStaProcessError::KeyDataTooLong`, `KeyUnwrap`).
+The station's four-way handshake is one machine, `RsnStaHandshake`, a sum by
+phase: no Message 1 yet; keyed by a Message 1's PTK, awaiting Message 3 or
+installing its keys. `RsnStaHandshake::on_eapol` derives the PTK and builds
+Message 2 in the step that takes Message 1, and verifies, unwraps and parses a
+Message 3 in the step that takes it, over the engine it is lent; a refusal
+changes nothing, and key data that does not fit, unwrap or parse ends the
+handshake (`RsnStaEapol::End`). The install request's group half,
+`RsnStaGroupInstall`, has no pairwise field; once installed it leaves
+`RsnStaInstalled`, a proof without a key, which `RsnStaHandshake::complete`
+takes to build Message 4 and become the `RsnConnectedSupplicant`; a refused
+Message 4 MIC is the handshake's end too. The KCK and the KEK never leave the
+machine. While the keys are installed, a repeat of the verified Message 3
+changes nothing; repeats after completion are the connected supplicant's.
 `RsnConnectedSupplicant::on_message3` authenticates exact and newer repeats
 with the retained PTK and produces only M4 or an `RsnGroupKeyFrame`, which
 binds the authenticated M3, including its full ANonce; its GTK/IGTK

@@ -87,7 +87,6 @@ fn derives_known_ptk_and_builds_message_2() {
         context.supplicant_nonce,
         &security_ies,
     )
-    .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
     let parsed = EapolKeyFrame::parse(message.as_bytes()).unwrap();
@@ -99,7 +98,6 @@ fn derives_known_ptk_and_builds_message_2() {
 
     let message4 =
         frames::RsnTxFrame::<512>::message4(crate::Akm::Psk, context.authenticator_address, 8)
-            .unwrap()
             .authenticate(&ptk, &mut SoftwareAes128)
             .unwrap();
     let parsed4 = EapolKeyFrame::parse(message4.as_bytes()).unwrap();

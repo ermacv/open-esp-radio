@@ -17,13 +17,44 @@ const RSN: [u8; 22] = [
     0x30, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 0,
 ];
 
-/// Process one frame, unwrapping its key data in software.
+/// Take one frame, unwrapping its key data in software.
 fn process(
-    supplicant: &mut RsnStaSupplicant,
+    handshake: &mut RsnStaHandshake,
     frame: crate::OwnedEapolFrame<512>,
     pmk: &Pmk,
-) -> Result<RsnStaReady<512>, RsnStaProcessError> {
-    supplicant.on_frame(frame, pmk, &mut SoftwareAes128)
+) -> Result<RsnStaEapol<512>, RsnStaError> {
+    handshake.on_eapol(frame, pmk, &mut SoftwareAes128)
+}
+
+fn test_pmk() -> Pmk {
+    let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
+    loop {
+        if let Some(pmk) = derivation.step() {
+            break pmk;
+        }
+    }
+}
+
+fn handshake() -> RsnStaHandshake {
+    RsnStaHandshake::new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap()
+}
+
+/// The key data Message 3 carries in these tests: the access point's RSN
+/// element and a GTK (key 2, bytes 0x5a).
+fn message3_plain() -> RsnPlainKeyData<64> {
+    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
+    let gtk = RsnGtk::new(
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
+        &[0x5a; 16],
+    );
+    RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap()
+}
+
+/// The installation `request` leaves once both its keys are installed.
+fn installed(request: RsnStaKeyInstallRequest) -> RsnStaInstalled {
+    let (_pairwise, group) = request.into_parts();
+    group.installed()
 }
 
 const REFUSED: oer_portable_crypto::KeyUnwrapError = oer_portable_crypto::KeyUnwrapError::Engine(
@@ -104,8 +135,7 @@ fn connected(ptk: Ptk) -> RsnConnectedSupplicant {
         key_encryption,
         authenticator_security_ies: OwnedAssociationSecurityIes::try_copy_bytes(&RSN).unwrap(),
         completed_message3,
-        replay_counter: 2,
-        completed_group_message1: None,
+        frontier: Frontier::Message3,
         group_management: None,
     }
 }
@@ -138,45 +168,15 @@ fn resign_eapol_key_variant(
 }
 
 fn completed_connected() -> (RsnConnectedSupplicant, crate::OwnedEapolFrame<512>, Ptk) {
-    let pmk = {
-        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
-        loop {
-            if let Some(pmk) = derivation.step() {
-                break pmk;
-            }
-        }
-    };
-    let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
-    let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
-    let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
-    assert!(matches!(
-        process(&mut supplicant, owned(&message1), &pmk).unwrap(),
-        RsnStaReady::Transmit(_)
-    ));
-    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
-    let gtk = RsnGtk::new(
-        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
-        &[0x5a; 16],
-    );
-    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
-    let message3 = encrypted_message3(&expected_ptk, [7, 6, 5, 4, 3, 2, 1, 0], plain.as_bytes());
+    let (mut handshake, message3, pmk, expected_ptk) = awaiting_encrypted_message3();
     let duplicate = message3.clone();
-    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, message3, &pmk).unwrap()
-    else {
+    let RsnStaEapol::Install(request) = process(&mut handshake, message3, &pmk).unwrap() else {
         panic!("Message 3 must produce one key transaction")
     };
-    let RsnStaReady::Transmit(_) = supplicant
-        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
-        .unwrap()
-    else {
-        panic!("installed keys must produce Message 4")
-    };
-    (
-        supplicant.into_connected().unwrap(),
-        duplicate,
-        expected_ptk,
-    )
+    let connected = handshake
+        .complete::<512, _>(installed(request), &mut SoftwareAes128)
+        .unwrap();
+    (connected.supplicant, duplicate, expected_ptk)
 }
 
 fn group_kde(key_id: u8, key: u8) -> [u8; 24] {
@@ -188,46 +188,28 @@ fn group_kde(key_id: u8, key: u8) -> [u8; 24] {
 
 #[test]
 fn resolves_m1_through_typed_install_and_authenticated_m4() {
-    let pmk = {
-        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
-        loop {
-            if let Some(pmk) = derivation.step() {
-                break pmk;
-            }
-        }
-    };
+    let pmk = test_pmk();
     let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
-    let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
+    let mut handshake = handshake();
 
     let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
-    let RsnStaReady::Transmit(message2) = process(&mut supplicant, owned(&message1), &pmk).unwrap()
+    let RsnStaEapol::Transmit(message2) = process(&mut handshake, owned(&message1), &pmk).unwrap()
     else {
         panic!("Message 1 must produce Message 2")
     };
-    assert_eq!(message2.key_frame().unwrap().replay_counter(), 1);
-    assert!(
-        message2
-            .key_frame()
-            .unwrap()
-            .verify_mic(&expected_ptk, &mut SoftwareAes128)
-            .unwrap()
-    );
+    let key = message2.key_frame().unwrap();
+    assert_eq!(key.replay_counter(), 1);
+    assert_eq!(key.key_data(), &RSN);
+    assert!(!message2.retransmission());
+    assert!(key.verify_mic(&expected_ptk, &mut SoftwareAes128).unwrap());
 
-    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
-    let gtk = RsnGtk::new(
-        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
-        &[0x5a; 16],
-    );
-    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
+    let plain = message3_plain();
     let rsc = [7, 6, 5, 4, 3, 2, 1, 0];
     let message3 = encrypted_message3(&expected_ptk, rsc, plain.as_bytes());
-    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, message3, &pmk).unwrap()
-    else {
+    let RsnStaEapol::Install(request) = process(&mut handshake, message3, &pmk).unwrap() else {
         panic!("Message 3 must produce one key transaction")
     };
     assert_eq!(request.replay_counter(), 2);
-    assert!(request.encrypted_key_data());
     assert_eq!(request.plain_key_data_len(), plain.as_bytes().len());
     assert_eq!(request.pairwise().peer(), &AP);
     assert_eq!(
@@ -244,13 +226,14 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
     assert_eq!(request.group().receive_sequence(), &rsc);
     assert_eq!(request.group().key().as_bytes(), &[0x5a; 16]);
 
-    let RsnStaReady::Transmit(message4) = supplicant
-        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
-        .unwrap()
-    else {
-        panic!("installed keys must produce Message 4")
-    };
-    assert_eq!(supplicant.phase(), RsnStaPhase::Completed);
+    let connected = handshake
+        .complete::<512, _>(installed(request), &mut SoftwareAes128)
+        .unwrap();
+    let message4 = connected.message4;
+    assert_eq!(
+        message4.key_frame().unwrap().message(),
+        crate::EapolKeyMessage::PairwiseMessage4
+    );
     assert_eq!(message4.key_frame().unwrap().replay_counter(), 2);
     assert!(
         message4
@@ -259,33 +242,12 @@ fn resolves_m1_through_typed_install_and_authenticated_m4() {
             .verify_mic(&expected_ptk, &mut SoftwareAes128)
             .unwrap()
     );
+    assert_eq!(connected.supplicant.replay_counter(), 2);
 }
 
 #[test]
-fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
-    let pmk = {
-        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
-        loop {
-            if let Some(pmk) = derivation.step() {
-                break pmk;
-            }
-        }
-    };
-    let expected_ptk = pmk.derive_ptk(crate::Akm::Psk, context());
-    let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
-    let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
-    assert!(matches!(
-        process(&mut supplicant, owned(&message1), &pmk).unwrap(),
-        RsnStaReady::Transmit(_)
-    ));
-    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
-    let gtk = RsnGtk::new(
-        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
-        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
-        &[9; 16],
-    );
-    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
-    let message3 = encrypted_message3(&expected_ptk, [0; 8], plain.as_bytes());
+fn invalid_message3_mic_is_refused_and_valid_retry_can_install() {
+    let (mut handshake, message3, pmk, expected_ptk) = awaiting_encrypted_message3();
     let mut bytes = [0; 512];
     let len = message3.as_bytes().len();
     bytes[..len].copy_from_slice(message3.as_bytes());
@@ -293,20 +255,15 @@ fn invalid_message3_mic_is_ignored_and_valid_retry_can_install() {
     let changed =
         crate::OwnedEapolFrame::<512>::try_copy(RsnInterface::Station, AP, &bytes[..len]).unwrap();
     assert!(matches!(
-        process(&mut supplicant, changed, &pmk),
-        Err(RsnStaProcessError::Supplicant(
-            RsnStaSupplicantError::InvalidMessage3Mic
-        ))
+        process(&mut handshake, changed, &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::InvalidMic))
     ));
-    assert_eq!(supplicant.phase(), RsnStaPhase::AwaitingMessage3);
-
-    let valid_retry = encrypted_message3(&expected_ptk, [0; 8], plain.as_bytes());
-    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, valid_retry, &pmk).unwrap()
-    else {
+    // The forged frame stored nothing: the real one installs.
+    let valid_retry = encrypted_message3(&expected_ptk, [0; 8], message3_plain().as_bytes());
+    let RsnStaEapol::Install(request) = process(&mut handshake, valid_retry, &pmk).unwrap() else {
         panic!("valid M3 retry must retain the original join")
     };
     assert_eq!(request.replay_counter(), 2);
-    assert_eq!(supplicant.phase(), RsnStaPhase::InstallingKeys);
 }
 
 #[test]
@@ -757,60 +714,82 @@ fn a_response_deadline_past_the_time_range_is_refused() {
     );
 }
 
-/// A supplicant past Message 1 and the encrypted Message 3 it now awaits.
-fn awaiting_encrypted_message3() -> (RsnStaSupplicant, crate::OwnedEapolFrame<512>, Pmk, Ptk) {
-    let pmk = {
-        let mut derivation = crate::PmkDerivation::new(b"password", b"ssid").unwrap();
-        loop {
-            if let Some(pmk) = derivation.step() {
-                break pmk;
-            }
-        }
-    };
+/// A handshake past Message 1 and the encrypted Message 3 it now awaits.
+fn awaiting_encrypted_message3() -> (RsnStaHandshake, crate::OwnedEapolFrame<512>, Pmk, Ptk) {
+    let pmk = test_pmk();
     let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
-    let mut supplicant = RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, &RSN, &RSN, &[]).unwrap();
+    let mut handshake = handshake();
     let message1 = RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, 1, ANONCE).unwrap();
     assert!(matches!(
-        process(&mut supplicant, owned(&message1), &pmk).unwrap(),
-        RsnStaReady::Transmit(_)
+        process(&mut handshake, owned(&message1), &pmk).unwrap(),
+        RsnStaEapol::Transmit(_)
     ));
-    let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
-    let gtk = RsnGtk::new(
-        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
-        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
-        &[0x5a; 16],
-    );
-    let plain = RsnPlainKeyData::<64>::build(rsn.as_bytes(), &gtk, None).unwrap();
-    let message3 = encrypted_message3(&ptk, [0; 8], plain.as_bytes());
-    (supplicant, message3, pmk, ptk)
+    let message3 = encrypted_message3(&ptk, [0; 8], message3_plain().as_bytes());
+    (handshake, message3, pmk, ptk)
 }
 
 #[test]
-fn message3_key_data_unwraps_in_the_call_into_install() {
-    let (mut supplicant, message3, pmk, _) = awaiting_encrypted_message3();
-    let RsnStaReady::InstallKeys(install) = process(&mut supplicant, message3, &pmk).unwrap()
+fn message3_key_data_unwraps_in_the_step_into_install() {
+    let (mut handshake, message3, pmk, _) = awaiting_encrypted_message3();
+    let RsnStaEapol::Install(install) = process(&mut handshake, message3.clone(), &pmk).unwrap()
     else {
         panic!("initial key installation")
     };
     assert_eq!(install.replay_counter(), 2);
-    assert!(install.encrypted_key_data());
     assert_eq!(install.group().key().as_bytes(), &[0x5a; 16]);
-    assert_eq!(supplicant.phase(), RsnStaPhase::InstallingKeys);
-}
-
-#[test]
-fn failed_message3_key_data_unwrap_fails_the_handshake_with_the_engine_error() {
-    let (mut supplicant, message3, pmk, _) = awaiting_encrypted_message3();
+    // While its keys are installed, a repeat of the same Message 3 does
+    // nothing, an older one is stale and a newer one unexpected.
     assert!(matches!(
-        supplicant.on_frame(message3, &pmk, &mut Refusing),
-        Err(RsnStaProcessError::KeyUnwrap(REFUSED))
+        process(&mut handshake, message3.clone(), &pmk),
+        Ok(RsnStaEapol::None)
     ));
-    assert_eq!(supplicant.phase(), RsnStaPhase::Failed);
+    let ptk = test_pmk().derive_ptk(crate::Akm::Psk, context());
+    let at = |counter: u64| {
+        resign_eapol_key_variant(&message3, &ptk, Mic::Resigned, |bytes| {
+            bytes[9..17].copy_from_slice(&counter.to_be_bytes());
+        })
+    };
+    assert!(matches!(
+        process(&mut handshake, at(1), &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
+    ));
+    assert!(matches!(
+        process(&mut handshake, at(3), &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage))
+    ));
+    // A Message 1 at or below the accepted one does nothing; a newer one is
+    // unexpected: the PTK being installed is not replaced.
+    let message1 = |counter| {
+        owned(&RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, counter, [9; 32]).unwrap())
+    };
+    assert!(matches!(
+        process(&mut handshake, message1(1), &pmk),
+        Ok(RsnStaEapol::None)
+    ));
+    assert!(matches!(
+        process(&mut handshake, message1(5), &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage))
+    ));
+    let connected = handshake
+        .complete::<512, _>(installed(install), &mut SoftwareAes128)
+        .unwrap();
+    assert_eq!(connected.message4.key_frame().unwrap().replay_counter(), 2);
 }
 
 #[test]
-fn message3_key_data_beyond_the_bound_fails_the_handshake() {
-    let (mut supplicant, _, pmk, ptk) = awaiting_encrypted_message3();
+fn failed_message3_key_data_unwrap_ends_the_handshake_with_the_engine_error() {
+    let (mut handshake, message3, pmk, _) = awaiting_encrypted_message3();
+    // Under PSK the MIC is HMAC-SHA1 and takes no engine: only the unwrap
+    // meets the refusal.
+    assert!(matches!(
+        handshake.on_eapol(message3, &pmk, &mut Refusing),
+        Ok(RsnStaEapol::End(RsnStaEnd::KeyUnwrap(REFUSED)))
+    ));
+}
+
+#[test]
+fn message3_key_data_beyond_the_bound_ends_the_handshake() {
+    let (mut handshake, _, pmk, ptk) = awaiting_encrypted_message3();
     let long = [0x11; RSN_KEY_DATA_CAPACITY + 8];
     let message3 = RsnTxFrame::<1024>::message3(crate::Akm::Psk, LOCAL, 2, ANONCE, [0; 8], &long)
         .unwrap()
@@ -819,50 +798,20 @@ fn message3_key_data_beyond_the_bound_fails_the_handshake() {
     let message3 =
         crate::OwnedEapolFrame::<1024>::try_copy(RsnInterface::Station, AP, message3.as_bytes())
             .unwrap();
-    let error = supplicant
-        .on_frame(message3, &pmk, &mut SoftwareAes128)
-        .err()
-        .unwrap();
-    assert_eq!(error, RsnStaProcessError::KeyDataTooLong);
-    assert!(!error.is_peer_input_rejection());
-    assert_eq!(supplicant.phase(), RsnStaPhase::Failed);
+    assert!(matches!(
+        handshake.on_eapol(message3, &pmk, &mut SoftwareAes128),
+        Ok(RsnStaEapol::End(RsnStaEnd::KeyDataTooLong))
+    ));
 }
 
 #[test]
-fn completed_handshake_repeated_m3_only_grants_group_installation() {
-    let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
-    let retry = resign_eapol_key_variant(&message3, &ptk, Mic::Resigned, |bytes| {
-        bytes[9..17].copy_from_slice(&3_u64.to_be_bytes());
-    });
-    let RsnStaReady::InstallKeys(initial) = process(&mut supplicant, message3, &pmk).unwrap()
-    else {
-        panic!("initial installation")
-    };
-    let RsnStaReady::Transmit(_) = supplicant
-        .complete_key_install::<512, _>(initial, &mut SoftwareAes128)
-        .unwrap()
-    else {
-        panic!("initial M4")
-    };
-    let RsnStaReady::RetryInstall(group) = process(&mut supplicant, retry, &pmk).unwrap() else {
-        panic!("completed M3 must never grant another pairwise installation")
-    };
-    assert_eq!(group.replay_counter(), 3);
-    assert_eq!(group.group().key().as_bytes(), &[0x5a; 16]);
-    let RsnStaReady::Transmit(message4) = supplicant
-        .complete_retry_install::<512, _>(group, &mut SoftwareAes128)
-        .unwrap()
-    else {
-        panic!("retry M4")
-    };
-    assert_eq!(message4.key_frame().unwrap().replay_counter(), 3);
-    assert!(
-        message4
-            .key_frame()
-            .unwrap()
-            .verify_mic(&ptk, &mut SoftwareAes128)
-            .unwrap()
-    );
+fn message3_key_data_that_does_not_parse_ends_the_handshake() {
+    let (mut handshake, _, pmk, ptk) = awaiting_encrypted_message3();
+    let message3 = encrypted_message3(&ptk, [0; 8], &[0; 24]);
+    assert!(matches!(
+        process(&mut handshake, message3, &pmk),
+        Ok(RsnStaEapol::End(RsnStaEnd::KeyData(_)))
+    ));
 }
 
 #[test]
@@ -1042,29 +991,26 @@ fn failed_group_key_data_unwrap_returns_the_error_and_releases_the_supplicant() 
 
 #[test]
 fn retained_authenticator_ies_fail_locally_during_initial_key_install() {
-    let (mut supplicant, message3, pmk, _) = awaiting_encrypted_message3();
-    supplicant.invalidate_security_ies_for_test();
-    let error = process(&mut supplicant, message3, &pmk).err().unwrap();
+    let (mut handshake, message3, pmk, _) = awaiting_encrypted_message3();
+    handshake.invalidate_security_ies_for_test();
     assert_eq!(
-        error,
-        RsnStaProcessError::Supplicant(RsnStaSupplicantError::RetainedSecurityIes(
+        process(&mut handshake, message3, &pmk).err(),
+        Some(RsnStaError::RetainedSecurityIes(
             RsnFrameError::InvalidRsnIe
         ))
     );
-    assert!(!error.is_peer_input_rejection());
 }
 
 #[test]
 fn retained_authenticator_ies_fail_locally_during_connected_key_install() {
-    let (mut supplicant, message3, pmk, ptk) = awaiting_encrypted_message3();
-    let RsnStaReady::InstallKeys(request) = process(&mut supplicant, message3, &pmk).unwrap()
-    else {
+    let (mut handshake, message3, pmk, ptk) = awaiting_encrypted_message3();
+    let RsnStaEapol::Install(request) = process(&mut handshake, message3, &pmk).unwrap() else {
         panic!()
     };
-    let _ = supplicant
-        .complete_key_install::<512, _>(request, &mut SoftwareAes128)
-        .unwrap();
-    let mut connected = supplicant.into_connected().unwrap();
+    let mut connected = handshake
+        .complete::<512, _>(installed(request), &mut SoftwareAes128)
+        .unwrap()
+        .supplicant;
     let rsn = OwnedRsnIe::<64>::try_copy(&RSN).unwrap();
     let gtk = RsnGtk::new(
         oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
@@ -1099,9 +1045,8 @@ fn management_frames_are_protected_only_when_both_elements_are_capable() {
         (&RSN, &capable, None),
         (&RSN, &RSN, None),
     ] {
-        let supplicant =
-            RsnStaSupplicant::try_new(LOCAL, AP, SNONCE, own, authenticator, &[]).unwrap();
-        assert_eq!(supplicant.group_management(), expected);
+        let handshake = RsnStaHandshake::new(LOCAL, AP, SNONCE, own, authenticator, &[]).unwrap();
+        assert_eq!(handshake.group_management(), expected);
     }
 }
 
@@ -1123,4 +1068,151 @@ fn software_wrap(
         ),
     )
     .into_wrapped()
+}
+
+/// A repeat of the accepted Message 1 answers Message 2 again; a newer one
+/// restarts with its ANonce and PTK; an older one is stale.
+#[test]
+fn a_repeated_message1_rebuilds_message2_and_a_newer_one_restarts() {
+    let pmk = test_pmk();
+    let mut handshake = handshake();
+    let message1 = |counter, nonce| {
+        owned(&RsnTxFrame::<512>::message1(crate::Akm::Psk, LOCAL, counter, nonce).unwrap())
+    };
+    let RsnStaEapol::Transmit(first) = process(&mut handshake, message1(5, ANONCE), &pmk).unwrap()
+    else {
+        panic!("Message 1 builds Message 2")
+    };
+    let RsnStaEapol::Transmit(again) = process(&mut handshake, message1(5, ANONCE), &pmk).unwrap()
+    else {
+        panic!("a repeated Message 1 builds Message 2 again")
+    };
+    assert!(again.retransmission());
+    assert_eq!(again.as_bytes(), first.as_bytes());
+    assert!(matches!(
+        process(&mut handshake, message1(4, ANONCE), &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
+    ));
+    let newer_nonce = [0x44; 32];
+    let RsnStaEapol::Transmit(restart) =
+        process(&mut handshake, message1(6, newer_nonce), &pmk).unwrap()
+    else {
+        panic!("a newer Message 1 restarts")
+    };
+    assert!(!restart.retransmission());
+    let newer_ptk = pmk.derive_ptk(
+        crate::Akm::Psk,
+        PtkContext {
+            authenticator_nonce: newer_nonce,
+            ..context()
+        },
+    );
+    assert!(
+        restart
+            .key_frame()
+            .unwrap()
+            .verify_mic(&newer_ptk, &mut SoftwareAes128)
+            .unwrap()
+    );
+    // Message 3 of the first ANonce no longer matches.
+    let message3 = encrypted_message3(
+        &pmk.derive_ptk(crate::Akm::Psk, context()),
+        [0; 8],
+        message3_plain().as_bytes(),
+    );
+    assert!(matches!(
+        process(&mut handshake, message3, &pmk),
+        Err(RsnStaError::Rejected(
+            RsnStateError::AuthenticatorNonceMismatch
+        ))
+    ));
+}
+
+/// A zero nonce and an element that is not one make no handshake.
+#[test]
+fn new_refuses_a_zero_nonce_and_invalid_elements() {
+    assert_eq!(
+        RsnStaHandshake::new(LOCAL, AP, [0; 32], &RSN, &RSN, &[]).err(),
+        Some(RsnStaNewError::ZeroNonce)
+    );
+    assert!(matches!(
+        RsnStaHandshake::new(LOCAL, AP, SNONCE, &[0xdd, 0], &RSN, &[]),
+        Err(RsnStaNewError::Frame(_))
+    ));
+    assert!(matches!(
+        RsnStaHandshake::new(LOCAL, AP, SNONCE, &RSN, &[0x30, 2, 1, 0], &[]),
+        Err(RsnStaNewError::Element(_))
+    ));
+}
+
+/// Message 3 before any Message 1, or at the accepted Message 1's counter,
+/// is refused and changes nothing.
+#[test]
+fn message3_is_bound_to_an_accepted_message1() {
+    let pmk = test_pmk();
+    let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
+    let mut fresh = handshake();
+    assert!(matches!(
+        process(
+            &mut fresh,
+            encrypted_message3(&ptk, [0; 8], message3_plain().as_bytes()),
+            &pmk
+        ),
+        Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage))
+    ));
+    let (mut handshake, message3, pmk, ptk) = awaiting_encrypted_message3();
+    let at_message1 = resign_eapol_key_variant(&message3, &ptk, Mic::Resigned, |bytes| {
+        bytes[9..17].copy_from_slice(&1_u64.to_be_bytes());
+    });
+    assert!(matches!(
+        process(&mut handshake, at_message1, &pmk),
+        Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
+    ));
+    assert!(matches!(
+        process(&mut handshake, message3, &pmk),
+        Ok(RsnStaEapol::Install(_))
+    ));
+}
+
+/// An engine that refuses Message 4's MIC ends the handshake with that
+/// cause. PSK-SHA256 computes its MICs with AES-CMAC on the engine.
+#[test]
+fn a_refused_message4_mic_ends_the_handshake() {
+    let mut rsn = RSN;
+    rsn[19] = 6; // PSK-SHA256
+    let pmk = test_pmk();
+    let ptk = pmk.derive_ptk(crate::Akm::PskSha256, context());
+    let mut handshake = RsnStaHandshake::new(LOCAL, AP, SNONCE, &rsn, &rsn, &[]).unwrap();
+    let message1 = RsnTxFrame::<512>::message1(crate::Akm::PskSha256, LOCAL, 1, ANONCE).unwrap();
+    assert!(matches!(
+        process(&mut handshake, owned(&message1), &pmk),
+        Ok(RsnStaEapol::Transmit(_))
+    ));
+    let rsn_ie = OwnedRsnIe::<64>::try_copy(&rsn).unwrap();
+    let gtk = RsnGtk::new(
+        oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(2).unwrap(),
+        oer_protocols_ieee80211_wire::eapol::GtkTx::ReceiveOnly,
+        &[0x5a; 16],
+    );
+    let plain = RsnPlainKeyData::<64>::build(rsn_ie.as_bytes(), &gtk, None).unwrap();
+    let wrapped = software_wrap(ptk.kek(), plain.as_bytes()).unwrap();
+    let message3 = RsnTxFrame::<512>::message3(
+        crate::Akm::PskSha256,
+        LOCAL,
+        2,
+        ANONCE,
+        [0; 8],
+        wrapped.as_bytes(),
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
+    let RsnStaEapol::Install(request) = process(&mut handshake, owned(&message3), &pmk).unwrap()
+    else {
+        panic!("Message 3 installs")
+    };
+    assert!(matches!(
+        handshake.complete::<512, _>(installed(request), &mut Refusing),
+        Err(RsnStaEnd::Engine(_))
+    ));
 }

@@ -147,6 +147,34 @@ impl<const N: usize> PrefixLength<N> {
         self.0
     }
 
+    /// The length as a 16-bit count. It is lossless: an array of at most
+    /// `u16::MAX` octets is checked when `N` is chosen.
+    pub const fn to_u16(self) -> u16 {
+        const {
+            if N > u16::MAX as usize {
+                panic!("invalid wire field geometry or value");
+            }
+        }
+        // `self.0 <= N <= u16::MAX`: the two low octets are the whole value.
+        let [.., high, low] = self.0.to_be_bytes();
+        u16::from_be_bytes([high, low])
+    }
+
+    /// This prefix placed after `PREFIX` octets, in an array of `M`
+    /// octets that holds `PREFIX + N`: the shifted length cannot exceed `M`,
+    /// which is checked when the constants are chosen.
+    pub const fn after<const PREFIX: usize, const M: usize>(self) -> PrefixLength<M> {
+        const {
+            match PREFIX.checked_add(N) {
+                Some(total) if total <= M => {}
+                _ => panic!("invalid wire field geometry or value"),
+            }
+        }
+        // `self.0 <= N`, so the sum is at most `PREFIX + N`: it does not
+        // saturate.
+        PrefixLength(self.0.saturating_add(PREFIX))
+    }
+
     /// The constructor is the bounds proof. Trimming an iterator's unused
     /// tail forms the exact slice without a panicking split or re-admission.
     pub fn borrow(self, bytes: &[u8; N]) -> &[u8] {

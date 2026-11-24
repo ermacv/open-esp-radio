@@ -147,6 +147,23 @@ fn finish_handshake(
     pmk: &Pmk,
     now: u32,
 ) -> Ptk {
+    let (ptk, message3) = handshake_message3(world, advertisement, akm, pmk, now);
+    world.receive(at(now + 2), &eapol_frame(message3.as_bytes()));
+    assert!(
+        world.station.is_connected(),
+        "wire SAE/PSK handshake completes"
+    );
+    ptk
+}
+
+/// Associate, answer Message 1 and build the access point's Message 3.
+fn handshake_message3(
+    world: &mut World<'_>,
+    advertisement: &[u8],
+    akm: Akm,
+    pmk: &Pmk,
+    now: u32,
+) -> (Ptk, RsnTxFrame<512>) {
     world.receive(at(now), &association_response(0));
     let message1 = RsnTxFrame::<512>::message1(akm, LOCAL, 1, ANONCE).unwrap();
     world.receive(at(now + 1), &eapol_frame(message1.as_bytes()));
@@ -191,12 +208,56 @@ fn finish_handshake(
         .unwrap()
         .authenticate(&ptk, &mut SoftwareAes128)
         .unwrap();
-    world.receive(at(now + 2), &eapol_frame(message3.as_bytes()));
-    assert!(
-        world.station.is_connected(),
-        "wire SAE/PSK handshake completes"
-    );
-    ptk
+    (ptk, message3)
+}
+
+/// An engine that refuses Message 4's MIC ends the handshake where the
+/// role ends every handshake: its installed keys are removed, no Message 4
+/// goes and the station does not connect. SAE computes the MIC with
+/// AES-CMAC on the engine.
+#[test]
+fn a_refused_message4_mic_ends_the_handshake_and_removes_its_keys() {
+    installed(|mint| {
+        let mut world = World::with_security(mint, 3, personal());
+        let beacon = advertised(Transition::SaeOnly, SaePwe::HuntingAndPecking);
+        begin(&mut world, &beacon, 0, 91);
+        let keys = authenticate(&mut world, SaePwe::HuntingAndPecking, 30);
+        let pmk = Pmk::from_bytes(*keys.pmk());
+        let (_, message3) = handshake_message3(&mut world, &beacon, Akm::Sae, &pmk, 32);
+        let eapol = world.eapol.len();
+        world.switches.on(Switch::HoldKeyInstalls);
+        world.receive(at(34), &eapol_frame(message3.as_bytes()));
+        // The pairwise key, then the group key: the engine refuses once
+        // both are in.
+        let pairwise = world.pending_installs.pop().unwrap();
+        world.input(at(35), pairwise);
+        world.run(at(35));
+        let group = world.pending_installs.pop().unwrap();
+        world.switches.off(Switch::HoldKeyInstalls);
+        world.station.config.callbacks.blocks.refuse =
+            Some(oer_portable_crypto::block::BlockError::Timeout { observation: 1 });
+        world.input(at(36), group);
+        world.run(at(36));
+        world.station.config.callbacks.blocks.refuse = None;
+        world.run(at(37));
+        assert!(!world.station.is_connected());
+        assert_eq!(world.eapol.len(), eapol, "no Message 4 goes");
+        assert_eq!(
+            world
+                .seen
+                .iter()
+                .filter(|event| **event == Seen::RemoveKey)
+                .count(),
+            2,
+            "the pairwise and the group key are removed"
+        );
+        assert!(
+            !world
+                .seen
+                .iter()
+                .any(|event| matches!(event, Seen::Notify(StaNotice::Connected { .. })))
+        );
+    });
 }
 
 #[test]

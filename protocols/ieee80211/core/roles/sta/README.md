@@ -520,9 +520,9 @@ replay frontier. Leave removes every group key, one at a time, then the
 pairwise key once the group table is empty and the link came back.
 
 A correctly authenticated repeated M3, including a larger replay counter,
-retains PTK. Its GTK follows that same material/slot policy. `RsnStaRetryInstall`
-contains only group work, so a completed handshake cannot grant another PTK
-installation. M4 retains the MAC protection of the M3 it answers, including
+retains PTK. Its GTK follows that same material/slot policy. The connected
+supplicant answers it with only group work, so a completed handshake cannot
+grant another PTK installation. M4 retains the MAC protection of the M3 it answers, including
 an open M3 after PTK installation and a protected repeat after a failed M4.
 The service reports authenticated-key refusals through `StaRxError::Security`.
 

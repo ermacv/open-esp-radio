@@ -493,7 +493,6 @@ mod handshake {
             SNONCE,
             &ies,
         )
-        .unwrap()
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap()
         .as_bytes()
@@ -506,7 +505,6 @@ mod handshake {
             AP,
             replay,
         )
-        .unwrap()
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap()
         .as_bytes()

@@ -85,7 +85,6 @@ fn message4_before_message3_terminal_keeps_the_handshake_complete() {
         AP,
         10,
     )
-    .unwrap()
     .authenticate(service.pending_ptk(PEER).unwrap(), &mut SoftwareAes128)
     .unwrap();
     let message4 =

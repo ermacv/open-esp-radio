@@ -143,7 +143,6 @@ fn signed_message2(
         supplicant_nonce,
         &security_ies,
     )
-    .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
     OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, message2.as_bytes()).unwrap()
@@ -933,7 +932,6 @@ fn complete_four_way_handshake_retains_ptk_until_hardware_authorization() {
         AP,
         12,
     )
-    .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
     let message4 =
@@ -1032,8 +1030,7 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         oer_protocols_ieee80211_wire::security::rsn::Akm::Psk,
         AP,
         77,
-    )
-    .unwrap();
+    );
     let replay_mismatch = OwnedEapolFrame::<512>::try_copy(
         RsnInterface::AccessPoint,
         PEER,
@@ -1120,7 +1117,6 @@ fn unauthenticated_eapol_cannot_poison_or_refresh_a_securing_peer() {
         AP,
         10,
     )
-    .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
     let valid_m4 =
@@ -2168,7 +2164,6 @@ fn authorize_management_peer(
         AP,
         10,
     )
-    .unwrap()
     .authenticate(&ptk, &mut SoftwareAes128)
     .unwrap();
     let message4 =

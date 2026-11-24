@@ -74,7 +74,6 @@ fn message2(rsn: &[u8], ptk: &Ptk) -> OwnedEapolFrame<512> {
 
 fn signed_message4(replay: u64) -> OwnedEapolFrame<512> {
     let answer = RsnTxFrame::<512>::message4(Akm::Psk, AP, replay)
-        .unwrap()
         .authenticate(&ptk(), &mut SoftwareAes128)
         .unwrap();
     OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, answer.as_bytes()).unwrap()

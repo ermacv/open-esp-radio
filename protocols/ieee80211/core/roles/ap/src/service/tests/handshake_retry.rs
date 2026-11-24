@@ -80,7 +80,6 @@ impl ReplayCheckingStation {
             AP,
             key.replay_counter(),
         )
-        .unwrap()
         .authenticate(&self.ptk, &mut SoftwareAes128)
         .unwrap();
         Some(Message4 {
@@ -214,7 +213,6 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
         AP,
         message4.key_frame().unwrap().replay_counter() + 1,
     )
-    .unwrap()
     .authenticate(&station.ptk, &mut SoftwareAes128)
     .unwrap();
     let unsent =
@@ -398,7 +396,6 @@ fn station_message4(replay: u64) -> OwnedEapolFrame<512> {
         AP,
         replay,
     )
-    .unwrap()
     .authenticate(&station_ptk(), &mut SoftwareAes128)
     .unwrap();
     OwnedEapolFrame::try_copy(RsnInterface::AccessPoint, PEER, frame.as_bytes()).unwrap()
