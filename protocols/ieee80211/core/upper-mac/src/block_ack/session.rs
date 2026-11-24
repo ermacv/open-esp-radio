@@ -1,5 +1,6 @@
 //! One bounded TX Block Ack negotiation and operational session.
 
+use oer_portable_bounded::Index;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::block_ack::frame::{
     ADDBA_ACTION_BODY_LEN, AddbaRequestError, BlockAckAction, encode_addba_request,
@@ -349,7 +350,8 @@ impl TxBlockAckSession {
                 *delivered |= bit;
             }
         }
-        let advance = (*delivered | *expired).trailing_ones();
+        let run = Index::<65>::trailing_ones(*delivered | *expired);
+        let advance = run.to_u32();
         let needs_bar = expired.trailing_zeros() < advance;
         if advance == u64::BITS {
             *delivered = 0;
@@ -358,8 +360,7 @@ impl TxBlockAckSession {
             *delivered >>= advance;
             *expired >>= advance;
         }
-        // trailing_ones is at most 64, within the sequence increment type.
-        agreement.starting_sequence = agreement.starting_sequence.wrapping_add(advance as u16);
+        agreement.starting_sequence = agreement.starting_sequence.wrapping_add(run.to_u16());
         needs_bar.then_some(agreement.starting_sequence)
     }
 

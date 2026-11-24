@@ -25,6 +25,7 @@ use crate::sequence::SequenceSpace;
 
 use core::num::NonZeroUsize;
 
+use oer_portable_bounded::Index;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 /// The widest window a [`RxReorderBuffer`] holds: its occupancy bitmap has
@@ -132,6 +133,12 @@ impl<const WINDOW_CAPACITY: usize> RxReorderRelease<WINDOW_CAPACITY> {
     }
 }
 
+/// The occupancy bit of a physical position below WINDOW_CAPACITY, at most
+/// 64, the width of the bitmap: the residue is the position itself.
+fn position_bit(position: usize) -> u64 {
+    1_u64.wrapping_shl(Index::<64>::residue(position).to_u32())
+}
+
 /// The bounded sequence range transferred by one window advance.
 struct ReleaseRange {
     start: SequenceNumber,
@@ -155,7 +162,7 @@ impl ReleaseRange {
                 *missing = missing.wrapping_sub(1);
             }
             if distance < self.span {
-                *occupied &= !1_u64.wrapping_shl(index as u32);
+                *occupied &= !position_bit(index);
                 *released = retained.take();
             }
         }
@@ -387,7 +394,7 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             release.received = Received::Released;
         } else {
             *owned = Some(frame);
-            self.occupied |= Self::bit(position);
+            self.occupied |= position_bit(position);
             release.received = Received::Buffered;
         }
         release.missing = missing;
@@ -467,11 +474,11 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
     /// examined sequence is distinct: window <= 64 < the sequence space.
     fn contiguous_from(&self, start: SequenceNumber, received: Option<SequenceNumber>) -> u16 {
         (0..self.window)
-            .take_while(|offset| {
+            .find(|offset| {
                 let sequence = start.wrapping_add(*offset);
-                received == Some(sequence) || self.has_sequence(sequence)
+                received != Some(sequence) && !self.has_sequence(sequence)
             })
-            .count() as u16
+            .unwrap_or(self.window)
     }
 
     /// Commit a timer/BAR transition without an incoming MPDU. Old frames
@@ -513,19 +520,12 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
             return false;
         }
         let index = self.relative_index(distance);
-        self.occupied & Self::bit(index) != 0
+        self.occupied & position_bit(index) != 0
             && self
                 .frames
                 .get(index)
                 .and_then(Option::as_ref)
                 .is_some_and(|frame| frame.sequence == sequence)
-    }
-
-    /// The occupancy bit of a physical position below WINDOW_CAPACITY.
-    const fn bit(index: usize) -> u64 {
-        // index < WINDOW_CAPACITY <= 64, the width of the bitmap, so the
-        // shift is in range.
-        1_u64.wrapping_shl(index as u32)
     }
 
     fn relative_index(&self, distance: u16) -> usize {

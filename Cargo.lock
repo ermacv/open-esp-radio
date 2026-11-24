@@ -2454,6 +2454,7 @@ name = "oer-protocols-ieee80211-core-upper-mac"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
+ "oer-portable-bounded",
  "oer-portable-events",
  "oer-portable-time",
  "oer-portable-time-virtual",

@@ -8,6 +8,8 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(test, allow(clippy::disallowed_methods, clippy::disallowed_macros))]
 
+use core::num::NonZeroUsize;
+
 /// A number below `COUNT`: an element of a register array, or any number
 /// the type bounds (a lane, the last word of a chunk, a table entry).
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -114,6 +116,42 @@ impl<const COUNT: usize> Index<COUNT> {
         // At most 64: the low byte is the whole number.
         let [byte, ..] = word.count_ones().to_le_bytes();
         Self(byte as usize)
+    }
+
+    /// The length of `word`'s run of ones from its lowest bit, when every
+    /// such number (at most 64) is below `COUNT`. A smaller bound refuses to
+    /// build:
+    ///
+    /// ```compile_fail,E0080
+    /// let run = oer_portable_bounded::Index::<64>::trailing_ones(7);
+    /// # let _ = run;
+    /// ```
+    pub const fn trailing_ones(word: u64) -> Self {
+        const {
+            if COUNT <= u64::BITS as usize {
+                panic!("every run of a word's ones is below the bound");
+            }
+        };
+        // At most 64: the low byte is the whole number.
+        let [byte, ..] = word.trailing_ones().to_le_bytes();
+        Self(byte as usize)
+    }
+
+    /// `value`'s remainder by `COUNT`. A bound of zero has none and refuses
+    /// to build:
+    ///
+    /// ```compile_fail,E0080
+    /// let index = oer_portable_bounded::Index::<0>::residue(7);
+    /// # let _ = index;
+    /// ```
+    pub fn residue(value: usize) -> Self {
+        let modulus = const {
+            match NonZeroUsize::new(COUNT) {
+                Some(modulus) => modulus,
+                None => panic!("the bound is not zero"),
+            }
+        };
+        Self(value % modulus)
     }
 
     /// The byte `value`, when every byte is below `COUNT`. A smaller bound
