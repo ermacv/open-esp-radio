@@ -264,3 +264,15 @@ fn a_tid_is_its_four_bit_field() {
     assert_eq!(QosControl::from_field(field).tid, highest);
     assert_eq!(Tid::new(16), None);
 }
+
+/// An MPDU's length lies from an ACK's header to what the capabilities
+/// buffer; a length past a 16-bit word is refused, not cut.
+#[test]
+fn an_mpdu_length_lies_between_an_ack_and_the_buffered_maximum() {
+    let len = |octets| MpduLength::<NonHtNoAck>::new(octets).map(|len| len.get());
+    assert_eq!(len(9), None);
+    assert_eq!(len(10), Some(10));
+    assert_eq!(len(2304), Some(2304));
+    assert_eq!(len(2305), None);
+    assert_eq!(len(65_536 + 100), None);
+}

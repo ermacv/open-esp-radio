@@ -164,6 +164,7 @@
 //! ```
 
 use core::marker::PhantomData;
+use oer_portable_bounded::Index;
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::{
     FrameControl, MacHeader, QosAckPolicy, QosControl as QosControlField,
@@ -381,13 +382,19 @@ const MIN_MPDU: u16 = 10;
 impl<K: Ieee80211Capabilities> MpduLength<K> {
     /// `len`, when it is an MPDU's length `K` buffers.
     pub const fn new(len: usize) -> Option<Self> {
-        if len >= MIN_MPDU as usize && len <= K::CAPS.max_mpdu_length as usize {
-            Some(Self {
-                len: len as u16,
-                brand: PhantomData,
-            })
-        } else {
-            None
+        match Index::<{ 1 << 16 }>::new(len) {
+            Ok(octets) => {
+                let octets = octets.to_u16();
+                if octets >= MIN_MPDU && octets <= K::CAPS.max_mpdu_length {
+                    Some(Self {
+                        len: octets,
+                        brand: PhantomData,
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
         }
     }
 

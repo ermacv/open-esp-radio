@@ -2298,6 +2298,7 @@ name = "oer-protocols-ieee80211-contracts-port"
 version = "0.1.0"
 dependencies = [
  "heapless 0.9.3",
+ "oer-portable-bounded",
  "oer-portable-time",
  "oer-portable-time-virtual",
  "oer-portable-wire",

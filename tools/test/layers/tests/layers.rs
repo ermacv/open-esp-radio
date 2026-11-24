@@ -10256,12 +10256,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
     ),
     (
         "protocols/ieee80211/contracts/port/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/contracts/port/src/lib.rs",
         "missing_docs",
         3,
         "preserve the carried service vocabulary's documentation coverage",
