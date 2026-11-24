@@ -49,3 +49,17 @@ fn a_number_below_its_bound_is_its_whole_word() {
     );
     assert_eq!(Index::<256>::new(0xab).map(Index::to_u16), Ok(0xab));
 }
+
+#[test]
+fn a_run_of_ones_is_counted_from_the_lowest_bit() {
+    assert_eq!(Index::<65>::trailing_ones(0b1010).get(), 0);
+    assert_eq!(Index::<65>::trailing_ones(0b1011).get(), 2);
+    assert_eq!(Index::<65>::trailing_ones(u64::MAX).get(), 64);
+}
+
+#[test]
+fn a_residue_is_below_its_modulus() {
+    assert_eq!(Index::<64>::residue(63).get(), 63);
+    assert_eq!(Index::<64>::residue(64).get(), 0);
+    assert_eq!(Index::<3>::residue(usize::MAX).get(), usize::MAX % 3);
+}
