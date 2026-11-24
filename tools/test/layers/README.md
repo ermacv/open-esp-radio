@@ -95,8 +95,9 @@ is gone both fail, so every list only shrinks:
     names itself;
   - `RAW_BYTES`: byte conversions (`from_le_bytes`, `from_be_bytes`,
     `to_le_bytes`, `to_be_bytes`) and indexing of bytes by name in the
-    protocol packages, the `wire` crates among them. It misses an index of a
-    slice of bytes named otherwise.
+    protocol packages, the `wire` crates among them. A lifetime of such a
+    name (`&'frame [u8]`) is a type, not an index, and is skipped. It misses
+    an index of a slice of bytes named otherwise.
 
 - A state is a sum (`CLAUDE.md`). Clippy's `struct_excessive_bools` and
   `fn_params_excessive_bools` are errors in the whole workspace, at the
