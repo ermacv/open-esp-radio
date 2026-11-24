@@ -1,18 +1,16 @@
-//! RSN four-way-handshake control flow, parameterized by the negotiated suite.
-//!
-//! The state machines never execute cryptography, transmit a frame, install a
-//! key, allocate, retry, or wait. Each method consumes one completion/event
-//! and returns at most one owned action for the radio executor.
+//! The facts both four-way handshakes share: nonces, the PTK's context,
+//! the authenticator's transmissions and the reasons a peer's EAPOL-Key
+//! frame is refused.
 
+use crate::Akm;
 use crate::AkmKeys;
-use crate::{Akm, DEFAULT_EAPOL_FRAME_CAPACITY, EapolKeyMessage, OwnedEapolFrame, RsnInterface};
 use oer_protocols_ieee80211_wire::eapol::KeyInformation;
 
 pub const RSN_NONCE_LEN: usize = 32;
 
-const RSN_CCMP_TEMPORAL_KEY_LEN: u16 = 16;
+pub(crate) const RSN_CCMP_TEMPORAL_KEY_LEN: u16 = 16;
 /// Key Information of an authenticator pairwise Message 3 for `akm`.
-fn pairwise_message3_key_info(akm: Akm) -> u16 {
+pub(crate) fn pairwise_message3_key_info(akm: Akm) -> u16 {
     KeyInformation::EMPTY
         .with_descriptor_version(akm.key_descriptor_version())
         .with_pairwise(true)
@@ -22,15 +20,6 @@ fn pairwise_message3_key_info(akm: Akm) -> u16 {
         .with_secure(true)
         .with_encrypted_key_data(true)
         .raw()
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct RsnTicket(u32);
-
-impl RsnTicket {
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,9 +63,8 @@ pub enum RsnStateError {
     NonzeroKeyIv,
     NonzeroKeyIdentifier,
     MissingEncryptedKeyData,
-    WrongPhase,
-    StaleCompletion,
-    RetainedFrameMismatch,
+    /// The frame's MIC is not the one its key computes: a forged frame.
+    InvalidMic,
 }
 
 impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStateError {
@@ -84,49 +72,3 @@ impl From<oer_protocols_ieee80211_wire::eapol::EapolParseError> for RsnStateErro
         Self::InvalidFrame(error)
     }
 }
-
-impl RsnStateError {
-    /// Whether this error can be produced solely by rejecting the current
-    /// untrusted peer frame before any authenticated protocol transition.
-    ///
-    /// Completion-ticket, retained-frame and phase failures are deliberately
-    /// excluded: those indicate a local ownership/invariant defect and must
-    /// remain visible to the executor.
-    pub const fn is_peer_input_rejection(self) -> bool {
-        matches!(
-            self,
-            Self::WrongInterface
-                | Self::WrongPeer
-                | Self::UnsupportedDescriptorVersion
-                | Self::UnsupportedMessage
-                | Self::UnexpectedMessage
-                | Self::StaleReplayCounter
-                | Self::ReplayCounterMismatch
-                | Self::ZeroNonce
-                | Self::AuthenticatorNonceMismatch
-                | Self::InvalidKeyLength
-                | Self::InvalidMessage3KeyInfo
-                | Self::NonzeroKeyIv
-                | Self::NonzeroKeyIdentifier
-                | Self::MissingEncryptedKeyData
-        )
-    }
-}
-
-mod supplicant;
-
-pub use supplicant::{RsnStaAction, RsnStaPhase, RsnStaState};
-
-const fn nonce_is_zero(nonce: &[u8; RSN_NONCE_LEN]) -> bool {
-    let mut remaining = nonce.as_slice();
-    while let Some((&byte, rest)) = remaining.split_first() {
-        if byte != 0 {
-            return false;
-        }
-        remaining = rest;
-    }
-    true
-}
-
-#[cfg(test)]
-mod tests;

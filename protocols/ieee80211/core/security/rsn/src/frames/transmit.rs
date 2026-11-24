@@ -82,29 +82,43 @@ impl<const N: usize> RsnTxFrame<N> {
         rsn_ie: &OwnedRsnIe<R>,
     ) -> Result<Self, RsnFrameError> {
         let security_ies = OwnedAssociationSecurityIes::<R>::try_copy(rsn_ie, &[])?;
-        Self::message2_with_security_ies(akm, peer, replay_counter, supplicant_nonce, &security_ies)
+        Ok(Self::message2_with_security_ies(
+            akm,
+            peer,
+            replay_counter,
+            supplicant_nonce,
+            &security_ies,
+        ))
     }
 
+    /// Message 2 echoing the association's security IEs. It cannot refuse:
+    /// the IEs' bound is their type, and their room in `N` is checked when
+    /// `N` and `R` are chosen.
     pub fn message2_with_security_ies<const R: usize>(
         akm: Akm,
         peer: [u8; 6],
         replay_counter: u64,
         supplicant_nonce: [u8; 32],
         security_ies: &OwnedAssociationSecurityIes<R>,
-    ) -> Result<Self, RsnFrameError> {
-        Self::build(
-            RsnInterface::Station,
+    ) -> Self {
+        let (bytes, length) = security_ies.bounded();
+        Self::station(
+            EapolKeyBuffer::encode_with_bounded_key_data(
+                &EapolKeyFixedFields {
+                    protocol_version: 1,
+                    key_information: KeyInformation::EMPTY
+                        .with_descriptor_version(akm.key_descriptor_version())
+                        .with_pairwise(true)
+                        .with_mic(true),
+                    key_length: 0,
+                    replay_counter,
+                    nonce: supplicant_nonce,
+                    key_rsc: [0; 8],
+                },
+                bytes,
+                length,
+            ),
             peer,
-            1,
-            KeyInformation::EMPTY
-                .with_descriptor_version(akm.key_descriptor_version())
-                .with_pairwise(true)
-                .with_mic(true),
-            0,
-            replay_counter,
-            supplicant_nonce,
-            [0; 8],
-            security_ies.as_bytes(),
         )
     }
 
@@ -139,44 +153,52 @@ impl<const N: usize> RsnTxFrame<N> {
         )
     }
 
-    pub fn message4(akm: Akm, peer: [u8; 6], replay_counter: u64) -> Result<Self, RsnFrameError> {
-        Self::build(
-            RsnInterface::Station,
+    /// Message 4. It cannot refuse: it carries no Key Data.
+    pub fn message4(akm: Akm, peer: [u8; 6], replay_counter: u64) -> Self {
+        Self::station(
+            EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
+                protocol_version: 1,
+                key_information: KeyInformation::EMPTY
+                    .with_descriptor_version(akm.key_descriptor_version())
+                    .with_pairwise(true)
+                    .with_mic(true)
+                    .with_secure(true),
+                key_length: 0,
+                replay_counter,
+                nonce: [0; 32],
+                key_rsc: [0; 8],
+            }),
             peer,
-            1,
-            KeyInformation::EMPTY
-                .with_descriptor_version(akm.key_descriptor_version())
-                .with_pairwise(true)
-                .with_mic(true)
-                .with_secure(true),
-            0,
-            replay_counter,
-            [0; 32],
-            [0; 8],
-            &[],
         )
     }
 
-    /// Build the station response to one connected-state Group Message 1.
-    pub fn group_message2(
-        akm: Akm,
-        peer: [u8; 6],
-        replay_counter: u64,
-    ) -> Result<Self, RsnFrameError> {
-        Self::build(
-            RsnInterface::Station,
+    /// The station's response to one connected-state Group Message 1. It
+    /// cannot refuse: it carries no Key Data.
+    pub fn group_message2(akm: Akm, peer: [u8; 6], replay_counter: u64) -> Self {
+        Self::station(
+            EapolKeyBuffer::encode_without_key_data(&EapolKeyFixedFields {
+                protocol_version: 1,
+                key_information: KeyInformation::EMPTY
+                    .with_descriptor_version(akm.key_descriptor_version())
+                    .with_mic(true)
+                    .with_secure(true),
+                key_length: 0,
+                replay_counter,
+                nonce: [0; 32],
+                key_rsc: [0; 8],
+            }),
             peer,
-            1,
-            KeyInformation::EMPTY
-                .with_descriptor_version(akm.key_descriptor_version())
-                .with_mic(true)
-                .with_secure(true),
-            0,
-            replay_counter,
-            [0; 32],
-            [0; 8],
-            &[],
         )
+    }
+
+    /// A station's frame of `packet` to `peer`.
+    const fn station(packet: EapolKeyBuffer<N>, peer: [u8; 6]) -> Self {
+        Self {
+            interface: RsnInterface::Station,
+            peer,
+            retransmission: false,
+            packet,
+        }
     }
 
     /// Build an authenticator Group Message 1 for protocol tests and the
@@ -316,30 +338,6 @@ impl<const N: usize> RsnTxFrame<N> {
     fn set_mic(&mut self, mic: &[u8; RSN_MIC_LEN]) {
         self.packet.set_mic(mic);
     }
-}
-
-pub fn build_sta_action_frame<const N: usize, const R: usize>(
-    state: &RsnStaState,
-    transmit: RsnTransmit,
-    security_ies: &OwnedAssociationSecurityIes<R>,
-) -> Result<RsnTxFrame<N>, RsnFrameError> {
-    let mut frame = match transmit.message {
-        RsnTxMessage::PairwiseMessage2 => RsnTxFrame::message2_with_security_ies(
-            state.akm(),
-            *state.peer(),
-            transmit.replay_counter,
-            *state.supplicant_nonce(),
-            security_ies,
-        ),
-        RsnTxMessage::PairwiseMessage4 => {
-            RsnTxFrame::message4(state.akm(), *state.peer(), transmit.replay_counter)
-        }
-        RsnTxMessage::PairwiseMessage1 | RsnTxMessage::PairwiseMessage3 => {
-            Err(RsnFrameError::UnexpectedTransmitAction)
-        }
-    }?;
-    frame.retransmission = transmit.retransmission;
-    Ok(frame)
 }
 
 #[cfg(test)]

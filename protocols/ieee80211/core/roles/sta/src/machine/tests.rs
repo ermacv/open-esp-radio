@@ -5362,17 +5362,14 @@ fn confirming_returns_a_refused_absence_place_without_opening_the_link() {
 }
 
 #[test]
-fn a_missing_handshake_supplicant_returns_the_rsn_error() {
+fn a_missing_handshake_supplicant_leaves_the_handshake() {
     installed(|mint| {
         let (mut world, _) = wpa2_associated::<2>(mint);
         let State::Handshake(handshake) = &mut world.station.state else {
             panic!("expected handshake");
         };
         handshake.supplicant = None;
-        assert!(matches!(
-            handshake.supplicant(),
-            Err(RsnStaSupplicantError::UnexpectedAction)
-        ));
+        assert!(handshake.supplicant().is_none());
         world.receive(at(40), &beacon());
         assert!(!matches!(world.station.state, State::Handshake(_)));
     });

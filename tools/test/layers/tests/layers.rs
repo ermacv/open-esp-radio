@@ -6374,11 +6374,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_CONTROLLER,
     ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs",
-        1,
-        BY_FINAL_CRATES,
-    ),
     ("protocols/radio/port/src/slot.rs", 1, BY_PHY_OWNER),
 ];
 /// S5: results dropped or replaced (a statement `.ok();`, an
@@ -8362,18 +8357,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnConnectedSupplicant.completed_group_message1",
-        "correct: a machine's datum replaced at each rekey, kept in its place (tasks/403)",
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.completed_message3",
-        BY_FINAL_CRATES,
-    ),
-    (
-        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.ptk",
         BY_FINAL_CRATES,
     ),
     (

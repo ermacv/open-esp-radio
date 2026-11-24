@@ -93,9 +93,8 @@ use oer_protocols_ieee80211_core_security_rsn::{
     supplicant::{
         RsnConnectedAction, RsnConnectedProcessError, RsnConnectedSupplicant,
         RsnConnectedSupplicantError, RsnGroupKeyFrame, RsnGroupKeyInstallRequest,
-        RsnStaDeadlineEvent, RsnStaKeyInstallRequest, RsnStaProcessError, RsnStaReady,
-        RsnStaResponseDeadline, RsnStaResponseWait, RsnStaRetryInstall, RsnStaSupplicant,
-        RsnStaSupplicantError,
+        RsnStaDeadlineEvent, RsnStaEapol, RsnStaError, RsnStaGroupInstall, RsnStaHandshake,
+        RsnStaKeyInstallRequest, RsnStaResponseDeadline, RsnStaResponseWait,
     },
 };
 use oer_protocols_ieee80211_core_upper_mac::protection::HePacketPadding;
@@ -1416,6 +1415,7 @@ enum Change<T: StaTypes, K> {
     Confirm {
         replay: CcmpRxReplayEpoch,
         response: EapolResponse,
+        supplicant: RsnConnectedSupplicant,
     },
 }
 
@@ -1442,29 +1442,14 @@ impl<T: StaTypes, K> State<T, K> {
     }
 
     #[inline(never)]
-    fn confirm(&mut self, replay: CcmpRxReplayEpoch, response: EapolResponse) {
+    fn confirm(
+        &mut self,
+        replay: CcmpRxReplayEpoch,
+        response: EapolResponse,
+        supplicant: RsnConnectedSupplicant,
+    ) {
         let Self::Handshake(handshake) = self else {
             return;
-        };
-        let supplicant = handshake
-            .supplicant
-            .take()
-            .ok_or(RsnStaSupplicantError::UnexpectedAction)
-            .and_then(RsnStaSupplicant::into_connected);
-        let supplicant = match supplicant {
-            Ok(supplicant) => supplicant,
-            Err(_) => {
-                let deauthentication = Deauthentication {
-                    bssid: handshake.bssid,
-                    reason_code: reason_code::UNSPECIFIED,
-                    protected: handshake.management.is_some(),
-                };
-                self.leave(
-                    StaDisconnectReason::HandshakeFailed,
-                    leave_key_step(Some(deauthentication)),
-                );
-                return;
-            }
         };
         let management = handshake.management.take();
         let new = NewConnection {
@@ -1516,7 +1501,11 @@ impl<T: StaTypes, K> State<T, K> {
             }
             Change::Report(reason) => *self = Self::Report(reason),
             Change::Leave { reason, step } => self.leave(reason, step),
-            Change::Confirm { replay, response } => self.confirm(replay, response),
+            Change::Confirm {
+                replay,
+                response,
+                supplicant,
+            } => self.confirm(replay, response, supplicant),
             Change::Establish(new) => self.establish(new),
         }
     }
@@ -1754,7 +1743,7 @@ struct NewHandshake<T: StaTypes, K> {
     association_id: u16,
     qos: bool,
     peer: Peer<T::RxMeta>,
-    supplicant: Option<RsnStaSupplicant>,
+    supplicant: Option<RsnStaHandshake>,
     spp: oer_protocols_ieee80211_wire::security::Spp,
     pmk: Pmk,
     qos_sequences: [SequenceCounter; 8],
@@ -1769,7 +1758,7 @@ struct Handshake<T: StaTypes, K> {
     association_id: u16,
     qos: bool,
     peer: Peer<T::RxMeta>,
-    supplicant: Option<RsnStaSupplicant>,
+    supplicant: Option<RsnStaHandshake>,
     spp: oer_protocols_ieee80211_wire::security::Spp,
     pmk: Pmk,
     qos_sequences: [SequenceCounter; 8],
@@ -1780,10 +1769,8 @@ struct Handshake<T: StaTypes, K> {
 }
 
 impl<T: StaTypes, K> Handshake<T, K> {
-    fn supplicant(&mut self) -> Result<&mut RsnStaSupplicant, RsnStaSupplicantError> {
-        self.supplicant
-            .as_mut()
-            .ok_or(RsnStaSupplicantError::UnexpectedAction)
+    fn supplicant(&mut self) -> Option<&mut RsnStaHandshake> {
+        self.supplicant.as_mut()
     }
 }
 
@@ -1799,8 +1786,8 @@ enum HandshakeStep {
     /// The keys of Message 3 to install: the pairwise key, then the group
     /// key.
     Install(RsnStaKeyInstallRequest, EapolProtection),
-    InstallGroup(RsnStaRetryInstall, CcmpRxReplayEpoch, EapolProtection),
-    AwaitInstalled(RsnStaRetryInstall, CcmpRxReplayEpoch, EapolProtection),
+    InstallGroup(RsnStaGroupInstall, CcmpRxReplayEpoch, EapolProtection),
+    AwaitInstalled(RsnStaGroupInstall, CcmpRxReplayEpoch, EapolProtection),
 }
 
 /// The next Sequence Number of a TID the station's ADDBA Request names,
@@ -5102,8 +5089,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             State::Handshake(handshake) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.group_management().is_some(),
-                    Err(_) => {
+                    Some(supplicant) => supplicant.group_management().is_some(),
+                    None => {
                         let change = leave_handshake(handshake, reason_code::UNSPECIFIED);
                         state.apply(change);
                         return;
@@ -5524,25 +5511,24 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             return Change::Keep;
         }
         // Message 3's key data is unwrapped here, in the step that takes it.
-        let received = match handshake.supplicant.as_mut() {
-            Some(supplicant) => {
-                supplicant.on_frame(eapol, &handshake.pmk, self.config.callbacks.aes_engine())
-            }
-            None => Err(RsnStaSupplicantError::UnexpectedAction.into()),
+        let Some(supplicant) = handshake.supplicant.as_mut() else {
+            return leave_handshake(handshake, reason_code::UNSPECIFIED);
         };
+        let received =
+            supplicant.on_eapol(eapol, &handshake.pmk, self.config.callbacks.aes_engine());
         let action = match received {
             Ok(action) => action,
-            Err(RsnStaProcessError::Supplicant(RsnStaSupplicantError::RetainedSecurityIes(
-                error,
-            ))) => {
+            Err(RsnStaError::RetainedSecurityIes(error)) => {
                 return leave_keyed(StaDisconnectReason::RetainedSecurityIes(error), None);
             }
-            Err(RsnStaProcessError::Supplicant(RsnStaSupplicantError::InvalidFrame(error))) => {
+            Err(RsnStaError::InvalidFrame(error)) => {
                 return leave_keyed(StaDisconnectReason::InvalidEapol(error), None);
             }
-            // A peer frame the supplicant rejects changes nothing.
-            Err(error) if error.is_peer_input_rejection() => RsnStaReady::None,
-            Err(_) => return leave_handshake(handshake, reason_code::UNSPECIFIED),
+            // A peer frame the handshake refuses changes nothing.
+            Err(RsnStaError::Rejected(_)) => RsnStaEapol::None,
+            Err(RsnStaError::Engine(_)) => {
+                return leave_handshake(handshake, reason_code::UNSPECIFIED);
+            }
         };
         handshake_ready(handshake, now, action, protection)
     }
@@ -5580,8 +5566,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             }
             HandshakeStep::Install(request, protection) => {
                 let protected = match handshake.supplicant() {
-                    Ok(supplicant) => supplicant.group_management().is_some(),
-                    Err(_) => {
+                    Some(supplicant) => supplicant.group_management().is_some(),
+                    None => {
                         return (
                             leave_handshake(handshake, reason_code::UNSPECIFIED),
                             ActionProgress::Transition,
@@ -6828,7 +6814,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 }),
             );
         };
-        let supplicant = RsnStaSupplicant::try_new(
+        // The checked handshake is built straight into the role's slot; the
+        // language moves it there by value.
+        let supplicant = RsnStaHandshake::new(
             self.config.address.get(),
             bssid.get(),
             self.config.callbacks.nonce(),
@@ -7145,11 +7133,11 @@ fn leave_keyed<T: StaTypes, K>(
 fn handshake_ready<T: StaTypes, K>(
     handshake: &mut Handshake<T, K>,
     now: Instant,
-    action: RsnStaReady<DEFAULT_EAPOL_FRAME_CAPACITY>,
+    action: RsnStaEapol<DEFAULT_EAPOL_FRAME_CAPACITY>,
     protection: EapolProtection,
 ) -> Change<T, K> {
     match action {
-        RsnStaReady::Transmit(message) => {
+        RsnStaEapol::Transmit(message) => {
             let Some(deadline) = RsnStaResponseDeadline::start(RsnStaResponseWait::Message3, now)
             else {
                 return leave_keyed(
@@ -7164,13 +7152,14 @@ fn handshake_ready<T: StaTypes, K>(
             handshake.step = HandshakeStep::Send(message);
             handshake.deadline = deadline;
         }
-        RsnStaReady::InstallKeys(request) => {
+        RsnStaEapol::Install(request) => {
             handshake.step = HandshakeStep::Install(request, protection);
         }
-        RsnStaReady::RetryInstall(_) | RsnStaReady::Deauthenticate => {
+        // The handshake ended: the role takes down what it installed.
+        RsnStaEapol::End(_) => {
             return leave_handshake(handshake, reason_code::UNSPECIFIED);
         }
-        RsnStaReady::None => {}
+        RsnStaEapol::None => {}
     }
     Change::Keep
 }
@@ -7245,7 +7234,7 @@ fn finish_connected_install<T: StaTypes, K>(
 
 fn finish_handshake_install<T: StaTypes, K, E: oer_portable_crypto::block::Aes128Engine>(
     handshake: &mut Handshake<T, K>,
-    request: RsnStaRetryInstall,
+    request: RsnStaGroupInstall,
     replay: CcmpRxReplayEpoch,
     protection: EapolProtection,
     engine: &mut E,
@@ -7253,17 +7242,21 @@ fn finish_handshake_install<T: StaTypes, K, E: oer_portable_crypto::block::Aes12
     if let (Some(management), Some(igtk)) = (&mut handshake.management, request.igtk()) {
         management.install_igtk(igtk);
     }
-    match handshake.supplicant().and_then(|supplicant| {
-        supplicant.complete_retry_install::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request, engine)
-    }) {
-        Ok(RsnStaReady::Transmit(message)) => Change::Confirm {
+    // The handshake becomes the connected supplicant: it leaves its slot.
+    let Some(supplicant) = handshake.supplicant.take() else {
+        return leave_handshake(handshake, reason_code::UNSPECIFIED);
+    };
+    match supplicant.complete::<DEFAULT_EAPOL_FRAME_CAPACITY, _>(request.installed(), engine) {
+        Ok(connected) => Change::Confirm {
             replay,
             response: EapolResponse {
-                frame: message,
+                frame: connected.message4,
                 protection,
             },
+            supplicant: connected.supplicant,
         },
-        _ => leave_handshake(handshake, reason_code::UNSPECIFIED),
+        // The handshake ended: the role takes down what it installed.
+        Err(_) => leave_handshake(handshake, reason_code::UNSPECIFIED),
     }
 }
 /// Why a frame was not handed out.

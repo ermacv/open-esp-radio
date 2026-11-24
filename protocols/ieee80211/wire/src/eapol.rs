@@ -200,6 +200,13 @@ pub const EAPOL_KEY_MIC_LEN: usize = 16;
 pub const EAPOL_KEY_FIXED_LEN: usize = 95;
 /// An EAPOL-Key packet without Key Data.
 pub const EAPOL_KEY_PACKET_LEN: usize = EAPOL_HEADER_LEN + EAPOL_KEY_FIXED_LEN;
+/// [`EAPOL_KEY_FIXED_LEN`] as the body's 16-bit Packet Body Length counts it.
+const BODY_BEFORE_KEY_DATA: u16 = 95;
+const _: () = {
+    if BODY_BEFORE_KEY_DATA as usize != EAPOL_KEY_FIXED_LEN {
+        panic!("the EAPOL-Key body before its Key Data");
+    }
+};
 
 /// The fields before the Key MIC, after the EAPOL header: descriptor type
 /// (1), Key Information (2), Key Length (2), Key Replay Counter (8), Key
@@ -403,12 +410,12 @@ pub struct EapolKeyBuffer<const N: usize> {
 /// 802.11-2020, 12.7.2, Figure 12-32 (EAPOL-Key frame).
 fn fixed_part(
     fields: &EapolKeyFixedFields,
-    body_len: u16,
-    key_data_len: u16,
+    body_len: EapolLength,
+    key_data_len: EapolLength,
 ) -> [u8; EAPOL_KEY_PACKET_LEN] {
     let layout = [
         &[fields.protocol_version, EAPOL_PACKET_TYPE_KEY][..],
-        &EapolLength::of(body_len).to_bytes(),
+        &body_len.to_bytes(),
         &[RSN_KEY_DESCRIPTOR_TYPE],
         &fields.key_information.to_bytes(),
         &EapolLength::of(fields.key_length).to_bytes(),
@@ -418,7 +425,7 @@ fn fixed_part(
         &fields.key_rsc,
         &[0; 8],
         &ZERO_MIC,
-        &EapolLength::of(key_data_len).to_bytes(),
+        &key_data_len.to_bytes(),
     ];
     let mut part = [0; EAPOL_KEY_PACKET_LEN];
     for (target, source) in part.iter_mut().zip(layout.into_iter().flatten()) {
@@ -442,7 +449,11 @@ impl<const N: usize> EapolKeyBuffer<N> {
         let length = oer_portable_wire::PrefixLength::new(required)
             .ok_or(EapolEncodeError::BufferTooSmall { required })?;
         Ok(Self::place(
-            &fixed_part(&fields.fixed, body_len, key_data_len),
+            &fixed_part(
+                &fields.fixed,
+                EapolLength::of(body_len),
+                EapolLength::of(key_data_len),
+            ),
             fields.key_data,
             length,
         ))
@@ -451,16 +462,54 @@ impl<const N: usize> EapolKeyBuffer<N> {
     /// Encode a packet without Key Data, with a zero Key MIC. It cannot
     /// refuse: the buffer's room for it is checked when `N` is chosen.
     pub fn encode_without_key_data(fields: &EapolKeyFixedFields) -> Self {
-        const BODY_LEN: u16 = 95;
+        Self::encode_with_bounded_key_data::<0>(fields, &[], oer_portable_wire::PrefixLength::ZERO)
+    }
+
+    /// Encode a packet whose Key Data is the admitted prefix `length` of
+    /// `key_data`, with a zero Key MIC. It cannot refuse: a Key Data of at
+    /// most `K` octets fits the buffer and the body's 16-bit length, which
+    /// is checked when `N` and `K` are chosen.
+    ///
+    /// ```compile_fail,E0080
+    /// // A Key Data bound past the 16-bit body length, though the buffer
+    /// // holds it.
+    /// use oer_protocols_ieee80211_wire::eapol::{EapolKeyBuffer, EapolKeyFixedFields, KeyInformation};
+    /// let fields = EapolKeyFixedFields {
+    ///     protocol_version: 2,
+    ///     key_information: KeyInformation::from_raw(0),
+    ///     key_length: 0,
+    ///     replay_counter: 0,
+    ///     nonce: [0; 32],
+    ///     key_rsc: [0; 8],
+    /// };
+    /// let key_data = [0; 65_500];
+    /// let _ = EapolKeyBuffer::<65_700>::encode_with_bounded_key_data(
+    ///     &fields,
+    ///     &key_data,
+    ///     oer_portable_wire::PrefixLength::ZERO,
+    /// );
+    /// ```
+    pub fn encode_with_bounded_key_data<const K: usize>(
+        fields: &EapolKeyFixedFields,
+        key_data: &[u8; K],
+        length: oer_portable_wire::PrefixLength<K>,
+    ) -> Self {
         const {
-            if BODY_LEN as usize != EAPOL_KEY_FIXED_LEN {
-                panic!("the EAPOL-Key body without Key Data");
+            match EAPOL_KEY_FIXED_LEN.checked_add(K) {
+                Some(body) if body <= u16::MAX as usize => {}
+                _ => panic!("a bounded Key Data fits the EAPOL-Key body's length"),
             }
         }
+        let key_data_len = length.to_u16();
         Self::place(
-            &fixed_part(fields, BODY_LEN, 0),
-            &[],
-            oer_portable_wire::PrefixLength::<N>::constant::<EAPOL_KEY_PACKET_LEN>(),
+            &fixed_part(
+                fields,
+                // At most `u16::MAX` (checked above): it does not saturate.
+                EapolLength::of(key_data_len.saturating_add(BODY_BEFORE_KEY_DATA)),
+                EapolLength::of(key_data_len),
+            ),
+            length.borrow(key_data),
+            length.after::<EAPOL_KEY_PACKET_LEN, N>(),
         )
     }
 
@@ -723,6 +772,23 @@ mod tests {
         assert_eq!(key.key_identifier(), &[0; 8]);
         assert_eq!(key.mic(), &[0; EAPOL_KEY_MIC_LEN]);
         assert_eq!(key.key_data(), &key_data);
+        // The bounded encoder lays out the same packet, Key Data shorter
+        // than its bound included.
+        let mut bounded = [0xee; 16];
+        bounded[..key_data.len()].copy_from_slice(&key_data);
+        let length = oer_portable_wire::PrefixLength::<16>::new(key_data.len()).unwrap();
+        let from_bound =
+            EapolKeyBuffer::<160>::encode_with_bounded_key_data(&fixed, &bounded, length);
+        assert_eq!(from_bound.as_bytes(), bytes);
+        let empty = EapolKeyBuffer::<160>::encode_with_bounded_key_data(
+            &fixed,
+            &bounded,
+            oer_portable_wire::PrefixLength::ZERO,
+        );
+        assert_eq!(
+            empty.as_bytes(),
+            EapolKeyBuffer::<160>::encode_without_key_data(&fixed).as_bytes()
+        );
     }
 
     /// A packet without Key Data is the packet `encode` writes for empty

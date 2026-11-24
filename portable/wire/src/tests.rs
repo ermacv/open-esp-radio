@@ -504,3 +504,27 @@ fn a_whole_field_writes_every_octet_and_keeps_the_rest() {
     let written = WholeOctets::from_bytes([0; 5]).with_word(0xabcd);
     assert_eq!(written.to_bytes(), [0xd0, 0xbc, 0x0a, 0, 0]);
 }
+
+/// A prefix shifted past a fixed head keeps its length plus the head's, in
+/// the larger array, whatever its length within its bound.
+#[test]
+fn a_prefix_after_a_head_is_its_length_plus_the_head() {
+    for length in 0..=4 {
+        let prefix = crate::PrefixLength::<4>::new(length).unwrap();
+        assert_eq!(prefix.after::<3, 7>().get(), length + 3);
+        assert_eq!(prefix.after::<3, 9>().get(), length + 3);
+    }
+}
+
+/// A prefix's length as a 16-bit count is its length, up to the bound.
+#[test]
+fn a_prefix_length_is_its_16_bit_count() {
+    for length in [0, 1, 255, 256, 4095] {
+        let prefix = crate::PrefixLength::<4095>::new(length).unwrap();
+        assert_eq!(usize::from(prefix.to_u16()), length);
+    }
+    assert_eq!(
+        crate::PrefixLength::<65535>::new(65535).unwrap().to_u16(),
+        u16::MAX
+    );
+}

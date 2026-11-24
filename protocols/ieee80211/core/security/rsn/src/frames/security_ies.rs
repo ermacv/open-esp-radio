@@ -32,13 +32,14 @@ impl<const N: usize> OwnedRsnIe<N> {
 /// when validating message 3 key data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OwnedAssociationSecurityIes<const N: usize = RSN_ASSOC_SECURITY_IES_CAPACITY> {
-    bytes: heapless::Vec<u8, N>,
+    bytes: [u8; N],
+    length: oer_portable_wire::PrefixLength<N>,
 }
 
 impl<const N: usize> OwnedAssociationSecurityIes<N> {
     #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn invalidate_for_test(&mut self) {
-        self.bytes.clear();
+        self.length = oer_portable_wire::PrefixLength::ZERO;
     }
 
     /// Copy the exact RSN IE plus optional RSNXE emitted by Association.
@@ -62,24 +63,28 @@ impl<const N: usize> OwnedAssociationSecurityIes<N> {
         {
             return Err(RsnFrameError::InvalidRsnxe);
         }
-        let len = rsn_ie
+        let length = rsn_ie
             .as_bytes()
             .len()
             .checked_add(rsnxe.len())
+            .and_then(oer_portable_wire::PrefixLength::new)
             .ok_or(RsnFrameError::CapacityExceeded)?;
-        if len > N {
-            return Err(RsnFrameError::CapacityExceeded);
+        let mut bytes = [0; N];
+        // `length` proves both elements fit the array.
+        for (target, source) in bytes.iter_mut().zip(rsn_ie.as_bytes().iter().chain(rsnxe)) {
+            *target = *source;
         }
-        let mut bytes = heapless::Vec::from_slice(rsn_ie.as_bytes())
-            .map_err(|_| RsnFrameError::CapacityExceeded)?;
-        bytes
-            .extend_from_slice(rsnxe)
-            .map_err(|_| RsnFrameError::CapacityExceeded)?;
-        Ok(Self { bytes })
+        Ok(Self { bytes, length })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        self.length.borrow(&self.bytes)
+    }
+
+    /// The array and the admitted length of its elements: their bound is
+    /// the type's.
+    pub(crate) const fn bounded(&self) -> (&[u8; N], oer_portable_wire::PrefixLength<N>) {
+        (&self.bytes, self.length)
     }
 
     /// The RSN element and the RSNXE after it.
@@ -108,8 +113,11 @@ mod tests {
     #[test]
     fn damaged_association_envelopes_return_errors_for_both_views() {
         for bytes in [&[][..], &[RSN_ELEMENT_ID][..], &[RSN_ELEMENT_ID, 255][..]] {
+            let mut array = [0; 4];
+            array[..bytes.len()].copy_from_slice(bytes);
             let owned = OwnedAssociationSecurityIes::<4> {
-                bytes: heapless::Vec::from_slice(bytes).unwrap(),
+                bytes: array,
+                length: oer_portable_wire::PrefixLength::new(bytes.len()).unwrap(),
             };
             assert_eq!(owned.rsn_ie(), Err(RsnFrameError::InvalidRsnIe));
             assert_eq!(owned.rsnxe(), Err(RsnFrameError::InvalidRsnIe));
