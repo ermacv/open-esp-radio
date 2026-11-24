@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")]
 //! ESP32-S31 chip knowledge: the tables and pure functions the HAL, the
 //! drivers and the host tools share, without hardware access.
 //!

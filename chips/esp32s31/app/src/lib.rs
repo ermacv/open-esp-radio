@@ -2,7 +2,7 @@
     target_arch = "riscv32",
     expect(
         clippy::let_underscore_must_use,
-        reason = "step 14: step 7 with the rest of P"
+        reason = "the pump, the entry and the images"
     )
 )]
 #![cfg(target_arch = "riscv32")]

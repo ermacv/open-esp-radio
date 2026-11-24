@@ -1,10 +1,10 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "step 15: the exception path as one module"
+    reason = "the CPU exception path as one module"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 15: the exception path as one module"
+    reason = "the CPU exception path as one module"
 )]
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(
@@ -26,7 +26,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "step 15: the exception path as one module"
+    reason = "the CPU exception path as one module"
 )]
 //! Stage-two entry, relocation, traps and interrupt-stack ownership of the
 //! Espressif staged boot.

@@ -1,15 +1,6 @@
-#![expect(
-    clippy::struct_excessive_bools,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
+#![expect(clippy::struct_excessive_bools, reason = "the final crates cleaned")]
+#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
+#![expect(clippy::let_underscore_must_use, reason = "the final crates cleaned")]
 //! The facts of the Espressif chips, in one layered model.
 //!
 //! Each fact has one layer (README): the ISA of the harts

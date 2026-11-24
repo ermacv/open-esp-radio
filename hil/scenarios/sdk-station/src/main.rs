@@ -19,7 +19,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "step 14: step 7 with the rest of P"
+    reason = "the pump, the entry and the images"
 )]
 
 use std::{

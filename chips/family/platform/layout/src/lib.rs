@@ -1,9 +1,6 @@
 #![cfg_attr(
     feature = "build",
-    expect(
-        clippy::cast_possible_truncation,
-        reason = "step 16b: the boot's and the family drivers' rows"
-    )
+    expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")
 )]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
@@ -19,7 +16,7 @@
 #![expect(
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
 
 //! Staged-boot layout contract of the Espressif chips.

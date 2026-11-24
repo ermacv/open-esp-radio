@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 11: 5.7, the port type and the conformance suite"
+    reason = "the port type and the conformance suite"
 )]
 #![no_std]
 #![forbid(unsafe_code)]

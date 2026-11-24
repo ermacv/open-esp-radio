@@ -1,11 +1,5 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
-#![expect(
-    clippy::cast_sign_loss,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
+#![expect(clippy::cast_sign_loss, reason = "the final crates cleaned")]
 #![cfg_attr(
     test,
     expect(

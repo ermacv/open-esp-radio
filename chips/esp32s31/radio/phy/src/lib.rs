@@ -5,19 +5,16 @@
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
 #![expect(
     clippy::cast_possible_wrap,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
-#![expect(
-    clippy::cast_sign_loss,
-    reason = "step 16: the PHY's procedures in the one-loop form"
-)]
+#![expect(clippy::cast_sign_loss, reason = "the PHY's procedures as programs")]
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
 #![no_std]
 #![forbid(unsafe_code)]
@@ -50,7 +47,7 @@
     clippy::expect_used,
     clippy::indexing_slicing,
     clippy::panic,
-    reason = "step 16: the PHY's procedures in the one-loop form"
+    reason = "the PHY's procedures as programs"
 )]
 
 //! Source-only ESP32-S31 shared RF/PHY ownership frontier.

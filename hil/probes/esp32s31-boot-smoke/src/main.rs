@@ -2,14 +2,14 @@
     target_arch = "riscv32",
     expect(
         clippy::cast_possible_truncation,
-        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+        reason = "the probe's first change: deleted, or moved onto HIL"
     )
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::let_underscore_must_use,
-        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+        reason = "the probe's first change: deleted, or moved onto HIL"
     )
 )]
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]

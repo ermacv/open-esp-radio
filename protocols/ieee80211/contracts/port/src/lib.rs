@@ -1,7 +1,4 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the final crates cleaned")]
 #![no_std]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]

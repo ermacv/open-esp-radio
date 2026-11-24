@@ -1,7 +1,7 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
 //! Espressif PMU light sleep over a chip's typed register traits.
 //!

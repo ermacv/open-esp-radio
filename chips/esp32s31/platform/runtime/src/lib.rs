@@ -1,10 +1,10 @@
 #![expect(
     clippy::fn_params_excessive_bools,
-    reason = "step 15: the exception path as one module"
+    reason = "the CPU exception path as one module"
 )]
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 15: the exception path as one module"
+    reason = "the CPU exception path as one module"
 )]
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]

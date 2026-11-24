@@ -1,19 +1,19 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+    reason = "the probe's first change: deleted, or moved onto HIL"
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::cast_sign_loss,
-        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+        reason = "the probe's first change: deleted, or moved onto HIL"
     )
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::let_underscore_must_use,
-        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+        reason = "the probe's first change: deleted, or moved onto HIL"
     )
 )]
 #![cfg_attr(target_arch = "riscv32", no_main)]
@@ -31,7 +31,7 @@
 )]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+    reason = "the probe's first change: deleted, or moved onto HIL"
 )]
 
 //! Case C's sender (`tasks/154`, `159`, cell E of `161`): frames to the

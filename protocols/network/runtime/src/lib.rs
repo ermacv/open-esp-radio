@@ -1,6 +1,6 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "step 14: step 7 with the rest of P"
+    reason = "the pump, the entry and the images"
 )]
 #![cfg_attr(
     test,

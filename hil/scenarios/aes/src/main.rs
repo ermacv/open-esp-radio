@@ -16,10 +16,7 @@
         clippy::arithmetic_side_effects
     )
 )]
-#![expect(
-    clippy::arithmetic_side_effects,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::arithmetic_side_effects, reason = "the rows no step rewrites")]
 
 use std::{process::ExitCode, time::Duration};
 

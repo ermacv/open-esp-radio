@@ -1,6 +1,6 @@
 #![expect(
     clippy::let_underscore_must_use,
-    reason = "step 4: D1, D2 and D3, the PHY without quarantine"
+    reason = "the PHY under one owner: its state, its operations, clocks and power"
 )]
 #![forbid(unsafe_code)]
 

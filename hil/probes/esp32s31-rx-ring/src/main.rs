@@ -1,12 +1,12 @@
 #![expect(
     clippy::cast_possible_truncation,
-    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+    reason = "the probe's first change: deleted, or moved onto HIL"
 )]
 #![cfg_attr(
     target_arch = "riscv32",
     expect(
         clippy::let_underscore_must_use,
-        reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+        reason = "the probe's first change: deleted, or moved onto HIL"
     )
 )]
 #![cfg_attr(
@@ -24,7 +24,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 #![expect(
     clippy::arithmetic_side_effects,
-    reason = "the probe's first change: deleted, or moved onto HIL (plan, section 6)"
+    reason = "the probe's first change: deleted, or moved onto HIL"
 )]
 
 //! The receive ring's atoms on the stand (`tasks/277`, `281`): over the

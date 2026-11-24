@@ -1,12 +1,9 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")]
 //! Espressif bootstrap sequences over a chip's typed register traits.
 //!
 //! Before an executor exists there is nothing to yield to: hardware

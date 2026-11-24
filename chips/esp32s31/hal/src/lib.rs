@@ -1,24 +1,12 @@
 #![expect(
     clippy::fn_params_excessive_bools,
     clippy::struct_excessive_bools,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
-#![expect(
-    clippy::cast_possible_wrap,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
-#![expect(
-    clippy::cast_sign_loss,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
-#![expect(
-    clippy::let_underscore_must_use,
-    reason = "step 16b: the boot's and the family drivers' rows"
-)]
+#![expect(clippy::cast_possible_truncation, reason = "the rows no step rewrites")]
+#![expect(clippy::cast_possible_wrap, reason = "the rows no step rewrites")]
+#![expect(clippy::cast_sign_loss, reason = "the rows no step rewrites")]
+#![expect(clippy::let_underscore_must_use, reason = "the rows no step rewrites")]
 #![no_std]
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 // A forgotten owner never releases what it holds, such as a modem clock lease,
@@ -39,7 +27,7 @@
     clippy::indexing_slicing,
     clippy::panic,
     clippy::unreachable,
-    reason = "step 16b: the boot's and the family drivers' rows"
+    reason = "the rows no step rewrites"
 )]
 
 //! ESP32-S31 register transactions and affine radio ownership.
