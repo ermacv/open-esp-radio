@@ -462,15 +462,7 @@ impl<const N: usize> EapolKeyBuffer<N> {
     /// Encode a packet without Key Data, with a zero Key MIC. It cannot
     /// refuse: the buffer's room for it is checked when `N` is chosen.
     pub fn encode_without_key_data(fields: &EapolKeyFixedFields) -> Self {
-        Self::place(
-            &fixed_part(
-                fields,
-                EapolLength::of(BODY_BEFORE_KEY_DATA),
-                EapolLength::of(0),
-            ),
-            &[],
-            oer_portable_wire::PrefixLength::<N>::constant::<EAPOL_KEY_PACKET_LEN>(),
-        )
+        Self::encode_with_bounded_key_data::<0>(fields, &[], oer_portable_wire::PrefixLength::ZERO)
     }
 
     /// Encode a packet whose Key Data is the admitted prefix `length` of

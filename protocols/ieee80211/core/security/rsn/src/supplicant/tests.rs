@@ -1273,3 +1273,41 @@ fn a_message1_with_another_anonce_under_the_same_counter_restarts() {
     };
     assert!(!restart.retransmission());
 }
+
+/// After a completed Message 3 and no Group Message 1, a Group Message 1
+/// under Message 3's counter is stale: refused before its MIC is read.
+#[test]
+fn a_group_message1_at_the_message3_frontier_is_stale() {
+    let pmk = test_pmk();
+    let ptk = pmk.derive_ptk(crate::Akm::Psk, context());
+    let mut connected = connected(pmk.derive_ptk(crate::Akm::Psk, context()));
+    assert_eq!(connected.replay_counter(), 2);
+    let frame = RsnTxFrame::<512>::group_message1(
+        crate::Akm::Psk,
+        LOCAL,
+        2,
+        [9; 8],
+        group_key_data(&ptk).as_bytes(),
+    )
+    .unwrap()
+    .authenticate(&ptk, &mut SoftwareAes128)
+    .unwrap();
+    assert_eq!(
+        connected
+            .on_group_message1(owned(&frame), &mut SoftwareAes128)
+            .err(),
+        Some(RsnConnectedSupplicantError::StaleReplayCounter)
+    );
+    // Its MIC is not read: a frame with a broken one is refused the same.
+    let mut broken = owned(&frame).as_bytes().to_vec();
+    broken[81] ^= 1;
+    let broken =
+        crate::OwnedEapolFrame::<512>::try_copy(RsnInterface::Station, AP, &broken).unwrap();
+    assert_eq!(
+        connected
+            .on_group_message1(broken, &mut SoftwareAes128)
+            .err(),
+        Some(RsnConnectedSupplicantError::StaleReplayCounter)
+    );
+    assert_eq!(connected.replay_counter(), 2);
+}

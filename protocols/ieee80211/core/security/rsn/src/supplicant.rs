@@ -981,18 +981,18 @@ impl RsnStaHandshake {
             return Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage));
         };
         let replay = key.replay_counter();
-        let Stage::AwaitingMessage3 = stage else {
-            let Stage::Installing { completed } = stage else {
-                return Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage));
-            };
-            return if replay == completed.replay_counter {
-                Ok(RsnStaEapol::None)
-            } else if replay < completed.replay_counter {
-                Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
-            } else {
-                Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage))
-            };
-        };
+        match stage {
+            Stage::AwaitingMessage3 => {}
+            Stage::Installing { completed } => {
+                return if replay == completed.replay_counter {
+                    Ok(RsnStaEapol::None)
+                } else if replay < completed.replay_counter {
+                    Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter))
+                } else {
+                    Err(RsnStaError::Rejected(RsnStateError::UnexpectedMessage))
+                };
+            }
+        }
         check_message3_fields(*akm, key, authenticator_nonce).map_err(RsnStaError::Rejected)?;
         if replay <= *message1_replay {
             return Err(RsnStaError::Rejected(RsnStateError::StaleReplayCounter));
