@@ -327,3 +327,25 @@ fn every_comeback_slot_is_updated_without_affecting_another_slot() {
     assert_eq!(tokens.pending[1], 2);
     assert_eq!(tokens.pending[254], 255);
 }
+
+/// A token naming another index than the station's pending one is refused,
+/// even with a valid MAC for that index.
+#[test]
+fn a_comeback_token_of_another_index_is_refused() {
+    let station = [2, 0, 0, 0, 0, 7];
+    let key = [0x42; 32];
+    let mut tokens = SaeComebackTokens::new();
+    let token = tokens.issue(
+        station,
+        oer_portable_time::Instant::from_micros(1_000),
+        || key,
+    );
+    assert_eq!(token[..2], [0, 1]);
+    let other_index = [0, 2];
+    let mac = hmac_sha256(&key, &[&station, &other_index]);
+    let mut other = token;
+    other[..2].copy_from_slice(&other_index);
+    other[2..].copy_from_slice(&mac[2..]);
+    assert!(!tokens.check(station, &other));
+    assert!(tokens.check(station, &token));
+}
