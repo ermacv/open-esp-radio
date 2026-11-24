@@ -99,53 +99,48 @@ impl EspNowPmkId {
     }
 }
 
-/// One optional PMK and its replacement/removal generation.
+/// The place of one PMK: empty, or a key. Its generation counts the
+/// installs and replacements, so a handle to an earlier key is stale.
 pub struct EspNowPmkOwner {
-    generation: u32,
-    key: Option<EspNowPmk>,
+    place: PmkPlace,
+}
+
+enum PmkPlace {
+    Empty { generation: u32 },
+    Installed { generation: u32, key: EspNowPmk },
 }
 
 impl EspNowPmkOwner {
     pub const fn new() -> Self {
         Self {
-            generation: 0,
-            key: None,
+            place: PmkPlace::Empty { generation: 0 },
         }
     }
 
     pub fn from_key(key: EspNowPmk) -> Self {
         Self {
-            generation: 1,
-            key: Some(key),
+            place: PmkPlace::Installed { generation: 1, key },
         }
     }
 
+    /// The installed key's handle; `None` while the place is empty.
     pub const fn current_id(&self) -> Option<EspNowPmkId> {
-        if self.key.is_some() {
-            Some(EspNowPmkId {
-                generation: self.generation,
-            })
-        } else {
-            None
+        match self.place {
+            PmkPlace::Installed { generation, .. } => Some(EspNowPmkId { generation }),
+            PmkPlace::Empty { .. } => None,
         }
     }
 
-    pub fn install(&mut self, key: EspNowPmk) -> Result<EspNowPmkId, EspNowPmkMutationFailure> {
-        if self.key.is_some() {
-            return Err(EspNowPmkMutationFailure::new(
-                EspNowPmkError::AlreadyInstalled,
-                key,
-            ));
+    /// The empty place, which alone installs a key; or the handle of the
+    /// key installed, which a caller replaces or removes first.
+    pub fn vacancy(&mut self) -> Result<EspNowPmkVacancy<'_>, EspNowPmkId> {
+        match self.place {
+            PmkPlace::Empty { generation } => Ok(EspNowPmkVacancy {
+                place: &mut self.place,
+                generation,
+            }),
+            PmkPlace::Installed { generation, .. } => Err(EspNowPmkId { generation }),
         }
-        let Some(generation) = self.generation.checked_add(1) else {
-            return Err(EspNowPmkMutationFailure::new(
-                EspNowPmkError::GenerationExhausted,
-                key,
-            ));
-        };
-        self.generation = generation;
-        self.key = Some(key);
-        Ok(EspNowPmkId { generation })
     }
 
     /// Atomically replace a PMK. Validation happens before either key moves;
@@ -155,41 +150,60 @@ impl EspNowPmkOwner {
         current: EspNowPmkId,
         replacement: EspNowPmk,
     ) -> Result<(EspNowPmkId, EspNowPmk), EspNowPmkMutationFailure> {
-        if self.generation != current.generation {
-            return Err(EspNowPmkMutationFailure::new(
-                EspNowPmkError::Stale(current),
-                replacement,
-            ));
-        }
-        let Some(installed) = self.key.as_mut() else {
+        let PmkPlace::Installed { generation, key } = &mut self.place else {
             return Err(EspNowPmkMutationFailure::new(
                 EspNowPmkError::Stale(current),
                 replacement,
             ));
         };
-        let Some(generation) = self.generation.checked_add(1) else {
+        if *generation != current.generation {
+            return Err(EspNowPmkMutationFailure::new(
+                EspNowPmkError::Stale(current),
+                replacement,
+            ));
+        }
+        let Some(next) = generation.checked_add(1) else {
             return Err(EspNowPmkMutationFailure::new(
                 EspNowPmkError::GenerationExhausted,
                 replacement,
             ));
         };
-        let old = core::mem::replace(installed, replacement);
-        self.generation = generation;
-        Ok((EspNowPmkId { generation }, old))
+        let old = core::mem::replace(key, replacement);
+        *generation = next;
+        Ok((EspNowPmkId { generation: next }, old))
     }
 
+    /// Remove the key `current` names; the place is empty after it. A
+    /// refusal moves nothing.
     pub fn remove(&mut self, current: EspNowPmkId) -> Result<EspNowPmk, EspNowPmkError> {
-        if self.current_id() != Some(current) {
+        if !matches!(
+            self.place,
+            PmkPlace::Installed { generation, .. } if generation == current.generation
+        ) {
             return Err(EspNowPmkError::Stale(current));
         }
-        self.key.take().ok_or(EspNowPmkError::Missing)
+        let empty = PmkPlace::Empty {
+            generation: current.generation,
+        };
+        match core::mem::replace(&mut self.place, empty) {
+            PmkPlace::Installed { key, .. } => Ok(key),
+            // The check above found the key installed; the language cannot
+            // carry that into this match, so this arm answers what it would
+            // see: no key of `current`.
+            vacant @ PmkPlace::Empty { .. } => {
+                self.place = vacant;
+                Err(EspNowPmkError::Stale(current))
+            }
+        }
     }
 
     pub fn key(&self, current: EspNowPmkId) -> Result<&EspNowPmk, EspNowPmkError> {
-        if self.current_id() != Some(current) {
-            return Err(EspNowPmkError::Stale(current));
+        match &self.place {
+            PmkPlace::Installed { generation, key } if *generation == current.generation => Ok(key),
+            PmkPlace::Installed { .. } | PmkPlace::Empty { .. } => {
+                Err(EspNowPmkError::Stale(current))
+            }
         }
-        self.key.as_ref().ok_or(EspNowPmkError::Missing)
     }
 }
 
@@ -199,10 +213,29 @@ impl Default for EspNowPmkOwner {
     }
 }
 
+/// The empty PMK place, lent by [`EspNowPmkOwner::vacancy`]: the one that
+/// installs a key.
+pub struct EspNowPmkVacancy<'owner> {
+    place: &'owner mut PmkPlace,
+    generation: u32,
+}
+
+impl EspNowPmkVacancy<'_> {
+    /// Install `key`; a refusal returns it and leaves the place empty.
+    pub fn install(self, key: EspNowPmk) -> Result<EspNowPmkId, EspNowPmkMutationFailure> {
+        let Some(generation) = self.generation.checked_add(1) else {
+            return Err(EspNowPmkMutationFailure::new(
+                EspNowPmkError::GenerationExhausted,
+                key,
+            ));
+        };
+        *self.place = PmkPlace::Installed { generation, key };
+        Ok(EspNowPmkId { generation })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowPmkError {
-    AlreadyInstalled,
-    Missing,
     GenerationExhausted,
     Stale(EspNowPmkId),
 }
@@ -210,8 +243,6 @@ pub enum EspNowPmkError {
 impl fmt::Display for EspNowPmkError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AlreadyInstalled => formatter.write_str("an ESP-NOW PMK is already installed"),
-            Self::Missing => formatter.write_str("no ESP-NOW PMK is installed"),
             Self::GenerationExhausted => {
                 formatter.write_str("the ESP-NOW PMK generation is exhausted")
             }
@@ -377,16 +408,55 @@ fn highest_authenticated(replay: &CcmpReplayFrontier) -> Option<u64> {
     (highest != CcmpPacketNumber::ZERO).then_some(highest.value())
 }
 
-struct EspNowEncryptedPeerSlot {
-    generation: u32,
-    state: Option<EspNowEncryptedPeerState>,
+/// One encrypted-peer slot: vacant, or a peer's key and packet-number
+/// spaces. Its generation counts the installs, so a handle to an earlier
+/// occupant is stale.
+enum EspNowEncryptedPeerSlot {
+    Vacant {
+        generation: u32,
+    },
+    Occupied {
+        generation: u32,
+        state: EspNowEncryptedPeerState,
+    },
 }
 
 impl EspNowEncryptedPeerSlot {
     const fn empty() -> Self {
-        Self {
-            generation: 0,
-            state: None,
+        Self::Vacant { generation: 0 }
+    }
+
+    const fn generation(&self) -> u32 {
+        match self {
+            Self::Vacant { generation } | Self::Occupied { generation, .. } => *generation,
+        }
+    }
+
+    const fn occupant(&self) -> Option<&EspNowEncryptedPeerState> {
+        match self {
+            Self::Occupied { state, .. } => Some(state),
+            Self::Vacant { .. } => None,
+        }
+    }
+
+    /// The state a handle of `generation` names here.
+    fn state_mut(&mut self, generation: u32) -> Option<&mut EspNowEncryptedPeerState> {
+        match self {
+            Self::Occupied {
+                generation: occupant,
+                state,
+            } if *occupant == generation => Some(state),
+            Self::Occupied { .. } | Self::Vacant { .. } => None,
+        }
+    }
+
+    /// Vacate the slot, keeping its generation: every LMK it held is
+    /// dropped and zeroized; `None` when it was vacant.
+    fn vacate(&mut self) -> Option<EspNowEncryptedPeerState> {
+        let generation = self.generation();
+        match core::mem::replace(self, Self::Vacant { generation }) {
+            Self::Occupied { state, .. } => Some(state),
+            Self::Vacant { .. } => None,
         }
     }
 }
@@ -398,7 +468,6 @@ impl EspNowEncryptedPeerSlot {
 pub struct EspNowEncryptedPeerTable<const N: usize = ESP_NOW_DEFAULT_ENCRYPTED_PEER_CAPACITY> {
     home_channel: Ghz2_4Channel,
     slots: [EspNowEncryptedPeerSlot; N],
-    length: usize,
 }
 
 /// Shutdown cleared the keys of `count` peers, saturated at `u32::MAX`:
@@ -414,7 +483,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         Self {
             home_channel,
             slots: array::from_fn(|_| EspNowEncryptedPeerSlot::empty()),
-            length: 0,
         }
     }
 
@@ -422,12 +490,16 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         self.home_channel
     }
 
-    pub const fn len(&self) -> usize {
-        self.length
+    /// The number of peers: the occupied slots.
+    pub fn len(&self) -> usize {
+        self.slots
+            .iter()
+            .filter_map(EspNowEncryptedPeerSlot::occupant)
+            .count()
     }
 
-    pub const fn is_empty(&self) -> bool {
-        self.length == 0
+    pub fn is_empty(&self) -> bool {
+        self.slots.iter().all(|slot| slot.occupant().is_none())
     }
 
     pub const fn capacity(&self) -> usize {
@@ -448,49 +520,37 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             ));
         }
 
-        if self.slots.iter().any(|slot| {
-            slot.state
-                .as_ref()
-                .is_some_and(|peer| peer.config().destination == config.destination)
-        }) {
+        if self.find(config.destination).is_some() {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::Duplicate(config.destination),
                 config,
             ));
         }
-        let Some((index, slot)) = self
-            .slots
-            .iter_mut()
-            .enumerate()
-            .find(|(_, slot)| slot.state.is_none() && slot.generation < u32::MAX)
+        let Some((index, slot, generation)) =
+            self.slots
+                .iter_mut()
+                .enumerate()
+                .find_map(|(index, slot)| match slot {
+                    EspNowEncryptedPeerSlot::Vacant { generation } => generation
+                        .checked_add(1)
+                        .map(|generation| (index, slot, generation)),
+                    EspNowEncryptedPeerSlot::Occupied { .. } => None,
+                })
         else {
-            let error = if self.slots.iter().any(|slot| slot.state.is_none()) {
+            let error = if self.slots.iter().any(|slot| slot.occupant().is_none()) {
                 EspNowEncryptedPeerError::GenerationExhausted
             } else {
                 EspNowEncryptedPeerError::Full
             };
             return Err(self.mutation_failure(error, config));
         };
-        let Some(generation) = slot.generation.checked_add(1) else {
-            return Err(
-                self.mutation_failure(EspNowEncryptedPeerError::GenerationExhausted, config)
-            );
+        *slot = EspNowEncryptedPeerSlot::Occupied {
+            generation,
+            state: EspNowEncryptedPeerState {
+                key: InstalledCcmpTxKey::install(config, CcmpPacketNumberStep::ONE),
+                replay: CcmpReplayFrontier::default(),
+            },
         };
-        let Some(length) = self.length.checked_add(1).filter(|length| *length <= N) else {
-            return Err(self.mutation_failure(
-                EspNowEncryptedPeerError::InvalidCount {
-                    count: self.length,
-                    capacity: N,
-                },
-                config,
-            ));
-        };
-        slot.generation = generation;
-        slot.state = Some(EspNowEncryptedPeerState {
-            key: InstalledCcmpTxKey::install(config, CcmpPacketNumberStep::ONE),
-            replay: CcmpReplayFrontier::default(),
-        });
-        self.length = length;
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
@@ -501,20 +561,22 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
         replacement: EspNowEncryptedPeerConfig,
     ) -> Result<EspNowEncryptedPeerReplacement, EspNowEncryptedPeerMutationFailure> {
-        let Some(slot) = self.slots.get_mut(peer.index) else {
+        let home_channel = self.home_channel;
+        let Some(EspNowEncryptedPeerSlot::Occupied {
+            generation: occupant,
+            state: installed,
+        }) = self.slots.get_mut(peer.index)
+        else {
             return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         };
-        if slot.generation != peer.generation {
+        if *occupant != peer.generation {
             return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
         }
-        let Some(installed) = slot.state.as_mut() else {
-            return Err(self.mutation_failure(EspNowEncryptedPeerError::Stale(peer), replacement));
-        };
-        if replacement.channel != self.home_channel {
+        if replacement.channel != home_channel {
             return Err(self.mutation_failure(
                 EspNowEncryptedPeerError::ChannelMismatch {
                     peer: replacement.channel,
-                    home: self.home_channel,
+                    home: home_channel,
                 },
                 replacement,
             ));
@@ -539,7 +601,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         // conservative for a fresh LMK and prevents nonce reuse if a caller
         // supplies the same LMK bytes again.
         let replaced = installed.key.replace_key(replacement);
-        slot.generation = generation;
+        *occupant = generation;
         Ok(EspNowEncryptedPeerReplacement {
             peer: EspNowEncryptedPeerId {
                 index: peer.index,
@@ -554,20 +616,13 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         peer: EspNowEncryptedPeerId,
     ) -> Result<EspNowRemovedEncryptedPeer, EspNowEncryptedPeerError> {
         self.state(peer)?;
-        let length = self
-            .length
-            .checked_sub(1)
-            .filter(|length| *length < N)
-            .ok_or(EspNowEncryptedPeerError::InvalidCount {
-                count: self.length,
-                capacity: N,
-            })?;
-        let slot = self.slot_mut(peer)?;
-        let state = slot
-            .state
-            .take()
-            .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
-        self.length = length;
+        let Some(state) = self
+            .slots
+            .get_mut(peer.index)
+            .and_then(EspNowEncryptedPeerSlot::vacate)
+        else {
+            return Err(EspNowEncryptedPeerError::Stale(peer));
+        };
         Ok(EspNowRemovedEncryptedPeer {
             index: peer.index,
             generation: peer.generation,
@@ -583,88 +638,57 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &mut self,
         removed: EspNowRemovedEncryptedPeer,
     ) -> Result<EspNowEncryptedPeerId, EspNowEncryptedPeerRestoreFailure> {
-        let Some(slot) = self.slots.get(removed.index) else {
+        // A slot occupied since the removal has a later generation: install
+        // and restore both advance it, so the generation alone refuses it.
+        let duplicate = self.find(removed.config().destination).is_some();
+        let home = self.home_channel;
+        let Some(slot) = self
+            .slots
+            .get_mut(removed.index)
+            .filter(|slot| slot.generation() == removed.generation)
+        else {
             return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(EspNowEncryptedPeerId {
-                    index: removed.index,
-                    generation: removed.generation,
-                }),
+                error: EspNowEncryptedPeerError::Stale(removed.previous_id()),
                 removed,
             });
         };
-        if slot.generation != removed.generation || slot.state.is_some() {
-            return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(EspNowEncryptedPeerId {
-                    index: removed.index,
-                    generation: removed.generation,
-                }),
-                removed,
-            });
-        }
         let Some(generation) = removed.generation.checked_add(1) else {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::GenerationExhausted,
                 removed,
             });
         };
-        if removed.config().channel != self.home_channel {
+        if removed.config().channel != home {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::ChannelMismatch {
                     peer: removed.config().channel,
-                    home: self.home_channel,
+                    home,
                 },
                 removed,
             });
         }
-        if self.slots.iter().any(|slot| {
-            slot.state
-                .as_ref()
-                .is_some_and(|state| state.config().destination == removed.config().destination)
-        }) {
+        if duplicate {
             return Err(EspNowEncryptedPeerRestoreFailure {
                 error: EspNowEncryptedPeerError::Duplicate(removed.config().destination),
                 removed,
             });
         }
-
-        let Some(length) = self.length.checked_add(1).filter(|length| *length <= N) else {
-            return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::InvalidCount {
-                    count: self.length,
-                    capacity: N,
-                },
-                removed,
-            });
-        };
-        let Some(slot) = self.slots.get_mut(removed.index) else {
-            return Err(EspNowEncryptedPeerRestoreFailure {
-                error: EspNowEncryptedPeerError::Stale(removed.previous_id()),
-                removed,
-            });
-        };
         let EspNowRemovedEncryptedPeer {
             index,
             generation: _,
             state,
         } = removed;
-        *slot = EspNowEncryptedPeerSlot {
-            generation,
-            state: Some(state),
-        };
-        self.length = length;
+        *slot = EspNowEncryptedPeerSlot::Occupied { generation, state };
         Ok(EspNowEncryptedPeerId { index, generation })
     }
 
     /// Drop and zeroize every LMK. Existing handles become stale immediately;
     /// a later install advances each reused slot generation.
     pub fn clear_on_shutdown(&mut self) -> usize {
-        let cleared = self
-            .slots
+        self.slots
             .iter_mut()
-            .filter_map(|slot| slot.state.take())
-            .count();
-        self.length = 0;
-        cleared
+            .filter_map(EspNowEncryptedPeerSlot::vacate)
+            .count()
     }
 
     pub fn find(&self, destination: EspNowUnicastAddress) -> Option<EspNowEncryptedPeerId> {
@@ -672,13 +696,12 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
             .iter()
             .enumerate()
             .find(|(_, slot)| {
-                slot.state
-                    .as_ref()
+                slot.occupant()
                     .is_some_and(|state| state.config().destination == destination)
             })
             .map(|(index, slot)| EspNowEncryptedPeerId {
                 index,
-                generation: slot.generation,
+                generation: slot.generation(),
             })
     }
 
@@ -736,8 +759,7 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         let state = self
             .slots
             .get_mut(peer.index)
-            .filter(|slot| slot.generation == peer.generation)
-            .and_then(|slot| slot.state.as_mut())
+            .and_then(|slot| slot.state_mut(peer.generation))
             .ok_or(EspNowEncryptedPeerError::Stale(peer))?;
         match state.replay.prepare(CcmpPacketNumber::from(packet_number)) {
             Ok(replay) => Ok(EspNowRxReplayCandidate {
@@ -757,28 +779,14 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         &self,
         peer: EspNowEncryptedPeerId,
     ) -> Result<&EspNowEncryptedPeerState, EspNowEncryptedPeerError> {
-        let Some(slot) = self.slots.get(peer.index) else {
-            return Err(EspNowEncryptedPeerError::Stale(peer));
-        };
-        if slot.generation != peer.generation {
-            return Err(EspNowEncryptedPeerError::Stale(peer));
+        match self.slots.get(peer.index) {
+            Some(EspNowEncryptedPeerSlot::Occupied { generation, state })
+                if *generation == peer.generation =>
+            {
+                Ok(state)
+            }
+            Some(_) | None => Err(EspNowEncryptedPeerError::Stale(peer)),
         }
-        slot.state
-            .as_ref()
-            .ok_or(EspNowEncryptedPeerError::Stale(peer))
-    }
-
-    fn slot_mut(
-        &mut self,
-        peer: EspNowEncryptedPeerId,
-    ) -> Result<&mut EspNowEncryptedPeerSlot, EspNowEncryptedPeerError> {
-        let Some(slot) = self.slots.get_mut(peer.index) else {
-            return Err(EspNowEncryptedPeerError::Stale(peer));
-        };
-        if slot.generation != peer.generation {
-            return Err(EspNowEncryptedPeerError::Stale(peer));
-        }
-        Ok(slot)
     }
 
     fn mutation_failure(
@@ -787,16 +795,6 @@ impl<const N: usize> EspNowEncryptedPeerTable<N> {
         config: EspNowEncryptedPeerConfig,
     ) -> EspNowEncryptedPeerMutationFailure {
         EspNowEncryptedPeerMutationFailure { error, config }
-    }
-}
-
-impl<const N: usize> Drop for EspNowEncryptedPeerTable<N> {
-    fn drop(&mut self) {
-        // `Option::take` drops each LMK through ZeroizeOnDrop before the table
-        // storage itself is released.
-        for slot in &mut self.slots {
-            let _ = slot.state.take();
-        }
     }
 }
 
@@ -916,10 +914,6 @@ impl fmt::Debug for EspNowEncryptedPeerMutationFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EspNowEncryptedPeerError {
     Full,
-    InvalidCount {
-        count: usize,
-        capacity: usize,
-    },
     Duplicate(EspNowUnicastAddress),
     ReplacementDestinationMismatch {
         installed: EspNowUnicastAddress,
@@ -944,10 +938,6 @@ impl fmt::Display for EspNowEncryptedPeerError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Full => formatter.write_str("the encrypted ESP-NOW peer table is full"),
-            Self::InvalidCount { count, capacity } => write!(
-                formatter,
-                "encrypted ESP-NOW peer count {count} is inconsistent with capacity {capacity}"
-            ),
             Self::Duplicate(destination) => {
                 write!(
                     formatter,

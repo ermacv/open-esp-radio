@@ -1,7 +1,3 @@
-#![expect(
-    clippy::cast_possible_truncation,
-    reason = "step 3: R3, R4 and R5 on the final crates"
-)]
 #![no_std]
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -39,7 +35,7 @@ pub use extensions::espressif::esp_now::security::{
     EspNowEncryptedPeerReplacement, EspNowEncryptedPeerRestoreFailure, EspNowEncryptedPeerTable,
     EspNowEncryptedPeerView, EspNowEncryptedProtocol, EspNowEncryptedReceiveError,
     EspNowEncryptedRxCandidate, EspNowEncryptedSendError, EspNowLmk, EspNowPeersCleared, EspNowPmk,
-    EspNowPmkError, EspNowPmkId, EspNowPmkMutationFailure, EspNowPmkOwner,
+    EspNowPmkError, EspNowPmkId, EspNowPmkMutationFailure, EspNowPmkOwner, EspNowPmkVacancy,
     EspNowPreparedEncryptedV1Tx, EspNowRemovedEncryptedPeer, EspNowRxReplayCandidate,
     encrypted_peer_destination, esp_now_encrypted_v1_codec_status,
 };

@@ -6197,11 +6197,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("portable/time/src/deadline.rs", 1, BY_STEP_16B),
     ("protocols/ieee80211/core/arbiter/src/lib.rs", 1, BY_STEP_13),
     (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs",
-        1,
-        BY_STEP_3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine/commands.rs",
         1,
         BY_STEP_13,
@@ -6376,11 +6371,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
     ),
     ("chips/family/platform/runtime/src/panic.rs", 2, BY_STEP_15),
     ("portable/memory/src/pinned_tx.rs", 2, BY_STEP_9),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs",
-        2,
-        BY_STEP_3,
-    ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         2,
@@ -6717,11 +6707,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     (
         "protocols/ieee80211/core/security/rsn/src/sae.rs",
         7,
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
-        24,
         BY_STEP_3,
     ),
     ("protocols/network/core/src/dhcp.rs", 3, BY_STEP_3),
@@ -8066,18 +8051,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/ieee80211/core/arbiter/src/lib.rs::StoppedArbiter.next_id",
         BY_STEP_13,
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs::EspNowPeerSlot.config",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowEncryptedPeerSlot.state",
-        BY_STEP_3,
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowPmkOwner.key",
-        BY_STEP_3,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.channel_switch",
@@ -10313,12 +10286,6 @@ const SILENCED: &[(&str, &str, usize, &str)] = &[
         "clippy::too_many_arguments",
         1,
         "the port, its facts, its gate and instant, the next plan, the network's return and the events",
-    ),
-    (
-        "protocols/ieee80211/core/extensions/esp-now/src/lib.rs",
-        "clippy::cast_possible_truncation",
-        1,
-        BY_STEP_3,
     ),
     (
         "protocols/ieee80211/core/roles/ap/src/beacon.rs",

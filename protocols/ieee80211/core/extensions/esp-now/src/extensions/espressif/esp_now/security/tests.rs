@@ -42,8 +42,10 @@ fn pmk_replace_returns_old_key_and_retains_proposal_on_each_refusal() {
         .into_parts();
     assert_eq!(error, EspNowPmkError::Stale(current));
     assert_eq!(proposed.expose_secret(), &[4; 16]);
-    owner.generation = u32::MAX;
-    owner.key = Some(EspNowPmk::new([5; 16]));
+    owner.place = PmkPlace::Installed {
+        generation: u32::MAX,
+        key: EspNowPmk::new([5; 16]),
+    };
     let last = owner.current_id().unwrap();
     let (error, proposed) = owner
         .replace(last, EspNowPmk::new([6; 16]))
@@ -62,81 +64,73 @@ fn pmk_replace_returns_old_key_and_retains_proposal_on_each_refusal() {
     );
 }
 
+/// The empty place alone installs a key; an installed one names itself
+/// as what blocks it, and removing it gives the place back.
 #[test]
-fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
+fn only_the_empty_pmk_place_installs() {
+    let mut owner = EspNowPmkOwner::new();
+    assert_eq!(owner.current_id(), None);
+    let first = owner
+        .vacancy()
+        .unwrap()
+        .install(EspNowPmk::new([1; 16]))
+        .unwrap();
+    assert_eq!(owner.current_id(), Some(first));
+    assert_eq!(owner.vacancy().err(), Some(first));
+    assert_eq!(owner.key(first).unwrap().expose_secret(), &[1; 16]);
+    assert_eq!(owner.remove(first).unwrap().expose_secret(), &[1; 16]);
+    assert_eq!(
+        owner.remove(first).unwrap_err(),
+        EspNowPmkError::Stale(first)
+    );
+    assert_eq!(owner.key(first).unwrap_err(), EspNowPmkError::Stale(first));
+    let second = owner
+        .vacancy()
+        .unwrap()
+        .install(EspNowPmk::new([2; 16]))
+        .unwrap();
+    assert_ne!(second, first);
+    assert_eq!(
+        owner.remove(first).unwrap_err(),
+        EspNowPmkError::Stale(first)
+    );
+    assert_eq!(owner.key(second).unwrap().expose_secret(), &[2; 16]);
+
+    owner.place = PmkPlace::Empty {
+        generation: u32::MAX,
+    };
+    let (error, proposed) = owner
+        .vacancy()
+        .unwrap()
+        .install(EspNowPmk::new([3; 16]))
+        .unwrap_err()
+        .into_parts();
+    assert_eq!(error, EspNowPmkError::GenerationExhausted);
+    assert_eq!(proposed.expose_secret(), &[3; 16]);
+    assert_eq!(owner.current_id(), None);
+}
+
+/// The count is the occupied slots: it follows install, remove, restore
+/// and shutdown, and a refusal changes nothing.
+#[test]
+fn the_encrypted_count_follows_the_occupied_slots() {
     let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
-    table.length = usize::MAX;
-    let (error, proposed) = table.install(peer(2, 1)).unwrap_err().into_parts();
-    assert_eq!(
-        error,
-        EspNowEncryptedPeerError::InvalidCount {
-            count: usize::MAX,
-            capacity: 2
-        }
-    );
-    assert_eq!(proposed.lmk().expose_secret(), &[1; 16]);
-    assert!(
-        table
-            .slots
-            .iter()
-            .all(|slot| slot.state.is_none() && slot.generation == 0)
-    );
-    table.length = 2;
-    let (error, proposed) = table.install(peer(2, 1)).unwrap_err().into_parts();
-    assert_eq!(
-        error,
-        EspNowEncryptedPeerError::InvalidCount {
-            count: 2,
-            capacity: 2
-        }
-    );
-    assert_eq!(proposed.lmk().expose_secret(), &[1; 16]);
-    table.length = 0;
+    assert!(table.is_empty());
     let first = table.install(peer(2, 1)).unwrap();
     assert_eq!(table.len(), 1);
     let second = table.install(peer(3, 2)).unwrap();
-    table.length = 0;
-    assert_eq!(
-        table.remove(first).unwrap_err(),
-        EspNowEncryptedPeerError::InvalidCount {
-            count: 0,
-            capacity: 2
-        }
-    );
-    assert_eq!(table.lmk(first).unwrap().expose_secret(), &[1; 16]);
-    table.length = 3;
-    assert_eq!(
-        table.remove(first).unwrap_err(),
-        EspNowEncryptedPeerError::InvalidCount {
-            count: 3,
-            capacity: 2
-        }
-    );
-    table.length = 2;
+    assert_eq!(table.len(), 2);
+    assert!(!table.is_empty());
+    let (error, proposed) = table.install(peer(4, 3)).unwrap_err().into_parts();
+    assert_eq!(error, EspNowEncryptedPeerError::Full);
+    assert_eq!(proposed.lmk().expose_secret(), &[3; 16]);
     let removed = table.remove(first).unwrap();
     assert_eq!(table.len(), 1);
-    table.length = usize::MAX;
-    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
     assert_eq!(
-        error,
-        EspNowEncryptedPeerError::InvalidCount {
-            count: usize::MAX,
-            capacity: 2
-        }
+        table.remove(first).unwrap_err(),
+        EspNowEncryptedPeerError::Stale(first)
     );
     assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
-    assert!(table.slots[0].state.is_none());
-    table.length = 2;
-    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
-    assert_eq!(
-        error,
-        EspNowEncryptedPeerError::InvalidCount {
-            count: 2,
-            capacity: 2
-        }
-    );
-    assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
-    table.length = 1;
     let restored = table.restore_removed(removed).unwrap();
     assert_eq!(table.len(), 2);
     assert_eq!(table.lmk(restored).unwrap().expose_secret(), &[1; 16]);
@@ -144,7 +138,11 @@ fn invalid_counts_refuse_encrypted_mutations_without_losing_keys() {
     assert_ne!(restored, first);
     assert_eq!(table.clear_on_shutdown(), 2);
     assert_eq!(table.clear_on_shutdown(), 0);
-    assert_eq!(table.len(), 0);
+    assert!(table.is_empty());
+    assert_eq!(
+        table.lmk(restored).unwrap_err(),
+        EspNowEncryptedPeerError::Stale(restored)
+    );
 }
 
 #[test]
@@ -156,7 +154,9 @@ fn encrypted_capacity_and_generation_refusals_retain_proposed_key() {
     assert_eq!(error, EspNowEncryptedPeerError::Full);
     assert_eq!(proposed.lmk().expose_secret(), &[7; 16]);
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
-    table.slots[0].generation = u32::MAX;
+    table.slots[0] = EspNowEncryptedPeerSlot::Vacant {
+        generation: u32::MAX,
+    };
     let (error, proposed) = table.install(peer(2, 8)).unwrap_err().into_parts();
     assert_eq!(error, EspNowEncryptedPeerError::GenerationExhausted);
     assert_eq!(proposed.lmk().expose_secret(), &[8; 16]);
@@ -195,7 +195,10 @@ fn encrypted_replacement_preserves_packet_number_spaces_and_old_key() {
     ));
     assert_eq!(proposed.lmk().expose_secret(), &[4; 16]);
     assert_eq!(table.get(current), Ok(view));
-    table.slots[0].generation = u32::MAX;
+    let EspNowEncryptedPeerSlot::Occupied { generation, .. } = &mut table.slots[0] else {
+        panic!("the replaced peer is installed");
+    };
+    *generation = u32::MAX;
     let last = EspNowEncryptedPeerId {
         index: 0,
         generation: u32::MAX,
@@ -368,4 +371,108 @@ fn shutdown_reports_its_cleared_peers_once_and_the_table_returns_its_count() {
     let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
     table.install(peer(2, 1)).unwrap();
     assert_eq!(table.clear_on_shutdown(), 1);
+}
+
+/// A replaced key's earlier handle is stale for its key as well.
+#[test]
+fn a_replaced_pmk_s_earlier_handle_reads_no_key() {
+    let mut owner = EspNowPmkOwner::from_key(EspNowPmk::new([1; 16]));
+    let first = owner.current_id().unwrap();
+    let (second, _) = owner.replace(first, EspNowPmk::new([2; 16])).unwrap();
+    assert_eq!(owner.key(first).unwrap_err(), EspNowPmkError::Stale(first));
+    assert_eq!(owner.key(second).unwrap().expose_secret(), &[2; 16]);
+}
+
+/// A slot reused by a later peer gives it the next generation; the
+/// earlier handle is stale for every call, and a removed peer is not
+/// restored into a slot reused and vacated since.
+#[test]
+fn a_reused_encrypted_slot_makes_the_earlier_handle_stale() {
+    let mut table = EspNowEncryptedPeerTable::<1>::new(channel());
+    let first = table.install(peer(2, 1)).unwrap();
+    assert_eq!(first.generation(), 1);
+    let removed = table.remove(first).unwrap();
+    let second = table.install(peer(3, 2)).unwrap();
+    assert_eq!((second.index(), second.generation()), (first.index(), 2));
+    assert_eq!(table.find(peer(3, 0).destination()), Some(second));
+    assert_eq!(
+        table.lmk(first).unwrap_err(),
+        EspNowEncryptedPeerError::Stale(first)
+    );
+    assert!(matches!(
+        table.prepare_rx_replay(first, pn(1)),
+        Err(EspNowEncryptedPeerError::Stale(stale)) if stale == first
+    ));
+    let (error, proposed) = table.install(peer(3, 4)).unwrap_err().into_parts();
+    assert_eq!(
+        error,
+        EspNowEncryptedPeerError::Duplicate(peer(3, 0).destination())
+    );
+    assert_eq!(proposed.lmk().expose_secret(), &[4; 16]);
+    table.remove(second).unwrap();
+    let previous = removed.previous_id();
+    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    assert_eq!(error, EspNowEncryptedPeerError::Stale(previous));
+    assert_eq!(removed.config().lmk().expose_secret(), &[1; 16]);
+}
+
+/// Every PMK and table error names itself: its text is never empty.
+#[test]
+fn a_security_error_s_text_names_it() {
+    let id = EspNowPmkOwner::from_key(EspNowPmk::new([1; 16]))
+        .current_id()
+        .unwrap();
+    for error in [
+        EspNowPmkError::GenerationExhausted,
+        EspNowPmkError::Stale(id),
+    ] {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
+    let destination = peer(2, 0).destination();
+    for error in [
+        EspNowEncryptedPeerError::Full,
+        EspNowEncryptedPeerError::Duplicate(destination),
+        EspNowEncryptedPeerError::GenerationExhausted,
+    ] {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
+}
+
+/// A removed peer whose address was installed again, in the lower free
+/// slot, is refused as a duplicate: it comes back whole, its key and its
+/// packet-number spaces, and the table is as before the call.
+#[test]
+fn restoring_over_a_reinstalled_address_is_a_duplicate() {
+    let mut table = EspNowEncryptedPeerTable::<2>::new(channel());
+    let lower = table.install(peer(2, 1)).unwrap();
+    let upper = table.install(peer(3, 2)).unwrap();
+    assert_eq!(table.allocate_tx_packet_number(upper), Ok(pn(1)));
+    table
+        .prepare_rx_replay(upper, pn(40))
+        .unwrap()
+        .commit_authenticated();
+    table.remove(lower).unwrap();
+    let removed = table.remove(upper).unwrap();
+    let again = table.install(peer(3, 3)).unwrap();
+    assert_eq!(again.index(), lower.index());
+    let before = table.get(again).unwrap();
+
+    let (error, removed) = table.restore_removed(removed).unwrap_err().into_parts();
+    assert_eq!(
+        error,
+        EspNowEncryptedPeerError::Duplicate(peer(3, 0).destination())
+    );
+    assert_eq!(removed.previous_id(), upper);
+    assert_eq!(removed.config().lmk().expose_secret(), &[2; 16]);
+    assert_eq!(removed.state.key.packet_numbers().last().value(), 1);
+    assert_eq!(highest_authenticated(&removed.state.replay), Some(40));
+
+    assert_eq!(table.len(), 1);
+    assert_eq!(table.get(again), Ok(before));
+    assert_eq!(table.lmk(again).unwrap().expose_secret(), &[3; 16]);
+    assert_eq!(table.find(peer(3, 0).destination()), Some(again));
+    assert!(matches!(
+        table.slots[upper.index()],
+        EspNowEncryptedPeerSlot::Vacant { generation } if generation == upper.generation()
+    ));
 }

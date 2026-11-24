@@ -1,3 +1,5 @@
+extern crate std;
+
 use super::*;
 use oer_protocols_ieee80211_core_arbiter::interface::{VifId, VirtualInterface};
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
@@ -24,59 +26,26 @@ fn peer(last: u8) -> EspNowPeerConfig {
     )
 }
 
+/// The count is the occupied slots: it follows each add and remove, and a
+/// stale handle changes nothing.
 #[test]
-fn invalid_counts_refuse_mutations_without_losing_peers() {
+fn the_count_follows_the_occupied_slots() {
     let mut table = EspNowPeerTable::<2>::new(channel(1));
-    // Fault injection: the former increment and decrement panicked here.
-    table.length = usize::MAX;
-    assert_eq!(
-        table.add(peer(2)),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: usize::MAX,
-            capacity: 2
-        })
-    );
-    assert!(
-        table
-            .slots
-            .iter()
-            .all(|slot| slot.config.is_none() && slot.generation == 0)
-    );
-    table.length = 2;
-    assert_eq!(
-        table.add(peer(2)),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 2,
-            capacity: 2
-        })
-    );
-    table.length = 0;
+    assert!(table.is_empty());
     let first = table.add(peer(2)).unwrap();
     assert_eq!(table.len(), 1);
     let second = table.add(peer(3)).unwrap();
-    table.length = 0;
-    assert_eq!(
-        table.remove(first),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 0,
-            capacity: 2
-        })
-    );
-    assert_eq!(table.get(first), Ok(peer(2)));
-    table.length = 3;
-    assert_eq!(
-        table.remove(first),
-        Err(EspNowPeerTableError::InvalidCount {
-            count: 3,
-            capacity: 2
-        })
-    );
-    table.length = 2;
+    assert_eq!(table.len(), 2);
+    assert!(!table.is_empty());
+    assert_eq!(table.add(peer(4)), Err(EspNowPeerTableError::Full));
     assert_eq!(table.remove(first), Ok(peer(2)));
     assert_eq!(table.len(), 1);
     assert_eq!(table.get(second), Ok(peer(3)));
     assert_eq!(table.remove(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.get(first), Err(EspNowPeerTableError::Stale(first)));
     assert_eq!(table.len(), 1);
+    assert_eq!(table.remove(second), Ok(peer(3)));
+    assert!(table.is_empty());
 }
 
 #[test]
@@ -86,7 +55,9 @@ fn zero_capacity_exhaustion_and_sparse_iteration_preserve_slot_identity() {
         Err(EspNowPeerTableError::Full)
     );
     let mut table = EspNowPeerTable::<3>::new(channel(1));
-    table.slots[0].generation = u32::MAX;
+    table.slots[0] = EspNowPeerSlot::Vacant {
+        generation: u32::MAX,
+    };
     let first = table.add(peer(2)).unwrap();
     let last = table.add(peer(3)).unwrap();
     assert_eq!((first.index(), last.index()), (1, 2));
@@ -144,20 +115,24 @@ fn rx_snapshot_keeps_sparse_home_unicast_slots_and_validates_ownership() {
     let epoch = protocol
         .begin_rx_epoch(config.station(), config.home_channel())
         .unwrap();
-    assert_eq!(epoch.peer_count(), 1);
+    assert_eq!(
+        epoch
+            .slots
+            .iter()
+            .filter(|slot| slot.peer.is_some())
+            .count(),
+        1
+    );
     assert!(protocol.owns_rx_epoch(&epoch));
     assert_eq!(epoch.peer_phy_mode(last), Some(EspNowPhyMode::LegacyDsss1M));
     assert_eq!(epoch.peer_phy_mode(first), None);
     protocol.remove_peer(last).unwrap();
     assert!(!protocol.owns_rx_epoch(&epoch));
     let empty = EspNowProtocol::<0>::new(config);
-    assert_eq!(
-        empty
-            .begin_rx_epoch(config.station(), config.home_channel())
-            .unwrap()
-            .peer_count(),
-        0
-    );
+    let epoch = empty
+        .begin_rx_epoch(config.station(), config.home_channel())
+        .unwrap();
+    assert!(empty.owns_rx_epoch(&epoch));
 }
 
 #[test]
@@ -206,4 +181,38 @@ fn duplicate_history_evicts_only_oldest_and_reset_counts_all_fingerprints() {
         epoch.receive_v1(&bytes[..len]),
         Ok(EspNowRxOutcome::Received(_))
     ));
+}
+
+/// A slot reused by a later peer gives it the next generation; the
+/// earlier handle is stale there.
+#[test]
+fn a_reused_slot_makes_the_earlier_handle_stale() {
+    let mut table = EspNowPeerTable::<1>::new(channel(1));
+    let first = table.add(peer(2)).unwrap();
+    assert_eq!(first.generation(), 1);
+    table.remove(first).unwrap();
+    let second = table.add(peer(3)).unwrap();
+    assert_eq!((second.index(), second.generation()), (first.index(), 2));
+    assert_eq!(table.iter().next(), Some((second, peer(3))));
+    assert_eq!(table.get(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.remove(first), Err(EspNowPeerTableError::Stale(first)));
+    assert_eq!(table.get(second), Ok(peer(3)));
+}
+
+/// Every table error names itself: its text is never empty.
+#[test]
+fn a_table_error_s_text_names_it() {
+    let errors = [
+        EspNowPeerTableError::Full,
+        EspNowPeerTableError::Duplicate(EspNowDestination::Broadcast),
+        EspNowPeerTableError::ChannelMismatch {
+            peer: channel(2),
+            home: channel(1),
+        },
+        EspNowPeerTableError::OffChannelMatchesHome(channel(1)),
+        EspNowPeerTableError::GenerationExhausted,
+    ];
+    for error in errors {
+        assert!(!std::format!("{error}").is_empty(), "{error:?}");
+    }
 }

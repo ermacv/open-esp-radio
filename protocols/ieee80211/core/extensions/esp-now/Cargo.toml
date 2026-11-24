@@ -10,6 +10,7 @@ readme = "README.md"
 
 [dependencies]
 oer-portable-events = { path = "../../../../../portable/events" }
+oer-portable-wire = { path = "../../../../../portable/wire" }
 oer-protocols-ieee80211-core-arbiter = { path = "../../arbiter" }
 oer-protocols-ieee80211-contracts-port = { path = "../../../contracts/port" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }
