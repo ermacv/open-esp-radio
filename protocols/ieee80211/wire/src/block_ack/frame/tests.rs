@@ -281,3 +281,18 @@ fn a_compressed_bar_round_trips_and_other_variants_are_refused() {
     protected[1] |= 0x40;
     assert_eq!(parse_compressed_block_ack_request(&protected), None);
 }
+
+/// TID 15 is the largest a four-bit TID holds: an ADDBA Response for it
+/// is written, one for 16 is refused.
+#[test]
+fn an_addba_response_holds_tid_15_and_refuses_16() {
+    let written = encode_addba_response(1, 0, 15, 64, 0, AmsduSupport::NotSupported).unwrap();
+    assert!(matches!(
+        parse_block_ack_action(&written),
+        Some(BlockAckAction::AddbaResponse { parameters, .. }) if parameters.tid() == 15
+    ));
+    assert_eq!(
+        encode_addba_response(1, 0, 16, 64, 0, AmsduSupport::NotSupported),
+        Err(RxAddbaResponseError::InvalidTid(16))
+    );
+}

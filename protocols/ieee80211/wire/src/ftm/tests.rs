@@ -238,3 +238,81 @@ fn clear_asap_bits_are_an_incapable_responder_at_the_partial_tsf() {
         Ok(response)
     );
 }
+
+/// A request's Status Indication and Value each refuse it alone; their
+/// reserved bit is refused for every element (IEEE Std 802.11-2020,
+/// 9.4.2.167: zero in a request).
+#[test]
+fn each_status_bit_refuses_a_request() {
+    for status in [0x01, 0x04] {
+        let mut element = request_parameters().encode_element();
+        element[2] = status;
+        assert_eq!(
+            FtmRequestParameters::decode_element(&element),
+            Err(FtmParameterError::ReservedStatus),
+            "{status:#04x}"
+        );
+    }
+}
+
+/// The TOD and TOA Error fields' reserved bits and the TOA's continuity
+/// bit each refuse a measurement; in an initial one (follow-up token 0) a
+/// TOA, a TOD Error or a TOA Error each refuses it alone.
+#[test]
+fn each_reserved_timestamp_bit_refuses_a_measurement() {
+    let fields = FtmMeasurementFields {
+        dialog_token: 2,
+        follow_up_dialog_token: 1,
+        tod: FtmTimestampPs::new(0x0102_0304_0506).unwrap(),
+        toa: FtmTimestampPs::new(0x0a0b_0c0d_0e0f).unwrap(),
+        tod_error: FtmTodError {
+            max_error_exponent: 4,
+            not_continuous: false,
+        },
+        toa_error: FtmToaError {
+            max_error_exponent: 5,
+        },
+    };
+    let mut body = [0_u8; FTM_MEASUREMENT_PREFIX_LEN];
+    encode_measurement(fields, &[], &mut body).unwrap();
+    assert!(FtmMeasurement::decode_body(&body).is_ok());
+    // TOD Error at 16..18, TOA Error at 18..20: bit 5 reserved, bit 15
+    // the TOA's not-continuous bit.
+    for (octet, bit) in [(16, 0x20), (18, 0x20), (19, 0x80)] {
+        let mut refused = body;
+        refused[octet] ^= bit;
+        assert_eq!(
+            FtmMeasurement::decode_body(&refused),
+            Err(FtmWireError::ReservedTimestampErrorBits),
+            "octet {octet} bit {bit:#04x}"
+        );
+    }
+
+    let initial = FtmMeasurementFields {
+        follow_up_dialog_token: 0,
+        tod: FtmTimestampPs::ZERO,
+        toa: FtmTimestampPs::ZERO,
+        tod_error: FtmTodError {
+            max_error_exponent: 0,
+            not_continuous: false,
+        },
+        toa_error: FtmToaError {
+            max_error_exponent: 0,
+        },
+        ..fields
+    };
+    let parameters = response_parameters().encode_element().unwrap();
+    let mut body = [0_u8; FTM_MEASUREMENT_PREFIX_LEN + FTM_PARAMETERS_ELEMENT_LEN];
+    encode_measurement(initial, &parameters, &mut body).unwrap();
+    assert!(FtmMeasurement::decode_body(&body).is_ok());
+    // TOA, TOD Error, TOA Error.
+    for octet in [10, 16, 18] {
+        let mut refused = body;
+        refused[octet] = 1;
+        assert_eq!(
+            FtmMeasurement::decode_body(&refused),
+            Err(FtmWireError::ReservedTimestampFields),
+            "octet {octet}"
+        );
+    }
+}

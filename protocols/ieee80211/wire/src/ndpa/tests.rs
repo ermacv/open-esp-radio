@@ -261,3 +261,25 @@ fn every_prefix_of_an_ndpa_or_report_is_handled() {
         }
     }
 }
+
+/// Each subfield of a STA Info is read from its own bits.
+#[test]
+fn a_station_info_reads_each_subfield() {
+    // AID 0x123, RU 5..9, feedback/Ng 2, disambiguation, codebook, Nc 6.
+    let word: u32 = 0x123 | (5 << 11) | (9 << 18) | (2 << 25) | (1 << 27) | (1 << 28) | (6 << 29);
+    let station = HeNdpaStationInfo {
+        fields: NdpaStationFields::from_bytes(word.to_le_bytes()),
+    };
+    assert_eq!(station.association_id(), 0x123);
+    assert_eq!(station.resource_unit_start_index(), 5);
+    assert_eq!(station.resource_unit_end_index(), 9);
+    assert_eq!(station.feedback_type_and_ng_encoding(), 2);
+    assert!(station.disambiguation());
+    assert!(station.codebook_size());
+    assert_eq!(station.nc_encoding(), 6);
+    let clear = HeNdpaStationInfo {
+        fields: NdpaStationFields::from_bytes(0x123_u32.to_le_bytes()),
+    };
+    assert!(!clear.disambiguation());
+    assert!(!clear.codebook_size());
+}

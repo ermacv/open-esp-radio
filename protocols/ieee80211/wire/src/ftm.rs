@@ -283,7 +283,7 @@ impl FtmRequestParameters {
     pub fn decode_element(element: &[u8]) -> Result<Self, FtmParameterError> {
         let fields = parameter_fields(element)?;
         let parsed = FtmParameterFields::from_bytes(fields);
-        if parsed.status() != 0 || parsed.retry() != 0 || parsed.status_reserved() {
+        if parsed.status() != 0 || parsed.retry() != 0 {
             return Err(FtmParameterError::ReservedStatus);
         }
         if FtmParameterFields::from_bytes(fields).asap_capable() {

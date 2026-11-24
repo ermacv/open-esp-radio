@@ -534,3 +534,12 @@ fn every_bounded_power_encoding_has_its_exact_dbm_value() {
         );
     }
 }
+
+/// A MU-BAR's Ack Policy is its BAR Control's bit 0.
+#[test]
+fn a_mu_bar_ack_policy_is_its_own_bit() {
+    let set = parse_trigger_mu_bar_dependent(&[0x05, 0xa0, 0x30, 0x12]).unwrap();
+    let clear = parse_trigger_mu_bar_dependent(&[0x04, 0xa0, 0x30, 0x12]).unwrap();
+    assert!(set.ack_policy());
+    assert!(!clear.ack_policy());
+}
